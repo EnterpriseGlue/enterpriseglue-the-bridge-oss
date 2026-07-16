@@ -60,8 +60,11 @@ import type {
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import type {
+  ProjectDeployGrantResponse as SharedProjectDeployGrantResponse,
+  ProjectMemberAddResponse as SharedProjectMemberAddResponse,
   ProjectMemberCapabilities as SharedProjectMemberCapabilities,
   ProjectMemberLookup as SharedProjectMemberLookup,
+  ReissuedManualProjectInvitation as SharedReissuedManualProjectInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
@@ -479,7 +482,7 @@ export default function ProjectDetail() {
     if (!canManageMemberDeployGrant) return
     if (!projectId) return
     try {
-      await apiClient.put(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}/deploy-permission`, {
+      await apiClient.put<SharedProjectDeployGrantResponse>(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}/deploy-permission`, {
         allowed,
       })
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
@@ -1326,23 +1329,20 @@ export default function ProjectDetail() {
         roles: memberRoles.filter((r) => r !== 'owner'),
         ...(memberLookup?.mode === 'invite' ? { deliveryMethod: memberDeliveryMethod } : {}),
       }
-      const json = await apiClient.post<any>(`/starbase-api/projects/${projectId}/members`, body)
-      const invited = !!json?.invited
-      const emailSent = !!json?.emailSent
-      const emailError = typeof json?.emailError === 'string' ? String(json.emailError) : ''
-      const inviteUrl = typeof json?.inviteUrl === 'string' ? String(json.inviteUrl) : ''
-      const oneTimePassword = typeof json?.oneTimePassword === 'string' ? String(json.oneTimePassword) : ''
+      const json = await apiClient.post<SharedProjectMemberAddResponse>(`/starbase-api/projects/${projectId}/members`, body)
 
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
 
-      if (invited) {
-        if (!emailSent && inviteUrl && oneTimePassword) {
+      if (json.invited) {
+        const inviteUrl = json.inviteUrl || ''
+        const oneTimePassword = json.oneTimePassword || ''
+        if (!json.emailSent && inviteUrl && oneTimePassword) {
           setMemberInviteReveal({ email, inviteUrl, oneTimePassword })
           return
         }
         resetAddMemberForm()
         addMemberModal.closeModal()
-        showToast({ kind: 'success', title: 'Member invited', subtitle: emailSent ? `Invite email sent to ${email}` : emailError || undefined })
+        showToast({ kind: 'success', title: 'Member invited', subtitle: json.emailSent ? `Invite email sent to ${email}` : json.emailError || undefined })
       } else {
         resetAddMemberForm()
         addMemberModal.closeModal()
@@ -1358,9 +1358,9 @@ export default function ProjectDetail() {
     if (!canInviteMembers) return
     if (!projectId) return
     try {
-      const json = await apiClient.post<any>(`/starbase-api/projects/${projectId}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`, {})
-      const inviteUrl = typeof json?.inviteUrl === 'string' ? String(json.inviteUrl) : ''
-      const oneTimePassword = typeof json?.oneTimePassword === 'string' ? String(json.oneTimePassword) : ''
+      const json = await apiClient.post<SharedReissuedManualProjectInvitation>(`/starbase-api/projects/${projectId}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`, {})
+      const inviteUrl = json.inviteUrl || ''
+      const oneTimePassword = json.oneTimePassword || ''
 
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
 

@@ -68,6 +68,39 @@ export const ProjectMemberCapabilitiesSchema = z.object({
   emailConfigured: z.boolean(),
 });
 
+/** Direct-add responses intentionally omit roster timestamps returned by list APIs. */
+export const ProjectMemberDirectAddResponseSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  userId: z.string(),
+  role: ProjectRoleSchema,
+  roles: z.array(ProjectRoleSchema),
+  user: UserSummarySchema,
+  invited: z.literal(false),
+});
+
+export const ProjectMemberInvitationResponseSchema = z.object({
+  invited: z.literal(true),
+  emailSent: z.boolean(),
+  emailError: z.string().optional(),
+  inviteUrl: z.string().optional(),
+  oneTimePassword: z.string().optional(),
+});
+
+export const ProjectMemberAddResponseSchema = z.union([
+  ProjectMemberDirectAddResponseSchema,
+  ProjectMemberInvitationResponseSchema,
+]);
+
+export const UpdateProjectDeployGrantRequestSchema = z.object({ allowed: z.boolean() });
+export const ProjectDeployGrantResponseSchema = z.object({ allowed: z.boolean() });
+export const ReissuedManualProjectInvitationSchema = z.object({
+  invited: z.literal(true),
+  emailSent: z.literal(false),
+  inviteUrl: z.string().optional(),
+  oneTimePassword: z.string().optional(),
+});
+
 // Request schemas
 export const AddProjectMemberRequest = z.object({
   email: z.string().email(),
@@ -94,4 +127,10 @@ export type ProjectMembersResponse = z.infer<typeof ProjectMembersResponseSchema
 export type ProjectMemberCandidate = z.infer<typeof ProjectMemberCandidateSchema>;
 export type ProjectMemberLookup = z.infer<typeof ProjectMemberLookupSchema>;
 export type ProjectMemberCapabilities = z.infer<typeof ProjectMemberCapabilitiesSchema>;
+export type ProjectMemberDirectAddResponse = z.infer<typeof ProjectMemberDirectAddResponseSchema>;
+export type ProjectMemberInvitationResponse = z.infer<typeof ProjectMemberInvitationResponseSchema>;
+export type ProjectMemberAddResponse = z.infer<typeof ProjectMemberAddResponseSchema>;
+export type UpdateProjectDeployGrantRequest = z.infer<typeof UpdateProjectDeployGrantRequestSchema>;
+export type ProjectDeployGrantResponse = z.infer<typeof ProjectDeployGrantResponseSchema>;
+export type ReissuedManualProjectInvitation = z.infer<typeof ReissuedManualProjectInvitationSchema>;
 export type AddProjectMember = z.infer<typeof AddProjectMemberRequest>;

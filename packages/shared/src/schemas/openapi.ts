@@ -1811,6 +1811,10 @@ const {
   ProjectMemberCandidateSchema,
   ProjectMemberLookupSchema,
   ProjectMemberCapabilitiesSchema,
+  ProjectMemberAddResponseSchema,
+  UpdateProjectDeployGrantRequestSchema,
+  ProjectDeployGrantResponseSchema,
+  ReissuedManualProjectInvitationSchema,
   AddProjectMemberRequest,
   UpdateProjectMemberRoleRequest,
   TransferProjectOwnershipRequest,
@@ -2279,14 +2283,6 @@ registry.registerPath({ method: 'post', path: '/api/identity/mappings/stored-sna
 // Project Members API
 // -----------------------------
 registry.register('ProjectMember', ProjectMemberSchema);
-const UpdateProjectDeployGrantRequestSchema = z.object({ allowed: z.boolean() });
-const ProjectDeployGrantResponseSchema = z.object({ allowed: z.boolean() });
-const ReissuedManualProjectInvitationSchema = z.object({
-  invited: z.boolean(),
-  emailSent: z.boolean(),
-  inviteUrl: z.string().optional(),
-  oneTimePassword: z.string().optional(),
-});
 
 registry.registerPath({
   method: 'get',
@@ -2341,7 +2337,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/members',
   ...authzExtension('project.members.add', 'POST', '/starbase-api/projects/{projectId}/members'),
   request: { params: z.object({ projectId: z.string().uuid() }), body: { content: { 'application/json': { schema: AddProjectMemberRequest } } } },
-  responses: { 201: { description: 'Member added', content: { 'application/json': { schema: ProjectMemberSchema } } } },
+  responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: ProjectMemberAddResponseSchema } } } },
 });
 
 registry.registerPath({
