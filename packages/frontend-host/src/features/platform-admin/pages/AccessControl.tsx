@@ -74,7 +74,7 @@ import { SsoMappingsPanel } from './access-control/SsoMappingsPanel';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { GroupsPanel } from './access-control/GroupsPanel';
 import { EngineSetsPanel } from './access-control/EngineSetsPanel';
-import { ProjectEngineTargetsPanel } from './access-control/ProjectEngineTargetsPanel';
+import { ProjectEngineTargetsTab } from './access-control/ProjectEngineTargetsTab';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { ByPrincipalPanel, ByResourcePanel } from './access-control/PrincipalResourcePanels';
 import { ApiClientsPanel } from './access-control/MachineIdentityPanel';
@@ -2643,28 +2643,25 @@ export default function AccessControl() {
           )}
           {projectTargetsReadDecision.allowed && (
           <TabPanel>
-            {projectEngineTargetsQ.isError ? (
-              <InlineNotification kind="error" title="Unable to load project-engine targets" lowContrast />
-            ) : (
-              <ProjectEngineTargetsPanel
-                targets={projectEngineTargets}
-                loading={projectEngineTargetsQ.isLoading}
-                pending={createProjectEngineTargetM.isPending || updateProjectEngineTargetM.isPending || archiveProjectEngineTargetM.isPending || syncLegacyProjectEngineTargetsM.isPending || evaluateDeploymentEligibilityM.isPending}
-                syncSummary={projectTargetSyncSummary}
-                eligibilityResult={deploymentEligibilityResult}
-                onCreate={openCreateProjectTarget}
-                onEdit={openEditProjectTarget}
-                onArchive={archiveProjectTarget}
-                onSyncLegacy={syncLegacyProjectTargets}
-                onEvaluate={evaluateProjectTargetEligibility}
-                canManage={projectTargetsManageDecision.allowed}
-                canEvaluate={deploymentEligibilityDecision.allowed}
-                manageUnavailableReason={projectTargetsManageUnavailableReason}
-                evaluateUnavailableReason={deploymentEligibilityUnavailableReason}
-                externalProjectTargetApiUpsertDecision={externalProjectTargetApiUpsertDecision}
-                externalProjectTargetApiDecommissionDecision={externalProjectTargetApiDecommissionDecision}
-              />
-            )}
+            <ProjectEngineTargetsTab
+              failed={projectEngineTargetsQ.isError}
+              targets={projectEngineTargets}
+              loading={projectEngineTargetsQ.isLoading}
+              pending={createProjectEngineTargetM.isPending || updateProjectEngineTargetM.isPending || archiveProjectEngineTargetM.isPending || syncLegacyProjectEngineTargetsM.isPending || evaluateDeploymentEligibilityM.isPending}
+              syncSummary={projectTargetSyncSummary}
+              eligibilityResult={deploymentEligibilityResult}
+              onCreate={openCreateProjectTarget}
+              onEdit={openEditProjectTarget}
+              onArchive={archiveProjectTarget}
+              onSyncLegacy={syncLegacyProjectTargets}
+              onEvaluate={evaluateProjectTargetEligibility}
+              canManage={projectTargetsManageDecision.allowed}
+              canEvaluate={deploymentEligibilityDecision.allowed}
+              manageUnavailableReason={projectTargetsManageUnavailableReason}
+              evaluateUnavailableReason={deploymentEligibilityUnavailableReason}
+              externalProjectTargetApiUpsertDecision={externalProjectTargetApiUpsertDecision}
+              externalProjectTargetApiDecommissionDecision={externalProjectTargetApiDecommissionDecision}
+            />
           </TabPanel>
           )}
           {policiesReadDecision.allowed && (
