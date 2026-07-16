@@ -3569,26 +3569,45 @@ class PermissionServiceClass {
     sources: PermissionEvaluationSource[],
     tenantId?: string | null
   ): Promise<PermissionEvaluationSource[]> {
+    const sourceMappingReference = (source: PermissionEvaluationSource): string | null =>
+      source.source === 'sso' ? source.sourceMappingId || source.sourceRef || null : null;
     const mappingIds = Array.from(new Set(
       sources
-        .filter((source) => source.source === 'sso')
-        .map((source) => source.sourceMappingId || source.sourceRef)
+        .map(sourceMappingReference)
+        .filter((reference): reference is string => typeof reference === 'string' && !reference.startsWith('identity_entitlement_mapping:'))
+    ));
+    const identityMappingIds = Array.from(new Set(
+      sources
+        .map(sourceMappingReference)
+        .filter((reference): reference is string => typeof reference === 'string' && reference.startsWith('identity_entitlement_mapping:'))
+        .map((reference) => reference.slice('identity_entitlement_mapping:'.length))
         .filter((id): id is string => Boolean(id))
     ));
-    if (mappingIds.length === 0) return sources;
+    if (mappingIds.length === 0 && identityMappingIds.length === 0) return sources;
 
-    const mappings = await dataSource.getRepository(SsoAssignmentMapping).find({
-      where: tenantScopedWhere({ id: In(mappingIds) }, tenantId),
-    });
+    const [mappings, identityMappings] = await Promise.all([
+      mappingIds.length > 0
+        ? dataSource.getRepository(SsoAssignmentMapping).find({ where: tenantScopedWhere({ id: In(mappingIds) }, tenantId) })
+        : Promise.resolve([]),
+      identityMappingIds.length > 0
+        ? dataSource.getRepository(IdentityEntitlementMapping).find({ where: tenantScopedWhere({ id: In(identityMappingIds) }, tenantId) })
+        : Promise.resolve([]),
+    ]);
     const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]));
+    const identityMappingById = new Map(identityMappings.map((mapping) => [mapping.id, mapping]));
 
     return sources.map((source) => {
-      const mappingId = source.source === 'sso' ? source.sourceMappingId || source.sourceRef : null;
+      const reference = sourceMappingReference(source);
+      const mappingId = reference && !reference.startsWith('identity_entitlement_mapping:') ? reference : null;
+      const identityMappingId = reference?.startsWith('identity_entitlement_mapping:')
+        ? reference.slice('identity_entitlement_mapping:'.length)
+        : null;
       const mapping = mappingId ? mappingById.get(mappingId) : null;
-      if (!mapping) return source;
+      const identityMapping = identityMappingId ? identityMappingById.get(identityMappingId) : null;
+      if (!mapping && !identityMapping) return source;
       return {
         ...source,
-        ssoMapping: {
+        ssoMapping: mapping ? {
           id: mapping.id,
           providerId: mapping.providerId,
           claimType: mapping.claimType,
@@ -3596,7 +3615,16 @@ class PermissionServiceClass {
           claimValue: mapping.claimValue,
           claimOperator: mapping.claimOperator,
           targetSelectorType: mapping.targetSelectorType,
-        },
+        } : source.ssoMapping,
+        identityEntitlementMapping: identityMapping ? {
+          id: identityMapping.id,
+          providerId: identityMapping.providerId,
+          entitlementType: identityMapping.entitlementType,
+          externalId: identityMapping.externalId,
+          matchOperator: identityMapping.matchOperator,
+          targetGroupId: identityMapping.targetGroupId,
+          syncMode: identityMapping.syncMode,
+        } : source.identityEntitlementMapping,
       };
     });
   }

@@ -869,6 +869,33 @@ describe('permissionService', () => {
     });
   });
 
+  it('explains provider-neutral identity mapping lineage from a converted group assignment', async () => {
+    const assignmentQb = { innerJoin: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), andWhere: vi.fn().mockReturnThis(), getMany: vi.fn().mockResolvedValue([{ id: 'assignment-converted-identity-group-engine-deployer', roleId: 'group-engine-role', principalType: 'group', principalId: 'group-operators', source: 'sso', sourceMappingId: null, sourceRef: 'identity_entitlement_mapping:mapping-operators' }]) };
+    const groupMembership = createGroupMembershipRepo(['group-operators']);
+    groupMembership.repo.find.mockResolvedValue([{ id: 'membership-manual-operators', groupId: 'group-operators', userId: 'user-1', source: 'manual', sourceRef: 'manual:add', expiresAt: null }]);
+    const authzGroupRepo = { find: vi.fn().mockResolvedValue([{ id: 'group-operators', key: 'operators', name: 'Operators', isArchived: false }]) };
+    const identityMappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'mapping-operators', providerId: 'identity.oidc.main', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-operators', syncMode: 'authoritative' }]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: (entity: unknown) => {
+      if (entity === AuthzGroupMembership) return groupMembership.repo;
+      if (entity === AuthzGroup) return authzGroupRepo;
+      if (entity === IdentityEntitlementMapping) return identityMappingRepo;
+      if (entity === SsoGroupMapping || entity === SsoAssignmentMapping) return { find: vi.fn().mockResolvedValue([]) };
+      if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+      if (entity === RbacRolePermission || entity === RbacRole) return {};
+      throw new Error('Unexpected repository');
+    } });
+
+    const result = await permissionService.evaluatePermission(EnginePermissions.DEPLOY, { userId: 'user-1', resourceType: 'engine', resourceId: 'engine-1' });
+
+    expect(result.allowed).toBe(true);
+    expect(result.sources[0]).toMatchObject({
+      source: 'sso',
+      sourceRef: 'identity_entitlement_mapping:mapping-operators',
+      groupMembership: { id: 'membership-manual-operators', source: 'manual', sourceRef: 'manual:add' },
+      identityEntitlementMapping: { id: 'mapping-operators', providerId: 'identity.oidc.main', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-operators', syncMode: 'authoritative' },
+    });
+  });
+
   it('explains configuration bundle lineage for config-managed role assignments', async () => {
     const assignmentQb = {
       innerJoin: vi.fn().mockReturnThis(),
