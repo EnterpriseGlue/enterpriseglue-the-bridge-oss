@@ -23,6 +23,7 @@ import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
+import { useActionDecision } from '../../../../shared/auth/guards'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
 
@@ -111,6 +112,11 @@ export default function Decisions() {
   const [maxResults] = React.useState(50)
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId],
+  )
+  const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
@@ -129,7 +135,7 @@ export default function Decisions() {
   const defsQ = useQuery({
     queryKey: ['mission-control', 'decision-defs', selectedEngineId],
     queryFn: () => listDecisionDefinitions(selectedEngineId),
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const defItems = React.useMemo(() => {
@@ -226,7 +232,7 @@ export default function Decisions() {
       if (!currentDef) return ''
       return fetchDecisionDefinitionDmnXml(currentDef.id, selectedEngineId)
     },
-    enabled: !!currentDef?.id && !!selectedEngineId,
+    enabled: !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   // Derived boolean flags from selectedStates
@@ -255,7 +261,7 @@ export default function Decisions() {
       })
       return listDecisionHistory(params)
     },
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
 
@@ -278,7 +284,7 @@ export default function Decisions() {
     // The API resolves the selected definition and makes the authoritative
     // runtime-resource decision. The browser snapshot intentionally excludes
     // runtime-resource keys, so it cannot safely gate this request.
-    enabled: !!selectedEngineId && !!currentKey && selectedVersion !== null,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed && !!currentKey && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -364,6 +370,19 @@ export default function Decisions() {
   const engineAccessError = isEngineAccessError(defsQ.error)
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  }
+  if (selectedEngineId && !decisionsReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-5)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Decision definitions unavailable"
+          subtitle={decisionsReadDecision.reason}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    )
   }
 
   return (

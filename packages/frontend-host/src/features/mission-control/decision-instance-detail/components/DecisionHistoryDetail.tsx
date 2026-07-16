@@ -27,6 +27,7 @@ import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
+import { useActionDecision } from '../../../../shared/auth/guards'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
@@ -78,6 +79,11 @@ export default function DecisionHistoryDetail() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const selectedEngineId = useSelectedEngine()
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId],
+  )
+  const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
   const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const searchParams = new URLSearchParams(location.search)
@@ -96,7 +102,7 @@ export default function DecisionHistoryDetail() {
       )
       return data[0] || null
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const decision = histQ.data as HistoricDecisionInstance | null
@@ -119,7 +125,7 @@ export default function DecisionHistoryDetail() {
       )
       return data
     },
-    enabled: !!rootDecisionInstanceId && !!selectedEngineId,
+    enabled: !!rootDecisionInstanceId && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const versionLabel = React.useMemo(() => {
@@ -144,7 +150,7 @@ export default function DecisionHistoryDetail() {
       )
       return data.dmnXml
     },
-    enabled: !!decision?.decisionDefinitionId && !!selectedEngineId,
+    enabled: !!decision?.decisionDefinitionId && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const inputsQ = useQuery({
@@ -158,7 +164,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const outputsQ = useQuery<DecisionIo[]>({
@@ -172,7 +178,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const title = decision?.decisionDefinitionName || decision?.decisionDefinitionKey || 'Decision'
@@ -242,7 +248,7 @@ export default function DecisionHistoryDetail() {
       version: decisionVersion,
       decisionDefinitionId: decision?.decisionDefinitionId,
     }),
-    enabled: !!selectedEngineId && !!decisionKey && decisionVersion !== null,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed && !!decisionKey && decisionVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -300,6 +306,20 @@ export default function DecisionHistoryDetail() {
 
   // Check if initial data is loading
   const isInitialLoading = histQ.isLoading || xmlQ.isLoading
+
+  if (selectedEngineId && !decisionsReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-5)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Decision history unavailable"
+          subtitle={decisionsReadDecision.reason}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    )
+  }
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="instance-detail">
