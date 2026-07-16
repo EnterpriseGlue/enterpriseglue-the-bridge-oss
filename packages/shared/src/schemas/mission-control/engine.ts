@@ -389,6 +389,21 @@ export const EngineHealthSchema = EngineHealthSchemaRaw.transform((h) => ({
   checkedAt: Number(h.checkedAt ?? 0),
 }));
 
+/**
+ * Runtime health and explicit connection-test response. Stored health rows do
+ * not necessarily include the optional live version or transport diagnostic.
+ */
+export const EngineConnectionHealthResponseSchema = z.object({
+  id: z.string().optional(),
+  engineId: z.string().optional(),
+  status: z.enum(['connected', 'disconnected', 'unknown']),
+  latencyMs: z.number().nullable().optional(),
+  message: z.string().nullable().optional(),
+  version: z.string().nullable().optional(),
+  checkedAt: z.number(),
+  transport: EngineTransportDiagnosticsSchema.optional(),
+});
+
 export const EngineHealthInsertSchema = z.object({
   id: z.string().uuid().optional(),
   engineId: z.string().uuid(),
@@ -405,3 +420,4 @@ export type UpdateEngineRequest = z.infer<typeof UpdateEngineRequestSchema>;
 export type AccessibleEngineSummary = z.infer<typeof AccessibleEngineSummarySchema>;
 export type EngineCapabilities = z.infer<typeof EngineCapabilitiesSchema>;
 export type EngineHealth = z.infer<typeof EngineHealthSchema>;
+export type EngineConnectionHealthResponse = z.infer<typeof EngineConnectionHealthResponseSchema>;

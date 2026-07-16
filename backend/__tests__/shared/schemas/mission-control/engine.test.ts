@@ -5,6 +5,7 @@ import {
   EndpointAuthenticationPolicyErrorSchema,
   EndpointAuthenticationPolicyMessages,
   EngineSchema,
+  EngineConnectionHealthResponseSchema,
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
@@ -94,6 +95,24 @@ describe('EngineSchema', () => {
       active: true, version: null, createdAt: 1, updatedAt: 2, metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false,
     });
     expect(engine).toMatchObject({ metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false });
+  });
+
+  it('shares the live connection-test and stored-health response shape', () => {
+    expect(EngineConnectionHealthResponseSchema.parse({
+      id: 'health-1',
+      engineId: 'engine-1',
+      status: 'connected',
+      latencyMs: 12,
+      message: null,
+      version: '7.20.0',
+      checkedAt: 10,
+      transport: {
+        connectionMode: 'customer_sidecar',
+        upstreamHop: 'enterpriseglue_to_sidecar',
+        endpointAuthentication: 'oauth2-client-credentials',
+        downstreamAuthentication: 'customer_managed',
+      },
+    })).toMatchObject({ status: 'connected', version: '7.20.0' });
   });
 
   it('keeps manual, external, and config registration connection modes aligned', () => {

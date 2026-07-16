@@ -34,6 +34,7 @@ const {
   EngineSchema,
   EngineSchemaRaw,
   AccessibleEngineSummarySchema,
+  EngineConnectionHealthResponseSchema,
   EngineConnectionModeSchema,
   EngineTransportDiagnosticsSchema,
   EndpointAuthenticationPolicyErrorSchema,
@@ -1047,24 +1048,14 @@ registry.registerPath({
 })
 
 // Engine health
-const EngineHealthSchema = z.object({
-  id: z.string().optional(),
-  engineId: z.string().optional(),
-  status: z.enum(['connected','disconnected','unknown']),
-  latencyMs: z.number().nullable().optional(),
-  message: z.string().nullable().optional(),
-  version: z.string().nullable().optional(),
-  checkedAt: z.number(),
-  transport: EngineTransportDiagnosticsSchema.optional(),
-})
-registry.register('EngineHealth', EngineHealthSchema)
+registry.register('EngineHealth', EngineConnectionHealthResponseSchema)
 
 registry.registerPath({
   method: 'post',
   path: '/engines-api/engines/{id}/test',
   ...authzExtension('engine.inventory.update', 'POST', '/engines-api/engines/{id}/test'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Health test result', content: { 'application/json': { schema: EngineHealthSchema } } } },
+  responses: { 200: { description: 'Health test result', content: { 'application/json': { schema: EngineConnectionHealthResponseSchema } } } },
 })
 
 registry.registerPath({
@@ -1072,7 +1063,7 @@ registry.registerPath({
   path: '/engines-api/engines/{id}/health',
   ...authzExtension('engine.inventory.read', 'GET', '/engines-api/engines/{id}/health'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Last recorded health or null', content: { 'application/json': { schema: EngineHealthSchema.nullable() } } } },
+  responses: { 200: { description: 'Last recorded health or null', content: { 'application/json': { schema: EngineConnectionHealthResponseSchema.nullable() } } } },
 })
 
 registry.register('SavedFilter', SavedFilterSchema)

@@ -44,6 +44,7 @@ import type {
 import type {
   CreateEngineRequest,
   AccessibleEngineSummary,
+  EngineConnectionHealthResponse,
   EngineAuthType,
   EngineConnectionMode,
   EngineType,
@@ -2399,7 +2400,7 @@ export default function Engines() {
 }
 
 function EngineHealthBadge({ engineId, version }: { engineId: string; version?: string | null }) {
-  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => apiClient.get<any | null>(`/engines-api/engines/${encodeURIComponent(engineId)}/health`, undefined, { credentials: 'include' }) })
+  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => apiClient.get<EngineConnectionHealthResponse | null>(`/engines-api/engines/${encodeURIComponent(engineId)}/health`, undefined, { credentials: 'include' }) })
   const h = q.data
   const status = h?.status || 'unknown'
   const label = status === 'connected' ? 'Connected' : (status === 'disconnected' ? 'Disconnected' : 'Unknown')
@@ -2413,7 +2414,7 @@ function EngineHealthBadge({ engineId, version }: { engineId: string; version?: 
 }
 
 function EngineVersionCell({ engineId, initialVersion }: { engineId: string; initialVersion?: string | null }) {
-  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => apiClient.get<any | null>(`/engines-api/engines/${encodeURIComponent(engineId)}/health`, undefined, { credentials: 'include' }) })
+  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => apiClient.get<EngineConnectionHealthResponse | null>(`/engines-api/engines/${encodeURIComponent(engineId)}/health`, undefined, { credentials: 'include' }) })
   const v = initialVersion || q.data?.version
   return <span style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>{v ? `v${v}` : '—'}</span>
 }
