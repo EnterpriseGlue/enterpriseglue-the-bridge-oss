@@ -19,11 +19,13 @@ import { getExternalEngineCapabilityDiagnostics, getExternalEngineMaterializatio
 import { parseExternalEngineFieldOwnership } from './external-engine-ownership.js';
 import { parseExternalEngineJson, parseExternalEngineLabels, redactExternalEngineAuditDetails } from './external-engine-serialization.js';
 import { isExternalEngineTenantVisible } from './external-engine-tenant.js';
-import { ExternalEngineRegistrationAuditQuerySchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import {
+  ExternalEngineLifecycleRequestSchema,
+  ExternalEngineRegistrationAuditQuerySchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
 const externalEngineAuditActions = ExternalEngineRegistrationAuditQuerySchema.shape.action.unwrap().exclude(['all']).options;
-const externalEngineLifecycleBodySchema = z.object({ reason: z.string().trim().max(500).optional() });
 
 export interface ExternalEngineRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
@@ -120,7 +122,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.post('/api/authz/external-engines/:id/decommission', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateBody(externalEngineLifecycleBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/external-engines/:id/decommission', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateBody(ExternalEngineLifecycleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
       const engineRepo = dataSource.getRepository(Engine);
@@ -146,7 +148,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateBody(externalEngineLifecycleBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/external-engines/:id/reactivate', apiLimiter, requireAuth, requireAction('platform.external-engines.lifecycle.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateBody(ExternalEngineLifecycleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const dataSource = await getDataSource();
       const engineRepo = dataSource.getRepository(Engine);

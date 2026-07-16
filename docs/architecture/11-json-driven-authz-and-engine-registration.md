@@ -2289,6 +2289,8 @@ Project-target deployment eligibility and legacy-sync requests now share their r
 
 The tenant-scoped authorization-audit query now also has one shared, coercion-aware schema across the backend route and OpenAPI, so pagination and decision filters cannot drift between documented and executable behavior.
 
+External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
+
 Policy create and update inputs now use the same shared schemas in route validation, OpenAPI, and Platform Admin hooks. OpenAPI now accurately advertises the service's identifier-only create response and success-only update response rather than a policy record that the mutation never returns.
 
 The policy list response now has one strict shared service-view schema across the route, OpenAPI, and hook. It exposes effective policy fields only; persistence timestamps and creator fields are no longer advertised when the service does not return them.

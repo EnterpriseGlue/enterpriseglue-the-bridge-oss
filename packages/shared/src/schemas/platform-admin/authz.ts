@@ -816,6 +816,11 @@ export const ExternalEngineRegistrationAuditQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
+/** Bounded operator note retained in external-engine lifecycle audit events. */
+export const ExternalEngineLifecycleRequestSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
 export const ExternalEngineDecommissionResponseSchema = z.object({
   decommissioned: z.boolean(),
   engineId: z.string(),
@@ -1932,6 +1937,7 @@ export type ExternalEngineRegistration = z.infer<typeof ExternalEngineRegistrati
 export type ExternalEngineRegistrationAuditEntry = z.infer<typeof ExternalEngineRegistrationAuditEntrySchema>;
 export type ExternalEngineRegistrationAuditAction = z.infer<typeof ExternalEngineRegistrationAuditActionSchema>;
 export type ExternalEngineRegistrationAuditQuery = z.infer<typeof ExternalEngineRegistrationAuditQuerySchema>;
+export type ExternalEngineLifecycleRequest = z.input<typeof ExternalEngineLifecycleRequestSchema>;
 export type ExternalEngineDecommissionResponse = z.infer<typeof ExternalEngineDecommissionResponseSchema>;
 export type ExternalEngineReactivateResponse = z.infer<typeof ExternalEngineReactivateResponseSchema>;
 export type ExternalEngineReconcileResponse = z.infer<typeof ExternalEngineReconcileResponseSchema>;

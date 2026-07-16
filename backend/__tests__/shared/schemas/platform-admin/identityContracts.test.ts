@@ -43,6 +43,7 @@ import {
   CustomPermissionCreateResponseSchema,
   EngineSetCreateSchema,
   EngineSetUpdateSchema,
+  ExternalEngineLifecycleRequestSchema,
   ProjectEngineTargetSyncLegacyResponseSchema,
   ProjectEngineTargetSyncLegacyRequestSchema,
   RoleAssignmentCreateResponseSchema,
@@ -312,6 +313,11 @@ describe('provider-neutral identity shared contracts', () => {
       decision: 'deny', limit: 500, offset: 0,
     });
     expect(() => AuthzAuditQuerySchema.parse({ limit: '501' })).toThrow();
+  });
+
+  it('shares bounded external-engine lifecycle notes with the route and OpenAPI', () => {
+    expect(ExternalEngineLifecycleRequestSchema.parse({ reason: '  maintenance window  ' })).toEqual({ reason: 'maintenance window' });
+    expect(() => ExternalEngineLifecycleRequestSchema.parse({ reason: 'x'.repeat(501) })).toThrow();
   });
 
   it('keeps the public policy response aligned with the service view', () => {
