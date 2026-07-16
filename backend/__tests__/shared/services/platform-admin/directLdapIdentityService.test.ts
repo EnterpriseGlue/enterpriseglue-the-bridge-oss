@@ -158,4 +158,26 @@ describe('direct LDAP identity service', () => {
     await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', directory.defaultUserPassword))
       .rejects.toThrow('did not include a DN');
   });
+
+  it('classifies rejected service and user binds without exposing LDAP protocol details', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    const rejectedServiceClient = {
+      bind: vi.fn().mockRejectedValue({ code: 49, message: ' Code: 0x31' }),
+      search: vi.fn(), unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => rejectedServiceClient);
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword))
+      .rejects.toThrow('LDAP service credentials were rejected');
+
+    const rejectedUserClient = {
+      bind: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce({ code: 49, message: ' Code: 0x31' }),
+      search: vi.fn().mockResolvedValue({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'uuid-1', mail: 'person@example.test' }] }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => rejectedUserClient);
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword))
+      .rejects.toThrow('LDAP user credentials were rejected');
+  });
 });

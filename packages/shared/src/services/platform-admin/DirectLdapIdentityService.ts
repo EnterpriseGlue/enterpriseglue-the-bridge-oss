@@ -59,6 +59,16 @@ function escapeFilter(value: string): string {
   return value.replace(/\\/g, '\\5c').replace(/\*/g, '\\2a').replace(/\(/g, '\\28').replace(/\)/g, '\\29').replace(/\0/g, '\\00');
 }
 
+function ldapBindError(error: unknown, subject: 'service' | 'user'): Error {
+  const candidate = error as { code?: unknown; message?: unknown } | null;
+  const code = Number(candidate?.code);
+  const message = typeof candidate?.message === 'string' ? candidate.message : '';
+  if (code === 49 || /(?:invalid credentials|code:\s*0x31)/i.test(message)) {
+    return new Error(`LDAP ${subject} credentials were rejected`);
+  }
+  return error instanceof Error ? error : new Error(`LDAP ${subject} bind failed`);
+}
+
 function configuration(provider: IdentityProvider): LdapConfiguration {
   let raw: Record<string, unknown>;
   try { raw = JSON.parse(provider.configurationJson) as Record<string, unknown>; } catch { throw new Error('LDAP provider configuration is invalid'); }
@@ -90,7 +100,7 @@ class DirectLdapIdentityService {
     try {
       const password = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!password) throw new Error('LDAP bind password reference is unavailable');
-      await client.bind(config.bindDn, password);
+      try { await client.bind(config.bindDn, password); } catch (error) { throw ldapBindError(error, 'service'); }
       const entries = await this.enumerateUsers(client, config);
       const identities = await Promise.all(entries.map(async (entry) => {
         const dn = first(entry, 'dn') || entry.dn || '';
@@ -124,14 +134,14 @@ class DirectLdapIdentityService {
     try {
       const bindPassword = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!bindPassword) throw new Error('LDAP bind password reference is unavailable');
-      await client.bind(config.bindDn, bindPassword);
+      try { await client.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
       const result = await client.search(config.userBaseDn, { scope: 'sub', filter, attributes: ['entryUUID', 'objectGUID', 'uid', 'mail', 'cn', 'givenName', 'sn', 'memberOf'], sizeLimit: 2, timeLimit: 5 });
       if (result.searchEntries.length !== 1) throw new Error('LDAP user lookup did not return exactly one entry');
       const entry = result.searchEntries[0];
       const userDn = first(entry, 'dn') || entry.dn || null;
       if (!userDn) throw new Error('LDAP user entry did not include a DN');
-      await client.bind(userDn, password);
-      await client.bind(config.bindDn, bindPassword);
+      try { await client.bind(userDn, password); } catch (error) { throw ldapBindError(error, 'user'); }
+      try { await client.bind(config.bindDn, bindPassword); } catch (error) { throw ldapBindError(error, 'service'); }
       const groups = config.membershipMode === 'memberOf'
         ? values(entry.memberOf)
         : await this.groupsForEntry(client, config, userDn);

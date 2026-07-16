@@ -57,4 +57,18 @@ describeContainer('direct LDAP container integration', () => {
       }),
     ]));
   });
+
+  it('fails closed for a rejected user bind and a missing directory user', async () => {
+    await expect(directLdapIdentityService.authenticate(
+      provider,
+      'alice@identity-mock.test',
+      'incorrect-test-password',
+    )).rejects.toThrow('LDAP user credentials were rejected');
+
+    await expect(directLdapIdentityService.authenticate(
+      provider,
+      'deleted-or-missing@identity-mock.test',
+      process.env.EG_LDAP_TEST_USER_PASSWORD!,
+    )).rejects.toThrow('did not return exactly one entry');
+  });
 });

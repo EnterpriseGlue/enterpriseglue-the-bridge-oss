@@ -31,7 +31,8 @@ The harness starts a temporary `osixia/openldap:1.5.0` directory on loopback
 with a random host port, a one-day local CA, random administrator and user
 passwords, and no persisted volume. It generates the following seed only:
 
-- `uid=alice,ou=people,dc=identity-mock,dc=test`;
+- `uid=alice,ou=people,dc=identity-mock,dc=test` (including a real rejected
+  bind check);
 - `uid=bob,ou=people,dc=identity-mock,dc=test`, so the production client must
   follow a one-entry LDAP page during directory enumeration;
 - `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice; and
