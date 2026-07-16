@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { ldapIdentityProviderAdapter, oidcIdentityProviderAdapter, samlIdentityProviderAdapter } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
-import { MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
+import { MockIdentityTestStack, MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 
 describe('identity mock provider contracts', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -32,30 +32,30 @@ describe('identity mock provider contracts', () => {
     ]));
   });
 
-  it('resets mutable OIDC, SAML, and LDAP fixture state between tests', async () => {
-    const oidc = new MockOidcProvider();
+  it('resets coordinated OIDC, SAML, and LDAP fixture state between tests', async () => {
+    const stack = new MockIdentityTestStack();
+    const { oidc, saml, ldap: directory } = stack;
     oidc.setFailureMode('unavailable');
-    oidc.reset();
-    vi.stubGlobal('fetch', oidc.fetch.bind(oidc));
-    await expect(genericOidcService.exchangeCode(oidc.configuration(), {
-      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
-    })).resolves.toMatchObject({ sub: 'user-1', groups: ['ops'] });
-
-    const saml = new MockSamlIdentityProvider();
+    oidc.setTokenClaims({ sub: 'changed-user', email: 'changed@example.test', nonce: 'changed-nonce', groups: ['changed'] });
+    const rotatedToken = oidc.issueIdToken();
     saml.setAttributes({ nameID: 'changed@example.test', role: ['changed'] });
     saml.setNow(new Date('2030-01-01T00:00:00.000Z'));
-    saml.reset();
-    expect(saml.assertion()).toMatchObject({ nameID: 'person@example.test', role: ['operator'] });
-    expect(Buffer.from(saml.signedResponse(), 'base64').toString('utf8')).not.toContain('2030-01-01T00:00:00.000Z');
-
-    const directory = new MockLdapDirectory();
     const previousBindPassword = directory.bindPassword;
     const removedUserPassword = directory.defaultUserPassword;
     directory.setUser('changed@example.test', {
       password: removedUserPassword, subjectId: 'uid=changed,ou=users,dc=example,dc=test', memberOf: [],
     });
     directory.setFailureMode('timeout');
-    directory.reset();
+
+    stack.reset();
+
+    vi.stubGlobal('fetch', oidc.fetch.bind(oidc));
+    await expect(genericOidcService.exchangeCode(oidc.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).resolves.toMatchObject({ sub: 'user-1', groups: ['ops'] });
+    expect(oidc.issueIdToken()).not.toBe(rotatedToken);
+    expect(saml.assertion()).toMatchObject({ nameID: 'person@example.test', role: ['operator'] });
+    expect(Buffer.from(saml.signedResponse(), 'base64').toString('utf8')).not.toContain('2030-01-01T00:00:00.000Z');
     expect(directory.bindPassword).not.toBe(previousBindPassword);
     expect(() => directory.bind('changed@example.test', removedUserPassword)).toThrow('LDAP invalid credentials');
     expect(directory.bind('person@example.test', directory.defaultUserPassword)).toMatchObject({ subjectId: expect.stringContaining('uid=person') });

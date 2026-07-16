@@ -488,6 +488,23 @@ export class MockLdapDirectory {
   }
 }
 
+/**
+ * Coordinates the mutable protocol fixtures used by an identity test. Product
+ * runtime never imports this stack: tests retain direct access to each protocol
+ * controller while `reset()` restores every fixture to an isolated baseline.
+ */
+export class MockIdentityTestStack {
+  readonly oidc = new MockOidcProvider();
+  readonly saml = new MockSamlIdentityProvider();
+  readonly ldap = new MockLdapDirectory();
+
+  reset(): void {
+    this.oidc.reset();
+    this.saml.reset();
+    this.ldap.reset();
+  }
+}
+
 /** A protocol-independent adapter used to prove the shared contract is not protocol-coupled. */
 export const inMemoryIdentityProviderAdapter: IdentityProviderAdapter = {
   type: 'oidc',
