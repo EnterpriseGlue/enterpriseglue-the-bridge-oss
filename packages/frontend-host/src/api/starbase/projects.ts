@@ -6,6 +6,8 @@ import type {
   ProjectMemberCapabilities,
   ProjectMemberLookup,
   ProjectMembersResponse,
+  ProjectDeployGrantResponse,
+  ReissuedManualProjectInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
 
 const BASE_URL = '/starbase-api/projects';
@@ -32,6 +34,24 @@ export const projectsApi = {
       `${BASE_URL}/${encodeURIComponent(id)}/members/lookup`,
       email ? { email } : undefined,
     ),
+
+  updateMemberDeployGrant: (id: string, userId: string, allowed: boolean) =>
+    apiClient.put<ProjectDeployGrantResponse>(
+      `${BASE_URL}/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}/deploy-permission`,
+      { allowed },
+    ),
+
+  reissueManualMemberInvitation: (id: string, invitationId: string) =>
+    apiClient.post<ReissuedManualProjectInvitation>(
+      `${BASE_URL}/${encodeURIComponent(id)}/pending-invites/${encodeURIComponent(invitationId)}/reissue`,
+      {},
+    ),
+
+  removeMember: (id: string, userId: string) =>
+    apiClient.delete(`${BASE_URL}/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`),
+
+  transferOwnership: (id: string, newOwnerId: string) =>
+    apiClient.post(`${BASE_URL}/${encodeURIComponent(id)}/transfer-ownership`, { newOwnerId }),
   
   create: (data: { name: string }) => apiClient.post<Project>(BASE_URL, data),
   

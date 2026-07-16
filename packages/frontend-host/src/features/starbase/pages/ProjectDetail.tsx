@@ -62,9 +62,7 @@ import type {
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import type {
-  ProjectDeployGrantResponse as SharedProjectDeployGrantResponse,
   ProjectMemberAddResponse as SharedProjectMemberAddResponse,
-  ReissuedManualProjectInvitation as SharedReissuedManualProjectInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
@@ -480,9 +478,7 @@ export default function ProjectDetail() {
     if (!canManageMemberDeployGrant) return
     if (!projectId) return
     try {
-      await apiClient.put<SharedProjectDeployGrantResponse>(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}/deploy-permission`, {
-        allowed,
-      })
+      await projectsApi.updateMemberDeployGrant(projectId, member.userId, allowed)
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
       showToast({ kind: 'success', title: allowed ? 'Deploy permission granted' : 'Deploy permission revoked' })
     } catch (e: any) {
@@ -1350,7 +1346,7 @@ export default function ProjectDetail() {
     if (!canInviteMembers) return
     if (!projectId) return
     try {
-      const json = await apiClient.post<SharedReissuedManualProjectInvitation>(`/starbase-api/projects/${projectId}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`, {})
+      const json = await projectsApi.reissueManualMemberInvitation(projectId, invite.invitationId)
       const inviteUrl = json.inviteUrl || ''
       const oneTimePassword = json.oneTimePassword || ''
 
@@ -1378,7 +1374,7 @@ export default function ProjectDetail() {
     if (!canRemoveMembers) return
     if (!projectId) return
     try {
-      await apiClient.delete(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}`)
+      await projectsApi.removeMember(projectId, member.userId)
       await syncProjectCustomRoleAssignments(member.userId, [])
       removeMemberModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
@@ -1393,9 +1389,7 @@ export default function ProjectDetail() {
     if (!canTransferOwnership) return
     if (!projectId) return
     try {
-      await apiClient.post(`/starbase-api/projects/${projectId}/transfer-ownership`, {
-        newOwnerId: member.userId,
-      })
+      await projectsApi.transferOwnership(projectId, member.userId)
       transferOwnershipModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'me'] })
