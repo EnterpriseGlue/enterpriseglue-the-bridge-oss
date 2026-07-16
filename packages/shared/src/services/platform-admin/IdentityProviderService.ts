@@ -7,12 +7,17 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import type {
+  IdentityProviderAuthenticationMode as SchemaIdentityProviderAuthenticationMode,
+  IdentityProviderType as SchemaIdentityProviderProtocol,
+} from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 
-export type IdentityProviderProtocol = 'oidc' | 'saml' | 'ldap';
-export type IdentityProviderAuthenticationMode = 'direct' | 'claims_only';
+/** Compatibility exports; shared schemas remain the canonical vocabulary. */
+export type IdentityProviderProtocol = SchemaIdentityProviderProtocol;
+export type IdentityProviderAuthenticationMode = SchemaIdentityProviderAuthenticationMode;
 
 export interface IdentityProviderInput {
   tenantId?: string | null;
