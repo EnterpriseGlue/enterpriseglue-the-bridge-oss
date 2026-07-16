@@ -447,17 +447,29 @@ router.get(
       const members = await projectMemberService.getMembers(projectId);
       const pendingInvites = await listPendingProjectInvites(projectId);
 
-      const editorIds = members
-        .filter((m: any) => String(m.role) === 'editor')
-        .map((m: any) => String(m.userId));
+      // The deploy-grant mutation validates the target through the canonical
+      // project file-edit permission. Keep the list contract on that same
+      // decision so the UI does not reintroduce a legacy ProjectMember.role
+      // allowlist (and custom/canonical editors remain manageable).
+      const deployEligibleUserIds = (await Promise.all(members.map(async (member: any) => {
+        const userId = String(member.userId || '');
+        if (!userId) return null;
+        const canEditProjectFiles = await permissionService.hasPermission(ProjectPermissions.FILES_EDIT, {
+          userId,
+          tenantId: req.tenant?.tenantId || null,
+          resourceType: 'project',
+          resourceId: projectId,
+        });
+        return canEditProjectFiles ? userId : null;
+      }))).filter((userId): userId is string => Boolean(userId));
 
       let deployGrantSet = new Set<string>();
-      if (editorIds.length > 0) {
+      if (deployEligibleUserIds.length > 0) {
         const dataSource = await getDataSource();
         const grantRepo = dataSource.getRepository(PermissionGrant);
         const deployGrantRows = await grantRepo.createQueryBuilder('pg')
           .select(['pg.userId'])
-          .where('pg.userId IN (:...editorIds)', { editorIds })
+          .where('pg.userId IN (:...deployEligibleUserIds)', { deployEligibleUserIds })
           .andWhere('pg.permission IN (:...perms)', { perms: ['project:deploy', 'project.deploy'] })
           .andWhere('pg.resourceType = :resourceType', { resourceType: 'project' })
           .andWhere('pg.resourceId = :resourceId', { resourceId: projectId })
@@ -468,7 +480,7 @@ router.get(
       res.json({
         members: members.map((m: any) => ({
           ...m,
-          deployAllowed: String(m.role) === 'editor' ? deployGrantSet.has(String(m.userId)) : null,
+          deployAllowed: deployEligibleUserIds.includes(String(m.userId)) ? deployGrantSet.has(String(m.userId)) : null,
         })),
         pendingInvites,
       });

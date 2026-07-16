@@ -408,7 +408,7 @@ export const PROJECT_AUTHZ_ACTIONS = [
       risk: 'high',
       audit: true,
       category: 'Project Members',
-      description: 'Grant or revoke project deployment permission for editor members.',
+      description: 'Grant or revoke project deployment permission for members with project file-edit access.',
       ui: [{ surfaceId: 'project.members.deploy-grant', behavior: 'disable' }],
       routes: [
         { method: 'PUT', route: '/starbase-api/projects/{projectId}/members/{userId}/deploy-permission', resourceResolver: 'project.byId' },

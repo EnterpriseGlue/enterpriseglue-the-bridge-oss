@@ -349,7 +349,11 @@ export const ProjectMembersModal = ({
                                   ? ((Array.isArray(member.roles) && member.roles.length > 0 ? member.roles : [member.role]) as ProjectRole[])
                                   : ([] as ProjectRole[])
                               const isOwner = hasProjectOwnerRole(roles)
-                              const isEditor = String(member?.role) === 'editor'
+                              // `deployAllowed` is `boolean` only when the server's
+                              // canonical project file-edit decision makes this member
+                              // eligible for a deploy grant. `null` is an ineligible
+                              // member, so no legacy role label participates in this UI.
+                              const isDeployGrantEligible = typeof member?.deployAllowed === 'boolean'
                               const name = r.cells.find((c) => c.info.header === 'name')?.value
                               const email = pendingInvite?.email || member?.user?.email || ''
                               const customRoleTags = member ? customRoleTagsByUser?.get(member.userId) || [] : []
@@ -367,7 +371,7 @@ export const ProjectMembersModal = ({
                                 !pendingInvite &&
                                 !isOwner &&
                                 manualProjectAccessEnabled &&
-                                (canUpdateMemberRoles || (isEditor && canManageMemberDeployGrant) || canTransferOwnership || canRemoveMembers)
+                                (canUpdateMemberRoles || (isDeployGrantEligible && canManageMemberDeployGrant) || canTransferOwnership || canRemoveMembers)
                               )
 
                               return (
@@ -400,7 +404,7 @@ export const ProjectMembersModal = ({
                                               {role}
                                             </Tag>
                                           ))}
-                                          {isEditor && (member as any)?.deployAllowed ? (
+                                          {isDeployGrantEligible && member?.deployAllowed ? (
                                             <Tag key="deploy" type="green" size="sm">
                                               deploy
                                             </Tag>
@@ -432,21 +436,21 @@ export const ProjectMembersModal = ({
                                         {canUpdateMemberRoles ? (
                                           <GuardedOverflowMenuItem itemText="Edit roles" onClick={() => onEditRoles(member as ProjectMember)} />
                                         ) : null}
-                                        {isEditor && canManageMemberDeployGrant ? (
+                                        {isDeployGrantEligible && canManageMemberDeployGrant ? (
                                           <GuardedOverflowMenuItem
-                                            itemText={(member as any)?.deployAllowed ? 'Revoke deploy permission' : 'Grant deploy permission'}
-                                            onClick={() => onToggleDeploy(member as ProjectMember, !(member as any)?.deployAllowed)}
+                                            itemText={member?.deployAllowed ? 'Revoke deploy permission' : 'Grant deploy permission'}
+                                            onClick={() => onToggleDeploy(member as ProjectMember, !member?.deployAllowed)}
                                           />
                                         ) : null}
                                         {canTransferOwnership && onTransferOwnership ? (
                                           <GuardedOverflowMenuItem
                                             itemText="Transfer ownership"
-                                            hasDivider={canUpdateMemberRoles || (isEditor && canManageMemberDeployGrant)}
+                                            hasDivider={canUpdateMemberRoles || (isDeployGrantEligible && canManageMemberDeployGrant)}
                                             onClick={() => onTransferOwnership(member as ProjectMember)}
                                           />
                                         ) : null}
                                         {canRemoveMembers ? (
-                                          <GuardedOverflowMenuItem itemText="Remove" isDelete hasDivider={canUpdateMemberRoles || (isEditor && canManageMemberDeployGrant) || canTransferOwnership} onClick={() => onRemove(member as ProjectMember)} />
+                                          <GuardedOverflowMenuItem itemText="Remove" isDelete hasDivider={canUpdateMemberRoles || (isDeployGrantEligible && canManageMemberDeployGrant) || canTransferOwnership} onClick={() => onRemove(member as ProjectMember)} />
                                         ) : null}
                                       </GuardedOverflowMenu>
                                     ) : null}

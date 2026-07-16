@@ -350,6 +350,53 @@ describe('starbase members routes', () => {
     );
   });
 
+  it('reports deploy-grant eligibility from canonical file-edit permission rather than the legacy member role', async () => {
+    const grantQueryBuilder = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{ userId: 'canonical-editor-1' }]),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project || entityName(entity) === 'Project') return projectRepository();
+        if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === PermissionGrant || entityName(entity) === 'PermissionGrant') return { createQueryBuilder: vi.fn().mockReturnValue(grantQueryBuilder) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (projectMemberService.getMembers as Mock).mockResolvedValue([
+      { userId: 'canonical-editor-1', role: 'viewer', roles: ['viewer'] },
+      { userId: 'legacy-editor-1', role: 'editor', roles: ['editor'] },
+    ]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string, context?: { userId?: string }) =>
+      permission === 'project:members:view' ||
+      (permission === 'project:files:edit' && context?.userId === 'canonical-editor-1')
+    );
+
+    const response = await request(app)
+      .get('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members');
+
+    expect(response.status).toBe(200);
+    expect(response.body.members).toEqual([
+      expect.objectContaining({ userId: 'canonical-editor-1', deployAllowed: true }),
+      expect.objectContaining({ userId: 'legacy-editor-1', deployAllowed: null }),
+    ]);
+    expect(grantQueryBuilder.where).toHaveBeenCalledWith(
+      'pg.userId IN (:...deployEligibleUserIds)',
+      { deployEligibleUserIds: ['canonical-editor-1'] },
+    );
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'project:files:edit',
+      expect.objectContaining({
+        userId: 'canonical-editor-1',
+        resourceType: 'project',
+        resourceId: '00000000-0000-0000-0000-000000000001',
+      }),
+    );
+  });
+
   it('adds existing user through scoped members-add action without legacy manager role', async () => {
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
