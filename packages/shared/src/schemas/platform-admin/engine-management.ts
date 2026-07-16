@@ -197,3 +197,4 @@ export type EngineWithDetails = z.infer<typeof EngineWithDetailsSchema>;
 export type EngineEndpointAuthenticationSummary = z.infer<typeof EngineEndpointAuthenticationSummarySchema>;
 export type EngineGovernanceMetadata = z.infer<typeof EngineGovernanceMetadataSchema>;
 export type EngineEnvironmentUpdateResponse = z.infer<typeof EngineEnvironmentUpdateResponseSchema>;
+export type AddEngineMember = z.infer<typeof AddEngineMemberRequest>;

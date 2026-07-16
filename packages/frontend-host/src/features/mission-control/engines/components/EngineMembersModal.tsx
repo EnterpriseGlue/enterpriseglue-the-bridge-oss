@@ -42,6 +42,7 @@ import UserLookupEmailField from '../../../../shared/components/UserLookupEmailF
 import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationDeliveryMethod, type InvitationRevealData } from '../../../../shared/utils/invitationFlow'
 import { StarbaseTableShell } from '../../../starbase/components/StarbaseTableShell'
 import {
+  addEngineMember,
   approveEngineAccessRequest,
   assignEngineDelegate,
   denyEngineAccessRequest,
@@ -55,7 +56,6 @@ import {
 } from '../api/engines'
 import type {
   EngineMember as SharedEngineMember,
-  EngineMemberAddResponse as SharedEngineMemberAddResponse,
   EngineRole as SharedEngineRole,
   PendingEngineInvite as SharedPendingEngineInvite,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
@@ -798,16 +798,21 @@ export default function EngineMembersModal({
       }
     }
 
+    if (memberRole !== 'operator' && memberRole !== 'deployer') {
+      setMemberError('Choose an operator or deployer role for a member invitation')
+      return
+    }
+
     try {
       setMemberSubmitting(true)
       setMemberError('')
       setMemberReveal(null)
 
-      const result = await apiClient.post<SharedEngineMemberAddResponse>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members`, {
+      const result = await addEngineMember(engine!.id, {
         email: normalizedMemberEmail,
         role: memberRole,
         ...(memberLookupMode === 'invite' ? { deliveryMethod: memberDeliveryMethod } : {}),
-      }, { credentials: 'include' })
+      })
 
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id] })
 

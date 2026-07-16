@@ -9,7 +9,9 @@ import type {
 import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
 import type { ProjectEngineTarget } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import type {
+  AddEngineMember,
   EngineEnvironmentUpdateResponse,
+  EngineMemberAddResponse,
   EngineMemberCapabilities,
   EngineMemberLookup,
   EngineMembersResponse,
@@ -162,6 +164,17 @@ export async function denyEngineAccessRequest(engineId: string, requestId: strin
   await apiClient.post<void>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/access-requests/${encodeURIComponent(requestId)}/deny`,
     {},
+    { credentials: 'include' },
+  )
+}
+
+export async function addEngineMember(
+  engineId: string,
+  payload: AddEngineMember,
+): Promise<EngineMemberAddResponse> {
+  return apiClient.post<EngineMemberAddResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/members`,
+    payload,
     { credentials: 'include' },
   )
 }
