@@ -5,6 +5,9 @@
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   AuthzCreatedIdResponse as SharedAuthzCreatedIdResponse,
+  AuthzGroupCreate as SharedAuthzGroupCreate,
+  AuthzGroupMembershipCreate as SharedAuthzGroupMembershipCreate,
+  AuthzGroupUpdate as SharedAuthzGroupUpdate,
   AuthzMutationSuccessResponse as SharedAuthzMutationSuccessResponse,
   AuthzPrincipalType as SharedAuthzPrincipalType,
   BridgeDecisionRequest as SharedBridgeDecisionRequest,
@@ -31,10 +34,12 @@ import type {
   DeploymentEligibilityEvaluateResponse as SharedDeploymentEligibilityEvaluateResponse,
   EffectiveAccessEvaluateResponse,
   EngineSetDetail as SharedEngineSetDetail,
+  EngineSetCreate as SharedEngineSetCreate,
   EngineSetMaterializationResult as SharedEngineSetMaterializationResult,
   EngineSetPreview as SharedEngineSetPreview,
   EngineSetSelector as SharedEngineSetSelector,
   EngineSetSummary as SharedEngineSetSummary,
+  EngineSetUpdate as SharedEngineSetUpdate,
   EngineCapabilityStatus as SharedEngineCapabilityStatus,
   EngineFieldOwnership as SharedEngineFieldOwnership,
   EngineLifecycleStatus as SharedEngineLifecycleStatus,
@@ -80,6 +85,7 @@ import type {
   ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
   PolicyCondition as SharedPolicyCondition,
   RoleAssignment as SharedRoleAssignment,
+  RoleAssignmentCreate as SharedRoleAssignmentCreate,
   RoleAssignmentCreateResponse as SharedRoleAssignmentCreateResponse,
   RoleAssignmentSource as SharedRoleAssignmentSource,
   RoleDetail as SharedRoleDetail,
@@ -169,6 +175,7 @@ export type CreateCustomPermissionPayload = SharedCustomPermissionCreate;
 export type UpdateCustomRolePayload = SharedCustomRoleUpdate & { id: string };
 
 export type RoleAssignment = SharedRoleAssignment;
+export type RoleAssignmentCreate = SharedRoleAssignmentCreate;
 export type AuthzCreatedIdResponse = SharedAuthzCreatedIdResponse;
 export type AuthzMutationSuccessResponse = SharedAuthzMutationSuccessResponse;
 export type CustomPermissionCreateResponse = SharedCustomPermissionCreateResponse;
@@ -177,6 +184,9 @@ export type AuthzGroupSource = SharedAuthzGroupSource;
 export type AuthzOwnershipMode = SharedAuthzOwnershipMode;
 export type AuthzGroup = SharedAuthzGroup;
 export type AuthzGroupMembership = SharedAuthzGroupMembership;
+export type AuthzGroupCreate = SharedAuthzGroupCreate;
+export type AuthzGroupUpdate = SharedAuthzGroupUpdate;
+export type AuthzGroupMembershipCreate = SharedAuthzGroupMembershipCreate;
 
 export type ApiClient = SharedApiClient;
 export type ApiClientWithToken = SharedApiClientWithToken;
@@ -207,6 +217,8 @@ export type ExternalEngineReactivateResponse = SharedExternalEngineReactivateRes
 export type ExternalEngineReconcileResponse = SharedExternalEngineReconcileResponse;
 
 export type EngineSetSelector = SharedEngineSetSelector;
+export type EngineSetCreate = SharedEngineSetCreate;
+export type EngineSetUpdate = SharedEngineSetUpdate;
 export type EngineSetSummary = SharedEngineSetSummary;
 export type EngineSetDetail = SharedEngineSetDetail;
 export type EngineSetPreview = SharedEngineSetPreview;
@@ -461,16 +473,7 @@ export function useRoleAssignments(params?: {
 export function useAssignRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      principalType: AuthzPrincipalType;
-      principalId: string;
-      roleId: string;
-      resourceType?: AuthzResourceType;
-      resourceId?: string | null;
-      scopeType?: AuthzResourceType;
-      scopeId?: string | null;
-      expiresAt?: number | null;
-    }) =>
+    mutationFn: (data: RoleAssignmentCreate) =>
       apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] }),
   });
@@ -499,7 +502,7 @@ export function useAuthzGroups(params?: { includeArchived?: boolean }, options: 
 export function useCreateAuthzGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { key?: string; name: string; description?: string | null }) =>
+    mutationFn: (data: AuthzGroupCreate) =>
       apiClient.post<AuthzCreatedIdResponse>('/api/authz/groups', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'groups'] }),
   });
@@ -508,7 +511,7 @@ export function useCreateAuthzGroup() {
 export function useUpdateAuthzGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string | null; isArchived?: boolean }) =>
+    mutationFn: ({ id, ...data }: AuthzGroupUpdate & { id: string }) =>
       apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/groups/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'groups'] }),
   });
@@ -537,7 +540,7 @@ export function useAuthzGroupMemberships(params?: { groupId?: string; userId?: s
 export function useAddAuthzGroupMembership() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { groupId: string; userId: string; expiresAt?: number | null }) =>
+    mutationFn: (data: AuthzGroupMembershipCreate) =>
       apiClient.post<AuthzCreatedIdResponse>('/api/authz/group-memberships', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz'] }),
   });
@@ -735,7 +738,7 @@ export function useEngineSet(id?: string) {
 export function useCreateEngineSet() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { key?: string; name: string; description?: string | null; selector: EngineSetSelector; riskAcknowledged?: boolean }) =>
+    mutationFn: (data: EngineSetCreate) =>
       apiClient.post<AuthzCreatedIdResponse>('/api/authz/engine-sets', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'engine-sets'] }),
   });
@@ -744,7 +747,7 @@ export function useCreateEngineSet() {
 export function useUpdateEngineSet() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; name?: string; description?: string | null; selector?: EngineSetSelector; isArchived?: boolean; riskAcknowledged?: boolean }) =>
+    mutationFn: ({ id, ...data }: EngineSetUpdate & { id: string }) =>
       apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/engine-sets/${id}`, data),
     onSuccess: (_result, variables) => {
       qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'engine-sets'] });
