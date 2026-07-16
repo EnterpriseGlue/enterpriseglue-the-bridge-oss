@@ -72,7 +72,12 @@ import type {
   SsoClaimsMapping as SharedSsoClaimsMapping,
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
   SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
+  SsoEngineAccessSnapshotQuery as SharedSsoEngineAccessSnapshotQuery,
   SsoGroupMapping as SharedSsoGroupMapping,
+  SsoSyncDiagnosticsRunRequest as SharedSsoSyncDiagnosticsRunRequest,
+  SsoSyncDiagnosticsScanResult as SharedSsoSyncDiagnosticsScanResult,
+  SsoSyncEventsQuery as SharedSsoSyncEventsQuery,
+  SsoSyncRunsQuery as SharedSsoSyncRunsQuery,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { EngineMetadataReconciliationResult as SharedEngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 import type {
@@ -226,54 +231,15 @@ export type AuthzAuditEntry = Omit<SharedAuthzAuditLogEntry, 'tenantId'>;
 export type SsoSyncRun = SharedIdentitySyncRun;
 export type SsoSyncEvent = SharedIdentitySyncEvent;
 
-export interface SsoSyncRunParams {
-  providerId?: string;
-  userId?: string;
-  status?: SsoSyncRun['status'];
-  trigger?: SsoSyncRun['trigger'];
-  limit?: number;
-}
-
-export interface SsoSyncEventParams {
-  providerId?: string;
-  severity?: SsoSyncEvent['severity'];
-  limit?: number;
-}
-
-export interface SsoSyncDiagnosticsRunPayload {
-  providerId?: string;
-  trigger?: Extract<SsoSyncRun['trigger'], 'manual' | 'scheduled' | 'mapping_change' | 'engine_change'>;
-  includeProviderChecks?: boolean;
-  includeSnapshotReplay?: boolean;
-  refreshProviderClaims?: boolean;
-  includeCleanup?: boolean;
-}
-
-export interface SsoSyncDiagnosticsScanResult {
-  runId: string | null;
-  scannedGroupMappings: number;
-  scannedAssignmentMappings: number;
-  scannedGroupMemberships: number;
-  scannedAssignments: number;
-  warnings: number;
-  errors: number;
-  providerIdentityCheck?: Record<string, unknown>;
-  snapshotReconciliation?: Record<string, unknown>;
-  cleanup?: Record<string, unknown>;
-}
+export type SsoSyncRunParams = SharedSsoSyncRunsQuery;
+export type SsoSyncEventParams = SharedSsoSyncEventsQuery;
+export type SsoSyncDiagnosticsRunPayload = SharedSsoSyncDiagnosticsRunRequest;
+export type SsoSyncDiagnosticsScanResult = SharedSsoSyncDiagnosticsScanResult;
 
 export type SsoEngineAccessSnapshotStatus = SharedSsoEngineAccessSnapshotStatus;
 export type SsoEngineAccessSnapshot = SharedSsoEngineAccessSnapshot;
 
-export interface SsoEngineAccessSnapshotParams {
-  providerId?: string;
-  mappingId?: string;
-  principalType?: string;
-  principalId?: string;
-  engineId?: string;
-  status?: SsoEngineAccessSnapshotStatus;
-  limit?: number;
-}
+export type SsoEngineAccessSnapshotParams = SharedSsoEngineAccessSnapshotQuery;
 
 export type EngineAccessTransitionCleanupCandidate = SharedEngineAccessTransitionCleanupCandidate;
 
