@@ -237,8 +237,9 @@ PLAYWRIGHT_BASE_URL='http://localhost:5173' \
 pnpm test:authz:local-smoke
 ```
 
-This local-only lane verifies sign-in and that the authenticated administrator
-can reach the Access Control UI. The narrower `test:authz:local-login` and
+This local-only lane verifies sign-in, Access Control navigation, and the
+authorized Runtime Resources and SSO Engine Assignments tab surfaces. The
+narrower `test:authz:local-login` and
 `test:authz:local-access-control` commands remain available for targeted
 reruns.
 
