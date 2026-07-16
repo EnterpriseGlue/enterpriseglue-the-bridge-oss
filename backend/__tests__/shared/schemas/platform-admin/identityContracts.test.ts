@@ -14,6 +14,7 @@ import {
   IdentityMappingResponseSchema,
   LegacyGlobalMappingRetirementRequestSchema,
   LegacyIdentityProviderMigrationDraftSchema,
+  LegacySsoProviderResponseSchema,
   LegacyMappingCoverageItemSchema,
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementReadinessSchema,
@@ -109,5 +110,18 @@ describe('provider-neutral identity shared contracts', () => {
       ...draft,
       provider: { ...draft.provider, configuration: { ...draft.provider.configuration, clientSecret: 'raw-secret' } },
     })).toThrow();
+  });
+
+  it('keeps legacy SSO provider responses redacted while preserving configured-value indicators', () => {
+    const provider = LegacySsoProviderResponseSchema.parse({
+      id: 'provider-1', name: 'Legacy SAML', type: 'saml', enabled: false,
+      clientId: null, tenantId: null, issuerUrl: null, authorizationUrl: null, tokenUrl: null, userInfoUrl: null, scopes: [],
+      entityId: 'enterpriseglue', ssoUrl: 'https://idp.example.test/sso', sloUrl: null, signatureAlgorithm: 'sha256', callbackUrl: 'https://app.example.test/api/auth/saml/callback',
+      iconUrl: null, buttonLabel: null, buttonColor: null, displayOrder: 0, autoProvision: true, defaultRole: 'user', createdAt: 1, updatedAt: 2,
+      hasClientSecret: true, hasCertificate: true,
+    });
+    expect(provider.hasCertificate).toBe(true);
+    expect(Object.keys(provider)).not.toContain('certificate');
+    expect(() => LegacySsoProviderResponseSchema.parse({ ...provider, clientSecret: 'raw-secret' })).toThrow();
   });
 });

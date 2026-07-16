@@ -17,6 +17,7 @@ import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandle
 import { secretResolver } from './SecretResolver.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import { DEFAULT_PLATFORM_GROUP_IDS } from './AuthzGroupService.js';
+import type { LegacySsoProviderResponse as SsoProviderPublic } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { IsNull } from 'typeorm';
 
 export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc';
@@ -62,35 +63,7 @@ export interface UpdateSsoProviderInput extends Partial<CreateSsoProviderInput> 
   enabled?: boolean;
 }
 
-export interface SsoProviderPublic {
-  id: string;
-  name: string;
-  type: SsoProviderType;
-  enabled: boolean;
-  clientId?: string | null;
-  tenantId?: string | null;
-  issuerUrl?: string | null;
-  authorizationUrl?: string | null;
-  tokenUrl?: string | null;
-  userInfoUrl?: string | null;
-  scopes?: string[];
-  entityId?: string | null;
-  ssoUrl?: string | null;
-  sloUrl?: string | null;
-  signatureAlgorithm?: string | null;
-  callbackUrl?: string | null;
-  iconUrl?: string | null;
-  buttonLabel?: string | null;
-  buttonColor?: string | null;
-  displayOrder: number;
-  autoProvision: boolean;
-  defaultRole: string;
-  createdAt: number;
-  updatedAt: number;
-  // Indicate if secrets are configured (without exposing them)
-  hasClientSecret: boolean;
-  hasCertificate: boolean;
-}
+export type { LegacySsoProviderResponse as SsoProviderPublic } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 class SsoProviderServiceClass {
   async migrateDefaultRoleToIdentityMapping(id: string, providerKey: string) {
@@ -390,7 +363,10 @@ class SsoProviderServiceClass {
   private toPublic(p: SsoProvider): SsoProviderPublic {
     let scopes: string[] = ['openid', 'profile', 'email'];
     try {
-      scopes = JSON.parse(p.scopes || '[]');
+      const parsed = JSON.parse(p.scopes || '[]');
+      if (Array.isArray(parsed)) {
+        scopes = parsed.filter((scope): scope is string => typeof scope === 'string');
+      }
     } catch {}
 
     return {

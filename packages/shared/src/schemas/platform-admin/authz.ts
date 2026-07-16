@@ -206,6 +206,41 @@ export const SsoProviderSchema = SsoProviderSchemaRaw.transform((p) => ({
   updatedAt: Number(p.updatedAt),
 }));
 
+/**
+ * Response for the legacy SSO provider compatibility API. Secret material is
+ * never present; the two booleans only communicate whether a redacted value
+ * is already configured so an edit form can preserve it.
+ */
+export const LegacySsoProviderResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
+  enabled: z.boolean(),
+  clientId: z.string().nullable(),
+  tenantId: z.string().nullable(),
+  issuerUrl: z.string().nullable(),
+  authorizationUrl: z.string().nullable(),
+  tokenUrl: z.string().nullable(),
+  userInfoUrl: z.string().nullable(),
+  scopes: z.array(z.string()),
+  entityId: z.string().nullable(),
+  ssoUrl: z.string().nullable(),
+  sloUrl: z.string().nullable(),
+  /** Legacy rows can expose a historical algorithm label; validation occurs at write/enable boundaries. */
+  signatureAlgorithm: z.string().nullable(),
+  callbackUrl: z.string().nullable(),
+  iconUrl: z.string().nullable(),
+  buttonLabel: z.string().nullable(),
+  buttonColor: z.string().nullable(),
+  displayOrder: z.number().int(),
+  autoProvision: z.boolean(),
+  defaultRole: z.enum(['admin', 'user']),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+  hasClientSecret: z.boolean(),
+  hasCertificate: z.boolean(),
+}).strict();
+
 // SSO Provider - Insert schema
 export const SsoProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -1604,6 +1639,7 @@ export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
 export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 export type AuthzAuditLogEntry = z.infer<typeof AuthzAuditLogSchema>;
 export type SsoProvider = z.infer<typeof SsoProviderSchema>;
+export type LegacySsoProviderResponse = z.infer<typeof LegacySsoProviderResponseSchema>;
 export type SsoClaimOperator = z.infer<typeof SsoClaimOperatorSchema>;
 export type SsoClaimsMapping = z.infer<typeof SsoClaimsMappingSchema>;
 export type PermissionCatalogEntry = z.infer<typeof PermissionCatalogEntrySchema>;

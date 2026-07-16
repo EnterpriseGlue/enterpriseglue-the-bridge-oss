@@ -2010,25 +2010,7 @@ registry.registerPath({
 
 // SSO Providers
 const SsoProviderTypeSchema = z.enum(['microsoft', 'google', 'saml', 'oidc']);
-const SsoProviderResponseSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: SsoProviderTypeSchema,
-  enabled: z.boolean(),
-  clientId: z.string().optional(),
-  tenantId: z.string().optional(),
-  issuerUrl: z.string().optional(),
-  scopes: z.string().optional(),
-  callbackUrl: z.string().optional(),
-  iconUrl: z.string().optional(),
-  buttonLabel: z.string().optional(),
-  buttonColor: z.string().optional(),
-  displayOrder: z.number(),
-  autoProvision: z.boolean(),
-  defaultRole: z.enum(['admin', 'user']),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
+const legacySsoProviderSchemas = await import('./platform-admin/authz.js');
 const SsoProviderCreateRequestSchema = z.object({
   name: z.string().min(1).max(100),
   type: SsoProviderTypeSchema,
@@ -2057,7 +2039,7 @@ const SsoProviderUpdateRequestSchema = SsoProviderCreateRequestSchema.partial();
 const SsoProviderToggleRequestSchema = z.object({
   riskAcknowledged: z.boolean().optional(),
 });
-const SsoProviderPublicSchema = SsoProviderResponseSchema.pick({
+const SsoProviderPublicSchema = legacySsoProviderSchemas.LegacySsoProviderResponseSchema.pick({
   id: true,
   name: true,
   type: true,
@@ -2069,7 +2051,7 @@ registry.registerPath({
   method: 'get',
   path: '/api/sso/providers',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/sso/providers'),
-  responses: { 200: { description: 'List SSO providers', content: { 'application/json': { schema: z.array(SsoProviderResponseSchema) } } } },
+  responses: { 200: { description: 'List SSO providers', content: { 'application/json': { schema: z.array(legacySsoProviderSchemas.LegacySsoProviderResponseSchema) } } } },
 });
 
 registry.registerPath({
@@ -2084,7 +2066,7 @@ registry.registerPath({
   path: '/api/sso/providers/{id}',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/sso/providers/{id}'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'SSO provider', content: { 'application/json': { schema: SsoProviderResponseSchema } } }, 404: { description: 'Provider not found' } },
+  responses: { 200: { description: 'SSO provider', content: { 'application/json': { schema: legacySsoProviderSchemas.LegacySsoProviderResponseSchema } } }, 404: { description: 'Provider not found' } },
 });
 
 registry.registerPath({

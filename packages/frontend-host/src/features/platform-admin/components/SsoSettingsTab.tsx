@@ -34,27 +34,7 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
-import type { SsoClaimsMapping } from '../hooks/useAuthzApi';
-
-// Types
-interface SsoProvider {
-  id: string;
-  name: string;
-  type: 'microsoft' | 'google' | 'saml' | 'oidc';
-  enabled: boolean;
-  clientId?: string;
-  tenantId?: string;
-  issuerUrl?: string;
-  callbackUrl?: string;
-  buttonLabel?: string;
-  buttonColor?: string;
-  autoProvision: boolean;
-  defaultRole: string;
-  hasClientSecret: boolean;
-  hasCertificate: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
+import type { LegacySsoProvider as SsoProvider, SsoClaimsMapping } from '../hooks/useAuthzApi';
 
 // Provider type labels
 const PROVIDER_TYPES = {

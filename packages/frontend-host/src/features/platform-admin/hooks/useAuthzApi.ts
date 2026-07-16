@@ -55,6 +55,7 @@ import type {
   IdentityProviderResponse,
   LegacyIdentityProviderCutoverResponse,
   LegacyIdentityProviderMigrationDraft as SharedLegacyIdentityProviderMigrationDraft,
+  LegacySsoProviderResponse as SharedLegacySsoProvider,
   LegacyMappingCoverageItem as SharedLegacyMappingCoverageItem,
   LegacyMappingRetirementReadiness as SharedLegacyMappingRetirementReadiness,
   PermissionCatalogEntry as SharedPermissionCatalogEntry,
@@ -82,7 +83,6 @@ import type {
   SsoSyncDiagnosticsScanResult as SharedSsoSyncDiagnosticsScanResult,
   SsoSyncEventsQuery as SharedSsoSyncEventsQuery,
   SsoSyncRunsQuery as SharedSsoSyncRunsQuery,
-  SsoProvider as SharedSsoProvider,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { EngineMetadataReconciliationResult as SharedEngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 import type {
@@ -228,7 +228,7 @@ export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTes
 export type IdentityProviderMigrationReadiness = IdentityProviderMigrationReadinessResponse;
 export type LegacyIdentityProviderCutoverResult = LegacyIdentityProviderCutoverResponse;
 export type LegacyIdentityProviderMigrationDraft = SharedLegacyIdentityProviderMigrationDraft;
-export type LegacySsoProvider = Pick<SharedSsoProvider, 'id' | 'name' | 'type' | 'enabled'>;
+export type LegacySsoProvider = SharedLegacySsoProvider;
 export type LegacyMappingCoverageItem = SharedLegacyMappingCoverageItem;
 export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementReadiness;
 
