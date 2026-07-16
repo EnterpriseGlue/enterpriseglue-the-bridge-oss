@@ -40,6 +40,8 @@ import {
   AuthzPolicyUpdateSchema,
   ApiClientCreateSchema,
   CustomPermissionCreateResponseSchema,
+  EngineSetCreateSchema,
+  EngineSetUpdateSchema,
   ProjectEngineTargetSyncLegacyResponseSchema,
   RoleAssignmentCreateResponseSchema,
   ServiceAccountCreateSchema,
@@ -281,6 +283,21 @@ describe('provider-neutral identity shared contracts', () => {
     })).toMatchObject({ scopes: ['deployment:execute'] });
     expect(() => ApiClientCreateSchema.parse({ name: 'invalid', scopes: ['admin:all'] })).toThrow();
     expect(() => ServiceAccountCreateSchema.parse({ name: 'invalid', scopes: ['engine:register'] })).toThrow();
+  });
+
+  it('shares Engine Set selectors and writes with the route and OpenAPI', () => {
+    expect(EngineSetCreateSchema.parse({
+      name: 'Production engines',
+      selector: { mode: 'labels', labels: { environment: 'production' }, labelMatch: 'all' },
+    }).selector).toMatchObject({ mode: 'labels', labelMatch: 'all' });
+    expect(EngineSetUpdateSchema.parse({
+      selector: { mode: 'engine_ids', engineIds: ['engine-1'] },
+      riskAcknowledged: true,
+    }).selector).toMatchObject({ mode: 'engine_ids', engineIds: ['engine-1'] });
+    expect(() => EngineSetCreateSchema.parse({
+      name: 'invalid labels',
+      selector: { mode: 'labels', labels: {} },
+    })).toThrow();
   });
 
   it('keeps the public policy response aligned with the service view', () => {

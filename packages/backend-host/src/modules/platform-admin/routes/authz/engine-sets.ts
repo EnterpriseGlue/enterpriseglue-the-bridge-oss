@@ -11,33 +11,16 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
-import { RuntimeResourceQuerySchema, RuntimeResourceSetQuerySchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import {
+  EngineSetCreateSchema,
+  EngineSetSelectorSchema,
+  EngineSetUpdateSchema,
+  RuntimeResourceQuerySchema,
+  RuntimeResourceSetQuerySchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
-const engineSetSelectorSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('all') }),
-  z.object({ mode: z.literal('engine_ids'), engineIds: z.array(z.string().min(1)).min(1) }),
-  z.object({
-    mode: z.literal('labels'),
-    labels: z.record(z.string().min(1), z.string().min(1)).refine((labels) => Object.keys(labels).length > 0, { message: 'At least one label is required' }),
-    labelMatch: z.enum(['all', 'any']).optional(),
-  }),
-]);
-const engineSetCreateSchema = z.object({
-  key: z.string().min(1).max(255).optional(),
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  selector: engineSetSelectorSchema,
-  riskAcknowledged: z.boolean().optional(),
-});
-const engineSetUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  selector: engineSetSelectorSchema.optional(),
-  isArchived: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-const engineSetPreviewSchema = z.object({ selector: engineSetSelectorSchema });
+const engineSetPreviewSchema = z.object({ selector: EngineSetSelectorSchema });
 
 export interface EngineSetRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
@@ -64,7 +47,7 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
     }
   }));
 
-  router.post('/api/authz/engine-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateBody(engineSetCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/engine-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateBody(EngineSetCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await engineSetService.createEngineSet({ ...req.body, tenantId: req.tenant?.tenantId || null, createdById: req.user!.userId });
       res.status(201).json(result);
@@ -87,7 +70,7 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
     }
   }));
 
-  router.put('/api/authz/engine-sets/:id', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), validateBody(engineSetUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.put('/api/authz/engine-sets/:id', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.manage'), validateParams(resourceIdParamSchema), validateBody(EngineSetUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       await engineSetService.updateEngineSet(String(req.params.id), { ...req.body, tenantId: req.tenant?.tenantId || null, updatedById: req.user!.userId });
       res.json({ success: true });
