@@ -12,6 +12,9 @@ import type {
   IdentityProviderReconciliationPreview,
   IdentityProviderResponse,
   LegacyIdentityProviderCutoverResponse,
+  ProjectEngineTarget as SharedProjectEngineTarget,
+  ProjectEngineTargetCreate as SharedProjectEngineTargetCreate,
+  ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
   RuntimeResource as SharedRuntimeResource,
   RuntimeResourceSet as SharedRuntimeResourceSet,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -466,69 +469,12 @@ export interface EngineSetMaterializationResult {
 }
 
 export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
-export type ProjectEngineTargetStatus = 'active' | 'disabled' | 'archived';
-export type ProjectEngineTargetSource = 'manual' | 'legacy' | 'ci' | 'api' | 'import' | 'deployment_history' | 'external' | 'system' | 'automation' | 'config';
-export type ProjectEngineTargetApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
-
-export interface ProjectEngineTarget {
-  id: string;
-  tenantId?: string | null;
-  projectId: string;
-  projectName: string | null;
-  engineId: string;
-  engineName: string | null;
-  engineBaseUrl: string | null;
-  environment: { id: string; name: string; color: string; manualDeployAllowed: boolean } | null;
-  status: ProjectEngineTargetStatus;
-  source: ProjectEngineTargetSource;
-  sourceRef: string | null;
-  ownershipMode: AuthzOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  externalSystemId: string | null;
-  externalProjectId: string | null;
-  externalEngineId: string | null;
-  externalTargetId: string | null;
-  allowManualDeploy: boolean;
-  allowCiDeploy: boolean;
-  allowApiDeploy: boolean;
-  allowImport: boolean;
-  createdById: string | null;
-  approvedById: string | null;
-  approvalStatus: ProjectEngineTargetApprovalStatus;
-  approvedAt: number | null;
-  policyTags: string[];
-  diagnostics: Record<string, unknown> | null;
-  lastSeenAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export type ProjectEngineTargetCreate = {
-  projectId: string;
-  engineId: string;
-  status?: ProjectEngineTargetStatus;
-  source?: ProjectEngineTargetSource;
-  sourceRef?: string | null;
-  externalSystemId?: string | null;
-  externalProjectId?: string | null;
-  externalEngineId?: string | null;
-  externalTargetId?: string | null;
-  allowManualDeploy?: boolean;
-  allowCiDeploy?: boolean;
-  allowApiDeploy?: boolean;
-  allowImport?: boolean;
-  approvedById?: string | null;
-  approvalStatus?: ProjectEngineTargetApprovalStatus;
-  approvedAt?: number | null;
-  policyTags?: string[];
-  diagnostics?: Record<string, unknown> | null;
-};
-
-export type ProjectEngineTargetUpdate = Omit<Partial<ProjectEngineTargetCreate>, 'projectId' | 'engineId'> & {
-  id: string;
-};
+export type ProjectEngineTargetStatus = SharedProjectEngineTarget['status'];
+export type ProjectEngineTargetSource = SharedProjectEngineTarget['source'];
+export type ProjectEngineTargetApprovalStatus = SharedProjectEngineTarget['approvalStatus'];
+export type ProjectEngineTarget = SharedProjectEngineTarget;
+export type ProjectEngineTargetCreate = SharedProjectEngineTargetCreate;
+export type ProjectEngineTargetUpdate = SharedProjectEngineTargetUpdate & { id: string };
 
 export interface DeploymentEligibilityResult {
   allowed: boolean;
