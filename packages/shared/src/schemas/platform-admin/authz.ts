@@ -1491,6 +1491,7 @@ export type IdentityProviderMigrationReadinessResponse = z.infer<typeof Identity
 export type LegacyIdentityProviderCutoverResponse = z.infer<typeof LegacyIdentityProviderCutoverResponseSchema>;
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
+export type RuntimeResourceSetMaterializationResult = z.infer<typeof RuntimeResourceSetMaterializationResultSchema>;
 export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;
 export type SsoEngineAccessSnapshot = z.infer<typeof SsoEngineAccessSnapshotSchema>;
 export type SsoEngineAccessSnapshotStatus = z.infer<typeof SsoEngineAccessSnapshotStatusSchema>;

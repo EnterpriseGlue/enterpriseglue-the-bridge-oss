@@ -46,11 +46,13 @@ import type {
   RoleSummary as SharedRoleSummary,
   RuntimeResource as SharedRuntimeResource,
   RuntimeResourceSet as SharedRuntimeResourceSet,
+  RuntimeResourceSetMaterializationResult as SharedRuntimeResourceSetMaterializationResult,
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
   SsoAssignmentMapping as SharedSsoAssignmentMapping,
   SsoGroupMapping as SharedSsoGroupMapping,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import type { EngineMetadataReconciliationResult as SharedEngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 import type {
   ConfigBundleApplyReconciliation,
   ConfigBundleApplyResult,
@@ -256,26 +258,8 @@ export type EffectiveAccessResult = EffectiveAccessEvaluateResponse;
 export type RuntimeResourceKind = SharedRuntimeResource['resourceKind'];
 export type RuntimeResource = SharedRuntimeResource;
 export type RuntimeResourceSet = SharedRuntimeResourceSet;
-
-export interface RuntimeResourceSetMaterializationResult {
-  runtimeResourceSetId: string;
-  matched: number;
-  created: number;
-  updated: number;
-  removed: number;
-}
-
-export interface RuntimeResourceReconciliationResult {
-  created: number;
-  updated: number;
-  deactivated: number;
-  materializedSets: number;
-  deployments: {
-    created: number;
-    updated: number;
-    artifactsCreated: number;
-  };
-}
+export type RuntimeResourceSetMaterializationResult = SharedRuntimeResourceSetMaterializationResult;
+export type RuntimeResourceReconciliationResult = SharedEngineMetadataReconciliationResult;
 
 export type { IdentityProviderAuthenticationMode, IdentityProviderProtocol };
 export type IdentityProvider = IdentityProviderResponse;

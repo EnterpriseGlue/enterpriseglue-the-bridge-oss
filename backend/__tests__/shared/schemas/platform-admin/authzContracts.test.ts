@@ -7,10 +7,12 @@ import {
   PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
   RoleDetailSchema,
+  RuntimeResourceSetMaterializationResultSchema,
   SsoAssignmentMappingSchema,
   SsoGroupMappingSchema,
   ServiceAccountWithTokenSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { EngineMetadataReconciliationResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
 describe('authorization response contracts', () => {
   it('preserves identity-provider provenance for groups and memberships', () => {
@@ -167,5 +169,15 @@ describe('authorization response contracts', () => {
       targetGroupId: 'group-operators', targetGroupKey: 'operators', targetGroupName: 'Operators', syncMode: 'additive',
       priority: 20, isActive: true, createdAt: 1, updatedAt: 1,
     }).targetGroupKey).toBe('operators');
+  });
+
+  it('shares runtime resource materialization and reconciliation responses', () => {
+    expect(RuntimeResourceSetMaterializationResultSchema.parse({
+      runtimeResourceSetId: 'runtime-set-a', matched: 4, created: 1, updated: 2, removed: 3,
+    }).matched).toBe(4);
+    expect(EngineMetadataReconciliationResultSchema.parse({
+      created: 1, updated: 2, deactivated: 3, materializedSets: 4, runtimeSkipped: true,
+      deployments: { created: 5, updated: 6, artifactsCreated: 7, skipped: true },
+    }).deployments.artifactsCreated).toBe(7);
   });
 });

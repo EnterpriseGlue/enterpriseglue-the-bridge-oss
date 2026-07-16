@@ -189,6 +189,7 @@ import {
   type PolicyCondition,
   type RoleAssignment,
   type RoleSummary,
+  type RuntimeResourceReconciliationResult,
   type ServiceAccount,
   type SsoClaimsMapping,
   type SsoGroupMapping,
@@ -2992,7 +2993,7 @@ function RuntimeResourcesPanel({
   canManage: boolean;
   reconcilePending: boolean;
   reconcileError: unknown;
-  reconcileResult: { created: number; updated: number; deactivated: number; materializedSets: number; deployments: { created: number; updated: number; artifactsCreated: number } } | undefined;
+  reconcileResult: RuntimeResourceReconciliationResult | undefined;
   onSelectEngine: (id: string) => void;
   onReconcile: () => void;
 }) {
