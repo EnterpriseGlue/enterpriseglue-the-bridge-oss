@@ -37,6 +37,10 @@ import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import type {
+  EngineMember as SharedEngineMember,
+  EngineMembersResponse as SharedEngineMembersResponse,
+} from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
 import { getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts } from './api/engines'
 
@@ -367,21 +371,8 @@ type ProjectEngineTargetView = {
   updatedAt?: number | null
 }
 
-type EngineAccessMember = {
-  id: string
-  engineId: string
-  userId: string
-  role: string
-  grantedById?: string | null
-  grantedAt?: number | null
-  createdAt?: number | null
-  user?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
-}
-
-type EngineMembersResponse = {
-  members?: EngineAccessMember[]
-  pendingInvites?: Array<{ invitationId: string; email: string; role: string; status: string }>
-}
+type EngineAccessMember = SharedEngineMember
+type EngineMembersResponse = SharedEngineMembersResponse
 
 type EngineRoleAssignment = {
   id: string

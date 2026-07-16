@@ -727,6 +727,7 @@ describe('EnginesPage', () => {
       engineId: 'engine-1',
       userId: 'user-1',
       role: 'owner',
+      createdAt: 0,
       user: { id: 'user-1', email: 'owner@example.com', firstName: 'Owner', lastName: 'User' },
     })).toBe('Owner User');
     expect(formatEngineAccessMemberGovernance({
@@ -734,12 +735,14 @@ describe('EnginesPage', () => {
       engineId: 'engine-1',
       userId: 'user-1',
       role: 'owner',
+      createdAt: 0,
     })).toBe('Accountable owner');
     expect(formatEngineAccessMemberGovernance({
       id: 'member-2',
       engineId: 'engine-1',
       userId: 'user-2',
       role: 'operator',
+      createdAt: 0,
     })).toBe('Scoped user access');
     expect(formatEngineAccessPrincipal({ id: 'assignment-1', principalType: 'api_client', principalId: 'client-1', roleId: 'system.api.engine_registrar', source: 'manual' })).toBe('API client: client-1');
     expect(formatEngineAccessRole('system.engine.deployer')).toBe('Deployer');
