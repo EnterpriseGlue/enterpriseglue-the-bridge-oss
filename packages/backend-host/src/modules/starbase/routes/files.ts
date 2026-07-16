@@ -23,7 +23,7 @@ import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services
 import { extractBpmnCallActivityLinks, extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { buildStarbaseFileName } from '@enterpriseglue/shared/utils/starbase-filenames.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { UpdateFileMetadataRequest } from '@enterpriseglue/shared/schemas/starbase/file.js';
+import { CreateFileRequest, UpdateFileMetadataRequest } from '@enterpriseglue/shared/schemas/starbase/file.js';
 
 const lockManager = new LockManager();
 
@@ -36,12 +36,7 @@ const uuidLikeSchema = z.string().regex(
 const projectIdParamSchema = z.object({ projectId: uuidLikeSchema });
 const fileIdParamSchema = z.object({ fileId: uuidLikeSchema });
 
-const createFileBodySchema = z.object({
-  type: z.string().default('bpmn'),
-  name: z.string().min(1).max(255),
-  folderId: uuidLikeSchema.nullable().optional(),
-  xml: z.string().optional(),
-});
+const createFileBodySchema = CreateFileRequest;
 
 const updateFileBodySchema = z.object({
   xml: z.string().min(1),
@@ -658,7 +653,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
   res.json({
     id: fileId,
     name: newName ?? projectResult.name,
-    folderId: folderId ?? undefined,
+    folderId: nextFolderId,
     updatedAt: now
   });
 }));

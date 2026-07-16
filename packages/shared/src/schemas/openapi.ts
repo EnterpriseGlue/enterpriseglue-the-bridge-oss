@@ -13,8 +13,10 @@ const {
   FileSchema,
   FileSchemaRaw,
   CreateFileRequest,
+  CreateFileResponseSchema,
   UpdateFileXmlRequest,
   UpdateFileMetadataRequest,
+  UpdateFileMetadataResponseSchema,
   VersionSchema,
   CompareVersionsResponse,
   CommentSchema,
@@ -22,7 +24,9 @@ const {
   FolderSchemaRaw,
   FolderSummarySchema,
   CreateFolderRequest,
+  CreateFolderResponseSchema,
   UpdateFolderRequest,
+  UpdateFolderResponseSchema,
   ProjectContentsSchema,
   FolderDeletePreviewSchema,
   FileDeploymentSummarySchema,
@@ -362,7 +366,7 @@ registry.registerPath({
   responses: {
     201: {
       description: 'File created',
-      content: { 'application/json': { schema: FileSchemaRaw.omit({ xml: true, projectId: true }) } },
+      content: { 'application/json': { schema: CreateFileResponseSchema } },
     },
   },
 });
@@ -403,7 +407,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'File metadata updated',
-      content: { 'application/json': { schema: z.object({ id: z.string(), name: z.string() }) } },
+      content: { 'application/json': { schema: UpdateFileMetadataResponseSchema } },
     },
     404: { description: 'Not found' },
   },
@@ -2548,7 +2552,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/folders',
   ...authzExtension('project.files.create', 'POST', '/starbase-api/projects/{projectId}/folders'),
   request: { params: z.object({ projectId: z.string() }), body: { content: { 'application/json': { schema: CreateFolderRequest } } } },
-  responses: { 201: { description: 'Folder created', content: { 'application/json': { schema: FolderSchema } } } },
+  responses: { 201: { description: 'Folder created', content: { 'application/json': { schema: CreateFolderResponseSchema } } } },
 });
 
 // PATCH /starbase-api/folders/:folderId (rename/move folder)
@@ -2558,7 +2562,7 @@ registry.registerPath({
   path: '/starbase-api/folders/{folderId}',
   ...authzExtension('project.files.update', 'PATCH', '/starbase-api/folders/{folderId}'),
   request: { params: z.object({ folderId: z.string() }), body: { content: { 'application/json': { schema: UpdateFolderRequest } } } },
-  responses: { 200: { description: 'Folder updated', content: { 'application/json': { schema: z.object({ id: z.string(), name: z.string(), parentFolderId: z.string().nullable(), updatedAt: z.number() }) } } } },
+  responses: { 200: { description: 'Folder updated', content: { 'application/json': { schema: UpdateFolderResponseSchema } } } },
 });
 
 // GET /starbase-api/folders/:folderId/delete-preview

@@ -40,6 +40,7 @@ import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
 import { getAccessibleEngines, requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
+import { filesApi } from '../../../api/starbase/files'
 import { projectsApi } from '../../../api/starbase/projects'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
@@ -1416,7 +1417,7 @@ export default function ProjectDetail() {
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.delete(`/starbase-api/files/${file.id}`)
+      await filesApi.delete(file.id)
       deleteFileModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({ kind: 'success', title: 'File deleted' })
@@ -1450,7 +1451,7 @@ export default function ProjectDetail() {
     if (!projectId) return
     try {
       setBusy(true)
-      await projectsApi.updateFileMetadata(file.id, { folderId: targetId })
+      await filesApi.updateMetadata(file.id, { folderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
@@ -1470,7 +1471,7 @@ export default function ProjectDetail() {
     try {
       setBusy(true)
       for (const fileId of fileIds) {
-        await projectsApi.updateFileMetadata(fileId, { folderId: targetId })
+        await filesApi.updateMetadata(fileId, { folderId: targetId })
       }
       moveModal.closeModal()
       setBatchMoveIds(null)
@@ -1514,7 +1515,7 @@ export default function ProjectDetail() {
     const type = createFileModal.data ?? 'bpmn'
     try {
       setBusy(true)
-      const created = await apiClient.post<{ id?: string }>(`/starbase-api/projects/${projectId}/files`, {
+      const created = await filesApi.create(projectId, {
         name,
         type,
         folderId: folderId ?? null,

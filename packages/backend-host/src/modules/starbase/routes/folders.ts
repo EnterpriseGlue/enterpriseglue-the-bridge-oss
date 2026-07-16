@@ -19,7 +19,8 @@ import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
-import { projectIdParamSchema, folderIdParamSchema, createFolderBodySchema, renameFolderBodySchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
+import { projectIdParamSchema, folderIdParamSchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
+import { CreateFolderRequest, UpdateFolderRequest } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 import { buildStarbaseFileName, sanitizeFileNameSegment } from '@enterpriseglue/shared/utils/starbase-filenames.js'
 import { z } from 'zod'
 
@@ -398,7 +399,7 @@ r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requ
  * POST create folder
  * ✨ Migrated to TypeORM
  */
-r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(createFolderBodySchema), requireAction('project.files.create', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, validateParams(projectIdParamSchema), validateBody(CreateFolderRequest), requireAction('project.files.create', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
   const { name, parentFolderId } = req.body;
@@ -442,7 +443,7 @@ r.post('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, val
  * PATCH update (rename/move)
  * ✨ Migrated to TypeORM
  */
-r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validateParams(folderIdParamSchema), validateBody(renameFolderBodySchema), requireAction('project.files.update', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+r.patch('/starbase-api/folders/:folderId', apiLimiter, requireAuth, validateParams(folderIdParamSchema), validateBody(UpdateFolderRequest), requireAction('project.files.update', { resourceResolver: 'project.byFolderId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const folderId = String(req.params.folderId);
   const userId = req.user!.userId;
   const { name, parentFolderId } = req.body;
