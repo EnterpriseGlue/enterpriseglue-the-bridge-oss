@@ -33,6 +33,21 @@ describe('identity provider adapters', () => {
       .toEqual([{ type: 'authenticated', externalId: 'authenticated' }, { type: 'group', externalId: 'CN=Ops,DC=example' }]);
   });
 
+  it('preserves an LDAP-backed immutable group identifier when delivered through OIDC or SAML', () => {
+    const groupId = 'group-id-platform-operators';
+    const normalizedGroups = [oidcIdentityProviderAdapter, samlIdentityProviderAdapter, ldapIdentityProviderAdapter]
+      .map((adapter) => adapter.normalizeIdentity({
+        providerKey: `${adapter.type}-ldap-backed`, subjectId: 'subject-1', observedAt: 1,
+        claims: adapter.type === 'ldap' ? { memberOf: [groupId] } : { groups: [groupId] },
+      }).entitlements.filter((entitlement) => entitlement.type === 'group'));
+
+    expect(normalizedGroups).toEqual([
+      [{ type: 'group', externalId: groupId }],
+      [{ type: 'group', externalId: groupId }],
+      [{ type: 'group', externalId: groupId }],
+    ]);
+  });
+
   it('emits attributes only from the sanitized authorization attribute block', () => {
     const identity = oidcIdentityProviderAdapter.normalizeIdentity({
       providerKey: 'entra-prod', subjectId: 'oid-1',

@@ -2112,7 +2112,7 @@ interface IdentityMockController {
 
 - [ ] ⬜ Run an ephemeral in-process LDAP server or CI container with deterministic users, groups, nested memberships, immutable group ids, DNs, paging, and TLS configuration. The opt-in LDAPS container now proves two-user, one-entry-page enumeration plus nested immutable group resolution; additional directory behavior remains pending.
 - [ ] ⬜ Support bind success/failure, user search, `memberOf`, group reverse search, nested groups, disabled/deleted users, renamed group with stable id, deleted group, paging, referral behavior, timeout, and unavailable directory. The LDAPS harness verifies service/user bind success, rejected user credentials (normalized without protocol details), missing-user rejection, reverse/nested groups, immutable group IDs, and paging; lifecycle and network-edge cases remain pending.
-- [ ] ⬜ Test both direct LDAP authentication and LDAP-backed groups delivered indirectly through OIDC/SAML.
+- [ ] ⬜ Test both direct LDAP authentication and LDAP-backed groups delivered indirectly through OIDC/SAML. The real LDAPS harness covers direct authentication, and the normalized-identity matrix proves that the same immutable LDAP group ID delivered by OIDC or SAML remains the same provider-neutral group entitlement; a deployed upstream-IdP test remains pending.
 - [ ] ⬜ Keep the implementation swappable: the adapter contract must not depend on the chosen LDAP test server library or container image.
 
 ### Deterministic Test Personas And Topologies
