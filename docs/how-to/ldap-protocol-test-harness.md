@@ -61,6 +61,10 @@ passwords, and no persisted volume. It generates the following seed only:
   bind check);
 - `uid=bob,ou=people,dc=identity-mock,dc=test`, so the production client must
   follow a one-entry LDAP page during directory enumeration;
+- `uid=disabled,ou=people,dc=identity-mock,dc=test`, whose portable
+  `employeeType=disabled` fixture attribute is excluded through the configured user
+  search and enumeration filters (rather than a production hard-coded vendor
+  account-status rule); and
 - `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice; and
 - `cn=platform-operators,ou=groups,dc=identity-mock,dc=test` containing the
   `operations` group, to exercise nested reverse group resolution. Each group
@@ -92,6 +96,7 @@ the exported values rather than copying them into source:
 | `EG_LDAP_TEST_ADMIN_PASSWORD` | Temporary bind password. |
 | `EG_LDAP_TEST_USER_DN` | Seeded Alice DN. |
 | `EG_LDAP_TEST_USER_PASSWORD` | Seeded Alice password. |
+| `EG_LDAP_TEST_DISABLED_USER_PASSWORD` | Seeded disabled-user password, for proving configured filters fail closed. |
 | `EG_LDAP_TEST_CA_CERT_PATH` | Path to the generated CA, for external diagnostic commands only. |
 | `EG_LDAP_TEST_CA_CERTIFICATE` | Generated CA supplied through the provider's `tlsTrustRef`, proving provider-scoped strict TLS verification. |
 

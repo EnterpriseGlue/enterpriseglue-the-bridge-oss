@@ -6,6 +6,7 @@ const requiredEnvironment = [
   'EG_LDAP_TEST_BIND_DN',
   'EG_LDAP_TEST_ADMIN_PASSWORD',
   'EG_LDAP_TEST_USER_PASSWORD',
+  'EG_LDAP_TEST_DISABLED_USER_PASSWORD',
   'EG_LDAP_TEST_CA_CERTIFICATE',
 ] as const;
 
@@ -23,8 +24,8 @@ describeContainer('direct LDAP container integration', () => {
       bindDn: process.env.EG_LDAP_TEST_BIND_DN,
       bindPasswordRef: 'EG_LDAP_TEST_ADMIN_PASSWORD',
       userBaseDn: 'ou=people,dc=identity-mock,dc=test',
-      userSearchFilter: '(mail={username})',
-      userEnumerationFilter: '(objectClass=inetOrgPerson)',
+      userSearchFilter: '(&(mail={username})(employeeType=active))',
+      userEnumerationFilter: '(&(objectClass=inetOrgPerson)(employeeType=active))',
       pageSize: 1,
       groupBaseDn: 'ou=groups,dc=identity-mock,dc=test',
       groupIdAttribute: 'businessCategory',
@@ -58,6 +59,9 @@ describeContainer('direct LDAP container integration', () => {
         email: 'bob@identity-mock.test',
       }),
     ]));
+    expect(page.identities).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ email: 'disabled@identity-mock.test' }),
+    ]));
   });
 
   it('fails closed for a rejected user bind and a missing directory user', async () => {
@@ -71,6 +75,12 @@ describeContainer('direct LDAP container integration', () => {
       provider,
       'deleted-or-missing@identity-mock.test',
       process.env.EG_LDAP_TEST_USER_PASSWORD!,
+    )).rejects.toThrow('did not return exactly one entry');
+
+    await expect(directLdapIdentityService.authenticate(
+      provider,
+      'disabled@identity-mock.test',
+      process.env.EG_LDAP_TEST_DISABLED_USER_PASSWORD!,
     )).rejects.toThrow('did not return exactly one entry');
   });
 });
