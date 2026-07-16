@@ -85,6 +85,7 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
   const processVersion = Math.trunc(Number(req.query.version))
   const target = await resolveDeployedEditTarget({
     userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
     engineId,
     artifactKind: 'process',
     artifactKey: processKey,

@@ -22,6 +22,7 @@ export interface DeployedEditTargetResolution {
 
 export interface ResolveDeployedEditTargetParams {
   userId: string
+  tenantId?: string | null
   engineId: string
   artifactKind: 'process' | 'decision'
   artifactKey: string
@@ -61,20 +62,21 @@ async function findLatestFileVersion(fileCommitVersionRepo: any, fileId: string)
     .getRawOne() as Promise<{ versionNumber?: number; commitId?: string } | null>
 }
 
-function hasProjectPermission(userId: string, projectId: string, permission: Permission) {
+function hasProjectPermission(userId: string, tenantId: string | null | undefined, projectId: string, permission: Permission) {
   return permissionService.hasPermission(permission, {
     userId,
+    tenantId: tenantId || null,
     resourceType: 'project',
     resourceId: projectId,
   })
 }
 
-async function canViewProjectFile(userId: string, projectId: string) {
-  return hasProjectPermission(userId, projectId, ProjectPermissions.FILES_VIEW)
+async function canViewProjectFile(userId: string, tenantId: string | null | undefined, projectId: string) {
+  return hasProjectPermission(userId, tenantId, projectId, ProjectPermissions.FILES_VIEW)
 }
 
-async function canEditProjectFile(userId: string, projectId: string) {
-  return hasProjectPermission(userId, projectId, ProjectPermissions.FILES_EDIT)
+async function canEditProjectFile(userId: string, tenantId: string | null | undefined, projectId: string) {
+  return hasProjectPermission(userId, tenantId, projectId, ProjectPermissions.FILES_EDIT)
 }
 
 export async function resolveDeployedEditTarget(params: ResolveDeployedEditTargetParams): Promise<DeployedEditTargetResolution | null> {
@@ -109,10 +111,10 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
     const fileId = toStringValue(row.fileId)
     if (!projectId || !fileId) continue
 
-    const canRead = await canViewProjectFile(params.userId, projectId)
+    const canRead = await canViewProjectFile(params.userId, params.tenantId, projectId)
     if (!canRead) continue
 
-    const canEdit = await canEditProjectFile(params.userId, projectId)
+    const canEdit = await canEditProjectFile(params.userId, params.tenantId, projectId)
     const commitId = toNullableString(row.fileGitCommitId)
     const engineDeploymentId = toStringValue(row.engineDeploymentId)
     const deploymentRow = engineDeploymentId

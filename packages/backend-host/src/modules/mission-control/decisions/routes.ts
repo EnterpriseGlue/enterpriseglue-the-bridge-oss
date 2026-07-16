@@ -43,6 +43,7 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
   const decisionVersion = Math.trunc(Number(req.query.version));
   const target = await resolveDeployedEditTarget({
     userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
     engineId,
     artifactKind: 'decision',
     artifactKey: decisionKey,
