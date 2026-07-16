@@ -2092,7 +2092,7 @@ interface IdentityMockController {
 ```
 
 - [x] ✅ Bind mock services to loopback/ephemeral ports and expose control methods only inside the test process or isolated test network. OIDC and SAML listen on per-test loopback HTTPS ports whose mutable controllers are not exposed over HTTP; the opt-in LDAP Compose harness publishes LDAPS only on `127.0.0.1` with a generated port and passes its temporary inputs only to the requested command.
-- [ ] ⬜ Reset all subjects, entitlements, keys, clocks, replay caches, and failure modes between tests. The coordinated OIDC/SAML/LDAP stack now resets OIDC signing material, claims, and failure state; SAML signing material, assertion sequence, attributes, and injected clock; and LDAP credentials, directory entries, and failure state. Product replay-cache fixtures remain protocol-specific work where those concepts are exposed.
+- [x] ✅ Reset all subjects, entitlements, keys, clocks, replay caches, and failure modes between tests. The coordinated OIDC/SAML/LDAP stack resets OIDC signing material, claims, and failure state; SAML signing material, assertion sequence, attributes, injected clock, and its hash-only TTL-bounded replay ledger; and LDAP credentials, directory entries, and failure state. The production SAML replay service retains an independent persistence contract test.
 - [x] ✅ Generate signing keys/certificates per test-provider instance and never commit reusable private keys or bind credentials. The test-only SAML fixture creates one-day self-signed material in the process temporary directory and removes it before returning; the LDAP fixture generates bind and user credentials for each directory instance.
 
 #### Mock OIDC Provider

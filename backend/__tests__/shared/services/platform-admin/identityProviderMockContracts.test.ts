@@ -40,6 +40,8 @@ describe('identity mock provider contracts', () => {
     const rotatedToken = oidc.issueIdToken();
     saml.setAttributes({ nameID: 'changed@example.test', role: ['changed'] });
     saml.setNow(new Date('2030-01-01T00:00:00.000Z'));
+    stack.samlReplayCache.consume('saml-provider-1', 'changed-signed-assertion', 1_000);
+    expect(() => stack.samlReplayCache.consume('saml-provider-1', 'changed-signed-assertion', 1_001)).toThrow('already been used');
     const previousBindPassword = directory.bindPassword;
     const removedUserPassword = directory.defaultUserPassword;
     directory.setUser('changed@example.test', {
@@ -59,6 +61,15 @@ describe('identity mock provider contracts', () => {
     expect(directory.bindPassword).not.toBe(previousBindPassword);
     expect(() => directory.bind('changed@example.test', removedUserPassword)).toThrow('LDAP invalid credentials');
     expect(directory.bind('person@example.test', directory.defaultUserPassword)).toMatchObject({ subjectId: expect.stringContaining('uid=person') });
+    expect(() => stack.samlReplayCache.consume('saml-provider-1', 'changed-signed-assertion', 1_002)).not.toThrow();
+  });
+
+  it('expires a replay entry before accepting the same SAML response again', () => {
+    const stack = new MockIdentityTestStack();
+    stack.samlReplayCache.consume('saml-provider-1', 'signed-assertion', 1_000, 10);
+
+    expect(() => stack.samlReplayCache.consume('saml-provider-1', 'signed-assertion', 1_009, 10)).toThrow('already been used');
+    expect(() => stack.samlReplayCache.consume('saml-provider-1', 'signed-assertion', 1_010, 10)).not.toThrow();
   });
 
   it('accepts a token signed with rotated provider key material', async () => {

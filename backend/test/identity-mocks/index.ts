@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createServer as createHttpsServer, request as httpsRequest, type Server } from 'node:https';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -489,6 +489,29 @@ export class MockLdapDirectory {
 }
 
 /**
+ * Test-only counterpart to the product SAML replay ledger. It retains only a
+ * provider-scoped hash, expires entries, and can be reset with the rest of a
+ * protocol fixture; raw assertions never leave the test that supplied them.
+ */
+export class MockSamlAssertionReplayCache {
+  private readonly entries = new Map<string, number>();
+
+  consume(providerId: string, samlResponse: string, now = Date.now(), ttlMs = 10 * 60 * 1000): void {
+    const hash = createHash('sha256').update(samlResponse, 'utf8').digest('hex');
+    for (const [key, expiresAt] of this.entries) {
+      if (expiresAt <= now) this.entries.delete(key);
+    }
+    const key = `${providerId}:${hash}`;
+    if (this.entries.has(key)) throw new Error('SAML assertion has already been used');
+    this.entries.set(key, now + ttlMs);
+  }
+
+  reset(): void {
+    this.entries.clear();
+  }
+}
+
+/**
  * Coordinates the mutable protocol fixtures used by an identity test. Product
  * runtime never imports this stack: tests retain direct access to each protocol
  * controller while `reset()` restores every fixture to an isolated baseline.
@@ -497,11 +520,13 @@ export class MockIdentityTestStack {
   readonly oidc = new MockOidcProvider();
   readonly saml = new MockSamlIdentityProvider();
   readonly ldap = new MockLdapDirectory();
+  readonly samlReplayCache = new MockSamlAssertionReplayCache();
 
   reset(): void {
     this.oidc.reset();
     this.saml.reset();
     this.ldap.reset();
+    this.samlReplayCache.reset();
   }
 }
 
