@@ -80,6 +80,36 @@ function configuration(raw: Record<string, unknown>): GenericSamlProviderConfigu
   };
 }
 
+function records(value: unknown): Array<Record<string, unknown>> {
+  const source = Array.isArray(value) ? value : [value];
+  return source.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object');
+}
+
+/**
+ * node-saml verifies XML signatures and assertion audience, but its POST
+ * validator intentionally does not enforce the HTTP-POST recipient when
+ * InResponseTo validation is disabled. Direct provider callbacks bind the
+ * signed response to our configured ACS URL here, after signature validation
+ * and without including raw assertion data in any error.
+ */
+function requireExpectedRecipient(profile: SamlProfile, callbackUrl: string): void {
+  const getAssertion = profile.getAssertion;
+  if (typeof getAssertion !== 'function') throw new Error('SAML response did not include a validated assertion');
+  const assertion = getAssertion();
+  const parsedAssertions = records(assertion).flatMap((entry) => records(entry.Assertion));
+  const confirmations = parsedAssertions
+    .flatMap((entry) => records(entry.Subject))
+    .flatMap((subject) => records(subject.SubjectConfirmation))
+    .flatMap((confirmation) => records(confirmation.SubjectConfirmationData));
+  const recipients = confirmations
+    .flatMap((data) => records(data.$))
+    .map((attributes) => attributes.Recipient)
+    .filter((recipient): recipient is string => typeof recipient === 'string' && Boolean(recipient));
+  if (!recipients.some((recipient) => recipient === callbackUrl)) {
+    throw new Error('SAML response recipient does not match the callback URL');
+  }
+}
+
 function client(raw: Record<string, unknown>): { config: GenericSamlProviderConfiguration; saml: any } {
   const config = configuration(raw);
   const certificate = secretResolver.resolveStored(config.signingCertificateRef.startsWith('ref:') ? config.signingCertificateRef : `ref:${config.signingCertificateRef}`);
@@ -107,11 +137,13 @@ export class GenericSamlService {
   }
 
   async validatePostResponse(raw: Record<string, unknown>, samlResponse: string): Promise<SamlProfile> {
-    const { saml } = client(raw);
+    const { config, saml } = client(raw);
     const { profile, loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
     if (loggedOut) throw new Error('Unexpected SAML logout response');
     if (!profile) throw new Error('SAML assertion did not contain a profile');
-    return profile as SamlProfile;
+    const normalizedProfile = profile as SamlProfile;
+    requireExpectedRecipient(normalizedProfile, config.callbackUrl);
+    return normalizedProfile;
   }
 
   extractUserClaims(raw: Record<string, unknown>, profile: SamlProfile): GenericSamlUserClaims {

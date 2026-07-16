@@ -68,6 +68,7 @@ describe('loopback SAML protocol mock', () => {
 
   it.each([
     ['a wrong audience', { audience: 'another-service' }],
+    ['a wrong recipient', { callbackUrl: 'https://other.example.test/saml/callback' }],
     ['an expired assertion', { notBefore: new Date(Date.now() - 420_000), notOnOrAfter: new Date(Date.now() - 360_000) }],
   ])('rejects a correctly signed assertion with %s', async (_label, options) => {
     const provider = new MockSamlIdentityProvider();
@@ -75,6 +76,18 @@ describe('loopback SAML protocol mock', () => {
 
     await expect(genericSamlService.validatePostResponse(configuration, provider.signedResponse(options)))
       .rejects.toThrow();
+  });
+
+  it('normalizes a missing NameID through the configured immutable email attribute', async () => {
+    const provider = new MockSamlIdentityProvider();
+    provider.setAttributes({ nameID: '', 'urn:example:email': 'NoNameId@Example.test' });
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+
+    const profile = await genericSamlService.validatePostResponse(configuration, provider.signedResponse());
+    expect(genericSamlService.extractUserClaims(configuration, profile)).toMatchObject({
+      subjectId: 'NoNameId@Example.test',
+      email: 'nonameid@example.test',
+    });
   });
 
   it('rejects malformed SAML before a profile can be produced', async () => {
