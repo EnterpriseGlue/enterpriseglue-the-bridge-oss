@@ -49,6 +49,11 @@ function serializeEngineWithDetails(entry: Awaited<ReturnType<typeof engineServi
         oauthScopesConfigured: Boolean(engine.oauthScopes),
         oauthAudienceConfigured: Boolean(engine.oauthAudience),
       },
+      governance: {
+        accountableOwnerId: engine.ownerId || null,
+        accountableDelegateId: engine.delegateId || null,
+      },
+      // Retained only for existing clients while they move to `governance`.
       ownerId: engine.ownerId,
       delegateId: engine.delegateId,
       environmentTagId: engine.environmentTagId,

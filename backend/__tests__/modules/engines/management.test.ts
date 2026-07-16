@@ -243,6 +243,10 @@ describe('engines management routes', () => {
           oauthScopesConfigured: true,
           oauthAudienceConfigured: true,
         },
+        governance: {
+          accountableOwnerId: 'owner-1',
+          accountableDelegateId: null,
+        },
       }),
     })]);
     expect(JSON.stringify(response.body)).not.toContain('ENGINE_OAUTH_SECRET');

@@ -44,6 +44,15 @@ export const EngineEndpointAuthenticationSummarySchema = z.object({
   oauthAudienceConfigured: z.boolean(),
 });
 
+/**
+ * Accountable contacts are governance metadata. They are never an
+ * authorization input; `role` below is the evaluator-derived effective role.
+ */
+export const EngineGovernanceMetadataSchema = z.object({
+  accountableOwnerId: z.string().nullable(),
+  accountableDelegateId: z.string().nullable(),
+});
+
 // Engine with details (for my-engines endpoint)
 export const EngineWithDetailsSchema = z.object({
   engine: z.object({
@@ -56,7 +65,10 @@ export const EngineWithDetailsSchema = z.object({
     runtimeAccessScope: EngineRuntimeAccessScopeSchema,
     deploymentIntegration: EngineDeploymentIntegrationSchema,
     endpointAuthentication: EngineEndpointAuthenticationSummarySchema,
+    governance: EngineGovernanceMetadataSchema,
+    /** @deprecated Use `governance.accountableOwnerId`. */
     ownerId: z.string().nullable().optional(),
+    /** @deprecated Use `governance.accountableDelegateId`. */
     delegateId: z.string().nullable().optional(),
     environmentTagId: z.string().nullable().optional(),
     environmentLocked: z.boolean().optional(),
@@ -115,3 +127,4 @@ export type PendingEngineInvite = z.infer<typeof PendingEngineInviteSchema>;
 export type EngineMembersResponse = z.infer<typeof EngineMembersResponseSchema>;
 export type EngineWithDetails = z.infer<typeof EngineWithDetailsSchema>;
 export type EngineEndpointAuthenticationSummary = z.infer<typeof EngineEndpointAuthenticationSummarySchema>;
+export type EngineGovernanceMetadata = z.infer<typeof EngineGovernanceMetadataSchema>;
