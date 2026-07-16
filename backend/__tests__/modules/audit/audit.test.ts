@@ -193,4 +193,41 @@ describe('GET /api/audit/logs', () => {
     );
     expect(piiRedactionService.redactPayload).not.toHaveBeenCalled();
   });
+
+  it('keeps config-apply audit secret references opaque even for unredacted reads', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    const resolvedValue = 'resolved-engine-password-must-not-leak';
+    const auditRepo = {
+      createQueryBuilder: vi.fn(() => ({
+        orderBy: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+        take: vi.fn().mockReturnThis(),
+        andWhere: vi.fn().mockReturnThis(),
+        getManyAndCount: vi.fn().mockResolvedValue([[
+          {
+            id: 'log-config-apply', action: 'authz.config_bundle.apply', createdAt: Date.now(),
+            details: JSON.stringify({
+              secretReferences: ['PAYMENTS_ENGINE_PASSWORD'],
+              redaction: 'Config payload and secret values omitted',
+            }),
+          },
+        ], 1]),
+      })),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuditLog) return auditRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/api/audit/logs?redaction=none');
+
+    expect(response.status).toBe(200);
+    expect(response.body.logs[0].details).toEqual({
+      secretReferences: ['PAYMENTS_ENGINE_PASSWORD'],
+      redaction: 'Config payload and secret values omitted',
+    });
+    expect(JSON.stringify(response.body)).not.toContain(resolvedValue);
+  });
 });

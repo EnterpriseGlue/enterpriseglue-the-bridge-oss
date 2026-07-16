@@ -207,7 +207,7 @@ describe('configBundleApplyService', () => {
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       action: 'authz.config_bundle.apply',
       resourceType: 'config_bundle_apply_run',
-      details: expect.stringContaining('"redaction":"Config payload and secret references omitted"'),
+      details: expect.stringContaining('"redaction":"Config payload and secret values omitted"'),
     }));
     expect(auditInsert).not.toHaveBeenCalledWith(expect.objectContaining({
       details: expect.stringContaining('CENTRAL_PASSWORD'),
@@ -668,7 +668,7 @@ describe('configBundleApplyService', () => {
     const applyAudit = auditInsert.mock.calls.map((args) => args[0] as { details: string; action: string }).find((entry) => entry.action === 'authz.config_bundle.apply');
     expect(applyAudit).toBeDefined();
     expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
-    expect(applyAudit!.details).not.toContain('PAYMENTS_ENGINE_PASSWORD');
+    expect(applyAudit!.details).toContain('"secretReferences":["PAYMENTS_ENGINE_PASSWORD"]');
     expect(applyAudit!.details).not.toContain('passwordRef');
   });
 

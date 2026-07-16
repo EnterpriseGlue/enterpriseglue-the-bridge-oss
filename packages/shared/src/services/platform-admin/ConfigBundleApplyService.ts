@@ -263,8 +263,8 @@ class ConfigBundleApplyService {
     if (input.expectedPreviewHash !== compilation.preview.canonicalHash) {
       return fail('Preview hash does not match the submitted configuration bundle', 409);
     }
+    const secretPreflight = configBundleSecretPreflightService.check({ bundle: input.bundle, files: input.files }, policy);
     if (input.expectedSecretPreflightHash) {
-      const secretPreflight = configBundleSecretPreflightService.check({ bundle: input.bundle, files: input.files }, policy);
       if (!secretPreflight.valid || !secretPreflight.available || secretPreflight.availabilityHash !== input.expectedSecretPreflightHash) {
         return fail('Secret reference availability changed or is no longer available since preflight', 409);
       }
@@ -739,7 +739,8 @@ class ConfigBundleApplyService {
           mode: manifest.mode,
           canonicalHash: diff.canonicalHash,
           changes: diff.changes.filter((change) => change.operation !== 'noop').map(auditApplyChangeSummary),
-          redaction: 'Config payload and secret references omitted',
+          secretReferences: secretPreflight.references.map(({ reference }) => reference),
+          redaction: 'Config payload and secret values omitted',
         },
       });
     });
