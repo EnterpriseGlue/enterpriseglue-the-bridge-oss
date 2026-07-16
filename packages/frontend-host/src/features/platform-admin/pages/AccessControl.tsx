@@ -61,7 +61,7 @@ import {
 import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
-import { PermissionsTable } from './access-control/PermissionsTable';
+import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import {
@@ -69,7 +69,6 @@ import {
   getPermissionImplications,
   getPermissionRisk,
 } from './access-control/rolePermissionPresentation';
-import { RolesTable } from './access-control/RolesTable';
 import type { RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 export { filterPermissions, getPermissionImplications, getPermissionRisk } from './access-control/rolePermissionPresentation';
@@ -5664,46 +5663,12 @@ export default function AccessControl() {
         <TabPanels>
           {rolesReadDecision.allowed && (
           <TabPanel>
-            {rolesQ.isError ? (
-              <InlineNotification kind="error" title="Unable to load roles" lowContrast />
-            ) : (
-              <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-                <RolesTable
-                  roles={roles}
-                  loading={rolesQ.isLoading}
-                  onCreate={openCreateRole}
-                  onEdit={openEditRole}
-                  onDuplicate={openDuplicateRole}
-                  onArchive={archiveRole}
-                  canManage={canManageRoles}
-                  filterRoles={filterRoles}
-                />
-                <InlineNotification
-                  kind="info"
-                  lowContrast
-                  hideCloseButton
-                  title="Edit one role at a time"
-                  subtitle="Use Edit for custom roles or Duplicate for system roles. The focused role editor keeps permissions scoped, avoids horizontal comparison tables, and requires acknowledgement for sensitive permissions."
-                />
-              </div>
-            )}
+            <RoleCatalogPanel roles={roles} loading={rolesQ.isLoading} failed={rolesQ.isError} onCreate={openCreateRole} onEdit={openEditRole} onDuplicate={openDuplicateRole} onArchive={archiveRole} canManage={canManageRoles} filterRoles={filterRoles} />
           </TabPanel>
           )}
           {permissionsReadDecision.allowed && (
           <TabPanel>
-            {permissionsQ.isError ? (
-              <InlineNotification kind="error" title="Unable to load permissions" lowContrast />
-            ) : (
-              <PermissionsTable
-                permissions={permissions}
-                loading={permissionsQ.isLoading}
-                onCreate={openCreatePermission}
-                canManage={canManageRoles}
-                filterPermissions={filterPermissions}
-                getPermissionImplications={getPermissionImplications}
-                getPermissionRisk={getPermissionRisk}
-              />
-            )}
+            <PermissionCatalogPanel permissions={permissions} loading={permissionsQ.isLoading} failed={permissionsQ.isError} onCreate={openCreatePermission} canManage={canManageRoles} filterPermissions={filterPermissions} getPermissionImplications={getPermissionImplications} getPermissionRisk={getPermissionRisk} />
           </TabPanel>
           )}
           {assignmentsReadDecision.allowed && (
