@@ -52,9 +52,6 @@ import {
   DEFAULT_AUTHZ_AUDIT_FILTER,
   EffectiveAccessPanel,
   PolicyInspectionTable,
-  SsoAssignmentDiagnosticsPanel,
-  SsoEngineAccessSnapshotsPanel,
-  SsoSyncDiagnosticsPanel,
   type AuthzAuditFilterState,
   type SsoAssignmentDiagnostics,
 } from './access-control';
@@ -63,8 +60,8 @@ import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
+import { SsoAssignmentsPanel } from './access-control/SsoAssignmentsPanel';
 import { SsoMappingsPanel } from './access-control/SsoMappingsPanel';
-import { SsoAssignmentMappingsTable, ssoAssignmentHeaders } from './access-control/SsoAssignmentMappingsTable';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import {
@@ -5459,87 +5456,49 @@ export default function AccessControl() {
           )}
           {ssoAssignmentsReadDecision.allowed && (
           <TabPanel>
-            {mappingsQ.isLoading ? (
-              <DataTableSkeleton headers={ssoAssignmentHeaders} rowCount={5} />
-            ) : (
-              <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
-                {staleSsoAssignments.length > 0 && (
-                  <InlineNotification
-                    kind="warning"
-                    title="Stale SSO assignments detected"
-                    subtitle={`${staleSsoAssignments.length} SSO-managed assignment${staleSsoAssignments.length === 1 ? '' : 's'} reference missing mappings.`}
-                    lowContrast
-                  />
-                )}
-                <SsoAssignmentDiagnosticsPanel
-                  diagnostics={ssoDiagnostics}
-                  roles={roles}
-                  testResult={testM.data}
-                />
-                <SsoSyncDiagnosticsPanel
-                  runs={ssoSyncRuns}
-                  events={ssoSyncEvents}
-                  loading={ssoSyncRunsQ.isLoading}
-                  eventsLoading={ssoSyncEventsQ.isLoading}
-                  runsError={ssoSyncRunsQ.isError}
-                  eventsError={ssoSyncEventsQ.isError}
-                  selectedRunId={selectedSsoSyncRunId}
-                  canRunDiagnostics={canManageSsoAssignments}
-                  diagnosticsUnavailableReason={ssoAssignmentsManageUnavailableReason}
-                  diagnosticsRunning={runSsoSyncDiagnosticsM.isPending}
-                  lastDiagnosticsResult={runSsoSyncDiagnosticsM.data || null}
-                  diagnosticsOptions={ssoDiagnosticsOptions}
-                  onSelectRun={setSelectedSsoSyncRunId}
-                  onRunDiagnostics={runSsoSyncDiagnostics}
-                  onDiagnosticsOptionsChange={setSsoDiagnosticsOptions}
-                />
-                <SsoEngineAccessSnapshotsPanel
-                  snapshots={ssoEngineAccessSnapshots}
-                  roles={roles}
-                  loading={ssoEngineAccessSnapshotsQ.isLoading}
-                  error={ssoEngineAccessSnapshotsQ.isError}
-                  canManageCleanup={canManageSsoAssignments}
-                  cleanupUnavailableReason={ssoAssignmentsManageUnavailableReason}
-                />
-                <SsoAssignmentMappingsTable
-                  mappings={mappings}
-                  roles={roles}
-                  canManage={canManageSsoAssignments}
-                  manageUnavailableReason={ssoAssignmentsManageUnavailableReason}
-                  testPending={testM.isPending}
-                  claimLabel={ssoClaimLabel}
-                  targetLabel={selectorLabel}
-                  roleLabel={roleLabel}
-                  warningFor={(mapping) => getSsoAssignmentMappingWarning(mapping, externalEngines)}
-                  onTest={testAssignments}
-                  onCreate={openCreate}
-                  onEdit={openEdit}
-                  onMigrate={(mapping) => {
-                    setSsoAssignmentMigrationTarget(mapping);
-                    setSsoAssignmentMigrationProviderKey('');
-                    setSsoAssignmentMigrationGroupKey('');
-                    setSsoAssignmentMigrationError(null);
-                  }}
-                  onDelete={(mappingId) => deleteM.mutate(mappingId)}
-                />
-              </div>
-            )}
-            {testM.data && (
-              <InlineNotification
-                kind="info"
-                title={`${(testM.data.assignments || []).length} assignment${(testM.data.assignments || []).length === 1 ? '' : 's'} would match`}
-                subtitle={(testM.data.assignments || []).map((assignment) => `${assignment.roleId} -> ${assignment.resourceId || 'all engines'}`).join(', ') || 'No mappings matched'}
-                lowContrast
-              />
-            )}
-            <div style={{ marginTop: 'var(--spacing-4)' }}>
-              <TextInput
-                id="test-claims"
-                labelText="Test claims JSON"
-                value={testClaims}
-                onChange={(event) => setTestClaims(event.target.value)}
-              />
-            </div>
+            <SsoAssignmentsPanel
+              loading={mappingsQ.isLoading}
+              mappings={mappings}
+              roles={roles}
+              diagnostics={ssoDiagnostics}
+              staleAssignmentCount={staleSsoAssignments.length}
+              syncRuns={ssoSyncRuns}
+              syncEvents={ssoSyncEvents}
+              syncRunsLoading={ssoSyncRunsQ.isLoading}
+              syncEventsLoading={ssoSyncEventsQ.isLoading}
+              syncRunsError={ssoSyncRunsQ.isError}
+              syncEventsError={ssoSyncEventsQ.isError}
+              selectedSyncRunId={selectedSsoSyncRunId}
+              canManage={canManageSsoAssignments}
+              manageUnavailableReason={ssoAssignmentsManageUnavailableReason}
+              diagnosticsRunning={runSsoSyncDiagnosticsM.isPending}
+              diagnosticsResult={runSsoSyncDiagnosticsM.data || null}
+              diagnosticsOptions={ssoDiagnosticsOptions}
+              snapshots={ssoEngineAccessSnapshots}
+              snapshotsLoading={ssoEngineAccessSnapshotsQ.isLoading}
+              snapshotsError={ssoEngineAccessSnapshotsQ.isError}
+              testPending={testM.isPending}
+              testResult={testM.data}
+              testClaims={testClaims}
+              claimLabel={ssoClaimLabel}
+              targetLabel={selectorLabel}
+              roleLabel={roleLabel}
+              warningFor={(mapping) => getSsoAssignmentMappingWarning(mapping, externalEngines)}
+              onSelectSyncRun={setSelectedSsoSyncRunId}
+              onRunDiagnostics={runSsoSyncDiagnostics}
+              onDiagnosticsOptionsChange={setSsoDiagnosticsOptions}
+              onTestClaimsChange={setTestClaims}
+              onTest={testAssignments}
+              onCreate={openCreate}
+              onEdit={openEdit}
+              onMigrate={(mapping) => {
+                setSsoAssignmentMigrationTarget(mapping);
+                setSsoAssignmentMigrationProviderKey('');
+                setSsoAssignmentMigrationGroupKey('');
+                setSsoAssignmentMigrationError(null);
+              }}
+              onDelete={(mappingId) => deleteM.mutate(mappingId)}
+            />
           </TabPanel>
           )}
           {engineSetsReadDecision.allowed && (
