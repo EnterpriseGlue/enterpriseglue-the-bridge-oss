@@ -66,6 +66,13 @@ describe('identityProviderService', () => {
     } });
     expect(provider.protocol).toBe('ldap');
   });
+  it('accepts only a non-empty LDAP TLS trust secret reference', async () => {
+    const configuration = {
+      url: 'ldaps://directory.test', bindDn: 'cn=service,dc=example,dc=test', bindPasswordRef: 'LDAP_BIND_PASSWORD', userBaseDn: 'ou=users,dc=example,dc=test', userSearchFilter: '(uid={username})', groupBaseDn: 'ou=groups,dc=example,dc=test', groupIdAttribute: 'cn', membershipMode: 'memberOf',
+    };
+    await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { ...configuration, tlsTrustRef: ' ' } })).rejects.toThrow('tlsTrustRef');
+    await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { ...configuration, tlsTrustRef: 'LDAP_CA_CERTIFICATE' } })).resolves.toMatchObject({ protocol: 'ldap' });
+  });
 
   it('archives provider access without removing manual or other-provider memberships', async () => {
     const provider = { id: 'provider-1', tenantId: 'tenant-1', key: 'entra', protocol: 'oidc' } as IdentityProvider;
