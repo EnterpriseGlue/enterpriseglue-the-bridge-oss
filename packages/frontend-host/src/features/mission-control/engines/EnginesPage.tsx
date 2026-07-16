@@ -114,8 +114,9 @@ function normalizeEngineType(type: unknown): EngineTypeId {
 
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean
 type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean
+type EngineActionSubject = Pick<AccessibleEngineSummary, 'id'> | null | undefined
 
-export function getEngineActionPermissions(engine: any, hasPermission: EnginePermissionCheck, hasAction?: EngineActionCheck) {
+export function getEngineActionPermissions(engine: EngineActionSubject, hasPermission: EnginePermissionCheck, hasAction?: EngineActionCheck) {
   const engineId = engine?.id
   const hasActionDecision = (actionId: string) => Boolean(engineId && hasAction?.(engineId, actionId))
   const hasPermissionOrAction = (permission: string, actionId?: string) =>
@@ -167,7 +168,7 @@ export function getEngineActionPermissions(engine: any, hasPermission: EnginePer
 
 type EngineActionPermissions = ReturnType<typeof getEngineActionPermissions>
 
-function getEngineInventoryReadDecision(engine: any, permissions: any) {
+function getEngineInventoryReadDecision(engine: EngineActionSubject, permissions: any) {
   return evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
 }
 
@@ -1508,7 +1509,7 @@ export default function Engines() {
     return evaluateActionSnapshot(permissions, actionId, { type: 'engine', id: engineId }).allowed
   }, [permissions])
 
-  function getActionsForEngine(engine: any) {
+  function getActionsForEngine(engine: EngineActionSubject) {
     return getEngineActionPermissions(engine, hasEnginePermission, hasEngineAction)
   }
 
