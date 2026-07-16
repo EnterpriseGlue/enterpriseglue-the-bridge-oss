@@ -9,12 +9,7 @@ import type {
 import type { AssignmentFormValues } from './assignmentFormOptions';
 import { RoleAssignmentForm } from './RoleAssignmentForm';
 import { RoleAssignmentsTable } from './RoleAssignmentsTable';
-
-type RuntimeResourceEngineOption = {
-  id: string;
-  name: string;
-  status?: string;
-};
+import type { RuntimeResourceEngineOption } from './runtimeResourceOptions';
 
 export function RoleAssignmentsPanel({
   roles,

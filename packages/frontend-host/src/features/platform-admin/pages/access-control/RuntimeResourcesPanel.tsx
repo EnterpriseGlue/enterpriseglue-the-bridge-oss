@@ -1,21 +1,10 @@
 import { Button, DataTableSkeleton, Dropdown, InlineNotification, Table, TableBody, TableCell, TableContainer, TableHead, TableHeader, TableRow, Tag } from '@carbon/react';
 import { parseApiError } from '../../../../shared/api/apiErrorUtils';
-import type { RuntimeResourceReconciliationResult } from '../../hooks/useAuthzApi';
-
-interface RuntimeResourceInventoryRow {
-  id: string;
-  resourceKind: 'process_definition' | 'decision_definition';
-  resourceKey: string;
-  runtimeTenantId: string;
-  projectId: string | null;
-  source: string;
-  observedAt: number;
-}
-
-interface RuntimeResourceEngineOption { id: string; name: string; }
+import type { RuntimeResource, RuntimeResourceReconciliationResult } from '../../hooks/useAuthzApi';
+import type { RuntimeResourceEngineOption } from './runtimeResourceOptions';
 
 export function RuntimeResourcesPanel({ engines, selectedEngineId, resources, loading, error, canManage, reconcilePending, reconcileError, reconcileResult, onSelectEngine, onReconcile }: {
-  engines: RuntimeResourceEngineOption[]; selectedEngineId: string; resources: RuntimeResourceInventoryRow[]; loading: boolean; error: unknown; canManage: boolean; reconcilePending: boolean; reconcileError: unknown; reconcileResult: RuntimeResourceReconciliationResult | undefined; onSelectEngine: (id: string) => void; onReconcile: () => void;
+  engines: RuntimeResourceEngineOption[]; selectedEngineId: string; resources: RuntimeResource[]; loading: boolean; error: unknown; canManage: boolean; reconcilePending: boolean; reconcileError: unknown; reconcileResult: RuntimeResourceReconciliationResult | undefined; onSelectEngine: (id: string) => void; onReconcile: () => void;
 }) {
   const selectedEngine = engines.find((engine) => engine.id === selectedEngineId) || null;
   const processCount = resources.filter((resource) => resource.resourceKind === 'process_definition').length;

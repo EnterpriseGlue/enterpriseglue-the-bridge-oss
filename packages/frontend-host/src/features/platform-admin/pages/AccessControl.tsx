@@ -68,6 +68,7 @@ import {
 } from './access-control/auditReferences';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
+import type { RuntimeResourceEngineOption } from './access-control/runtimeResourceOptions';
 import { SsoAssignmentsPanel } from './access-control/SsoAssignmentsPanel';
 import { SsoMappingsPanel } from './access-control/SsoMappingsPanel';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
@@ -206,6 +207,7 @@ import {
   type PolicyCondition,
   type RoleAssignment,
   type RoleSummary,
+  type RuntimeResource,
   type ServiceAccount,
   type SsoClaimsMapping,
   type SsoGroupMapping,
@@ -217,23 +219,6 @@ import {
   type SsoSyncRun,
   type AuthzResourceType,
 } from '../hooks/useAuthzApi';
-
-interface RuntimeResourceInventoryRow {
-  id: string;
-  engineId: string;
-  resourceKind: 'process_definition' | 'decision_definition';
-  resourceKey: string;
-  runtimeTenantId: string;
-  projectId: string | null;
-  source: string;
-  observedAt: number;
-  isActive: boolean;
-}
-
-interface RuntimeResourceEngineOption {
-  id: string;
-  name: string;
-}
 
 const CLAIM_TYPES = [
   { id: 'group', label: 'Group' },
@@ -1189,7 +1174,7 @@ export default function AccessControl() {
   const runtimeResourcesQ = useQuery({
     queryKey: ['authz-runtime-resources', selectedRuntimeEngineId],
     enabled: engineSetsReadDecision.allowed && Boolean(selectedRuntimeEngineId),
-    queryFn: () => apiClient.get<RuntimeResourceInventoryRow[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
+    queryFn: () => apiClient.get<RuntimeResource[]>(`/api/authz/runtime-resources?engineId=${encodeURIComponent(selectedRuntimeEngineId)}`),
   });
   const reconcileRuntimeResourcesM = useReconcileRuntimeResources();
   const assignmentsReadUnavailableReason = unavailableReason(assignmentsReadDecision, 'Missing permission platform:authz:roles:view');

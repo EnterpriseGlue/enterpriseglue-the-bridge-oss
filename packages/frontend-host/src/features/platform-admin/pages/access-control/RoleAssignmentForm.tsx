@@ -20,11 +20,7 @@ import {
   type AssignmentPrincipalType,
 } from './assignmentFormOptions';
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
-
-interface RuntimeResourceEngineOption {
-  id: string;
-  name: string;
-}
+import type { RuntimeResourceEngineOption } from './runtimeResourceOptions';
 
 export function RoleAssignmentForm({
   roles,
