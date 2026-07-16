@@ -43,8 +43,10 @@ describe('identity mock provider contracts', () => {
 
     const saml = new MockSamlIdentityProvider();
     saml.setAttributes({ nameID: 'changed@example.test', role: ['changed'] });
+    saml.setNow(new Date('2030-01-01T00:00:00.000Z'));
     saml.reset();
     expect(saml.assertion()).toMatchObject({ nameID: 'person@example.test', role: ['operator'] });
+    expect(Buffer.from(saml.signedResponse(), 'base64').toString('utf8')).not.toContain('2030-01-01T00:00:00.000Z');
 
     const directory = new MockLdapDirectory();
     const previousBindPassword = directory.bindPassword;

@@ -254,6 +254,7 @@ export class MockSamlIdentityProvider {
   readonly callbackUrl: string;
   private signingMaterial = createSamlSigningMaterial();
   private sequence = 0;
+  private now: Date | null = null;
   private attributes: Record<string, unknown> = {
     nameID: 'person@example.test',
     'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['payments', 'operations'],
@@ -282,9 +283,14 @@ export class MockSamlIdentityProvider {
     this.signingMaterial = createSamlSigningMaterial();
   }
 
+  setNow(now: Date | null): void {
+    this.now = now ? new Date(now) : null;
+  }
+
   reset(): void {
     this.signingMaterial = createSamlSigningMaterial();
     this.sequence = 0;
+    this.now = null;
     this.attributes = {
       nameID: 'person@example.test',
       'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['payments', 'operations'],
@@ -294,7 +300,7 @@ export class MockSamlIdentityProvider {
 
   signedResponse(options: MockSamlResponseOptions = {}): string {
     const material = this.signingMaterial;
-    const now = options.issueInstant || new Date();
+    const now = options.issueInstant || this.now || new Date();
     const notBefore = (options.notBefore || new Date(now.getTime() - 60_000)).toISOString();
     const notOnOrAfter = (options.notOnOrAfter || new Date(now.getTime() + 300_000)).toISOString();
     const issueInstant = now.toISOString();
