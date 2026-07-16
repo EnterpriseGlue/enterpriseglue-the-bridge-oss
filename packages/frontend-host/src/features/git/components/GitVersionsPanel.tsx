@@ -18,7 +18,7 @@ import { evaluateActionSnapshot } from '../../../shared/auth/guards';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import type { FileDeploymentSummary as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
-import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
+import { getAccessibleEngines, getEngineEnvironmentTags } from '../../mission-control/engines/api/engines';
 
 // Lazy load the viewers
 const Viewer = lazy(() => import('../../shared/components/Viewer'));
@@ -96,12 +96,6 @@ interface FileSnapshot {
   type: string;
   content: string | null;
   changeType: string;
-}
-
-interface EnvironmentTag {
-  id: string;
-  name: string;
-  color: string;
 }
 
 type EngineWithAccess = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>;
@@ -415,7 +409,7 @@ export default function GitVersionsPanel({
 
   const environmentTagsQuery = useQuery({
     queryKey: ['engines', 'environment-tags'],
-    queryFn: () => apiClient.get<EnvironmentTag[]>('/engines-api/environment-tags', undefined, { credentials: 'include' }),
+    queryFn: getEngineEnvironmentTags,
     enabled: hasEngineAccess,
     staleTime: 60000,
   });

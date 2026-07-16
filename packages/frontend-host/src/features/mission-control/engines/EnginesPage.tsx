@@ -37,7 +37,6 @@ import EngineMembersModal from './components/EngineMembersModal'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
-import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
 import type {
   EngineOnboardingMode,
   PlatformSettings,
@@ -61,7 +60,7 @@ import type {
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts } from './api/engines'
+import { getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1404,7 +1403,7 @@ export default function Engines() {
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
   // Fetch environment tags (read-only, used by engine owners/delegates too)
-  const envTagsQ = useQuery({ queryKey: ['engines', 'environment-tags'], queryFn: () => apiClient.get<EnvironmentTag[]>('/engines-api/environment-tags', undefined, { credentials: 'include' }) })
+  const envTagsQ = useQuery({ queryKey: ['engines', 'environment-tags'], queryFn: getEngineEnvironmentTags })
   const envTags = envTagsQ.data
   const hasSingleTag = Array.isArray(envTags) && envTags.length === 1
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
