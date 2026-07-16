@@ -44,13 +44,11 @@ import type {
 import type {
   CreateEngineRequest,
   AccessibleEngineSummary,
-  EngineConnectionHealthResponse,
   EngineAuthType,
   EngineConnectionMode,
   EngineType,
   UpdateEngineRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
-import type { EngineEnvironmentUpdateResponse } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import type {
   EngineMember as SharedEngineMember,
   EngineMembersResponse as SharedEngineMembersResponse,
@@ -61,7 +59,7 @@ import type {
   ProjectEngineTarget as SharedProjectEngineTarget,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { getAccessibleEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineProjectTargets } from './api/engines'
+import { createEngine, deleteEngine as deleteEngineRequest, getAccessibleEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineProjectTargets, setEngineEnvironment, testEngineConnection, updateEngine } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1399,7 +1397,7 @@ export default function Engines() {
   const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({
-    mutationFn: (payload: CreateEngineRequest) => apiClient.post<AccessibleEngineSummary>('/engines-api/engines', payload, { credentials: 'include' }),
+    mutationFn: createEngine,
     onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       qc.invalidateQueries({ queryKey: ['engines','active'] })
@@ -1417,7 +1415,7 @@ export default function Engines() {
   const updateM = useMutation({
     mutationFn: (payload: UpdateEngineRequest) => {
       if (!editing) throw new Error('Select an engine before updating it')
-      return apiClient.put<AccessibleEngineSummary>(`/engines-api/engines/${encodeURIComponent(editing.id)}`, payload, { credentials: 'include' })
+      return updateEngine(editing.id, payload)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
@@ -1429,11 +1427,7 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to update engine', subtitle: getUiErrorMessage(e, 'Failed to update') })
   })
   const setEnvironmentM = useMutation({
-    mutationFn: ({ engineId, environmentTagId }: { engineId: string; environmentTagId: string | null }) => apiClient.post<EngineEnvironmentUpdateResponse>(
-      `/engines-api/engines/${encodeURIComponent(engineId)}/environment`,
-      { environmentTagId },
-      { credentials: 'include' }
-    ),
+    mutationFn: ({ engineId, environmentTagId }: { engineId: string; environmentTagId: string | null }) => setEngineEnvironment(engineId, environmentTagId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       qc.invalidateQueries({ queryKey: ['engines','active'] })
@@ -1444,7 +1438,7 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to update engine environment', subtitle: getUiErrorMessage(e, 'Failed to update engine environment') })
   })
   const deleteM = useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/engines-api/engines/${encodeURIComponent(id)}`, { credentials: 'include' }),
+    mutationFn: deleteEngineRequest,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['engines'] })
       notify({ kind: 'success', title: 'Engine deleted' })
@@ -1452,7 +1446,7 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to delete engine', subtitle: getUiErrorMessage(e, 'Failed to delete') })
   })
   const testM = useMutation({
-    mutationFn: (id: string) => apiClient.post<EngineConnectionHealthResponse>(`/engines-api/engines/${encodeURIComponent(id)}/test`, {}, { credentials: 'include' }),
+    mutationFn: testEngineConnection,
     onSuccess: (_data, id) => { qc.invalidateQueries({ queryKey: ['engines'] }); qc.invalidateQueries({ queryKey: ['engines','health', id] }) },
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to test connection', subtitle: getUiErrorMessage(e, 'Failed to test connection') })
   })

@@ -1,8 +1,14 @@
 import { apiClient } from '../../../../shared/api/client'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
-import type { AccessibleEngineSummary, EngineConnectionHealthResponse } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import type {
+  AccessibleEngineSummary,
+  CreateEngineRequest,
+  EngineConnectionHealthResponse,
+  UpdateEngineRequest,
+} from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
 import type { ProjectEngineTarget } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import type { EngineEnvironmentUpdateResponse } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 
 /**
  * Returns the authorization-filtered engine collection. This is deliberately
@@ -10,6 +16,38 @@ import type { ProjectEngineTarget } from '@enterpriseglue/shared/schemas/platfor
  */
 export async function getAccessibleEngines(): Promise<AccessibleEngineSummary[]> {
   return apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines', undefined, { credentials: 'include' })
+}
+
+export async function createEngine(payload: CreateEngineRequest): Promise<AccessibleEngineSummary> {
+  return apiClient.post<AccessibleEngineSummary>('/engines-api/engines', payload, { credentials: 'include' })
+}
+
+export async function updateEngine(engineId: string, payload: UpdateEngineRequest): Promise<AccessibleEngineSummary> {
+  return apiClient.put<AccessibleEngineSummary>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}`,
+    payload,
+    { credentials: 'include' },
+  )
+}
+
+export async function deleteEngine(engineId: string): Promise<void> {
+  await apiClient.delete(`/engines-api/engines/${encodeURIComponent(engineId)}`, { credentials: 'include' })
+}
+
+export async function setEngineEnvironment(engineId: string, environmentTagId: string | null): Promise<EngineEnvironmentUpdateResponse> {
+  return apiClient.post<EngineEnvironmentUpdateResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/environment`,
+    { environmentTagId },
+    { credentials: 'include' },
+  )
+}
+
+export async function testEngineConnection(engineId: string): Promise<EngineConnectionHealthResponse> {
+  return apiClient.post<EngineConnectionHealthResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/test`,
+    {},
+    { credentials: 'include' },
+  )
 }
 
 export async function getEngineEnvironmentTags(): Promise<EnvironmentTag[]> {
