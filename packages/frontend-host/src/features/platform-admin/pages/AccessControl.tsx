@@ -2088,7 +2088,7 @@ export default function AccessControl() {
     try {
       const payload = {
         ...ssoPlatformForm,
-        providerId: ssoPlatformForm.providerId.trim() || null,
+        providerId: ssoPlatformForm.providerId.trim() || undefined,
         claimKey: ssoPlatformForm.claimKey.trim(),
         claimValue: ssoPlatformForm.claimValue.trim(),
         claimOperator: ssoPlatformForm.claimOperator || null,

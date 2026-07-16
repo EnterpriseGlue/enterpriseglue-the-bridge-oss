@@ -63,6 +63,8 @@ import type {
   LegacySsoGroupMappingMigrationRequest as SharedLegacySsoGroupMappingMigrationRequest,
   LegacySsoGroupMappingMigrationResponse as SharedLegacySsoGroupMappingMigrationResponse,
   LegacySsoMappingMigrationRequest as SharedLegacySsoMappingMigrationRequest,
+  LegacySsoPlatformMappingCreateRequest as SharedLegacySsoPlatformMappingCreateRequest,
+  LegacySsoPlatformMappingUpdateRequest as SharedLegacySsoPlatformMappingUpdateRequest,
   LegacySsoPlatformMappingMigrationResponse as SharedLegacySsoPlatformMappingMigrationResponse,
   LegacySsoProviderResponse as SharedLegacySsoProvider,
   LegacyMappingCoverageItem as SharedLegacyMappingCoverageItem,
@@ -245,6 +247,8 @@ export type IdentityProviderMigrationReadiness = IdentityProviderMigrationReadin
 export type LegacyIdentityProviderCutoverResult = LegacyIdentityProviderCutoverResponse;
 export type LegacyIdentityProviderMigrationDraft = SharedLegacyIdentityProviderMigrationDraft;
 export type LegacySsoMappingMigrationRequest = SharedLegacySsoMappingMigrationRequest;
+export type LegacySsoPlatformMappingCreateRequest = SharedLegacySsoPlatformMappingCreateRequest;
+export type LegacySsoPlatformMappingUpdateRequest = SharedLegacySsoPlatformMappingUpdateRequest;
 export type LegacySsoPlatformMappingMigrationResponse = SharedLegacySsoPlatformMappingMigrationResponse;
 export type LegacySsoAssignmentMappingMigrationResponse = SharedLegacySsoAssignmentMappingMigrationResponse;
 export type LegacySsoGroupMappingMigrationRequest = SharedLegacySsoGroupMappingMigrationRequest;
@@ -931,8 +935,8 @@ export function useSsoClaimsMappings() {
 export function useCreateSsoMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Omit<SsoClaimsMapping, 'id' | 'createdAt' | 'updatedAt'>) =>
-      apiClient.post<{ id: string }>('/api/authz/sso-mappings', data),
+    mutationFn: (data: LegacySsoPlatformMappingCreateRequest) =>
+      apiClient.post<SsoClaimsMapping>('/api/authz/sso-mappings', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoMappings }),
   });
 }
@@ -940,8 +944,8 @@ export function useCreateSsoMapping() {
 export function useUpdateSsoMapping() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: Partial<SsoClaimsMapping> & { id: string }) =>
-      apiClient.put<void>(`/api/authz/sso-mappings/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & LegacySsoPlatformMappingUpdateRequest) =>
+      apiClient.put<{ success: true }>(`/api/authz/sso-mappings/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoMappings }),
   });
 }

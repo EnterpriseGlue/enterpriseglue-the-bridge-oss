@@ -37,6 +37,7 @@ import {
   useUpdateSsoMapping,
   useDeleteSsoMapping,
   useTestSsoMapping,
+  type SsoPlatformMappingTestResponse,
   type SsoClaimsMapping,
 } from '../hooks/useAuthzApi';
 
@@ -85,7 +86,7 @@ export default function SsoMappings() {
   });
 
   const [testClaims, setTestClaims] = React.useState('{\n  "email": "user@example.com",\n  "groups": ["Developers"]\n}');
-  const [testResult, setTestResult] = React.useState<{ resolvedRole: string; matchedMappings: any[] } | null>(null);
+  const [testResult, setTestResult] = React.useState<SsoPlatformMappingTestResponse | null>(null);
 
   const openCreate = () => {
     setEditing(null);
@@ -120,11 +121,11 @@ export default function SsoMappings() {
       if (editing) {
         await updateM.mutateAsync({ id: editing.id, ...form });
       } else {
-        await createM.mutateAsync({ ...form, providerId: null });
+        await createM.mutateAsync(form);
       }
       setModalOpen(false);
       setError(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const parsed = parseApiError(e, 'Failed to save mapping');
       setError(parsed.message);
     }
@@ -134,7 +135,7 @@ export default function SsoMappings() {
     try {
       await deleteM.mutateAsync(id);
       setError(null);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const parsed = parseApiError(e, 'Failed to delete mapping');
       setError(parsed.message);
     }
@@ -145,7 +146,7 @@ export default function SsoMappings() {
       const claims = JSON.parse(testClaims);
       const result = await testM.mutateAsync({ claims });
       setTestResult(result);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const parsed = parseApiError(e, 'Failed to test claims');
       setError(parsed.message);
     }
