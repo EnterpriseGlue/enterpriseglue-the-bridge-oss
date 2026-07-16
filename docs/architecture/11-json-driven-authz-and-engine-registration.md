@@ -112,7 +112,7 @@ The remaining work in this document is not to rebuild those foundations. It is t
 - [x] ✅ Project-engine targets support active/disabled/archive state and deployment mode flags for manual, CI, API, and import.
 - [x] ✅ SSO assignment mapping and SSO access snapshot services already support engine-scoped SSO-derived access.
 - [x] ✅ Effective access evaluation can explain why a user has or lacks access.
-- [ ] ⬜ Mission Control authorization is still mostly engine-scoped. Shared central engines require resource-level scopes and collection filtering before different projects can safely share one runtime engine.
+- [x] ✅ Mission Control authorization supports resource-level scopes and collection filtering for shared central engines. Process, decision, instance, job, batch, incident, and migration routes resolve evaluator-visible runtime resources and fail closed when lineage or inventory cannot be verified.
 
 ## End-To-End Alignment Audit
 
