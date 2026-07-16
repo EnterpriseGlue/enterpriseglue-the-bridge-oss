@@ -187,6 +187,7 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
     // tenant lineage cannot become a second authorization authority.
     res.json({
       userId: snapshot.userId,
+      tenantId: req.tenant?.tenantId || null,
       platform: snapshot.platform,
       projects: snapshot.projects.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
       engines: snapshot.engines.map(({ resourceId, permissions }) => ({ resourceId, permissions })),

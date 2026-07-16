@@ -709,6 +709,7 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       userId: 'user-1',
+      tenantId: null,
       platform: ['platform:authz:check'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
       engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
@@ -733,6 +734,7 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       userId: 'user-1',
+      tenantId: null,
       platform: ['platform:authz:check'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
       engines: [{ resourceId: 'engine-central', permissions: [] }],

@@ -91,6 +91,8 @@ export interface EffectiveResourcePermissions {
 }
 export interface CurrentUserPermissions {
     userId: string;
+    /** Request-derived tenant context for this evaluated snapshot. */
+    tenantId: string | null;
     platform: string[];
     projects: EffectiveResourcePermissions[];
     engines: EffectiveResourcePermissions[];

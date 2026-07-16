@@ -4,6 +4,7 @@ import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
+import { permissionSnapshotMatchesSession } from './authSessionPermissions';
 import {
   hasAnyEnginePermission as snapshotHasAnyEnginePermission,
   hasAnyPlatformPermission as snapshotHasAnyPlatformPermission,
@@ -62,11 +63,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const persistUser = useCallback((nextUser: User | null) => {
     setUser(nextUser);
+    setPermissions((currentPermissions) =>
+      permissionSnapshotMatchesSession(nextUser, currentPermissions) ? currentPermissions : null,
+    );
     try {
       if (nextUser) {
         localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
       } else {
-        setPermissions(null);
         localStorage.removeItem(USER_KEY);
       }
     } catch {
@@ -88,6 +91,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== USER_KEY) return;
       setUser(readStoredUser(event.newValue));
+      setPermissions(null);
     };
 
     window.addEventListener('storage', handleStorage);
@@ -144,11 +148,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearAuth();
       return;
     }
-    setUser(nextUser);
-    setPermissions(null);
-    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    persistUser(nextUser);
     void refreshPermissions();
-  }, [clearAuth, refreshPermissions]);
+  }, [clearAuth, persistUser, refreshPermissions]);
 
   /**
    * Login with email and password
@@ -229,26 +231,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [clearAuth, persistUser, refreshPermissions]);
 
+  const activePermissions = permissionSnapshotMatchesSession(user, permissions) ? permissions : null;
+
   const hasPlatformPermission = useCallback((permission: string) =>
-    snapshotHasPlatformPermission(permissions, permission), [permissions]);
+    snapshotHasPlatformPermission(activePermissions, permission), [activePermissions]);
 
   const hasAnyPlatformPermission = useCallback((permissionList: string[]) =>
-    snapshotHasAnyPlatformPermission(permissions, permissionList), [permissions]);
+    snapshotHasAnyPlatformPermission(activePermissions, permissionList), [activePermissions]);
 
   const hasProjectPermission = useCallback((projectId: string | null | undefined, permission: string) =>
-    snapshotHasProjectPermission(permissions, projectId, permission), [permissions]);
+    snapshotHasProjectPermission(activePermissions, projectId, permission), [activePermissions]);
 
   const hasAnyProjectPermission = useCallback((projectId: string | null | undefined, permissionList: string[]) =>
-    snapshotHasAnyProjectPermission(permissions, projectId, permissionList), [permissions]);
+    snapshotHasAnyProjectPermission(activePermissions, projectId, permissionList), [activePermissions]);
 
   const hasAnyEnginePermission = useCallback((permissionList: string[]) =>
-    snapshotHasAnyEnginePermission(permissions, permissionList), [permissions]);
+    snapshotHasAnyEnginePermission(activePermissions, permissionList), [activePermissions]);
 
   const hasEnginePermission = useCallback((engineId: string | null | undefined, permission: string) =>
-    snapshotHasEnginePermission(permissions, engineId, permission), [permissions]);
+    snapshotHasEnginePermission(activePermissions, engineId, permission), [activePermissions]);
 
   const hasAnyScopedEnginePermission = useCallback((engineId: string | null | undefined, permissionList: string[]) =>
-    snapshotHasAnyScopedEnginePermission(permissions, engineId, permissionList), [permissions]);
+    snapshotHasAnyScopedEnginePermission(activePermissions, engineId, permissionList), [activePermissions]);
 
   /**
    * Proactive token refresh - check every minute and refresh if needed
@@ -289,7 +293,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextValue = {
     user,
-    permissions,
+    permissions: activePermissions,
     isAuthenticated: !!user,
     isLoading,
     login,

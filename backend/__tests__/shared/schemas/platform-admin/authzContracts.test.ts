@@ -242,7 +242,7 @@ describe('authorization response contracts', () => {
 
   it('shares permission snapshots and deployment eligibility decisions', () => {
     expect(CurrentUserPermissionsSchema.parse({
-      userId: 'user-a', platform: ['platform:authz:view'], projects: [{ resourceId: 'project-a', permissions: ['project:read'] }],
+      userId: 'user-a', tenantId: null, platform: ['platform:authz:view'], projects: [{ resourceId: 'project-a', permissions: ['project:read'] }],
       engines: [{ resourceId: 'engine-a', permissions: ['engine:read'] }], authorizationVersion: 'version-a', generatedAt: 1,
     }).authorizationVersion).toBe('version-a');
     expect(DeploymentEligibilityEvaluateResponseSchema.parse({

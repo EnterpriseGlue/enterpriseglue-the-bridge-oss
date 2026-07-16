@@ -365,6 +365,7 @@ export const EffectiveResourcePermissionsSchema = z.object({
 
 export const CurrentUserPermissionsSchema = z.object({
   userId: z.string(),
+  tenantId: z.string().nullable(),
   platform: z.array(z.string()),
   projects: z.array(EffectiveResourcePermissionsSchema),
   engines: z.array(EffectiveResourcePermissionsSchema),
