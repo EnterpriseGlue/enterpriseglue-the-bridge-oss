@@ -1,5 +1,4 @@
 import { Router, type Response as ExpressResponse } from 'express';
-import { z } from 'zod';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter, createUserLimiter, passwordResetVerifyLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -16,25 +15,18 @@ import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/i
 import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import {
+  CreateInvitationRequestSchema,
+  CreateInvitationResponseSchema,
+  InvitationCapabilitiesResponseSchema,
+  InvitationOnboardingResponseSchema,
+  InvitationTokenParamsSchema,
+  VerifyInvitationOtpRequestSchema,
+  type CreateInvitationRequest,
+  type VerifyInvitationOtpRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 
 const router = Router();
-
-const invitationParamsSchema = z.object({
-  token: z.string().min(1),
-});
-
-const createInvitationSchema = z.object({
-  email: z.string().email(),
-  resourceType: z.enum(['tenant', 'project', 'engine']),
-  resourceId: z.string().optional(),
-  resourceName: z.string().optional(),
-  role: z.string().optional(),
-  deliveryMethod: z.enum(['email', 'manual']).default('email'),
-});
-
-const verifyInvitationSchema = z.object({
-  oneTimePassword: z.string().min(1),
-});
 
 function setOnboardingCookie(res: ExpressResponse, payload: {
   userId: string;
@@ -85,15 +77,15 @@ router.get('/api/t/:tenantSlug/invitations/capabilities', apiLimiter, requireAut
   const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
   const ssoRequired = await invitationService.isLocalLoginDisabled();
 
-  res.json({
+  res.json(InvitationCapabilitiesResponseSchema.parse({
     ssoRequired,
     emailConfigured: Boolean(emailConfig),
-  });
+  }));
 }));
 
-router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(createInvitationSchema), requireInvitationCreateAction('invitations.create'), asyncHandler(async (req, res) => {
+router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(CreateInvitationRequestSchema), requireInvitationCreateAction('invitations.create'), asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
-  const { email, resourceType, resourceId, resourceName, role, deliveryMethod } = req.body as z.infer<typeof createInvitationSchema>;
+  const { email, resourceType, resourceId, resourceName, role, deliveryMethod } = req.body as CreateInvitationRequest;
   const normalizedEmail = email.toLowerCase();
 
   if (resourceType === 'engine' && role && role !== 'operator' && role !== 'deployer') {
@@ -148,23 +140,23 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUse
     },
   });
 
-  res.status(201).json({
+  res.status(201).json(CreateInvitationResponseSchema.parse({
     invited: true,
     emailSent: result.emailSent,
     emailError: result.emailError,
     inviteUrl: result.emailSent ? undefined : result.inviteUrl,
     oneTimePassword: deliveryMethod === 'manual' ? result.oneTimePassword : undefined,
-  });
+  }));
 }));
 
-router.get('/api/invitations/:token', apiLimiter, validateParams(invitationParamsSchema), asyncHandler(async (req, res) => {
+router.get('/api/invitations/:token', apiLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
   const info = await invitationService.getInvitationInfo(String(req.params.token));
   res.json(info);
 }));
 
-router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(invitationParamsSchema), validateBody(verifyInvitationSchema), asyncHandler(async (req, res) => {
+router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), validateBody(VerifyInvitationOtpRequestSchema), asyncHandler(async (req, res) => {
   const token = String(req.params.token);
-  const { oneTimePassword } = req.body as z.infer<typeof verifyInvitationSchema>;
+  const { oneTimePassword } = req.body as VerifyInvitationOtpRequest;
   const invitationInfo = await invitationService.getInvitationInfo(token);
   const verified = await invitationService.verifyOneTimePassword(token, oneTimePassword);
   const dataSource = await getDataSource();
@@ -197,10 +189,10 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
     },
   });
 
-  res.json({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'manual' });
+  res.json(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'manual' }));
 }));
 
-router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLimiter, validateParams(invitationParamsSchema), asyncHandler(async (req, res) => {
+router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
   const token = String(req.params.token);
   const invitationInfo = await invitationService.getInvitationInfo(token);
   const verified = await invitationService.redeemEmailInvitation(token);
@@ -234,7 +226,7 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
     },
   });
 
-  res.json({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'email' });
+  res.json(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'email' }));
 }));
 
 export default router;

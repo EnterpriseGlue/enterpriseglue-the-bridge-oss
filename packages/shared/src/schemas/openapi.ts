@@ -1825,6 +1825,9 @@ const {
   UserSearchResultSchema,
   UserListItemSchema,
   SuccessResponseSchema,
+  InvitationCapabilitiesResponseSchema,
+  CreateInvitationRequestSchema,
+  CreateInvitationResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/index.js');
 
 // Environment Tags
@@ -3079,7 +3082,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Invitation readiness flags for the authenticated tenant UI',
-      content: { 'application/json': { schema: z.object({ ssoRequired: z.boolean(), emailConfigured: z.boolean() }) } },
+      content: { 'application/json': { schema: InvitationCapabilitiesResponseSchema } },
     },
   },
 });
@@ -3092,14 +3095,7 @@ registry.registerPath({
     body: {
       content: {
         'application/json': {
-          schema: z.object({
-            email: z.string().email(),
-            resourceType: z.enum(['tenant', 'project', 'engine']),
-            resourceId: z.string().optional(),
-            resourceName: z.string().optional(),
-            role: z.string().optional(),
-            deliveryMethod: z.enum(['email', 'manual']).optional(),
-          }),
+          schema: CreateInvitationRequestSchema,
         },
       },
     },
@@ -3109,13 +3105,7 @@ registry.registerPath({
       description: 'Invitation created. Manual delivery may include reveal-once onboarding details.',
       content: {
         'application/json': {
-          schema: z.object({
-            invited: z.boolean(),
-            emailSent: z.boolean(),
-            emailError: z.string().optional(),
-            inviteUrl: z.string().optional(),
-            oneTimePassword: z.string().optional(),
-          }),
+          schema: CreateInvitationResponseSchema,
         },
       },
     },

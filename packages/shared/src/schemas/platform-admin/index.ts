@@ -8,3 +8,4 @@ export * from './config-bundle.js';
 export * from './deployment-receipt.js';
 export * from './identity.js';
 export * from './authz.js';
+export * from './invitation.js';

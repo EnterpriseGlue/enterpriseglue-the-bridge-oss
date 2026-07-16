@@ -9,6 +9,11 @@ import {
 } from '@carbon/react';
 import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
+import type {
+  CreateInvitationRequest,
+  CreateInvitationResponse,
+  InvitationCapabilitiesResponse,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 
 interface InviteMemberModalProps {
   open: boolean;
@@ -19,19 +24,6 @@ interface InviteMemberModalProps {
   resourceName?: string;
   availableRoles?: { id: string; label: string }[];
   defaultRole?: string;
-}
-
-interface InvitationResponse {
-  invited: boolean;
-  emailSent: boolean;
-  emailError?: string;
-  inviteUrl?: string;
-  oneTimePassword?: string;
-}
-
-interface InvitationCapabilitiesResponse {
-  ssoRequired: boolean;
-  emailConfigured: boolean;
 }
 
 export default function InviteMemberModal({
@@ -123,14 +115,15 @@ export default function InviteMemberModal({
       setInviteUrl('');
       setOneTimePassword('');
 
-      const result = await apiClient.post<InvitationResponse>(`/api/t/${encodeURIComponent(tenantSlug)}/invitations`, {
+      const invitation: CreateInvitationRequest = {
         email: email.trim().toLowerCase(),
         resourceType,
         resourceId: resourceType !== 'tenant' ? resourceId : undefined,
         resourceName,
         role,
         deliveryMethod,
-      });
+      };
+      const result = await apiClient.post<CreateInvitationResponse>(`/api/t/${encodeURIComponent(tenantSlug)}/invitations`, invitation);
 
       if (result.emailSent) {
         setSuccess(`Invitation emailed to ${email.trim().toLowerCase()}`);
