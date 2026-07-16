@@ -269,6 +269,17 @@ export const EngineSchema = EngineSchemaRaw.transform((e) => ({
   updatedAt: toTimestamp(e.updatedAt),
 }));
 
+/**
+ * Minimum stable contract for the authorization-filtered engine collection.
+ * The route intentionally includes additional, permission-dependent display
+ * metadata, so unknown fields must survive route-boundary validation.
+ */
+export const AccessibleEngineSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  lifecycleStatus: z.string().nullable().optional(),
+}).passthrough();
+
 export const EngineInsertSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),
@@ -328,4 +339,5 @@ export const EngineHealthInsertSchema = z.object({
 
 // Types
 export type Engine = z.infer<typeof EngineSchema>;
+export type AccessibleEngineSummary = z.infer<typeof AccessibleEngineSummarySchema>;
 export type EngineHealth = z.infer<typeof EngineHealthSchema>;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AccessibleEngineSummarySchema,
   CreateEngineRequestSchema,
   EndpointAuthenticationPolicyErrorSchema,
   EndpointAuthenticationPolicyMessages,
@@ -10,6 +11,20 @@ import {
 import { ConfigEngineSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 describe('EngineSchema', () => {
+  it('accepts the stable authorization-filtered engine list fields without discarding permitted metadata', () => {
+    expect(AccessibleEngineSummarySchema.parse({
+      id: 'engine-1',
+      name: 'Operations',
+      lifecycleStatus: null,
+      myRole: 'operator',
+    })).toMatchObject({
+      id: 'engine-1',
+      name: 'Operations',
+      lifecycleStatus: null,
+      myRole: 'operator',
+    });
+  });
+
   it('exposes persisted configuration ownership and central-engine defaults safely', () => {
     const engine = EngineSchema.parse({
       id: 'engine-1',

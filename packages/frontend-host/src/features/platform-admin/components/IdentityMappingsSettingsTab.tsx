@@ -5,13 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
+import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useLegacyMappingCoverage, useLegacyMappingRetirementReadiness, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
 import type { HumanIdentityEntitlementType, IdentityEntitlementMapping, LegacyMappingCoverageItem } from '../hooks/useAuthzApi';
 
 type EntitlementType = HumanIdentityEntitlementType;
 type MatchOperator = 'exact' | 'contains' | 'exists';
 type Mapping = IdentityEntitlementMapping;
-interface Engine { id: string; name: string; lifecycleStatus?: string; }
 type FormState = { providerKey: string; targetGroupKey: string; entitlementType: EntitlementType; externalId: string; matchOperator: MatchOperator; syncMode: 'additive' | 'authoritative'; claims: string; };
 const emptyForm = (): FormState => ({ providerKey: '', targetGroupKey: '', entitlementType: 'group', externalId: '', matchOperator: 'exact', syncMode: 'authoritative', claims: '{\n  "sub": "preview-user",\n  "groups": ["engineering"]\n}' });
 
@@ -29,7 +29,7 @@ export default function IdentityMappingsSettingsTab() {
   const providersQuery = useIdentityProviders({ enabled: manage.allowed });
   const groupsQuery = useAuthzGroups(undefined, { enabled: manage.allowed });
   const rolesQuery = useRbacRoles({ enabled: rolesManage.allowed });
-  const enginesQuery = useQuery({ queryKey: ['identity-mapping-engines'], queryFn: () => apiClient.get<Engine[]>('/engines-api/engines'), enabled: rolesManage.allowed });
+  const enginesQuery = useQuery({ queryKey: ['identity-mapping-engines'], queryFn: () => apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines'), enabled: rolesManage.allowed });
   const engineSetsQuery = useEngineSets(undefined, { enabled: rolesManage.allowed });
   const [editing, setEditing] = useState<Mapping | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);

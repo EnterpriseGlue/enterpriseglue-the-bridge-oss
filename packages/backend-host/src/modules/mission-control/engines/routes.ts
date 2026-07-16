@@ -31,6 +31,7 @@ import { config } from '@enterpriseglue/shared/config/index.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import {
+  AccessibleEngineSummarySchema,
   CreateEngineRequestSchema,
   EndpointAuthenticationPolicyMessages,
   EngineRuntimeQueryCapabilitiesSchema,
@@ -921,7 +922,7 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.
     }
     return out
   }))
-  res.json(rows)
+  res.json(AccessibleEngineSummarySchema.array().parse(rows))
 }))
 
 r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLimiter, requireAction('engine.inventory.create', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(createEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
