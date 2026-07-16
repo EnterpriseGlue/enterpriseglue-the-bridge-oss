@@ -5,6 +5,10 @@
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   AuthzPrincipalType as SharedAuthzPrincipalType,
+  AuthzGroup as SharedAuthzGroup,
+  AuthzGroupMembership as SharedAuthzGroupMembership,
+  AuthzGroupSource as SharedAuthzGroupSource,
+  AuthzOwnershipMode as SharedAuthzOwnershipMode,
   AuthzResourceType as SharedAuthzResourceType,
   EffectiveAccessEvaluateResponse,
   EngineSetDetail as SharedEngineSetDetail,
@@ -22,6 +26,8 @@ import type {
   ProjectEngineTarget as SharedProjectEngineTarget,
   ProjectEngineTargetCreate as SharedProjectEngineTargetCreate,
   ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
+  RoleAssignment as SharedRoleAssignment,
+  RoleAssignmentSource as SharedRoleAssignmentSource,
   RuntimeResource as SharedRuntimeResource,
   RuntimeResourceSet as SharedRuntimeResourceSet,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -57,7 +63,7 @@ export type {
 // Types
 export type AuthzResourceType = SharedAuthzResourceType;
 export type AuthzPrincipalType = SharedAuthzPrincipalType;
-export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap' | 'config';
+export type RoleAssignmentSource = SharedRoleAssignmentSource;
 export type SsoClaimOperator =
   | 'equals'
   | 'not_equals'
@@ -152,69 +158,11 @@ export interface UpdateCustomRolePayload {
   isArchived?: boolean;
 }
 
-export interface RoleAssignment {
-  id: string;
-  userId: string;
-  principalType: AuthzPrincipalType;
-  principalId: string;
-  roleId: string;
-  roleKey: string | null;
-  roleName: string | null;
-  roleScope: AuthzResourceType | null;
-  resourceType: AuthzResourceType | null;
-  resourceId: string | null;
-  scopeType: AuthzResourceType | null;
-  scopeId: string | null;
-  source: RoleAssignmentSource;
-  sourceMappingId: string | null;
-  sourceRef: string | null;
-  ownershipMode: AuthzOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  expiresAt: number | null;
-  lastSeenAt: number | null;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export type AuthzGroupSource = 'manual' | 'sso' | 'identity_provider' | 'api' | 'automation' | 'system' | 'config';
-export type AuthzOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
-
-export interface AuthzGroup {
-  id: string;
-  tenantId?: string | null;
-  key: string;
-  name: string;
-  description: string | null;
-  source: AuthzGroupSource;
-  sourceRef: string | null;
-  ownershipMode: AuthzOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  isSystem: boolean;
-  isArchived: boolean;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface AuthzGroupMembership {
-  id: string;
-  tenantId?: string | null;
-  groupId: string;
-  groupKey: string | null;
-  groupName: string | null;
-  userId: string;
-  source: AuthzGroupSource;
-  sourceRef: string | null;
-  expiresAt: number | null;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
+export type RoleAssignment = SharedRoleAssignment;
+export type AuthzGroupSource = SharedAuthzGroupSource;
+export type AuthzOwnershipMode = SharedAuthzOwnershipMode;
+export type AuthzGroup = SharedAuthzGroup;
+export type AuthzGroupMembership = SharedAuthzGroupMembership;
 
 export interface ApiClient {
   id: string;

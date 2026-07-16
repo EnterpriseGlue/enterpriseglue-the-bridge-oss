@@ -7,12 +7,13 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { SYSTEM_ROLE_IDS } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
+import type { AuthzGroupSource, AuthzOwnershipMode } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource, type EntityManager } from 'typeorm';
 
-export type AuthzGroupSource = 'manual' | 'sso' | 'identity_provider' | 'api' | 'automation' | 'system' | 'config';
-export type AuthzGroupOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
+export type { AuthzGroupSource } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+export type AuthzGroupOwnershipMode = AuthzOwnershipMode;
 
 /** Canonical portable identity for a global or tenant-scoped authorization group key. */
 export function authzGroupKeyIdentity(tenantId: string | null | undefined, key: string): string {

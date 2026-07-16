@@ -300,6 +300,9 @@ export const RoleDetailSchema = RoleSummarySchema.extend({
   permissions: z.array(z.string()),
 });
 
+export const RoleAssignmentSourceSchema = z.enum(['legacy', 'manual', 'sso', 'api', 'system', 'automation', 'bootstrap', 'config']);
+export const AuthzOwnershipModeSchema = z.enum(['manual', 'config_locked', 'config_warn']);
+
 const customRoleDenyFieldNames = [
   'denyPermissionIds',
   'deniedPermissionIds',
@@ -351,10 +354,10 @@ export const RoleAssignmentSchema = z.object({
   resourceId: z.string().nullable(),
   scopeType: AuthzResourceTypeSchema.nullable(),
   scopeId: z.string().nullable(),
-  source: z.enum(['legacy', 'manual', 'sso', 'api', 'system', 'automation', 'bootstrap', 'config']),
+  source: RoleAssignmentSourceSchema,
   sourceMappingId: z.string().nullable(),
   sourceRef: z.string().nullable(),
-  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  ownershipMode: AuthzOwnershipModeSchema,
   sourceHash: z.string().nullable(),
   lastAppliedAt: z.number().nullable(),
   driftStatus: z.string().nullable(),
@@ -376,7 +379,7 @@ export const RoleAssignmentCreateSchema = z.object({
   expiresAt: z.number().nullable().optional(),
 });
 
-export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'api', 'automation', 'system', 'config']);
+export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'identity_provider', 'api', 'automation', 'system', 'config']);
 
 export const AuthzGroupSchema = z.object({
   id: z.string(),
@@ -386,7 +389,7 @@ export const AuthzGroupSchema = z.object({
   description: z.string().nullable(),
   source: AuthzGroupSourceSchema,
   sourceRef: z.string().nullable(),
-  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  ownershipMode: AuthzOwnershipModeSchema,
   sourceHash: z.string().nullable(),
   lastAppliedAt: z.number().nullable(),
   driftStatus: z.string().nullable(),
@@ -1437,7 +1440,10 @@ export type CustomRoleCreate = z.infer<typeof CustomRoleCreateSchema>;
 export type CustomRoleUpdate = z.infer<typeof CustomRoleUpdateSchema>;
 export type RoleAssignment = z.infer<typeof RoleAssignmentSchema>;
 export type RoleAssignmentCreate = z.infer<typeof RoleAssignmentCreateSchema>;
+export type RoleAssignmentSource = z.infer<typeof RoleAssignmentSourceSchema>;
+export type AuthzOwnershipMode = z.infer<typeof AuthzOwnershipModeSchema>;
 export type AuthzGroup = z.infer<typeof AuthzGroupSchema>;
+export type AuthzGroupSource = z.infer<typeof AuthzGroupSourceSchema>;
 export type AuthzGroupCreate = z.infer<typeof AuthzGroupCreateSchema>;
 export type AuthzGroupUpdate = z.infer<typeof AuthzGroupUpdateSchema>;
 export type AuthzGroupMembership = z.infer<typeof AuthzGroupMembershipSchema>;
