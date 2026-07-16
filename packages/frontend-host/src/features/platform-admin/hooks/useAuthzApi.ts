@@ -20,6 +20,7 @@ import type {
   AuthzGroupSource as SharedAuthzGroupSource,
   AuthzOwnershipMode as SharedAuthzOwnershipMode,
   AuthzAuditLogEntry as SharedAuthzAuditLogEntry,
+  AuthzAuditQuery as SharedAuthzAuditQuery,
   AuthzCheckRequest as SharedAuthzCheckRequest,
   AuthzCheckResponse as SharedAuthzCheckResponse,
   AuthzPolicyCreate as SharedAuthzPolicyCreate,
@@ -1247,14 +1248,7 @@ export function useCheckPermission() {
 // Audit Log Hooks
 // ============================================================================
 
-export function useAuthzAuditLog(params?: {
-  userId?: string;
-  resourceType?: string;
-  resourceId?: string;
-  decision?: 'allow' | 'deny';
-  limit?: number;
-  offset?: number;
-}, options?: { enabled?: boolean }) {
+export function useAuthzAuditLog(params?: SharedAuthzAuditQuery, options?: { enabled?: boolean }) {
   const searchParams = new URLSearchParams();
   if (params?.userId) searchParams.set('userId', params.userId);
   if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
