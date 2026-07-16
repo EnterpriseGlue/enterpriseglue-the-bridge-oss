@@ -12,6 +12,8 @@ import type {
   AuthzResourceType as SharedAuthzResourceType,
   ApiClient as SharedApiClient,
   ApiClientWithToken as SharedApiClientWithToken,
+  CurrentUserPermissions as SharedCurrentUserPermissions,
+  DeploymentEligibilityEvaluateResponse as SharedDeploymentEligibilityEvaluateResponse,
   EffectiveAccessEvaluateResponse,
   EngineSetDetail as SharedEngineSetDetail,
   EngineSetMaterializationResult as SharedEngineSetMaterializationResult,
@@ -117,14 +119,7 @@ export interface SsoClaimsMapping {
 
 export type PermissionCatalogEntry = SharedPermissionCatalogEntry;
 
-export interface CurrentUserPermissions {
-  userId: string;
-  platform: string[];
-  projects: Array<{ resourceId: string; permissions: string[] }>;
-  engines: Array<{ resourceId: string; permissions: string[] }>;
-  authorizationVersion?: string;
-  generatedAt: number;
-}
+export type CurrentUserPermissions = SharedCurrentUserPermissions;
 
 export type RoleSummary = SharedRoleSummary;
 export type RoleDetail = SharedRoleDetail;
@@ -231,15 +226,7 @@ export type ProjectEngineTarget = SharedProjectEngineTarget;
 export type ProjectEngineTargetCreate = SharedProjectEngineTargetCreate;
 export type ProjectEngineTargetUpdate = SharedProjectEngineTargetUpdate & { id: string };
 
-export interface DeploymentEligibilityResult {
-  allowed: boolean;
-  decision: 'allow' | 'deny';
-  mode: ProjectEngineTargetMode;
-  projectId: string;
-  engineId: string;
-  checks: Array<{ id: string; allowed: boolean; reason: string; remediation?: string }>;
-  reasons: string[];
-}
+export type DeploymentEligibilityResult = SharedDeploymentEligibilityEvaluateResponse;
 
 /** UI-only acknowledgement retained while legacy mapping forms remain supported. */
 export type SsoAssignmentMapping = SharedSsoAssignmentMapping & { riskAcknowledged?: boolean };

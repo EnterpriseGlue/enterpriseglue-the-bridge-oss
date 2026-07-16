@@ -3,6 +3,8 @@ import {
   ApiClientWithTokenSchema,
   AuthzGroupMembershipSchema,
   AuthzGroupSchema,
+  CurrentUserPermissionsSchema,
+  DeploymentEligibilityEvaluateResponseSchema,
   ExternalEngineRegistrationSchema,
   PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
@@ -179,5 +181,16 @@ describe('authorization response contracts', () => {
       created: 1, updated: 2, deactivated: 3, materializedSets: 4, runtimeSkipped: true,
       deployments: { created: 5, updated: 6, artifactsCreated: 7, skipped: true },
     }).deployments.artifactsCreated).toBe(7);
+  });
+
+  it('shares permission snapshots and deployment eligibility decisions', () => {
+    expect(CurrentUserPermissionsSchema.parse({
+      userId: 'user-a', platform: ['platform:authz:view'], projects: [{ resourceId: 'project-a', permissions: ['project:read'] }],
+      engines: [{ resourceId: 'engine-a', permissions: ['engine:read'] }], authorizationVersion: 'version-a', generatedAt: 1,
+    }).authorizationVersion).toBe('version-a');
+    expect(DeploymentEligibilityEvaluateResponseSchema.parse({
+      allowed: true, decision: 'allow', mode: 'ci', projectId: 'project-a', engineId: 'engine-a',
+      checks: [{ id: 'target.ci', allowed: true, reason: 'CI deployment is enabled' }], reasons: [],
+    }).mode).toBe('ci');
   });
 });
