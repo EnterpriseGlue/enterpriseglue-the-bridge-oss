@@ -108,6 +108,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
       await dataSource.getRepository({ name: 'Engine' }).insert(engine);
     }),
   },
+  engineSetService: {
+    materializeEngineSetsForEngine: vi.fn().mockResolvedValue(undefined),
+  },
   platformSettingsService: platformSettingsServiceMock,
   projectEngineTargetService: {
     listTargets: vi.fn().mockResolvedValue([]),
@@ -153,6 +156,28 @@ describe('mission-control engines routes', () => {
     app.use(enginesRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    apiClientAuthMock.authenticateToken.mockReset();
+    permissionServiceMock.hasPermission.mockReset();
+    permissionServiceMock.getKnownEngineIdsForUser.mockReset();
+    permissionServiceMock.syncLegacyRoleAssignments.mockReset();
+    platformSettingsServiceMock.get.mockReset();
+    secretResolverMock.normalizeForStorage.mockReset();
+    secretResolverMock.resolveStored.mockReset();
+    (engineService as any).listEngines.mockReset();
+    (engineService as any).getEngine.mockReset();
+    (engineService as any).hasEngineAccess.mockReset();
+    (engineService as any).getUserEngines.mockReset();
+    (engineService as any).getEngineRole.mockReset();
+    (engineService as any).createEngineWithGovernanceAssignments.mockReset();
+    (projectEngineTargetService as any).listTargets.mockReset();
+    (projectEngineTargetService as any).createTarget.mockReset();
+    (projectEngineTargetService as any).getTarget.mockReset();
+    (projectEngineTargetService as any).archiveTarget.mockReset();
+    (engineMetadataReconciliationService as any).reconcileEngine.mockReset();
+    (getDataSource as any).mockReset();
+    (existsSync as any).mockReset();
+
+    apiClientAuthMock.authenticateToken.mockResolvedValue(null);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
       permission === 'engine:instance:view' ||
       permission === 'platform:engine:create' ||
@@ -161,6 +186,11 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['e1']);
     permissionServiceMock.syncLegacyRoleAssignments.mockResolvedValue({ scannedProjects: 0, scannedEngines: 1, upserted: 1, removed: 0 });
     platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'manual_allowed' });
+    secretResolverMock.normalizeForStorage.mockImplementation((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null);
+    secretResolverMock.resolveStored.mockImplementation((value: string | null | undefined) => value?.startsWith('v2:test:') ? Buffer.from(value.slice('v2:test:'.length), 'base64').toString() : value || null);
+    (engineService as any).listEngines.mockResolvedValue([]);
+    (engineService as any).getEngine.mockResolvedValue({ id: 'e1', name: 'Engine 1' });
+    (engineService as any).getUserEngines.mockResolvedValue([{ engine: { id: 'e1', name: 'Engine 1' }, role: 'admin' }]);
     (projectEngineTargetService as any).listTargets.mockResolvedValue([]);
     (projectEngineTargetService as any).createTarget.mockResolvedValue({ id: 'target-1' });
     (projectEngineTargetService as any).getTarget.mockResolvedValue({
@@ -176,6 +206,17 @@ describe('mission-control engines routes', () => {
       allowImport: true,
     });
     (projectEngineTargetService as any).archiveTarget.mockResolvedValue(true);
+    (engineService as any).createEngineWithGovernanceAssignments.mockImplementation(async (engine: unknown, dataSource: any) => {
+      await dataSource.getRepository({ name: 'Engine' }).insert(engine);
+    });
+    (engineMetadataReconciliationService as any).reconcileEngine.mockResolvedValue({
+      created: 0,
+      updated: 0,
+      deactivated: 0,
+      materializedSets: 0,
+      deployments: { created: 0, updated: 0, artifactsCreated: 0 },
+    });
+    (existsSync as any).mockReturnValue(false);
     fetchMock.mockReset();
     (engineService as any).hasEngineAccess.mockResolvedValue(true);
     (engineService as any).getEngineRole.mockResolvedValue('owner');
