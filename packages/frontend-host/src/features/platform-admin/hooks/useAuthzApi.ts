@@ -5,6 +5,11 @@
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   EffectiveAccessEvaluateResponse,
+  EngineSetDetail as SharedEngineSetDetail,
+  EngineSetMaterializationResult as SharedEngineSetMaterializationResult,
+  EngineSetPreview as SharedEngineSetPreview,
+  EngineSetSelector as SharedEngineSetSelector,
+  EngineSetSummary as SharedEngineSetSummary,
   IdentityMappingResponse,
   IdentityProviderConnectionTestResponse,
   IdentityProviderMembershipReplayResponse,
@@ -396,77 +401,11 @@ export interface ExternalEngineReconcileResponse {
   materializationDiagnostics: ExternalEngineMaterializationDiagnostics;
 }
 
-export type EngineSetSelector =
-  | { mode: 'all' }
-  | { mode: 'engine_ids'; engineIds: string[] }
-  | { mode: 'labels'; labels: Record<string, string>; labelMatch?: 'all' | 'any' };
-
-export interface EngineSetMaterialization {
-  id: string;
-  tenantId?: string | null;
-  engineSetId: string;
-  engineId: string;
-  engineName: string | null;
-  selectorFingerprint: string;
-  matchedBy: Record<string, unknown>;
-  lineage: Record<string, unknown>;
-  source: string;
-  sourceRef: string | null;
-  lastSeenAt: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EngineSetSummary {
-  id: string;
-  tenantId?: string | null;
-  key: string;
-  name: string;
-  description: string | null;
-  selector: EngineSetSelector;
-  selectorFingerprint: string;
-  source: 'manual' | 'sso' | 'api' | 'external' | 'system' | 'automation' | 'config';
-  sourceRef: string | null;
-  ownershipMode: AuthzOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  isArchived: boolean;
-  createdById: string | null;
-  lastMaterializedAt: number | null;
-  materializationStatus: string;
-  materializationError: string | null;
-  materializedEngineCount: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EngineSetDetail extends EngineSetSummary {
-  materializations: EngineSetMaterialization[];
-}
-
-export interface EngineSetPreview {
-  selector: EngineSetSelector;
-  selectorFingerprint: string;
-  riskReasons: Array<'all_engines_selector' | 'any_label_match'>;
-  warnings: string[];
-  matchedEngines: Array<{
-    engineId: string;
-    engineName: string;
-    labels: Record<string, string>;
-    matchedBy: Record<string, unknown>;
-  }>;
-}
-
-export interface EngineSetMaterializationResult {
-  engineSetId: string;
-  selectorFingerprint: string;
-  matched: number;
-  created: number;
-  updated: number;
-  removed: number;
-  materializations: EngineSetMaterialization[];
-}
+export type EngineSetSelector = SharedEngineSetSelector;
+export type EngineSetSummary = SharedEngineSetSummary;
+export type EngineSetDetail = SharedEngineSetDetail;
+export type EngineSetPreview = SharedEngineSetPreview;
+export type EngineSetMaterializationResult = SharedEngineSetMaterializationResult;
 
 export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
 export type ProjectEngineTargetStatus = SharedProjectEngineTarget['status'];
