@@ -2239,7 +2239,7 @@ Phase 0 exit criteria:
 
 - [x] ✅ Add shared Zod schemas for `EnterpriseGlueConfigBundle` and the declared production JSON files.
 - [x] ✅ Add `identity-providers.json` and `identity-mappings.json` schemas with normalized entitlement types, stable external ids, provider-specific adapter configuration, secret refs, and sync modes.
-- [ ] ⬜ Add provider-neutral `NormalizedExternalIdentity`, `ExternalEntitlement`, `IdentityProviderAdapter`, and identity sync diagnostic types.
+- [x] ✅ Add provider-neutral `NormalizedExternalIdentity`, `ExternalEntitlement`, `IdentityProviderAdapter`, and identity sync diagnostic types. The shared identity schema module is the canonical source for provider protocol, adapter input, normalized entitlement, and bounded sync-diagnostic contracts; the adapter exports its compatibility types from those inferred schemas, and config-bundle entitlement mappings reuse the same enum.
 - [x] ✅ Add test-only identity fixture schemas that reuse production provider/mapping identifiers but are rejected by production bundle manifests.
 - [x] ✅ Add schema version and strict unknown-field rejection.
 - [x] ✅ Add stable object hashing and canonical JSON normalization.

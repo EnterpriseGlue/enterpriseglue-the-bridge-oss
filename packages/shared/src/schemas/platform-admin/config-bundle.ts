@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ExternalEntitlementTypeSchema } from './identity.js';
 import {
   AccessAuthorityModeSchema,
   EngineOnboardingModeSchema,
@@ -339,7 +340,6 @@ export const ConfigIdentityProvidersFileSchema = z.object({
   identityProviders: z.array(ConfigIdentityProviderSchema),
 }).strict().superRefine((file, ctx) => uniqueKeys(file.identityProviders, ctx, 'identityProviders'));
 
-export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']);
 /** OAuth scopes are valid in test fixtures but cannot grant interactive human access. */
 export const HumanIdentityEntitlementTypeSchema = z.enum(['group', 'role', 'attribute', 'authenticated']);
 export const ConfigIdentityMappingSchema = z.object({

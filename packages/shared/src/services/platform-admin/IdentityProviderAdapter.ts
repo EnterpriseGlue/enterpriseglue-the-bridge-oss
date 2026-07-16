@@ -1,35 +1,17 @@
 import { IdentityProviderFailure } from './IdentityProviderFailure.js';
+import type {
+  ExternalEntitlement as SchemaExternalEntitlement,
+  ExternalEntitlementType as SchemaExternalEntitlementType,
+  IdentityProviderType as SchemaIdentityProviderType,
+  NormalizedExternalIdentity as SchemaNormalizedExternalIdentity,
+  ProviderIdentityInput as SchemaProviderIdentityInput,
+} from '../../schemas/platform-admin/identity.js';
 
-export type IdentityProviderType = 'oidc' | 'saml' | 'ldap';
-export type ExternalEntitlementType = 'group' | 'role' | 'scope' | 'attribute' | 'authenticated';
-
-export interface ExternalEntitlement {
-  type: ExternalEntitlementType;
-  externalId: string;
-  displayName?: string;
-  value?: string;
-}
-
-export interface NormalizedExternalIdentity {
-  providerKey: string;
-  providerType: IdentityProviderType;
-  subjectId: string;
-  username?: string;
-  email?: string;
-  directoryTenantId?: string;
-  entitlements: ExternalEntitlement[];
-  observedAt: number;
-}
-
-export interface ProviderIdentityInput {
-  providerKey: string;
-  subjectId: string;
-  claims: Record<string, unknown>;
-  username?: string | null;
-  email?: string | null;
-  directoryTenantId?: string | null;
-  observedAt?: number;
-}
+export type IdentityProviderType = SchemaIdentityProviderType;
+export type ExternalEntitlementType = SchemaExternalEntitlementType;
+export type ExternalEntitlement = SchemaExternalEntitlement;
+export type NormalizedExternalIdentity = SchemaNormalizedExternalIdentity;
+export type ProviderIdentityInput = SchemaProviderIdentityInput;
 
 const AUTHZ_ATTRIBUTES_CLAIM = '__enterpriseglue_authz_attributes';
 

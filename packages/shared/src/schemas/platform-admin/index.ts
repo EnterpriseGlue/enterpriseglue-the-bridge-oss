@@ -6,3 +6,4 @@ export * from './engine-management.js';
 export * from './admin.js';
 export * from './config-bundle.js';
 export * from './deployment-receipt.js';
+export * from './identity.js';
