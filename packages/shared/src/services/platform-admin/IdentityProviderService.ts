@@ -61,10 +61,26 @@ function ensureAuthorizationAttributeKeys(configuration: Record<string, unknown>
     throw Errors.validation('authorizationAttributeKeys must contain at most 20 unique claim names');
   }
 }
+
+function findRawSecretFields(value: unknown, path = 'configuration'): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) => findRawSecretFields(entry, `${path}[${index}]`));
+  }
+  if (!value || typeof value !== 'object') return [];
+
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => {
+    const childPath = `${path}.${key}`;
+    const current = /(?:secret|password|private.?key|certificate|token|api.?key|credential)$/i.test(key) && !/ref$/i.test(key)
+      ? [childPath]
+      : [];
+    return [...current, ...findRawSecretFields(child, childPath)];
+  });
+}
+
 function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<string, unknown>): void {
   if (!configuration || Array.isArray(configuration)) throw Errors.validation('Provider configuration is required');
   ensureAuthorizationAttributeKeys(configuration);
-  const rawSecrets = Object.keys(configuration).filter((key) => /(?:secret|password|private.?key)$/i.test(key) && !/ref$/i.test(key));
+  const rawSecrets = findRawSecretFields(configuration);
   if (rawSecrets.length) throw Errors.validation(`Provider configuration must use secret references: ${rawSecrets.join(', ')}`);
   if (protocol === 'oidc' && (typeof configuration.issuerUrl !== 'string' || typeof configuration.clientId !== 'string')) throw Errors.validation('OIDC providers require issuerUrl and clientId');
   if (protocol === 'saml') {

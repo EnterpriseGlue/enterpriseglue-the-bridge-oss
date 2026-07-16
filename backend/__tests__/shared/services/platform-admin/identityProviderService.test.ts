@@ -52,6 +52,7 @@ describe('identityProviderService', () => {
   });
   it('rejects raw secrets and non-LDAPS LDAP endpoints', async () => {
     await expect(identityProviderService.upsert({ key: 'bad', protocol: 'oidc', configuration: { issuerUrl: 'https://idp.test', clientId: 'x', clientSecret: 'raw' } })).rejects.toThrow('secret references');
+    await expect(identityProviderService.upsert({ key: 'nested-secret', protocol: 'oidc', configuration: { issuerUrl: 'https://idp.test', clientId: 'x', discovery: { apiKey: 'raw' } } })).rejects.toThrow('configuration.discovery.apiKey');
     await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldap://directory.test' } })).rejects.toThrow('ldaps://');
   });
   it('rejects SHA-1 SAML provider configuration', async () => {
