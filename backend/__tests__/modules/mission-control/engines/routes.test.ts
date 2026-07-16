@@ -899,7 +899,7 @@ describe('mission-control engines routes', () => {
     expect(engineDelete).not.toHaveBeenCalled();
   });
 
-  it('prunes canonical legacy assignments when a manual engine is deleted', async () => {
+  it('prunes every scoped canonical assignment when a manual engine is deleted', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
     const engineDelete = vi.fn().mockResolvedValue({ affected: 1 });
@@ -927,7 +927,6 @@ describe('mission-control engines routes', () => {
 
     expect(engineDelete).toHaveBeenCalledWith({ id: 'e1' });
     expect(assignmentDelete).toHaveBeenCalledWith({
-      source: 'legacy',
       scopeType: 'engine',
       scopeId: 'e1',
     });

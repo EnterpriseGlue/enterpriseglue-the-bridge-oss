@@ -551,7 +551,6 @@ r.delete('/starbase-api/projects/:projectId', apiLimiter, requireAuth, requireAc
   // Delete project and all its resources using cascade delete service
   await CascadeDeleteService.deleteProject(projectId);
   await (await getDataSource()).getRepository(RbacRoleAssignment).delete({
-    source: 'legacy',
     scopeType: 'project',
     scopeId: projectId,
   });

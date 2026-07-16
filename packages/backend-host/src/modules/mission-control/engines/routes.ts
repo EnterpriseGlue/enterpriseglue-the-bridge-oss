@@ -1601,7 +1601,6 @@ r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, requireAction('
   await dataSource.getRepository(EngineSetMaterialization).delete({ engineId })
   await engineRepo.delete({ id: engineId })
   await dataSource.getRepository(RbacRoleAssignment).delete({
-    source: 'legacy',
     scopeType: 'engine',
     scopeId: engineId,
   })

@@ -119,6 +119,16 @@ const forbiddenPatterns = [
     fileSuffix: 'packages/shared/src/services/platform-admin/EngineService.ts',
     pattern: /\bwriteLegacyEngineMemberAssignment\b/g,
   },
+  {
+    id: 'engine-delete-legacy-only-assignment-cleanup',
+    fileSuffix: 'packages/backend-host/src/modules/mission-control/engines/routes.ts',
+    pattern: /source:\s*'legacy'/g,
+  },
+  {
+    id: 'project-delete-legacy-only-assignment-cleanup',
+    fileSuffix: 'packages/backend-host/src/modules/starbase/routes/projects.ts',
+    pattern: /source:\s*'legacy'/g,
+  },
 ];
 
 // Maximum current route-local legacy-auth pattern counts by rule. New files must

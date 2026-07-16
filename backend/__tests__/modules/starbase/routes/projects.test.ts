@@ -389,7 +389,7 @@ describe('starbase projects routes', () => {
         principalId: 'user-1',
         scopeType: 'project',
         scopeId: response.body.id,
-        source: 'legacy',
+        source: 'manual',
       }),
     ], expect.objectContaining({ conflictPaths: ['id'] }));
     expect(permissionService.syncLegacyRoleAssignments).not.toHaveBeenCalled();
@@ -477,11 +477,7 @@ describe('starbase projects routes', () => {
       resourceId: projectId,
     }));
     expect(CascadeDeleteService.deleteProject).toHaveBeenCalledWith(projectId);
-    expect(assignmentDelete).toHaveBeenCalledWith({
-      source: 'legacy',
-      scopeType: 'project',
-      scopeId: projectId,
-    });
+    expect(assignmentDelete).toHaveBeenCalledWith({ scopeType: 'project', scopeId: projectId });
     expect(permissionService.syncLegacyRoleAssignments).not.toHaveBeenCalled();
   });
 
