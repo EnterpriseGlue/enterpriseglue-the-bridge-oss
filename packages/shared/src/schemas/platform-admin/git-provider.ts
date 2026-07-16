@@ -36,6 +36,14 @@ export const GitProviderSchema = GitProviderSchemaRaw.transform((p) => ({
   updatedAt: Number(p.updatedAt),
 }));
 
+/** Administrator-only provider inventory with safe connection-usage indicators. */
+export const GitProviderAdminSummarySchema = GitProviderSchemaRaw.extend({
+  projectConnectionsCount: z.number().int().nonnegative(),
+  gitConnectionsCount: z.number().int().nonnegative(),
+  hasProjectConnections: z.boolean(),
+  hasGitConnections: z.boolean(),
+});
+
 // Git Provider - Insert schema
 export const GitProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -47,3 +55,4 @@ export const GitProviderInsertSchema = z.object({
 
 // Types
 export type GitProvider = z.infer<typeof GitProviderSchema>;
+export type GitProviderAdminSummary = z.infer<typeof GitProviderAdminSummarySchema>;

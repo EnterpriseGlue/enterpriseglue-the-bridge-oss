@@ -22,6 +22,7 @@ import type {
   GovernanceProjectSummary,
   UserListItem,
 } from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
+import type { GitProviderAdminSummary } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
 export type {
   AccessAuthorityMode,
@@ -101,20 +102,4 @@ export const platformAdminApi = {
 };
 
 // Git Provider type
-export interface GitProvider {
-  id: string;
-  name: string;
-  type: string;
-  baseUrl: string;
-  apiUrl: string;
-  customBaseUrl: string | null;
-  customApiUrl: string | null;
-  isActive: boolean;
-  displayOrder: number;
-  supportsOAuth: boolean;
-  supportsPAT: boolean;
-  projectConnectionsCount?: number;
-  gitConnectionsCount?: number;
-  hasProjectConnections?: boolean;
-  hasGitConnections?: boolean;
-}
+export type GitProvider = GitProviderAdminSummary;

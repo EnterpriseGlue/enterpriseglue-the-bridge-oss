@@ -1829,6 +1829,7 @@ const {
   UserListItemSchema,
   GovernanceProjectSummarySchema,
   GovernanceEngineSummarySchema,
+  GitProviderAdminSummarySchema,
   SuccessResponseSchema,
   InvitationCapabilitiesResponseSchema,
   CreateInvitationRequestSchema,
@@ -3704,7 +3705,7 @@ registry.registerPath({ method: 'post', path: '/api/users/{id}/unlock', ...authz
 // -----------------------------
 
 // Admin providers
-registry.registerPath({ method: 'get', path: '/git-api/admin/providers', ...authzExtension('platform.git.providers.manage', 'GET', '/git-api/admin/providers'), responses: { 200: { description: 'List admin git providers', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/admin/providers', ...authzExtension('platform.git.providers.manage', 'GET', '/git-api/admin/providers'), responses: { 200: { description: 'List admin git providers', content: { 'application/json': { schema: z.array(GitProviderAdminSummarySchema) } } } } });
 registry.registerPath({ method: 'put', path: '/git-api/admin/providers/{id}', ...authzExtension('platform.git.providers.manage', 'PUT', '/git-api/admin/providers/:id'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Provider updated', content: { 'application/json': { schema: z.unknown() } } } } });
 
 // Providers

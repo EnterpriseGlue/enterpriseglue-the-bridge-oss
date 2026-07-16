@@ -13,6 +13,7 @@ import { GitCredential } from '@enterpriseglue/shared/infrastructure/persistence
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
 import { credentialService } from '@enterpriseglue/shared/services/git/CredentialService.js';
 import { encrypt as encryptSecret, isEncrypted as isEncryptedValue } from '@enterpriseglue/shared/services/encryption.js';
+import { GitProviderAdminSummarySchema } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
 const router = Router();
 
@@ -133,7 +134,7 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requireAction('p
     };
   });
 
-  res.json(providersWithUsage);
+  res.json(GitProviderAdminSummarySchema.array().parse(providersWithUsage));
 }));
 
 /**
