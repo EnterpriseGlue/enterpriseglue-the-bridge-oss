@@ -5,6 +5,7 @@ import { existsSync } from 'fs';
 import enginesRouter from '../../../../../packages/backend-host/src/modules/mission-control/engines/routes.js';
 import { engineService, projectEngineTargetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
@@ -132,6 +133,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineMetadataReconcilia
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
+  runtimeResourceInventoryService: {
+    materializeForEngine: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/constants/roles.js', () => ({
   ENGINE_VIEW_ROLES: ['owner', 'delegate', 'operator', 'viewer'],
   ENGINE_MANAGE_ROLES: ['owner', 'delegate'],
@@ -174,6 +181,7 @@ describe('mission-control engines routes', () => {
     (projectEngineTargetService as any).getTarget.mockReset();
     (projectEngineTargetService as any).archiveTarget.mockReset();
     (engineMetadataReconciliationService as any).reconcileEngine.mockReset();
+    (runtimeResourceInventoryService as any).materializeForEngine.mockReset();
     (getDataSource as any).mockReset();
     (existsSync as any).mockReset();
 
@@ -216,6 +224,7 @@ describe('mission-control engines routes', () => {
       materializedSets: 0,
       deployments: { created: 0, updated: 0, artifactsCreated: 0 },
     });
+    (runtimeResourceInventoryService as any).materializeForEngine.mockResolvedValue([]);
     (existsSync as any).mockReturnValue(false);
     fetchMock.mockReset();
     (engineService as any).hasEngineAccess.mockResolvedValue(true);
@@ -1426,6 +1435,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       lastExternalSyncAt: null,
     }));
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenCalledWith(expect.any(String), null);
   });
 
   it('upserts engines through the external registration API', async () => {
@@ -1550,6 +1560,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       lastExternalSyncAt: expect.any(Number),
     }));
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenLastCalledWith('e1', null);
   });
 
   it('stores external system and hybrid field ownership during external registration', async () => {

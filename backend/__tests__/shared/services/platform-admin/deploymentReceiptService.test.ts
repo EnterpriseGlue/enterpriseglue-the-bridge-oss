@@ -55,6 +55,7 @@ describe('deploymentReceiptService', () => {
     expect(runtimeResourceInventoryService.observe).toHaveBeenCalledWith('engine-1', 'tenant-a', [expect.objectContaining({
       resourceKind: 'process_definition', resourceKey: 'payments-order', deploymentId: 'deployment-1', projectId: 'project-1', source: 'deployment_receipt',
     })]);
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenCalledWith('engine-1', 'tenant-a');
   });
 
   it('returns an idempotent response without changing inventory for an existing matching receipt', async () => {

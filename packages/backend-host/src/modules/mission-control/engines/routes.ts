@@ -22,6 +22,7 @@ import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/
 import { apiLimiter, engineLimiter, engineRegistrationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
 import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl, validateBpmnEngineEndpointUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
@@ -804,6 +805,15 @@ async function refreshEngineSetMaterializationsForEngine(engineId: string, tenan
   }
 }
 
+/** Engine label and registration changes can affect resource-set membership metadata. */
+async function refreshRuntimeResourceSetMaterializationsForEngine(engineId: string, tenantId?: string | null): Promise<void> {
+  try {
+    await runtimeResourceInventoryService.materializeForEngine(engineId, tenantId)
+  } catch (error) {
+    logger.warn('Failed to refresh Runtime Resource Set materializations', { engineId, error })
+  }
+}
+
 function scheduleRuntimeInventoryReconciliation(
   engineId: string,
   tenantId: string | null | undefined,
@@ -997,6 +1007,7 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
     })
   }
   await refreshEngineSetMaterializationsForEngine(id, tenantId)
+  await refreshRuntimeResourceSetMaterializationsForEngine(id, tenantId)
   scheduleRuntimeInventoryReconciliation(id, tenantId, {
     runtimeAccessScope: payload.runtimeAccessScope,
     metadataDiscoveryEnabled: payload.metadataDiscoveryEnabled,
@@ -1109,6 +1120,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       now,
     })
     await refreshEngineSetMaterializationsForEngine(String(existing.id), tenantId)
+    await refreshRuntimeResourceSetMaterializationsForEngine(String(existing.id), tenantId)
     scheduleRuntimeInventoryReconciliation(String(existing.id), tenantId, {
       runtimeAccessScope: (updatePayload.runtimeAccessScope as string | undefined) ?? existing.runtimeAccessScope,
       metadataDiscoveryEnabled: (updatePayload.metadataDiscoveryEnabled as boolean | undefined) ?? existing.metadataDiscoveryEnabled,
@@ -1170,6 +1182,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     now,
   })
   await refreshEngineSetMaterializationsForEngine(id, tenantId)
+  await refreshRuntimeResourceSetMaterializationsForEngine(id, tenantId)
   scheduleRuntimeInventoryReconciliation(id, tenantId, {
     runtimeAccessScope: payload.runtimeAccessScope || 'engine_wide',
     metadataDiscoveryEnabled: payload.metadataDiscoveryEnabled,
@@ -1526,6 +1539,7 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistration
   }
   if (req.body.externalId !== undefined || req.body.labels !== undefined) {
     await refreshEngineSetMaterializationsForEngine(engineId, existing.tenantId)
+    await refreshRuntimeResourceSetMaterializationsForEngine(engineId, existing.tenantId)
     scheduleRuntimeInventoryReconciliation(engineId, existing.tenantId, {
       runtimeAccessScope: updates.runtimeAccessScope ?? existing.runtimeAccessScope,
       metadataDiscoveryEnabled: updates.metadataDiscoveryEnabled ?? existing.metadataDiscoveryEnabled,
