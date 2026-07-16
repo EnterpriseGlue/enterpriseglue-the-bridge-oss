@@ -187,7 +187,6 @@ import {
   type IdentityEntitlementMapping,
   type ProjectEngineTarget,
   type ProjectEngineTargetMode,
-  type ProjectEngineTargetSource,
   type ProjectEngineTargetStatus,
   type PolicyCondition,
   type RoleAssignment,
@@ -435,19 +434,6 @@ const externalEngineAuditHeaders = [
   { key: 'created', header: 'Created' },
 ];
 
-const projectEngineTargetHeaders = [
-  { key: 'project', header: 'Project' },
-  { key: 'engine', header: 'Engine' },
-  { key: 'environment', header: 'Environment' },
-  { key: 'status', header: 'Status' },
-  { key: 'source', header: 'Source' },
-  { key: 'modes', header: 'Modes' },
-  { key: 'approval', header: 'Approval' },
-  { key: 'external', header: 'External refs' },
-  { key: 'diagnostics', header: 'Diagnostics' },
-  { key: 'actions', header: '' },
-];
-
 const policyInspectionHeaders = [
   { key: 'policy', header: 'Policy' },
   { key: 'effect', header: 'Effect' },
@@ -608,15 +594,6 @@ const PROJECT_ENGINE_TARGET_STATUSES: Array<{ id: ProjectEngineTargetStatus; lab
   { id: 'disabled', label: 'Disabled' },
   { id: 'archived', label: 'Archived' },
 ];
-
-const PROJECT_ENGINE_TARGET_MODES: Array<{ id: ProjectEngineTargetMode; label: string }> = [
-  { id: 'manual', label: 'Manual' },
-  { id: 'ci', label: 'CI' },
-  { id: 'api', label: 'API' },
-  { id: 'import', label: 'Import' },
-];
-
-const SOURCE_OWNED_PROJECT_TARGET_SOURCES = new Set<ProjectEngineTargetSource>(['ci', 'api', 'external', 'system', 'automation', 'config']);
 
 const POLICY_EFFECTS: Array<{ id: AuthzPolicy['effect']; label: string }> = [
   { id: 'allow', label: 'Allow' },
@@ -854,37 +831,6 @@ function engineSetSelectorRiskDescription(reason: 'all_engines_selector' | 'any_
   return 'This Engine Set can include engines that match only one configured label.';
 }
 
-function isSourceOwnedProjectTarget(target: ProjectEngineTarget) {
-  return SOURCE_OWNED_PROJECT_TARGET_SOURCES.has(target.source) && !(target.source === 'config' && target.ownershipMode === 'config_warn');
-}
-
-function formatProjectEngineTargetModes(target: ProjectEngineTarget) {
-  return [
-    target.allowManualDeploy ? 'Manual' : '',
-    target.allowCiDeploy ? 'CI' : '',
-    target.allowApiDeploy ? 'API' : '',
-    target.allowImport ? 'Import' : '',
-  ].filter(Boolean).join(', ') || '-';
-}
-
-function formatProjectEngineTargetExternalRefs(target: ProjectEngineTarget) {
-  const refs = [
-    target.externalSystemId ? `system=${target.externalSystemId}` : '',
-    target.externalProjectId ? `project=${target.externalProjectId}` : '',
-    target.externalEngineId ? `engine=${target.externalEngineId}` : '',
-    target.externalTargetId ? `target=${target.externalTargetId}` : '',
-  ].filter(Boolean);
-  return refs.length ? refs.join(', ') : '-';
-}
-
-function formatProjectEngineTargetDiagnostics(target: ProjectEngineTarget) {
-  const parts = [
-    target.policyTags.length ? `Policies: ${target.policyTags.join(', ')}` : '',
-    target.diagnostics ? formatDetails(target.diagnostics) : '',
-  ].filter(Boolean);
-  return parts.length ? parts.join(' | ') : '-';
-}
-
 function formatPolicyConditions(conditions: PolicyCondition) {
   const keys = Object.keys(conditions || {});
   return keys.length ? keys.join(', ') : 'None';
@@ -982,11 +928,6 @@ function projectEngineTargetPayloadFromForm(form: ProjectEngineTargetFormState) 
     allowImport: form.allowImport,
     policyTags: form.policyTags.split(',').map((item) => item.trim()).filter(Boolean),
   };
-}
-
-function formatDeploymentEligibility(result: DeploymentEligibilityResult) {
-  if (result.allowed) return 'Allowed';
-  return result.reasons.length ? result.reasons.join('; ') : 'Denied';
 }
 
 function formatDetails(details: Record<string, unknown> | null) {
