@@ -3,13 +3,17 @@ import { InlineNotification, Toggle, Tile } from '@carbon/react'
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid'
 import GitProvidersSettings from './GitProvidersSettings'
 import type { PlatformSettings } from '../../../api/platform-admin'
+import type {
+  GitProviderAdminSummary,
+  UpdateGitProviderRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js'
 
 interface GitSettingsSectionProps {
   settings: PlatformSettings | undefined
-  gitProviders: any[]
+  gitProviders: GitProviderAdminSummary[]
   gitProvidersLoading: boolean
   onToggle: (key: 'syncPushEnabled' | 'syncPullEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => void
-  onUpdateGitProvider: (id: string, updates: any) => Promise<void>
+  onUpdateGitProvider: (id: string, updates: UpdateGitProviderRequest) => Promise<void>
   canManageSettings?: boolean
   settingsUnavailableReason?: string | null
   canManageGitProviders?: boolean

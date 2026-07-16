@@ -3,8 +3,9 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { platformAdminApi, type PlatformSettings, type EnvironmentTag, type ProjectGovernanceItem, type EngineGovernanceItem, type GitProvider } from '../../../api/platform-admin';
+import { platformAdminApi, type PlatformSettings, type EnvironmentTag, type ProjectGovernanceItem, type EngineGovernanceItem } from '../../../api/platform-admin';
 import type { CreateEnvironmentTag, UpdateEnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
+import type { UpdateGitProviderRequest } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 // Query keys
 export const adminQueryKeys = {
   settings: ['platform-admin', 'admin', 'settings'] as const,
@@ -211,7 +212,7 @@ export function useUpdateGitProvider() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<GitProvider> }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: UpdateGitProviderRequest }) =>
       platformAdminApi.updateGitProvider(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.gitProviders });

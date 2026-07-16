@@ -9,30 +9,16 @@ import {
   SkeletonText,
   Modal,
 } from '@carbon/react';
+import type {
+  GitProviderAdminSummary,
+  UpdateGitProviderRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 import { GitProviderIcon } from '../../shared/components/GitProviderIcon';
 
-interface GitProvider {
-  id: string;
-  name: string;
-  type: string;
-  baseUrl: string;
-  apiUrl: string;
-  customBaseUrl: string | null;
-  customApiUrl: string | null;
-  isActive: boolean;
-  displayOrder: number;
-  supportsOAuth: boolean;
-  supportsPAT: boolean;
-  projectConnectionsCount?: number;
-  gitConnectionsCount?: number;
-  hasProjectConnections?: boolean;
-  hasGitConnections?: boolean;
-}
-
 interface GitProvidersSettingsProps {
-  providers: GitProvider[];
+  providers: GitProviderAdminSummary[];
   isLoading: boolean;
-  onUpdateProvider: (id: string, updates: Partial<GitProvider>) => Promise<void>;
+  onUpdateProvider: (id: string, updates: UpdateGitProviderRequest) => Promise<void>;
   canManageProviders?: boolean;
   unavailableReason?: string | null;
 }
@@ -44,19 +30,19 @@ export default function GitProvidersSettings({
   canManageProviders = true,
   unavailableReason,
 }: GitProvidersSettingsProps) {
-  const [configProvider, setConfigProvider] = useState<GitProvider | null>(null);
+  const [configProvider, setConfigProvider] = useState<GitProviderAdminSummary | null>(null);
   const [formData, setFormData] = useState<{ useCustomUrl: boolean; customBaseUrl: string; customApiUrl: string }>({
     useCustomUrl: false,
     customBaseUrl: '',
     customApiUrl: '',
   });
   const [saving, setSaving] = useState<string | null>(null);
-  const [disableConfirmProvider, setDisableConfirmProvider] = useState<GitProvider | null>(null);
+  const [disableConfirmProvider, setDisableConfirmProvider] = useState<GitProviderAdminSummary | null>(null);
   const [disableConfirmText, setDisableConfirmText] = useState('');
   const [disableSubmitting, setDisableSubmitting] = useState(false);
   const disabledReason = unavailableReason || 'Missing permission platform:git-providers:manage';
 
-  const handleToggleProvider = async (provider: GitProvider, enabled: boolean) => {
+  const handleToggleProvider = async (provider: GitProviderAdminSummary, enabled: boolean) => {
     if (!canManageProviders) return false;
 
     if (enabled) {
@@ -115,7 +101,7 @@ export default function GitProvidersSettings({
     }
   };
 
-  const handleOpenConfig = (provider: GitProvider) => {
+  const handleOpenConfig = (provider: GitProviderAdminSummary) => {
     if (!canManageProviders) return;
     setConfigProvider(provider);
     setFormData({
@@ -129,7 +115,7 @@ export default function GitProvidersSettings({
     if (!canManageProviders) return;
     setSaving(providerId);
     try {
-      const updates: Partial<GitProvider> = {
+      const updates: UpdateGitProviderRequest = {
         customBaseUrl: formData.useCustomUrl ? formData.customBaseUrl || null : null,
         customApiUrl: formData.useCustomUrl ? formData.customApiUrl || null : null,
       };
