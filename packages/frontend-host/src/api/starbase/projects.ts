@@ -2,6 +2,7 @@ import { apiClient } from '../../shared/api/client';
 import type { Project } from '../../shared/api/types';
 import type { ProjectEngineAccessResponse } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
 import type { ProjectContents } from '@enterpriseglue/shared/schemas/starbase/folder.js';
+import type { UpdateFileMetadata } from '@enterpriseglue/shared/schemas/starbase/file.js';
 import type {
   ProjectMemberAccessView,
   ProjectMemberCandidate,
@@ -75,6 +76,9 @@ export const projectsApi = {
 
   updateMemberRoles: (id: string, userId: string, payload: UpdateProjectMemberRole) =>
     apiClient.patch(`${BASE_URL}/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}`, payload),
+
+  updateFileMetadata: (fileId: string, payload: UpdateFileMetadata) =>
+    apiClient.patch(`/starbase-api/files/${encodeURIComponent(fileId)}`, payload),
   
   create: (data: { name: string }) => apiClient.post<Project>(BASE_URL, data),
   

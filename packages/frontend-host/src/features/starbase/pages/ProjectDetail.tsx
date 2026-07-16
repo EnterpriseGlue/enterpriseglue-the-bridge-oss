@@ -1450,7 +1450,7 @@ export default function ProjectDetail() {
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.patch(`/starbase-api/files/${file.id}`, { folderId: targetId })
+      await projectsApi.updateFileMetadata(file.id, { folderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
@@ -1470,7 +1470,7 @@ export default function ProjectDetail() {
     try {
       setBusy(true)
       for (const fileId of fileIds) {
-        await apiClient.patch(`/starbase-api/files/${fileId}`, { folderId: targetId })
+        await projectsApi.updateFileMetadata(fileId, { folderId: targetId })
       }
       moveModal.closeModal()
       setBatchMoveIds(null)
