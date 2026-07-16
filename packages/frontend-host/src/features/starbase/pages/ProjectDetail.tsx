@@ -53,8 +53,11 @@ import {
 } from './components/ProjectContentsTable'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import type {
+  AuthzGroup as SharedAuthzGroup,
+  AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzPrincipalType as SharedAuthzPrincipalType,
   RoleAssignment as SharedRoleAssignment,
+  RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
@@ -161,20 +164,8 @@ function buildProjectDetailToolbarDiagnosticDecision(
 type ScopedProjectRoleAssignment = SharedRoleAssignment
 type ProjectAssignmentPrincipalType = SharedAuthzPrincipalType
 
-interface ProjectAuthzGroupSummary {
-  id: string
-  key?: string | null
-  name?: string | null
-}
-
-interface ProjectAuthzGroupMembershipSummary {
-  id?: string | null
-  groupId: string
-  userId: string
-  source?: 'manual' | 'sso' | 'api' | 'automation' | 'system' | null
-  sourceRef?: string | null
-  expiresAt?: number | null
-}
+type ProjectAuthzGroupSummary = SharedAuthzGroup
+type ProjectAuthzGroupMembershipSummary = SharedAuthzGroupMembership
 
 export function formatProjectRoleAssignmentSourceLineage(assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef' | 'sourceMappingId'> | null | undefined): string {
   if (!assignment) return '-'
@@ -902,7 +893,7 @@ export default function ProjectDetail() {
 
   const customProjectRolesQ = useQuery({
     queryKey: ['project-members', projectId, 'custom-roles'],
-    queryFn: () => apiClient.get<ProjectScopedCustomRole[]>('/api/authz/roles', {
+    queryFn: () => apiClient.get<SharedRoleSummary[]>('/api/authz/roles', {
       scope: 'project',
       assignable: 'true',
       resourceType: 'project',

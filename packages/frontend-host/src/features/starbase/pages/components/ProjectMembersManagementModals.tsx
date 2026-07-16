@@ -8,6 +8,10 @@ import UserLookupEmailField from '../../../../shared/components/UserLookupEmailF
 import { getInvitationDeliveryOptions } from '../../../../shared/utils/invitationFlow'
 import { ProjectPermission } from '../../../../shared/auth/permissions'
 import { composeProjectRoles, getProjectAccessSelection, getProjectRoleDescription, projectBaseAccessOptions, type ProjectBaseAccessRole, type ProjectMember, type ProjectRole, type UserSearchItem } from '../../components/project-detail'
+import type {
+  AuthzPrincipalType as SharedAuthzPrincipalType,
+  RoleSummary as SharedRoleSummary,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 
 interface MemberLookupResult {
   mode: 'invite' | 'direct-add' | 'existing-member'
@@ -25,7 +29,7 @@ interface MemberInviteReveal {
   oneTimePassword: string
 }
 
-type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
+type AuthzPrincipalType = SharedAuthzPrincipalType
 
 const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
   user: 'User',
@@ -34,15 +38,7 @@ const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
   service_account: 'Service account',
 }
 
-export interface ProjectScopedCustomRole {
-  id: string
-  name: string
-  description?: string | null
-  scope: 'project'
-  kind: 'system' | 'custom'
-  isAssignable: boolean
-  isArchived: boolean
-}
+export type ProjectScopedCustomRole = SharedRoleSummary
 
 interface ProjectMembersManagementModalsProps {
   addMemberOpen: boolean
