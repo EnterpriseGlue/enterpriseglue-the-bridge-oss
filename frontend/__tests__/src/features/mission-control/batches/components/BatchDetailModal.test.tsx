@@ -88,10 +88,10 @@ describe('BatchDetailModal', () => {
 
     const pause = screen.getByRole('button', { name: /Pause batch/i });
     expect(pause).toBeDisabled();
-    expect(pause).toHaveAttribute('title', 'Missing permission engine:process:modify');
+    expect(pause).toHaveAttribute('title', 'Action decision unavailable for this runtime resource');
 
     const cancel = screen.getByRole('button', { name: /Cancel batch/i });
     expect(cancel).toBeDisabled();
-    expect(cancel).toHaveAttribute('title', 'Missing permission engine:process:cancel');
+    expect(cancel).toHaveAttribute('title', 'Action decision unavailable for this runtime resource');
   });
 });
