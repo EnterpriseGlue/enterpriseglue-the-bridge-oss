@@ -224,6 +224,19 @@ deterministic local contracts; they do not require a deployed identity provider,
 browser lifecycle environment, or LDAP container. Run those opt-in boundaries
 separately with `pnpm test:identity:browser` and `pnpm test:identity:ldap`.
 
+For an end-to-end check of an already-running local stack, use the guarded login
+smoke below. It rejects non-local URLs, missing credentials, an unreachable
+frontend, and a missing Playwright browser instead of silently skipping. Supply
+a disposable local account through your shell or secret manager; the runner does
+not seed, modify, or print its credentials.
+
+```bash
+E2E_USER='local-admin@example.test' \
+E2E_PASSWORD='your-local-password' \
+PLAYWRIGHT_BASE_URL='http://localhost:5173' \
+pnpm test:authz:local-login
+```
+
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;

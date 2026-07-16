@@ -77,6 +77,7 @@
     "test:identity:ldap": "pnpm run test:identity-ldap-container",
     "test:identity:browser": "pnpm run test:e2e:identity-lifecycle",
     "test:authz:browser": "pnpm run test:e2e:access-control-layout",
+    "test:authz:local-login": "./scripts/run-authz-local-login-test.sh",
     "test:identity:local": "pnpm run test:identity:contract && pnpm run test:identity:routes && pnpm run test:identity:matrix && pnpm run test:identity:protocol && pnpm run test:identity:ui",
     "test:identity:verify": "pnpm run test:identity:local && pnpm run test:identity:browser && pnpm run test:identity:ldap",
     "test:authz:structure": "node --test scripts/authz-test-lanes.test.mjs",

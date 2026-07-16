@@ -97,6 +97,23 @@ pnpm run db:migration:run
 - Frontend: http://localhost:5173 (default)
 - Login: http://localhost:5173/login (default)
 
+## Optional local sign-in smoke
+
+After the stack is healthy, verify a real login with an existing disposable
+local account. This test never seeds a user or prints credentials, and accepts
+only localhost, loopback, or `.local` URLs.
+
+```bash
+E2E_USER='local-admin@example.test' \
+E2E_PASSWORD='your-local-password' \
+PLAYWRIGHT_BASE_URL='http://localhost:5173' \
+pnpm test:authz:local-login
+```
+
+If Chromium is not installed for this workspace, run `pnpm exec playwright
+install chromium` once. The command fails rather than skipping if either
+credential is absent.
+
 ## Logs
 - Backend: `tail -f backend/server.log`
 - Frontend: `tail -f frontend/preview.log`
