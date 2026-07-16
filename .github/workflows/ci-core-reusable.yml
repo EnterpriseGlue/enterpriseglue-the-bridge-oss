@@ -339,6 +339,24 @@ jobs:
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
             bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @smoke"
 
+      - name: Run identity lifecycle browser e2e
+        if: matrix.database == 'postgres' && inputs.run_e2e
+        run: |
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI="${CI:-true}" \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_SEED_USER=false \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @identity-lifecycle"
+
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && inputs.run_e2e
         continue-on-error: true
