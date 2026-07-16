@@ -57,6 +57,8 @@ import type {
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
   SsoAssignmentMapping as SharedSsoAssignmentMapping,
+  SsoClaimOperator as SharedSsoClaimOperator,
+  SsoClaimsMapping as SharedSsoClaimsMapping,
   SsoGroupMapping as SharedSsoGroupMapping,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { EngineMetadataReconciliationResult as SharedEngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
@@ -93,34 +95,12 @@ export type {
 export type AuthzResourceType = SharedAuthzResourceType;
 export type AuthzPrincipalType = SharedAuthzPrincipalType;
 export type RoleAssignmentSource = SharedRoleAssignmentSource;
-export type SsoClaimOperator =
-  | 'equals'
-  | 'not_equals'
-  | 'contains'
-  | 'not_contains'
-  | 'contains_any'
-  | 'not_contains_any'
-  | 'contains_all'
-  | 'not_contains_all'
-  | 'matches_regex'
-  | 'not_matches_regex'
-  | 'exists'
-  | 'not_exists';
-
-export interface SsoClaimsMapping {
-  id: string;
+export type SsoClaimOperator = SharedSsoClaimOperator;
+/** The legacy API emits `null` for an all-provider mapping; retain it only at this UI boundary. */
+export type SsoClaimsMapping = Omit<SharedSsoClaimsMapping, 'providerId'> & {
   providerId: string | null;
-  claimType: 'group' | 'role' | 'email_domain' | 'custom';
-  claimKey: string;
-  claimValue: string;
-  claimOperator?: SsoClaimOperator | null;
-  targetRole: 'admin' | 'user';
-  priority: number;
-  isActive: boolean;
-  createdAt: number;
-  updatedAt: number;
   riskAcknowledged?: boolean;
-}
+};
 
 export type PermissionCatalogEntry = SharedPermissionCatalogEntry;
 
