@@ -147,9 +147,39 @@ describe('IdentityProviderProvisioningService', () => {
 
     await expect(identityProviderProvisioningService.provisionLdapUser(provider, {
       subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
-    })).rejects.toThrow('requires administrator relinking');
+    })).rejects.toThrow('administrator-approved verified sign-in recovery');
     expect(stores.user.findOneBy).not.toHaveBeenCalled();
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
+  it('recovers an explicitly unlinked identity only from a fresh verified sign-in for its recorded email', async () => {
+    const unlinkedIdentity = { id: 'identity-1', userId: 'old-user-1', status: 'unlinked', emailHint: 'person@example.test' };
+    const recoveredUser = { id: 'recovered-user-1', email: 'person@example.test', firstName: null, lastName: null, platformRole: 'user', authProvider: 'local', passwordHash: 'local-password-hash', isActive: true, isEmailVerified: true };
+    stores.externalIdentity.findOne
+      .mockResolvedValueOnce(unlinkedIdentity)
+      .mockResolvedValueOnce(unlinkedIdentity)
+      .mockResolvedValueOnce({ ...unlinkedIdentity, userId: 'recovered-user-1', status: 'active' });
+    stores.user.findOneBy.mockResolvedValue(recoveredUser);
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: JSON.stringify({ allowVerifiedEmailLinking: true }) } as any;
+
+    await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+      sub: 'subject-1', email: 'person@example.test', email_verified: true,
+    } as any)).resolves.toMatchObject({ id: 'recovered-user-1' });
+
+    expect(stores.externalIdentity.update).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({ userId: 'recovered-user-1', status: 'active' }));
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({ userId: 'recovered-user-1' }));
+  });
+
+  it('keeps an unlinked identity blocked when the fresh provider email differs from its recorded email', async () => {
+    stores.externalIdentity.findOne.mockResolvedValue({ id: 'identity-1', userId: 'old-user-1', status: 'unlinked', emailHint: 'other@example.test' });
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1', configurationJson: JSON.stringify({ allowVerifiedEmailLinking: true }) } as any;
+
+    await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+      sub: 'subject-1', email: 'person@example.test', email_verified: true,
+    } as any)).rejects.toThrow('administrator-approved verified sign-in recovery');
+
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
+    expect(stores.externalIdentity.update).not.toHaveBeenCalled();
   });
 
   it('records the same diagnostics model for direct login reconciliation', async () => {
@@ -173,7 +203,7 @@ describe('IdentityProviderProvisioningService', () => {
 
     await expect(identityProviderProvisioningService.reconcileLdapLogin(provider, {
       subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
-    })).rejects.toThrow('requires administrator relinking');
+    })).rejects.toThrow('administrator-approved verified sign-in recovery');
 
     expect(ssoSyncDiagnosticsService.failRun).toHaveBeenCalledWith('run-1', expect.any(Error), expect.objectContaining({
       tenantId: 'tenant-1', providerId: 'provider-1', details: expect.objectContaining({ mode: 'login' }),

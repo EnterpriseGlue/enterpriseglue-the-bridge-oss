@@ -69,7 +69,7 @@ export const ExternalIdentitySchema = z.object({
   directoryTenantId: z.string().nullable(),
   userId: z.string().min(1),
   emailHint: z.string().nullable(),
-  status: z.enum(['active', 'deactivated', 'archived']),
+  status: z.enum(['active', 'deactivated', 'archived', 'unlinked']),
   linkedAt: z.number().int().nonnegative(),
   lastSeenAt: z.number().int().nonnegative(),
   createdAt: z.number().int().nonnegative(),

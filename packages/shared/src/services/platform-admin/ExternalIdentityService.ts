@@ -41,6 +41,15 @@ export interface UnlinkExternalIdentityResult {
   providerRefreshSessionsRevoked: number;
 }
 
+export interface RestoreUnlinkedExternalIdentityInput {
+  tenantId?: string | null;
+  providerId: string;
+  subjectId: string;
+  userId: string;
+  email: string;
+  now?: number;
+}
+
 export interface FindExternalIdentityUserInput {
   tenantId?: string | null;
   providerId: string;
@@ -178,6 +187,27 @@ class ExternalIdentityService {
       normalizedIdentitiesMarked: normalized.affected || 0,
       providerRefreshSessionsRevoked: sessions.affected || 0,
     };
+  }
+
+  /**
+   * Re-enable only an administrator-unlinked tombstone after the caller has
+   * independently established fresh, verified provider-email evidence. This
+   * deliberately does not accept a different account email or revive a link
+   * as a side effect of ordinary token refreshes.
+   */
+  async restoreUnlinkedWithManager(manager: EntityManager, input: RestoreUnlinkedExternalIdentityInput): Promise<{ id: string }> {
+    const tenantId = optional(input.tenantId);
+    const providerId = required(input.providerId, 'providerId');
+    const subjectId = required(input.subjectId, 'subjectId');
+    const userId = required(input.userId, 'userId');
+    const email = required(input.email, 'email').toLowerCase();
+    const identityKey = externalIdentityKey({ tenantId, providerId, subjectId });
+    const repo = manager.getRepository(ExternalIdentity);
+    const identity = await repo.findOne({ where: { identityKey } });
+    if (!identity || identity.status !== 'unlinked') throw new Error('External identity is not awaiting verified sign-in recovery');
+    if (!identity.emailHint || identity.emailHint.toLowerCase() !== email) throw new Error('Verified provider email does not match the unlinked external identity');
+    await repo.update({ id: identity.id }, { userId, status: 'active', lastSeenAt: input.now ?? Date.now(), updatedAt: input.now ?? Date.now() });
+    return { id: identity.id };
   }
 
   private async updateExisting(

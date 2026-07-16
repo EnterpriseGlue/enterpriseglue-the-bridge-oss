@@ -5,6 +5,7 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { externalIdentityService } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 import { legacyIdentityProviderMigrationService } from '@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
@@ -24,6 +25,7 @@ import {
   IdentityProviderSyncRunsQuerySchema,
   IdentityProviderUpdateSchema,
   LegacyIdentityProviderCutoverRequestSchema,
+  IdentityProviderExternalIdentityUnlinkRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const router = Router();
@@ -79,6 +81,24 @@ router.post('/api/identity/providers/legacy-cutover', requireAuth, identityAdmin
     },
   });
   res.json(result);
+}));
+router.post('/api/identity/providers/:key/external-identities/unlink', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(IdentityProviderExternalIdentityUnlinkRequestSchema), asyncHandler(async (req, res) => {
+  const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
+  if (!provider) throw Errors.notFound('Identity provider not found');
+  const cleanup = await externalIdentityService.unlink({
+    tenantId: req.tenant?.tenantId || null,
+    providerId: provider.id,
+    subjectId: req.body.subjectId,
+    userId: req.body.userId,
+  });
+  await logAudit({
+    action: 'identity.provider.external_identity_unlinked',
+    userId: req.user!.userId,
+    resourceType: 'external_identity',
+    resourceId: cleanup.identityId,
+    details: { providerKey: provider.key, targetUserId: req.body.userId, cleanup },
+  });
+  res.json({ ...cleanup, recovery: 'verified_sign_in_required' });
 }));
 router.get('/api/identity/providers/:key', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);

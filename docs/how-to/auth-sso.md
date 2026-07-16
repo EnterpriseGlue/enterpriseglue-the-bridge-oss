@@ -142,7 +142,14 @@ Unlinking a provider identity marks that provider/subject link and normalized
 snapshot as unlinked, removes only memberships sourced from that provider,
 and revokes only refresh sessions issued through that provider for the linked
 user. Other provider links, local credentials, and manual access remain intact.
-The unlinked subject fails closed until an administrator intentionally relinks it.
+The unlinked subject fails closed. An administrator can use the provider's
+**Resolve external identity conflict** action to explicitly unlink a confirmed
+subject/account pair; that action is audited and cannot transfer the subject to
+another account. Recovery then requires a fresh provider sign-in with a
+verified email equal to the recorded provider email, and the provider's
+**Allow verified email account linking** setting must be enabled. Any different
+email, unverified claim, disabled policy, or missing active local account stays
+blocked.
 
 Rollback is intentionally simple: disable the new provider, re-enable the
 previous legacy provider, and investigate the new provider's mapping or secret

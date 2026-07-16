@@ -139,16 +139,27 @@ class IdentityProviderProvisioningService {
       const externalIdentityRepo = manager.getRepository(ExternalIdentity);
       const identityKey = externalIdentityKey({ tenantId: provider.tenantId, providerId: provider.id, subjectId: input.subjectId });
       const externalIdentity = await externalIdentityRepo.findOne({ where: { identityKey } });
+      let recoveredUnlinkedIdentity = false;
       if (externalIdentity?.status === 'unlinked') {
-        throw new Error('External identity has been unlinked and requires administrator relinking');
+        // An administrator must first explicitly unlink the conflict. Recovery
+        // then requires new provider evidence for the exact recorded email and
+        // the provider's opt-in verified-email-linking policy; no admin request
+        // can move the external subject between accounts.
+        if (!emailVerified || !allowsVerifiedEmailLinking(provider) || !externalIdentity.emailHint || externalIdentity.emailHint.toLowerCase() !== email) {
+          throw new Error('External identity has been unlinked and requires an administrator-approved verified sign-in recovery');
+        }
+        recoveredUnlinkedIdentity = true;
       }
-      let user = externalIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
-      if (externalIdentity && !user) throw new Error('External identity references a missing user account');
-      if (!externalIdentity) {
+      let user = externalIdentity && !recoveredUnlinkedIdentity ? await userRepo.findOneBy({ id: externalIdentity.userId }) : null;
+      if (externalIdentity && !recoveredUnlinkedIdentity && !user) throw new Error('External identity references a missing user account');
+      if (!externalIdentity || recoveredUnlinkedIdentity) {
         if (!emailVerified) throw new Error('Identity provider email must be verified before a new identity can be linked');
         const matchingEmailUser = await userRepo.findOneBy({ email });
         if (matchingEmailUser && !allowsVerifiedEmailLinking(provider)) {
           throw new Error('Verified email account linking is disabled for this identity provider');
+        }
+        if (recoveredUnlinkedIdentity && (!matchingEmailUser || !matchingEmailUser.isActive)) {
+          throw new Error('External identity recovery requires an active local account with the verified provider email');
         }
         user = matchingEmailUser;
       }
@@ -164,6 +175,16 @@ class IdentityProviderProvisioningService {
         const authProvider = user.authProvider === 'local' && user.passwordHash ? 'local' : input.providerType;
         await userRepo.update({ id: user.id }, { email: emailVerified ? email : user.email, authProvider, firstName: input.firstName || user.firstName, lastName: input.lastName || user.lastName, isEmailVerified: Boolean(user.isEmailVerified || emailVerified), lastLoginAt: now, updatedAt: now });
         user = { ...user, email: emailVerified ? email : user.email } as User;
+      }
+      if (recoveredUnlinkedIdentity) {
+        await externalIdentityService.restoreUnlinkedWithManager(manager, {
+          tenantId: provider.tenantId,
+          providerId: provider.id,
+          subjectId: input.subjectId,
+          userId: user.id,
+          email,
+          now,
+        });
       }
       await externalIdentityService.upsertWithManager(manager, {
         tenantId: provider.tenantId,

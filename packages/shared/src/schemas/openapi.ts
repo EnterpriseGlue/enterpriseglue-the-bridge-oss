@@ -2174,6 +2174,20 @@ registry.registerPath({
   responses: { 200: { description: 'Disable a persisted legacy provider after its provider-neutral replacement passes readiness checks', content: { 'application/json': { schema: identityProviderMigrationSchemas.LegacyIdentityProviderCutoverResponseSchema } } }, 400: { description: 'Target provider is not ready or legacy provider is environment-managed' }, 404: { description: 'Legacy provider not found' } },
 });
 registry.registerPath({
+  method: 'post',
+  path: '/api/identity/providers/{key}/external-identities/unlink',
+  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/external-identities/unlink'),
+  request: {
+    params: z.object({ key: z.string().min(1).max(128) }),
+    body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Explicitly unlink a conflicting provider subject without reassigning it to another account', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderExternalIdentityUnlinkResponseSchema } } },
+    400: { description: 'The requested link cannot be unlinked' },
+    404: { description: 'Identity provider or external identity not found' },
+  },
+});
+registry.registerPath({
   method: 'get',
   path: '/api/identity/providers/{key}',
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers/{key}'),

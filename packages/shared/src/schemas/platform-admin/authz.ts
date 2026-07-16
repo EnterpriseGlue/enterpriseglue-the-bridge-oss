@@ -1247,6 +1247,25 @@ export const LegacyIdentityProviderCutoverResponseSchema = z.object({
   alreadyDisabled: z.boolean(),
 });
 
+/**
+ * A conflicting provider subject is never reassigned by this request. It only
+ * revokes the current account link and leaves a tombstone until a fresh,
+ * verified provider sign-in satisfies the provider's linking policy.
+ */
+export const IdentityProviderExternalIdentityUnlinkRequestSchema = z.object({
+  subjectId: z.string().min(1).max(2000),
+  userId: z.string().min(1).max(128),
+  confirmation: z.literal('UNLINK_EXTERNAL_IDENTITY'),
+});
+
+export const IdentityProviderExternalIdentityUnlinkResponseSchema = z.object({
+  identityId: z.string().min(1),
+  providerManagedMembershipsRemoved: z.number().int().nonnegative(),
+  normalizedIdentitiesMarked: z.number().int().nonnegative(),
+  providerRefreshSessionsRevoked: z.number().int().nonnegative(),
+  recovery: z.literal('verified_sign_in_required'),
+});
+
 export const IdentityProviderMigrationReadinessResponseSchema = z.object({
   ready: z.boolean(),
   targetProviderKey: z.string(),

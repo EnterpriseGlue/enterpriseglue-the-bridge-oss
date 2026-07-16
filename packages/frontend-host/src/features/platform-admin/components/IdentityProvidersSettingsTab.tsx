@@ -48,6 +48,13 @@ type SyncRun = { id: string; status: 'running' | 'success' | 'failed'; trigger: 
 type ConnectionTestResult = IdentityProviderConnectionTestResult;
 type MigrationReadiness = IdentityProviderMigrationReadiness;
 type LegacyCutoverResult = LegacyIdentityProviderCutoverResult;
+type ExternalIdentityUnlinkResult = {
+  identityId: string;
+  providerManagedMembershipsRemoved: number;
+  normalizedIdentitiesMarked: number;
+  providerRefreshSessionsRevoked: number;
+  recovery: 'verified_sign_in_required';
+};
 
 type FormState = {
   key: string; protocol: Protocol; isEnabled: boolean; authenticationMode: AuthenticationMode; directoryTenantId: string;
@@ -111,6 +118,8 @@ export default function IdentityProvidersSettingsTab() {
   const [migrationDraft, setMigrationDraft] = useState<LegacyMigrationDraft | null>(null);
   const [cutoverTarget, setCutoverTarget] = useState<{ legacyProvider: LegacySsoProvider; targetProviderKey: string } | null>(null);
   const [cutoverResult, setCutoverResult] = useState<LegacyCutoverResult | null>(null);
+  const [externalIdentityConflict, setExternalIdentityConflict] = useState<{ provider: IdentityProvider; subjectId: string; userId: string } | null>(null);
+  const [externalIdentityUnlinkResult, setExternalIdentityUnlinkResult] = useState<{ providerKey: string; result: ExternalIdentityUnlinkResult } | null>(null);
   const syncRunsQuery = useQuery({ queryKey: ['identity-provider-sync-runs', historyProvider?.key], queryFn: () => apiClient.get<SyncRun[]>(`/api/identity/providers/${encodeURIComponent(historyProvider!.key)}/sync-runs?limit=10`), enabled: Boolean(historyProvider) && read.allowed });
 
   const save = useMutation({
@@ -142,6 +151,17 @@ export default function IdentityProvidersSettingsTab() {
       setError(null);
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to complete the legacy provider cutover').message),
+  });
+  const unlinkExternalIdentity = useMutation({
+    mutationFn: (input: { key: string; subjectId: string; userId: string }) => apiClient.post<ExternalIdentityUnlinkResult>(`/api/identity/providers/${encodeURIComponent(input.key)}/external-identities/unlink`, {
+      subjectId: input.subjectId.trim(), userId: input.userId.trim(), confirmation: 'UNLINK_EXTERNAL_IDENTITY',
+    }),
+    onSuccess: (result, input) => {
+      setExternalIdentityUnlinkResult({ providerKey: input.key, result });
+      setExternalIdentityConflict(null);
+      setError(null);
+    },
+    onError: (value: unknown) => setError(parseApiError(value, 'Unable to unlink the external identity').message),
   });
   const openMigrationDraft = (draft: LegacyMigrationDraft) => {
     setEditing(null);
@@ -186,6 +206,7 @@ export default function IdentityProvidersSettingsTab() {
       {connectionResult && <InlineNotification kind="success" title={`Connection test: ${connectionResult.providerKey}`} subtitle={`${connectionResult.result.protocol.toUpperCase()} connection verified${connectionResult.result.protocol === 'oidc' ? ` for ${connectionResult.result.issuer}` : ''}${connectionResult.result.protocol === 'ldap' ? `; sampled ${connectionResult.result.sampledIdentities} directory identities` : ''}${connectionResult.result.protocol === 'saml' ? `; validated ${connectionResult.result.entityDescriptorCount} SAML entity descriptors` : ''}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {migrationReadiness && <InlineNotification kind={migrationReadiness.ready ? 'success' : 'warning'} title={`Migration readiness: ${migrationReadiness.targetProviderKey}`} subtitle={migrationReadiness.ready ? `Ready for an operator-managed legacy cutover with ${migrationReadiness.activeMappingCount} active identity mapping${migrationReadiness.activeMappingCount === 1 ? '' : 's'}.${migrationReadiness.requiredDefaultGroupId ? ` The required ${migrationReadiness.requiredDefaultGroupId} authenticated-identity mapping is configured.` : ''}` : `Not ready: ${migrationReadiness.blockers.join(', ').split('_').join(' ')}.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {cutoverResult && <InlineNotification kind="success" title="Legacy provider cut over" subtitle={`${cutoverResult.legacyProvider.name} was ${cutoverResult.alreadyDisabled ? 'already disabled' : 'disabled'} after ${cutoverResult.targetProviderKey} passed provider-neutral migration readiness.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+      {externalIdentityUnlinkResult && <InlineNotification kind="success" title={`External identity unlinked: ${externalIdentityUnlinkResult.providerKey}`} subtitle={`The prior provider link was revoked (${externalIdentityUnlinkResult.result.providerManagedMembershipsRemoved} provider memberships and ${externalIdentityUnlinkResult.result.providerRefreshSessionsRevoked} refresh sessions removed). It was not moved to another account. Recovery requires a new verified sign-in for the same provider email while verified-email linking is enabled.`} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
       {manage.allowed && legacyMigratableProviders.length > 0 && <div style={{ borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}>
         <h4 style={{ margin: 0, fontSize: '0.875rem' }}>Migrate legacy provider</h4>
         <p style={{ margin: 'var(--spacing-2) 0 var(--spacing-3)', color: 'var(--cds-text-secondary)' }}>Prepare a disabled OIDC or SAML draft from a legacy provider. Existing client secrets and signing certificates are not copied.</p>
@@ -233,6 +254,7 @@ export default function IdentityProvidersSettingsTab() {
                     {provider.protocol === 'ldap' && <GuardedOverflowMenuItem decision={manage} itemText="Reconcile directory" disabled={!provider.isEnabled || reconcile.isPending} onClick={() => reconcile.mutate(provider.key)} />}
                     <GuardedOverflowMenuItem decision={manage} itemText={previewCursors[provider.key] ? 'Continue membership preview' : 'Preview membership changes'} disabled={!provider.isEnabled || previewMemberships.isPending} onClick={() => previewMemberships.mutate({ key: provider.key, cursor: previewCursors[provider.key] })} />
                     <GuardedOverflowMenuItem decision={manage} itemText={replayCursors[provider.key] ? 'Continue membership replay' : 'Replay stored memberships'} disabled={!provider.isEnabled || replayMemberships.isPending} onClick={() => replayMemberships.mutate({ key: provider.key, cursor: replayCursors[provider.key] })} />
+                    <GuardedOverflowMenuItem decision={manage} itemText="Resolve external identity conflict" onClick={() => setExternalIdentityConflict({ provider, subjectId: '', userId: '' })} />
                     <GuardedOverflowMenuItem decision={manage} itemText="Archive" isDelete disabled={configLocked} unavailableReason={configLocked ? 'Config-locked providers must be removed through their authoritative configuration bundle.' : undefined} onClick={() => setArchiveTarget(provider)} />
                   </GuardedOverflowMenu></TableCell>
                 </TableRow>;
@@ -264,6 +286,12 @@ export default function IdentityProvidersSettingsTab() {
       <Toggle id="identity-provider-enabled" labelText="Enable provider" labelA="Disabled" labelB="Enabled" toggled={form.isEnabled} onToggle={(checked) => update('isEnabled', checked)} />
     </Modal>
     <Modal open={Boolean(cutoverTarget)} danger modalHeading="Disable legacy identity provider" primaryButtonText="Disable legacy provider" secondaryButtonText="Cancel" onRequestClose={() => setCutoverTarget(null)} onRequestSubmit={() => cutoverTarget && cutoverLegacyProvider.mutate({ legacyProviderId: cutoverTarget.legacyProvider.id, targetProviderKey: cutoverTarget.targetProviderKey })} primaryButtonDisabled={cutoverLegacyProvider.isPending}>Disable {cutoverTarget?.legacyProvider.name}? The replacement provider, {cutoverTarget?.targetProviderKey}, has passed readiness checks. This disables only the selected database-backed legacy login path; it does not remove mappings or change environment-based authentication.</Modal>
+    <Modal open={Boolean(externalIdentityConflict)} danger modalHeading="Resolve external identity conflict" primaryButtonText="Unlink external identity" secondaryButtonText="Cancel" onRequestClose={() => setExternalIdentityConflict(null)} onRequestSubmit={() => externalIdentityConflict && unlinkExternalIdentity.mutate({ key: externalIdentityConflict.provider.key, subjectId: externalIdentityConflict.subjectId, userId: externalIdentityConflict.userId })} primaryButtonDisabled={!externalIdentityConflict?.subjectId.trim() || !externalIdentityConflict?.userId.trim() || unlinkExternalIdentity.isPending}>
+      <p>This revokes the selected provider subject from the account currently linked to it. It does not transfer the identity to another account. Provider-managed memberships and provider refresh sessions for that account are revoked, and the action is audited.</p>
+      <TextInput id="external-identity-subject" labelText="External provider subject ID" value={externalIdentityConflict?.subjectId || ''} onChange={(event) => setExternalIdentityConflict((current) => current ? { ...current, subjectId: event.target.value } : current)} helperText="Use the immutable subject identifier from the provider conflict or sign-in diagnostics, not an email address." />
+      <TextInput id="external-identity-user" labelText="Currently linked account ID" value={externalIdentityConflict?.userId || ''} onChange={(event) => setExternalIdentityConflict((current) => current ? { ...current, userId: event.target.value } : current)} helperText="Confirm the affected local account ID before unlinking." />
+      <p style={{ color: 'var(--cds-text-secondary)' }}>Afterward, recovery is permitted only through a fresh verified sign-in for the same recorded provider email when this provider allows verified-email linking. Any other sign-in remains blocked.</p>
+    </Modal>
     <Modal open={Boolean(archiveTarget)} danger modalHeading="Archive identity provider" primaryButtonText="Archive" secondaryButtonText="Cancel" onRequestClose={() => setArchiveTarget(null)} onRequestSubmit={() => archiveTarget && archive.mutate(archiveTarget.key)} primaryButtonDisabled={archive.isPending}>Archive {archiveTarget?.key}? Existing identity history and mappings are retained. Provider-managed group memberships are removed, while manual and API-managed access remains unchanged.</Modal>
   </>;
 }

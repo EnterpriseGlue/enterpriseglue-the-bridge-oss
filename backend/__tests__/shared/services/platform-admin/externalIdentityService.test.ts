@@ -123,6 +123,25 @@ describe('externalIdentityService', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('restores an unlinked identity only when fresh verified provider evidence matches its recorded email', async () => {
+    const findOne = vi.fn().mockResolvedValue({ id: 'identity-1', status: 'unlinked', emailHint: 'person@example.test' });
+    const update = vi.fn().mockResolvedValue(undefined);
+    const manager = { getRepository: (entity: unknown) => {
+      if (entity === ExternalIdentity) return { findOne, update };
+      throw new Error('Unexpected repository');
+    }};
+
+    await expect(externalIdentityService.restoreUnlinkedWithManager(manager as any, {
+      tenantId: 'tenant-a', providerId: 'oidc-a', subjectId: 'subject-a', userId: 'user-2', email: 'person@example.test', now: 300,
+    })).resolves.toEqual({ id: 'identity-1' });
+    expect(update).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({ userId: 'user-2', status: 'active', lastSeenAt: 300 }));
+
+    findOne.mockResolvedValue({ id: 'identity-1', status: 'unlinked', emailHint: 'other@example.test' });
+    await expect(externalIdentityService.restoreUnlinkedWithManager(manager as any, {
+      tenantId: 'tenant-a', providerId: 'oidc-a', subjectId: 'subject-a', userId: 'user-2', email: 'person@example.test', now: 301,
+    })).rejects.toThrow('does not match');
+  });
+
   it('unlinks only the selected provider identity and revokes its memberships and refresh sessions', async () => {
     const identityUpdate = vi.fn().mockResolvedValue({ affected: 1 });
     const membershipDelete = vi.fn().mockResolvedValue({ affected: 2 });

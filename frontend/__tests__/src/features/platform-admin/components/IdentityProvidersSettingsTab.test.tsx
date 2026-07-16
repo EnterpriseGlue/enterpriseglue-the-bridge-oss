@@ -112,6 +112,27 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.queryByText(/never-render-this/)).not.toBeInTheDocument();
   });
 
+  it('requires an operator-confirmed unlink to resolve an external identity conflict without transferring it', async () => {
+    const unlink = vi.fn();
+    server.use(http.post('/api/identity/providers/:key/external-identities/unlink', async ({ params, request }) => {
+      unlink({ key: params.key, body: await request.json() });
+      return HttpResponse.json({ identityId: 'external-identity-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, providerRefreshSessionsRevoked: 1, recovery: 'verified_sign_in_required' });
+    }));
+    renderTab();
+    await screen.findByText('demo-oidc');
+
+    await openProviderActions();
+    fireEvent.click(providerMenuItem('Resolve external identity conflict'));
+    const modal = await screen.findByRole('dialog', { name: 'Resolve external identity conflict' });
+    fireEvent.change(within(modal).getByLabelText('External provider subject ID'), { target: { value: 'subject-1' } });
+    fireEvent.change(within(modal).getByLabelText('Currently linked account ID'), { target: { value: 'user-1' } });
+    fireEvent.click(within(modal).getByRole('button', { name: 'Unlink external identity' }));
+
+    await waitFor(() => expect(unlink).toHaveBeenCalledWith({ key: 'demo-oidc', body: { subjectId: 'subject-1', userId: 'user-1', confirmation: 'UNLINK_EXTERNAL_IDENTITY' } }));
+    expect(await screen.findByText('External identity unlinked: demo-oidc')).toBeInTheDocument();
+    expect(screen.getByText(/It was not moved to another account/)).toBeInTheDocument();
+  });
+
   it('collects the complete provider-neutral SAML runtime configuration', async () => {
     renderTab();
     await waitFor(() => expect(screen.getByText('demo-oidc')).toBeInTheDocument());

@@ -23,6 +23,7 @@ const service = vi.hoisted(() => ({
   listEnvironmentMigrationDrafts: vi.fn(),
   getMigrationReadiness: vi.fn(),
   cutoverLegacyProvider: vi.fn(),
+  unlinkExternalIdentity: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -36,6 +37,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
   requireAction: () => (_req: any, _res: any, next: any) => next(),
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js', () => ({ externalIdentityService: { unlink: service.unlinkExternalIdentity } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft, listEnvironmentDrafts: service.listEnvironmentMigrationDrafts, getReadiness: service.getMigrationReadiness, cutover: service.cutoverLegacyProvider } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
@@ -81,6 +83,7 @@ describe('identity provider routes', () => {
     ]);
     service.getMigrationReadiness.mockResolvedValue({ ready: false, targetProviderKey: 'migrated-entra', activeMappingCount: 0, checks: { targetExists: true, directOidc: true, enabled: true, secretReferenceConfigured: true, secretReferenceAvailable: true, activeMappingsConfigured: false }, blockers: ['identity_mappings_missing'] });
     service.cutoverLegacyProvider.mockResolvedValue({ legacyProvider: { id: 'legacy-google-1', name: 'Google', type: 'google' }, targetProviderKey: 'migrated-google', legacyProviderDisabled: true, alreadyDisabled: false });
+    service.unlinkExternalIdentity.mockResolvedValue({ identityId: 'external-identity-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, providerRefreshSessionsRevoked: 1 });
     app = express();
     app.use(express.json());
     app.use(identityProvidersRouter);
@@ -145,6 +148,29 @@ describe('identity provider routes', () => {
     expect(response.body).toEqual(expect.objectContaining({ targetProviderKey: 'migrated-google', legacyProviderDisabled: true }));
     expect(service.cutoverLegacyProvider).toHaveBeenCalledWith({ legacyProviderId: 'legacy-google-1', targetProviderKey: 'migrated-google', tenantId: 'tenant-1' });
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.legacy_cutover', resourceId: 'legacy-google-1', details: expect.objectContaining({ targetProviderKey: 'migrated-google' }) }));
+  });
+
+  it('explicitly unlinks a conflicting external subject without reassigning it and records the recovery gate', async () => {
+    const response = await request(app)
+      .post('/api/identity/providers/entra/external-identities/unlink')
+      .send({ subjectId: 'subject-1', userId: 'user-1', confirmation: 'UNLINK_EXTERNAL_IDENTITY' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ identityId: 'external-identity-1', recovery: 'verified_sign_in_required' }));
+    expect(service.unlinkExternalIdentity).toHaveBeenCalledWith({ tenantId: 'tenant-1', providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1' });
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'identity.provider.external_identity_unlinked', resourceType: 'external_identity', resourceId: 'external-identity-1',
+      details: expect.objectContaining({ providerKey: 'entra', targetUserId: 'user-1' }),
+    }));
+  });
+
+  it('requires the explicit external-identity unlink acknowledgement', async () => {
+    const response = await request(app)
+      .post('/api/identity/providers/entra/external-identities/unlink')
+      .send({ subjectId: 'subject-1', userId: 'user-1', confirmation: 'no' });
+
+    expect(response.status).toBe(400);
+    expect(service.unlinkExternalIdentity).not.toHaveBeenCalled();
   });
 
   it('lists bounded synchronization history for one provider', async () => {
