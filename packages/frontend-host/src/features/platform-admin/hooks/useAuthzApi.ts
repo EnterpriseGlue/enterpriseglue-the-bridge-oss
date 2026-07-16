@@ -5,6 +5,8 @@
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
   AuthzPrincipalType as SharedAuthzPrincipalType,
+  BridgeDecisionRequest as SharedBridgeDecisionRequest,
+  BridgeDecisionResponse as SharedBridgeDecisionResponse,
   AuthzGroup as SharedAuthzGroup,
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzGroupSource as SharedAuthzGroupSource,
@@ -436,34 +438,8 @@ export interface EngineAccessTransitionCleanupApplyResult {
   removedCount: number;
 }
 
-export interface BridgeDecisionPayload {
-  engineId?: string;
-  projectId?: string;
-  fileId?: string;
-  targetId?: string;
-  definitionId?: string;
-  definitionKey?: string;
-  decisionDefinitionId?: string;
-  decisionDefinitionKey?: string;
-  kind?: 'process' | 'decision' | 'bpmn' | 'dmn';
-  [key: string]: unknown;
-}
-
-export interface BridgeDecisionResponse {
-  allowed: boolean;
-  reasonCode: string;
-  reason: string;
-  missingActions: string[];
-  projectId: string | null;
-  fileId: string | null;
-  engineId: string | null;
-  targetId: string | null;
-  lineage: Record<string, unknown>;
-  diagnostics?: {
-    effectiveAccessUrl?: string;
-    label?: string;
-  };
-}
+export type BridgeDecisionPayload = SharedBridgeDecisionRequest;
+export type BridgeDecisionResponse = SharedBridgeDecisionResponse;
 
 // Query keys
 export const authzQueryKeys = {
