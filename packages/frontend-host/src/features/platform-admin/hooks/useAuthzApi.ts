@@ -18,6 +18,17 @@ import type {
   EngineSetPreview as SharedEngineSetPreview,
   EngineSetSelector as SharedEngineSetSelector,
   EngineSetSummary as SharedEngineSetSummary,
+  EngineCapabilityStatus as SharedEngineCapabilityStatus,
+  EngineFieldOwnership as SharedEngineFieldOwnership,
+  EngineLifecycleStatus as SharedEngineLifecycleStatus,
+  EngineManagementMode as SharedEngineManagementMode,
+  EngineRuntimeQueryCapabilities as SharedEngineRuntimeQueryCapabilities,
+  ExternalEngineCapabilities as SharedExternalEngineCapabilities,
+  ExternalEngineCapabilityDiagnostics as SharedExternalEngineCapabilityDiagnostics,
+  ExternalEngineMaterializationDiagnostics as SharedExternalEngineMaterializationDiagnostics,
+  ExternalEngineRegistration as SharedExternalEngineRegistration,
+  ExternalEngineRegistrationAuditEntry as SharedExternalEngineRegistrationAuditEntry,
+  ExternalEngineSystem as SharedExternalEngineSystem,
   IdentityMappingResponse,
   IdentityProviderConnectionTestResponse,
   IdentityProviderMembershipReplayResponse,
@@ -148,63 +159,15 @@ export type ApiClientWithToken = SharedApiClientWithToken;
 export type ServiceAccount = SharedServiceAccount;
 export type ServiceAccountWithToken = SharedServiceAccountWithToken;
 
-export type EngineManagementMode = 'manual' | 'external_managed' | 'hybrid';
-export type EngineLifecycleStatus = 'active' | 'disabled' | 'stale' | 'decommissioned';
-export type EngineCapabilityStatus = 'unknown' | 'in_sync' | 'mismatch';
-export type EngineFieldOwnership = Record<string, 'manual' | 'external'>;
-export type EngineRuntimeQueryCapabilities = Partial<Record<
-  'processDefinitionKey' | 'decisionDefinitionKey' | 'tenantFilters' | 'instanceLineage' | 'history' | 'jobs' | 'incidents' | 'batches' | 'counts',
-  boolean
->>;
-export interface ExternalEngineCapabilities {
-  operations?: string[];
-  queryCapabilities?: EngineRuntimeQueryCapabilities;
-  supportLevel?: string | null;
-  compatibilityProfile?: string | null;
-  [key: string]: unknown;
-}
-
-export interface ExternalEngineCapabilityDiagnostics {
-  status: EngineCapabilityStatus;
-  expectedOperations: string[];
-  reportedOperations: string[];
-  missingOperations: string[];
-  extraOperations: string[];
-  expectedQueryCapabilities: EngineRuntimeQueryCapabilities;
-  reportedQueryCapabilities: EngineRuntimeQueryCapabilities | null;
-  mismatchedQueryCapabilities: string[];
-  expectedSupportLevel: string;
-  reportedSupportLevel: string | null;
-  expectedCompatibilityProfile: string;
-  reportedCompatibilityProfile: string | null;
-  issues: string[];
-  recommendation: string;
-}
-
-export interface ExternalEngineMaterializationDiagnostics {
-  engineSetCount: number;
-  matched: number;
-  created: number;
-  updated: number;
-  removed: number;
-  errors: Array<{ engineSetId: string; error: string }>;
-  status: 'ok' | 'failed';
-  summary: string;
-}
-
-export interface ExternalEngineSystem {
-  id: string;
-  tenantId?: string | null;
-  key: string;
-  name: string;
-  description: string | null;
-  defaultManagementMode: EngineManagementMode;
-  defaultFieldOwnership: EngineFieldOwnership;
-  isActive: boolean;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
+export type EngineManagementMode = SharedEngineManagementMode;
+export type EngineLifecycleStatus = SharedEngineLifecycleStatus;
+export type EngineCapabilityStatus = SharedEngineCapabilityStatus;
+export type EngineFieldOwnership = SharedEngineFieldOwnership;
+export type EngineRuntimeQueryCapabilities = SharedEngineRuntimeQueryCapabilities;
+export type ExternalEngineCapabilities = SharedExternalEngineCapabilities;
+export type ExternalEngineCapabilityDiagnostics = SharedExternalEngineCapabilityDiagnostics;
+export type ExternalEngineMaterializationDiagnostics = SharedExternalEngineMaterializationDiagnostics;
+export type ExternalEngineSystem = SharedExternalEngineSystem;
 
 export interface ExternalEngineSystemPayload {
   key?: string;
@@ -215,42 +178,8 @@ export interface ExternalEngineSystemPayload {
   isActive?: boolean;
 }
 
-export interface ExternalEngineRegistration {
-  id: string;
-  registrationId?: string;
-  name: string;
-  baseUrl: string;
-  type: string | null;
-  externalId: string | null;
-  labels: Record<string, string>;
-  registrationSource: string | null;
-  apiClientId?: string | null;
-  externalSystemId?: string | null;
-  externalSystemName?: string | null;
-  managementMode?: EngineManagementMode | null;
-  fieldOwnership?: EngineFieldOwnership;
-  driftStatus?: string | null;
-  lifecycleStatus?: EngineLifecycleStatus | null;
-  lastExternalSyncAt?: number | null;
-  capabilities?: ExternalEngineCapabilities | null;
-  capabilityStatus?: EngineCapabilityStatus | null;
-  capabilityDiagnostics?: ExternalEngineCapabilityDiagnostics;
-  externalUpdatedAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ExternalEngineRegistrationAuditEntry {
-  id: string;
-  userId: string | null;
-  action: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  ipAddress: string | null;
-  userAgent: string | null;
-  details: Record<string, unknown> | null;
-  createdAt: number;
-}
+export type ExternalEngineRegistration = SharedExternalEngineRegistration;
+export type ExternalEngineRegistrationAuditEntry = SharedExternalEngineRegistrationAuditEntry;
 
 export type ExternalEngineAuditAction =
   | 'all'

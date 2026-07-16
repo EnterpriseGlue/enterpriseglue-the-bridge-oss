@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import type {
   AuthzGroup,
   AuthzGroupMembership,
@@ -79,11 +80,15 @@ import {
   applyEngineAccessTransitionCleanup,
 } from './AccessControlTestUtils';
 
+function renderAccessControl() {
+  return render(<MemoryRouter><AccessControl /></MemoryRouter>);
+}
+
 describe('AccessControl external registration', () => {
   beforeEach(resetAccessControlMocks);
 
   it('renders external registration API clients', async () => {
-    render(<AccessControl />);
+    renderAccessControl();
 
     fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
 
@@ -128,7 +133,7 @@ describe('AccessControl external registration', () => {
       platform: [...authState.permissions.platform, 'platform:api-clients:manage'],
     };
 
-    render(<AccessControl />);
+    renderAccessControl();
 
     fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
     fireEvent.change(screen.getByLabelText('Client name'), { target: { value: 'Deploy bot' } });
@@ -150,7 +155,7 @@ describe('AccessControl external registration', () => {
       platform: [...authState.permissions.platform, 'platform:service-accounts:manage'],
     };
 
-    render(<AccessControl />);
+    renderAccessControl();
 
     fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
     fireEvent.change(screen.getByLabelText('Service account name'), { target: { value: 'Release service' } });
@@ -167,7 +172,7 @@ describe('AccessControl external registration', () => {
   }, 60000);
 
   it('creates, edits, and archives external engine systems', () => {
-    render(<AccessControl />);
+    renderAccessControl();
 
     fireEvent.click(screen.getByRole('tab', { name: /External Registration/i }));
     fireEvent.change(document.getElementById('external-system-key')!, { target: { value: 'cmdb' } });

@@ -3,6 +3,7 @@ import {
   ApiClientWithTokenSchema,
   AuthzGroupMembershipSchema,
   AuthzGroupSchema,
+  ExternalEngineRegistrationSchema,
   PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
   RoleDetailSchema,
@@ -134,5 +135,21 @@ describe('authorization response contracts', () => {
       createdAt: 1,
       updatedAt: 1,
     }).ownershipMode).toBe('config_locked');
+  });
+
+  it('includes transport mode in external engine registration responses', () => {
+    expect(ExternalEngineRegistrationSchema.parse({
+      id: 'engine-registration-a',
+      name: 'Payments engine',
+      baseUrl: 'https://payments-sidecar.example.test/engine-rest',
+      type: 'operaton',
+      connectionMode: 'customer_sidecar',
+      externalId: 'payments-prod',
+      labels: { environment: 'production' },
+      registrationSource: 'external',
+      externalUpdatedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }).connectionMode).toBe('customer_sidecar');
   });
 });
