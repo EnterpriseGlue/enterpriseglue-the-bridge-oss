@@ -77,7 +77,7 @@ import { EngineSetsPanel } from './access-control/EngineSetsPanel';
 import { ProjectEngineTargetsTab } from './access-control/ProjectEngineTargetsTab';
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { ByPrincipalPanel, ByResourcePanel } from './access-control/PrincipalResourcePanels';
-import { ApiClientsPanel } from './access-control/MachineIdentityPanel';
+import { ExternalRegistrationTab } from './access-control/ExternalRegistrationTab';
 import type { ResourceSummary } from './access-control/principalResourcePresentation';
 import {
   filterPermissions,
@@ -2701,10 +2701,8 @@ export default function AccessControl() {
           )}
           {showExternalRegistrationTab && (
           <TabPanel>
-            {apiClientsQ.isError || serviceAccountsQ.isError || externalSystemsQ.isError || externalEnginesQ.isError ? (
-              <InlineNotification kind="error" title="Unable to load external registration data" lowContrast />
-            ) : (
-              <ApiClientsPanel
+              <ExternalRegistrationTab
+                failed={apiClientsQ.isError || serviceAccountsQ.isError || externalSystemsQ.isError || externalEnginesQ.isError}
                 clients={apiClients}
                 serviceAccounts={serviceAccounts}
                 loading={apiClientsQ.isLoading}
@@ -2757,7 +2755,6 @@ export default function AccessControl() {
                 externalEngineApiUpsertDecision={externalEngineApiUpsertDecision}
                 externalEngineApiDecommissionDecision={externalEngineApiDecommissionDecision}
               />
-            )}
           </TabPanel>
           )}
         </TabPanels>
