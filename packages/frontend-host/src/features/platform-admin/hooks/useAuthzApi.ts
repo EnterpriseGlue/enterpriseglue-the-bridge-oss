@@ -4,6 +4,8 @@
 
 import { useQuery, useMutation, useQueryClient, useQueries } from '@tanstack/react-query';
 import type {
+  AuthzPrincipalType as SharedAuthzPrincipalType,
+  AuthzResourceType as SharedAuthzResourceType,
   EffectiveAccessEvaluateResponse,
   EngineSetDetail as SharedEngineSetDetail,
   EngineSetMaterializationResult as SharedEngineSetMaterializationResult,
@@ -53,22 +55,8 @@ export type {
 };
 
 // Types
-export type AuthzResourceType =
-  | 'platform'
-  | 'tenant'
-  | 'project'
-  | 'engine'
-  | 'engine_set'
-  | 'engine_runtime_resource'
-  | 'engine_runtime_resource_set'
-  | 'project_engine_target'
-  | 'external_engine_system'
-  | 'api_client'
-  | 'sso_mapping'
-  | 'sidecar'
-  | 'extension';
-
-export type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account';
+export type AuthzResourceType = SharedAuthzResourceType;
+export type AuthzPrincipalType = SharedAuthzPrincipalType;
 export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap' | 'config';
 export type SsoClaimOperator =
   | 'equals'
