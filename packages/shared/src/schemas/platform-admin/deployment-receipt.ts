@@ -153,6 +153,7 @@ export const ScheduledRuntimeInventoryReconciliationResultSchema = EngineMetadat
 });
 
 export type DeploymentReceiptCreate = z.infer<typeof DeploymentReceiptCreateSchema>;
+export type DeploymentReceiptResponse = z.infer<typeof DeploymentReceiptResponseSchema>;
 export type DeploymentReceiptView = z.infer<typeof DeploymentReceiptViewSchema>;
 export type DeploymentHistoryView = z.infer<typeof DeploymentHistoryViewSchema>;
 export type DeploymentLineageArtifactView = z.infer<typeof DeploymentLineageArtifactViewSchema>;

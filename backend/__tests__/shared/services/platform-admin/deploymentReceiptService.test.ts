@@ -5,6 +5,10 @@ import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persiste
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
 import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
+import {
+  DeploymentReceiptResponseSchema,
+  DeploymentReceiptViewSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
@@ -40,7 +44,7 @@ describe('deploymentReceiptService', () => {
       lineage: { pipelineRunId: 'run-1', commitSha: 'abc123' },
     });
 
-    expect(result).toMatchObject({ idempotent: false, inventory: { created: 1, updated: 0 } });
+    expect(DeploymentReceiptResponseSchema.parse(result)).toMatchObject({ idempotent: false, inventory: { created: 1, updated: 0 } });
     expect(receiptRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a', idempotencyKey: 'release-001', source: 'api_client',
       lineageJson: expect.stringContaining('pipelineRunId'),
@@ -76,7 +80,8 @@ describe('deploymentReceiptService', () => {
       lineageJson: JSON.stringify({ source: 'api_client', sourcePrincipalId: 'client-1', pipelineRunId: 'run-1', ignoredSecret: 'must-not-leak' }),
     }]);
 
-    await expect(deploymentReceiptService.listForEngine('engine-1', 'tenant-a')).resolves.toEqual([{
+    const receipts = await deploymentReceiptService.listForEngine('engine-1', 'tenant-a');
+    expect(receipts.map((receipt) => DeploymentReceiptViewSchema.parse(receipt))).toEqual([{
       id: 'receipt-1', projectId: 'project-1', engineId: 'engine-1', engineDeploymentId: 'deployment-1', source: 'api_client', receivedAt: 123,
       lineage: { source: 'api_client', sourcePrincipalId: 'client-1', pipelineRunId: 'run-1' },
     }]);

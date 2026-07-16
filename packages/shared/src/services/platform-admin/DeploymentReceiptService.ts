@@ -5,30 +5,17 @@ import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persiste
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
-import type { DeploymentReceiptCreate } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
+import type {
+  DeploymentReceiptCreate,
+  DeploymentReceiptResponse,
+  DeploymentReceiptView,
+} from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 
 export interface RecordDeploymentReceiptInput extends DeploymentReceiptCreate {
   tenantId?: string | null;
   engineId: string;
   source: 'api_client' | 'service_account';
   sourcePrincipalId: string;
-}
-
-export interface DeploymentReceiptResult {
-  receiptId: string;
-  idempotent: boolean;
-  inventory: { created: number; updated: number };
-  materializedResourceSets: number;
-}
-
-export interface DeploymentReceiptView {
-  id: string;
-  projectId: string;
-  engineId: string;
-  engineDeploymentId: string;
-  source: string;
-  lineage: Record<string, string>;
-  receivedAt: number;
 }
 
 function normalizedTenantWhere(tenantId?: string | null): { tenantId: string } | { tenantId: ReturnType<typeof IsNull> } {
@@ -103,7 +90,7 @@ class DeploymentReceiptService {
     }));
   }
 
-  async record(input: RecordDeploymentReceiptInput): Promise<DeploymentReceiptResult> {
+  async record(input: RecordDeploymentReceiptInput): Promise<DeploymentReceiptResponse> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(DeploymentReceipt);
     const tenantId = input.tenantId?.trim() || null;
