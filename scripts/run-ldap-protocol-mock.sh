@@ -76,6 +76,11 @@ dn: cn=operations,ou=groups,$base_dn
 objectClass: groupOfNames
 cn: operations
 member: uid=alice,ou=people,$base_dn
+
+dn: cn=platform-operators,ou=groups,$base_dn
+objectClass: groupOfNames
+cn: platform-operators
+member: cn=operations,ou=groups,$base_dn
 EOF
 
 ldap_port="$(docker compose -p "$project" -f "$compose_file" port openldap 636 | sed -E 's/.*:([0-9]+)$/\1/')"

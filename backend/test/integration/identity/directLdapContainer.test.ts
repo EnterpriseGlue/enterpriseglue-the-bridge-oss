@@ -40,14 +40,17 @@ describeContainer('direct LDAP container integration', () => {
 
     expect(identity).toMatchObject({
       email: 'alice@identity-mock.test',
-      groups: ['operations'],
+      groups: expect.arrayContaining(['operations', 'platform-operators']),
     });
     expect(identity.subjectId).toBeTruthy();
 
     const page = await directLdapIdentityService.listDirectoryPage(provider);
     expect(page.nextCursor).toBeNull();
     expect(page.identities).toEqual(expect.arrayContaining([
-      expect.objectContaining({ email: 'alice@identity-mock.test', groups: ['operations'] }),
+      expect.objectContaining({
+        email: 'alice@identity-mock.test',
+        groups: expect.arrayContaining(['operations', 'platform-operators']),
+      }),
     ]));
   });
 });

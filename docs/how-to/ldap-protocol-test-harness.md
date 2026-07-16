@@ -10,7 +10,9 @@ with a random host port, a one-day local CA, random administrator and user
 passwords, and no persisted volume. It generates the following seed only:
 
 - `uid=alice,ou=people,dc=identity-mock,dc=test`;
-- `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice.
+- `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice; and
+- `cn=platform-operators,ou=groups,dc=identity-mock,dc=test` containing the
+  `operations` group, to exercise nested reverse group resolution.
 
 The image's documented configuration supports `LDAP_DOMAIN`,
 `LDAP_ADMIN_PASSWORD`, TLS material, and mapping LDAPS port 636; it is pinned
