@@ -137,7 +137,7 @@ describe('ssoAssignmentMappingService', () => {
 
     expect(result).toMatchObject({ legacyMappingId: legacy.id, providerKey: provider.key, created: true, identityMapping: { id: 'identity-mapping-1' }, assignment: { id: 'assignment-1' }, createdGroup: null });
     expect(createIdentityMapping).toHaveBeenCalledWith({ providerKey: provider.key, targetGroupKey: group.key, entitlementType: 'group', externalId: 'operators', matchOperator: 'exact', syncMode: 'authoritative' }, null, expect.anything());
-    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, principalType: 'group', principalId: group.id, roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1', source: 'legacy', sourceRef: `sso_assignment_mapping:${legacy.id}` }), expect.anything());
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, principalType: 'group', principalId: group.id, roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1', source: 'sso', sourceRef: 'identity_entitlement_mapping:identity-mapping-1' }), expect.anything());
   });
 
   it('converts an allowlisted exact custom engine mapping into an attribute entitlement', async () => {
@@ -215,7 +215,7 @@ describe('ssoAssignmentMappingService', () => {
 
     expect(result).toMatchObject({ created: false, identityMapping: { id: existingMapping.id }, assignment: { id: 'assignment-existing' } });
     expect(createIdentityMapping).not.toHaveBeenCalled();
-    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ roleId: 'system.engine.deployer', sourceRef: `sso_assignment_mapping:${legacy.id}` }), expect.anything());
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ roleId: 'system.engine.deployer', source: 'sso', sourceRef: 'identity_entitlement_mapping:identity-mapping-existing' }), expect.anything());
   });
 
   it('refuses dynamic legacy selectors instead of broadening access during conversion', async () => {

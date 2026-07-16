@@ -282,7 +282,7 @@ describe('SsoClaimsMappingService', () => {
 
     expect(result).toMatchObject({ legacyMappingId: legacy.id, created: true, mapping: { id: 'identity-mapping-1' }, assignment: { id: 'assignment-1' }, createdGroup: null });
     expect(createIdentityMapping).toHaveBeenCalledWith({ providerKey: 'entra', targetGroupKey: group.key, entitlementType: 'group', externalId: legacy.claimValue, matchOperator: 'exact', syncMode: 'authoritative' }, null, expect.anything());
-    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, principalType: 'group', principalId: group.id, roleId: 'system.platform.admin', resourceType: 'platform', resourceId: null }), expect.anything());
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, principalType: 'group', principalId: group.id, roleId: 'system.platform.admin', resourceType: 'platform', resourceId: null, source: 'sso', sourceRef: 'identity_entitlement_mapping:identity-mapping-1' }), expect.anything());
   });
 
   it('reuses an equivalent provider-neutral mapping on retry', async () => {
@@ -306,7 +306,7 @@ describe('SsoClaimsMappingService', () => {
 
     expect(result).toMatchObject({ created: false, mapping: { id: existing.id, targetGroupKey: group.key } });
     expect(createIdentityMapping).not.toHaveBeenCalled();
-    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ roleId: 'system.platform.user' }), expect.anything());
+    expect(assignRole).toHaveBeenCalledWith(expect.objectContaining({ roleId: 'system.platform.user', source: 'sso', sourceRef: 'identity_entitlement_mapping:identity-mapping-existing' }), expect.anything());
   });
 
   it('converts an exact legacy email-domain rule into a sanitized attribute mapping', async () => {

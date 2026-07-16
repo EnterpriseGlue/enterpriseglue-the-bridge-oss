@@ -423,7 +423,7 @@ class SsoAssignmentMappingServiceClass {
         }, tenantId, manager);
       const assignment = await permissionService.assignRole({
         tenantId, createdById, principalType: 'group', principalId: group.id, roleId: legacyMapping.targetRoleId,
-        resourceType: 'engine', resourceId: engine.id, source: 'legacy', sourceRef: `sso_assignment_mapping:${legacyMapping.id}`,
+        resourceType: 'engine', resourceId: engine.id, source: 'sso', sourceRef: `identity_entitlement_mapping:${identityMapping.id}`,
       }, manager);
       const created = !existing;
       await recordLegacyMappingConversion(manager, {

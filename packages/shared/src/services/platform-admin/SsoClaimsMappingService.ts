@@ -393,7 +393,17 @@ class SsoClaimsMappingServiceClass {
         ? { id: existingMapping.id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType, externalId, matchOperator, syncMode: 'authoritative' as const, isActive: true, configKey: existingMapping.configKey, sourceRef: existingMapping.sourceRef }
         : await identityEntitlementMappingService.create({ providerKey, targetGroupKey, entitlementType, externalId, matchOperator, syncMode: 'authoritative' }, null, manager);
       const roleId = normalizeRoleValue(legacy.targetRole) === 'admin' ? SYSTEM_ROLE_IDS.PLATFORM_ADMIN : SYSTEM_ROLE_IDS.PLATFORM_USER;
-      const assignment = await permissionService.assignRole({ tenantId: null, createdById, principalType: 'group', principalId: group.id, roleId, resourceType: 'platform', resourceId: null }, manager);
+      const assignment = await permissionService.assignRole({
+        tenantId: null,
+        createdById,
+        principalType: 'group',
+        principalId: group.id,
+        roleId,
+        resourceType: 'platform',
+        resourceId: null,
+        source: 'sso',
+        sourceRef: `identity_entitlement_mapping:${mapping.id}`,
+      }, manager);
       const created = !existingMapping;
       await recordLegacyMappingConversion(manager, {
         tenantId: null,
