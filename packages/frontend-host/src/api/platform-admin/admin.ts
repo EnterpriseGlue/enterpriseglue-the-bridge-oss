@@ -22,7 +22,10 @@ import type {
   GovernanceProjectSummary,
   UserListItem,
 } from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
-import type { GitProviderAdminSummary } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
+import type {
+  GitProviderAdminSummary,
+  UpdateGitProviderRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
 export type {
   AccessAuthorityMode,
@@ -97,7 +100,7 @@ export const platformAdminApi = {
   getGitProviders: () =>
     apiClient.get<GitProvider[]>('/git-api/admin/providers'),
 
-  updateGitProvider: (id: string, data: Partial<GitProvider>) =>
+  updateGitProvider: (id: string, data: UpdateGitProviderRequest) =>
     apiClient.put<GitProvider>(`/git-api/admin/providers/${id}`, data),
 };
 

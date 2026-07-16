@@ -44,6 +44,17 @@ export const GitProviderAdminSummarySchema = GitProviderSchemaRaw.extend({
   hasGitConnections: z.boolean(),
 });
 
+/** Administrator-only mutable provider settings; secret values are write-only. */
+export const UpdateGitProviderRequestSchema = z.object({
+  isActive: z.boolean().optional(),
+  customBaseUrl: z.string().url().nullable().optional(),
+  customApiUrl: z.string().url().nullable().optional(),
+  oauthClientId: z.string().nullable().optional(),
+  oauthClientSecret: z.string().nullable().optional(),
+  oauthScopes: z.string().nullable().optional(),
+  displayOrder: z.number().int().optional(),
+});
+
 // Git Provider - Insert schema
 export const GitProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -56,3 +67,4 @@ export const GitProviderInsertSchema = z.object({
 // Types
 export type GitProvider = z.infer<typeof GitProviderSchema>;
 export type GitProviderAdminSummary = z.infer<typeof GitProviderAdminSummarySchema>;
+export type UpdateGitProviderRequest = z.infer<typeof UpdateGitProviderRequestSchema>;

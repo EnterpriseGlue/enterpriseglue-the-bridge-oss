@@ -13,23 +13,16 @@ import { GitCredential } from '@enterpriseglue/shared/infrastructure/persistence
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
 import { credentialService } from '@enterpriseglue/shared/services/git/CredentialService.js';
 import { encrypt as encryptSecret, isEncrypted as isEncryptedValue } from '@enterpriseglue/shared/services/encryption.js';
-import { GitProviderAdminSummarySchema } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
+import {
+  GitProviderAdminSummarySchema,
+  UpdateGitProviderRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
 const router = Router();
 
 // Validation schemas
 const providerIdSchema = z.object({
   id: z.string().min(1),
-});
-
-const updateProviderSchema = z.object({
-  isActive: z.boolean().optional(),
-  customBaseUrl: z.string().url().nullable().optional(),
-  customApiUrl: z.string().url().nullable().optional(),
-  oauthClientId: z.string().nullable().optional(),
-  oauthClientSecret: z.string().nullable().optional(),
-  oauthScopes: z.string().nullable().optional(),
-  displayOrder: z.number().int().optional(),
 });
 
 /**
@@ -143,7 +136,7 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requireAction('p
  *
  * Same middleware order as GET: requireAuth first, then requireAction.
  */
-router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requireAction('platform.git.providers.manage', { resourceResolver: 'platform.self' }), validateParams(providerIdSchema), validateBody(updateProviderSchema), asyncHandler(async (req: Request, res: Response) => {
+router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requireAction('platform.git.providers.manage', { resourceResolver: 'platform.self' }), validateParams(providerIdSchema), validateBody(UpdateGitProviderRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const {
     isActive,
