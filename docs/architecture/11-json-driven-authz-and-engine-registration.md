@@ -2209,7 +2209,7 @@ This phase is required because the current implementation still carries compatib
 
 #### Module Boundaries
 
-- [ ] ⬜ Split the 8k+ line Access Control page into tab/domain components before adding Identity, Config Imports, and Runtime Resources.
+- [ ] ⬜ Split the 8k+ line Access Control page into tab/domain components before adding Identity, Config Imports, and Runtime Resources. The focused `GroupsPanel` now owns group and membership rendering plus source-ownership guard presentation; parent queries and mutations remain centralized.
 - [x] ✅ Extract the read-only authorization audit tab, filter state, and presentation helpers into `pages/access-control/AuthzAuditPanel.tsx` without altering the Carbon tab layout.
 - [x] ✅ Extract SSO synchronization run/event table headers, status tags, and presentation formatting into `pages/access-control/ssoSyncPresentation.ts`, preparing the diagnostics panel for a follow-up component move without changing its controls.
 - [x] ✅ Move the SSO diagnostics option contract and defaults into `ssoSyncPresentation.ts`, so the state shared by the page and future panel component has one definition.
