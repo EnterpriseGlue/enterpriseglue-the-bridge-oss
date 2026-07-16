@@ -79,6 +79,42 @@ describe('runtimeResourceInventoryService', () => {
     expect(materializeForEngine).toHaveBeenCalledWith('engine-1', 'tenant-a');
   });
 
+  it('persists every discovered artifact with its stable runtime and deployment identity', async () => {
+    const { resourceRepo } = setup();
+    camundaGet.mockResolvedValue([{
+      id: 'process-1', key: 'payments-order', version: 2, tenantId: 'runtime-payments', deploymentId: 'deployment-1',
+    }]);
+    getDecisionDefinitions.mockResolvedValue([{
+      id: 'decision-1', key: 'payments-risk', version: 3, tenantId: 'runtime-risk', deploymentId: 'deployment-1',
+    }]);
+    vi.spyOn(runtimeResourceInventoryService, 'materializeForEngine').mockResolvedValue([]);
+
+    await runtimeResourceInventoryService.reconcileEngine('engine-1', 'tenant-a');
+
+    expect(resourceRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      resourceKind: 'process_definition',
+      resourceKey: 'payments-order',
+      engineResourceId: 'process-1',
+      runtimeTenantId: 'runtime-payments',
+      deploymentId: 'deployment-1',
+      version: 2,
+      source: 'engine_discovery',
+      observedAt: expect.any(Number),
+    }));
+    expect(resourceRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      resourceKind: 'decision_definition',
+      resourceKey: 'payments-risk',
+      engineResourceId: 'decision-1',
+      runtimeTenantId: 'runtime-risk',
+      deploymentId: 'deployment-1',
+      version: 3,
+      source: 'engine_discovery',
+      observedAt: expect.any(Number),
+    }));
+  });
+
   it('keeps receipt project lineage when a later engine discovery refreshes the same resource', async () => {
     const { resourceRepo } = setup();
     resourceRepo.findOne.mockResolvedValue({
