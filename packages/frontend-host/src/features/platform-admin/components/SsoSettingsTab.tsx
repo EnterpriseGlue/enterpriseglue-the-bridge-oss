@@ -43,6 +43,10 @@ import type {
   LegacySsoPlatformMappingUpdateRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type {
+  PlatformSettings,
+  UpdatePlatformSettings,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import type {
   LegacySsoMappingMigrationRequest,
   LegacySsoPlatformMappingMigrationResponse,
   LegacySsoProvider as SsoProvider,
@@ -118,18 +122,7 @@ export default function SsoSettingsTab() {
 
   const ssoLoginBehaviorQuery = useQuery({
     queryKey: ['platform-settings', 'sso-login-behavior'],
-    queryFn: () =>
-      apiClient.get<{
-        ssoAutoRedirectSingleProvider: boolean;
-        ssoAllEnginesAssignmentMappingsEnabled: boolean;
-        ssoEngineOwnerAssignmentMappingsEnabled: boolean;
-        ssoEngineDelegateAssignmentMappingsEnabled: boolean;
-        ssoRegexClaimMappingsEnabled: boolean;
-        ssoBroadEntitlementMappingsEnabled: boolean;
-        ssoSecretViewMappingsEnabled: boolean;
-        ssoUnredactedAuditMappingsEnabled: boolean;
-        ssoPermanentDeleteMappingsEnabled: boolean;
-      }>('/api/admin/settings'),
+    queryFn: () => apiClient.get<PlatformSettings>('/api/admin/settings'),
     enabled: canReadProviders,
   });
 
@@ -292,8 +285,9 @@ export default function SsoSettingsTab() {
   });
 
   const updateSsoLoginBehavior = useMutation({
-    mutationFn: (enabled: boolean) =>
-      apiClient.put('/api/admin/settings', { ssoAutoRedirectSingleProvider: enabled }),
+    mutationFn: (enabled: boolean) => apiClient.put('/api/admin/settings', {
+      ssoAutoRedirectSingleProvider: enabled,
+    } satisfies UpdatePlatformSettings),
     onSuccess: () => {
       setSsoLoginBehaviorError(null);
       queryClient.invalidateQueries({ queryKey: ['platform-settings', 'sso-login-behavior'] });
@@ -305,16 +299,16 @@ export default function SsoSettingsTab() {
   });
 
   const updateSsoHighRiskSettings = useMutation({
-    mutationFn: (data: {
-      ssoAllEnginesAssignmentMappingsEnabled?: boolean;
-      ssoEngineOwnerAssignmentMappingsEnabled?: boolean;
-      ssoEngineDelegateAssignmentMappingsEnabled?: boolean;
-      ssoRegexClaimMappingsEnabled?: boolean;
-      ssoBroadEntitlementMappingsEnabled?: boolean;
-      ssoSecretViewMappingsEnabled?: boolean;
-      ssoUnredactedAuditMappingsEnabled?: boolean;
-      ssoPermanentDeleteMappingsEnabled?: boolean;
-    }) =>
+    mutationFn: (data: Pick<UpdatePlatformSettings,
+      | 'ssoAllEnginesAssignmentMappingsEnabled'
+      | 'ssoEngineOwnerAssignmentMappingsEnabled'
+      | 'ssoEngineDelegateAssignmentMappingsEnabled'
+      | 'ssoRegexClaimMappingsEnabled'
+      | 'ssoBroadEntitlementMappingsEnabled'
+      | 'ssoSecretViewMappingsEnabled'
+      | 'ssoUnredactedAuditMappingsEnabled'
+      | 'ssoPermanentDeleteMappingsEnabled'
+    >) =>
       apiClient.put('/api/admin/settings', data),
     onSuccess: () => {
       setSsoLoginBehaviorError(null);
