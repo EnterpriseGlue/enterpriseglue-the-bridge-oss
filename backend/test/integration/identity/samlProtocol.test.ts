@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
-import { MockSamlHttpsServer } from '../../identity-mocks/index.js';
+import { MockSamlHttpsServer, MockSamlIdentityProvider } from '../../identity-mocks/index.js';
 
 const configuration = {
   entityId: 'enterpriseglue-ai',
@@ -40,5 +40,48 @@ describe('loopback SAML protocol mock', () => {
       ...configuration,
       ssoUrl: `${transport.issuer}/sso`,
     }, response!)).resolves.toMatchObject({ nameID: 'person@example.test', role: 'operator' });
+  });
+
+  it('applies in-process subject and multi-valued group changes to the next browser-post assertion', async () => {
+    transport = new MockSamlHttpsServer();
+    await transport.start();
+    transport.provider!.setAttributes({
+      nameID: 'changed@example.test',
+      'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['operations', 'payments'],
+      role: ['operator', 'reviewer'],
+    });
+    process.env.EG_SAML_PROTOCOL_CERT = transport.provider!.certificate();
+
+    const html = await (await transport.fetch(`${transport.issuer}/sso`)).text();
+    const response = html.match(/name="SAMLResponse" value="([^"]+)"/)?.[1];
+    const profile = await genericSamlService.validatePostResponse({
+      ...configuration,
+      ssoUrl: `${transport.issuer}/sso`,
+    }, response!);
+
+    expect(profile).toMatchObject({
+      nameID: 'changed@example.test',
+      role: ['operator', 'reviewer'],
+      'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['operations', 'payments'],
+    });
+  });
+
+  it.each([
+    ['a wrong audience', { audience: 'another-service' }],
+    ['an expired assertion', { notBefore: new Date(Date.now() - 420_000), notOnOrAfter: new Date(Date.now() - 360_000) }],
+  ])('rejects a correctly signed assertion with %s', async (_label, options) => {
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+
+    await expect(genericSamlService.validatePostResponse(configuration, provider.signedResponse(options)))
+      .rejects.toThrow();
+  });
+
+  it('rejects malformed SAML before a profile can be produced', async () => {
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+
+    await expect(genericSamlService.validatePostResponse(configuration, Buffer.from('<not-saml/>').toString('base64')))
+      .rejects.toThrow();
   });
 });

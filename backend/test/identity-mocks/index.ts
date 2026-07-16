@@ -26,6 +26,14 @@ export interface MockSamlIdentityProviderOptions {
   callbackUrl?: string;
 }
 
+export interface MockSamlResponseOptions {
+  audience?: string;
+  callbackUrl?: string;
+  issueInstant?: Date;
+  notBefore?: Date;
+  notOnOrAfter?: Date;
+}
+
 interface SigningMaterial {
   privateKey: string;
   publicJwk: JsonWebKey & { kid: string };
@@ -284,19 +292,21 @@ export class MockSamlIdentityProvider {
     };
   }
 
-  signedResponse(): string {
+  signedResponse(options: MockSamlResponseOptions = {}): string {
     const material = this.signingMaterial;
-    const now = new Date();
-    const notBefore = new Date(now.getTime() - 60_000).toISOString();
-    const notOnOrAfter = new Date(now.getTime() + 300_000).toISOString();
+    const now = options.issueInstant || new Date();
+    const notBefore = (options.notBefore || new Date(now.getTime() - 60_000)).toISOString();
+    const notOnOrAfter = (options.notOnOrAfter || new Date(now.getTime() + 300_000)).toISOString();
     const issueInstant = now.toISOString();
     const sequence = ++this.sequence;
-    const nameId = xmlEscape(String(this.attributes.nameID || 'person@example.test'));
+    const nameId = xmlEscape(String(this.attributes.nameID ?? 'person@example.test'));
+    const callbackUrl = options.callbackUrl || this.callbackUrl;
+    const audience = options.audience || this.audience;
     const attributeXml = Object.entries(this.attributes)
       .filter(([name]) => name !== 'nameID')
       .map(([name, value]) => `<saml:Attribute Name="${xmlEscape(name)}">${(Array.isArray(value) ? value : [value]).map((entry) => `<saml:AttributeValue>${xmlEscape(String(entry))}</saml:AttributeValue>`).join('')}</saml:Attribute>`)
       .join('');
-    const assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_assertion-${sequence}" Version="2.0" IssueInstant="${issueInstant}"><saml:Issuer>${this.issuer}</saml:Issuer><saml:Subject><saml:NameID>${nameId}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${this.callbackUrl}" NotOnOrAfter="${notOnOrAfter}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}"><saml:AudienceRestriction><saml:Audience>${this.audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${issueInstant}" SessionIndex="session-${sequence}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attributeXml}</saml:AttributeStatement></saml:Assertion>`;
+    const assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_assertion-${sequence}" Version="2.0" IssueInstant="${issueInstant}"><saml:Issuer>${this.issuer}</saml:Issuer><saml:Subject><saml:NameID>${nameId}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${callbackUrl}" NotOnOrAfter="${notOnOrAfter}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}"><saml:AudienceRestriction><saml:Audience>${audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${issueInstant}" SessionIndex="session-${sequence}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attributeXml}</saml:AttributeStatement></saml:Assertion>`;
     const signedAssertion = signXml(assertion, "/*[local-name(.)='Assertion']", { reference: "/*[local-name(.)='Assertion']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
     const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response-${sequence}" Version="2.0" IssueInstant="${issueInstant}" Destination="${this.callbackUrl}"><saml:Issuer>${this.issuer}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signedAssertion}</samlp:Response>`;
     const signedResponse = signXml(response, "/*[local-name(.)='Response']", { reference: "/*[local-name(.)='Response']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
