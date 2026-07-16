@@ -66,6 +66,17 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
   });
 
+  it('warns before a broad entitlement match is saved', async () => {
+    renderTab();
+    await screen.findByText('group.engine-operators');
+    fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
+
+    fireEvent.change(screen.getByLabelText('Match'), { target: { value: 'contains' } });
+
+    expect(await screen.findByText('Broad entitlement match')).toBeInTheDocument();
+    expect(screen.getByText(/partial display value/)).toBeInTheDocument();
+  });
+
   it('shows config-managed mappings but disables UI mutation actions', async () => {
     server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations' }])));
     renderTab();

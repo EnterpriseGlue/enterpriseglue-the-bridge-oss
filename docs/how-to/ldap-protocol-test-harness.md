@@ -1,4 +1,26 @@
-# LDAP Protocol Test Harness
+# Identity Test Setup
+
+Use the grouped `test:identity:*` commands to choose the smallest relevant
+test lane. The pre-existing dashed commands remain supported for CI jobs and
+automation that already use them.
+
+| Command | Boundary covered | External dependency |
+| --- | --- | --- |
+| `pnpm run test:identity:contract` | normalization, mapping, provider, replay, and migration services | none |
+| `pnpm run test:identity:routes` | authentication and Platform Admin HTTP routes | none |
+| `pnpm run test:identity:matrix` | OIDC/SAML/LDAP normalized-identity compatibility matrix | none |
+| `pnpm run test:identity:protocol` | loopback OIDC and SAML transport fixtures plus mock contracts | none |
+| `pnpm run test:identity:ui` | provider and mapping administration screens | none |
+| `pnpm run test:identity:local` | all of the preceding local-only lanes | none |
+| `pnpm run test:identity:ldap` | real LDAPS bind, search, TLS, and nested-group flow | Docker |
+
+Run `test:identity:local` during ordinary development. Add
+`test:identity:ldap` for directory-client changes; it remains separate so a
+missing Docker daemon cannot hide regressions in the local-only suite. The
+broader `test:authz-refactor` lane keeps its compatibility-oriented CI scope
+and includes the protocol-mock lane, but deliberately does not start Docker.
+
+## LDAP Protocol Test Harness
 
 Use this opt-in harness when a change needs a real LDAP/LDAPS server boundary.
 It is not part of the ordinary unit, integration, browser, or deployment
