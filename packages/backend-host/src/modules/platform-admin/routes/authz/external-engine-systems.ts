@@ -11,26 +11,26 @@ import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/pers
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import {
-  engineFieldOwnershipSchema,
-  engineManagementModeSchema,
   externalEngineFieldOwnershipToJson,
   parseExternalEngineFieldOwnership,
 } from './external-engine-ownership.js';
+import {
+  EngineFieldOwnershipSchema,
+  EngineManagementModeSchema,
+  ExternalEngineSystemCreateSchema,
+  ExternalEngineSystemUpdateSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
-const externalEngineSystemCreateSchema = z.object({
+/** Direct compatibility accepts legacy manual defaults while shared OpenAPI keeps new systems external-only. */
+const externalEngineSystemCreateSchema = ExternalEngineSystemCreateSchema.extend({
   key: z.string().min(1).max(255).regex(/^[a-z0-9][a-z0-9._-]*$/).optional(),
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  defaultManagementMode: engineManagementModeSchema.optional(),
-  defaultFieldOwnership: engineFieldOwnershipSchema.optional(),
+  defaultManagementMode: EngineManagementModeSchema.optional(),
+  defaultFieldOwnership: EngineFieldOwnershipSchema.optional(),
 });
-const externalEngineSystemUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  defaultManagementMode: engineManagementModeSchema.optional(),
-  defaultFieldOwnership: engineFieldOwnershipSchema.optional(),
-  isActive: z.boolean().optional(),
+const externalEngineSystemUpdateSchema = ExternalEngineSystemUpdateSchema.extend({
+  defaultManagementMode: EngineManagementModeSchema.optional(),
+  defaultFieldOwnership: EngineFieldOwnershipSchema.optional(),
 });
 
 export interface ExternalEngineSystemRouteDependencies {

@@ -2291,6 +2291,8 @@ The tenant-scoped authorization-audit query now also has one shared, coercion-aw
 
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
+External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.
+
 Policy create and update inputs now use the same shared schemas in route validation, OpenAPI, and Platform Admin hooks. OpenAPI now accurately advertises the service's identifier-only create response and success-only update response rather than a policy record that the mutation never returns.
 
 The policy list response now has one strict shared service-view schema across the route, OpenAPI, and hook. It exposes effective policy fields only; persistence timestamps and creator fields are no longer advertised when the service does not return them.
