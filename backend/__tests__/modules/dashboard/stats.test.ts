@@ -14,6 +14,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', type: 'access', platformRole: 'user' };
+    req.tenant = { tenantId: req.get('x-tenant-id') || undefined };
     next();
   },
 }));
@@ -111,6 +112,23 @@ describe('GET /api/dashboard/stats', () => {
     expect(response.body.totalProjects).toBe(1);
     expect(response.body.totalFiles).toBe(3);
     expect(response.body.fileTypes).toEqual({ bpmn: 2, dmn: 1, form: 0 });
+  });
+
+  it('uses the request tenant for evaluator-backed project aggregates', async () => {
+    const fileRepo = { createQueryBuilder: vi.fn() };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === File) return fileRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app)
+      .get('/api/dashboard/stats')
+      .set('x-tenant-id', 'tenant-1');
+
+    expect(response.status).toBe(200);
+    expect(dashboardPermissionService.getCurrentUserPermissions).toHaveBeenCalledWith('user-1', 'tenant-1');
   });
 
   it('denies stats without dashboard view permission', async () => {

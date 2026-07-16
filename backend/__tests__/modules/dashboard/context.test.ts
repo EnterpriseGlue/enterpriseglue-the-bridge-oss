@@ -16,6 +16,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'user' };
+    req.tenant = { tenantId: req.get('x-tenant-id') || undefined };
     next();
   },
 }));
@@ -182,6 +183,24 @@ describe('GET /api/dashboard/context', () => {
     expect(response.body.projectMemberships[0].projectName).toBe('Test Project');
     expect(response.body.projectMemberships[0].role).toBe('permission');
     expect(response.body.canViewDeployments).toBe(false);
+  });
+
+  it('uses the request tenant for evaluator-backed project visibility', async () => {
+    const projectRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return projectRepo;
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app)
+      .get('/api/dashboard/context')
+      .set('x-tenant-id', 'tenant-1');
+
+    expect(response.status).toBe(200);
+    expect(permissionService.getCurrentUserPermissions).toHaveBeenCalledWith('user-1', 'tenant-1');
   });
 
   it('derives dashboard visibility from scoped permission snapshots', async () => {
