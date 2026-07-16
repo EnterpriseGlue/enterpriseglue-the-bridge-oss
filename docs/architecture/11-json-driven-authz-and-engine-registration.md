@@ -1851,7 +1851,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [ ] ⬜ Make role keys tenant-scoped where roles are tenant-owned and add deterministic config keys/source metadata to roles, groups, providers, mappings, engines, Engine Sets, and targets.
 - [x] ✅ Keep one `ProjectEngineTarget` per project/engine pair and add explicit config ownership transfer/conflict metadata rather than source-duplicate target rows. The pair constraint, ownership/drift fields, and configuration apply/diff contracts are covered by the maintained target-ownership test lane.
 - [ ] ⬜ Add config bundle source, object ownership/hash, preview/apply run, and run-event entities.
-- [ ] ⬜ Add matching migrations under both `packages/shared/src/infrastructure/persistence/migrations/` and the existing `packages/shared/src/db/migrations/` re-export path, then export all entities through the persistence indexes.
+- [x] ✅ Keep matching migrations under both `packages/shared/src/infrastructure/persistence/migrations/` and the existing `packages/shared/src/db/migrations/` re-export path, and export all entities through the persistence indexes. Identity-provider plus reconciliation/deployment-receipt migrations now have canonical persistence re-exports; the migration filename sets are identical, a bridge-parity test imports both paths, and the canonical authorization schema invariants pass.
 - [ ] ⬜ Update every configured database adapter/entity registry and run migration tests against the supported OSS database baseline.
 
 ### Shared Services
