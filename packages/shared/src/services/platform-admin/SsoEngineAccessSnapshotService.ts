@@ -3,6 +3,13 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { SsoEngineAccessSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoEngineAccessSnapshot.js';
+import type {
+  EngineAccessTransitionCleanupApplyResponse as SharedEngineAccessTransitionCleanupApplyResponse,
+  EngineAccessTransitionCleanupCandidate as SharedEngineAccessTransitionCleanupCandidate,
+  EngineAccessTransitionCleanupPreview as SharedEngineAccessTransitionCleanupPreview,
+  SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
+  SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
@@ -10,38 +17,8 @@ import type { SsoClaims } from './SsoClaimsMappingService.js';
 
 type SnapshotStore = DataSource | EntityManager;
 
-export type SsoEngineAccessSnapshotStatus =
-  | 'active'
-  | 'stale'
-  | 'removed_by_sso'
-  | 'removed_by_admin'
-  | 'mapping_disabled'
-  | 'provider_identity_missing'
-  | 'provider_group_missing'
-  | 'engine_no_longer_matches_selector';
-
-export interface SsoEngineAccessSnapshotView {
-  id: string;
-  tenantId: string | null;
-  providerId: string | null;
-  mappingId: string;
-  principalType: string;
-  principalId: string;
-  engineId: string;
-  providerSubjectIds: string[];
-  providerGroupIds: string[];
-  providerAppRoleIds: string[];
-  currentRoleIds: string[];
-  previousRoleIds: string[];
-  status: SsoEngineAccessSnapshotStatus;
-  cleanupReason: string | null;
-  lastSeenAt: number;
-  lastSyncedAt: number;
-  removedAt: number | null;
-  details: Record<string, unknown>;
-  createdAt: number;
-  updatedAt: number;
-}
+export type SsoEngineAccessSnapshotStatus = SharedSsoEngineAccessSnapshotStatus;
+export type SsoEngineAccessSnapshotView = SharedSsoEngineAccessSnapshot;
 
 export interface SsoEngineAccessSnapshotQuery {
   tenantId?: string | null;
@@ -75,31 +52,9 @@ export interface SsoSnapshotRemovalInput {
   details?: Record<string, unknown>;
 }
 
-export interface EngineAccessTransitionCleanupCandidate {
-  manualAssignmentId: string;
-  ssoAssignmentId: string;
-  principalType: string;
-  principalId: string;
-  engineId: string;
-  manualRoleId: string;
-  ssoRoleId: string;
-  sourceMappingId: string | null;
-  lastSnapshotStatus: SsoEngineAccessSnapshotStatus | null;
-  recommendedAction: 'remove_manual_duplicate' | 'review_manual_conflict';
-}
-
-export interface EngineAccessTransitionCleanupPreview {
-  previewCorrelationId: string;
-  engineId: string;
-  candidates: EngineAccessTransitionCleanupCandidate[];
-}
-
-export interface EngineAccessTransitionCleanupApplyResult {
-  previewCorrelationId: string;
-  engineId: string;
-  removedAssignmentIds: string[];
-  removedCount: number;
-}
+export type EngineAccessTransitionCleanupCandidate = SharedEngineAccessTransitionCleanupCandidate;
+export type EngineAccessTransitionCleanupPreview = SharedEngineAccessTransitionCleanupPreview;
+export type EngineAccessTransitionCleanupApplyResult = SharedEngineAccessTransitionCleanupApplyResponse;
 
 function normalizeTenantId(tenantId?: string | null): string | null {
   const normalized = tenantId?.trim();
