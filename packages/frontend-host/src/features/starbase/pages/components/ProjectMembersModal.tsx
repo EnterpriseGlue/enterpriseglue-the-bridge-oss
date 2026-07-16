@@ -25,9 +25,9 @@ import type {
   AuthzPrincipalType as SharedAuthzPrincipalType,
   RoleAssignment as SharedRoleAssignment,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import type { AccessAuthorityMode } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
 
 type ProjectAssignmentPrincipalType = SharedAuthzPrincipalType
-type ProjectAccessAuthorityMode = 'manual' | 'transition_to_sso' | 'sso_managed'
 type ProjectScopedRoleAssignmentRow = SharedRoleAssignment
 
 const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<ProjectAssignmentPrincipalType, string> = {
@@ -177,7 +177,7 @@ interface ProjectMembersModalProps {
   canManageMemberDeployGrant?: boolean
   canTransferOwnership?: boolean
   canAssignScopedAccess?: boolean
-  projectAccessAuthority?: ProjectAccessAuthorityMode
+  projectAccessAuthority?: AccessAuthorityMode
   scopedAssignmentsVisible?: boolean
   scopedAssignmentsLoading?: boolean
   scopedAssignmentsError?: boolean
