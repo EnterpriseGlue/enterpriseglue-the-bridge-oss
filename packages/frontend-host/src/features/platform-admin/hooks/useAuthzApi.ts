@@ -301,10 +301,11 @@ export function useCurrentUserPermissions() {
   });
 }
 
-export function usePermissionCatalog() {
+export function usePermissionCatalog(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.permissions,
     queryFn: () => apiClient.get<PermissionCatalogEntry[]>('/api/authz/permissions'),
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -324,11 +325,11 @@ export function useRbacRoles(options: { enabled?: boolean } = {}) {
   });
 }
 
-export function useRoleDetail(id?: string) {
+export function useRoleDetail(id?: string, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.roleDetail(id),
     queryFn: () => apiClient.get<RoleDetail>(`/api/authz/roles/${id}`),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && (options.enabled ?? true),
   });
 }
 

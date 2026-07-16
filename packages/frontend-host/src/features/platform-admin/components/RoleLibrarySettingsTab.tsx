@@ -1,22 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Add, Copy, Download, Save } from '@carbon/icons-react';
 import { Accordion, AccordionItem, Button, Checkbox, InlineNotification, Modal, Search, Select, SelectItem, SkeletonText, Tag, TextArea, TextInput, Tile } from '@carbon/react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { getPermissionRiskForKey } from '../../../shared/auth/permissionRisk';
 import {
+  authzQueryKeys,
+  usePermissionCatalog,
+  useRbacRoles,
+  useRoleDetail,
+  type PermissionCatalogEntry,
+  type RoleSummary,
+} from '../hooks/useAuthzApi';
+import {
   buildSystemRoleConfigBundle,
   configRoleKeyFromSystemRoleKey,
   isStableConfigKey,
+  type ConfigRoleTemplateScope,
   type ConfigRoleTemplateOwnershipMode,
 } from './configRoleTemplate';
 
-type Scope = 'platform' | 'project' | 'engine' | 'engine_runtime_resource';
-interface Role { id: string; key: string; name: string; description: string | null; scope: Scope; kind: 'system' | 'custom'; isEditable: boolean; isAssignable: boolean; isArchived: boolean; source?: string; sourceRef?: string | null; ownershipMode?: 'manual' | 'config_locked' | 'config_warn'; driftStatus?: string | null; permissionCount: number; }
-interface RoleDetail extends Role { permissions: string[]; }
-export interface RoleLibraryPermission { key: string; scope: Scope; category: string; label: string; description: string; }
+type Scope = ConfigRoleTemplateScope;
+export type RoleLibraryPermission = PermissionCatalogEntry;
+
+function supportsConfigRoleTemplate(scope: RoleSummary['scope']): scope is Scope {
+  return scope === 'platform' || scope === 'project' || scope === 'engine' || scope === 'engine_runtime_resource';
+}
 
 const blank = { name: '', description: '', scope: 'engine' as Scope };
 const blankConfig = {
@@ -122,8 +133,8 @@ export default function RoleLibrarySettingsTab() {
   const resource = useMemo(() => ({ type: 'platform' as const }), []);
   const read = useActionDecision('platform.authz.roles.read', resource);
   const manage = useActionDecision('platform.authz.roles.manage', resource);
-  const rolesQuery = useQuery({ queryKey: ['rbac-roles'], queryFn: () => apiClient.get<Role[]>('/api/authz/roles'), enabled: read.allowed });
-  const permissionsQuery = useQuery({ queryKey: ['authz-permissions'], queryFn: () => apiClient.get<RoleLibraryPermission[]>('/api/authz/permissions'), enabled: read.allowed });
+  const rolesQuery = useRbacRoles({ enabled: read.allowed });
+  const permissionsQuery = usePermissionCatalog({ enabled: read.allowed });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [roleSearch, setRoleSearch] = useState('');
   const [draft, setDraft] = useState<string[]>([]);
@@ -138,7 +149,7 @@ export default function RoleLibrarySettingsTab() {
   const [error, setError] = useState<string | null>(null);
   const roles = rolesQuery.data || [];
   const selected = roles.find((role) => role.id === selectedId) || roles[0] || null;
-  const detailQuery = useQuery({ queryKey: ['rbac-role', selected?.id], queryFn: () => apiClient.get<RoleDetail>(`/api/authz/roles/${selected!.id}`), enabled: Boolean(selected?.id) && read.allowed });
+  const detailQuery = useRoleDetail(selected?.id, { enabled: read.allowed });
   const detail = detailQuery.data || null;
 
   useEffect(() => {
@@ -172,15 +183,15 @@ export default function RoleLibrarySettingsTab() {
   const save = useMutation({
     mutationFn: () => apiClient.put(`/api/authz/roles/${selected!.id}`, { name: metadataDraft.name.trim(), description: metadataDraft.description.trim() || null, permissionIds: draft, isAssignable: metadataDraft.isAssignable }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rbac-role', selected?.id] });
-      queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
+      queryClient.invalidateQueries({ queryKey: authzQueryKeys.roleDetail(selected?.id) });
+      queryClient.invalidateQueries({ queryKey: authzQueryKeys.roles });
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to update role').message),
   });
   const create = useMutation({
     mutationFn: () => apiClient.post<{ id: string }>('/api/authz/roles', { name: form.name, description: form.description || null, scope: form.scope, permissionIds: draft }),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
+      queryClient.invalidateQueries({ queryKey: authzQueryKeys.roles });
       setSelectedId(result.id);
       setCreateOpen(false);
       setForm(blank);
@@ -190,17 +201,22 @@ export default function RoleLibrarySettingsTab() {
   const archive = useMutation({
     mutationFn: () => apiClient.delete(`/api/authz/roles/${selected!.id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['rbac-roles'] });
+      queryClient.invalidateQueries({ queryKey: authzQueryKeys.roles });
       setSelectedId(null);
       setArchiveConfirmation(false);
     },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to archive role').message),
   });
   const startCreate = (copy = false, target: 'manual' | 'config' = 'manual') => {
+    if (copy && selected && !supportsConfigRoleTemplate(selected.scope)) {
+      setError(`The ${selected.scope} role scope is not yet supported by the Role Library create flow.`);
+      return;
+    }
+    const copiedScope = selected && supportsConfigRoleTemplate(selected.scope) ? selected.scope : blank.scope;
     setError(null);
     setCreateTarget(target);
     setCreateRiskAcknowledged(false);
-    setForm(copy && selected ? { name: `${selected.name} copy`, description: selected.description || '', scope: selected.scope } : blank);
+    setForm(copy && selected ? { name: `${selected.name} copy`, description: selected.description || '', scope: copiedScope } : blank);
     setConfigForm(copy && selected ? { ...blankConfig, roleKey: configRoleKeyFromSystemRoleKey(selected.key) } : blankConfig);
     setDraft(copy ? detail?.permissions || [] : []);
     setCreateOpen(true);
