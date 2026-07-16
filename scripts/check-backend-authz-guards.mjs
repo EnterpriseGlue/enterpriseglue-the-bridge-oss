@@ -24,6 +24,14 @@ const sharedAuthorizationServiceFiles = [
   // accountable owner/delegate metadata is not an access source.
   'packages/shared/src/services/platform-admin/EngineAccessService.ts',
 ];
+const projectMembershipCommandFiles = [
+  'packages/shared/src/services/platform-admin/ProjectMemberService.ts',
+  'packages/shared/src/services/starbase/ProjectCreationService.ts',
+  'packages/shared/src/services/starbase/ProjectQueryService.ts',
+  'packages/backend-host/src/modules/git/routes/clone.ts',
+  'packages/backend-host/src/modules/git/routes/createOnline.ts',
+  'packages/backend-host/src/modules/starbase/routes/projects.ts',
+];
 const legacyRoleValues = [
   'admin',
   'developer',
@@ -97,6 +105,13 @@ const forbiddenPatterns = [
     fileSuffix: 'packages/backend-host/src/modules/dashboard/routes/stats.ts',
     pattern: /\bProjectMember\b|\bprojectMemberRepo\b/g,
   },
+  {
+    // Compatibility projections are migration-only. Any active project
+    // membership command must write the canonical manual assignment instead.
+    id: 'project-membership-legacy-assignment-write',
+    filePaths: projectMembershipCommandFiles,
+    pattern: /\bwriteLegacyProjectMemberRoleAssignments\b/g,
+  },
 ];
 
 // Maximum current route-local legacy-auth pattern counts by rule. New files must
@@ -145,6 +160,7 @@ function scanFile(filePath) {
 
   for (const rule of forbiddenPatterns) {
     if (rule.fileSuffix && rel !== rule.fileSuffix) continue;
+    if (rule.filePaths && !rule.filePaths.includes(rel)) continue;
     rule.pattern.lastIndex = 0;
     for (const match of content.matchAll(rule.pattern)) {
       const location = lineAndColumn(content, match.index || 0);

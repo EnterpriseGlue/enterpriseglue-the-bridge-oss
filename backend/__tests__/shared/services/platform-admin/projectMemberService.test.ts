@@ -72,7 +72,7 @@ describe('ProjectMemberService', () => {
     expect(membership).toBeNull();
   });
 
-  it('writes direct canonical legacy assignments when project member roles change', async () => {
+  it('writes direct canonical manual assignments when project member roles change', async () => {
     const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const memberRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }) };
     const roleRepo = {
@@ -107,22 +107,22 @@ describe('ProjectMemberService', () => {
     });
     expect(assignmentRepo.upsert).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({
-        id: 'legacy:project:project-1:user-1:system.project.developer',
+        id: 'manual:project:project-1:user-1:system.project.developer',
         tenantId: 'tenant-1',
-        source: 'legacy',
-        sourceRef: 'project_member_role:project-1:user-1:developer',
+        source: 'manual',
+        sourceRef: 'project_membership:project-1:user-1:developer',
         scopeType: 'project',
         scopeId: 'project-1',
       }),
       expect.objectContaining({
-        id: 'legacy:project:project-1:user-1:system.project.editor',
-        sourceRef: 'project_member_role:project-1:user-1:editor',
+        id: 'manual:project:project-1:user-1:system.project.editor',
+        sourceRef: 'project_membership:project-1:user-1:editor',
       }),
     ]), expect.objectContaining({ conflictPaths: ['id'] }));
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 
-  it('removes direct canonical legacy assignments when a member is removed', async () => {
+  it('removes current and compatibility canonical assignments when a member is removed', async () => {
     const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const memberRepo = { delete: vi.fn().mockResolvedValue({ affected: 1 }) };
     const roleRepo = { delete: vi.fn().mockResolvedValue({ affected: 2 }) };

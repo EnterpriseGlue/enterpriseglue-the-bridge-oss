@@ -24,7 +24,7 @@ import { credentialService } from '@enterpriseglue/shared/services/git/Credentia
 import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
-import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
+import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
 
 const router = Router();
 
@@ -226,7 +226,7 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       .orIgnore()
       .execute();
 
-    await writeLegacyProjectMemberRoleAssignments(dataSource, {
+    await writeProjectMemberRoleAssignments(dataSource, {
       projectId,
       tenantId: req.tenant?.tenantId || null,
       userId,

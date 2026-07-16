@@ -27,7 +27,7 @@ import {
   assertUserCanImportFromEngine,
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
-import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
+import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
 
 const router = Router();
 
@@ -219,7 +219,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
       .orIgnore()
       .execute();
 
-    await writeLegacyProjectMemberRoleAssignments(dataSource, {
+    await writeProjectMemberRoleAssignments(dataSource, {
       projectId,
       tenantId: req.tenant?.tenantId || null,
       userId,

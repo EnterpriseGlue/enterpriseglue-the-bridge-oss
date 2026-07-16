@@ -103,9 +103,9 @@ describe('ProjectQueryService', () => {
     });
     expect(assignmentUpsert).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({
-        id: 'legacy:project:project-1:user-1:system.project.owner',
-        source: 'legacy',
-        sourceRef: 'project_member_role:project-1:user-1:owner',
+        id: 'manual:project:project-1:user-1:system.project.owner',
+        source: 'manual',
+        sourceRef: 'project_membership:project-1:user-1:owner',
       }),
     ]), expect.objectContaining({ conflictPaths: ['id'] }));
     expect(applyPreparedEngineImportToProject).toHaveBeenCalledWith({

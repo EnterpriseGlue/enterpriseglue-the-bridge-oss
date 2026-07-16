@@ -10,7 +10,7 @@ import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTa
 import { In } from 'typeorm';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { applyPreparedEngineImportToProject, type PreparedEngineImport } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
-import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
+import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
 
 export interface AccessedEngineResponse {
   engineId: string;
@@ -76,7 +76,7 @@ class ProjectQueryServiceImpl {
         .orIgnore()
         .execute();
 
-      await writeLegacyProjectMemberRoleAssignments(manager, {
+      await writeProjectMemberRoleAssignments(manager, {
         projectId: id,
         tenantId: null,
         userId: input.ownerId,

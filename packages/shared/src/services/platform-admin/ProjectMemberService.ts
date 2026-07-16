@@ -14,8 +14,11 @@ import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import {
   removeLegacyProjectMemberRoleAssignments,
-  writeLegacyProjectMemberRoleAssignments,
 } from './legacy-project-role-assignments.js';
+import {
+  removeProjectMemberRoleAssignments,
+  writeProjectMemberRoleAssignments,
+} from './project-member-role-assignments.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -201,7 +204,7 @@ export class ProjectMemberService {
         .execute();
     }
 
-    await this.writeLegacyProjectMemberAssignments(dataSource, {
+    await this.writeProjectMemberAssignments(dataSource, {
       projectId,
       userId,
       roles,
@@ -231,6 +234,9 @@ export class ProjectMemberService {
     await memberRepo.update({ projectId, userId }, { role: effectiveRole, updatedAt: now });
 
     await roleRepo.delete({ projectId, userId });
+    await removeProjectMemberRoleAssignments(dataSource, projectId, userId);
+    // Old compatibility projections must not retain access after a current
+    // membership command changes the role set.
     await removeLegacyProjectMemberRoleAssignments(dataSource, projectId, userId);
 
     for (const r of roles) {
@@ -241,7 +247,7 @@ export class ProjectMemberService {
         .execute();
     }
 
-    await this.writeLegacyProjectMemberAssignments(dataSource, {
+    await this.writeProjectMemberAssignments(dataSource, {
       projectId,
       userId,
       roles,
@@ -260,6 +266,7 @@ export class ProjectMemberService {
 
     await roleRepo.delete({ projectId, userId });
     await memberRepo.delete({ projectId, userId });
+    await removeProjectMemberRoleAssignments(dataSource, projectId, userId);
     await removeLegacyProjectMemberRoleAssignments(dataSource, projectId, userId);
   }
 
@@ -304,7 +311,7 @@ export class ProjectMemberService {
     await projectRepo.update({ id: projectId }, { ownerId: toUserId });
   }
 
-  private async writeLegacyProjectMemberAssignments(
+  private async writeProjectMemberAssignments(
     dataSource: Awaited<ReturnType<typeof getDataSource>>,
     input: { projectId: string; userId: string; roles: ProjectRole[]; createdById: string | null; createdAt: number },
   ): Promise<void> {
@@ -316,7 +323,7 @@ export class ProjectMemberService {
       throw new Error('Project not found');
     }
 
-    await writeLegacyProjectMemberRoleAssignments(dataSource, {
+    await writeProjectMemberRoleAssignments(dataSource, {
       ...input,
       tenantId: project.tenantId ?? null,
     });

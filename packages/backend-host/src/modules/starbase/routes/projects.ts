@@ -32,7 +32,7 @@ import {
   type DeploymentEligibilityResult,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { PlatformPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-import { writeLegacyProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/legacy-project-role-assignments.js';
+import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
 import { projectCreateLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import {
   applyPreparedEngineImportToProject,
@@ -492,7 +492,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
       .orIgnore()
       .execute();
 
-    await writeLegacyProjectMemberRoleAssignments(manager, {
+    await writeProjectMemberRoleAssignments(manager, {
       projectId: id,
       tenantId: req.tenant?.tenantId || null,
       userId,
