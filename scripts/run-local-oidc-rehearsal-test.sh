@@ -39,7 +39,16 @@ if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/d
 fi
 
 issuer_discovery_url="${issuer_url%/}/.well-known/openid-configuration"
-if ! curl --fail --silent --show-error --max-time 15 --cacert "$ca_file" "$issuer_discovery_url" >/dev/null; then
+issuer_ready=false
+for _ in {1..30}; do
+  if curl --fail --silent --max-time 2 --cacert "$ca_file" "$issuer_discovery_url" >/dev/null; then
+    issuer_ready=true
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$issuer_ready" != true ]]; then
   echo "[local-oidc-rehearsal] Keycloak discovery is unavailable at $issuer_discovery_url." >&2
   echo "[local-oidc-rehearsal] If backend was recreated, recreate Keycloak in the same Compose command or run: docker compose ... up -d --force-recreate keycloak" >&2
   exit 2

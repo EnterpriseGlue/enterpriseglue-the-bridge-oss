@@ -161,7 +161,10 @@ When rebuilding or recreating the backend while this overlay is running, also
 recreate `keycloak` in the same Compose command (or run `up -d --force-recreate
 keycloak` afterwards). Its shared network namespace belongs to the backend
 container, so leaving Keycloak attached to a replaced backend causes local OIDC
-discovery to fail with a connection-refused error.
+discovery to fail with a connection-refused error. The guarded OIDC rehearsal
+waits up to 30 seconds for Keycloak discovery after that recreation; a failure
+after the wait still indicates that the namespace or Keycloak startup needs
+attention.
 
 Verify both endpoints with the generated CA:
 

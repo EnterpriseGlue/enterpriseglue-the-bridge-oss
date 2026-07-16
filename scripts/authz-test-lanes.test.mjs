@@ -84,6 +84,8 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_REHEARSAL=true/);
   assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localOidcRehearsalRunner, /localhost, loopback, or a \.local host/);
+  assert.match(localOidcRehearsalRunner, /for _ in \{1\.\.30\}/);
+  assert.match(localOidcRehearsalRunner, /sleep 1/);
 });
 
 test('the identity browser lifecycle runner accepts the generated local TLS CA', () => {
