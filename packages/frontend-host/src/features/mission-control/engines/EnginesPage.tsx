@@ -61,7 +61,7 @@ import type {
   ProjectEngineTarget as SharedProjectEngineTarget,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { getAccessibleEngines, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineProjectTargets } from './api/engines'
+import { getAccessibleEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineProjectTargets } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -2403,7 +2403,7 @@ export default function Engines() {
 }
 
 function EngineHealthBadge({ engineId, version }: { engineId: string; version?: string | null }) {
-  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => apiClient.get<EngineConnectionHealthResponse | null>(`/engines-api/engines/${encodeURIComponent(engineId)}/health`, undefined, { credentials: 'include' }) })
+  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => getEngineConnectionHealth(engineId) })
   const h = q.data
   const status = h?.status || 'unknown'
   const label = status === 'connected' ? 'Connected' : (status === 'disconnected' ? 'Disconnected' : 'Unknown')
@@ -2417,7 +2417,7 @@ function EngineHealthBadge({ engineId, version }: { engineId: string; version?: 
 }
 
 function EngineVersionCell({ engineId, initialVersion }: { engineId: string; initialVersion?: string | null }) {
-  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => apiClient.get<EngineConnectionHealthResponse | null>(`/engines-api/engines/${encodeURIComponent(engineId)}/health`, undefined, { credentials: 'include' }) })
+  const q = useQuery({ queryKey: ['engines','health', engineId], queryFn: () => getEngineConnectionHealth(engineId) })
   const v = initialVersion || q.data?.version
   return <span style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>{v ? `v${v}` : '—'}</span>
 }

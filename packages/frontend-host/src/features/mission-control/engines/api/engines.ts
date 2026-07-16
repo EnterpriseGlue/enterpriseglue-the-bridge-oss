@@ -1,6 +1,6 @@
 import { apiClient } from '../../../../shared/api/client'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
-import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import type { AccessibleEngineSummary, EngineConnectionHealthResponse } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
 import type { ProjectEngineTarget } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 
@@ -19,6 +19,14 @@ export async function getEngineEnvironmentTags(): Promise<EnvironmentTag[]> {
 export async function getEngineProjectTargets(engineId: string): Promise<ProjectEngineTarget[]> {
   return apiClient.get<ProjectEngineTarget[]>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/project-targets`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineConnectionHealth(engineId: string): Promise<EngineConnectionHealthResponse | null> {
+  return apiClient.get<EngineConnectionHealthResponse | null>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/health`,
     undefined,
     { credentials: 'include' },
   )
