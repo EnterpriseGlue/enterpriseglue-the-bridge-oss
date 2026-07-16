@@ -32,7 +32,21 @@ export function registerAuditRoutes(router: Router, { requirePlatformAction }: A
         limit,
         offset,
       });
-      res.json(AuthzAuditLogResponseSchema.array().parse(entries));
+      res.json(entries.map((entry) => AuthzAuditLogResponseSchema.parse({
+        id: entry.id,
+        tenantId: entry.tenantId,
+        userId: entry.userId,
+        action: entry.action,
+        resourceType: entry.resourceType,
+        resourceId: entry.resourceId,
+        decision: entry.decision,
+        reason: entry.reason,
+        policyId: entry.policyId,
+        context: entry.context,
+        ipAddress: entry.ipAddress,
+        userAgent: entry.userAgent,
+        timestamp: entry.timestamp,
+      })));
     } catch (error: any) {
       logger.error('Get audit log error:', error);
       throw Errors.internal('Failed to get audit log');

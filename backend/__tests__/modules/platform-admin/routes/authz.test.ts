@@ -719,6 +719,46 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it('serializes authorization audit records through the strict shared API view', async () => {
+    vi.mocked(policyService.getAuditLog).mockResolvedValueOnce([{
+      id: 'audit-1',
+      tenantId: null,
+      userId: 'user-1',
+      action: 'authz.check',
+      resourceType: null,
+      resourceId: null,
+      decision: 'allow',
+      reason: 'role assignment',
+      policyId: null,
+      context: '{}',
+      ipAddress: null,
+      userAgent: null,
+      timestamp: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    }] as any);
+
+    const response = await request(app).get('/api/authz/audit?limit=25');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{
+      id: 'audit-1',
+      tenantId: null,
+      userId: 'user-1',
+      action: 'authz.check',
+      resourceType: null,
+      resourceId: null,
+      decision: 'allow',
+      reason: 'role assignment',
+      policyId: null,
+      context: '{}',
+      ipAddress: null,
+      userAgent: null,
+      timestamp: 1,
+    }]);
+    expect(policyService.getAuditLog).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, limit: 25 }));
+  });
+
   it('never serializes runtime-resource keys into the coarse current-user permission snapshot', async () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       userId: 'user-1',
