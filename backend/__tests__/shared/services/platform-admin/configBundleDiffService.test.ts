@@ -327,6 +327,23 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('warns that direct-engine deployment discovery needs receipts for project and file lineage', async () => {
+    mockDataSource();
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: { './engines.json': { engines: [{
+        key: 'engine.direct', name: 'Direct', type: 'operaton', baseUrl: 'https://engine.example.test/rest',
+        auth: { type: 'basic', username: 'eg', passwordRef: 'DIRECT_PASSWORD' }, deploymentIntegration: 'direct_engine', pipelineReceiptEnabled: false,
+      }] } },
+    }, 'tenant-a');
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'config.direct_engine_lineage:engine.direct' }),
+      expect.objectContaining({ id: 'config.direct_engine_lineage_receipts_disabled:engine.direct' }),
+    ]));
+  });
+
   it('includes config-owned identity providers in the persisted-state diff', async () => {
     mockDataSource([], [], [], [], []);
     const result = await configBundleDiffService.diff({

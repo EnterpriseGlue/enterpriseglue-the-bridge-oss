@@ -571,6 +571,18 @@ class ConfigBundleDiffService {
     for (const role of desiredRoles) rolePermissionsByKey.set(role.key, compilation.preview.expandedRolePermissions?.[role.key] || role.permissions || []);
     const runtimeSetEngineKeyByKey = new Map(desiredRuntimeResourceSets.map((set) => [set.key, set.engineRef.engineKey]));
     const desiredEngineByKey = new Map(desiredEngines.map((engine) => [engine.key, engine]));
+    for (const engine of desiredEngines.filter((candidate) => candidate.deploymentIntegration === 'direct_engine')) {
+      warnings.push({
+        id: `config.direct_engine_lineage:${engine.key}`,
+        message: `Direct-engine integration for ${engine.key} can discover runtime deployments but cannot establish project/file lineage without a validated pipeline receipt.`,
+      });
+      if (!engine.pipelineReceiptEnabled) {
+        warnings.push({
+          id: `config.direct_engine_lineage_receipts_disabled:${engine.key}`,
+          message: `Pipeline receipts are disabled for direct-engine integration ${engine.key}; discovered deployments will remain inventory-only without project/file lineage.`,
+        });
+      }
+    }
     for (const set of desiredRuntimeResourceSets) {
       const engine = desiredEngineByKey.get(set.engineRef.engineKey) || enginesByConfigKey.get(set.engineRef.engineKey);
       if (engine?.runtimeAccessScope === 'engine_wide') {
