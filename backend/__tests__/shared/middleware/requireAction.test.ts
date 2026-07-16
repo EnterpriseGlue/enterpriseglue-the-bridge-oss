@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -90,6 +90,7 @@ describe('requireAction project resource resolvers', () => {
   let savedFilterFindOne: ReturnType<typeof vi.fn>;
   let versionFindOne: ReturnType<typeof vi.fn>;
   let runtimeResourceFindOne: ReturnType<typeof vi.fn>;
+  let runtimeResourceFind: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     app = express();
@@ -195,6 +196,9 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.get('/runtime-deployments/:deploymentId', requireRuntimeDeploymentAction('engine.runtime.process-definitions.read'), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId, resourceKeys: req.authorizedRuntimeResourceKeys });
+    });
     app.post('/runtime-migration', requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', {
       resourceKind: 'process_definition',
     }), (req: any, res) => {
@@ -234,6 +238,7 @@ describe('requireAction project resource resolvers', () => {
     savedFilterFindOne = vi.fn().mockResolvedValue({ id: savedFilterId, engineId });
     versionFindOne = vi.fn().mockResolvedValue({ id: versionId, fileId });
     runtimeResourceFindOne = vi.fn().mockResolvedValue({ id: 'runtime-resource-1', tenantId: null });
+    runtimeResourceFind = vi.fn().mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
     camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
 
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
@@ -255,7 +260,7 @@ describe('requireAction project resource resolvers', () => {
         if (entity === GitLock) return { findOne: gitLockFindOne };
         if (entity === SavedFilter) return { findOne: savedFilterFindOne };
         if (entity === Version) return { findOne: versionFindOne };
-        if (entity === RuntimeResource) return { findOne: runtimeResourceFindOne };
+        if (entity === RuntimeResource) return { findOne: runtimeResourceFindOne, find: runtimeResourceFind };
         return {};
       },
     });
@@ -320,6 +325,49 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(200);
     expect(camundaGet).not.toHaveBeenCalled();
     expect(runtimeResourceFindOne).not.toHaveBeenCalled();
+    expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
+  });
+
+  it('resolves a deployment only through active inventoried runtime resources', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFind.mockResolvedValue([
+      { id: 'runtime-resource-payments', tenantId: null, resourceKey: 'payments' },
+      { id: 'runtime-resource-risk', tenantId: null, resourceKey: 'payments-risk' },
+    ]);
+    (permissionService.hasPermission as unknown as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true);
+
+    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(runtimeResourceFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ engineId, deploymentId: 'deployment-1', isActive: true }),
+    }));
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-payments' });
+    expect(response.body.resourceKeys).toEqual(['payments', 'payments-risk']);
+  });
+
+  it('fails closed when a resource-aware deployment is absent from inventory', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFind.mockResolvedValue([]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app).get(`/runtime-deployments/deployment-missing?engineId=${engineId}`);
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains the engine-wide deployment fast path without inventory lookups', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(runtimeResourceFind).not.toHaveBeenCalled();
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 

@@ -84,6 +84,20 @@ export interface RequireRuntimeProcessInstanceSelectionActionOptions extends Req
   processInstanceIdsKey?: string;
 }
 
+/**
+ * Resolves a runtime deployment through EnterpriseGlue's sanitized inventory.
+ * It never trusts a client-supplied definition key or calls an engine to infer
+ * project lineage; only active resources already observed for the deployment
+ * can satisfy a narrow resource-aware authorization decision.
+ */
+export interface RequireRuntimeDeploymentActionOptions {
+  engineIdFrom?: ResourceIdLocation;
+  engineIdKey?: string;
+  deploymentIdFrom?: ResourceIdLocation;
+  deploymentIdKey?: string;
+  resourceKinds?: Array<'process_definition' | 'decision_definition'>;
+}
+
 export interface RequireRuntimeMigrationActionOptions extends RequireRuntimeCollectionActionOptions {
   planKey?: string;
 }
@@ -1189,6 +1203,80 @@ export function requireRuntimeProcessInstanceSelectionAction(
       return next();
     } catch (error) {
       return next(error instanceof Error ? error : Errors.internal('Runtime batch authorization failed'));
+    }
+  };
+}
+
+/**
+ * Authorizes a runtime deployment query or mutation. Engine-wide grants retain
+ * the existing fast path; resource-aware grants must authorize every active
+ * runtime resource observed under the requested engine deployment id.
+ */
+export function requireRuntimeDeploymentAction(
+  actionId: string,
+  options: RequireRuntimeDeploymentActionOptions = {},
+) {
+  return async function requireRuntimeDeployment(req: Request, _res: Response, next: NextFunction) {
+    try {
+      if (!req.user) throw Errors.unauthorized('Authentication required');
+      const action = assertKnownAuthzAction(actionId);
+      const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'any')
+        || (req as Request & { engineId?: string }).engineId;
+      const deploymentId = readRequestValue(req, options.deploymentIdKey || 'deploymentId', options.deploymentIdFrom || 'params');
+      if (!engineId) throw Errors.validation('engineId is required');
+      if (!deploymentId) throw Errors.validation('deploymentId is required');
+
+      const tenantId = req.tenant?.tenantId || null;
+      const dataSource = await getDataSource();
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'],
+      });
+      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+
+      const context: PermissionContext = {
+        userId: req.user.userId,
+        tenantId,
+        resourceType: 'engine',
+        resourceId: engineId,
+      };
+      const broad = await permissionService.hasPermission(action.permissionId, context);
+      if (!broad && engine.runtimeAccessScope !== 'resource_aware') {
+        throw Errors.forbidden('Engine runtime access is not allowed');
+      }
+
+      let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
+      let resourceKeys: string[] | undefined;
+      if (!broad) {
+        const resources = await dataSource.getRepository(RuntimeResource).find({
+          where: {
+            engineId,
+            deploymentId,
+            isActive: true,
+            ...(options.resourceKinds?.length === 1 ? { resourceKind: options.resourceKinds[0] } : {}),
+          },
+          select: ['id', 'tenantId', 'resourceKey'],
+        });
+        if (!resources.length || resources.some((candidate) => !isTenantVisible(candidate.tenantId, tenantId))) {
+          throw Errors.forbidden('Runtime deployment is not present in the authorization inventory');
+        }
+        const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {
+          ...context,
+          resourceType: 'engine_runtime_resource',
+          resourceId: candidate.id,
+        })));
+        if (allowed.some((candidate) => !candidate)) throw Errors.forbidden(`Access denied for action ${action.actionId}`);
+        resource = { type: 'engine_runtime_resource', id: resources[0]!.id };
+        resourceKeys = Array.from(new Set(resources.map((candidate) => candidate.resourceKey).filter(Boolean)));
+      }
+
+      (req as Request & { engineId?: string }).engineId = engineId;
+      req.authzAction = action;
+      req.authzResource = resource;
+      req.authorizedRuntimeResourceKeys = resourceKeys;
+      updateBpmnEngineRequestContext({ actionId: action.actionId, engineId });
+      return next();
+    } catch (error) {
+      return next(error instanceof Error ? error : Errors.internal('Runtime deployment authorization failed'));
     }
   };
 }
