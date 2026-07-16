@@ -707,7 +707,7 @@ describe('EnginesPage', () => {
     expect(formatEngineCapabilityDiagnostics({
       status: 'in_sync',
       reportedOperations: ['engine.read'],
-    })).toBe('All expected operations reported');
+    })).toBe('All expected operations and query capabilities reported');
     expect(formatEngineCapabilityDiagnostics({
       status: 'mismatch',
       missingOperations: ['engine.deploy'],
