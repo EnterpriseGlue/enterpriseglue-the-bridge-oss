@@ -5,6 +5,7 @@ import {
   AuthzGroupSchema,
   PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
+  RoleDetailSchema,
   ServiceAccountWithTokenSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
@@ -108,5 +109,30 @@ describe('authorization response contracts', () => {
       createdAt: 1,
       updatedAt: 1,
     }).key).toBe('project.deploy.create');
+  });
+
+  it('keeps config provenance on role detail responses', () => {
+    expect(RoleDetailSchema.parse({
+      id: 'role-operators',
+      tenantId: 'tenant-a',
+      key: 'custom.engine.operator',
+      name: 'Engine Operator',
+      description: null,
+      scope: 'engine',
+      kind: 'custom',
+      isEditable: true,
+      isAssignable: true,
+      isArchived: false,
+      source: 'config',
+      sourceRef: 'bundle:production-authz',
+      ownershipMode: 'config_locked',
+      sourceHash: 'role-hash',
+      lastAppliedAt: 1,
+      driftStatus: null,
+      permissionCount: 1,
+      permissions: ['engine:instance:view'],
+      createdAt: 1,
+      updatedAt: 1,
+    }).ownershipMode).toBe('config_locked');
   });
 });

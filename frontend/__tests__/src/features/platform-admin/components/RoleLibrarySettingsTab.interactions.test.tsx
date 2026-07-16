@@ -54,10 +54,10 @@ describe('RoleLibrarySettingsTab interactions', () => {
     renderTab();
     await screen.findByText('System Operator');
 
-    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: 'Custom' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search roles' }), { target: { value: 'Custom' } });
     expect(screen.getByText('Custom Operator')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /System Operator system engine/ })).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Search roles'), { target: { value: '' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search roles' }), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: /Custom Operator custom engine/ }));
 
     expect(await screen.findByRole('button', { name: 'Save' })).toBeDisabled();
@@ -116,7 +116,7 @@ describe('RoleLibrarySettingsTab interactions', () => {
     fireEvent.click(category('Runtime (1)'));
     await waitFor(() => expect(document.getElementById('role-library-engine:instance:view')).toBeDisabled());
 
-    const rolePanels = screen.getByLabelText('Search roles').closest('div[style*="grid-template-columns"]');
+    const rolePanels = screen.getByRole('searchbox', { name: 'Search roles' }).closest('div[style*="grid-template-columns"]');
     expect(rolePanels).toHaveStyle({ gridTemplateColumns: 'minmax(13rem, 18rem) minmax(0, 1fr)' });
   });
 });

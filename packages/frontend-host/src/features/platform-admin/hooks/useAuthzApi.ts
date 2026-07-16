@@ -31,6 +31,8 @@ import type {
   ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
   RoleAssignment as SharedRoleAssignment,
   RoleAssignmentSource as SharedRoleAssignmentSource,
+  RoleDetail as SharedRoleDetail,
+  RoleSummary as SharedRoleSummary,
   RuntimeResource as SharedRuntimeResource,
   RuntimeResourceSet as SharedRuntimeResourceSet,
   ServiceAccount as SharedServiceAccount,
@@ -109,24 +111,8 @@ export interface CurrentUserPermissions {
   generatedAt: number;
 }
 
-export interface RoleSummary {
-  id: string;
-  key: string;
-  name: string;
-  description: string | null;
-  scope: AuthzResourceType;
-  kind: 'system' | 'custom';
-  isEditable: boolean;
-  isAssignable: boolean;
-  isArchived: boolean;
-  permissionCount: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface RoleDetail extends RoleSummary {
-  permissions: string[];
-}
+export type RoleSummary = SharedRoleSummary;
+export type RoleDetail = SharedRoleDetail;
 
 export interface CreateCustomRolePayload {
   name: string;
