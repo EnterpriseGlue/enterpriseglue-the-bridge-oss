@@ -69,6 +69,7 @@ import type {
   LegacyMappingRetirementReadiness as SharedLegacyMappingRetirementReadiness,
   PermissionCatalogEntry as SharedPermissionCatalogEntry,
   ProjectEngineTarget as SharedProjectEngineTarget,
+  ProjectEngineTargetMode as SharedProjectEngineTargetMode,
   ProjectEngineTargetCreate as SharedProjectEngineTargetCreate,
   ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
   PolicyCondition as SharedPolicyCondition,
@@ -200,7 +201,7 @@ export type EngineSetDetail = SharedEngineSetDetail;
 export type EngineSetPreview = SharedEngineSetPreview;
 export type EngineSetMaterializationResult = SharedEngineSetMaterializationResult;
 
-export type ProjectEngineTargetMode = 'manual' | 'ci' | 'api' | 'import';
+export type ProjectEngineTargetMode = SharedProjectEngineTargetMode;
 export type ProjectEngineTargetStatus = SharedProjectEngineTarget['status'];
 export type ProjectEngineTargetSource = SharedProjectEngineTarget['source'];
 export type ProjectEngineTargetApprovalStatus = SharedProjectEngineTarget['approvalStatus'];
