@@ -18,6 +18,7 @@ import {
 } from './tasks-service.js';
 import {
   TaskQueryParams,
+  TaskCountResponseSchema,
   ClaimTaskRequest,
   SetAssigneeRequest,
   CompleteTaskRequest,
@@ -59,7 +60,7 @@ r.get('/mission-control-api/tasks', requireRuntimeCollectionAction('engine.runti
 r.get('/mission-control-api/tasks/count', requireRuntimeCollectionAction('engine.runtime.tasks.read', { resourceKind: 'process_definition' }), validateQuery(TaskQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
-  if (!keys) return res.json(await getTaskCountByQuery(engineId, req.query));
+  if (!keys) return res.json(TaskCountResponseSchema.parse(await getTaskCountByQuery(engineId, req.query)));
 
   // Camunda's count response cannot be post-filtered. A non-conforming engine
   // could return a whole-engine count despite the definition-key query, so do

@@ -68,6 +68,7 @@ const {
   EngineDeploymentRequestSchema,
   EngineDeploymentResponseSchema,
   TaskSchema,
+  TaskCountResponseSchema,
   TaskQueryParams,
   ClaimTaskRequest,
   SetAssigneeRequest,
@@ -1484,7 +1485,7 @@ registry.registerPath({ method: 'post', path: '/mission-control-api/direct/jobs/
 // Tasks
 registry.register('Task', TaskSchema);
 registry.registerPath({ method: 'get', path: '/mission-control-api/tasks', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks'), request: { query: TaskQueryParams.partial() }, responses: { 200: { description: 'Query tasks', content: { 'application/json': { schema: z.array(TaskSchema) } } } } });
-registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/count', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks/count'), request: { query: TaskQueryParams.partial() }, responses: { 200: { description: 'Count tasks', content: { 'application/json': { schema: z.object({ count: z.number() }) } } } } });
+registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/count', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks/count'), request: { query: TaskQueryParams.partial() }, responses: { 200: { description: 'Count tasks', content: { 'application/json': { schema: TaskCountResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/{id}', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Get task', content: { 'application/json': { schema: TaskSchema } } }, 404: { description: 'Not found' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/{id}/variables', ...authzExtension('engine.runtime.tasks.variables.read', 'GET', '/mission-control-api/tasks/{id}/variables'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Task variables', content: { 'application/json': { schema: MissionControlVariablesSchema } } } } });
 registry.registerPath({ method: 'put', path: '/mission-control-api/tasks/{id}/variables', ...authzExtension('engine.runtime.tasks.variables.update', 'PUT', '/mission-control-api/tasks/{id}/variables'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: TaskVariablesRequest } } } }, responses: { 200: { description: 'Variables updated', content: { 'application/json': { schema: z.unknown() } } } } });

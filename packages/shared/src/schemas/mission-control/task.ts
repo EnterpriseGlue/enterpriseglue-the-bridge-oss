@@ -38,6 +38,10 @@ export const TaskFormSchema = z.object({
   })).optional(),
 });
 
+export const TaskCountResponseSchema = z.object({
+  count: z.number().int().nonnegative(),
+}).strict();
+
 // Request schemas
 export const TaskQueryParams = z.object({
   processInstanceId: z.string().optional(),
@@ -98,6 +102,7 @@ export const TaskVariablesRequest = z.object({
 // Types
 export type Task = z.infer<typeof TaskSchema>;
 export type TaskForm = z.infer<typeof TaskFormSchema>;
+export type TaskCountResponse = z.infer<typeof TaskCountResponseSchema>;
 export type TaskQueryParams = z.infer<typeof TaskQueryParams>;
 export type ClaimTaskRequest = z.infer<typeof ClaimTaskRequest>;
 export type SetAssigneeRequest = z.infer<typeof SetAssigneeRequest>;

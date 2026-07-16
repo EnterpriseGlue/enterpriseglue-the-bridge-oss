@@ -2305,6 +2305,8 @@ Migration preview and active-source count responses now have explicit shared non
 
 Decision-definition XML now uses its existing shared schema across its runtime route, OpenAPI, and shared frontend helper; Decision History reuses that helper rather than carrying a second DMN response shape.
 
+Task aggregate reads now serialize a single shared non-negative-integer count response, keeping the engine-wide-only safety boundary for resource-aware task counts unchanged.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.
