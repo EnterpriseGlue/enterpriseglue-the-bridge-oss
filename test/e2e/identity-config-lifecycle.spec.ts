@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { expect, test, type Route } from '@playwright/test';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 
@@ -21,10 +23,32 @@ const bundle = {
 
 const fulfillJson = (route: Route, body: unknown) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
 
+const evidenceByTest = new Map<string, MockBrowserIdentityStack>();
+const evidenceKey = (titlePath: string[]) => titlePath.join(' > ');
+
+test.afterEach(async ({}, testInfo) => {
+  const artifactPath = process.env.IDENTITY_TEST_EVIDENCE_PATH;
+  const identityStack = evidenceByTest.get(evidenceKey(testInfo.titlePath));
+  if (!artifactPath || !identityStack) return;
+
+  evidenceByTest.delete(evidenceKey(testInfo.titlePath));
+  await mkdir(dirname(artifactPath), { recursive: true });
+  await writeFile(artifactPath, `${JSON.stringify({
+    schemaVersion: 1,
+    source: 'browser-local-identity-stack',
+    status: testInfo.status,
+    failureDiagnostic: testInfo.status === 'passed' ? null : 'browser_lifecycle_failed',
+    providerKey: identityStack.provider.key,
+    syncRunIds: ['browser-sync-run', 'browser-replay-run'],
+    lifecycleEvents: identityStack.events,
+  }, null, 2)}\n`, 'utf8');
+});
+
 test.describe('Identity configuration browser lifecycle', () => {
-  test('configures, applies, signs in, and reconciles against the browser-local identity stack @identity-lifecycle', async ({ page }) => {
+  test('configures, applies, signs in, and reconciles against the browser-local identity stack @identity-lifecycle', async ({ page }, testInfo) => {
     const appOrigin = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
     const identityStack = new MockBrowserIdentityStack();
+    evidenceByTest.set(evidenceKey(testInfo.titlePath), identityStack);
     await identityStack.install(page, appOrigin);
 
     const appliedBodies: unknown[] = [];

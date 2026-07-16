@@ -352,10 +352,20 @@ jobs:
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_SEED_USER=false \
+            -e IDENTITY_TEST_EVIDENCE_PATH=test/results/identity-lifecycle-evidence.json \
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
             bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @identity-lifecycle"
+
+      - name: Upload sanitized identity lifecycle evidence
+        if: always() && matrix.database == 'postgres' && inputs.run_e2e
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: identity-lifecycle-evidence-${{ github.run_id }}
+          path: test/results/identity-lifecycle-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && inputs.run_e2e
