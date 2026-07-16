@@ -12,6 +12,10 @@ import {
 import {
   EffectiveAccessEvaluateResponseSchema,
   IdentityMappingResponseSchema,
+  IdentityMappingStoredSnapshotPreviewRequestSchema,
+  IdentityMappingStoredSnapshotPreviewResponseSchema,
+  IdentityMappingTestRequestSchema,
+  IdentityMappingTestResponseSchema,
   LegacyGlobalMappingRetirementRequestSchema,
   LegacyIdentityProviderMigrationDraftSchema,
   LegacySsoProviderResponseSchema,
@@ -120,6 +124,21 @@ describe('provider-neutral identity shared contracts', () => {
         identityEntitlementMapping: { id: 'mapping-1', providerId: 'provider-1', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative' },
       }],
     }).sources[0]?.identityEntitlementMapping?.providerId).toBe('provider-1');
+  });
+
+  it('shares identity-mapping preview contracts without a UI-local response model', () => {
+    expect(IdentityMappingTestRequestSchema.parse({
+      providerKey: 'identity.oidc.example', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', claims: { groups: ['operations'] },
+    }).claims).toEqual({ groups: ['operations'] });
+    expect(IdentityMappingTestResponseSchema.parse({
+      matches: true, entitlements: [{ type: 'group', externalId: 'operations' }],
+    }).matches).toBe(true);
+    expect(IdentityMappingStoredSnapshotPreviewRequestSchema.parse({
+      providerKey: 'identity.oidc.example', entitlementType: 'group', externalId: null, matchOperator: 'exists', limit: 100,
+    }).limit).toBe(100);
+    expect(IdentityMappingStoredSnapshotPreviewResponseSchema.parse({
+      scanned: 10, matches: 4, nonMatches: 6, failed: 0, truncated: false, latestSnapshotAt: null, warnings: [],
+    }).scanned).toBe(10);
   });
 
   it('shares the legacy mapping replacement and retirement gate contracts', () => {

@@ -7,7 +7,14 @@ import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useLegacyMappingCoverage, useLegacyMappingRetirementReadiness, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
-import type { HumanIdentityEntitlementType, IdentityEntitlementMapping, LegacyMappingCoverageItem } from '../hooks/useAuthzApi';
+import type { AuthzGroup, HumanIdentityEntitlementType, IdentityEntitlementMapping, LegacyMappingCoverageItem } from '../hooks/useAuthzApi';
+import type {
+  IdentityMappingRequest,
+  IdentityMappingStoredSnapshotPreviewRequest,
+  IdentityMappingStoredSnapshotPreviewResponse,
+  IdentityMappingTestRequest,
+  IdentityMappingTestResponse,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 type EntitlementType = HumanIdentityEntitlementType;
 type MatchOperator = 'exact' | 'contains' | 'exists';
@@ -84,12 +91,12 @@ export default function IdentityMappingsSettingsTab() {
       let createdGroupId: string | null = null;
       if (createGroupInFlow && !(!editing && provisionAccessInFlow)) {
         if (!groupsManage.allowed || !newGroupName.trim() || !newGroupKey.trim()) throw new Error('Group name and stable group key are required');
-        const group = await apiClient.post<{ id: string }>('/api/authz/groups', { name: newGroupName.trim(), key: newGroupKey.trim() });
+        const group = await apiClient.post<Pick<AuthzGroup, 'id'>>('/api/authz/groups', { name: newGroupName.trim(), key: newGroupKey.trim() });
         createdGroupId = group.id;
         targetGroupKey = newGroupKey.trim();
       }
       if (createGroupInFlow) targetGroupKey = newGroupKey.trim();
-      const body = { providerKey: value.providerKey, targetGroupKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator, syncMode: value.syncMode };
+      const body: IdentityMappingRequest = { providerKey: value.providerKey, targetGroupKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator, syncMode: value.syncMode };
       try {
         if (!editing && provisionAccessInFlow) {
           if (!provisionRoleId || !provisionResourceId) throw new Error('Select an engine role and access target');
@@ -119,13 +126,17 @@ export default function IdentityMappingsSettingsTab() {
     mutationFn: (value: FormState) => {
       let claims: Record<string, unknown>;
       try { claims = JSON.parse(value.claims) as Record<string, unknown>; } catch { throw new Error('Claims JSON is invalid'); }
-      return apiClient.post<{ matches: boolean; entitlements: Array<{ type: string; externalId: string }> }>('/api/identity/mappings/test', { providerKey: value.providerKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator, claims });
+      const request: IdentityMappingTestRequest = { providerKey: value.providerKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator, claims };
+      return apiClient.post<IdentityMappingTestResponse>('/api/identity/mappings/test', request);
     },
     onSuccess: (result) => setTestResult(result.matches ? `Matched: ${result.entitlements.map((item) => `${item.type}:${item.externalId}`).join(', ') || 'no normalized entitlements'}` : 'No match for the supplied claims.'),
     onError: (value: unknown) => setTestResult(parseApiError(value, 'Mapping preview failed').message),
   });
   const previewSnapshots = useMutation({
-    mutationFn: (value: FormState) => apiClient.post<{ scanned: number; matches: number; nonMatches: number; failed: number; truncated: boolean; warnings: string[] }>('/api/identity/mappings/stored-snapshot-preview', { providerKey: value.providerKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator }),
+    mutationFn: (value: FormState) => {
+      const request: IdentityMappingStoredSnapshotPreviewRequest = { providerKey: value.providerKey, entitlementType: value.entitlementType, externalId: value.matchOperator === 'exists' ? null : value.externalId.trim(), matchOperator: value.matchOperator };
+      return apiClient.post<IdentityMappingStoredSnapshotPreviewResponse>('/api/identity/mappings/stored-snapshot-preview', request);
+    },
     onSuccess: (result) => setSnapshotResult(`${result.matches} of ${result.scanned} stored identities match; ${result.nonMatches} do not${result.failed ? `; ${result.failed} could not be evaluated` : ''}${result.truncated ? '; result is truncated' : ''}.`),
     onError: (value: unknown) => setSnapshotResult(parseApiError(value, 'Stored identity preview failed').message),
   });
