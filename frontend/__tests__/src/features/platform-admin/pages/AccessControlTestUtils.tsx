@@ -25,6 +25,11 @@ vi.mock('@tanstack/react-query', () => ({
   useMutation: () => ({ isPending: false, mutate: vi.fn(), mutateAsync: vi.fn(), reset: vi.fn() }),
 }));
 
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...await importOriginal<typeof import('react-router-dom')>(),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()] as const,
+}));
+
 const ssoAssignmentTestState = vi.hoisted(() => ({
   data: null as null | {
     matchedMappings: Array<SsoAssignmentMapping & { targetResourceId: string | null; targetResourceIds: Array<string | null> }>;
