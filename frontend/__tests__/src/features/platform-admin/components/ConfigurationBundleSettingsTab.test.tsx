@@ -64,8 +64,9 @@ describe('ConfigurationBundleSettingsTab', () => {
     await waitFor(() => expect(applyBody).not.toBeNull());
     await waitFor(() => expect(authState.refreshPermissions).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(queryClient.getQueryState(authzQueryKeys.roles)?.isInvalidated).toBe(true));
-    expect(applyBody).toMatchObject({ expectedPreviewHash: 'preview-hash-1', identityReconciliationMode: 'apply' });
-    expect(applyBody?.idempotencyKey).toEqual(expect.any(String));
+    const capturedApplyBody = applyBody as Record<string, unknown>;
+    expect(capturedApplyBody).toMatchObject({ expectedPreviewHash: 'preview-hash-1', identityReconciliationMode: 'apply' });
+    expect(capturedApplyBody.idempotencyKey).toEqual(expect.any(String));
   });
 
   it('exports the current source-owned bundle for GitOps bootstrap', async () => {
@@ -83,8 +84,9 @@ describe('ConfigurationBundleSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Export JSON' }));
 
     await waitFor(() => expect(exportUrl).not.toBeNull());
-    expect(exportUrl?.searchParams.get('bundleKey')).toBe('example.authz');
-    expect(exportUrl?.searchParams.get('tenantKey')).toBe('default');
+    const capturedExportUrl = exportUrl as URL;
+    expect(capturedExportUrl.searchParams.get('bundleKey')).toBe('example.authz');
+    expect(capturedExportUrl.searchParams.get('tenantKey')).toBe('default');
     expect(createObjectUrl).toHaveBeenCalledTimes(1);
     expect(click).toHaveBeenCalledTimes(1);
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:config-bundle');
