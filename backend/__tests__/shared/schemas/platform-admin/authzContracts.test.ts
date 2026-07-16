@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ApiClientWithTokenSchema,
   AuthzGroupMembershipSchema,
   AuthzGroupSchema,
   RoleAssignmentSchema,
+  ServiceAccountWithTokenSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('authorization response contracts', () => {
@@ -71,5 +73,23 @@ describe('authorization response contracts', () => {
       createdAt: 1,
       updatedAt: 1,
     }).ownershipMode).toBe('config_locked');
+  });
+
+  it('keeps one reveal-once credential response shape for machine principals', () => {
+    expect(ApiClientWithTokenSchema.parse({
+      client: {
+        id: 'client-a', name: 'CI deployer', tokenPrefix: 'eg_client_', scopes: ['deployment:execute'],
+        isActive: true, createdById: 'user-a', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1,
+      },
+      token: 'reveal-once-client-token',
+    }).client.tokenPrefix).toBe('eg_client_');
+
+    expect(ServiceAccountWithTokenSchema.parse({
+      account: {
+        id: 'service-account-a', name: 'Release service account', tokenPrefix: null, scopes: ['deployment:execute'],
+        description: null, isActive: true, createdById: 'user-a', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1,
+      },
+      token: 'reveal-once-service-token',
+    }).account.id).toBe('service-account-a');
   });
 });

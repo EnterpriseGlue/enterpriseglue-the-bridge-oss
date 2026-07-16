@@ -10,6 +10,8 @@ import type {
   AuthzGroupSource as SharedAuthzGroupSource,
   AuthzOwnershipMode as SharedAuthzOwnershipMode,
   AuthzResourceType as SharedAuthzResourceType,
+  ApiClient as SharedApiClient,
+  ApiClientWithToken as SharedApiClientWithToken,
   EffectiveAccessEvaluateResponse,
   EngineSetDetail as SharedEngineSetDetail,
   EngineSetMaterializationResult as SharedEngineSetMaterializationResult,
@@ -30,6 +32,8 @@ import type {
   RoleAssignmentSource as SharedRoleAssignmentSource,
   RuntimeResource as SharedRuntimeResource,
   RuntimeResourceSet as SharedRuntimeResourceSet,
+  ServiceAccount as SharedServiceAccount,
+  ServiceAccountWithToken as SharedServiceAccountWithToken,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type {
   ConfigBundleApplyReconciliation,
@@ -164,42 +168,10 @@ export type AuthzOwnershipMode = SharedAuthzOwnershipMode;
 export type AuthzGroup = SharedAuthzGroup;
 export type AuthzGroupMembership = SharedAuthzGroupMembership;
 
-export interface ApiClient {
-  id: string;
-  name: string;
-  tokenPrefix: string;
-  scopes: string[];
-  isActive: boolean;
-  createdById: string | null;
-  lastUsedAt: number | null;
-  revokedAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ApiClientWithToken {
-  client: ApiClient;
-  token: string;
-}
-
-export interface ServiceAccount {
-  id: string;
-  name: string;
-  tokenPrefix: string | null;
-  scopes: string[];
-  description: string | null;
-  isActive: boolean;
-  createdById: string | null;
-  lastUsedAt: number | null;
-  revokedAt: number | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ServiceAccountWithToken {
-  account: ServiceAccount;
-  token: string;
-}
+export type ApiClient = SharedApiClient;
+export type ApiClientWithToken = SharedApiClientWithToken;
+export type ServiceAccount = SharedServiceAccount;
+export type ServiceAccountWithToken = SharedServiceAccountWithToken;
 
 export type EngineManagementMode = 'manual' | 'external_managed' | 'hybrid';
 export type EngineLifecycleStatus = 'active' | 'disabled' | 'stale' | 'decommissioned';
