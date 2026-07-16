@@ -1761,6 +1761,7 @@ const {
   UpdateEnvironmentTagRequest,
   ReorderEnvironmentTagsRequest,
   PlatformSettingsSchema,
+  PublicPlatformSettingsSchema,
   UpdatePlatformSettingsRequest,
   PlatformBrandingSchema,
   PublicPlatformBrandingSchema,
@@ -1912,23 +1913,6 @@ registry.registerPath({
 registry.register('EngineRuntimeAuthorizationMode', EngineRuntimeAuthorizationModeSchema);
 registry.register('UnsupportedEngineRuntimeAuthorizationModeError', UnsupportedEngineRuntimeAuthorizationModeErrorSchema);
 registry.register('PlatformSettings', PlatformSettingsSchema);
-const PublicPlatformSettingsSchema = z.object({
-  syncPushEnabled: z.boolean(),
-  syncPullEnabled: z.boolean(),
-  gitProjectTokenSharingEnabled: z.boolean(),
-  defaultDeployRoles: z.array(z.string()),
-  engineOnboardingMode: EngineOnboardingModeSchema,
-  projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema,
-  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema,
-  ssoAllEnginesAssignmentMappingsEnabled: z.boolean(),
-  ssoEngineOwnerAssignmentMappingsEnabled: z.boolean(),
-  ssoEngineDelegateAssignmentMappingsEnabled: z.boolean(),
-  ssoRegexClaimMappingsEnabled: z.boolean(),
-  ssoBroadEntitlementMappingsEnabled: z.boolean(),
-  ssoSecretViewMappingsEnabled: z.boolean(),
-  ssoUnredactedAuditMappingsEnabled: z.boolean(),
-  ssoPermanentDeleteMappingsEnabled: z.boolean(),
-});
 registry.register('PublicPlatformSettings', PublicPlatformSettingsSchema);
 registry.registerPath({
   method: 'get',

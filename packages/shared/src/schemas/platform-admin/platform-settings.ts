@@ -92,6 +92,28 @@ export const PlatformSettingsSchema = z.object({
   piiMaxPayloadSizeBytes: z.number(),
 });
 
+/** Safe settings required by authenticated, non-admin UI surfaces. */
+export const PublicPlatformSettingsSchema = PlatformSettingsSchema.pick({
+  syncPushEnabled: true,
+  syncPullEnabled: true,
+  gitProjectTokenSharingEnabled: true,
+  defaultDeployRoles: true,
+  engineOnboardingMode: true,
+  projectEngineTargetMode: true,
+  engineAccessAuthority: true,
+  projectAccessAuthority: true,
+  engineRuntimeAuthorizationMode: true,
+  credentiallessCustomerSidecarsEnabled: true,
+  ssoAllEnginesAssignmentMappingsEnabled: true,
+  ssoEngineOwnerAssignmentMappingsEnabled: true,
+  ssoEngineDelegateAssignmentMappingsEnabled: true,
+  ssoRegexClaimMappingsEnabled: true,
+  ssoBroadEntitlementMappingsEnabled: true,
+  ssoSecretViewMappingsEnabled: true,
+  ssoUnredactedAuditMappingsEnabled: true,
+  ssoPermanentDeleteMappingsEnabled: true,
+});
+
 // Request schemas
 export const UpdatePlatformSettingsRequest = z.object({
   defaultEnvironmentTagId: z.string().nullable().optional(),
@@ -131,6 +153,7 @@ export const UpdatePlatformSettingsRequest = z.object({
 
 // Types
 export type PlatformSettings = z.infer<typeof PlatformSettingsSchema>;
+export type PublicPlatformSettings = z.infer<typeof PublicPlatformSettingsSchema>;
 export type UpdatePlatformSettings = z.infer<typeof UpdatePlatformSettingsRequest>;
 export type PlatformBranding = z.infer<typeof PlatformBrandingSchema>;
 export type PublicPlatformBranding = z.infer<typeof PublicPlatformBrandingSchema>;

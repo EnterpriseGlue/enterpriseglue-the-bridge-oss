@@ -8,7 +8,10 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
-import { PublicPlatformBrandingSchema } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import {
+  PublicPlatformBrandingSchema,
+  PublicPlatformSettingsSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import {
   normalizeEngineOnboardingMode,
   normalizeProjectEngineTargetMode,
@@ -190,7 +193,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
     const settings = await settingsRepo.findOneBy({ id: 'default' });
 
     if (!settings) {
-      return res.json({
+      return res.json(PublicPlatformSettingsSchema.parse({
         syncPushEnabled: true,
         syncPullEnabled: false,
         gitProjectTokenSharingEnabled: false,
@@ -209,7 +212,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         ssoSecretViewMappingsEnabled: false,
         ssoUnredactedAuditMappingsEnabled: false,
         ssoPermanentDeleteMappingsEnabled: false,
-      });
+      }));
     }
 
     const defaultDeployRoles = (() => {
@@ -221,7 +224,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       }
     })();
 
-    res.json({
+    res.json(PublicPlatformSettingsSchema.parse({
       syncPushEnabled: settings.syncPushEnabled ?? true,
       syncPullEnabled: settings.syncPullEnabled ?? false,
       gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
@@ -240,7 +243,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       ssoSecretViewMappingsEnabled: (settings as any).ssoSecretViewMappingsEnabled ?? false,
       ssoUnredactedAuditMappingsEnabled: (settings as any).ssoUnredactedAuditMappingsEnabled ?? false,
       ssoPermanentDeleteMappingsEnabled: (settings as any).ssoPermanentDeleteMappingsEnabled ?? false,
-    });
+    }));
   } catch (error) {
     logger.error('Get platform settings error:', error);
     res.status(500).json({ error: 'Failed to get platform settings' });
