@@ -530,6 +530,14 @@ export const RoleAssignmentCreateSchema = z.object({
   expiresAt: z.number().nullable().optional(),
 });
 
+/** Standard response for authorization creates that expose only a stable identifier. */
+export const AuthzCreatedIdResponseSchema = z.object({ id: z.string() });
+/** Standard response for authorization mutations that do not return the updated record. */
+export const AuthzMutationSuccessResponseSchema = z.object({ success: z.literal(true) });
+export const CustomPermissionCreateResponseSchema = AuthzCreatedIdResponseSchema.extend({ key: z.string() });
+export const RoleAssignmentCreateResponseSchema = AuthzCreatedIdResponseSchema.extend({ warnings: z.array(z.string()) });
+export const ProjectEngineTargetSyncLegacyResponseSchema = z.object({ createdOrUpdated: z.number().int().nonnegative() });
+
 export const AuthzGroupSourceSchema = z.enum(['manual', 'sso', 'identity_provider', 'api', 'automation', 'system', 'config']);
 
 export const AuthzGroupSchema = z.object({
@@ -1844,6 +1852,11 @@ export type CustomRoleCreate = z.infer<typeof CustomRoleCreateSchema>;
 export type CustomRoleUpdate = z.infer<typeof CustomRoleUpdateSchema>;
 export type RoleAssignment = z.infer<typeof RoleAssignmentSchema>;
 export type RoleAssignmentCreate = z.infer<typeof RoleAssignmentCreateSchema>;
+export type AuthzCreatedIdResponse = z.infer<typeof AuthzCreatedIdResponseSchema>;
+export type AuthzMutationSuccessResponse = z.infer<typeof AuthzMutationSuccessResponseSchema>;
+export type CustomPermissionCreateResponse = z.infer<typeof CustomPermissionCreateResponseSchema>;
+export type RoleAssignmentCreateResponse = z.infer<typeof RoleAssignmentCreateResponseSchema>;
+export type ProjectEngineTargetSyncLegacyResponse = z.infer<typeof ProjectEngineTargetSyncLegacyResponseSchema>;
 export type RoleAssignmentSource = z.infer<typeof RoleAssignmentSourceSchema>;
 export type AuthzOwnershipMode = z.infer<typeof AuthzOwnershipModeSchema>;
 export type AuthzGroup = z.infer<typeof AuthzGroupSchema>;

@@ -33,6 +33,11 @@ import {
   AuthzCheckBatchResponseSchema,
   AuthzCheckRequestSchema,
   AuthzCheckResponseSchema,
+  AuthzCreatedIdResponseSchema,
+  AuthzMutationSuccessResponseSchema,
+  CustomPermissionCreateResponseSchema,
+  ProjectEngineTargetSyncLegacyResponseSchema,
+  RoleAssignmentCreateResponseSchema,
   SsoAssignmentMappingTestResponseSchema,
   SsoGroupMappingTestResponseSchema,
   SamlAuthenticationStatusSchema,
@@ -224,6 +229,15 @@ describe('provider-neutral identity shared contracts', () => {
       results: [{ action: 'engine.instances.read', allowed: false, reason: 'Missing assignment' }],
     }).results[0]?.allowed).toBe(false);
     expect(() => AuthzCheckRequestSchema.parse({ action: '' })).toThrow();
+  });
+
+  it('shares bounded authorization mutation responses across routes and hooks', () => {
+    expect(AuthzCreatedIdResponseSchema.parse({ id: 'group-1' }).id).toBe('group-1');
+    expect(AuthzMutationSuccessResponseSchema.parse({ success: true }).success).toBe(true);
+    expect(() => AuthzMutationSuccessResponseSchema.parse({ success: false })).toThrow();
+    expect(CustomPermissionCreateResponseSchema.parse({ id: 'permission-1', key: 'custom.view' }).key).toBe('custom.view');
+    expect(RoleAssignmentCreateResponseSchema.parse({ id: 'assignment-1', warnings: [] }).warnings).toEqual([]);
+    expect(ProjectEngineTargetSyncLegacyResponseSchema.parse({ createdOrUpdated: 2 }).createdOrUpdated).toBe(2);
   });
 
   it('keeps legacy mapping conversion additive and validates shared provider-neutral contracts', () => {

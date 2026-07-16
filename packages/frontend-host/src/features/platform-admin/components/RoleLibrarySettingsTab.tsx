@@ -14,6 +14,7 @@ import {
   type PermissionCatalogEntry,
   type RoleSummary,
 } from '../hooks/useAuthzApi';
+import type { AuthzCreatedIdResponse } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import {
   buildSystemRoleConfigBundle,
   configRoleKeyFromSystemRoleKey,
@@ -189,7 +190,7 @@ export default function RoleLibrarySettingsTab() {
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to update role').message),
   });
   const create = useMutation({
-    mutationFn: () => apiClient.post<{ id: string }>('/api/authz/roles', { name: form.name, description: form.description || null, scope: form.scope, permissionIds: draft }),
+    mutationFn: () => apiClient.post<AuthzCreatedIdResponse>('/api/authz/roles', { name: form.name, description: form.description || null, scope: form.scope, permissionIds: draft }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: authzQueryKeys.roles });
       setSelectedId(result.id);
