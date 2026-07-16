@@ -41,19 +41,16 @@ import InvitationRevealPanel from '../../../../shared/components/InvitationRevea
 import UserLookupEmailField from '../../../../shared/components/UserLookupEmailField'
 import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationCapabilities, type InvitationDeliveryMethod, type InvitationRevealData } from '../../../../shared/utils/invitationFlow'
 import { StarbaseTableShell } from '../../../starbase/components/StarbaseTableShell'
+import type {
+  EngineMember as SharedEngineMember,
+  EngineMembersResponse as SharedEngineMembersResponse,
+  PendingEngineInvite as SharedPendingEngineInvite,
+} from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 
 // Types
 type EngineRole = 'owner' | 'delegate' | 'operator' | 'deployer'
 
-type EngineMember = {
-  id: string
-  engineId: string
-  userId: string
-  role: EngineRole
-  grantedById?: string | null
-  grantedAt: number
-  user?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
-}
+type EngineMember = SharedEngineMember
 
 type AccessRequest = {
   id: string
@@ -68,23 +65,9 @@ type AccessRequest = {
 }
 
 type UserSearchItem = { id: string; email: string; firstName?: string | null; lastName?: string | null }
-type PendingEngineInviteStatus = 'pending' | 'expired' | 'onboarding'
-type PendingEngineInvite = {
-  invitationId: string
-  userId: string
-  email: string
-  firstName?: string | null
-  lastName?: string | null
-  role: 'operator' | 'deployer'
-  status: PendingEngineInviteStatus
-  deliveryMethod: InvitationDeliveryMethod
-  expiresAt: number
-  createdAt: number
-}
-type EngineMembersResponse = {
-  members: EngineMember[]
-  pendingInvites: PendingEngineInvite[]
-}
+type PendingEngineInvite = SharedPendingEngineInvite
+type PendingEngineInviteStatus = PendingEngineInvite['status']
+type EngineMembersResponse = SharedEngineMembersResponse
 type MemberModalFlow = 'invite' | 'delegate'
 type AssignableEngineRole = 'delegate' | 'operator' | 'deployer'
 type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
@@ -140,11 +123,11 @@ interface EngineMembersModalProps {
   onClose: () => void
 }
 
-function roleLabel(role: EngineRole): string {
+function roleLabel(role: string): string {
   return role.charAt(0).toUpperCase() + role.slice(1)
 }
 
-function tagTypeForRole(role: EngineRole): 'red' | 'magenta' | 'teal' | 'blue' | 'gray' {
+function tagTypeForRole(role: string): 'red' | 'magenta' | 'teal' | 'blue' | 'gray' {
   switch (role) {
     case 'owner': return 'red'
     case 'delegate': return 'magenta'
