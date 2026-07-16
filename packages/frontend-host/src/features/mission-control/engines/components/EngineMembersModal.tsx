@@ -42,17 +42,22 @@ import UserLookupEmailField from '../../../../shared/components/UserLookupEmailF
 import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationDeliveryMethod, type InvitationRevealData } from '../../../../shared/utils/invitationFlow'
 import { StarbaseTableShell } from '../../../starbase/components/StarbaseTableShell'
 import {
+  approveEngineAccessRequest,
+  assignEngineDelegate,
+  denyEngineAccessRequest,
   getEngineAccessRequests,
   getEngineMemberCapabilities,
   getEngineMembers,
   lookupEngineMember,
+  reissueManualEngineInvitation,
+  removeEngineMember,
+  updateEngineMemberRole,
 } from '../api/engines'
 import type {
   EngineMember as SharedEngineMember,
   EngineMemberAddResponse as SharedEngineMemberAddResponse,
   EngineRole as SharedEngineRole,
   PendingEngineInvite as SharedPendingEngineInvite,
-  ReissuedManualEngineInvitation as SharedReissuedManualEngineInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import type {
   RoleAssignment as SharedRoleAssignment,
@@ -439,7 +444,7 @@ export default function EngineMembersModal({
   const deleteMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
       if (!canRemoveMembers) throw new Error('Missing permission to remove engine members')
-      await apiClient.delete(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members/${encodeURIComponent(memberId)}`, { credentials: 'include' })
+      await removeEngineMember(engine!.id, memberId)
     },
     onSuccess: async (_result, memberId) => {
       await syncCustomRoleAssignments(memberId, [])
@@ -452,7 +457,7 @@ export default function EngineMembersModal({
   const assignDelegateM = useMutation({
     mutationFn: (email: string | null) => {
       if (!canManageDelegate) throw new Error('Missing permission to manage engine delegates')
-      return apiClient.post(`/engines-api/engines/${encodeURIComponent(engine!.id)}/delegate`, { email }, { credentials: 'include' })
+      return assignEngineDelegate(engine!.id, email)
     },
     onSuccess: async (_result, email) => {
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id] })
@@ -465,7 +470,7 @@ export default function EngineMembersModal({
   const updateMemberRoleM = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: 'operator' | 'deployer' }) => {
       if (!canUpdateMemberRoles) throw new Error('Missing permission to update engine member roles')
-      return apiClient.patch<void>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members/${encodeURIComponent(userId)}`, { role }, { credentials: 'include' })
+      return updateEngineMemberRole(engine!.id, userId, role)
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id] })
@@ -477,11 +482,7 @@ export default function EngineMembersModal({
   const reissuePendingInviteM = useMutation({
     mutationFn: (invite: PendingEngineInvite) => {
       if (!canInviteMembers) throw new Error('Missing permission to invite engine members')
-      return apiClient.post<SharedReissuedManualEngineInvitation>(
-        `/engines-api/engines/${encodeURIComponent(engine!.id)}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`,
-        {},
-        { credentials: 'include' },
-      )
+      return reissueManualEngineInvitation(engine!.id, invite.invitationId)
     },
     onSuccess: async (result, invite) => {
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id] })
@@ -506,7 +507,7 @@ export default function EngineMembersModal({
   const approveRequestM = useMutation({
     mutationFn: (requestId: string) => {
       if (!canApproveProjectAccess) throw new Error('Missing permission to approve engine project access')
-      return apiClient.post<void>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/access-requests/${encodeURIComponent(requestId)}/approve`, {}, { credentials: 'include' })
+      return approveEngineAccessRequest(engine!.id, requestId)
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['engine-access-requests', engine?.id] })
@@ -519,7 +520,7 @@ export default function EngineMembersModal({
   const denyRequestM = useMutation({
     mutationFn: (requestId: string) => {
       if (!canDenyProjectAccess) throw new Error('Missing permission to deny engine project access')
-      return apiClient.post<void>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/access-requests/${encodeURIComponent(requestId)}/deny`, {}, { credentials: 'include' })
+      return denyEngineAccessRequest(engine!.id, requestId)
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['engine-access-requests', engine?.id] })

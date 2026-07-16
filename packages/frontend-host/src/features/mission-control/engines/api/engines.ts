@@ -14,6 +14,7 @@ import type {
   EngineMemberLookup,
   EngineMembersResponse,
   EngineProjectAccessRequest,
+  ReissuedManualEngineInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 
 /**
@@ -107,6 +108,60 @@ export async function lookupEngineMember(
   return apiClient.get<EngineMemberLookup>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/members/lookup`,
     query,
+    { credentials: 'include' },
+  )
+}
+
+export async function removeEngineMember(engineId: string, userId: string): Promise<void> {
+  await apiClient.delete(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/members/${encodeURIComponent(userId)}`,
+    { credentials: 'include' },
+  )
+}
+
+export async function updateEngineMemberRole(
+  engineId: string,
+  userId: string,
+  role: 'operator' | 'deployer',
+): Promise<void> {
+  await apiClient.patch<void>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/members/${encodeURIComponent(userId)}`,
+    { role },
+    { credentials: 'include' },
+  )
+}
+
+export async function assignEngineDelegate(engineId: string, email: string | null): Promise<void> {
+  await apiClient.post<void>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/delegate`,
+    { email },
+    { credentials: 'include' },
+  )
+}
+
+export async function reissueManualEngineInvitation(
+  engineId: string,
+  invitationId: string,
+): Promise<ReissuedManualEngineInvitation> {
+  return apiClient.post<ReissuedManualEngineInvitation>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/pending-invites/${encodeURIComponent(invitationId)}/reissue`,
+    {},
+    { credentials: 'include' },
+  )
+}
+
+export async function approveEngineAccessRequest(engineId: string, requestId: string): Promise<void> {
+  await apiClient.post<void>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/access-requests/${encodeURIComponent(requestId)}/approve`,
+    {},
+    { credentials: 'include' },
+  )
+}
+
+export async function denyEngineAccessRequest(engineId: string, requestId: string): Promise<void> {
+  await apiClient.post<void>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/access-requests/${encodeURIComponent(requestId)}/deny`,
+    {},
     { credentials: 'include' },
   )
 }
