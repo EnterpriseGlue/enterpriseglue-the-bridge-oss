@@ -357,7 +357,7 @@ export const PROJECT_AUTHZ_ACTIONS = [
           additionalChecks: [
             'existing users require project:members:add',
             'pending or unknown users require project:members:invite',
-            'delegate assignment also requires project:delegate:manage or owner role',
+            'delegate assignment requires project:delegate:manage',
           ],
         },
       ],
@@ -377,7 +377,7 @@ export const PROJECT_AUTHZ_ACTIONS = [
           method: 'PATCH',
           route: '/starbase-api/projects/{projectId}/members/{userId}',
           resourceResolver: 'project.byId',
-          additionalChecks: ['delegate assignment also requires project:delegate:manage or owner role'],
+          additionalChecks: ['delegate assignment requires project:delegate:manage'],
         },
       ],
     },

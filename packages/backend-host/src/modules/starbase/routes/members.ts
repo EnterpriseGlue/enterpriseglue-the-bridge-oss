@@ -586,17 +586,16 @@ router.post(
         ? roles
         : (role ? [role] : (['viewer'] as ProjectRole[]));
 
-      const inviterMembership = await projectMemberService.getMembership(projectId, inviterId) as MembershipWithRoles | null;
-      const inviterRoles = getRolesFromMembership(inviterMembership);
-      const inviterIsOwner = inviterRoles.includes('owner');
-      const inviterCanManageDelegates = inviterIsOwner || await canManageProjectDelegates(req, projectId);
+      // Governance membership rows describe the project roster. They must not
+      // bypass the canonical evaluator when assigning another delegate.
+      const inviterCanManageDelegates = await canManageProjectDelegates(req, projectId);
 
       if (requestedRoles.includes('owner')) {
         throw Errors.forbidden('Use transfer ownership to assign project owner role');
       }
 
       if (!inviterCanManageDelegates && requestedRoles.includes('delegate')) {
-        throw Errors.forbidden('Only project owners can assign owner or delegate role to new members');
+        throw Errors.forbidden('Delegate assignment requires project delegate-management permission');
       }
 
       // Find user by email
@@ -727,12 +726,9 @@ router.patch(
         throw Errors.projectNotFound();
       }
       const targetRoles = getRolesFromMembership(targetMembership as MembershipWithRoles);
-      const requesterMembership = await projectMemberService.getMembership(projectId, requesterId) as MembershipWithRoles | null;
-      const requesterRoles = getRolesFromMembership(requesterMembership);
-      const requesterIsOwner = requesterRoles.includes('owner');
-      const requesterCanManageDelegates = requesterIsOwner || await canManageProjectDelegates(req, projectId);
+      const requesterCanManageDelegates = await canManageProjectDelegates(req, projectId);
 
-      if (targetRoles.includes('owner') && !requesterIsOwner) {
+      if (targetRoles.includes('owner')) {
         throw Errors.validation('Cannot change owner role. Use transfer ownership instead.');
       }
 
@@ -749,7 +745,7 @@ router.patch(
       }
 
       if (!requesterCanManageDelegates && requestedRoles.includes('delegate')) {
-        throw Errors.forbidden('Only project owners can assign owner or delegate role');
+        throw Errors.forbidden('Delegate assignment requires project delegate-management permission');
       }
 
       await projectMemberService.updateRoles(projectId, targetUserId, requestedRoles);

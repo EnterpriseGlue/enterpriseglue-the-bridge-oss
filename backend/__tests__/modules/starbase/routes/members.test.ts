@@ -172,7 +172,7 @@ describe('starbase members routes', () => {
     (projectMemberService.hasAccess as Mock).mockResolvedValue(true);
     (projectMemberService.hasRole as Mock).mockResolvedValue(true);
     (projectMemberService.getMembers as Mock).mockResolvedValue([]);
-    (projectMemberService.getMembership as Mock).mockResolvedValue({ role: 'owner', roles: ['owner'] });
+    (projectMemberService.getMembership as Mock).mockReset().mockResolvedValue(null);
     (projectMemberService.getProjectOwners as Mock).mockResolvedValue(['owner-1']);
     (projectMemberService.addMember as Mock).mockResolvedValue({ id: 'pm1', userId: 'target-1', role: 'viewer' });
     (projectMemberService.updateRoles as Mock).mockResolvedValue(undefined);
@@ -294,8 +294,7 @@ describe('starbase members routes', () => {
     });
 
     const { projectMemberService } = await import('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js');
-    (projectMemberService.getMembership as Mock).mockResolvedValueOnce({ role: 'owner', roles: ['owner'] })
-      .mockResolvedValueOnce(null);
+    (projectMemberService.getMembership as Mock).mockResolvedValueOnce(null);
 
     const response = await request(app)
       .post('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members')
@@ -677,9 +676,7 @@ describe('starbase members routes', () => {
 
     const { projectMemberService } = await import('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js');
     (projectMemberService.hasRole as Mock).mockResolvedValue(false);
-    (projectMemberService.getMembership as Mock)
-      .mockResolvedValueOnce({ role: 'viewer', roles: ['viewer'] })
-      .mockResolvedValueOnce(null);
+    (projectMemberService.getMembership as Mock).mockResolvedValueOnce(null);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
       permission === 'project:members:add' || permission === 'project:delegate:manage'
     );
@@ -702,6 +699,40 @@ describe('starbase members routes', () => {
         resourceType: 'project',
         resourceId: '00000000-0000-0000-0000-000000000001',
       })
+    );
+  });
+
+  it('does not let a legacy owner membership bypass delegate-management permission', async () => {
+    const userRepo = {
+      createQueryBuilder: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        getOne: vi.fn().mockResolvedValue({ id: 'delegate-1', email: 'delegate@example.com', passwordHash: 'hash' }),
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User || entityName(entity) === 'User') return userRepo;
+        if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (projectMemberService.getMembership as Mock).mockResolvedValue({ role: 'owner', roles: ['owner'] });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'project:members:add'
+    );
+
+    const response = await request(app)
+      .post('/starbase-api/projects/00000000-0000-0000-0000-000000000001/members')
+      .send({ email: 'delegate@example.com', roles: ['delegate'] });
+
+    expect(response.status).toBe(403);
+    expect(projectMemberService.addMember).not.toHaveBeenCalled();
+    expect(projectMemberService.getMembership).not.toHaveBeenCalled();
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'project:delegate:manage',
+      expect.objectContaining({ userId: 'owner-1', resourceId: '00000000-0000-0000-0000-000000000001' }),
     );
   });
 
