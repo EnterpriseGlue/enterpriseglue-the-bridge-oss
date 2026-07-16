@@ -12,7 +12,9 @@ passwords, and no persisted volume. It generates the following seed only:
 - `uid=alice,ou=people,dc=identity-mock,dc=test`;
 - `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice; and
 - `cn=platform-operators,ou=groups,dc=identity-mock,dc=test` containing the
-  `operations` group, to exercise nested reverse group resolution.
+  `operations` group, to exercise nested reverse group resolution. Each group
+  has a stable `businessCategory` identifier; the production-client test maps
+  that immutable identifier rather than the display CN.
 
 The image's documented configuration supports `LDAP_DOMAIN`,
 `LDAP_ADMIN_PASSWORD`, TLS material, and mapping LDAPS port 636; it is pinned

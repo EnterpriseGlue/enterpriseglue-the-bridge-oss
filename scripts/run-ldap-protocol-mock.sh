@@ -74,12 +74,16 @@ ou: groups
 
 dn: cn=operations,ou=groups,$base_dn
 objectClass: groupOfNames
+objectClass: extensibleObject
 cn: operations
+businessCategory: group-id-operations
 member: uid=alice,ou=people,$base_dn
 
 dn: cn=platform-operators,ou=groups,$base_dn
 objectClass: groupOfNames
+objectClass: extensibleObject
 cn: platform-operators
+businessCategory: group-id-platform-operators
 member: cn=operations,ou=groups,$base_dn
 EOF
 
