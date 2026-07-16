@@ -28,6 +28,7 @@ export EG_LDAP_TEST_ADMIN_PASSWORD="$(random_secret)"
 export EG_LDAP_TEST_CONFIG_PASSWORD="$(random_secret)"
 export EG_LDAP_TEST_CERT_DIR="$tmp_dir"
 export EG_LDAP_TEST_USER_PASSWORD="$(random_secret)"
+export EG_LDAP_TEST_SECOND_USER_PASSWORD="$(random_secret)"
 
 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
   -keyout "$tmp_dir/ldap.key" -out "$tmp_dir/ldap.crt" \
@@ -67,6 +68,15 @@ sn: Protocol Test
 givenName: Alice
 mail: alice@identity-mock.test
 userPassword: $EG_LDAP_TEST_USER_PASSWORD
+
+dn: uid=bob,ou=people,$base_dn
+objectClass: inetOrgPerson
+uid: bob
+cn: Bob Protocol Test
+sn: Protocol Test
+givenName: Bob
+mail: bob@identity-mock.test
+userPassword: $EG_LDAP_TEST_SECOND_USER_PASSWORD
 
 dn: ou=groups,$base_dn
 objectClass: organizationalUnit

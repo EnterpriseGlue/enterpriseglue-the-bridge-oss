@@ -24,6 +24,7 @@ describeContainer('direct LDAP container integration', () => {
       userBaseDn: 'ou=people,dc=identity-mock,dc=test',
       userSearchFilter: '(mail={username})',
       userEnumerationFilter: '(objectClass=inetOrgPerson)',
+      pageSize: 1,
       groupBaseDn: 'ou=groups,dc=identity-mock,dc=test',
       groupIdAttribute: 'businessCategory',
       membershipMode: 'group_search',
@@ -50,6 +51,9 @@ describeContainer('direct LDAP container integration', () => {
       expect.objectContaining({
         email: 'alice@identity-mock.test',
         groups: expect.arrayContaining(['group-id-operations', 'group-id-platform-operators']),
+      }),
+      expect.objectContaining({
+        email: 'bob@identity-mock.test',
       }),
     ]));
   });

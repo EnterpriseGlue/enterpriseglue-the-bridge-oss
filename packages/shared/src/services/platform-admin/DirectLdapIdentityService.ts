@@ -32,6 +32,7 @@ export interface LdapDirectoryPage { identities: DirectLdapIdentity[]; nextCurso
 export interface LdapClientLike {
   bind(dn: string, password: string): Promise<void>;
   search(baseDn: string, options: { scope: 'sub'; filter: string; attributes: string[]; sizeLimit: number; timeLimit: number }): Promise<{ searchEntries: Array<Record<string, unknown> & { dn?: string }> }>;
+  searchPaginated?(baseDn: string, options: { scope: 'sub'; filter: string; attributes: string[]; paged: { pageSize: number }; timeLimit: number }): AsyncGenerator<{ searchEntries: Array<Record<string, unknown> & { dn?: string }> }>;
   unbind(): Promise<void>;
 }
 
@@ -90,14 +91,27 @@ class DirectLdapIdentityService {
       const password = secretResolver.resolveStored(config.bindPasswordRef.startsWith('ref:') ? config.bindPasswordRef : `ref:${config.bindPasswordRef}`);
       if (!password) throw new Error('LDAP bind password reference is unavailable');
       await client.bind(config.bindDn, password);
-      const result = await client.search(config.userBaseDn, { scope: 'sub', filter: config.userEnumerationFilter, attributes: [config.subjectAttribute, config.emailAttribute, 'cn', 'givenName', 'sn', 'memberOf'], sizeLimit: config.pageSize, timeLimit: 10 });
-      const identities = await Promise.all(result.searchEntries.map(async (entry) => {
+      const entries = await this.enumerateUsers(client, config);
+      const identities = await Promise.all(entries.map(async (entry) => {
         const dn = first(entry, 'dn') || entry.dn || '';
         const groups = config.membershipMode === 'memberOf' ? values(entry.memberOf) : await this.groupsForEntry(client, config, dn);
         return { subjectId: first(entry, config.subjectAttribute, 'entryUUID', 'objectGUID', 'uid') || dn, email: first(entry, config.emailAttribute, 'mail') || '', displayName: first(entry, 'cn'), firstName: first(entry, 'givenName'), lastName: first(entry, 'sn'), groups };
       }));
       return { identities: identities.filter((identity) => identity.subjectId && identity.email.includes('@')), nextCursor: null };
     } finally { await client.unbind().catch(() => undefined); }
+  }
+
+  private async enumerateUsers(client: LdapClientLike, config: LdapConfiguration): Promise<Array<Record<string, unknown> & { dn?: string }>> {
+    const attributes = [config.subjectAttribute, config.emailAttribute, 'cn', 'givenName', 'sn', 'memberOf'];
+    if (!client.searchPaginated) {
+      const result = await client.search(config.userBaseDn, { scope: 'sub', filter: config.userEnumerationFilter, attributes, sizeLimit: config.pageSize, timeLimit: 10 });
+      return result.searchEntries;
+    }
+    const entries: Array<Record<string, unknown> & { dn?: string }> = [];
+    for await (const page of client.searchPaginated(config.userBaseDn, {
+      scope: 'sub', filter: config.userEnumerationFilter, attributes, paged: { pageSize: config.pageSize }, timeLimit: 10,
+    })) entries.push(...page.searchEntries);
+    return entries;
   }
 
   async authenticate(provider: IdentityProvider, username: string, password: string): Promise<DirectLdapIdentity> {

@@ -98,6 +98,31 @@ describe('direct LDAP identity service', () => {
     });
   });
 
+  it('follows LDAP paged directory enumeration rather than truncating at the configured page size', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    const firstPage = { searchEntries: [{ dn: 'uid=first,ou=users,dc=example,dc=test', entryUUID: 'first-id', mail: 'first@example.test', cn: 'First' }] };
+    const secondPage = { searchEntries: [{ dn: 'uid=second,ou=users,dc=example,dc=test', entryUUID: 'second-id', mail: 'second@example.test', cn: 'Second' }] };
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn(),
+      searchPaginated: vi.fn(async function* () { yield firstPage; yield secondPage; }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    const page = await directLdapIdentityService.listDirectoryPage({
+      ...provider,
+      configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), pageSize: 1 }),
+    });
+
+    expect(page.identities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ subjectId: 'first-id', email: 'first@example.test' }),
+      expect.objectContaining({ subjectId: 'second-id', email: 'second@example.test' }),
+    ]));
+    expect(client.searchPaginated).toHaveBeenCalledWith('ou=users,dc=example,dc=test', expect.objectContaining({ paged: { pageSize: 1 } }));
+    expect(client.search).not.toHaveBeenCalled();
+  });
+
   it('rejects an insecure LDAP URL before opening a directory client', async () => {
     process.env.LDAP_BIND_SECRET = serviceBindPassword;
     const factory = vi.fn();
