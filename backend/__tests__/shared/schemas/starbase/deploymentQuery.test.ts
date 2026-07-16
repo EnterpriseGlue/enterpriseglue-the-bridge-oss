@@ -25,8 +25,9 @@ describe('Starbase deployment-query contracts', () => {
 
   it('requires complete latest-project lineage fields', () => {
     expect(() => LatestProjectDeploymentArtifactSchema.parse(fileDeployment)).toThrow();
+    const { fileVersionNumber: _fileVersionNumber, ...latestProjectArtifact } = fileDeployment;
     expect(LatestProjectDeploymentArtifactSchema.parse({
-      ...fileDeployment,
+      ...latestProjectArtifact,
       fileUpdatedAt: 1700000001,
       fileContentHash: 'hash-1',
       fileGitCommitMessage: 'Deploy invoice',

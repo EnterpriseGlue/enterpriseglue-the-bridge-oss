@@ -6,6 +6,10 @@ import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommit
 import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { In } from 'typeorm';
+import type {
+  FileDeploymentSummary,
+  LatestProjectDeploymentArtifact,
+} from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
 import {
   normalizeEngineDeploymentEnvironmentTag,
   toEngineDeploymentMeta,
@@ -98,7 +102,7 @@ class EngineDeploymentQueryServiceImpl {
     return rows;
   }
 
-  async listLatestFileDeployments(projectId: string, fileId: string, visibleEngineIds: string[], limit: number, scanLimit: number) {
+  async listLatestFileDeployments(projectId: string, fileId: string, visibleEngineIds: string[], limit: number, scanLimit: number): Promise<FileDeploymentSummary[]> {
     if (visibleEngineIds.length === 0) {
       return [];
     }
@@ -196,7 +200,7 @@ class EngineDeploymentQueryServiceImpl {
       .slice(0, limit);
   }
 
-  async listFileDeploymentHistory(projectId: string, fileId: string, visibleEngineIds: string[], limit: number, scanLimit: number) {
+  async listFileDeploymentHistory(projectId: string, fileId: string, visibleEngineIds: string[], limit: number, scanLimit: number): Promise<FileDeploymentSummary[]> {
     if (visibleEngineIds.length === 0) {
       return [];
     }
@@ -288,7 +292,7 @@ class EngineDeploymentQueryServiceImpl {
       .slice(0, limit);
   }
 
-  async listLatestProjectDeploymentArtifacts(projectId: string, visibleEngineIds: string[], scanLimit: number) {
+  async listLatestProjectDeploymentArtifacts(projectId: string, visibleEngineIds: string[], scanLimit: number): Promise<LatestProjectDeploymentArtifact[]> {
     if (visibleEngineIds.length === 0) {
       return [];
     }

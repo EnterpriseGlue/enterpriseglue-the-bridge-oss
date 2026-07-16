@@ -8,23 +8,27 @@ export const DeploymentArtifactSummarySchema = z.object({
   id: z.string(),
 });
 
-/** Deployment history returned for one Starbase file, filtered to visible engines. */
-export const FileDeploymentSummarySchema = z.object({
+/** Common visible engine/file deployment lineage. */
+export const DeploymentArtifactProjectFileBaseSchema = z.object({
   engineId: z.string(),
   engineDeploymentId: z.string(),
   fileId: z.string(),
   fileType: z.string().nullable(),
   fileName: z.string().nullable(),
   fileGitCommitId: z.string().nullable(),
-  fileVersionNumber: z.number().nullable(),
   artifacts: z.array(DeploymentArtifactSummarySchema),
   deployedAt: z.number().nullable(),
   engineName: z.string().nullable(),
   environmentTag: z.string().nullable(),
 });
 
+/** Deployment history returned for one Starbase file, filtered to visible engines. */
+export const FileDeploymentSummarySchema = DeploymentArtifactProjectFileBaseSchema.extend({
+  fileVersionNumber: z.number().nullable(),
+});
+
 /** Latest deployment artifact per visible engine/file pair for a Starbase project. */
-export const LatestProjectDeploymentArtifactSchema = FileDeploymentSummarySchema.extend({
+export const LatestProjectDeploymentArtifactSchema = DeploymentArtifactProjectFileBaseSchema.extend({
   fileUpdatedAt: z.number().nullable(),
   fileContentHash: z.string().nullable(),
   fileGitCommitMessage: z.string().nullable(),
@@ -39,5 +43,6 @@ export const LatestProjectDeploymentArtifactSchema = FileDeploymentSummarySchema
 });
 
 export type DeploymentArtifactSummary = z.infer<typeof DeploymentArtifactSummarySchema>;
+export type DeploymentArtifactProjectFileBase = z.infer<typeof DeploymentArtifactProjectFileBaseSchema>;
 export type FileDeploymentSummary = z.infer<typeof FileDeploymentSummarySchema>;
 export type LatestProjectDeploymentArtifact = z.infer<typeof LatestProjectDeploymentArtifactSchema>;
