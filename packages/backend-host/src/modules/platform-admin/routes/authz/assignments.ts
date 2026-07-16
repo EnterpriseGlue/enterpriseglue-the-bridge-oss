@@ -16,6 +16,12 @@ import {
   ProjectPermissions,
   SYSTEM_ROLE_IDS,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  AuthzGroupCreateSchema,
+  AuthzGroupMembershipCreateSchema,
+  AuthzGroupUpdateSchema,
+  RoleAssignmentCreateSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { AUTHZ_PRINCIPAL_TYPES, AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-actions.js';
 
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
@@ -31,34 +37,9 @@ const roleAssignmentQuerySchema = z.object({
   scopeId: z.string().optional(),
   engineId: z.string().min(1).optional(),
 });
-const roleAssignmentCreateSchema = z.object({
-  principalType: authzPrincipalTypeSchema,
-  principalId: z.string().min(1),
-  roleId: z.string().min(1),
-  resourceType: authzResourceTypeSchema.optional(),
-  resourceId: z.string().nullable().optional(),
-  scopeType: authzResourceTypeSchema.optional(),
-  scopeId: z.string().nullable().optional(),
-  expiresAt: z.number().nullable().optional(),
-});
-const authzGroupCreateSchema = z.object({
-  key: z.string().min(1).max(255).optional(),
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-});
-const authzGroupUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  isArchived: z.boolean().optional(),
-});
 const authzGroupMembershipQuerySchema = z.object({
   groupId: z.string().min(1).optional(),
   userId: z.string().uuid().optional(),
-});
-const authzGroupMembershipCreateSchema = z.object({
-  groupId: z.string().min(1),
-  userId: z.string().uuid(),
-  expiresAt: z.number().nullable().optional(),
 });
 
 type ScopedAssignmentResource = {
@@ -147,7 +128,7 @@ async function assertCanViewRoleAssignments(req: Request, resource: ScopedAssign
   if (!resource || !await canViewScopedAssignments(req, resource)) throw Errors.adminRequired();
 }
 
-async function assertCanAssignScopedRole(req: Request, input: z.infer<typeof roleAssignmentCreateSchema>): Promise<void> {
+async function assertCanAssignScopedRole(req: Request, input: z.infer<typeof RoleAssignmentCreateSchema>): Promise<void> {
   if (await hasPlatformPermission(req, PlatformPermissions.AUTHZ_ROLES_MANAGE)) return;
   const resource = toScopedAssignmentResource(input.resourceType, input.resourceId);
   if (!resource || !await canManageScopedAssignments(req, resource)) throw Errors.adminRequired();
@@ -205,7 +186,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     }
   }));
 
-  router.post('/api/authz/role-assignments', apiLimiter, requireAuth, validateBody(roleAssignmentCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/role-assignments', apiLimiter, requireAuth, validateBody(RoleAssignmentCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       await assertCanAssignScopedRole(req, req.body);
       const result = await permissionService.assignRole({
@@ -247,7 +228,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     }
   }));
 
-  router.post('/api/authz/groups', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateBody(authzGroupCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/groups', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateBody(AuthzGroupCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await authzGroupService.createGroup({
         ...req.body,
@@ -263,7 +244,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     }
   }));
 
-  router.put('/api/authz/groups/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateParams(resourceIdParamSchema), validateBody(authzGroupUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.put('/api/authz/groups/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateParams(resourceIdParamSchema), validateBody(AuthzGroupUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       await authzGroupService.updateGroup(String(req.params.id), {
         ...req.body,
@@ -308,7 +289,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     }
   }));
 
-  router.post('/api/authz/group-memberships', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateBody(authzGroupMembershipCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/group-memberships', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateBody(AuthzGroupMembershipCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await authzGroupService.addMembership({
         ...req.body,

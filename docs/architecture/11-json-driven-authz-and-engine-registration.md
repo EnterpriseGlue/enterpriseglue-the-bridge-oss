@@ -2277,6 +2277,8 @@ The provider-neutral Identity Mappings form now consumes the canonical mapping w
 
 Common authorization create, assignment, update, and legacy-target-sync responses now use bounded shared mutation contracts in both OpenAPI and Platform Admin hooks, removing repeated inline `{ id }`, `{ success: true }`, warning, and sync-count response shapes. The same hooks now consume their shared role-assignment, group, membership, and Engine Set write inputs instead of reconstructing equivalent local payloads.
 
+The backend assignment routes now validate those same role-assignment, group, and membership writes through the shared schemas, so scoped assignment authorization operates on the exact payload contract that OpenAPI and the UI use.
+
 Policy create and update inputs now use the same shared schemas in route validation, OpenAPI, and Platform Admin hooks. OpenAPI now accurately advertises the service's identifier-only create response and success-only update response rather than a policy record that the mutation never returns.
 
 The policy list response now has one strict shared service-view schema across the route, OpenAPI, and hook. It exposes effective policy fields only; persistence timestamps and creator fields are no longer advertised when the service does not return them.
