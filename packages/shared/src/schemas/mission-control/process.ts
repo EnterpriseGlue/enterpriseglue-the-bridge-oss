@@ -74,10 +74,17 @@ export const PreviewCountRequest = z.object({
   })).optional(),
 });
 
+// The engine-compatible request remains intentionally permissive at the route
+// boundary, while every preview response has this stable public shape.
+export const PreviewCountResponseSchema = z.object({
+  count: z.number().int().nonnegative(),
+}).strict();
+
 // Types
 export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
 export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
+export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;

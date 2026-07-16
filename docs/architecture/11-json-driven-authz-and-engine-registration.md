@@ -2297,6 +2297,8 @@ Mission Control saved-engine filters now also distinguish their JSON-text persis
 
 Mission Control activity-count reads now share explicit per-activity and five-state contracts across the runtime route, OpenAPI, and Process Overview. The backend serializes the fixed active, incidents, suspended, canceled, and completed maps rather than leaving the state response as undocumented JSON.
 
+The permissive runtime preview-count request remains compatible with supported engine filter fields, while its non-negative integer response now has one shared contract across route serialization, OpenAPI, and Process Overview.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

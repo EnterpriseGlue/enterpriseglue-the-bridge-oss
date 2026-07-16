@@ -183,6 +183,21 @@ describe('mission-control shared mission_control routes', () => {
     expect(previewProcessInstanceCount).not.toHaveBeenCalled();
   });
 
+  it('serializes engine-wide process-instance preview counts through the shared response contract', async () => {
+    vi.mocked(previewProcessInstanceCount).mockResolvedValueOnce({ count: 42 });
+
+    const response = await request(app)
+      .post('/mission-control-api/process-instances/preview-count')
+      .send({ engineId: 'engine-77', active: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ count: 42 });
+    expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({
+      engineId: 'engine-77',
+      active: true,
+    }));
+  });
+
   it('bounds compatibility process-definition and instance collections for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine

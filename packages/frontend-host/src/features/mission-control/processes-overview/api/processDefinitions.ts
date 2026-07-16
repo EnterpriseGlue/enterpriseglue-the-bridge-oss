@@ -6,6 +6,7 @@ import type {
 import type {
   ActivityCountByActivityId,
   ActivityCountsByState as SharedActivityCountsByState,
+  PreviewCountResponse,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
@@ -90,8 +91,8 @@ export async function listProcessInstances(params: GetProcessInstancesParams): P
   return apiClient.get<ProcessInstance[]>(`/mission-control-api/process-instances?${searchParams.toString()}`, undefined, { credentials: 'include' })
 }
 
-export async function fetchPreviewCount(body: Record<string, unknown>): Promise<{ count: number }> {
-  return apiClient.post<{ count: number }>('/mission-control-api/process-instances/preview-count', body, { credentials: 'include' })
+export async function fetchPreviewCount(body: Record<string, unknown>): Promise<PreviewCountResponse> {
+  return apiClient.post<PreviewCountResponse>('/mission-control-api/process-instances/preview-count', body, { credentials: 'include' })
 }
 
 export async function listSavedProcessFilters(): Promise<SavedProcessFilter[]> {

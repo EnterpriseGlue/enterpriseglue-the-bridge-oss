@@ -57,6 +57,7 @@ const {
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  PreviewCountResponseSchema,
   VariablesSchema: MissionControlVariablesSchema,
   ActivityInstanceSchema: MissionControlActivityInstanceSchema,
   PreviewCountRequest,
@@ -672,7 +673,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Instance count matching filters',
-      content: { 'application/json': { schema: z.object({ count: z.number() }) } },
+      content: { 'application/json': { schema: PreviewCountResponseSchema } },
     },
   },
 });

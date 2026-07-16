@@ -35,6 +35,7 @@ import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-d
 import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 // Validation schemas
@@ -193,7 +194,7 @@ r.post('/mission-control-api/process-instances/preview-count', requireRuntimeCol
     const keys = req.authorizedRuntimeResourceKeys
     const scopes = req.authorizedRuntimeResourceScopes
     if (!keys) {
-      return res.json(await previewProcessInstanceCount(engineId, req.body || {}))
+      return res.json(PreviewCountResponseSchema.parse(await previewProcessInstanceCount(engineId, req.body || {})))
     }
     throw Errors.forbidden('Resource-aware process-instance preview counts are not supported')
   } catch (e: any) {
