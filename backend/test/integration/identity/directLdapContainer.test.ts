@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Client } from 'ldapts';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 
 const requiredEnvironment = [
@@ -46,6 +47,7 @@ describeContainer('direct LDAP container integration', () => {
       email: 'alice@identity-mock.test',
       groups: expect.arrayContaining(['group-id-operations', 'group-id-platform-operators']),
     });
+    expect(identity.groups).not.toContain('platform-operators-renamed');
     expect(identity.subjectId).toBeTruthy();
 
     const page = await directLdapIdentityService.listDirectoryPage(provider);
@@ -82,5 +84,25 @@ describeContainer('direct LDAP container integration', () => {
       'disabled@identity-mock.test',
       process.env.EG_LDAP_TEST_DISABLED_USER_PASSWORD!,
     )).rejects.toThrow('did not return exactly one entry');
+  });
+
+  it('drops a deleted renamed group while preserving the remaining immutable group id', async () => {
+    const adminClient = new Client({
+      url: process.env.EG_LDAP_TEST_URL!,
+      tlsOptions: { rejectUnauthorized: true, ca: process.env.EG_LDAP_TEST_CA_CERTIFICATE! },
+    });
+    try {
+      await adminClient.bind(process.env.EG_LDAP_TEST_BIND_DN!, process.env.EG_LDAP_TEST_ADMIN_PASSWORD!);
+      await adminClient.del('cn=platform-operators-renamed,ou=groups,dc=identity-mock,dc=test');
+    } finally {
+      await adminClient.unbind().catch(() => undefined);
+    }
+
+    const identity = await directLdapIdentityService.authenticate(
+      provider,
+      'alice@identity-mock.test',
+      process.env.EG_LDAP_TEST_USER_PASSWORD!,
+    );
+    expect(identity.groups).toEqual(['group-id-operations']);
   });
 });

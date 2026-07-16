@@ -66,10 +66,12 @@ passwords, and no persisted volume. It generates the following seed only:
   search and enumeration filters (rather than a production hard-coded vendor
   account-status rule); and
 - `cn=operations,ou=groups,dc=identity-mock,dc=test` containing Alice; and
-- `cn=platform-operators,ou=groups,dc=identity-mock,dc=test` containing the
-  `operations` group, to exercise nested reverse group resolution. Each group
-  has a stable `businessCategory` identifier; the production-client test maps
-  that immutable identifier rather than the display CN.
+- `cn=platform-operators-renamed,ou=groups,dc=identity-mock,dc=test`
+  containing the `operations` group, to exercise nested reverse group
+  resolution through a renamed display CN. Each group has a stable
+  `businessCategory` identifier; the production-client test maps that
+  immutable identifier rather than the display CN, then removes the renamed
+  group and proves the stale entitlement disappears.
 
 The image's documented configuration supports `LDAP_DOMAIN`,
 `LDAP_ADMIN_PASSWORD`, TLS material, and mapping LDAPS port 636; it is pinned
