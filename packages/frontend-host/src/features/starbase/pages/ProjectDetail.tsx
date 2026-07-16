@@ -75,7 +75,6 @@ import {
   Project,
   UserSearchItem,
   FolderSummary,
-  ProjectContents,
   ProjectRole,
   ProjectMember,
   ProjectPendingInvite,
@@ -378,10 +377,7 @@ export default function ProjectDetail() {
 
   const contentsQ = useQuery({
     queryKey: ['contents', projectId, folderId],
-    queryFn: () => apiClient.get<ProjectContents>(
-      `/starbase-api/projects/${projectId}/contents`,
-      folderId ? { folderId } : undefined
-    ),
+    queryFn: () => projectsApi.getContents(projectId!, folderId),
     enabled: !!projectId,
   })
 

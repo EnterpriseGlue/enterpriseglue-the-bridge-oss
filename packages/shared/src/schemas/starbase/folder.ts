@@ -35,12 +35,27 @@ export const UpdateFolderRequest = z.object({
   parentFolderId: z.string().nullable().optional()
 })
 
+export const ProjectContentsFolderSchema = FolderSummarySchema.extend({
+  createdBy: z.string().nullable().optional(),
+  updatedBy: z.string().nullable().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const ProjectContentsFileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['bpmn', 'dmn', 'form']),
+  createdBy: z.string().nullable().optional(),
+  updatedBy: z.string().nullable().optional(),
+  updatedAt: z.number(),
+  createdAt: z.number(),
+});
+
 export const ProjectContentsSchema = z.object({
   breadcrumb: z.array(FolderSchema).default([]),
-  folders: z.array(FolderSummarySchema),
-  files: z.array(
-    z.object({ id: z.string(), name: z.string(), type: z.enum(['bpmn','dmn','form']), updatedAt: z.number(), createdAt: z.number() })
-  )
+  folders: z.array(ProjectContentsFolderSchema),
+  files: z.array(ProjectContentsFileSchema),
 })
 
 export const FolderDeletePreviewSchema = z.object({
@@ -52,3 +67,4 @@ export const FolderDeletePreviewSchema = z.object({
 
 export type Folder = z.infer<typeof FolderSchema>
 export type CreateFolder = z.infer<typeof CreateFolderRequest>
+export type ProjectContents = z.infer<typeof ProjectContentsSchema>

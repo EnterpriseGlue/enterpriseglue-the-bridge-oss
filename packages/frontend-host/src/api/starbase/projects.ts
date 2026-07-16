@@ -1,6 +1,7 @@
 import { apiClient } from '../../shared/api/client';
 import type { Project } from '../../shared/api/types';
 import type { ProjectEngineAccessResponse } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
+import type { ProjectContents } from '@enterpriseglue/shared/schemas/starbase/folder.js';
 import type {
   ProjectMemberAccessView,
   ProjectMemberCandidate,
@@ -20,6 +21,12 @@ export const projectsApi = {
   list: () => apiClient.get<Project[]>(BASE_URL),
   
   getById: (id: string) => apiClient.get<Project>(`${BASE_URL}/${id}`),
+
+  getContents: (id: string, folderId?: string | null) =>
+    apiClient.get<ProjectContents>(
+      `${BASE_URL}/${encodeURIComponent(id)}/contents`,
+      folderId ? { folderId } : undefined,
+    ),
 
   getEngineAccess: (id: string) =>
     apiClient.get<ProjectEngineAccessResponse>(`${BASE_URL}/${encodeURIComponent(id)}/engine-access`),
