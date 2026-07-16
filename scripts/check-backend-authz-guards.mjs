@@ -112,6 +112,13 @@ const forbiddenPatterns = [
     filePaths: projectMembershipCommandFiles,
     pattern: /\bwriteLegacyProjectMemberRoleAssignments\b/g,
   },
+  {
+    // Current EngineMember changes must replace historical projections with a
+    // normal canonical assignment instead of writing another legacy source.
+    id: 'engine-member-legacy-assignment-write',
+    fileSuffix: 'packages/shared/src/services/platform-admin/EngineService.ts',
+    pattern: /\bwriteLegacyEngineMemberAssignment\b/g,
+  },
 ];
 
 // Maximum current route-local legacy-auth pattern counts by rule. New files must

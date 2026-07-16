@@ -368,16 +368,19 @@ export class EngineService {
           createdAt: Date.now(),
         });
       });
-      await this.writeLegacyEngineMemberAssignment(dataSource, {
-        engineId,
-        userId,
-        role: newRole,
-        grantedById: existing.grantedById,
-        createdAt: existing.createdAt,
+      await permissionService.assignRole({
+        principalType: 'user',
+        principalId: userId,
+        roleId: ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[newRole],
+        resourceType: 'engine',
+        resourceId: engineId,
+        source: 'manual',
+        createdById: updatedById || existing.grantedById || userId,
       });
-      if (existing.role !== newRole) {
-        await this.removeLegacyEngineMemberAssignments(dataSource, engineId, userId, [existing.role as 'operator' | 'deployer']);
-      }
+      // An existing EngineMember row predates canonical member commands. Once
+      // it is changed, replace every matching historical projection so it
+      // cannot preserve the old role alongside the new manual assignment.
+      await this.removeLegacyEngineMemberAssignments(dataSource, engineId, userId);
       return;
     }
 
@@ -433,51 +436,6 @@ export class EngineService {
       .andWhere('assignment.source = :source', { source: 'manual' })
       .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_STANDARD_MEMBER_SYSTEM_ROLE_IDS })
       .getMany();
-  }
-
-  private async writeLegacyEngineMemberAssignment(
-    dataSource: Awaited<ReturnType<typeof getDataSource>>,
-    input: { engineId: string; userId: string; role: 'operator' | 'deployer'; grantedById: string | null; createdAt: number },
-  ): Promise<void> {
-    const engine = await dataSource.getRepository(Engine).findOne({
-      where: { id: input.engineId },
-      select: ['id', 'tenantId'],
-    });
-    if (!engine) {
-      throw new Error('Engine not found');
-    }
-    const roleId = ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[input.role];
-    const sourceRef = `engine_member:${input.engineId}:${input.userId}:${input.role}`;
-    const now = Date.now();
-    await dataSource.getRepository(RbacRoleAssignment).upsert({
-      id: `legacy:engine:${input.engineId}:${input.userId}:${roleId}`,
-      tenantId: engine.tenantId ?? null,
-      principalType: 'user',
-      principalId: input.userId,
-      assignmentKey: canonicalRoleAssignmentKey({
-        tenantId: engine.tenantId ?? null,
-        principalType: 'user',
-        principalId: input.userId,
-        roleId,
-        scopeType: 'engine',
-        scopeId: input.engineId,
-        source: 'legacy',
-        sourceRef,
-      }),
-      roleId,
-      scopeType: 'engine',
-      scopeId: input.engineId,
-      source: 'legacy',
-      sourceRef,
-      expiresAt: null,
-      lastSeenAt: now,
-      createdById: input.grantedById,
-      createdAt: input.createdAt || now,
-      updatedAt: now,
-    }, {
-      conflictPaths: ['id'],
-      skipUpdateIfNoValuesChanged: true,
-    });
   }
 
   private async removeLegacyEngineMemberAssignments(

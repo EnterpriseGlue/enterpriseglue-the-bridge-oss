@@ -367,8 +367,9 @@ describe('EngineService', () => {
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
 
-  it('updates a legacy engine member with a direct canonical legacy assignment', async () => {
+  it('updates a legacy engine member with a direct canonical manual assignment', async () => {
     const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
+    const assignRoleSpy = vi.spyOn(permissionService, 'assignRole').mockResolvedValue({ id: 'assignment-1', warnings: [] });
     const memberRepo = {
       findOne: vi.fn().mockResolvedValue({ engineId: 'engine-1', userId: 'user-1', role: 'operator', grantedById: 'admin-1', createdAt: 100 }),
     };
@@ -376,17 +377,12 @@ describe('EngineService', () => {
       delete: vi.fn().mockResolvedValue({ affected: 1 }),
       insert: vi.fn().mockResolvedValue(undefined),
     };
-    const engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-1' }),
-    };
     const assignmentRepo = {
-      upsert: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn().mockResolvedValue({ affected: 1 }),
     };
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === EngineMember) return memberRepo;
-        if (entity === Engine) return engineRepo;
         if (entity === RbacRoleAssignment) return assignmentRepo;
         throw new Error('Unexpected repository');
       },
@@ -400,22 +396,15 @@ describe('EngineService', () => {
 
     await service.updateEngineMemberRole('engine-1', 'user-1', 'deployer', 'admin-2');
 
-    expect(assignmentRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      id: 'legacy:engine:engine-1:user-1:system.engine.deployer',
-      tenantId: 'tenant-1',
+    expect(assignRoleSpy).toHaveBeenCalledWith({
       principalType: 'user',
       principalId: 'user-1',
       roleId: 'system.engine.deployer',
-      scopeType: 'engine',
-      scopeId: 'engine-1',
-      source: 'legacy',
-      sourceRef: 'engine_member:engine-1:user-1:deployer',
-    }), expect.objectContaining({ conflictPaths: ['id'] }));
-    const legacyAssignment = assignmentRepo.upsert.mock.calls[0][0];
-    expect(legacyAssignment).not.toHaveProperty('userId');
-    expect(legacyAssignment).not.toHaveProperty('resourceType');
-    expect(legacyAssignment).not.toHaveProperty('resourceId');
-    expect(legacyAssignment).not.toHaveProperty('sourceMappingId');
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+      source: 'manual',
+      createdById: 'admin-2',
+    });
     expect(assignmentRepo.delete).toHaveBeenCalledWith({ id: expect.anything() });
     expect(legacySyncSpy).not.toHaveBeenCalled();
   });
