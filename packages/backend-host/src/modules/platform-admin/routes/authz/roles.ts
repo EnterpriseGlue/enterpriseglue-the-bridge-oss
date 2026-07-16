@@ -14,15 +14,13 @@ import {
   SYSTEM_ROLE_IDS,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-actions.js';
+import {
+  CustomPermissionCreateSchema,
+  CustomRoleCreateSchema,
+  CustomRoleUpdateSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
-const customPermissionCreateSchema = z.object({
-  key: z.string().min(1).max(255),
-  scope: authzResourceTypeSchema,
-  category: z.string().min(1).max(128),
-  label: z.string().min(1).max(128),
-  description: z.string().max(2000).nullable().optional(),
-});
 const roleIdParamSchema = z.object({ id: z.string().min(1) });
 const rolesQuerySchema = z.object({
   scope: authzResourceTypeSchema.optional(),
@@ -31,39 +29,6 @@ const rolesQuerySchema = z.object({
   resourceType: z.enum(['project', 'engine']).optional(),
   resourceId: z.string().optional(),
 });
-const customRoleCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-  scope: authzResourceTypeSchema,
-  permissionIds: z.array(z.string().min(1)).min(1),
-});
-const customRoleUpdateSchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  description: z.string().max(2000).nullable().optional(),
-  permissionIds: z.array(z.string().min(1)).min(1).optional(),
-  isAssignable: z.boolean().optional(),
-  isArchived: z.boolean().optional(),
-});
-const customRoleDenyFieldNames = [
-  'denyPermissionIds',
-  'deniedPermissionIds',
-  'denyPermissions',
-  'deniedPermissions',
-  'permissionDenies',
-] as const;
-const customRoleAllowOnlyGuard = z.object({}).passthrough().superRefine((input, ctx) => {
-  for (const field of customRoleDenyFieldNames) {
-    if (Object.prototype.hasOwnProperty.call(input, field)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [field],
-        message: 'Custom roles are allow-only; use authorization policies for deny rules',
-      });
-    }
-  }
-});
-const customRoleCreateRequestSchema = customRoleAllowOnlyGuard.pipe(customRoleCreateSchema);
-const customRoleUpdateRequestSchema = customRoleAllowOnlyGuard.pipe(customRoleUpdateSchema);
 
 type ScopedAssignmentResource = {
   resourceType: 'project' | 'engine';
@@ -146,7 +111,7 @@ export function registerRoleRoutes(router: Router, { requirePlatformAction }: Ro
     res.json(await permissionService.getPermissionCatalog());
   }));
 
-  router.post('/api/authz/permissions', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(customPermissionCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/permissions', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(CustomPermissionCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await permissionService.createCustomPermission({
         ...req.body,
@@ -200,7 +165,7 @@ export function registerRoleRoutes(router: Router, { requirePlatformAction }: Ro
     }
   }));
 
-  router.post('/api/authz/roles', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(customRoleCreateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/roles', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateBody(CustomRoleCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const result = await permissionService.createCustomRole({
         ...req.body,
@@ -215,7 +180,7 @@ export function registerRoleRoutes(router: Router, { requirePlatformAction }: Ro
     }
   }));
 
-  router.put('/api/authz/roles/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateParams(roleIdParamSchema), validateBody(customRoleUpdateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.put('/api/authz/roles/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.roles.manage'), validateParams(roleIdParamSchema), validateBody(CustomRoleUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       await permissionService.updateCustomRole(String(req.params.id), {
         ...req.body,
