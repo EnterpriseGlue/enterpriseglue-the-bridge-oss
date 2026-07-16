@@ -183,7 +183,13 @@ describe('ProjectOverview actions', () => {
 
   it('does not treat legacy membership roles as bulk permission grants', () => {
     const project = { id: 'project-1', name: 'Alpha Project' } as any;
-    const memberships = new Map([['project-1', { role: 'owner', roles: ['owner'] }]]);
+    const memberships = new Map([['project-1', {
+      userId: 'user-1',
+      firstName: 'Legacy',
+      lastName: 'Owner',
+      role: 'owner',
+      roles: ['owner'],
+    }]]);
 
     expect(getBulkPermissionDenial(
       [project],
