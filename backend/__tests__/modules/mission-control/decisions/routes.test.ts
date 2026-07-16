@@ -13,6 +13,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import {
   listDecisionDefinitions,
   evaluateDecisionById,
+  fetchDecisionDefinitionXml,
 } from '../../../../../packages/backend-host/src/modules/mission-control/decisions/service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -156,6 +157,16 @@ describe('mission-control decisions routes', () => {
       resourceId: 'engine-1',
     }));
     expect(listDecisionDefinitions).toHaveBeenCalledWith('engine-1', {});
+  });
+
+  it('serializes decision definition XML through the shared response contract', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/decision-definitions/d1/xml')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: 'd1', dmnXml: '<definitions />' });
+    expect(fetchDecisionDefinitionXml).toHaveBeenCalledWith('engine-1', 'd1');
   });
 
   it('evaluates decision', async () => {

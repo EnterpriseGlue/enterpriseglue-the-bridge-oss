@@ -1,5 +1,6 @@
 import { apiClient } from '../../../../shared/api/client'
 import type { ProcessDefXml } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { DecisionDefinitionXml } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 
 export async function fetchProcessDefinitionXml(definitionId: string, engineId?: string): Promise<string> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
@@ -13,7 +14,7 @@ export async function fetchProcessDefinitionXml(definitionId: string, engineId?:
 
 export async function fetchDecisionDefinitionDmnXml(definitionId: string, engineId?: string): Promise<string> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  const data = await apiClient.get<{ dmnXml: string }>(
+  const data = await apiClient.get<DecisionDefinitionXml>(
     `/mission-control-api/decision-definitions/${encodeURIComponent(definitionId)}/xml${params}`,
     undefined,
     { credentials: 'include' },

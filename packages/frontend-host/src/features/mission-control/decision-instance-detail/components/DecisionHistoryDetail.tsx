@@ -32,6 +32,7 @@ import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
+import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -138,18 +139,9 @@ export default function DecisionHistoryDetail() {
 
   const xmlQ = useQuery({
     queryKey: ['mission-control', 'decision-xml', decision?.decisionDefinitionId, selectedEngineId],
-    queryFn: async () => {
-      if (!decision?.decisionDefinitionId) return ''
-      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
-      const data = await apiClient.get<{ dmnXml: string }>(
-        `/mission-control-api/decision-definitions/${encodeURIComponent(
-          decision.decisionDefinitionId,
-        )}/xml${params}`,
-        undefined,
-        { credentials: 'include' },
-      )
-      return data.dmnXml
-    },
+    queryFn: () => decision?.decisionDefinitionId
+      ? fetchDecisionDefinitionDmnXml(decision.decisionDefinitionId, selectedEngineId)
+      : Promise.resolve(''),
     enabled: !!decision?.decisionDefinitionId && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 

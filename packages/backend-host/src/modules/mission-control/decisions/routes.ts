@@ -12,6 +12,7 @@ import {
   evaluateDecisionByKey,
 } from './service.js';
 import {
+  DecisionDefinitionXmlSchema,
   DecisionDefinitionQueryParams,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
@@ -92,7 +93,7 @@ r.get('/mission-control-api/decision-definitions/:id/xml', requireRuntimeDefinit
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinitionXml(engineId, definitionId);
-  res.json(data);
+  res.json(DecisionDefinitionXmlSchema.parse(data));
 }));
 
 // Evaluate decision
