@@ -35,6 +35,10 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
 import type {
+  LegacySsoProviderCreateRequest,
+  LegacySsoProviderDefaultRoleMigrationRequest,
+  LegacySsoProviderToggleRequest,
+  LegacySsoProviderUpdateRequest,
   LegacySsoPlatformMappingCreateRequest,
   LegacySsoPlatformMappingUpdateRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -240,7 +244,7 @@ export default function SsoSettingsTab() {
 
   // Mutations
   const createProvider = useMutation({
-    mutationFn: (data: any) => apiClient.post('/api/sso/providers', data),
+    mutationFn: (data: LegacySsoProviderCreateRequest) => apiClient.post<SsoProvider>('/api/sso/providers', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
       setProviderFormError(null);
@@ -253,7 +257,7 @@ export default function SsoSettingsTab() {
   });
 
   const updateProvider = useMutation({
-    mutationFn: ({ id, ...data }: any) => apiClient.put(`/api/sso/providers/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & LegacySsoProviderUpdateRequest) => apiClient.put<{ success: true }>(`/api/sso/providers/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
       setProviderFormError(null);
@@ -274,15 +278,15 @@ export default function SsoSettingsTab() {
   });
 
   const toggleProvider = useMutation({
-    mutationFn: ({ id, riskAcknowledged }: { id: string; riskAcknowledged?: boolean }) =>
-      apiClient.post(`/api/sso/providers/${id}/toggle`, riskAcknowledged ? { riskAcknowledged } : {}),
+    mutationFn: ({ id, ...data }: { id: string } & LegacySsoProviderToggleRequest) =>
+      apiClient.post<{ success: true }>(`/api/sso/providers/${id}/toggle`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
       setToggleProviderConfirm(null);
     },
   });
   const migrateDefaultRole = useMutation({
-    mutationFn: ({ id, providerKey, riskAcknowledged }: { id: string; providerKey: string; riskAcknowledged: boolean }) => apiClient.post(`/api/sso/providers/${id}/migrate-default-role`, { providerKey, ...(riskAcknowledged ? { riskAcknowledged: true } : {}) }),
+    mutationFn: ({ id, ...data }: { id: string } & LegacySsoProviderDefaultRoleMigrationRequest) => apiClient.post(`/api/sso/providers/${id}/migrate-default-role`, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['sso-providers'] }); setDefaultRoleMigration(null); setDefaultRoleMigrationProviderKey(''); },
     onError: (error: unknown) => setProviderFormError(parseApiError(error, 'Unable to convert the provider default role').message),
   });
@@ -508,7 +512,7 @@ export default function SsoSettingsTab() {
       return;
     }
 
-    const data: any = {
+    const data: LegacySsoProviderCreateRequest = {
       name: providerForm.name,
       type: providerForm.type,
       enabled: providerForm.enabled,
@@ -1280,7 +1284,7 @@ export default function SsoSettingsTab() {
             id="provider-type"
             labelText="Provider Type"
             value={providerForm.type}
-            onChange={(e) => setProviderForm({ ...providerForm, type: e.target.value as any })}
+            onChange={(e) => setProviderForm({ ...providerForm, type: e.target.value as LegacySsoProviderCreateRequest['type'] })}
             disabled={!!editingProvider}
           >
             <SelectItem value="microsoft" text="Microsoft Entra ID" />
