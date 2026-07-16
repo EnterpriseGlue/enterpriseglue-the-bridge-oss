@@ -24,7 +24,7 @@ describe('identity mock provider contracts', () => {
   it('requires an LDAP bind before normalizing immutable group DNs', () => {
     const directory = new MockLdapDirectory();
     expect(() => directory.bind('person@example.test', 'wrong')).toThrow('LDAP invalid credentials');
-    const entry = directory.bind('person@example.test', 'directory-password');
+    const entry = directory.bind('person@example.test', directory.defaultUserPassword);
     const identity = ldapIdentityProviderAdapter.normalizeIdentity({ providerKey: 'ldap-mock', subjectId: entry.subjectId, claims: { memberOf: entry.memberOf } });
     expect(identity.entitlements).toEqual(expect.arrayContaining([
       { type: 'authenticated', externalId: 'authenticated' },

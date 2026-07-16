@@ -1,8 +1,8 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
-import { samlSigningMaterials } from './samlSigningMaterial.js';
+import { createSamlSigningMaterial } from './samlSigningMaterial.js';
 
 const require = createRequire(import.meta.url);
 const { signXml } = require('@node-saml/node-saml/lib/xml.js') as {
@@ -116,7 +116,7 @@ export class MockSamlIdentityProvider {
   readonly issuer = 'https://saml-mock.example.test';
   readonly audience = 'enterpriseglue-ai';
   readonly callbackUrl = 'https://app.example.test/api/auth/providers/saml/callback';
-  private signingMaterialIndex = 0;
+  private signingMaterial = createSamlSigningMaterial();
   private sequence = 0;
   private attributes: Record<string, unknown> = {
     nameID: 'person@example.test',
@@ -133,15 +133,15 @@ export class MockSamlIdentityProvider {
   }
 
   certificate(): string {
-    return samlSigningMaterials[this.signingMaterialIndex].certificate;
+    return this.signingMaterial.certificate;
   }
 
   rotateSigningMaterial(): void {
-    this.signingMaterialIndex = (this.signingMaterialIndex + 1) % samlSigningMaterials.length;
+    this.signingMaterial = createSamlSigningMaterial();
   }
 
   signedResponse(): string {
-    const material = samlSigningMaterials[this.signingMaterialIndex];
+    const material = this.signingMaterial;
     const now = new Date();
     const notBefore = new Date(now.getTime() - 60_000).toISOString();
     const notOnOrAfter = new Date(now.getTime() + 300_000).toISOString();
@@ -167,13 +167,15 @@ function xmlEscape(value: string): string {
 export class MockLdapDirectory {
   readonly url = 'ldaps://directory-mock.example.test:636';
   readonly bindDn = 'cn=service,dc=example,dc=test';
-  readonly bindPassword = 'service-password';
+  /** Per-directory fixture credentials; never reusable outside this test instance. */
+  readonly bindPassword = randomBytes(24).toString('base64url');
+  readonly defaultUserPassword = randomBytes(24).toString('base64url');
   private readonly users = new Map<string, { password: string; subjectId: string; memberOf: string[] }>();
   private failureMode: 'none' | 'tls_failure' | 'timeout' | 'search_failure' | 'malformed' = 'none';
 
   constructor() {
     this.setUser('person@example.test', {
-      password: 'directory-password', subjectId: 'uid=person,ou=users,dc=example,dc=test',
+      password: this.defaultUserPassword, subjectId: 'uid=person,ou=users,dc=example,dc=test',
       memberOf: ['cn=operations,ou=groups,dc=example,dc=test'],
     });
   }

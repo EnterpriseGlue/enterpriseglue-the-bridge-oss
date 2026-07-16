@@ -91,4 +91,11 @@ describe('GenericSamlService', () => {
       signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
     }, response)).resolves.toMatchObject({ nameID: 'person@example.test' });
   });
+
+  it('uses fresh signing material for each test provider instance', () => {
+    const first = new MockSamlIdentityProvider();
+    const second = new MockSamlIdentityProvider();
+
+    expect(first.certificate()).not.toEqual(second.certificate());
+  });
 });

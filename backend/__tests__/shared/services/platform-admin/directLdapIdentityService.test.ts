@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { randomBytes } from 'node:crypto';
 import { directLdapIdentityService, setLdapClientFactoryForTest } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
 import { MockLdapDirectory } from '../../../../test/identity-mocks/index.js';
+
+const serviceBindPassword = randomBytes(24).toString('base64url');
+const testUserPassword = randomBytes(24).toString('base64url');
 
 const provider = {
   id: 'provider-1', protocol: 'ldap', isEnabled: true, authenticationMode: 'direct',
@@ -11,23 +15,23 @@ describe('direct LDAP identity service', () => {
   afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; });
 
   it('uses a service lookup then user bind and returns a stable user id with group DNs', async () => {
-    process.env.LDAP_BIND_SECRET = 'service-password';
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
     const client = {
       bind: vi.fn().mockResolvedValue(undefined),
       search: vi.fn().mockResolvedValue({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'uuid-1', mail: 'person@example.test', cn: 'Person', givenName: 'Person', sn: 'Example', memberOf: ['cn=operations,ou=groups,dc=example,dc=test'] }] }),
       unbind: vi.fn().mockResolvedValue(undefined),
     };
     setLdapClientFactoryForTest(() => client);
-    const identity = await directLdapIdentityService.authenticate(provider, 'person@example.test', 'user-password');
+    const identity = await directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword);
     expect(identity).toMatchObject({ subjectId: 'uuid-1', email: 'person@example.test', groups: ['cn=operations,ou=groups,dc=example,dc=test'] });
-    expect(client.bind).toHaveBeenNthCalledWith(1, 'cn=service,dc=example,dc=test', 'service-password');
-    expect(client.bind).toHaveBeenNthCalledWith(2, 'uid=person,ou=users,dc=example,dc=test', 'user-password');
+    expect(client.bind).toHaveBeenNthCalledWith(1, 'cn=service,dc=example,dc=test', serviceBindPassword);
+    expect(client.bind).toHaveBeenNthCalledWith(2, 'uid=person,ou=users,dc=example,dc=test', testUserPassword);
     expect(client.search).toHaveBeenCalledWith('ou=users,dc=example,dc=test', expect.objectContaining({ filter: '(mail=person@example.test)', sizeLimit: 2 }));
     expect(client.unbind).toHaveBeenCalled();
   });
 
   it('returns configured immutable group ids from reverse group search', async () => {
-    process.env.LDAP_BIND_SECRET = 'service-password';
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
     const groupSearchProvider = {
       ...provider,
       configurationJson: JSON.stringify({
@@ -49,7 +53,7 @@ describe('direct LDAP identity service', () => {
     };
     setLdapClientFactoryForTest(() => client);
 
-    const identity = await directLdapIdentityService.authenticate(groupSearchProvider, 'person@example.test', 'user-password');
+    const identity = await directLdapIdentityService.authenticate(groupSearchProvider, 'person@example.test', testUserPassword);
 
     expect(identity).toMatchObject({
       subjectId: 'user-uuid-1',
@@ -62,7 +66,7 @@ describe('direct LDAP identity service', () => {
   });
 
   it('resolves bounded parent groups when group_search enables nested groups', async () => {
-    process.env.LDAP_BIND_SECRET = 'service-password';
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
     const nestedProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), groupIdAttribute: 'entryUUID', membershipMode: 'group_search', nestedGroups: true }) };
     const client = { bind: vi.fn().mockResolvedValue(undefined), search: vi.fn()
       .mockResolvedValueOnce({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'user-1', mail: 'person@example.test' }] })
@@ -70,16 +74,16 @@ describe('direct LDAP identity service', () => {
       .mockResolvedValueOnce({ searchEntries: [{ dn: 'cn=admins,ou=groups,dc=example,dc=test', entryUUID: 'group-admins' }] })
       .mockResolvedValueOnce({ searchEntries: [] }), unbind: vi.fn().mockResolvedValue(undefined) };
     setLdapClientFactoryForTest(() => client);
-    await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', 'user-password')).resolves.toMatchObject({ groups: ['group-operators', 'group-admins'] });
+    await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', testUserPassword)).resolves.toMatchObject({ groups: ['group-operators', 'group-admins'] });
   });
 
   it('fails closed when nested groups are requested with memberOf mode', async () => {
-    await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), nestedGroups: true }) }, 'person@example.test', 'user-password'))
+    await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), nestedGroups: true }) }, 'person@example.test', testUserPassword))
       .rejects.toThrow('Nested LDAP groups require group_search membership mode');
   });
 
   it('rejects an unsafe user filter without a username placeholder', async () => {
-    await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), userSearchFilter: '(objectClass=person)' }) }, 'person@example.test', 'password')).rejects.toThrow('{username}');
+    await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), userSearchFilter: '(objectClass=person)' }) }, 'person@example.test', testUserPassword)).rejects.toThrow('{username}');
   });
 
   it('runs bind and search over the LDAPS protocol mock', async () => {
@@ -87,7 +91,7 @@ describe('direct LDAP identity service', () => {
     process.env.LDAP_BIND_SECRET = directory.bindPassword;
     setLdapClientFactoryForTest((url) => directory.client(url));
 
-    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', 'directory-password')).resolves.toMatchObject({
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', directory.defaultUserPassword)).resolves.toMatchObject({
       subjectId: 'uuid-person@example.test',
       email: 'person@example.test',
       groups: ['cn=operations,ou=groups,dc=example,dc=test'],
@@ -95,14 +99,14 @@ describe('direct LDAP identity service', () => {
   });
 
   it('rejects an insecure LDAP URL before opening a directory client', async () => {
-    process.env.LDAP_BIND_SECRET = 'service-password';
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
     const factory = vi.fn();
     setLdapClientFactoryForTest(factory);
 
     await expect(directLdapIdentityService.authenticate({
       ...provider,
       configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), url: 'ldap://directory.example.test:389' }),
-    }, 'person@example.test', 'directory-password')).rejects.toThrow('must use LDAPS');
+    }, 'person@example.test', testUserPassword)).rejects.toThrow('must use LDAPS');
     expect(factory).not.toHaveBeenCalled();
   });
 
@@ -116,7 +120,7 @@ describe('direct LDAP identity service', () => {
     process.env.LDAP_BIND_SECRET = directory.bindPassword;
     setLdapClientFactoryForTest((url) => directory.client(url));
 
-    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', 'directory-password'))
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', directory.defaultUserPassword))
       .rejects.toThrow(message);
   });
 
@@ -126,7 +130,7 @@ describe('direct LDAP identity service', () => {
     process.env.LDAP_BIND_SECRET = directory.bindPassword;
     setLdapClientFactoryForTest((url) => directory.client(url));
 
-    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', 'directory-password'))
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', directory.defaultUserPassword))
       .rejects.toThrow('did not include a DN');
   });
 });

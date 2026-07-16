@@ -2093,7 +2093,7 @@ interface IdentityMockController {
 
 - [ ] ⬜ Bind mock services to loopback/ephemeral ports and expose control methods only inside the test process or isolated test network.
 - [ ] ⬜ Reset all subjects, entitlements, keys, clocks, replay caches, and failure modes between tests.
-- [ ] ⬜ Generate signing keys/certificates per test run and never commit reusable private keys or bind credentials.
+- [x] ✅ Generate signing keys/certificates per test-provider instance and never commit reusable private keys or bind credentials. The test-only SAML fixture creates one-day self-signed material in the process temporary directory and removes it before returning; the LDAP fixture generates bind and user credentials for each directory instance.
 
 #### Mock OIDC Provider
 
@@ -2159,7 +2159,7 @@ Fixtures should include at least:
 - [x] ✅ Extend frontend MSW handlers in `frontend/test/mocks/handlers.ts` for identity/config APIs and controlled provider failure variants. The Identity Providers and Identity Mappings tabs exercise the real API client against those handlers for success, denied access, failure rendering, and config-managed mapping lockout.
 - [ ] ⬜ Add a local identity mock compose/profile only if LDAP protocol fidelity requires a container; OIDC/SAML mocks should prefer ephemeral test processes.
 - [x] ✅ Add `test:identity-contract`, `test:identity-integration`, serialized `test:legacy-auth-integration`, and `test:config-bundles` scripts plus the `test:authz-refactor` root aggregate. The identity-contract lane includes provider-neutral and legacy SSO group/assignment reconciliation plus snapshot-cleanup contracts; the legacy flow suite deliberately serializes files because its Express router fixtures have process-global module state. These commands run isolated protocol, route, mapping, and bundle suites. Containerized protocol-faithful browser mocks remain a separate pending milestone.
-- [ ] ⬜ Publish no fixed mock ports or credentials; tests allocate ephemeral ports and use generated short-lived signing keys/certificates.
+- [x] ✅ Publish no fixed mock ports or credentials. Browser-local fixtures expose no network port, the protocol fixtures retain control APIs in the test process, SAML signing material is generated per provider instance with one-day validity, and LDAP credentials are generated per directory instance.
 - [ ] ⬜ Archive sanitized failure diagnostics and sync-run ids as CI artifacts without tokens, assertions, bind credentials, or raw PII.
 
 ## Implementation Plan
