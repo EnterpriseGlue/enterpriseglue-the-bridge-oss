@@ -126,7 +126,7 @@ describe('IdentityProvidersSettingsTab', () => {
     const modal = await screen.findByRole('dialog', { name: 'Resolve external identity conflict' });
     fireEvent.change(within(modal).getByLabelText('External provider subject ID'), { target: { value: 'subject-1' } });
     fireEvent.change(within(modal).getByLabelText('Currently linked account ID'), { target: { value: 'user-1' } });
-    fireEvent.click(within(modal).getByRole('button', { name: 'Unlink external identity' }));
+    fireEvent.click(within(modal).getByRole('button', { name: /Unlink external identity/ }));
 
     await waitFor(() => expect(unlink).toHaveBeenCalledWith({ key: 'demo-oidc', body: { subjectId: 'subject-1', userId: 'user-1', confirmation: 'UNLINK_EXTERNAL_IDENTITY' } }));
     expect(await screen.findByText('External identity unlinked: demo-oidc')).toBeInTheDocument();
