@@ -32,8 +32,13 @@ import { authzGroupService } from './AuthzGroupService.js';
 import { runtimeResourceSetService } from './RuntimeResourceSetService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
+import type {
+  ConfigBundleApplyReconciliation as SchemaConfigBundleApplyReconciliation,
+  ConfigBundleIdentityReconciliationMode as SchemaConfigBundleIdentityReconciliationMode,
+} from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
-export type ConfigBundleIdentityReconciliationMode = 'none' | 'preview' | 'apply';
+/** Compatibility alias for consumers of the apply service. */
+export type ConfigBundleIdentityReconciliationMode = SchemaConfigBundleIdentityReconciliationMode;
 
 export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   expectedPreviewHash: string;
@@ -52,28 +57,7 @@ export interface ConfigBundleApplyResult {
   updated: number;
   archived: number;
   changes: ConfigBundleDiffChange[];
-  reconciliation: {
-    status: 'completed';
-    engineSetCount: number;
-    runtimeResourceSetCount: number;
-    engineCount: number;
-    identitySnapshot: {
-      mode: ConfigBundleIdentityReconciliationMode;
-      status: 'not_needed' | 'skipped' | 'previewed' | 'completed' | 'truncated' | 'failed';
-      providerCount: number;
-      scanned: number;
-      created: number;
-      removed: number;
-      failed: number;
-    };
-    runtimeReconciliation: {
-      status: 'not_needed' | 'queued' | 'completed' | 'failed';
-      taskId: string | null;
-      engineSetCount: number;
-      runtimeResourceSetCount: number;
-      engineCount: number;
-    };
-  };
+  reconciliation: SchemaConfigBundleApplyReconciliation;
   idempotent?: boolean;
   applyRunId?: string;
 }

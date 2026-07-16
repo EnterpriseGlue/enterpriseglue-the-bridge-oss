@@ -515,6 +515,7 @@ export const IdentityMockFixturesSchema = z.object({
 export type EnterpriseGlueConfigBundle = z.infer<typeof EnterpriseGlueConfigBundleSchema>;
 export type ConfigBundleSettings = z.infer<typeof ConfigBundleSettingsSchema>;
 export type ConfigBundleBootstrapStatus = z.infer<typeof ConfigBundleBootstrapStatusSchema>;
+export type ConfigBundleIdentityReconciliationMode = z.infer<typeof ConfigBundleIdentityReconciliationModeSchema>;
 export type ConfigBundleIdentitySnapshot = z.infer<typeof ConfigBundleIdentitySnapshotSchema>;
 export type ConfigBundleRuntimeReconciliation = z.infer<typeof ConfigBundleRuntimeReconciliationSchema>;
 export type ConfigBundleApplyReconciliation = z.infer<typeof ConfigBundleApplyReconciliationSchema>;
