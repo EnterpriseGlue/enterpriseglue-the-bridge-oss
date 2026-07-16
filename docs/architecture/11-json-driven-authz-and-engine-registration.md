@@ -2104,7 +2104,7 @@ interface IdentityMockController {
 
 #### Mock SAML Identity Provider
 
-- [ ] ⬜ Serve metadata and produce signed assertions with configurable NameID, email, group attributes, roles, audience, recipient, timestamps, and session index.
+- [x] ✅ Serve metadata and produce signed assertions with configurable NameID, email, group attributes, roles, audience, recipient, timestamps, and session index. The SAML fixture exposes metadata and a browser-post response only on an ephemeral loopback HTTPS port; mutable attributes stay behind the test-process controller.
 - [ ] ⬜ Support certificate rotation, invalid signature, wrong audience/recipient, expired assertion, replayed response id, missing NameID, multi-valued attributes, and malformed XML.
 - [ ] ⬜ Verify raw assertions and private keys never appear in logs or API diagnostics.
 

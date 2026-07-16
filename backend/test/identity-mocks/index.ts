@@ -20,6 +20,12 @@ export interface MockOidcProviderOptions {
   callbackUrl?: string;
 }
 
+export interface MockSamlIdentityProviderOptions {
+  issuer?: string;
+  audience?: string;
+  callbackUrl?: string;
+}
+
 interface SigningMaterial {
   privateKey: string;
   publicJwk: JsonWebKey & { kid: string };
@@ -235,9 +241,9 @@ export class MockOidcHttpsServer {
 }
 
 export class MockSamlIdentityProvider {
-  readonly issuer = 'https://saml-mock.example.test';
-  readonly audience = 'enterpriseglue-ai';
-  readonly callbackUrl = 'https://app.example.test/api/auth/providers/saml/callback';
+  readonly issuer: string;
+  readonly audience: string;
+  readonly callbackUrl: string;
   private signingMaterial = createSamlSigningMaterial();
   private sequence = 0;
   private attributes: Record<string, unknown> = {
@@ -245,6 +251,12 @@ export class MockSamlIdentityProvider {
     'http://schemas.microsoft.com/ws/2008/06/identity/claims/groups': ['payments', 'operations'],
     role: ['operator'],
   };
+
+  constructor(options: MockSamlIdentityProviderOptions = {}) {
+    this.issuer = options.issuer || 'https://saml-mock.example.test';
+    this.audience = options.audience || 'enterpriseglue-ai';
+    this.callbackUrl = options.callbackUrl || 'https://app.example.test/api/auth/providers/saml/callback';
+  }
 
   setAttributes(attributes: Record<string, unknown>): void {
     this.attributes = { ...attributes };
@@ -289,6 +301,100 @@ export class MockSamlIdentityProvider {
     const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response-${sequence}" Version="2.0" IssueInstant="${issueInstant}" Destination="${this.callbackUrl}"><saml:Issuer>${this.issuer}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signedAssertion}</samlp:Response>`;
     const signedResponse = signXml(response, "/*[local-name(.)='Response']", { reference: "/*[local-name(.)='Response']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
     return Buffer.from(signedResponse).toString('base64');
+  }
+}
+
+/**
+ * A test-only SAML IdP transport surface. The server binds to loopback with an
+ * ephemeral port and has no HTTP mutation endpoint; tests mutate only the
+ * in-process provider controller before requesting metadata or the SSO form.
+ */
+export class MockSamlHttpsServer {
+  private server: Server | null = null;
+  provider: MockSamlIdentityProvider | null = null;
+  private issuerUrl: string | null = null;
+
+  get issuer(): string {
+    if (!this.issuerUrl) throw new Error('SAML mock server is not running');
+    return this.issuerUrl;
+  }
+
+  async start(): Promise<void> {
+    if (this.server) return;
+    const tls = createEphemeralTestCertificate('127.0.0.1');
+    this.server = createHttpsServer({ key: tls.privateKey, cert: tls.certificate }, (request, response) => {
+      this.handle(request, response);
+    });
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', reject);
+      this.server!.listen(0, '127.0.0.1', () => {
+        this.server!.off('error', reject);
+        resolve();
+      });
+    });
+    const address = this.server.address() as AddressInfo;
+    this.issuerUrl = `https://127.0.0.1:${address.port}`;
+    this.provider = new MockSamlIdentityProvider({ issuer: this.issuerUrl });
+  }
+
+  async stop(): Promise<void> {
+    const server = this.server;
+    this.server = null;
+    this.provider = null;
+    this.issuerUrl = null;
+    if (!server) return;
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+
+  async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
+    const url = new URL(String(input));
+    if (url.origin !== this.issuer) return globalThis.fetch(input, init);
+    const headers = new Headers(init?.headers);
+    return new Promise<Response>((resolve, reject) => {
+      const request = httpsRequest(url, {
+        method: init?.method || 'GET',
+        headers: Object.fromEntries(headers.entries()),
+        rejectUnauthorized: false,
+      }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        response.once('error', reject);
+        response.once('end', () => {
+          const responseHeaders = new Headers();
+          for (const [key, value] of Object.entries(response.headers)) {
+            if (Array.isArray(value)) value.forEach((entry) => responseHeaders.append(key, entry));
+            else if (value !== undefined) responseHeaders.set(key, String(value));
+          }
+          resolve(new Response(Buffer.concat(chunks), { status: response.statusCode || 500, headers: responseHeaders }));
+        });
+      });
+      request.once('error', reject);
+      request.end();
+    });
+  }
+
+  private handle(request: IncomingMessage, response: ServerResponse): void {
+    const provider = this.provider;
+    if (!provider) {
+      response.statusCode = 503;
+      response.end();
+      return;
+    }
+    const url = new URL(request.url || '/', this.issuer);
+    if (url.pathname === '/metadata') {
+      const certificate = provider.certificate().replace(/-----[^-]+-----|\s+/g, '');
+      response.setHeader('content-type', 'application/samlmetadata+xml');
+      response.end(`<?xml version="1.0"?><EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${xmlEscape(provider.issuer)}"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><KeyDescriptor use="signing"><KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data><X509Certificate>${certificate}</X509Certificate></X509Data></KeyInfo></KeyDescriptor><SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${xmlEscape(`${provider.issuer}/sso`)}"/></IDPSSODescriptor></EntityDescriptor>`);
+      return;
+    }
+    if (url.pathname === '/sso') {
+      const relayState = url.searchParams.get('RelayState') || '';
+      response.setHeader('content-type', 'text/html; charset=utf-8');
+      response.end(`<!doctype html><form method="post" action="${xmlEscape(provider.callbackUrl)}"><input type="hidden" name="SAMLResponse" value="${provider.signedResponse()}"/><input type="hidden" name="RelayState" value="${xmlEscape(relayState)}"/></form>`);
+      return;
+    }
+    response.statusCode = 404;
+    response.end('not found');
   }
 }
 
