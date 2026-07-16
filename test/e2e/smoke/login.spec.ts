@@ -13,7 +13,7 @@ test.describe('Smoke: login', () => {
 
     await page.getByLabel(/email/i).fill(email);
     await page.getByLabel(/password/i).fill(password);
-    await page.getByRole('button', { name: /sign in/i }).click();
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
   });
