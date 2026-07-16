@@ -5,6 +5,7 @@ import { test } from 'node:test';
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
+const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -71,4 +72,11 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_REHEARSAL=true/);
   assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localOidcRehearsalRunner, /localhost, loopback, or a \.local host/);
+});
+
+test('the live local SAML rehearsal is opt-in and guarded to local browser targets', () => {
+  assert.match(scripts['test:saml:local-rehearsal'], /run-local-saml-rehearsal-test\.sh/);
+  assert.match(localSamlRehearsalRunner, /LOCAL_SAML_REHEARSAL=true/);
+  assert.match(localSamlRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
+  assert.match(localSamlRehearsalRunner, /localhost, loopback, or a \.local host/);
 });

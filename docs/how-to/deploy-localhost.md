@@ -223,6 +223,52 @@ credentials, session cookies, or tokens.
 This is local protocol and browser-flow evidence only. It does not replace the
 representative deployed-provider cutover evidence described below.
 
+### Live local SAML callback
+
+The same disposable Keycloak realm contains a signed-SAML client. Add the SAML
+overlay to expose its public IdP signing certificate to the backend only through
+the existing file-reference secret boundary. The helper extracts that public
+certificate from localhost metadata into the ignored `.local/` directory; it
+never records a signing key or a resolved secret in provider configuration.
+
+```bash
+./infra/docker/keycloak/generate-local-tls.sh
+
+docker compose --project-directory . \
+  --env-file .local/docker/env/docker.env \
+  -f infra/docker/compose/docker-compose.yml \
+  -f infra/docker/compose/docker-compose.backend-expose.yml \
+  -f infra/docker/compose/docker-compose.keycloak.yml \
+  -f infra/docker/compose/docker-compose.keycloak-tls.yml \
+  -f infra/docker/compose/docker-compose.keycloak-saml.yml \
+  up -d backend keycloak frontend-tls
+```
+
+Configure the direct SAML provider with an existing local platform administrator.
+The helper accepts only local HTTPS URLs, fetches only the Keycloak public SAML
+metadata, configures a file reference rather than a certificate value, and runs
+a metadata connection test.
+
+```bash
+LOCAL_SAML_ADMIN_EMAIL='your-local-admin@example.test' \
+LOCAL_SAML_ADMIN_PASSWORD='your-local-admin-password' \
+./scripts/configure-local-saml-provider.sh
+```
+
+Then run the guarded browser lane. It signs in through Keycloak, receives a
+signed HTTP-POST assertion at the provider-specific callback, and verifies the
+EnterpriseGlue session without printing fixture credentials, assertions,
+cookies, or tokens.
+
+```bash
+PLAYWRIGHT_BASE_URL=https://localhost:5443 \
+PLAYWRIGHT_LOCAL_CA_FILE=.local/docker/keycloak-tls/ca.crt \
+corepack pnpm@11.0.8 run test:saml:local-rehearsal
+```
+
+As with OIDC, this is local protocol and browser-flow evidence only. It does
+not authorize a legacy-provider cutover or compatibility-path removal.
+
 ## Optional local sign-in smoke
 
 After the stack is healthy, verify a real login with an existing disposable

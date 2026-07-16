@@ -19,6 +19,51 @@
       "https://localhost:5443",
       "https://localhost:15443"
     ]
+  }, {
+    "clientId": "enterpriseglue-local-saml",
+    "name": "EnterpriseGlue local SAML rehearsal",
+    "protocol": "saml",
+    "enabled": true,
+    "publicClient": false,
+    "redirectUris": [
+      "https://localhost:5443/api/auth/providers/saml/callback",
+      "https://localhost:15443/api/auth/providers/saml/callback"
+    ],
+    "attributes": {
+      "saml.assertion.signature": "true",
+      "saml.authnstatement": "true",
+      "saml.client.signature": "false",
+      "saml.force.post.binding": "true",
+      "saml.server.signature": "true",
+      "saml.signature.algorithm": "RSA_SHA256",
+      "saml.assertion.nameid.format": "email"
+    },
+    "protocolMappers": [{
+      "name": "email",
+      "protocol": "saml",
+      "protocolMapper": "saml-user-property-mapper",
+      "consentRequired": false,
+      "config": {
+        "attribute.name": "email",
+        "attribute.nameformat": "Basic",
+        "friendly.name": "email",
+        "user.attribute": "email"
+      }
+    }, {
+      "name": "groups",
+      "protocol": "saml",
+      "protocolMapper": "saml-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "attribute.name": "groups",
+        "attribute.nameformat": "Basic",
+        "full.path": "false",
+        "single": "false"
+      }
+    }]
+  }],
+  "groups": [{
+    "name": "operators"
   }],
   "users": [{
     "username": "oidc-operator",
@@ -28,6 +73,16 @@
     "firstName": "OIDC",
     "lastName": "Operator",
     "credentials": [{"type": "password", "value": "local-oidc-operator", "temporary": false}],
-    "realmRoles": ["offline_access"]
+    "realmRoles": ["offline_access"],
+    "groups": ["/operators"]
+  }, {
+    "username": "saml-operator",
+    "enabled": true,
+    "emailVerified": true,
+    "email": "saml-operator@localhost.test",
+    "firstName": "SAML",
+    "lastName": "Operator",
+    "credentials": [{"type": "password", "value": "local-saml-operator", "temporary": false}],
+    "groups": ["/operators"]
   }]
 }
