@@ -1804,6 +1804,7 @@ const {
   LegacyMappingRetirementResultSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
+  ProjectMembersResponseSchema,
   AddProjectMemberRequest,
   UpdateProjectMemberRoleRequest,
   TransferProjectOwnershipRequest,
@@ -2332,7 +2333,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/members',
   ...authzExtension('project.members.read', 'GET', '/starbase-api/projects/{projectId}/members'),
   request: { params: z.object({ projectId: z.string().uuid() }) },
-  responses: { 200: { description: 'Project members', content: { 'application/json': { schema: z.array(ProjectMemberSchema) } } } },
+  responses: { 200: { description: 'Project members and unresolved invitations', content: { 'application/json': { schema: ProjectMembersResponseSchema } } } },
 });
 
 registry.registerPath({

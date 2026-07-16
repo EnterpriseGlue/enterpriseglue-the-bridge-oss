@@ -25,6 +25,36 @@ export const ProjectMemberSchema = z.object({
   user: UserSummarySchema.optional(),
 });
 
+/**
+ * Starbase's project-members collection augments a canonical member with the
+ * legacy deploy-grant display state. The grant remains presentation data;
+ * protected deployment routes still evaluate canonical permissions.
+ */
+export const ProjectMemberAccessViewSchema = ProjectMemberSchema.extend({
+  deployAllowed: z.boolean().nullable().optional(),
+  user: UserSummarySchema.nullable().optional(),
+});
+
+export const ProjectPendingInviteStatusSchema = z.enum(['pending', 'expired', 'onboarding']);
+export const ProjectPendingInviteSchema = z.object({
+  invitationId: z.string(),
+  userId: z.string(),
+  email: z.string().email(),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  role: ProjectRoleSchema,
+  roles: z.array(ProjectRoleSchema).optional(),
+  status: ProjectPendingInviteStatusSchema,
+  deliveryMethod: z.enum(['email', 'manual']),
+  expiresAt: z.number(),
+  createdAt: z.number(),
+});
+
+export const ProjectMembersResponseSchema = z.object({
+  members: z.array(ProjectMemberAccessViewSchema),
+  pendingInvites: z.array(ProjectPendingInviteSchema),
+});
+
 // Request schemas
 export const AddProjectMemberRequest = z.object({
   email: z.string().email(),
@@ -44,4 +74,8 @@ export const TransferProjectOwnershipRequest = z.object({
 // Types
 export type ProjectRole = z.infer<typeof ProjectRoleSchema>;
 export type ProjectMember = z.infer<typeof ProjectMemberSchema>;
+export type ProjectMemberAccessView = z.infer<typeof ProjectMemberAccessViewSchema>;
+export type ProjectPendingInviteStatus = z.infer<typeof ProjectPendingInviteStatusSchema>;
+export type ProjectPendingInvite = z.infer<typeof ProjectPendingInviteSchema>;
+export type ProjectMembersResponse = z.infer<typeof ProjectMembersResponseSchema>;
 export type AddProjectMember = z.infer<typeof AddProjectMemberRequest>;
