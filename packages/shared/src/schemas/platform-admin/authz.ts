@@ -702,6 +702,21 @@ export const ExternalEngineRegistrationAuditEntrySchema = z.object({
   createdAt: z.number(),
 });
 
+export const ExternalEngineRegistrationAuditActionSchema = z.enum([
+  'all',
+  'engine.external_registration.create',
+  'engine.external_registration.update',
+  'engine.external_registration.decommission',
+  'engine.external_registration.reactivate',
+  'engine.external_registration.reconcile',
+]);
+
+/** Shared query contract for the External Registration audit history API. */
+export const ExternalEngineRegistrationAuditQuerySchema = z.object({
+  action: ExternalEngineRegistrationAuditActionSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
 export const ExternalEngineDecommissionResponseSchema = z.object({
   decommissioned: z.boolean(),
   engineId: z.string(),
@@ -1797,6 +1812,8 @@ export type ExternalEngineSystemCreate = z.infer<typeof ExternalEngineSystemCrea
 export type ExternalEngineSystemUpdate = z.infer<typeof ExternalEngineSystemUpdateSchema>;
 export type ExternalEngineRegistration = z.infer<typeof ExternalEngineRegistrationSchema>;
 export type ExternalEngineRegistrationAuditEntry = z.infer<typeof ExternalEngineRegistrationAuditEntrySchema>;
+export type ExternalEngineRegistrationAuditAction = z.infer<typeof ExternalEngineRegistrationAuditActionSchema>;
+export type ExternalEngineRegistrationAuditQuery = z.infer<typeof ExternalEngineRegistrationAuditQuerySchema>;
 export type ExternalEngineDecommissionResponse = z.infer<typeof ExternalEngineDecommissionResponseSchema>;
 export type ExternalEngineReactivateResponse = z.infer<typeof ExternalEngineReactivateResponseSchema>;
 export type ExternalEngineReconcileResponse = z.infer<typeof ExternalEngineReconcileResponseSchema>;

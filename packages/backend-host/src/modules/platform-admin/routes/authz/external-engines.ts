@@ -19,19 +19,10 @@ import { getExternalEngineCapabilityDiagnostics, getExternalEngineMaterializatio
 import { parseExternalEngineFieldOwnership } from './external-engine-ownership.js';
 import { parseExternalEngineJson, parseExternalEngineLabels, redactExternalEngineAuditDetails } from './external-engine-serialization.js';
 import { isExternalEngineTenantVisible } from './external-engine-tenant.js';
+import { ExternalEngineRegistrationAuditQuerySchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const resourceIdParamSchema = z.object({ id: z.string().min(1) });
-const externalEngineAuditActions = [
-  'engine.external_registration.create',
-  'engine.external_registration.update',
-  'engine.external_registration.decommission',
-  'engine.external_registration.reactivate',
-  'engine.external_registration.reconcile',
-] as const;
-const externalEngineAuditQuerySchema = z.object({
-  action: z.enum(['all', ...externalEngineAuditActions]).optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-});
+const externalEngineAuditActions = ExternalEngineRegistrationAuditQuerySchema.shape.action.unwrap().exclude(['all']).options;
 const externalEngineLifecycleBodySchema = z.object({ reason: z.string().trim().max(500).optional() });
 
 export interface ExternalEngineRouteDependencies {
@@ -111,7 +102,7 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
     }
   }));
 
-  router.get('/api/authz/external-engines/:id/audit', apiLimiter, requireAuth, requireAction('platform.external-engines.audit.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateQuery(externalEngineAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  router.get('/api/authz/external-engines/:id/audit', apiLimiter, requireAuth, requireAction('platform.external-engines.audit.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), validateParams(resourceIdParamSchema), validateQuery(ExternalEngineRegistrationAuditQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const action = req.query.action === 'all' ? undefined : req.query.action;
       const entries = await (await getDataSource()).getRepository(AuditLog).find({

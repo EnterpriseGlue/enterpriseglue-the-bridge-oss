@@ -45,6 +45,8 @@ import type {
   ExternalEngineReconcileResponse as SharedExternalEngineReconcileResponse,
   ExternalEngineRegistration as SharedExternalEngineRegistration,
   ExternalEngineRegistrationAuditEntry as SharedExternalEngineRegistrationAuditEntry,
+  ExternalEngineRegistrationAuditAction as SharedExternalEngineRegistrationAuditAction,
+  ExternalEngineRegistrationAuditQuery as SharedExternalEngineRegistrationAuditQuery,
   ExternalEngineSystem as SharedExternalEngineSystem,
   ExternalEngineSystemCreate as SharedExternalEngineSystemCreate,
   ExternalEngineSystemUpdate as SharedExternalEngineSystemUpdate,
@@ -185,18 +187,8 @@ export type ExternalEngineSystemUpdatePayload = SharedExternalEngineSystemUpdate
 export type ExternalEngineRegistration = SharedExternalEngineRegistration;
 export type ExternalEngineRegistrationAuditEntry = SharedExternalEngineRegistrationAuditEntry;
 
-export type ExternalEngineAuditAction =
-  | 'all'
-  | 'engine.external_registration.create'
-  | 'engine.external_registration.update'
-  | 'engine.external_registration.decommission'
-  | 'engine.external_registration.reactivate'
-  | 'engine.external_registration.reconcile';
-
-export interface ExternalEngineAuditParams {
-  action?: ExternalEngineAuditAction;
-  limit?: number;
-}
+export type ExternalEngineAuditAction = SharedExternalEngineRegistrationAuditAction;
+export type ExternalEngineAuditParams = SharedExternalEngineRegistrationAuditQuery;
 
 export type ExternalEngineDecommissionResponse = SharedExternalEngineDecommissionResponse;
 export type ExternalEngineReactivateResponse = SharedExternalEngineReactivateResponse;
