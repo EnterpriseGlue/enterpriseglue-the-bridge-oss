@@ -1558,6 +1558,82 @@ describe('permissionService', () => {
     versionSpy.mockRestore();
   });
 
+  it('discovers an explicitly granted project in the tenant-scoped permission snapshot', async () => {
+    const grantQb = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{ resourceId: 'project-direct' }]),
+    };
+    const assignmentQb = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    const projectRepo = {
+      find: vi.fn().mockResolvedValue([{ id: 'project-direct' }]),
+    };
+    const groupMembership = createGroupMembershipRepo();
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return groupMembership.repo;
+        if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        if (entity === Project) return projectRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.getKnownProjectIdsForUser('user-1', 'tenant-1')).resolves.toEqual(['project-direct']);
+    expect(grantQb.andWhere).toHaveBeenCalledWith(
+      '(grant.tenantId IN (:...tenantIds) OR grant.tenantId IS NULL)',
+      { tenantIds: ['tenant-1'] },
+    );
+    expect(projectRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      select: ['id'],
+    }));
+  });
+
+  it('discovers every tenant-visible project for a global direct project grant', async () => {
+    const grantQb = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{ resourceId: null }]),
+    };
+    const assignmentQb = {
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    const projectRepo = {
+      find: vi.fn().mockResolvedValue([{ id: 'project-global' }, { id: 'project-shared' }]),
+    };
+    const groupMembership = createGroupMembershipRepo();
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return groupMembership.repo;
+        if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        if (entity === Project) return projectRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(permissionService.getKnownProjectIdsForUser('user-1', 'tenant-1')).resolves.toEqual([
+      'project-global',
+      'project-shared',
+    ]);
+    expect(projectRepo.find).toHaveBeenCalledWith({
+      where: [{ tenantId: 'tenant-1' }, { tenantId: expect.anything() }],
+      select: ['id'],
+    });
+  });
+
   it('seeds canonical system roles with the expected permissions', () => {
     const permissionsFor = (roleId: string) => SystemRoleDefinitions.find((role) => role.id === roleId)?.permissions || [];
 

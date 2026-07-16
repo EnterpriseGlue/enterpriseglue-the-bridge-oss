@@ -2905,6 +2905,20 @@ class PermissionServiceClass {
 
   private async getKnownProjectIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
     const ids = new Set<string>();
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    const explicitGrantQb = dataSource.getRepository(PermissionGrant)
+      .createQueryBuilder('grant')
+      .select(['grant.resourceId'])
+      .where('grant.userId = :userId', { userId })
+      .andWhere('grant.resourceType = :resourceType', { resourceType: 'project' })
+      .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now: Date.now() });
+    addTenantScopeFilter(explicitGrantQb, 'grant', tenantId);
+    const explicitGrants = await explicitGrantQb.getMany();
+    const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
+    explicitGrants.forEach((grant) => {
+      if (grant.resourceId) ids.add(grant.resourceId);
+    });
+
     const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
@@ -2921,7 +2935,16 @@ class PermissionServiceClass {
       if (projectId) ids.add(projectId);
     });
 
-    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (hasGlobalExplicitGrant) {
+      const projects = await dataSource.getRepository(Project).find({
+        where: normalizedTenantId
+          ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }]
+          : undefined,
+        select: ['id'],
+      });
+      projects.forEach((project) => ids.add(project.id));
+    }
+
     if (!normalizedTenantId || ids.size === 0) {
       return Array.from(ids).sort();
     }
