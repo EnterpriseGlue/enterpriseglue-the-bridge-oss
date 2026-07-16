@@ -7,6 +7,7 @@ import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infras
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { camundaGet, getDecisionDefinitions } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import { RuntimeResourceObservationSchema, type RuntimeResourceKind, type RuntimeResourceObservation } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
+import type { RuntimeResourceSetMaterializationResult as SharedRuntimeResourceSetMaterializationResult } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 export type { RuntimeResourceKind, RuntimeResourceObservation } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 export type RuntimeResourceSetSelector =
@@ -15,13 +16,8 @@ export type RuntimeResourceSetSelector =
   | { mode: 'labels'; labels: Record<string, string>; labelMatch?: 'all' | 'any' }
   | { mode: 'project_lineage'; projectRef: { id?: string; key?: string } };
 
-export interface RuntimeResourceMaterializationResult {
-  runtimeResourceSetId: string;
-  matched: number;
-  created: number;
-  updated: number;
-  removed: number;
-}
+/** Canonical transport response used by the runtime-resource API and OpenAPI contract. */
+export type RuntimeResourceMaterializationResult = SharedRuntimeResourceSetMaterializationResult;
 
 function parseObject(value: string | null | undefined): Record<string, unknown> {
   if (!value) return {};
