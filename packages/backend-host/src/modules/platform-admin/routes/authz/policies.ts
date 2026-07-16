@@ -6,7 +6,7 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { policyService } from '@enterpriseglue/shared/services/platform-admin/index.js';
-import { AuthzPolicyCreateSchema, AuthzPolicyUpdateSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { AuthzPolicyCreateSchema, AuthzPolicyResponseSchema, AuthzPolicyUpdateSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 
@@ -18,7 +18,7 @@ export function registerPolicyRoutes(router: Router, { requirePlatformAction }: 
   router.get('/api/authz/policies', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.read'), asyncHandler(async (req: Request, res: Response) => {
     try {
       const policies = await policyService.getAllPolicies(req.tenant?.tenantId || null);
-      res.json(policies);
+      res.json(AuthzPolicyResponseSchema.array().parse(policies));
     } catch (error: any) {
       logger.error('Get policies error:', error);
       throw Errors.internal('Failed to get policies');

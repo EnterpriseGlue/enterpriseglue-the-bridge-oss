@@ -22,8 +22,8 @@ import type {
   AuthzAuditLogEntry as SharedAuthzAuditLogEntry,
   AuthzCheckRequest as SharedAuthzCheckRequest,
   AuthzCheckResponse as SharedAuthzCheckResponse,
-  AuthzPolicy as SharedAuthzPolicy,
   AuthzPolicyCreate as SharedAuthzPolicyCreate,
+  AuthzPolicyResponse as SharedAuthzPolicyResponse,
   AuthzPolicyUpdate as SharedAuthzPolicyUpdate,
   AuthzResourceType as SharedAuthzResourceType,
   ApiClient as SharedApiClient,
@@ -291,7 +291,7 @@ export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementRead
 
 export type PolicyCondition = SharedPolicyCondition;
 /** The policy list endpoint intentionally omits persistence-only metadata. */
-export type AuthzPolicy = Omit<SharedAuthzPolicy, 'tenantId' | 'createdAt' | 'updatedAt' | 'createdById'>;
+export type AuthzPolicy = SharedAuthzPolicyResponse;
 export type AuthzPolicyCreate = SharedAuthzPolicyCreate;
 export type AuthzPolicyUpdate = SharedAuthzPolicyUpdate;
 export type AuthzCheckRequest = SharedAuthzCheckRequest;

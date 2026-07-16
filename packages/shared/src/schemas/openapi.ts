@@ -3218,6 +3218,7 @@ const {
   AuthzCheckResponseSchema,
   AuthzCreatedIdResponseSchema,
   AuthzPolicyCreateSchema,
+  AuthzPolicyResponseSchema,
   AuthzPolicyUpdateSchema,
   AuthzPrincipalTypeSchema,
   AuthzMutationSuccessResponseSchema,
@@ -3319,22 +3320,6 @@ registry.registerPath({
   request: { params: z.object({ id: z.string() }) },
   responses: { 200: { description: 'Project-engine deployment targets for an engine', content: { 'application/json': { schema: z.array(ProjectEngineTargetSchema) } } } },
 });
-const AuthzPolicyResponseSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable().optional(),
-  name: z.string(),
-  description: z.string().nullable().optional(),
-  effect: z.enum(['allow', 'deny']),
-  priority: z.number(),
-  resourceType: z.string().optional(),
-  action: z.string().optional(),
-  conditions: z.unknown().optional(),
-  isActive: z.boolean(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-  createdById: z.string().optional(),
-});
-
 const AuthzAuditQueryOpenApiSchema = z.object({
   userId: z.string().optional(),
   resourceType: z.string().optional(),

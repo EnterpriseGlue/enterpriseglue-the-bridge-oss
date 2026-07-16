@@ -36,6 +36,7 @@ import {
   AuthzCreatedIdResponseSchema,
   AuthzMutationSuccessResponseSchema,
   AuthzPolicyCreateSchema,
+  AuthzPolicyResponseSchema,
   AuthzPolicyUpdateSchema,
   CustomPermissionCreateResponseSchema,
   ProjectEngineTargetSyncLegacyResponseSchema,
@@ -264,6 +265,16 @@ describe('provider-neutral identity shared contracts', () => {
     }).effect).toBe('deny');
     expect(AuthzPolicyUpdateSchema.parse({ priority: 10, isActive: false })).toMatchObject({ priority: 10, isActive: false });
     expect(() => AuthzPolicyCreateSchema.parse({ name: 'bad', effect: 'allow', priority: -1 })).toThrow();
+  });
+
+  it('keeps the public policy response aligned with the service view', () => {
+    expect(AuthzPolicyResponseSchema.parse({
+      id: 'policy-1', tenantId: null, name: 'Deny risky production action', effect: 'deny', priority: 10,
+      conditions: { environment: 'production' }, isActive: true,
+    }).conditions).toEqual({ environment: 'production' });
+    expect(() => AuthzPolicyResponseSchema.parse({
+      id: 'policy-1', tenantId: null, name: 'Deny', effect: 'deny', priority: 10, conditions: {}, isActive: true, createdAt: 1,
+    })).toThrow();
   });
 
   it('keeps legacy mapping conversion additive and validates shared provider-neutral contracts', () => {

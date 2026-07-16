@@ -121,6 +121,20 @@ export const AuthzPolicySchema = AuthzPolicySchemaRaw.transform((p) => ({
   createdById: p.createdById ?? undefined,
 }));
 
+/** Safe policy service view returned by the authorization API. */
+export const AuthzPolicyResponseSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  name: z.string(),
+  description: z.string().optional(),
+  effect: z.enum(['allow', 'deny']),
+  priority: z.number().int(),
+  resourceType: z.string().optional(),
+  action: z.string().optional(),
+  conditions: z.record(z.string(), z.unknown()),
+  isActive: z.boolean(),
+}).strict();
+
 /** Public policy write contract; persistence-only tenant and actor fields are route-owned. */
 export const AuthzPolicyCreateSchema = z.object({
   name: z.string().min(1).max(255),
@@ -1841,6 +1855,7 @@ export const SsoGroupMappingTestResponseSchema = z.object({
 
 // Types
 export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
+export type AuthzPolicyResponse = z.infer<typeof AuthzPolicyResponseSchema>;
 export type AuthzPolicyCreate = z.input<typeof AuthzPolicyCreateSchema>;
 export type AuthzPolicyUpdate = z.input<typeof AuthzPolicyUpdateSchema>;
 export type AuthzCheckRequest = z.input<typeof AuthzCheckRequestSchema>;
