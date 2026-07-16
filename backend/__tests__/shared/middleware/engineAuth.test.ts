@@ -1,17 +1,10 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { requireEngineAccess, requireEngineDeployer } from '@enterpriseglue/shared/middleware/engineAuth.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
-}));
-
-vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
-  engineService: {
-    getEngineRole: vi.fn().mockResolvedValue(null),
-  },
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
@@ -27,7 +20,6 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => 
 describe('engineAuth middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (engineService.getEngineRole as Mock).mockResolvedValue(null);
     (permissionService.hasPermission as Mock).mockResolvedValue(false);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: () => ({
@@ -48,8 +40,7 @@ describe('engineAuth middleware', () => {
     } as any;
   }
 
-  it('denies engine access through a legacy engine role without scoped permission', async () => {
-    (engineService.getEngineRole as Mock).mockResolvedValue('operator');
+  it('denies engine access without a route-specific scoped permission', async () => {
     const next = vi.fn();
 
     await requireEngineAccess({ engineIdFrom: 'params' })(request(), {} as any, next);
