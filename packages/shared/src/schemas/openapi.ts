@@ -1820,6 +1820,10 @@ const {
   TransferProjectOwnershipRequest,
   EngineMemberSchema,
   EngineMembersResponseSchema,
+  EngineMemberCapabilitiesSchema,
+  EngineMemberLookupSchema,
+  EngineMemberAddResponseSchema,
+  ReissuedManualEngineInvitationSchema,
   EngineWithDetailsSchema,
   EngineRoleResponse,
   AddEngineMemberRequest,
@@ -2406,7 +2410,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/members/capabilities',
   ...authzExtension('engine.members.invite', 'GET', '/engines-api/engines/{engineId}/members/capabilities'),
   request: { params: z.object({ engineId: z.string() }) },
-  responses: { 200: { description: 'Engine member invitation capabilities', content: { 'application/json': { schema: z.object({ ssoRequired: z.boolean(), emailConfigured: z.boolean() }) } } } },
+  responses: { 200: { description: 'Engine member invitation capabilities', content: { 'application/json': { schema: EngineMemberCapabilitiesSchema } } } },
 });
 
 registry.registerPath({
@@ -2414,7 +2418,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/members/lookup',
   ...authzExtension('engine.members.lookup', 'GET', '/engines-api/engines/{engineId}/members/lookup'),
   request: { params: z.object({ engineId: z.string() }), query: z.object({ email: z.string().email().optional(), role: z.enum(['delegate', 'operator', 'deployer']).optional() }) },
-  responses: { 200: { description: 'Engine member lookup result', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Engine member lookup result', content: { 'application/json': { schema: EngineMemberLookupSchema } } } },
 });
 
 registry.registerPath({
@@ -2422,7 +2426,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/members',
   ...authzExtension('engine.members.add', 'POST', '/engines-api/engines/{engineId}/members'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: AddEngineMemberRequest } } } },
-  responses: { 201: { description: 'Member added', content: { 'application/json': { schema: EngineMemberSchema } } } },
+  responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: EngineMemberAddResponseSchema } } } },
 });
 
 registry.registerPath({
@@ -2446,7 +2450,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/pending-invites/{invitationId}/reissue',
   ...authzExtension('engine.members.invite', 'POST', '/engines-api/engines/{engineId}/pending-invites/{invitationId}/reissue'),
   request: { params: z.object({ engineId: z.string(), invitationId: z.string().uuid() }) },
-  responses: { 200: { description: 'Manual invitation reissued', content: { 'application/json': { schema: z.object({ invited: z.boolean(), emailSent: z.boolean(), inviteUrl: z.string().optional(), oneTimePassword: z.string().optional() }) } } } },
+  responses: { 200: { description: 'Manual invitation reissued', content: { 'application/json': { schema: ReissuedManualEngineInvitationSchema } } } },
 });
 
 registry.registerPath({

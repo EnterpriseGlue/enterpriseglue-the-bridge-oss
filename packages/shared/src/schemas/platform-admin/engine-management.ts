@@ -34,6 +34,46 @@ export const EngineMembersResponseSchema = z.object({
   pendingInvites: z.array(PendingEngineInviteSchema),
 });
 
+export const EngineMemberCandidateSchema = UserSummarySchema;
+export const EngineMemberLookupSchema = z.object({
+  mode: z.enum(['invite', 'existing-member', 'direct-add', 'direct-add-only']),
+  user: EngineMemberCandidateSchema.nullable().optional(),
+});
+
+export const EngineMemberCapabilitiesSchema = z.object({
+  ssoRequired: z.boolean(),
+  emailConfigured: z.boolean(),
+});
+
+/** Direct member adds return assignment data, not an EngineMember roster row. */
+export const EngineMemberDirectAddResponseSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  role: z.enum(['operator', 'deployer']),
+  user: UserSummarySchema,
+  invited: z.literal(false),
+});
+
+export const EngineMemberInvitationResponseSchema = z.object({
+  invited: z.literal(true),
+  emailSent: z.boolean(),
+  emailError: z.string().optional(),
+  inviteUrl: z.string().optional(),
+  oneTimePassword: z.string().optional(),
+});
+
+export const EngineMemberAddResponseSchema = z.union([
+  EngineMemberDirectAddResponseSchema,
+  EngineMemberInvitationResponseSchema,
+]);
+
+export const ReissuedManualEngineInvitationSchema = z.object({
+  invited: z.literal(true),
+  emailSent: z.literal(false),
+  inviteUrl: z.string().optional(),
+  oneTimePassword: z.string().optional(),
+});
+
 export const EngineRuntimeAccessScopeSchema = z.enum(['engine_wide', 'resource_aware']);
 export const EngineDeploymentIntegrationSchema = z.enum(['enterpriseglue_proxy', 'direct_engine']);
 export const EngineEndpointAuthenticationSummarySchema = z.object({
@@ -125,6 +165,13 @@ export type EngineRole = z.infer<typeof EngineRoleSchema>;
 export type EngineMember = z.infer<typeof EngineMemberSchema>;
 export type PendingEngineInvite = z.infer<typeof PendingEngineInviteSchema>;
 export type EngineMembersResponse = z.infer<typeof EngineMembersResponseSchema>;
+export type EngineMemberCandidate = z.infer<typeof EngineMemberCandidateSchema>;
+export type EngineMemberLookup = z.infer<typeof EngineMemberLookupSchema>;
+export type EngineMemberCapabilities = z.infer<typeof EngineMemberCapabilitiesSchema>;
+export type EngineMemberDirectAddResponse = z.infer<typeof EngineMemberDirectAddResponseSchema>;
+export type EngineMemberInvitationResponse = z.infer<typeof EngineMemberInvitationResponseSchema>;
+export type EngineMemberAddResponse = z.infer<typeof EngineMemberAddResponseSchema>;
+export type ReissuedManualEngineInvitation = z.infer<typeof ReissuedManualEngineInvitationSchema>;
 export type EngineWithDetails = z.infer<typeof EngineWithDetailsSchema>;
 export type EngineEndpointAuthenticationSummary = z.infer<typeof EngineEndpointAuthenticationSummarySchema>;
 export type EngineGovernanceMetadata = z.infer<typeof EngineGovernanceMetadataSchema>;

@@ -39,13 +39,17 @@ import { apiClient } from '../../../../shared/api/client'
 import InvitationFlowModal from '../../../../shared/components/InvitationFlowModal'
 import InvitationRevealPanel from '../../../../shared/components/InvitationRevealPanel'
 import UserLookupEmailField from '../../../../shared/components/UserLookupEmailField'
-import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationCapabilities, type InvitationDeliveryMethod, type InvitationRevealData } from '../../../../shared/utils/invitationFlow'
+import { getInvitationDeliveryOptions, getPreferredInvitationDeliveryMethod, type InvitationDeliveryMethod, type InvitationRevealData } from '../../../../shared/utils/invitationFlow'
 import { StarbaseTableShell } from '../../../starbase/components/StarbaseTableShell'
 import type {
   EngineMember as SharedEngineMember,
+  EngineMemberAddResponse as SharedEngineMemberAddResponse,
+  EngineMemberCapabilities as SharedEngineMemberCapabilities,
+  EngineMemberLookup as SharedEngineMemberLookup,
   EngineMembersResponse as SharedEngineMembersResponse,
   EngineRole as SharedEngineRole,
   PendingEngineInvite as SharedPendingEngineInvite,
+  ReissuedManualEngineInvitation as SharedReissuedManualEngineInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import type {
   RoleAssignment as SharedRoleAssignment,
@@ -382,13 +386,13 @@ export default function EngineMembersModal({
 
   const memberCapabilitiesQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'capabilities'],
-    queryFn: () => apiClient.get<InvitationCapabilities>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members/capabilities`, undefined, { credentials: 'include' }),
+    queryFn: () => apiClient.get<SharedEngineMemberCapabilities>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members/capabilities`, undefined, { credentials: 'include' }),
     enabled: addMemberModal.isOpen && memberFlow === 'invite' && !!engine?.id && canInviteMembers,
   })
 
   const memberLookupQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'lookup', debouncedMemberEmail.toLowerCase(), memberRole],
-    queryFn: () => apiClient.get<{ mode: 'invite' | 'direct-add' | 'existing-member' | 'direct-add-only'; user?: UserSearchItem | null }>(
+    queryFn: () => apiClient.get<SharedEngineMemberLookup>(
       `/engines-api/engines/${encodeURIComponent(engine!.id)}/members/lookup`,
       { email: debouncedMemberEmail.toLowerCase(), role: memberRole },
       { credentials: 'include' },
@@ -487,7 +491,7 @@ export default function EngineMembersModal({
   const reissuePendingInviteM = useMutation({
     mutationFn: (invite: PendingEngineInvite) => {
       if (!canInviteMembers) throw new Error('Missing permission to invite engine members')
-      return apiClient.post<any>(
+      return apiClient.post<SharedReissuedManualEngineInvitation>(
         `/engines-api/engines/${encodeURIComponent(engine!.id)}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`,
         {},
         { credentials: 'include' },
@@ -496,10 +500,14 @@ export default function EngineMembersModal({
     onSuccess: async (result, invite) => {
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id] })
       setMemberError('')
+      if (!result.inviteUrl || !result.oneTimePassword) {
+        notify({ kind: 'error', title: 'Failed to reissue invitation', subtitle: 'The new invite link or one-time password was missing.' })
+        return
+      }
       setMemberReveal({
         email: invite.email,
-        inviteUrl: String(result.inviteUrl),
-        oneTimePassword: String(result.oneTimePassword),
+        inviteUrl: result.inviteUrl,
+        oneTimePassword: result.oneTimePassword,
       })
       addMemberModal.openModal()
     },
@@ -808,7 +816,7 @@ export default function EngineMembersModal({
       setMemberError('')
       setMemberReveal(null)
 
-      const result = await apiClient.post<any>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members`, {
+      const result = await apiClient.post<SharedEngineMemberAddResponse>(`/engines-api/engines/${encodeURIComponent(engine!.id)}/members`, {
         email: normalizedMemberEmail,
         role: memberRole,
         ...(memberLookupMode === 'invite' ? { deliveryMethod: memberDeliveryMethod } : {}),
@@ -816,12 +824,12 @@ export default function EngineMembersModal({
 
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id] })
 
-      if (result?.invited) {
-        if (!result?.emailSent && result?.inviteUrl && result?.oneTimePassword) {
+      if (result.invited) {
+        if (!result.emailSent && result.inviteUrl && result.oneTimePassword) {
           setMemberReveal({
             email: normalizedMemberEmail,
-            inviteUrl: String(result.inviteUrl),
-            oneTimePassword: String(result.oneTimePassword),
+            inviteUrl: result.inviteUrl,
+            oneTimePassword: result.oneTimePassword,
           })
           return
         }
@@ -829,7 +837,7 @@ export default function EngineMembersModal({
         notify({
           kind: 'success',
           title: 'Member invited',
-          subtitle: result?.emailSent ? `Invitation emailed to ${normalizedMemberEmail}` : result?.emailError || 'Invitation created successfully.',
+          subtitle: result.emailSent ? `Invitation emailed to ${normalizedMemberEmail}` : result.emailError || 'Invitation created successfully.',
         })
       } else {
         notify({ kind: 'success', title: 'Invitation request completed' })
