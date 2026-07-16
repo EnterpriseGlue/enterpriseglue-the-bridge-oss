@@ -7,7 +7,12 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { SYSTEM_ROLE_IDS } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
-import type { AuthzGroupSource, AuthzOwnershipMode } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import type {
+  AuthzGroup as SharedAuthzGroup,
+  AuthzGroupMembership as SharedAuthzGroupMembership,
+  AuthzGroupSource,
+  AuthzOwnershipMode,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource, type EntityManager } from 'typeorm';
@@ -20,39 +25,8 @@ export function authzGroupKeyIdentity(tenantId: string | null | undefined, key: 
   return `${tenantId || 'platform'}:${key.trim()}`;
 }
 
-export interface AuthzGroupView {
-  id: string;
-  tenantId: string | null;
-  key: string;
-  name: string;
-  description: string | null;
-  source: AuthzGroupSource;
-  sourceRef: string | null;
-  ownershipMode: AuthzGroupOwnershipMode;
-  sourceHash: string | null;
-  lastAppliedAt: number | null;
-  driftStatus: string | null;
-  isSystem: boolean;
-  isArchived: boolean;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface AuthzGroupMembershipView {
-  id: string;
-  tenantId: string | null;
-  groupId: string;
-  groupKey: string | null;
-  groupName: string | null;
-  userId: string;
-  source: AuthzGroupSource;
-  sourceRef: string | null;
-  expiresAt: number | null;
-  createdById: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
+export type AuthzGroupView = SharedAuthzGroup;
+export type AuthzGroupMembershipView = SharedAuthzGroupMembership;
 
 export interface CreateAuthzGroupInput {
   tenantId?: string | null;
