@@ -14,7 +14,7 @@ const {
   FileSchemaRaw,
   CreateFileRequest,
   UpdateFileXmlRequest,
-  RenameFileRequest,
+  UpdateFileMetadataRequest,
   VersionSchema,
   CompareVersionsResponse,
   CommentSchema,
@@ -391,18 +391,18 @@ registry.registerPath({
 });
 
 // PATCH /files/:fileId (rename file)
-registry.register('RenameFileRequest', RenameFileRequest);
+registry.register('UpdateFileMetadataRequest', UpdateFileMetadataRequest);
 registry.registerPath({
   method: 'patch',
   path: '/starbase-api/files/{fileId}',
   ...authzExtension('project.files.update', 'PATCH', '/starbase-api/files/{fileId}'),
   request: {
     params: z.object({ fileId: z.string() }),
-    body: { content: { 'application/json': { schema: RenameFileRequest } } },
+    body: { content: { 'application/json': { schema: UpdateFileMetadataRequest } } },
   },
   responses: {
     200: {
-      description: 'File renamed',
+      description: 'File metadata updated',
       content: { 'application/json': { schema: z.object({ id: z.string(), name: z.string() }) } },
     },
     404: { description: 'Not found' },

@@ -53,10 +53,17 @@ export const UpdateFileXmlRequest = z.object({
   prevUpdatedAt: z.number().optional(),
 });
 
-export const RenameFileRequest = z.object({
-  name: z.string().min(1),
+export const UpdateFileMetadataRequest = z.object({
+  name: z.string().min(1).max(255).optional(),
+  folderId: z.string().nullable().optional(),
+}).refine((value) => value.name !== undefined || value.folderId !== undefined, {
+  message: 'At least one file metadata field is required',
 });
+
+/** @deprecated Use UpdateFileMetadataRequest. */
+export const RenameFileRequest = UpdateFileMetadataRequest;
 
 // Types
 export type File = z.infer<typeof FileSchema>;
 export type CreateFile = z.infer<typeof CreateFileRequest>;
+export type UpdateFileMetadata = z.infer<typeof UpdateFileMetadataRequest>;

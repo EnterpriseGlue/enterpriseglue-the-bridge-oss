@@ -23,6 +23,7 @@ import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services
 import { extractBpmnCallActivityLinks, extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { buildStarbaseFileName } from '@enterpriseglue/shared/utils/starbase-filenames.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { UpdateFileMetadataRequest } from '@enterpriseglue/shared/schemas/starbase/file.js';
 
 const lockManager = new LockManager();
 
@@ -47,10 +48,7 @@ const updateFileBodySchema = z.object({
   prevUpdatedAt: z.number().optional(),
 });
 
-const patchFileBodySchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  folderId: uuidLikeSchema.nullable().optional(),
-});
+const patchFileBodySchema = UpdateFileMetadataRequest;
 
 const restoreFromCommitBodySchema = z.object({
   commitId: z.string().min(1).optional(),
