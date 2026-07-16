@@ -38,6 +38,7 @@ describe('EngineSchema', () => {
       hasCredential: true,
       environmentTagId: 'production',
       runtimeAccessScope: 'resource_aware',
+      governance: { accountableOwnerId: 'user-owner', delegateId: null },
       myRole: 'operator',
       capabilities: {
         type: 'operaton',
@@ -53,6 +54,7 @@ describe('EngineSchema', () => {
       hasCredential: true,
       myRole: 'operator',
       runtimeAccessScope: 'resource_aware',
+      governance: { accountableOwnerId: 'user-owner', delegateId: null },
     });
   });
 

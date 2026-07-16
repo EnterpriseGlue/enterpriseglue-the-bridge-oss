@@ -916,7 +916,17 @@ r.get('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.
     // Legacy roles remain useful display metadata. Runtime-resource-only users
     // intentionally have no synthetic engine-wide role.
     const role = await engineService.getEngineRole(req.user!.userId, String(engine.id), tenantId)
-    const out = withEngineCapabilities({ ...serializeEngine(engine), myRole: role })
+    const out = withEngineCapabilities({
+      ...serializeEngine(engine),
+      // Retain the historical top-level ids for API compatibility, but expose
+      // accountable contacts under a distinct governance object so callers do
+      // not mistake them for evaluator-backed access grants.
+      governance: {
+        accountableOwnerId: engine.ownerId ?? null,
+        delegateId: engine.delegateId ?? null,
+      },
+      myRole: role,
+    })
     if (!(await canViewEngineSecrets(req, String(engine.id)))) {
       return redactEngineSecrets(out)
     }

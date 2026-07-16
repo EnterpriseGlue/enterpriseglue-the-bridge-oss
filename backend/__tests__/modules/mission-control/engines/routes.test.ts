@@ -252,6 +252,7 @@ describe('mission-control engines routes', () => {
         id: 'e1',
         name: 'Engine 1',
         myRole: 'owner',
+        governance: { accountableOwnerId: null, delegateId: null },
         username: null,
         passwordEnc: null,
         capabilities: expect.objectContaining({

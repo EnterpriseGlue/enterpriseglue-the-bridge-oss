@@ -333,6 +333,14 @@ export const AccessibleEngineSummarySchema = z.object({
   version: z.string().nullable().optional(),
   ownerId: z.string().nullable().optional(),
   delegateId: z.string().nullable().optional(),
+  /**
+   * Accountable contacts are governance metadata only. Authorization is
+   * determined by canonical role assignments and action evaluation.
+   */
+  governance: z.object({
+    accountableOwnerId: z.string().nullable(),
+    delegateId: z.string().nullable(),
+  }).optional(),
   environmentTagId: z.string().nullable().optional(),
   environmentLocked: z.boolean().nullable().optional(),
   tenantId: z.string().nullable().optional(),
@@ -340,6 +348,7 @@ export const AccessibleEngineSummarySchema = z.object({
   updatedAt: z.number().optional(),
   myRole: z.enum(['owner', 'delegate', 'operator', 'deployer']).nullable().optional(),
 }).passthrough();
+export type EngineGovernance = NonNullable<z.infer<typeof AccessibleEngineSummarySchema>['governance']>;
 
 export const EngineInsertSchema = z.object({
   id: z.string().uuid().optional(),
