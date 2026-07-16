@@ -2066,13 +2066,13 @@ Identity testing must prove the normalized adapter contract and the real protoco
 
 Every adapter must pass the same assertions:
 
-- [ ] ⬜ Produces a stable provider key, provider type, subject id, normalized username/email, observation time, and typed entitlement list.
-- [ ] ⬜ Deduplicates repeated entitlements deterministically without losing the preferred immutable external id.
-- [ ] ⬜ Keeps display names diagnostic-only and never substitutes them for a configured immutable id match.
+- [x] ✅ Produces a stable provider key, provider type, subject id, normalized username/email, observation time, and typed entitlement list.
+- [x] ✅ Deduplicates repeated entitlements deterministically without losing the preferred immutable external id.
+- [x] ✅ Keeps display names diagnostic-only and never substitutes them for a configured immutable id match.
 - [ ] ⬜ Classifies invalid credentials/signatures, unavailable provider, timeout, malformed response, missing required subject, and incomplete group result distinctly.
 - [ ] ⬜ Redacts tokens, assertions, bind passwords, certificates/private keys, and sensitive raw attributes from errors, audit, and snapshots.
 - [ ] ⬜ Supports deterministic clock and correlation id injection for repeatable sync/audit assertions.
-- [ ] ⬜ Produces the same normalized group entitlement for equivalent OIDC, SAML, and LDAP identities.
+- [x] ✅ Produces the same normalized group entitlement for equivalent OIDC, SAML, and LDAP identities.
 
 ### Mock Services
 

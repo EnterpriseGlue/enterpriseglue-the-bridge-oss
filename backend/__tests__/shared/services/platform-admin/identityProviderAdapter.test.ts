@@ -7,6 +7,7 @@ import {
   type IdentityProviderAdapter,
 } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 import { allowlistedIdentityClaims } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
+import { matchesIdentityEntitlement } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { inMemoryIdentityProviderAdapter } from '../../../../test/identity-mocks/index.js';
 
 describe('identity provider adapters', () => {
@@ -46,6 +47,27 @@ describe('identity provider adapters', () => {
       [{ type: 'group', externalId: groupId }],
       [{ type: 'group', externalId: groupId }],
     ]);
+  });
+
+  it('keeps group display names diagnostic-only when matching immutable ids', () => {
+    const identity = oidcIdentityProviderAdapter.normalizeIdentity({
+      providerKey: 'entra-prod',
+      subjectId: 'oid-1',
+      observedAt: 10,
+      claims: {
+        groups: ['group-id-platform-operators'],
+        groupDisplayNames: ['Platform Operators'],
+      },
+    });
+
+    expect(identity.entitlements).toContainEqual({ type: 'group', externalId: 'group-id-platform-operators' });
+    expect(identity.entitlements).not.toContainEqual({ type: 'group', externalId: 'Platform Operators' });
+    expect(matchesIdentityEntitlement({
+      entitlementType: 'group', externalId: 'group-id-platform-operators', matchOperator: 'exact',
+    }, identity)).toBe(true);
+    expect(matchesIdentityEntitlement({
+      entitlementType: 'group', externalId: 'Platform Operators', matchOperator: 'exact',
+    }, identity)).toBe(false);
   });
 
   it('emits attributes only from the sanitized authorization attribute block', () => {
