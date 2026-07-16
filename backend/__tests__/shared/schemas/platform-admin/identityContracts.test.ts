@@ -22,6 +22,8 @@ import {
   LegacySsoGroupMappingMigrationRequestSchema,
   LegacySsoGroupMappingMigrationResponseSchema,
   LegacySsoMappingMigrationRequestSchema,
+  LegacySsoPlatformMappingCreateRequestSchema,
+  LegacySsoPlatformMappingUpdateRequestSchema,
   LegacySsoPlatformMappingMigrationResponseSchema,
   AuthzCheckBatchRequestSchema,
   AuthzCheckBatchResponseSchema,
@@ -36,6 +38,16 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('provider-neutral identity shared contracts', () => {
+  it('shares the retained legacy platform-mapping write contracts', () => {
+    expect(LegacySsoPlatformMappingCreateRequestSchema.parse({
+      claimType: 'group', claimKey: 'groups', targetRole: 'user', priority: 0,
+    })).toMatchObject({ claimValue: '', claimType: 'group' });
+    expect(LegacySsoPlatformMappingUpdateRequestSchema.parse({ priority: 10 })).toMatchObject({ priority: 10, claimValue: '' });
+    expect(() => LegacySsoPlatformMappingCreateRequestSchema.parse({
+      claimType: 'group', claimKey: 'groups', targetRole: 'operator',
+    })).toThrow();
+  });
+
   it('accepts normalized identity and adapter input without protocol payload fields', () => {
     expect(ProviderIdentityInputSchema.parse({
       providerKey: 'identity.oidc.example', subjectId: 'subject-1', claims: { groups: ['operators'] },

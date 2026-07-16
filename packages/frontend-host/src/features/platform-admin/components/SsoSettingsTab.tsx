@@ -35,6 +35,10 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
 import type {
+  LegacySsoPlatformMappingCreateRequest,
+  LegacySsoPlatformMappingUpdateRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import type {
   LegacySsoMappingMigrationRequest,
   LegacySsoPlatformMappingMigrationResponse,
   LegacySsoProvider as SsoProvider,
@@ -60,6 +64,15 @@ const PLATFORM_ROLES = [
   { value: 'admin', label: 'Platform Admin' },
   { value: 'user', label: 'Standard User' },
 ];
+
+type LegacySsoPlatformMappingForm = {
+  providerId: string;
+  claimType: NonNullable<LegacySsoPlatformMappingCreateRequest['claimType']>;
+  claimKey: string;
+  claimValue: string;
+  targetRole: NonNullable<LegacySsoPlatformMappingCreateRequest['targetRole']>;
+  priority: number;
+};
 
 function legacyMappingMigrationSupport(mapping: SsoClaimsMapping | null): { supported: boolean; reason?: string } {
   if (!mapping) return { supported: false };
@@ -145,7 +158,7 @@ export default function SsoSettingsTab() {
   // Mapping state
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState<SsoClaimsMapping | null>(null);
-  const [mappingForm, setMappingForm] = useState({
+  const [mappingForm, setMappingForm] = useState<LegacySsoPlatformMappingForm>({
     providerId: '',
     claimType: 'group',
     claimKey: 'groups',
@@ -310,7 +323,7 @@ export default function SsoSettingsTab() {
   });
 
   const createMapping = useMutation({
-    mutationFn: (data: any) => apiClient.post('/api/authz/sso-mappings', data),
+    mutationFn: (data: LegacySsoPlatformMappingCreateRequest) => apiClient.post('/api/authz/sso-mappings', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-mappings'] });
       closeMappingModal();
@@ -318,7 +331,7 @@ export default function SsoSettingsTab() {
   });
 
   const updateMapping = useMutation({
-    mutationFn: ({ id, ...data }: any) => apiClient.put(`/api/authz/sso-mappings/${id}`, data),
+    mutationFn: ({ id, ...data }: { id: string } & LegacySsoPlatformMappingUpdateRequest) => apiClient.put(`/api/authz/sso-mappings/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-mappings'] });
       closeMappingModal();
@@ -562,8 +575,8 @@ export default function SsoSettingsTab() {
   const handleSaveMapping = () => {
     if (!canManageMappings) return;
 
-    const data = {
-      providerId: mappingForm.providerId || null,
+    const data: LegacySsoPlatformMappingCreateRequest = {
+      providerId: mappingForm.providerId || undefined,
       claimType: mappingForm.claimType,
       claimKey: mappingForm.claimKey,
       claimValue: mappingForm.claimValue,
@@ -579,7 +592,7 @@ export default function SsoSettingsTab() {
   };
 
   // Update claimKey when claimType changes
-  const handleClaimTypeChange = (type: string) => {
+  const handleClaimTypeChange = (type: LegacySsoPlatformMappingForm['claimType']) => {
     let key = 'groups';
     switch (type) {
       case 'group': key = 'groups'; break;
@@ -1512,7 +1525,7 @@ export default function SsoSettingsTab() {
             id="mapping-claim-type"
             labelText="Claim Type"
             value={mappingForm.claimType}
-            onChange={(e) => handleClaimTypeChange(e.target.value)}
+            onChange={(e) => handleClaimTypeChange(e.target.value as LegacySsoPlatformMappingForm['claimType'])}
           >
             {CLAIM_TYPES.map(ct => (
               <SelectItem key={ct.value} value={ct.value} text={ct.label} />
@@ -1546,7 +1559,7 @@ export default function SsoSettingsTab() {
             id="mapping-target-role"
             labelText="Assign Platform Role"
             value={mappingForm.targetRole}
-            onChange={(e) => setMappingForm({ ...mappingForm, targetRole: e.target.value })}
+            onChange={(e) => setMappingForm({ ...mappingForm, targetRole: e.target.value as LegacySsoPlatformMappingForm['targetRole'] })}
           >
             {PLATFORM_ROLES.map(r => (
               <SelectItem key={r.value} value={r.value} text={r.label} />

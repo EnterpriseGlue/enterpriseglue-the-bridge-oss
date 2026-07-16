@@ -1794,6 +1794,8 @@ const {
   LegacyMappingRetirementReadinessSchema,
   LegacyMappingRetirementRequestSchema,
   LegacyMappingRetirementResultSchema,
+  LegacySsoPlatformMappingCreateRequestSchema,
+  LegacySsoPlatformMappingUpdateRequestSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   ProjectMembersResponseSchema,
@@ -3387,33 +3389,6 @@ const SsoClaimsMappingSchemaOpenApi = z.object({
   updatedAt: z.number(),
 });
 
-const SsoClaimsMappingCreateRequestSchema = z.object({
-  providerId: z.string().min(1).optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional(),
-  claimOperator: z.enum([
-    'equals',
-    'not_equals',
-    'contains',
-    'not_contains',
-    'contains_any',
-    'not_contains_any',
-    'contains_all',
-    'not_contains_all',
-    'matches_regex',
-    'not_matches_regex',
-    'exists',
-    'not_exists',
-  ]).nullable().optional(),
-  targetRole: z.enum(['admin', 'user']),
-  priority: z.number().int().optional(),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-
-const SsoClaimsMappingUpdateRequestSchema = SsoClaimsMappingCreateRequestSchema.partial();
-
 const ConfigBundleFilesOpenApiSchema = z.object({
   './roles.json': ConfigRolesFileSchema.optional(),
   './groups.json': ConfigGroupsFileSchema.optional(),
@@ -3557,9 +3532,9 @@ registry.registerPath({ method: 'get', path: '/api/authz/audit', ...authzExtensi
 
 // SSO mappings
 registry.registerPath({ method: 'get', path: '/api/authz/sso-mappings', ...authzExtension('platform.sso.platform-role-mappings.read', 'GET', '/api/authz/sso-mappings'), responses: { 200: { description: 'List SSO role mappings', content: { 'application/json': { schema: z.array(SsoClaimsMappingSchemaOpenApi) } } } } });
-registry.registerPath({ method: 'post', path: '/api/authz/sso-mappings', ...authzExtension('platform.sso.platform-role-mappings.manage', 'POST', '/api/authz/sso-mappings'), request: { body: { content: { 'application/json': { schema: SsoClaimsMappingCreateRequestSchema } } } }, responses: { 201: { description: 'Mapping created', content: { 'application/json': { schema: SsoClaimsMappingSchemaOpenApi } } } } });
+registry.registerPath({ method: 'post', path: '/api/authz/sso-mappings', ...authzExtension('platform.sso.platform-role-mappings.manage', 'POST', '/api/authz/sso-mappings'), request: { body: { content: { 'application/json': { schema: LegacySsoPlatformMappingCreateRequestSchema } } } }, responses: { 201: { description: 'Mapping created', content: { 'application/json': { schema: SsoClaimsMappingSchemaOpenApi } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/sso-mappings/{id}/migrate-provider-neutral', ...authzExtension('platform.sso.platform-role-mappings.manage', 'POST', '/api/authz/sso-mappings/{id}/migrate-provider-neutral'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: LegacySsoMappingMigrationRequestSchema } } } }, responses: { 200: { description: 'Existing equivalent provider-neutral mapping and platform group role assignment', content: { 'application/json': { schema: LegacySsoPlatformMappingMigrationResponseSchema } } }, 201: { description: 'Global provider-neutral identity mapping and platform group role assignment created while retaining the legacy mapping', content: { 'application/json': { schema: LegacySsoPlatformMappingMigrationResponseSchema } } }, 400: { description: 'Legacy mapping cannot be migrated safely' }, 404: { description: 'Legacy mapping, global identity provider, or global authorization group not found' } } });
-registry.registerPath({ method: 'put', path: '/api/authz/sso-mappings/{id}', ...authzExtension('platform.sso.platform-role-mappings.manage', 'PUT', '/api/authz/sso-mappings/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SsoClaimsMappingUpdateRequestSchema } } } }, responses: { 200: { description: 'Mapping updated', content: { 'application/json': { schema: SsoClaimsMappingSchemaOpenApi } } } } });
+registry.registerPath({ method: 'put', path: '/api/authz/sso-mappings/{id}', ...authzExtension('platform.sso.platform-role-mappings.manage', 'PUT', '/api/authz/sso-mappings/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: LegacySsoPlatformMappingUpdateRequestSchema } } } }, responses: { 200: { description: 'Mapping updated', content: { 'application/json': { schema: SsoClaimsMappingSchemaOpenApi } } } } });
 registry.registerPath({ method: 'delete', path: '/api/authz/sso-mappings/{id}', ...authzExtension('platform.sso.platform-role-mappings.manage', 'DELETE', '/api/authz/sso-mappings/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Mapping deleted' } } });
 registry.registerPath({ method: 'post', path: '/api/authz/sso-mappings/test', ...authzExtension('platform.sso.platform-role-mappings.manage', 'POST', '/api/authz/sso-mappings/test'), request: { body: { content: { 'application/json': { schema: SsoMappingTestRequestSchema } } } }, responses: { 200: { description: 'Test SSO mapping result', content: { 'application/json': { schema: SsoPlatformMappingTestResponseSchema } } } } });
 

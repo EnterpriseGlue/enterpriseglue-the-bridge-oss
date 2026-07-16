@@ -364,6 +364,21 @@ export const SsoClaimsMappingInsertSchema = z.object({
   riskAcknowledged: z.boolean().optional(),
 });
 
+/** Compatibility write contract for the retained legacy platform-role mapping API. */
+export const LegacySsoPlatformMappingCreateRequestSchema = z.object({
+  providerId: z.string().min(1).optional(),
+  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
+  claimKey: z.string().min(1),
+  claimValue: z.string().optional().default(''),
+  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
+  targetRole: z.enum(['admin', 'user']),
+  priority: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+  riskAcknowledged: z.boolean().optional(),
+});
+
+export const LegacySsoPlatformMappingUpdateRequestSchema = LegacySsoPlatformMappingCreateRequestSchema.partial();
+
 export const PermissionCatalogEntrySchema = z.object({
   key: z.string(),
   scope: AuthzResourceTypeSchema,
@@ -1803,6 +1818,8 @@ export type SsoProvider = z.infer<typeof SsoProviderSchema>;
 export type LegacySsoProviderResponse = z.infer<typeof LegacySsoProviderResponseSchema>;
 export type SsoClaimOperator = z.infer<typeof SsoClaimOperatorSchema>;
 export type SsoClaimsMapping = z.infer<typeof SsoClaimsMappingSchema>;
+export type LegacySsoPlatformMappingCreateRequest = z.input<typeof LegacySsoPlatformMappingCreateRequestSchema>;
+export type LegacySsoPlatformMappingUpdateRequest = z.input<typeof LegacySsoPlatformMappingUpdateRequestSchema>;
 export type PermissionCatalogEntry = z.infer<typeof PermissionCatalogEntrySchema>;
 export type CustomPermissionCreate = z.infer<typeof CustomPermissionCreateSchema>;
 export type EffectiveResourcePermissions = z.infer<typeof EffectiveResourcePermissionsSchema>;
