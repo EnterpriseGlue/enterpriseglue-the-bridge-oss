@@ -35,8 +35,12 @@ import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
-import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/platform-admin'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import type { EnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js'
+import type {
+  EngineOnboardingMode,
+  PlatformSettings,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
 import type {
   CreateEngineRequest,
   AccessibleEngineSummary,
@@ -92,6 +96,8 @@ export type EngineMutationForm = {
 }
 
 type EngineMutationPayload = CreateEngineRequest | UpdateEngineRequest
+type EngineOnboardingSettings = Pick<PlatformSettings,
+  'engineOnboardingMode' | 'engineAccessAuthority' | 'credentiallessCustomerSidecarsEnabled'>
 
 const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
   ion: 'ION-Engine',
@@ -1319,7 +1325,7 @@ export default function Engines() {
   const assignmentReadDecision = useActionDecision('platform.authz.assignments.read', { type: 'platform' })
   const platformSettingsQ = useQuery({
     queryKey: ['platform', 'sync-settings'],
-    queryFn: () => apiClient.get<{ engineOnboardingMode?: EngineOnboardingMode; engineAccessAuthority?: AccessAuthorityMode; credentiallessCustomerSidecarsEnabled?: boolean }>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
+    queryFn: () => apiClient.get<EngineOnboardingSettings>('/api/auth/platform-settings', undefined, { credentials: 'include' }),
   })
   const engineOnboardingMode = platformSettingsQ.data?.engineOnboardingMode || 'manual_allowed'
   const engineAccessAuthority = platformSettingsQ.data?.engineAccessAuthority || 'manual'
@@ -1383,7 +1389,7 @@ export default function Engines() {
   const dockerLoopbackSuggestion = React.useMemo(() => getDockerLoopbackSuggestion(String(form.baseUrl || '').trim()), [form.baseUrl])
 
   // Fetch environment tags (read-only, used by engine owners/delegates too)
-  const envTagsQ = useQuery({ queryKey: ['engines', 'environment-tags'], queryFn: () => apiClient.get<any[]>('/engines-api/environment-tags', undefined, { credentials: 'include' }) })
+  const envTagsQ = useQuery({ queryKey: ['engines', 'environment-tags'], queryFn: () => apiClient.get<EnvironmentTag[]>('/engines-api/environment-tags', undefined, { credentials: 'include' }) })
   const envTags = envTagsQ.data
   const hasSingleTag = Array.isArray(envTags) && envTags.length === 1
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
@@ -1917,7 +1923,7 @@ export default function Engines() {
                                           width: 8,
                                           height: 8,
                                           borderRadius: '50%',
-                                          background: envTag.color,
+                                          background: envTag.color || undefined,
                                         }}
                                       />
                                       <span style={{ fontSize: '13px' }}>{envTag.name}</span>
@@ -2308,7 +2314,7 @@ export default function Engines() {
               Environment
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', padding: '8px 0' }}>
-              <div style={{ width: 12, height: 12, borderRadius: '50%', background: envTags![0].color }} />
+              <div style={{ width: 12, height: 12, borderRadius: '50%', background: envTags![0].color || undefined }} />
               <span style={{ fontSize: '14px' }}>{envTags![0].name}</span>
               <Tag type="gray" size="sm">Auto-assigned</Tag>
             </div>
