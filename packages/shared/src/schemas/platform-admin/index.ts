@@ -7,3 +7,4 @@ export * from './admin.js';
 export * from './config-bundle.js';
 export * from './deployment-receipt.js';
 export * from './identity.js';
+export * from './authz.js';

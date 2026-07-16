@@ -12,24 +12,17 @@ import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { IsNull } from 'typeorm';
 import { LEGACY_MAPPING_CONVERSION_AUDIT_ACTION, type LegacyMappingConversionFamily } from './LegacyMappingConversionAudit.js';
+import type {
+  LegacyMappingCoverageItem as SharedLegacyMappingCoverageItem,
+  LegacyMappingCoverageStatus as SharedLegacyMappingCoverageStatus,
+  LegacyMappingRetirementReadiness as SharedLegacyMappingRetirementReadiness,
+  LegacyMappingRetirementResult as SharedLegacyMappingRetirementResult,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
-export type LegacyMappingCoverageStatus = 'replacement_candidate' | 'manual_redesign_required' | 'no_replacement_candidate';
-export interface LegacyMappingCoverageItem {
-  id: string;
-  family: 'platform_role' | 'group' | 'engine_assignment';
-  status: LegacyMappingCoverageStatus;
-  reason: string;
-  candidateIdentityMappingIds: string[];
-  verification: { candidateIdentityMappingId: string; verifiedById: string | null; verifiedAt: number; note: string } | null;
-}
-
-export interface LegacyMappingRetirementReadiness {
-  ready: boolean;
-  activeLegacyMappingCount: number;
-  verifiedReplacementCount: number;
-  blockers: Array<{ id: string; family: LegacyMappingCoverageItem['family']; reason: string }>;
-}
-export interface LegacyMappingRetirementResult { platformRoleMappingsDisabled: number; groupMappingsDisabled: number; engineAssignmentMappingsDisabled: number; }
+export type LegacyMappingCoverageStatus = SharedLegacyMappingCoverageStatus;
+export type LegacyMappingCoverageItem = SharedLegacyMappingCoverageItem;
+export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementReadiness;
+export type LegacyMappingRetirementResult = SharedLegacyMappingRetirementResult;
 
 type LegacyClaimMapping = {
   providerId?: string | null;

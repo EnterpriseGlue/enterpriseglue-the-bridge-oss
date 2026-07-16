@@ -54,6 +54,8 @@ import type {
   IdentityProviderReconciliationPreview,
   IdentityProviderResponse,
   LegacyIdentityProviderCutoverResponse,
+  LegacyMappingCoverageItem as SharedLegacyMappingCoverageItem,
+  LegacyMappingRetirementReadiness as SharedLegacyMappingRetirementReadiness,
   PermissionCatalogEntry as SharedPermissionCatalogEntry,
   ProjectEngineTarget as SharedProjectEngineTarget,
   ProjectEngineTargetCreate as SharedProjectEngineTargetCreate,
@@ -223,6 +225,8 @@ export type IdentityProviderMembershipPreviewResult = IdentityProviderReconcilia
 export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTestResponse;
 export type IdentityProviderMigrationReadiness = IdentityProviderMigrationReadinessResponse;
 export type LegacyIdentityProviderCutoverResult = LegacyIdentityProviderCutoverResponse;
+export type LegacyMappingCoverageItem = SharedLegacyMappingCoverageItem;
+export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementReadiness;
 
 export type PolicyCondition = SharedPolicyCondition;
 /** The policy list endpoint intentionally omits persistence-only metadata. */
@@ -260,6 +264,8 @@ export const authzQueryKeys = {
   ssoGroupMappings: ['platform-admin', 'authz', 'sso-group-mappings'] as const,
   identityProviders: ['platform-admin', 'authz', 'identity-providers'] as const,
   identityEntitlementMappings: ['platform-admin', 'authz', 'identity-entitlement-mappings'] as const,
+  legacyMappingCoverage: ['platform-admin', 'authz', 'legacy-mapping-coverage'] as const,
+  legacyMappingRetirementReadiness: ['platform-admin', 'authz', 'legacy-mapping-retirement-readiness'] as const,
   ssoSyncRuns: (params?: SsoSyncRunParams) => ['platform-admin', 'authz', 'sso-sync-runs', params] as const,
   ssoSyncEvents: (runId?: string, params?: SsoSyncEventParams) => ['platform-admin', 'authz', 'sso-sync-runs', runId, 'events', params] as const,
   myPermissions: ['platform-admin', 'authz', 'me', 'permissions'] as const,
@@ -1082,6 +1088,22 @@ export function useIdentityEntitlementMappings(options: { enabled?: boolean } = 
   return useQuery({
     queryKey: authzQueryKeys.identityEntitlementMappings,
     queryFn: () => apiClient.get<IdentityEntitlementMapping[]>('/api/identity/mappings'),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useLegacyMappingCoverage(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.legacyMappingCoverage,
+    queryFn: () => apiClient.get<LegacyMappingCoverageItem[]>('/api/authz/legacy-mapping-coverage'),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useLegacyMappingRetirementReadiness(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.legacyMappingRetirementReadiness,
+    queryFn: () => apiClient.get<LegacyMappingRetirementReadiness>('/api/authz/legacy-mapping-retirement-readiness'),
     enabled: options.enabled ?? true,
   });
 }

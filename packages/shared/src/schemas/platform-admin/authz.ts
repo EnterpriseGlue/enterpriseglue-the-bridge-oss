@@ -1144,6 +1144,47 @@ export const IdentityMappingProvisionAccessResponseSchema = z.object({
   createdGroup: z.object({ id: z.string() }).nullable(),
 });
 
+/** Diagnostics and retirement gate for compatibility mapping evaluators. */
+export const LegacyMappingCoverageFamilySchema = z.enum(['platform_role', 'group', 'engine_assignment']);
+export const LegacyMappingCoverageStatusSchema = z.enum(['replacement_candidate', 'manual_redesign_required', 'no_replacement_candidate']);
+export const LegacyMappingCoverageVerificationSchema = z.object({
+  candidateIdentityMappingId: z.string(),
+  verifiedById: z.string().nullable(),
+  verifiedAt: z.number(),
+  note: z.string(),
+});
+export const LegacyMappingCoverageItemSchema = z.object({
+  id: z.string(),
+  family: LegacyMappingCoverageFamilySchema,
+  status: LegacyMappingCoverageStatusSchema,
+  reason: z.string(),
+  candidateIdentityMappingIds: z.array(z.string()),
+  verification: LegacyMappingCoverageVerificationSchema.nullable(),
+});
+export const LegacyMappingRetirementBlockerSchema = z.object({
+  id: z.string(),
+  family: LegacyMappingCoverageFamilySchema,
+  reason: z.string(),
+});
+export const LegacyMappingRetirementReadinessSchema = z.object({
+  ready: z.boolean(),
+  activeLegacyMappingCount: z.number().int().nonnegative(),
+  verifiedReplacementCount: z.number().int().nonnegative(),
+  blockers: z.array(LegacyMappingRetirementBlockerSchema),
+});
+export const LegacyMappingCoverageVerifyRequestSchema = z.object({
+  family: LegacyMappingCoverageFamilySchema,
+  candidateIdentityMappingId: z.string().min(1),
+  note: z.string().min(3).max(2000),
+});
+export const LegacyMappingRetirementRequestSchema = z.object({ confirmation: z.literal('RETIRE_LEGACY_MAPPINGS') });
+export const LegacyGlobalMappingRetirementRequestSchema = z.object({ confirmation: z.literal('RETIRE_GLOBAL_LEGACY_MAPPINGS') });
+export const LegacyMappingRetirementResultSchema = z.object({
+  platformRoleMappingsDisabled: z.number().int().nonnegative(),
+  groupMappingsDisabled: z.number().int().nonnegative(),
+  engineAssignmentMappingsDisabled: z.number().int().nonnegative(),
+});
+
 /** Backward-compatible names for the shared provider-neutral sync contracts. */
 export const SsoSyncRunSchema = IdentitySyncRunSchema;
 export const SsoSyncEventSchema = IdentitySyncEventSchema;
@@ -1567,6 +1608,13 @@ export type EffectiveAccessEvaluateRequest = z.infer<typeof EffectiveAccessEvalu
 export type EffectiveAccessEvaluateResponse = z.infer<typeof EffectiveAccessEvaluateResponseSchema>;
 export type IdentityMappingRequest = z.infer<typeof IdentityMappingRequestSchema>;
 export type IdentityMappingResponse = z.infer<typeof IdentityMappingResponseSchema>;
+export type LegacyMappingCoverageFamily = z.infer<typeof LegacyMappingCoverageFamilySchema>;
+export type LegacyMappingCoverageStatus = z.infer<typeof LegacyMappingCoverageStatusSchema>;
+export type LegacyMappingCoverageVerification = z.infer<typeof LegacyMappingCoverageVerificationSchema>;
+export type LegacyMappingCoverageItem = z.infer<typeof LegacyMappingCoverageItemSchema>;
+export type LegacyMappingRetirementBlocker = z.infer<typeof LegacyMappingRetirementBlockerSchema>;
+export type LegacyMappingRetirementReadiness = z.infer<typeof LegacyMappingRetirementReadinessSchema>;
+export type LegacyMappingRetirementResult = z.infer<typeof LegacyMappingRetirementResultSchema>;
 export type IdentityProviderResponse = z.infer<typeof IdentityProviderResponseSchema>;
 export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityProviderMembershipReplayResponseSchema>;
 export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof IdentityProviderExternalIdentityUnlinkResponseSchema>;

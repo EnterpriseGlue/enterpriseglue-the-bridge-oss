@@ -5,15 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
-import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
-import type { HumanIdentityEntitlementType, IdentityEntitlementMapping } from '../hooks/useAuthzApi';
+import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useLegacyMappingCoverage, useLegacyMappingRetirementReadiness, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
+import type { HumanIdentityEntitlementType, IdentityEntitlementMapping, LegacyMappingCoverageItem } from '../hooks/useAuthzApi';
 
 type EntitlementType = HumanIdentityEntitlementType;
 type MatchOperator = 'exact' | 'contains' | 'exists';
 type Mapping = IdentityEntitlementMapping;
 interface Engine { id: string; name: string; lifecycleStatus?: string; }
-interface LegacyMappingCoverageItem { id: string; family: 'platform_role' | 'group' | 'engine_assignment'; status: 'replacement_candidate' | 'manual_redesign_required' | 'no_replacement_candidate'; reason: string; candidateIdentityMappingIds: string[]; verification: { candidateIdentityMappingId: string; verifiedById: string | null; verifiedAt: number; note: string } | null; }
-interface LegacyMappingRetirementReadiness { ready: boolean; activeLegacyMappingCount: number; verifiedReplacementCount: number; blockers: Array<{ id: string; family: LegacyMappingCoverageItem['family']; reason: string }>; }
 type FormState = { providerKey: string; targetGroupKey: string; entitlementType: EntitlementType; externalId: string; matchOperator: MatchOperator; syncMode: 'additive' | 'authoritative'; claims: string; };
 const emptyForm = (): FormState => ({ providerKey: '', targetGroupKey: '', entitlementType: 'group', externalId: '', matchOperator: 'exact', syncMode: 'authoritative', claims: '{\n  "sub": "preview-user",\n  "groups": ["engineering"]\n}' });
 
@@ -26,8 +24,8 @@ export default function IdentityMappingsSettingsTab() {
   const rolesManage = useActionDecision('platform.authz.roles.manage', resource);
   const groupsManage = useActionDecision('platform.authz.groups.manage', resource);
   const mappingsQuery = useIdentityEntitlementMappings({ enabled: read.allowed });
-  const legacyCoverageQuery = useQuery({ queryKey: ['legacy-mapping-coverage'], queryFn: () => apiClient.get<LegacyMappingCoverageItem[]>('/api/authz/legacy-mapping-coverage'), enabled: read.allowed });
-  const retirementReadinessQuery = useQuery({ queryKey: ['legacy-mapping-retirement-readiness'], queryFn: () => apiClient.get<LegacyMappingRetirementReadiness>('/api/authz/legacy-mapping-retirement-readiness'), enabled: read.allowed });
+  const legacyCoverageQuery = useLegacyMappingCoverage({ enabled: read.allowed });
+  const retirementReadinessQuery = useLegacyMappingRetirementReadiness({ enabled: read.allowed });
   const providersQuery = useIdentityProviders({ enabled: manage.allowed });
   const groupsQuery = useAuthzGroups(undefined, { enabled: manage.allowed });
   const rolesQuery = useRbacRoles({ enabled: rolesManage.allowed });
@@ -133,12 +131,12 @@ export default function IdentityMappingsSettingsTab() {
   });
   const verifyLegacyReplacement = useMutation({
     mutationFn: (item: LegacyMappingCoverageItem) => apiClient.post(`/api/authz/legacy-mapping-coverage/${encodeURIComponent(item.id)}/verify`, { family: item.family, candidateIdentityMappingId: item.candidateIdentityMappingIds[0], note: verificationNote.trim() }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['legacy-mapping-coverage'] }); queryClient.invalidateQueries({ queryKey: ['legacy-mapping-retirement-readiness'] }); setVerificationTarget(null); setVerificationNote(''); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.legacyMappingCoverage }); queryClient.invalidateQueries({ queryKey: authzQueryKeys.legacyMappingRetirementReadiness }); setVerificationTarget(null); setVerificationNote(''); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to record verification').message),
   });
   const retireLegacyMappings = useMutation({
     mutationFn: (globalScope: boolean) => apiClient.post(globalScope ? '/api/authz/legacy-mapping-retirement/disable-global' : '/api/authz/legacy-mapping-retirement/disable', { confirmation: retirementConfirmation }),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['legacy-mapping-coverage'] }); queryClient.invalidateQueries({ queryKey: ['legacy-mapping-retirement-readiness'] }); queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); setRetirementOpen(false); setRetirementConfirmation(''); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.legacyMappingCoverage }); queryClient.invalidateQueries({ queryKey: authzQueryKeys.legacyMappingRetirementReadiness }); queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); setRetirementOpen(false); setRetirementConfirmation(''); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to retire legacy mappings').message),
   });
   const startCreate = () => { setEditing(null); setCreationStep(1); setForm(emptyForm()); setCreateGroupInFlow(false); setNewGroupName(''); setNewGroupKey(''); setProvisionAccessInFlow(false); setProvisionRoleId(''); setProvisionScopeType('engine'); setProvisionResourceId(''); setProvisionRuntimeEngineId(''); setError(null); setTestResult(null); setSnapshotResult(null); setOpen(true); };

@@ -12,6 +12,11 @@ import {
 import {
   EffectiveAccessEvaluateResponseSchema,
   IdentityMappingResponseSchema,
+  LegacyGlobalMappingRetirementRequestSchema,
+  LegacyMappingCoverageItemSchema,
+  LegacyMappingCoverageVerifyRequestSchema,
+  LegacyMappingRetirementReadinessSchema,
+  LegacyMappingRetirementRequestSchema,
   SsoSyncEventSchema,
   SsoSyncRunSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -70,5 +75,21 @@ describe('provider-neutral identity shared contracts', () => {
         identityEntitlementMapping: { id: 'mapping-1', providerId: 'provider-1', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative' },
       }],
     }).sources[0]?.identityEntitlementMapping?.providerId).toBe('provider-1');
+  });
+
+  it('shares the legacy mapping replacement and retirement gate contracts', () => {
+    expect(LegacyMappingCoverageItemSchema.parse({
+      id: 'legacy-1', family: 'engine_assignment', status: 'replacement_candidate', reason: 'Ready to verify',
+      candidateIdentityMappingIds: ['mapping-1'],
+      verification: { candidateIdentityMappingId: 'mapping-1', verifiedById: null, verifiedAt: 1, note: 'Representative sign-in verified.' },
+    }).family).toBe('engine_assignment');
+    expect(LegacyMappingRetirementReadinessSchema.parse({
+      ready: false, activeLegacyMappingCount: 1, verifiedReplacementCount: 0,
+      blockers: [{ id: 'legacy-1', family: 'group', reason: 'Verification required.' }],
+    }).blockers).toHaveLength(1);
+    expect(LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'platform_role', candidateIdentityMappingId: 'mapping-1', note: 'Verified.' }).note).toBe('Verified.');
+    expect(LegacyMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_LEGACY_MAPPINGS');
+    expect(LegacyGlobalMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_GLOBAL_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_GLOBAL_LEGACY_MAPPINGS');
+    expect(() => LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'scope', candidateIdentityMappingId: 'mapping-1', note: 'no' })).toThrow();
   });
 });

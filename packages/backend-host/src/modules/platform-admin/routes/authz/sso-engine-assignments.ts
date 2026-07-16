@@ -7,6 +7,11 @@ import { validateBody, validateParams, validateQuery } from '@enterpriseglue/sha
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { legacyMappingCoverageService, ssoAssignmentMappingService, ssoEngineAccessSnapshotService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  LegacyGlobalMappingRetirementRequestSchema,
+  LegacyMappingCoverageVerifyRequestSchema,
+  LegacyMappingRetirementRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
 const engineIdParamSchema = z.object({ engineId: z.string().min(1) });
@@ -33,9 +38,6 @@ const snapshotQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 const cleanupSchema = z.object({ previewCorrelationId: z.string().min(1).optional(), assignmentIds: z.array(z.string().min(1)).min(1) });
-const coverageSchema = z.object({ family: z.enum(['platform_role', 'group', 'engine_assignment']), candidateIdentityMappingId: z.string().min(1), note: z.string().min(3).max(2000) });
-const retirementSchema = z.object({ confirmation: z.literal('RETIRE_LEGACY_MAPPINGS') });
-const globalRetirementSchema = z.object({ confirmation: z.literal('RETIRE_GLOBAL_LEGACY_MAPPINGS') });
 
 export interface SsoEngineAssignmentRouteDependencies { requirePlatformAction: (actionId: string) => RequestHandler; }
 
@@ -46,9 +48,9 @@ export function registerSsoEngineAssignmentRoutes(router: Router, { requirePlatf
   }));
   router.get('/api/authz/legacy-mapping-coverage', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.getCoverage(req.tenant?.tenantId || null)); }));
   router.get('/api/authz/legacy-mapping-retirement-readiness', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.getRetirementReadiness(req.tenant?.tenantId || null)); }));
-  router.post('/api/authz/legacy-mapping-coverage/:id/verify', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(coverageSchema), asyncHandler(async (req, res) => { await legacyMappingCoverageService.verifyReplacement({ tenantId: req.tenant?.tenantId || null, legacyMappingId: String(req.params.id), actorId: req.user!.userId, ...req.body }); res.status(204).send(); }));
-  router.post('/api/authz/legacy-mapping-retirement/disable', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(retirementSchema), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.retireLegacyMappings(req.tenant?.tenantId || null, req.user!.userId)); }));
-  router.post('/api/authz/legacy-mapping-retirement/disable-global', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(globalRetirementSchema), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.retireLegacyMappings(null, req.user!.userId)); }));
+  router.post('/api/authz/legacy-mapping-coverage/:id/verify', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateParams(idParamSchema), validateBody(LegacyMappingCoverageVerifyRequestSchema), asyncHandler(async (req, res) => { await legacyMappingCoverageService.verifyReplacement({ tenantId: req.tenant?.tenantId || null, legacyMappingId: String(req.params.id), actorId: req.user!.userId, ...req.body }); res.status(204).send(); }));
+  router.post('/api/authz/legacy-mapping-retirement/disable', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), validateBody(LegacyMappingRetirementRequestSchema), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.retireLegacyMappings(req.tenant?.tenantId || null, req.user!.userId)); }));
+  router.post('/api/authz/legacy-mapping-retirement/disable-global', apiLimiter, requireAuth, requirePlatformAction('platform.sso.group-mappings.manage'), requirePlatformAction('platform.sso.platform-role-mappings.manage'), validateBody(LegacyGlobalMappingRetirementRequestSchema), asyncHandler(async (req, res) => { res.json(await legacyMappingCoverageService.retireLegacyMappings(null, req.user!.userId)); }));
   router.post('/api/authz/sso-assignment-mappings', apiLimiter, requireAuth, requirePlatformAction('platform.sso.engine-assignments.manage'), validateBody(mappingSchema), asyncHandler(async (req, res) => {
     try { res.status(201).json(await ssoAssignmentMappingService.createMapping({ ...req.body, tenantId: req.tenant?.tenantId || null, actorUserId: req.user!.userId })); }
     catch (error: any) { if (error.statusCode) throw error; logger.error('Create SSO assignment mapping error:', error); throw Errors.badRequest(error.message || 'Failed to create SSO assignment mapping'); }
