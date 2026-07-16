@@ -58,6 +58,7 @@ import {
 import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
+import { findIdentityEntitlementMappingForMembership, findSsoAssignmentMappingForAssignment, findSsoGroupMappingForMembership, joinLineageParts } from './access-control/inspectionLineage';
 import {
   AuditReferenceLinks,
   findAssignmentAuditEntries,
@@ -954,32 +955,6 @@ function assignmentResourceMatches(assignment: RoleAssignment, resource: Resourc
   return getAssignmentResourceType(assignment) === resource.type && getAssignmentResourceId(assignment) === resource.id;
 }
 
-function sourceRefMappingId(sourceRef: string | null | undefined) {
-  if (!sourceRef) return null;
-  return sourceRef.includes(':') ? sourceRef.split(':').pop() || sourceRef : sourceRef;
-}
-
-function findSsoAssignmentMappingForAssignment(assignment: RoleAssignment, mappings: SsoAssignmentMapping[]) {
-  const mappingId = assignment.sourceMappingId || sourceRefMappingId(assignment.sourceRef);
-  return mappingId ? mappings.find((mapping) => mapping.id === mappingId) || null : null;
-}
-
-function findSsoGroupMappingForMembership(membership: AuthzGroupMembership, mappings: SsoGroupMapping[]) {
-  const mappingId = sourceRefMappingId(membership.sourceRef);
-  if (mappingId) {
-    const exact = mappings.find((mapping) => mapping.id === mappingId);
-    if (exact) return exact;
-  }
-  if (membership.source !== 'sso') return null;
-  return mappings.find((mapping) => mapping.isActive && mapping.targetGroupId === membership.groupId) || null;
-}
-
-function findIdentityEntitlementMappingForMembership(membership: AuthzGroupMembership, mappings: IdentityEntitlementMapping[]) {
-  if (membership.source !== 'identity_provider') return null;
-  const mappingId = membership.sourceRef?.startsWith('identity_mapping:') ? membership.sourceRef.slice('identity_mapping:'.length) : null;
-  return mappingId ? mappings.find((mapping) => mapping.id === mappingId) || null : null;
-}
-
 function formatSsoAssignmentMappingForInspection(mapping: SsoAssignmentMapping, roles: RoleSummary[]) {
   return `SSO engine mapping: ${ssoClaimLabel(mapping)} -> ${selectorLabel(mapping) || 'target'} as ${roleLabel(mapping.targetRoleId, roles)} (${mapping.syncMode})`;
 }
@@ -991,11 +966,6 @@ function formatSsoGroupMappingForInspection(mapping: SsoGroupMapping) {
 function formatIdentityEntitlementMappingForInspection(mapping: IdentityEntitlementMapping) {
   const value = mapping.matchOperator === 'exists' ? 'any value' : mapping.externalId || '-';
   return `Identity mapping: ${mapping.providerKey} ${mapping.entitlementType} ${mapping.matchOperator} ${value} -> ${mapping.targetGroupKey} (${mapping.syncMode})`;
-}
-
-function joinLineageParts(parts: Array<string | null | undefined>) {
-  const filtered = parts.filter((part): part is string => Boolean(part && part !== '-'));
-  return filtered.length ? filtered.join('; ') : '-';
 }
 
 function formatMachineDiagnosticCount(count: number, singular: string, plural = `${singular}s`) {
