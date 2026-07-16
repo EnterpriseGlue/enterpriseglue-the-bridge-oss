@@ -16,7 +16,7 @@ export interface SamlSigningMaterial {
  * TLS validation; use it here solely to issue a self-signed X.509 certificate
  * for node-saml's production validation boundary.
  */
-export function createSamlSigningMaterial(): SamlSigningMaterial {
+export function createEphemeralTestCertificate(commonName: string): SamlSigningMaterial {
   const directory = mkdtempSync(join(tmpdir(), 'enterpriseglue-saml-mock-'));
   const privateKeyPath = join(directory, 'key.pem');
   const certificatePath = join(directory, 'certificate.pem');
@@ -27,7 +27,7 @@ export function createSamlSigningMaterial(): SamlSigningMaterial {
     writeFileSync(privateKeyPath, privateKey, { mode: 0o600 });
     execFileSync('openssl', [
       'req', '-x509', '-new', '-key', privateKeyPath,
-      '-sha256', '-days', '1', '-subj', '/CN=enterpriseglue-saml-test-mock',
+      '-sha256', '-days', '1', '-subj', `/CN=${commonName}`,
       '-out', certificatePath,
     ], { stdio: 'pipe' });
 
@@ -35,4 +35,8 @@ export function createSamlSigningMaterial(): SamlSigningMaterial {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+export function createSamlSigningMaterial(): SamlSigningMaterial {
+  return createEphemeralTestCertificate('enterpriseglue-saml-test-mock');
 }

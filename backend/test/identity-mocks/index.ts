@@ -1,8 +1,11 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createServer as createHttpsServer, request as httpsRequest, type Server } from 'node:https';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
-import { createSamlSigningMaterial } from './samlSigningMaterial.js';
+import { createEphemeralTestCertificate, createSamlSigningMaterial } from './samlSigningMaterial.js';
 
 const require = createRequire(import.meta.url);
 const { signXml } = require('@node-saml/node-saml/lib/xml.js') as {
@@ -10,6 +13,12 @@ const { signXml } = require('@node-saml/node-saml/lib/xml.js') as {
 };
 
 export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'timeout';
+
+export interface MockOidcProviderOptions {
+  issuer?: string;
+  clientId?: string;
+  callbackUrl?: string;
+}
 
 interface SigningMaterial {
   privateKey: string;
@@ -29,14 +38,20 @@ function createSigningMaterial(kid: string): SigningMaterial {
  * test-only: product code only sees ordinary discovery, token, and JWKS HTTP calls.
  */
 export class MockOidcProvider {
-  readonly issuer = 'https://identity-mock.example.test';
-  readonly clientId = 'enterpriseglue-test-client';
-  readonly callbackUrl = 'https://app.example.test/api/auth/identity/callback';
+  readonly issuer: string;
+  readonly clientId: string;
+  readonly callbackUrl: string;
   private signingMaterial = createSigningMaterial('identity-mock-key-1');
   private tokenClaims: Record<string, unknown> = {
     sub: 'user-1', email: 'person@example.test', email_verified: true, groups: ['ops'], nonce: 'nonce-1',
   };
   private failureMode: OidcMockFailureMode = 'none';
+
+  constructor(options: MockOidcProviderOptions = {}) {
+    this.issuer = options.issuer || 'https://identity-mock.example.test';
+    this.clientId = options.clientId || 'enterpriseglue-test-client';
+    this.callbackUrl = options.callbackUrl || 'https://app.example.test/api/auth/identity/callback';
+  }
 
   configuration() {
     return { issuerUrl: this.issuer, clientId: this.clientId, callbackUrl: this.callbackUrl, scopes: ['openid', 'profile', 'email'] };
@@ -79,18 +94,18 @@ export class MockOidcProvider {
   }
 
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
-    const url = String(input);
+    const url = new URL(String(input));
     if (this.failureMode === 'timeout') throw new Error('OIDC provider request timed out');
     if (this.failureMode === 'unavailable') return new Response('unavailable', { status: 503 });
-    if (url === `${this.issuer}/.well-known/openid-configuration`) {
+    if (url.href === `${this.issuer}/.well-known/openid-configuration`) {
       if (this.failureMode === 'malformed') return Response.json({ issuer: this.issuer });
       return Response.json({
         issuer: this.failureMode === 'wrong_issuer' ? 'https://wrong-issuer.example.test' : this.issuer,
         authorization_endpoint: `${this.issuer}/authorize`, token_endpoint: `${this.issuer}/token`, jwks_uri: `${this.issuer}/jwks`,
       });
     }
-    if (url === `${this.issuer}/jwks`) return Response.json({ keys: [this.signingMaterial.publicJwk] });
-    if (url === `${this.issuer}/token` && init?.method === 'POST') {
+    if (url.href === `${this.issuer}/jwks`) return Response.json({ keys: [this.signingMaterial.publicJwk] });
+    if (url.href === `${this.issuer}/token` && init?.method === 'POST') {
       if (this.failureMode === 'invalid_token') return Response.json({ id_token: 'invalid.token.value' });
       if (this.failureMode === 'wrong_audience') {
         return Response.json({ id_token: jwt.sign({ ...this.tokenClaims, iss: this.issuer, aud: 'wrong-audience' }, this.signingMaterial.privateKey, {
@@ -108,7 +123,113 @@ export class MockOidcProvider {
       }
       return Response.json({ id_token: this.issueIdToken() });
     }
+    if (url.href.startsWith(`${this.issuer}/authorize`)) {
+      const state = url.searchParams.get('state') || '';
+      const callbackUrl = url.searchParams.get('redirect_uri') || this.callbackUrl;
+      const callback = new URL(callbackUrl);
+      callback.searchParams.set('code', 'code-1');
+      callback.searchParams.set('state', state);
+      return new Response(null, { status: 302, headers: { location: callback.toString() } });
+    }
+    if (url.href === `${this.issuer}/userinfo`) {
+      const { nonce: _nonce, ...claims } = this.tokenClaims;
+      return Response.json(claims);
+    }
+    if (url.href === `${this.issuer}/groups`) {
+      return Response.json({ groups: this.tokenClaims.groups || [], roles: this.tokenClaims.roles || [] });
+    }
     return new Response('not found', { status: 404 });
+  }
+}
+
+/**
+ * HTTPS loopback provider for transport-level OIDC tests. Its controller is
+ * only exposed to the test process, while product code receives real discovery,
+ * authorization, token, JWKS, userinfo, and group endpoint responses.
+ */
+export class MockOidcHttpsServer {
+  private server: Server | null = null;
+  provider: MockOidcProvider | null = null;
+  private issuerUrl: string | null = null;
+
+  get issuer(): string {
+    if (!this.issuerUrl) throw new Error('OIDC mock server is not running');
+    return this.issuerUrl;
+  }
+
+  async start(): Promise<void> {
+    if (this.server) return;
+    const tls = createEphemeralTestCertificate('127.0.0.1');
+    this.server = createHttpsServer({ key: tls.privateKey, cert: tls.certificate }, (request, response) => {
+      void this.handle(request, response);
+    });
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once('error', reject);
+      this.server!.listen(0, '127.0.0.1', () => {
+        this.server!.off('error', reject);
+        resolve();
+      });
+    });
+    const address = this.server.address() as AddressInfo;
+    this.issuerUrl = `https://127.0.0.1:${address.port}`;
+    this.provider = new MockOidcProvider({ issuer: this.issuerUrl });
+  }
+
+  async stop(): Promise<void> {
+    const server = this.server;
+    this.server = null;
+    this.provider = null;
+    this.issuerUrl = null;
+    if (!server) return;
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+
+  configuration() {
+    if (!this.provider) throw new Error('OIDC mock server is not running');
+    return this.provider.configuration();
+  }
+
+  async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
+    const url = new URL(String(input));
+    if (url.origin !== this.issuer) return globalThis.fetch(input, init);
+    const headers = new Headers(init?.headers);
+    const body = init?.body instanceof URLSearchParams ? init.body.toString() : init?.body;
+    return new Promise<Response>((resolve, reject) => {
+      const request = httpsRequest(url, {
+        method: init?.method || 'GET',
+        headers: Object.fromEntries(headers.entries()),
+        rejectUnauthorized: false,
+      }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        response.once('error', reject);
+        response.once('end', () => {
+          const responseHeaders = new Headers();
+          for (const [key, value] of Object.entries(response.headers)) {
+            if (Array.isArray(value)) value.forEach((entry) => responseHeaders.append(key, entry));
+            else if (value !== undefined) responseHeaders.set(key, String(value));
+          }
+          resolve(new Response(Buffer.concat(chunks), { status: response.statusCode || 500, headers: responseHeaders }));
+        });
+      });
+      request.once('error', reject);
+      if (body === undefined || body === null) request.end();
+      else request.end(body as string | Buffer);
+    });
+  }
+
+  private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    try {
+      const provider = this.provider;
+      if (!provider) throw new Error('OIDC mock server is not initialized');
+      const result = await provider.fetch(new URL(request.url || '/', this.issuer), { method: request.method });
+      response.statusCode = result.status;
+      result.headers.forEach((value, key) => response.setHeader(key, value));
+      response.end(Buffer.from(await result.arrayBuffer()));
+    } catch {
+      response.statusCode = 500;
+      response.end('OIDC test mock failed');
+    }
   }
 }
 

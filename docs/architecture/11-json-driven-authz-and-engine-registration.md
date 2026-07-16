@@ -2097,10 +2097,10 @@ interface IdentityMockController {
 
 #### Mock OIDC Provider
 
-- [ ] ⬜ Serve discovery metadata, authorization, token, JWKS, userinfo, and optional group/app-role API endpoints on an ephemeral port.
-- [ ] ⬜ Issue signed JWTs with configurable issuer, audience, subject, groups, roles, scopes, expiry, nonce, and key id.
+- [x] ✅ Serve discovery metadata, authorization, token, JWKS, userinfo, and group/app-role API endpoints on an ephemeral loopback HTTPS port. The OIDC test server has no HTTP control endpoint: its mutable controller remains inside the test process.
+- [x] ✅ Issue signed JWTs with configurable issuer, audience, subject, groups, roles, scopes, expiry, nonce, and key id. The loopback server and in-process fixture share this controller contract, so transport tests can update a subject without a published control API.
 - [x] ✅ Support key rotation, invalid signature, wrong issuer/audience, expired/not-yet-valid token, missing subject, group overage marker, and provider timeout scenarios. The deterministic OIDC fixture covers signing-key rotation, invalid and expired/not-yet-valid tokens, missing subject, discovery failures, wrong audience, timeout, and Entra-style group-overage claims.
-- [ ] ⬜ Support changing a subject's groups/roles between login and scheduled reconciliation.
+- [x] ✅ Support changing a subject's groups/roles between login and scheduled reconciliation. The test-process controller updates the signed token and group endpoints between exchanges, with transport coverage for the changed entitlement set.
 
 #### Mock SAML Identity Provider
 
