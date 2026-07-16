@@ -27,7 +27,10 @@ import type {
   EngineRuntimeQueryCapabilities as SharedEngineRuntimeQueryCapabilities,
   ExternalEngineCapabilities as SharedExternalEngineCapabilities,
   ExternalEngineCapabilityDiagnostics as SharedExternalEngineCapabilityDiagnostics,
+  ExternalEngineDecommissionResponse as SharedExternalEngineDecommissionResponse,
   ExternalEngineMaterializationDiagnostics as SharedExternalEngineMaterializationDiagnostics,
+  ExternalEngineReactivateResponse as SharedExternalEngineReactivateResponse,
+  ExternalEngineReconcileResponse as SharedExternalEngineReconcileResponse,
   ExternalEngineRegistration as SharedExternalEngineRegistration,
   ExternalEngineRegistrationAuditEntry as SharedExternalEngineRegistrationAuditEntry,
   ExternalEngineSystem as SharedExternalEngineSystem,
@@ -193,24 +196,9 @@ export interface ExternalEngineAuditParams {
   limit?: number;
 }
 
-export interface ExternalEngineLifecycleResponse {
-  engineId: string;
-  externalId: string | null;
-  lifecycleStatus: EngineLifecycleStatus;
-  driftStatus?: string | null;
-  materializationResults?: unknown[];
-  materializationDiagnostics?: ExternalEngineMaterializationDiagnostics;
-}
-
-export interface ExternalEngineReconcileResponse {
-  engineId: string;
-  externalId: string | null;
-  lifecycleStatus: EngineLifecycleStatus;
-  capabilityStatus: EngineCapabilityStatus;
-  capabilityDiagnostics: ExternalEngineCapabilityDiagnostics;
-  materializationResults: unknown[];
-  materializationDiagnostics: ExternalEngineMaterializationDiagnostics;
-}
+export type ExternalEngineDecommissionResponse = SharedExternalEngineDecommissionResponse;
+export type ExternalEngineReactivateResponse = SharedExternalEngineReactivateResponse;
+export type ExternalEngineReconcileResponse = SharedExternalEngineReconcileResponse;
 
 export type EngineSetSelector = SharedEngineSetSelector;
 export type EngineSetSummary = SharedEngineSetSummary;
@@ -857,7 +845,7 @@ export function useDecommissionExternalEngine() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
-      apiClient.post<ExternalEngineLifecycleResponse & { decommissioned: boolean }>(`/api/authz/external-engines/${id}/decommission`, { reason }),
+      apiClient.post<ExternalEngineDecommissionResponse>(`/api/authz/external-engines/${id}/decommission`, { reason }),
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: authzQueryKeys.externalEngines });
       qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'external-engines', id, 'audit'] });
@@ -870,7 +858,7 @@ export function useReactivateExternalEngine() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
-      apiClient.post<ExternalEngineLifecycleResponse & { reactivated: boolean }>(`/api/authz/external-engines/${id}/reactivate`, { reason }),
+      apiClient.post<ExternalEngineReactivateResponse>(`/api/authz/external-engines/${id}/reactivate`, { reason }),
     onSuccess: (_result, { id }) => {
       qc.invalidateQueries({ queryKey: authzQueryKeys.externalEngines });
       qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'external-engines', id, 'audit'] });

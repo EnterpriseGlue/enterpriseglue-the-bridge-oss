@@ -5,7 +5,10 @@ import {
   AuthzGroupSchema,
   CurrentUserPermissionsSchema,
   DeploymentEligibilityEvaluateResponseSchema,
+  ExternalEngineDecommissionResponseSchema,
   ExternalEngineRegistrationSchema,
+  ExternalEngineReactivateResponseSchema,
+  ExternalEngineReconcileResponseSchema,
   PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
   RoleDetailSchema,
@@ -157,6 +160,30 @@ describe('authorization response contracts', () => {
       createdAt: 1,
       updatedAt: 1,
     }).connectionMode).toBe('customer_sidecar');
+  });
+
+  it('shares external engine lifecycle and reconciliation responses', () => {
+    expect(ExternalEngineDecommissionResponseSchema.parse({
+      decommissioned: true, engineId: 'engine-a', externalId: null, lifecycleStatus: 'decommissioned',
+    }).decommissioned).toBe(true);
+    expect(ExternalEngineReactivateResponseSchema.parse({
+      reactivated: true, engineId: 'engine-a', externalId: 'external-a', lifecycleStatus: 'active', driftStatus: 'in_sync',
+      materializationResults: [{ engineSetId: 'set-a' }], materializationDiagnostics: {
+        engineSetCount: 1, matched: 1, created: 0, updated: 1, removed: 0, errors: [], status: 'ok', summary: 'One Engine Set refreshed',
+      },
+    }).reactivated).toBe(true);
+    expect(ExternalEngineReconcileResponseSchema.parse({
+      engineId: 'engine-a', externalId: 'external-a', lifecycleStatus: 'active', capabilityStatus: 'in_sync',
+      capabilityDiagnostics: {
+        status: 'in_sync', expectedOperations: [], reportedOperations: [], missingOperations: [], extraOperations: [],
+        expectedQueryCapabilities: {}, reportedQueryCapabilities: null, mismatchedQueryCapabilities: [],
+        expectedSupportLevel: 'compatible', reportedSupportLevel: 'compatible', expectedCompatibilityProfile: 'camunda7-rest',
+        reportedCompatibilityProfile: 'camunda7-rest', issues: [], recommendation: 'No action required',
+      },
+      materializationResults: [], materializationDiagnostics: {
+        engineSetCount: 1, matched: 1, created: 0, updated: 1, removed: 0, errors: [], status: 'ok', summary: 'One Engine Set refreshed',
+      },
+    }).capabilityStatus).toBe('in_sync');
   });
 
   it('keeps legacy mapping response fields canonical during provider-neutral migration', () => {

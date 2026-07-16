@@ -603,6 +603,33 @@ export const ExternalEngineRegistrationAuditEntrySchema = z.object({
   createdAt: z.number(),
 });
 
+export const ExternalEngineDecommissionResponseSchema = z.object({
+  decommissioned: z.boolean(),
+  engineId: z.string(),
+  externalId: z.string().nullable(),
+  lifecycleStatus: z.literal('decommissioned'),
+});
+
+export const ExternalEngineReactivateResponseSchema = z.object({
+  reactivated: z.boolean(),
+  engineId: z.string(),
+  externalId: z.string().nullable(),
+  lifecycleStatus: z.literal('active'),
+  driftStatus: z.string(),
+  materializationResults: z.array(z.record(z.string(), z.unknown())),
+  materializationDiagnostics: ExternalEngineMaterializationDiagnosticsSchema,
+});
+
+export const ExternalEngineReconcileResponseSchema = z.object({
+  engineId: z.string(),
+  externalId: z.string().nullable(),
+  lifecycleStatus: EngineLifecycleStatusSchema,
+  capabilityStatus: EngineCapabilityStatusSchema,
+  capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema,
+  materializationResults: z.array(z.record(z.string(), z.unknown())),
+  materializationDiagnostics: ExternalEngineMaterializationDiagnosticsSchema,
+});
+
 export const EngineSetSelectorSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('all') }),
   z.object({
@@ -1467,6 +1494,9 @@ export type ExternalEngineSystemCreate = z.infer<typeof ExternalEngineSystemCrea
 export type ExternalEngineSystemUpdate = z.infer<typeof ExternalEngineSystemUpdateSchema>;
 export type ExternalEngineRegistration = z.infer<typeof ExternalEngineRegistrationSchema>;
 export type ExternalEngineRegistrationAuditEntry = z.infer<typeof ExternalEngineRegistrationAuditEntrySchema>;
+export type ExternalEngineDecommissionResponse = z.infer<typeof ExternalEngineDecommissionResponseSchema>;
+export type ExternalEngineReactivateResponse = z.infer<typeof ExternalEngineReactivateResponseSchema>;
+export type ExternalEngineReconcileResponse = z.infer<typeof ExternalEngineReconcileResponseSchema>;
 export type EngineSetSelector = z.infer<typeof EngineSetSelectorSchema>;
 export type EngineSetSummary = z.infer<typeof EngineSetSummarySchema>;
 export type EngineSetDetail = z.infer<typeof EngineSetDetailSchema>;
