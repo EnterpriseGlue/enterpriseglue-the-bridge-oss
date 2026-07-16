@@ -23,6 +23,8 @@ import type {
   AuthzCheckRequest as SharedAuthzCheckRequest,
   AuthzCheckResponse as SharedAuthzCheckResponse,
   AuthzPolicy as SharedAuthzPolicy,
+  AuthzPolicyCreate as SharedAuthzPolicyCreate,
+  AuthzPolicyUpdate as SharedAuthzPolicyUpdate,
   AuthzResourceType as SharedAuthzResourceType,
   ApiClient as SharedApiClient,
   ApiClientWithToken as SharedApiClientWithToken,
@@ -290,6 +292,8 @@ export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementRead
 export type PolicyCondition = SharedPolicyCondition;
 /** The policy list endpoint intentionally omits persistence-only metadata. */
 export type AuthzPolicy = Omit<SharedAuthzPolicy, 'tenantId' | 'createdAt' | 'updatedAt' | 'createdById'>;
+export type AuthzPolicyCreate = SharedAuthzPolicyCreate;
+export type AuthzPolicyUpdate = SharedAuthzPolicyUpdate;
 export type AuthzCheckRequest = SharedAuthzCheckRequest;
 export type AuthzCheckResponse = SharedAuthzCheckResponse;
 
@@ -1205,8 +1209,8 @@ export function useAuthzPolicies() {
 export function useCreatePolicy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Omit<AuthzPolicy, 'id' | 'isActive'>) =>
-      apiClient.post<{ id: string }>('/api/authz/policies', data),
+    mutationFn: (data: AuthzPolicyCreate) =>
+      apiClient.post<AuthzCreatedIdResponse>('/api/authz/policies', data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.policies }),
   });
 }
@@ -1214,8 +1218,8 @@ export function useCreatePolicy() {
 export function useUpdatePolicy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: Partial<AuthzPolicy> & { id: string }) =>
-      apiClient.put<void>(`/api/authz/policies/${id}`, data),
+    mutationFn: ({ id, ...data }: AuthzPolicyUpdate & { id: string }) =>
+      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/policies/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.policies }),
   });
 }

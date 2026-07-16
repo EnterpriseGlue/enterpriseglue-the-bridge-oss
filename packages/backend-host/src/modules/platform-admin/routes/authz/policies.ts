@@ -6,18 +6,9 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { policyService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { AuthzPolicyCreateSchema, AuthzPolicyUpdateSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const idParamSchema = z.object({ id: z.string().uuid() });
-const policyCreateSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  effect: z.enum(['allow', 'deny']),
-  resourceType: z.string().optional(),
-  action: z.string().optional(),
-  conditions: z.record(z.string(), z.unknown()).optional(),
-  priority: z.number().int().min(0).optional(),
-});
-const policyUpdateSchema = policyCreateSchema.partial();
 
 export interface PolicyRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
@@ -34,7 +25,7 @@ export function registerPolicyRoutes(router: Router, { requirePlatformAction }: 
     }
   }));
 
-  router.post('/api/authz/policies', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateBody(policyCreateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/policies', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateBody(AuthzPolicyCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const { name, description, effect, priority, resourceType, action, conditions } = req.body;
       const result = await policyService.createPolicy({
@@ -55,7 +46,7 @@ export function registerPolicyRoutes(router: Router, { requirePlatformAction }: 
     }
   }));
 
-  router.put('/api/authz/policies/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateParams(idParamSchema), validateBody(policyUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.put('/api/authz/policies/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.policies.manage'), validateParams(idParamSchema), validateBody(AuthzPolicyUpdateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const policyId = String(req.params.id);
       await policyService.updatePolicy(policyId, {

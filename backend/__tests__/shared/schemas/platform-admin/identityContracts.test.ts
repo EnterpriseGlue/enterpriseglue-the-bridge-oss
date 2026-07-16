@@ -35,6 +35,8 @@ import {
   AuthzCheckResponseSchema,
   AuthzCreatedIdResponseSchema,
   AuthzMutationSuccessResponseSchema,
+  AuthzPolicyCreateSchema,
+  AuthzPolicyUpdateSchema,
   CustomPermissionCreateResponseSchema,
   ProjectEngineTargetSyncLegacyResponseSchema,
   RoleAssignmentCreateResponseSchema,
@@ -254,6 +256,14 @@ describe('provider-neutral identity shared contracts', () => {
     expect(CustomPermissionCreateResponseSchema.parse({ id: 'permission-1', key: 'custom.view' }).key).toBe('custom.view');
     expect(RoleAssignmentCreateResponseSchema.parse({ id: 'assignment-1', warnings: [] }).warnings).toEqual([]);
     expect(ProjectEngineTargetSyncLegacyResponseSchema.parse({ createdOrUpdated: 2 }).createdOrUpdated).toBe(2);
+  });
+
+  it('shares policy writes without route-local persistence fields', () => {
+    expect(AuthzPolicyCreateSchema.parse({
+      name: 'Deny risky production action', effect: 'deny', action: 'engine.deploy.execute', conditions: { environment: 'production' },
+    }).effect).toBe('deny');
+    expect(AuthzPolicyUpdateSchema.parse({ priority: 10, isActive: false })).toMatchObject({ priority: 10, isActive: false });
+    expect(() => AuthzPolicyCreateSchema.parse({ name: 'bad', effect: 'allow', priority: -1 })).toThrow();
   });
 
   it('keeps legacy mapping conversion additive and validates shared provider-neutral contracts', () => {

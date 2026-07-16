@@ -121,6 +121,20 @@ export const AuthzPolicySchema = AuthzPolicySchemaRaw.transform((p) => ({
   createdById: p.createdById ?? undefined,
 }));
 
+/** Public policy write contract; persistence-only tenant and actor fields are route-owned. */
+export const AuthzPolicyCreateSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().optional(),
+  effect: z.enum(['allow', 'deny']),
+  resourceType: z.string().optional(),
+  action: z.string().optional(),
+  conditions: z.record(z.string(), z.unknown()).optional(),
+  priority: z.number().int().min(0).optional(),
+});
+export const AuthzPolicyUpdateSchema = AuthzPolicyCreateSchema.partial().extend({
+  isActive: z.boolean().optional(),
+});
+
 /** Caller-supplied context is diagnostic input only; authorization still resolves server-side identity and tenancy. */
 export const AuthzCheckRequestSchema = z.object({
   action: z.string().min(1),
@@ -1827,6 +1841,8 @@ export const SsoGroupMappingTestResponseSchema = z.object({
 
 // Types
 export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
+export type AuthzPolicyCreate = z.input<typeof AuthzPolicyCreateSchema>;
+export type AuthzPolicyUpdate = z.input<typeof AuthzPolicyUpdateSchema>;
 export type AuthzCheckRequest = z.input<typeof AuthzCheckRequestSchema>;
 export type AuthzCheckResponse = z.infer<typeof AuthzCheckResponseSchema>;
 export type AuthzCheckBatchRequest = z.input<typeof AuthzCheckBatchRequestSchema>;

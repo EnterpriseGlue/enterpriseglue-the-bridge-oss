@@ -7,6 +7,7 @@ import {
   deploymentEligibilityService,
   engineSetService,
   permissionService,
+  policyService,
   projectEngineTargetService,
   serviceAccountService,
   ssoAssignmentMappingService,
@@ -1190,6 +1191,19 @@ describe('platform-admin authz routes', () => {
       });
 
     expect(createResponse.status).toBe(201);
+  });
+
+  it('accepts a policy activation update through the shared write contract', async () => {
+    const response = await request(app)
+      .put('/api/authz/policies/00000000-0000-4000-8000-000000000090')
+      .send({ isActive: false });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true });
+    expect(vi.mocked(policyService.updatePolicy)).toHaveBeenCalledWith(
+      '00000000-0000-4000-8000-000000000090',
+      expect.objectContaining({ isActive: false, tenantId: null, updatedById: 'user-1' }),
+    );
   });
 
   it('lists SSO sync diagnostics with SSO assignment read permission', async () => {

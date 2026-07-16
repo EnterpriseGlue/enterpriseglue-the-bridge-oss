@@ -3217,6 +3217,8 @@ const {
   AuthzCheckRequestSchema,
   AuthzCheckResponseSchema,
   AuthzCreatedIdResponseSchema,
+  AuthzPolicyCreateSchema,
+  AuthzPolicyUpdateSchema,
   AuthzPrincipalTypeSchema,
   AuthzMutationSuccessResponseSchema,
   AuthzGroupCreateSchema,
@@ -3332,18 +3334,6 @@ const AuthzPolicyResponseSchema = z.object({
   updatedAt: z.number(),
   createdById: z.string().optional(),
 });
-
-const AuthzPolicyCreateRequestSchema = z.object({
-  name: z.string().min(1).max(255),
-  description: z.string().optional(),
-  effect: z.enum(['allow', 'deny']),
-  resourceType: z.string().optional(),
-  action: z.string().optional(),
-  conditions: z.record(z.string(), z.unknown()).optional(),
-  priority: z.number().int().min(0).optional(),
-});
-
-const AuthzPolicyUpdateRequestSchema = AuthzPolicyCreateRequestSchema.partial();
 
 const AuthzAuditQueryOpenApiSchema = z.object({
   userId: z.string().optional(),
@@ -3531,8 +3521,8 @@ registry.registerPath({ method: 'post', path: '/starbase-api/projects/{projectId
 registry.registerPath({ method: 'put', path: '/starbase-api/projects/{projectId}/deployment-targets/{targetId}', ...authzExtension('project.deployment-targets.manage', 'PUT', '/starbase-api/projects/{projectId}/deployment-targets/{targetId}'), request: { params: z.object({ projectId: z.string(), targetId: z.string() }), body: { content: { 'application/json': { schema: ProjectEngineTargetUpdateSchema.omit({ source: true, sourceRef: true, externalSystemId: true, externalProjectId: true, externalEngineId: true, externalTargetId: true, approvedById: true, approvalStatus: true, approvedAt: true, policyTags: true, diagnostics: true }) } } } }, responses: { 200: { description: 'Project deployment target updated', content: { 'application/json': { schema: z.object({ success: z.boolean() }) } } } } });
 registry.registerPath({ method: 'delete', path: '/starbase-api/projects/{projectId}/deployment-targets/{targetId}', ...authzExtension('project.deployment-targets.manage', 'DELETE', '/starbase-api/projects/{projectId}/deployment-targets/{targetId}'), request: { params: z.object({ projectId: z.string(), targetId: z.string() }) }, responses: { 204: { description: 'Project deployment target archived' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/policies', ...authzExtension('platform.authz.policies.read', 'GET', '/api/authz/policies'), responses: { 200: { description: 'List policies', content: { 'application/json': { schema: z.array(AuthzPolicyResponseSchema) } } } } });
-registry.registerPath({ method: 'post', path: '/api/authz/policies', ...authzExtension('platform.authz.policies.manage', 'POST', '/api/authz/policies'), request: { body: { content: { 'application/json': { schema: AuthzPolicyCreateRequestSchema } } } }, responses: { 201: { description: 'Policy created', content: { 'application/json': { schema: AuthzPolicyResponseSchema } } } } });
-registry.registerPath({ method: 'put', path: '/api/authz/policies/{id}', ...authzExtension('platform.authz.policies.manage', 'PUT', '/api/authz/policies/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: AuthzPolicyUpdateRequestSchema } } } }, responses: { 200: { description: 'Policy updated', content: { 'application/json': { schema: AuthzPolicyResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/authz/policies', ...authzExtension('platform.authz.policies.manage', 'POST', '/api/authz/policies'), request: { body: { content: { 'application/json': { schema: AuthzPolicyCreateSchema } } } }, responses: { 201: { description: 'Policy created', content: { 'application/json': { schema: AuthzCreatedIdResponseSchema } } } } });
+registry.registerPath({ method: 'put', path: '/api/authz/policies/{id}', ...authzExtension('platform.authz.policies.manage', 'PUT', '/api/authz/policies/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: AuthzPolicyUpdateSchema } } } }, responses: { 200: { description: 'Policy updated', content: { 'application/json': { schema: AuthzMutationSuccessResponseSchema } } } } });
 registry.registerPath({ method: 'delete', path: '/api/authz/policies/{id}', ...authzExtension('platform.authz.policies.manage', 'DELETE', '/api/authz/policies/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Policy deleted' } } });
 
 // Authz audit
