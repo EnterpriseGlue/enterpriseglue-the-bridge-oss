@@ -1219,7 +1219,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/deployments',
   ...authzExtension('engine.deployments.read', 'GET', '/engines-api/engines/{engineId}/deployments'),
   request: { params: z.object({ engineId: z.string() }) },
-  responses: { 200: { description: 'List engine deployments (raw engine shape)', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Engine-native Camunda-compatible deployment list. This passthrough is scoped by EnterpriseGlue authorization but its payload is not a canonical deployment receipt or history contract.', content: { 'application/json': { schema: z.unknown() } } } },
 })
 
 registry.registerPath({
@@ -1227,7 +1227,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/deployments/{id}',
   ...authzExtension('engine.deployments.read', 'GET', '/engines-api/engines/{engineId}/deployments/{id}'),
   request: { params: z.object({ engineId: z.string(), id: z.string() }) },
-  responses: { 200: { description: 'Engine deployment detail (raw engine shape)', content: { 'application/json': { schema: z.unknown() } } }, 404: { description: 'Not found' } },
+  responses: { 200: { description: 'Engine-native Camunda-compatible deployment detail. This passthrough is scoped by EnterpriseGlue authorization but its payload is not a canonical deployment receipt or history contract.', content: { 'application/json': { schema: z.unknown() } } }, 404: { description: 'Not found' } },
 })
 
 registry.registerPath({

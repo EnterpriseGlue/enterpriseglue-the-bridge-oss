@@ -1505,7 +1505,7 @@ V1 implementation boundary:
 - [x] ✅ Do not build duplicate Camunda permission editors in Access Control. The Role Library manages EnterpriseGlue roles and runtime-resource assignments only.
 - [x] ✅ Do not synchronize EnterpriseGlue permissions into Camunda in v1. EnterpriseGlue evaluates access before the integration identity invokes the engine.
 - [x] ✅ If the engine rejects a call despite EnterpriseGlue allowing it, surface an operational `ENGINE_OPERATION_REJECTED` error with sanitized diagnostics rather than granting by fallback.
-- [x] ✅ If EnterpriseGlue denies a request, never call the engine even if engine-native permissions might allow it. Runtime route tests cover denial before engine service invocation.
+- [x] ✅ If EnterpriseGlue denies a request, never call the engine even if engine-native permissions might allow it. Runtime route tests cover denial before engine service invocation, including engine-native deployment list and detail passthroughs; their OpenAPI contracts explicitly distinguish raw engine payloads from sanitized canonical receipt/history APIs.
 
 ### EnterpriseGlue Target Model
 

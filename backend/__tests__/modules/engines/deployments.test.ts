@@ -237,6 +237,16 @@ describe('engines deployments routes', () => {
     }));
   });
 
+  it('does not call an engine-native deployment passthrough when deploy-view is denied', async () => {
+    const { fetch } = await import('undici');
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app).get('/engines-api/engines/e1/deployments');
+
+    expect(response.status).toBe(403);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('lists sanitized external deployment receipts through deployment-read permission', async () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
       permission === 'engine:deploy:view'
@@ -349,6 +359,16 @@ describe('engines deployments routes', () => {
       resourceType: 'engine',
       resourceId: 'e1',
     }));
+  });
+
+  it('does not call an engine-native deployment detail passthrough when deploy-view is denied', async () => {
+    const { fetch } = await import('undici');
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app).get('/engines-api/engines/e1/deployments/d1');
+
+    expect(response.status).toBe(403);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('lists deployments through scoped deploy-view permission without legacy engine access', async () => {
