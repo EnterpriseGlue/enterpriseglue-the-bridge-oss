@@ -26,5 +26,8 @@ test.describe('Smoke: local Access Control authorization', () => {
     await page.getByRole('tab', { name: 'Runtime Resources', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Runtime Resources' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Engine' })).toBeVisible();
+
+    await page.getByRole('tab', { name: 'SSO Engine Assignments', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'SSO diagnostics' })).toBeVisible();
   });
 });
