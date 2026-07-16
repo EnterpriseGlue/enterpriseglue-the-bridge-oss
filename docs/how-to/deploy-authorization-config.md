@@ -218,9 +218,10 @@ The aggregate is organized into three independently runnable, local-safe lanes:
 | Configuration | `pnpm test:authz:config` | Bundle schema/preview/apply/export, deployment manifests, CI contract, documentation, secret boundaries, ownership, and engine import. |
 | Runtime authorization | `pnpm test:authz:runtime` | Action/route inventory, assignment targets, group/resource identities, runtime/deployment lineage, engine connection resolution, and deployment eligibility. |
 
-`test:authz-refactor` runs those lanes in that order. They are deterministic
-local contracts; they do not require a deployed identity provider, browser
-lifecycle environment, or LDAP container. Run those opt-in boundaries
+`test:authz-refactor` first checks that this composition still contains every
+focused check exactly once, then runs the lanes in that order. They are
+deterministic local contracts; they do not require a deployed identity provider,
+browser lifecycle environment, or LDAP container. Run those opt-in boundaries
 separately with `pnpm test:identity:browser` and `pnpm test:identity:ldap`.
 
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
