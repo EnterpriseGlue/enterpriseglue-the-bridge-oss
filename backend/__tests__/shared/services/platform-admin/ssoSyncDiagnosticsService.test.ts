@@ -18,6 +18,7 @@ import { ssoAssignmentMappingService } from '@enterpriseglue/shared/services/pla
 import { ssoGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/SsoGroupMappingService.js';
 import { ssoProviderIdentityCheckService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderIdentityCheckService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
+import { IdentityProviderFailure } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderFailure.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -144,6 +145,43 @@ describe('ssoSyncDiagnosticsService', () => {
       type: 'sso_sync_failed',
       message: 'materialization failed',
     }));
+  });
+
+  it('redacts protocol material from failed sync diagnostics while preserving a stable failure code', async () => {
+    const runUpdate = vi.fn().mockResolvedValue(undefined);
+    const eventInsert = vi.fn().mockResolvedValue(undefined);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === SsoSyncRun) return { update: runUpdate };
+        if (entity === SsoSyncEvent) return { insert: eventInsert };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await ssoSyncDiagnosticsService.failRun('sync-run-1', new IdentityProviderFailure(
+      'invalid_signature', 'SAMLResponse=<Assertion>raw-saml-assertion</Assertion> token=raw-token',
+    ), {
+      tenantId: 'tenant-a',
+      providerId: 'provider-1',
+      details: {
+        accessToken: 'raw-access-token',
+        bindPassword: 'raw-directory-password',
+        signingCertificate: '-----BEGIN CERTIFICATE-----\nraw-certificate\n-----END CERTIFICATE-----',
+        safeCount: 1,
+      },
+    });
+
+    expect(runUpdate).toHaveBeenCalledWith({ id: 'sync-run-1' }, expect.objectContaining({
+      errorCode: 'invalid_signature',
+      errorMessage: 'Identity provider failure: invalid_signature',
+      details: JSON.stringify({ accessToken: '[redacted]', bindPassword: '[redacted]', signingCertificate: '[redacted]', safeCount: 1 }),
+    }));
+    const persistedDiagnostics = JSON.stringify([runUpdate.mock.calls, eventInsert.mock.calls]);
+    expect(persistedDiagnostics).not.toContain('raw-saml-assertion');
+    expect(persistedDiagnostics).not.toContain('raw-token');
+    expect(persistedDiagnostics).not.toContain('raw-access-token');
+    expect(persistedDiagnostics).not.toContain('raw-directory-password');
+    expect(persistedDiagnostics).not.toContain('raw-certificate');
   });
 
   it('lists SSO sync runs and run events with tenant-aware filters', async () => {

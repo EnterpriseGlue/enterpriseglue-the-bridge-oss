@@ -18,6 +18,7 @@ import { ssoAssignmentMappingService } from './SsoAssignmentMappingService.js';
 import { ssoEngineAccessSnapshotService, type SsoEngineAccessSnapshotStatus } from './SsoEngineAccessSnapshotService.js';
 import { ssoGroupMappingService } from './SsoGroupMappingService.js';
 import { ssoProviderIdentityCheckService } from './SsoProviderIdentityCheckService.js';
+import { IdentityProviderFailure } from './IdentityProviderFailure.js';
 import type { SsoClaims } from './SsoClaimsMappingService.js';
 
 export type SsoSyncRunStatus = 'running' | 'success' | 'failed';
@@ -189,18 +190,41 @@ function providerMatches(providerId: string | null, mappingProviderId: string | 
   return !mappingProviderId || mappingProviderId === providerId;
 }
 
+const sensitiveDiagnosticKey = /(?:access[_-]?token|id[_-]?token|refresh[_-]?token|token|assertion|password|secret|certificate|private[_-]?key|authorization|cookie)/i;
+
+function sanitizeDiagnosticText(value: string): string {
+  return value
+    .replace(/-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----/g, '[redacted certificate]')
+    .replace(/<\/?(?:\w+:)?(?:Assertion|Response)\b[^>]*>[\s\S]*?<\/?(?:\w+:)?(?:Assertion|Response)>/gi, '[redacted assertion]')
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, 'Bearer [redacted]')
+    .replace(/\b(?:access[_-]?token|id[_-]?token|refresh[_-]?token|token|password|secret|assertion|authorization)=([^\s,&]+)/gi, (matched) => `${matched.slice(0, matched.indexOf('=') + 1)}[redacted]`)
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[redacted token]');
+}
+
+function sanitizeDiagnosticValue(value: unknown, key?: string): unknown {
+  if (key && sensitiveDiagnosticKey.test(key)) return '[redacted]';
+  if (typeof value === 'string') return sanitizeDiagnosticText(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeDiagnosticValue(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .map(([entryKey, entryValue]) => [entryKey, sanitizeDiagnosticValue(entryValue, entryKey)]));
+  }
+  return value;
+}
+
 function stringifyDetails(details?: Record<string, unknown>): string {
   if (!details || Object.keys(details).length === 0) return '{}';
   try {
-    return JSON.stringify(details);
+    return JSON.stringify(sanitizeDiagnosticValue(details));
   } catch {
     return '{}';
   }
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
+  if (error instanceof IdentityProviderFailure) return `Identity provider failure: ${error.code}`;
+  if (error instanceof Error) return sanitizeDiagnosticText(error.message);
+  if (typeof error === 'string') return sanitizeDiagnosticText(error);
   return 'Unknown SSO sync error';
 }
 
@@ -1661,7 +1685,9 @@ class SsoSyncDiagnosticsServiceClass {
     try {
       const dataSource = await getDataSource();
       const message = errorMessage(error);
-      const code = error instanceof Error && error.name ? error.name : 'SsoSyncError';
+      const code = error instanceof IdentityProviderFailure
+        ? error.code
+        : error instanceof Error && error.name ? error.name : 'SsoSyncError';
       await dataSource.getRepository(SsoSyncRun).update({ id: runId }, {
         status: 'failed',
         completedAt: Date.now(),
