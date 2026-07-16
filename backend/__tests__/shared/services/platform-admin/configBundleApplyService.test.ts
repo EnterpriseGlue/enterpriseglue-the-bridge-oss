@@ -951,6 +951,9 @@ describe('configBundleApplyService', () => {
         identitySnapshot: { mode: 'apply', status: 'completed', providerCount: 1 },
       },
     });
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      authType: 'basic', username: 'eg', passwordEnc: 'ref:PAYMENTS_PASSWORD',
+    }));
     expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'engines.payments', selectorJson: expect.stringContaining(engineRows[0].id),
     }));
