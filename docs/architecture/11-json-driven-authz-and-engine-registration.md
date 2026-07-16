@@ -2291,6 +2291,8 @@ The tenant-scoped authorization-audit query now also has one shared, coercion-aw
 
 The authorization-audit list now serializes through one strict shared service-view response schema across backend, OpenAPI, and the Platform Admin hook. It preserves nullable tenant/resource/policy/network references and the opaque stored context while rejecting persistence-only fields.
 
+The Starbase deployed-commit file restore request and response now likewise share a bounded contract across route validation, serialization, OpenAPI, and Editor. The response requires the resolved semantic version to be either an integer or an explicit `null`, instead of allowing the UI and API to drift on an omitted version.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

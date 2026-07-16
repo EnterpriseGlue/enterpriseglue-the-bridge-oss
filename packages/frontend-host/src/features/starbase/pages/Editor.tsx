@@ -44,6 +44,10 @@ import { redirectTo, replaceAndReloadToInternalPath } from '../../../utils/redir
 import { LoadingState } from '../../shared/components/LoadingState'
 import type { LockHolder, LockResponse } from '../../git/types/git'
 import type { LatestProjectDeploymentArtifact as LatestDeploymentByFile } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js'
+import type {
+  RestoreFileFromCommitRequest,
+  RestoreFileFromCommitResponse,
+} from '@enterpriseglue/shared/schemas/starbase/file.js'
 
 type FolderBreadcrumb = {
   id: string
@@ -102,14 +106,6 @@ type MissionControlTarget = {
   keyParam: 'process' | 'decision'
   key: string
   version: number
-}
-
-type RestoreFromCommitResponse = {
-  restored: boolean
-  fileId: string
-  commitId: string
-  fileVersionNumber?: number | null
-  updatedAt: number
 }
 
 type CollaborationLock = LockResponse
@@ -2275,11 +2271,11 @@ export default function Editor() {
       ensureCollaborationWriteAllowed()
       if (!fileId) throw new Error('Missing fileId')
 
-      const payload: { commitId?: string; fileVersionNumber?: number } = {}
+      const payload: RestoreFileFromCommitRequest = {}
       if (phase2CommitId) payload.commitId = phase2CommitId
       if (typeof phase2FileVersion === 'number') payload.fileVersionNumber = phase2FileVersion
 
-      return apiClient.post<RestoreFromCommitResponse>(
+      return apiClient.post<RestoreFileFromCommitResponse>(
         `/starbase-api/files/${encodeURIComponent(sanitizePathParam(String(fileId)))}/restore-from-commit`,
         payload,
       )

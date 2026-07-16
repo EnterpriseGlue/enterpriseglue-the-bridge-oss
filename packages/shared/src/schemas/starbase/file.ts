@@ -78,6 +78,21 @@ export const UpdateFileMetadataResponseSchema = z.object({
   updatedAt: z.number(),
 });
 
+export const RestoreFileFromCommitRequestSchema = z.object({
+  commitId: z.string().min(1).optional(),
+  fileVersionNumber: z.number().int().positive().optional(),
+}).refine((value) => Boolean(value.commitId) || typeof value.fileVersionNumber === 'number', {
+  message: 'commitId or fileVersionNumber is required',
+});
+
+export const RestoreFileFromCommitResponseSchema = z.object({
+  restored: z.literal(true),
+  fileId: z.string().uuid(),
+  commitId: z.string(),
+  fileVersionNumber: z.number().int().nullable(),
+  updatedAt: z.number(),
+}).strict();
+
 /** @deprecated Use UpdateFileMetadataRequest. */
 export const RenameFileRequest = UpdateFileMetadataRequest;
 
@@ -87,3 +102,5 @@ export type CreateFile = z.infer<typeof CreateFileRequest>;
 export type CreateFileResponse = z.infer<typeof CreateFileResponseSchema>;
 export type UpdateFileMetadata = z.infer<typeof UpdateFileMetadataRequest>;
 export type UpdateFileMetadataResponse = z.infer<typeof UpdateFileMetadataResponseSchema>;
+export type RestoreFileFromCommitRequest = z.infer<typeof RestoreFileFromCommitRequestSchema>;
+export type RestoreFileFromCommitResponse = z.infer<typeof RestoreFileFromCommitResponseSchema>;

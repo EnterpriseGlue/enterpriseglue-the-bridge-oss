@@ -10,6 +10,7 @@ import { Commit } from '@enterpriseglue/shared/db/entities/Commit.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { RestoreFileFromCommitResponseSchema } from '@enterpriseglue/shared/schemas/starbase/file.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -101,7 +102,7 @@ describe('starbase files routes - restore from commit', () => {
 
   it('restores file snapshot by semantic file version number', async () => {
     fileFindOne.mockResolvedValue({
-      id: '11111111-1111-1111-1111-111111111111',
+      id: '11111111-1111-4111-8111-111111111111',
       projectId: 'project-1',
       name: 'Invoice',
       type: 'bpmn',
@@ -124,7 +125,7 @@ describe('starbase files routes - restore from commit', () => {
     ]);
 
     const response = await request(app)
-      .post('/starbase-api/files/11111111-1111-1111-1111-111111111111/restore-from-commit')
+      .post('/starbase-api/files/11111111-1111-4111-8111-111111111111/restore-from-commit')
       .send({ fileVersionNumber: 5 });
 
     expect(response.status).toBe(200);
@@ -133,12 +134,13 @@ describe('starbase files routes - restore from commit', () => {
       commitId: 'commit-1',
       fileVersionNumber: 5,
     });
+    expect(RestoreFileFromCommitResponseSchema.parse(response.body)).toEqual(response.body);
     expect(fileUpdate).toHaveBeenCalled();
   });
 
   it('rejects restore when commit does not belong to file project', async () => {
     fileFindOne.mockResolvedValue({
-      id: '11111111-1111-1111-1111-111111111111',
+      id: '11111111-1111-4111-8111-111111111111',
       projectId: 'project-1',
       name: 'Invoice',
       type: 'bpmn',
@@ -148,7 +150,7 @@ describe('starbase files routes - restore from commit', () => {
     commitFindOne.mockResolvedValue(null);
 
     const response = await request(app)
-      .post('/starbase-api/files/11111111-1111-1111-1111-111111111111/restore-from-commit')
+      .post('/starbase-api/files/11111111-1111-4111-8111-111111111111/restore-from-commit')
       .send({ commitId: 'foreign-commit' });
 
     expect(response.status).toBe(404);
@@ -158,7 +160,7 @@ describe('starbase files routes - restore from commit', () => {
   it('restores through project.files.restore without legacy edit role', async () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:versions:restore');
     fileFindOne.mockResolvedValue({
-      id: '11111111-1111-1111-1111-111111111111',
+      id: '11111111-1111-4111-8111-111111111111',
       projectId: 'project-1',
       name: 'Invoice',
       type: 'bpmn',
@@ -174,7 +176,7 @@ describe('starbase files routes - restore from commit', () => {
     ]);
 
     const response = await request(app)
-      .post('/starbase-api/files/11111111-1111-1111-1111-111111111111/restore-from-commit')
+      .post('/starbase-api/files/11111111-1111-4111-8111-111111111111/restore-from-commit')
       .send({ commitId: 'commit-1' });
 
     expect(response.status).toBe(200);
@@ -189,7 +191,7 @@ describe('starbase files routes - restore from commit', () => {
   it('denies restore before handler work when project.files.restore is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     fileFindOne.mockResolvedValue({
-      id: '11111111-1111-1111-1111-111111111111',
+      id: '11111111-1111-4111-8111-111111111111',
       projectId: 'project-1',
       name: 'Invoice',
       type: 'bpmn',
@@ -197,7 +199,7 @@ describe('starbase files routes - restore from commit', () => {
     });
 
     const response = await request(app)
-      .post('/starbase-api/files/11111111-1111-1111-1111-111111111111/restore-from-commit')
+      .post('/starbase-api/files/11111111-1111-4111-8111-111111111111/restore-from-commit')
       .send({ commitId: 'commit-1' });
 
     expect(response.status).toBe(403);

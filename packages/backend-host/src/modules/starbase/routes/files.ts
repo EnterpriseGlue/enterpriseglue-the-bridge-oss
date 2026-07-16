@@ -23,7 +23,12 @@ import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services
 import { extractBpmnCallActivityLinks, extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { buildStarbaseFileName } from '@enterpriseglue/shared/utils/starbase-filenames.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { CreateFileRequest, UpdateFileMetadataRequest } from '@enterpriseglue/shared/schemas/starbase/file.js';
+import {
+  CreateFileRequest,
+  RestoreFileFromCommitRequestSchema,
+  RestoreFileFromCommitResponseSchema,
+  UpdateFileMetadataRequest,
+} from '@enterpriseglue/shared/schemas/starbase/file.js';
 
 const lockManager = new LockManager();
 
@@ -45,12 +50,7 @@ const updateFileBodySchema = z.object({
 
 const patchFileBodySchema = UpdateFileMetadataRequest;
 
-const restoreFromCommitBodySchema = z.object({
-  commitId: z.string().min(1).optional(),
-  fileVersionNumber: z.number().int().positive().optional(),
-}).refine((v) => !!v.commitId || typeof v.fileVersionNumber === 'number', {
-  message: 'commitId or fileVersionNumber is required',
-});
+const restoreFromCommitBodySchema = RestoreFileFromCommitRequestSchema;
 
 /**
  * Get folder breadcrumb trail
@@ -564,13 +564,13 @@ r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAut
     fileRow.folderId
   ).catch(() => {});
 
-  res.json({
+  res.json(RestoreFileFromCommitResponseSchema.parse({
     restored: true,
     fileId,
     commitId,
     fileVersionNumber: resolvedFileVersionNumber,
     updatedAt: now,
-  });
+  }));
 }));
 
 /**

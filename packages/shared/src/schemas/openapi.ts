@@ -17,6 +17,8 @@ const {
   UpdateFileXmlRequest,
   UpdateFileMetadataRequest,
   UpdateFileMetadataResponseSchema,
+  RestoreFileFromCommitRequestSchema,
+  RestoreFileFromCommitResponseSchema,
   VersionSchema,
   CompareVersionsResponse,
   CommentSchema,
@@ -2606,9 +2608,9 @@ registry.registerPath({
   ...authzExtension('project.files.restore', 'POST', '/starbase-api/files/{fileId}/restore-from-commit'),
   request: {
     params: z.object({ fileId: z.string() }),
-    body: { content: { 'application/json': { schema: z.object({ commitId: z.string().optional(), fileVersionNumber: z.number().optional() }) } } },
+    body: { content: { 'application/json': { schema: RestoreFileFromCommitRequestSchema } } },
   },
-  responses: { 200: { description: 'File restored', content: { 'application/json': { schema: z.object({ restored: z.boolean(), fileId: z.string(), commitId: z.string(), fileVersionNumber: z.number().nullable(), updatedAt: z.number() }) } } } },
+  responses: { 200: { description: 'File restored', content: { 'application/json': { schema: RestoreFileFromCommitResponseSchema } } } },
 });
 
 registry.register('ProjectEngineAccessResponse', ProjectEngineAccessResponseSchema);
