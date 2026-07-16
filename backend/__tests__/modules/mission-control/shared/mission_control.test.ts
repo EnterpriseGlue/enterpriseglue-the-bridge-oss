@@ -10,6 +10,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   getActiveActivityCounts,
+  getActivityCountsByState,
   listProcessDefinitions,
   listProcessInstancesDetailed,
   getProcessInstanceById,
@@ -141,6 +142,25 @@ describe('mission-control shared mission_control routes', () => {
       resourceId: 'engine-77',
     }));
     expect(getActiveActivityCounts).toHaveBeenCalledWith('engine-77', 'pd-1');
+  });
+
+  it('reads five-state activity counts through process-definition action permission', async () => {
+    const counts = {
+      active: { approve: 2 },
+      incidents: { approve: 1 },
+      suspended: {},
+      canceled: { archive: 1 },
+      completed: { end: 3 },
+    };
+    vi.mocked(getActivityCountsByState).mockResolvedValueOnce(counts as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/activity-counts-by-state')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(counts);
+    expect(getActivityCountsByState).toHaveBeenCalledWith('engine-77', 'pd-1');
   });
 
   it('fails closed for resource-aware process-instance preview counts because aggregate responses cannot be post-filtered', async () => {

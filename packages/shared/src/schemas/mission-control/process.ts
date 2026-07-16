@@ -39,6 +39,16 @@ export const ProcessInstanceSchema = z.object({
   runtimeActionDecisions: ProcessInstanceRuntimeActionDecisionsSchema.optional(),
 });
 
+export const ActivityCountByActivityIdSchema = z.record(z.string(), z.number().nonnegative());
+
+export const ActivityCountsByStateSchema = z.object({
+  active: ActivityCountByActivityIdSchema,
+  incidents: ActivityCountByActivityIdSchema,
+  suspended: ActivityCountByActivityIdSchema,
+  canceled: ActivityCountByActivityIdSchema,
+  completed: ActivityCountByActivityIdSchema,
+});
+
 // Variables schema
 export const VariablesSchema = z.record(z.string(), z.object({ value: z.any(), type: z.string() }));
 
@@ -67,5 +77,7 @@ export const PreviewCountRequest = z.object({
 // Types
 export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
 export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
+export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
+export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;

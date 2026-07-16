@@ -2295,6 +2295,8 @@ The Starbase deployed-commit file restore request and response now likewise shar
 
 Mission Control saved-engine filters now also distinguish their JSON-text persistence model from their API contract. Create/update validation, route serialization, OpenAPI, and the Process Overview client share one array-based response model; the response deliberately accepts a legacy string version from an immediate create alongside the persisted numeric version returned on subsequent reads.
 
+Mission Control activity-count reads now share explicit per-activity and five-state contracts across the runtime route, OpenAPI, and Process Overview. The backend serializes the fixed active, incidents, suspended, canceled, and completed maps rather than leaving the state response as undocumented JSON.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

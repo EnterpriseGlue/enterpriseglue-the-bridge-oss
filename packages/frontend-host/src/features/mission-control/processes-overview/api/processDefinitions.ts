@@ -3,6 +3,10 @@ import type {
   SavedFilter as SharedSavedFilter,
   SavedFilterCreateRequest as SharedSavedFilterCreateRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/saved-filter.js'
+import type {
+  ActivityCountByActivityId,
+  ActivityCountsByState as SharedActivityCountsByState,
+} from '@enterpriseglue/shared/schemas/mission-control/process.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 // Types
@@ -32,13 +36,7 @@ export type ProcessInstance = {
   }
 }
 
-export type ActivityCountsByState = {
-  active: Record<string, number>
-  incidents: Record<string, number>
-  suspended: Record<string, number>
-  canceled: Record<string, number>
-  completed: Record<string, number>
-}
+export type ActivityCountsByState = SharedActivityCountsByState
 
 export type SavedProcessFilter = SharedSavedFilter
 export type CreateSavedProcessFilterRequest = SharedSavedFilterCreateRequest
@@ -50,7 +48,7 @@ export async function listProcessDefinitions(engineId?: string): Promise<Process
   return apiClient.get<ProcessDefinition[]>(`/mission-control-api/process-definitions?${params}`, undefined, { credentials: 'include' })
 }
 
-export async function getActiveActivityCounts(definitionId: string, engineId?: string): Promise<Record<string, number>> {
+export async function getActiveActivityCounts(definitionId: string, engineId?: string): Promise<ActivityCountByActivityId> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
   return apiClient.get<Record<string, number>>(`/mission-control-api/process-definitions/${definitionId}/active-activity-counts${params}`, undefined, { credentials: 'include' })
 }

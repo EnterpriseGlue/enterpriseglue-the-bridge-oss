@@ -55,6 +55,8 @@ const {
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
+  ActivityCountByActivityIdSchema,
+  ActivityCountsByStateSchema,
   VariablesSchema: MissionControlVariablesSchema,
   ActivityInstanceSchema: MissionControlActivityInstanceSchema,
   PreviewCountRequest,
@@ -653,7 +655,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Active activity counts by activity ID',
-      content: { 'application/json': { schema: z.record(z.string(), z.number()) } },
+      content: { 'application/json': { schema: ActivityCountByActivityIdSchema } },
     },
   },
 });
@@ -2671,7 +2673,7 @@ registry.registerPath({
   path: '/mission-control-api/process-definitions/{id}/activity-counts-by-state',
   ...authzExtension('engine.runtime.process-definitions.read', 'GET', '/mission-control-api/process-definitions/{id}/activity-counts-by-state'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Activity counts grouped by state', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Activity counts grouped by state', content: { 'application/json': { schema: ActivityCountsByStateSchema } } } },
 });
 
 // POST /mission-control-api/process-definitions/key/{key}/start

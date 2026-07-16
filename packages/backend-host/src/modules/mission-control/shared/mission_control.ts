@@ -32,6 +32,10 @@ import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinition
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { filterRuntimeItemsByProcessDefinitionKeys, filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-decisions.js'
+import {
+  ActivityCountByActivityIdSchema,
+  ActivityCountsByStateSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 // Validation schemas
 const previewCountSchema = z.object({}).passthrough()
@@ -158,7 +162,7 @@ r.get('/mission-control-api/process-definitions/:id/active-activity-counts', req
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
     const counts = await getActiveActivityCounts(engineId, definitionId)
-    res.json(counts)
+    res.json(ActivityCountByActivityIdSchema.parse(counts))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load active activity counts')
   }
@@ -171,7 +175,7 @@ r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', r
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
     const result = await getActivityCountsByState(engineId, definitionId)
-    res.json(result)
+    res.json(ActivityCountsByStateSchema.parse(result))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity counts by state')
   }
