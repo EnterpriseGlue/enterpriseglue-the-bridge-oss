@@ -74,4 +74,33 @@ describe('deploymentDiscoveryService', () => {
     expect(deploymentRepo.insert).not.toHaveBeenCalled();
     expect(artifactRepo.insert).not.toHaveBeenCalled();
   });
+
+  it('reconciles engine deployments into matching proxy and receipt history without weakening lineage', async () => {
+    const { deploymentRepo, artifactRepo } = setup();
+    deploymentRepo.find.mockResolvedValue([
+      { id: 'proxy-history', camundaDeploymentId: 'camunda-proxy', camundaDeploymentName: 'old proxy', lineageQuality: 'complete', ingestionSource: 'enterpriseglue_proxy' },
+      { id: 'receipt-history', camundaDeploymentId: 'camunda-receipt', camundaDeploymentName: 'old receipt', lineageQuality: 'reported', ingestionSource: 'pipeline_receipt' },
+    ]);
+    vi.mocked(getDeployments).mockResolvedValue([
+      { id: 'camunda-proxy', name: 'proxy release', deploymentTime: '2026-07-14T10:00:00.000Z' },
+      { id: 'camunda-receipt', name: 'receipt release', deploymentTime: '2026-07-14T11:00:00.000Z' },
+    ]);
+
+    await expect(deploymentDiscoveryService.reconcileEngine('engine-1', 'tenant-a')).resolves.toEqual({
+      created: 0, updated: 2, artifactsCreated: 0,
+    });
+
+    expect(deploymentRepo.insert).not.toHaveBeenCalled();
+    expect(artifactRepo.insert).not.toHaveBeenCalled();
+    expect(deploymentRepo.update).toHaveBeenCalledWith('proxy-history', expect.objectContaining({
+      camundaDeploymentName: 'proxy release', reconciledAt: expect.any(Number),
+    }));
+    expect(deploymentRepo.update).toHaveBeenCalledWith('receipt-history', expect.objectContaining({
+      camundaDeploymentName: 'receipt release', reconciledAt: expect.any(Number),
+    }));
+    for (const [, updates] of deploymentRepo.update.mock.calls) {
+      expect(updates).not.toHaveProperty('ingestionSource');
+      expect(updates).not.toHaveProperty('lineageQuality');
+    }
+  });
 });
