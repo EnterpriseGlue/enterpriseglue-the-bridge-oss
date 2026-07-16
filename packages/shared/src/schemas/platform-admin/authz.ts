@@ -121,6 +121,37 @@ export const AuthzPolicySchema = AuthzPolicySchemaRaw.transform((p) => ({
   createdById: p.createdById ?? undefined,
 }));
 
+/** Caller-supplied context is diagnostic input only; authorization still resolves server-side identity and tenancy. */
+export const AuthzCheckRequestSchema = z.object({
+  action: z.string().min(1),
+  resourceType: z.string().optional(),
+  resourceId: z.string().optional(),
+  userAttributes: z.record(z.string(), z.unknown()).optional(),
+  resourceAttributes: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const AuthzCheckResponseSchema = z.object({
+  allowed: z.boolean(),
+  decision: z.enum(['allow', 'deny']),
+  reason: z.string(),
+  policyId: z.string().optional(),
+  policyName: z.string().optional(),
+});
+
+export const AuthzCheckBatchRequestSchema = z.object({
+  checks: z.array(AuthzCheckRequestSchema).min(1),
+});
+
+export const AuthzCheckBatchResponseSchema = z.object({
+  results: z.array(z.object({
+    action: z.string(),
+    resourceType: z.string().optional(),
+    resourceId: z.string().optional(),
+    allowed: z.boolean(),
+    reason: z.string(),
+  })),
+});
+
 // Authorization Policy - Insert schema
 export const AuthzPolicyInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -1672,6 +1703,10 @@ export const SsoGroupMappingTestResponseSchema = z.object({
 
 // Types
 export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
+export type AuthzCheckRequest = z.input<typeof AuthzCheckRequestSchema>;
+export type AuthzCheckResponse = z.infer<typeof AuthzCheckResponseSchema>;
+export type AuthzCheckBatchRequest = z.input<typeof AuthzCheckBatchRequestSchema>;
+export type AuthzCheckBatchResponse = z.infer<typeof AuthzCheckBatchResponseSchema>;
 export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 export type AuthzAuditLogEntry = z.infer<typeof AuthzAuditLogSchema>;
 export type SsoProvider = z.infer<typeof SsoProviderSchema>;

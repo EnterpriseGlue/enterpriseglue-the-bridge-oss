@@ -19,6 +19,10 @@ import {
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementReadinessSchema,
   LegacyMappingRetirementRequestSchema,
+  AuthzCheckBatchRequestSchema,
+  AuthzCheckBatchResponseSchema,
+  AuthzCheckRequestSchema,
+  AuthzCheckResponseSchema,
   SsoAssignmentMappingTestResponseSchema,
   SsoGroupMappingTestResponseSchema,
   SsoMappingTestRequestSchema,
@@ -152,5 +156,19 @@ describe('provider-neutral identity shared contracts', () => {
       }],
       memberships: [{ groupId: 'group-1', mappingId: 'mapping-1' }],
     }).memberships[0]?.groupId).toBe('group-1');
+  });
+
+  it('shares authorization check contracts without trusting caller identity or tenancy', () => {
+    expect(AuthzCheckRequestSchema.parse({
+      action: 'engine.instances.read', resourceType: 'engine', resourceId: 'engine-1', userAttributes: { department: 'operations' },
+    }).action).toBe('engine.instances.read');
+    expect(AuthzCheckResponseSchema.parse({
+      allowed: true, decision: 'allow', reason: 'Canonical assignment', policyId: 'policy-1', policyName: 'Allow operations',
+    }).policyName).toBe('Allow operations');
+    expect(AuthzCheckBatchRequestSchema.parse({ checks: [{ action: 'engine.instances.read' }] }).checks).toHaveLength(1);
+    expect(AuthzCheckBatchResponseSchema.parse({
+      results: [{ action: 'engine.instances.read', allowed: false, reason: 'Missing assignment' }],
+    }).results[0]?.allowed).toBe(false);
+    expect(() => AuthzCheckRequestSchema.parse({ action: '' })).toThrow();
   });
 });

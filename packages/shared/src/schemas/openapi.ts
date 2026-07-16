@@ -3327,6 +3327,10 @@ const {
   ApiClientCreateSchema,
   ApiClientSchema,
   ApiClientWithTokenSchema,
+  AuthzCheckBatchRequestSchema,
+  AuthzCheckBatchResponseSchema,
+  AuthzCheckRequestSchema,
+  AuthzCheckResponseSchema,
   AuthzPrincipalTypeSchema,
   AuthzGroupCreateSchema,
   AuthzGroupMembershipCreateSchema,
@@ -3693,8 +3697,8 @@ registry.registerPath({
   method: 'post',
   path: '/api/authz/check',
   ...authzExemption('POST', '/api/authz/check'),
-  request: { body: { content: { 'application/json': { schema: z.object({ resource: z.string(), action: z.string(), resourceId: z.string().optional() }) } } } },
-  responses: { 200: { description: 'Authorization check result', content: { 'application/json': { schema: z.object({ allowed: z.boolean() }) } } } },
+  request: { body: { content: { 'application/json': { schema: AuthzCheckRequestSchema } } } },
+  responses: { 200: { description: 'Authorization check result', content: { 'application/json': { schema: AuthzCheckResponseSchema } } } },
 });
 
 // POST /api/authz/check-batch
@@ -3702,8 +3706,8 @@ registry.registerPath({
   method: 'post',
   path: '/api/authz/check-batch',
   ...authzExemption('POST', '/api/authz/check-batch'),
-  request: { body: { content: { 'application/json': { schema: z.object({ checks: z.array(z.object({ resource: z.string(), action: z.string(), resourceId: z.string().optional() })) }) } } } },
-  responses: { 200: { description: 'Batch authorization results', content: { 'application/json': { schema: z.object({ results: z.array(z.object({ allowed: z.boolean() })) }) } } } },
+  request: { body: { content: { 'application/json': { schema: AuthzCheckBatchRequestSchema } } } },
+  responses: { 200: { description: 'Batch authorization results', content: { 'application/json': { schema: AuthzCheckBatchResponseSchema } } } },
 });
 
 // Authz policies

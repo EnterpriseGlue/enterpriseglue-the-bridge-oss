@@ -24,7 +24,11 @@ import {
   Permission,
   EvaluationContext,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
-import { EffectiveAccessEvaluateRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import {
+  AuthzCheckBatchRequestSchema,
+  AuthzCheckRequestSchema,
+  EffectiveAccessEvaluateRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
 import { registerEngineSetRoutes } from './authz/engine-sets.js';
 import { registerMachineRoutes } from './authz/machines.js';
@@ -41,17 +45,6 @@ import { registerSsoEngineAssignmentRoutes } from './authz/sso-engine-assignment
 import { registerSsoGroupMappingRoutes } from './authz/sso-group-mappings.js';
 
 // Validation schemas
-const authzCheckSchema = z.object({
-  action: z.string().min(1),
-  resourceType: z.string().optional(),
-  resourceId: z.string().optional(),
-  userAttributes: z.record(z.string(), z.unknown()).optional(),
-  resourceAttributes: z.record(z.string(), z.unknown()).optional(),
-});
-
-const authzCheckBatchSchema = z.object({
-  checks: z.array(authzCheckSchema).min(1),
-});
 const idParamSchema = z.object({ id: z.string().uuid() });
 
 const router = Router();
@@ -112,7 +105,7 @@ function requireTargetTransferAccess(req: Request, res: Response, next: NextFunc
  * Check if a user has permission to perform an action on a resource.
  * Returns the decision and the reason.
  */
-router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(authzCheckSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(AuthzCheckRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { action, resourceType, resourceId, userAttributes, resourceAttributes } = req.body;
 
@@ -147,7 +140,7 @@ router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(authzCheck
  * POST /api/platform-admin/authz/check-batch
  * Check multiple permissions at once.
  */
-router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(authzCheckBatchSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(AuthzCheckBatchRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { checks } = req.body;
 

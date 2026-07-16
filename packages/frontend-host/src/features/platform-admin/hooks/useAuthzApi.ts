@@ -15,6 +15,8 @@ import type {
   AuthzGroupSource as SharedAuthzGroupSource,
   AuthzOwnershipMode as SharedAuthzOwnershipMode,
   AuthzAuditLogEntry as SharedAuthzAuditLogEntry,
+  AuthzCheckRequest as SharedAuthzCheckRequest,
+  AuthzCheckResponse as SharedAuthzCheckResponse,
   AuthzPolicy as SharedAuthzPolicy,
   AuthzResourceType as SharedAuthzResourceType,
   ApiClient as SharedApiClient,
@@ -243,6 +245,8 @@ export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementRead
 export type PolicyCondition = SharedPolicyCondition;
 /** The policy list endpoint intentionally omits persistence-only metadata. */
 export type AuthzPolicy = Omit<SharedAuthzPolicy, 'tenantId' | 'createdAt' | 'updatedAt' | 'createdById'>;
+export type AuthzCheckRequest = SharedAuthzCheckRequest;
+export type AuthzCheckResponse = SharedAuthzCheckResponse;
 
 export type AuthzAuditEntry = Omit<SharedAuthzAuditLogEntry, 'tenantId'>;
 
@@ -1194,20 +1198,8 @@ export function useDeletePolicy() {
 
 export function useCheckPermission() {
   return useMutation({
-    mutationFn: (data: {
-      action: string;
-      resourceType?: string;
-      resourceId?: string;
-      userAttributes?: Record<string, any>;
-      resourceAttributes?: Record<string, any>;
-    }) =>
-      apiClient.post<{
-        allowed: boolean;
-        decision: 'allow' | 'deny';
-        reason: string;
-        policyId?: string;
-        policyName?: string;
-      }>('/api/authz/check', data),
+    mutationFn: (data: AuthzCheckRequest) =>
+      apiClient.post<AuthzCheckResponse>('/api/authz/check', data),
   });
 }
 
