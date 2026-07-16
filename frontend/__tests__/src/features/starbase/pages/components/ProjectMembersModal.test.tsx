@@ -202,14 +202,34 @@ describe('ProjectMembersModal', () => {
     expect(screen.queryByText('Grant deploy permission')).toBeNull();
   });
 
-  it('shows deploy grant controls only for deploy-grant permission', async () => {
-    renderMembersModal({ canManageMemberDeployGrant: true });
+  it('shows deploy grant controls from server eligibility rather than the legacy member role', async () => {
+    const canonicalFileEditor = {
+      userId: 'user-2',
+      role: 'viewer',
+      roles: ['viewer'],
+      deployAllowed: false,
+      user: { email: 'editor@example.com' },
+    } as any;
+    renderMembersModal({ members: [canonicalFileEditor], canManageMemberDeployGrant: true });
 
     await userEvent.click(screen.getByRole('button', { name: /options/i }));
 
     expect(await screen.findByText('Grant deploy permission')).toBeInTheDocument();
     expect(screen.queryByText('Edit roles')).toBeNull();
     expect(screen.queryByText('Remove')).toBeNull();
+  });
+
+  it('hides deploy grant controls when the server marks a legacy editor ineligible', () => {
+    const legacyEditorWithoutFileEdit = {
+      userId: 'user-2',
+      role: 'editor',
+      roles: ['editor'],
+      deployAllowed: null,
+      user: { email: 'editor@example.com' },
+    } as any;
+    renderMembersModal({ members: [legacyEditorWithoutFileEdit], canManageMemberDeployGrant: true });
+
+    expect(screen.queryByRole('button', { name: /options/i })).toBeNull();
   });
 
   it('shows transfer ownership only when transfer permission is available', async () => {

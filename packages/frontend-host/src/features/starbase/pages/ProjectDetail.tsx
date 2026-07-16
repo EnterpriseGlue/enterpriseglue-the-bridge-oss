@@ -52,6 +52,10 @@ import {
   type ProjectDetailToolbarAction,
 } from './components/ProjectContentsTable'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type {
+  AuthzPrincipalType as SharedAuthzPrincipalType,
+  RoleAssignment as SharedRoleAssignment,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
 import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
@@ -154,22 +158,8 @@ function buildProjectDetailToolbarDiagnosticDecision(
   }
 }
 
-interface ScopedProjectRoleAssignment {
-  id: string
-  userId: string
-  principalType?: ProjectAssignmentPrincipalType | null
-  principalId?: string | null
-  roleId: string
-  roleName: string | null
-  roleScope: 'project' | null
-  resourceType: 'project' | null
-  resourceId: string | null
-  source: 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap'
-  sourceMappingId?: string | null
-  sourceRef?: string | null
-}
-
-type ProjectAssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
+type ScopedProjectRoleAssignment = SharedRoleAssignment
+type ProjectAssignmentPrincipalType = SharedAuthzPrincipalType
 
 interface ProjectAuthzGroupSummary {
   id: string

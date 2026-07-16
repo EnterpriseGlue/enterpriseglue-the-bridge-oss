@@ -21,21 +21,14 @@ import {
 import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards'
 import { StarbaseTableShell } from '../../components/StarbaseTableShell'
 import type { ProjectMember, ProjectPendingInvite, ProjectRole } from '../../components/project-detail'
+import type {
+  AuthzPrincipalType as SharedAuthzPrincipalType,
+  RoleAssignment as SharedRoleAssignment,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 
-type ProjectAssignmentPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
+type ProjectAssignmentPrincipalType = SharedAuthzPrincipalType
 type ProjectAccessAuthorityMode = 'manual' | 'transition_to_sso' | 'sso_managed'
-
-interface ProjectScopedRoleAssignmentRow {
-  id: string
-  userId?: string | null
-  principalType?: ProjectAssignmentPrincipalType | null
-  principalId?: string | null
-  roleId: string
-  roleName?: string | null
-  source: 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap'
-  sourceMappingId?: string | null
-  sourceRef?: string | null
-}
+type ProjectScopedRoleAssignmentRow = SharedRoleAssignment
 
 const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<ProjectAssignmentPrincipalType, string> = {
   user: 'User',
