@@ -25,6 +25,36 @@ describe('EngineSchema', () => {
     });
   });
 
+  it('documents the sanitized inventory fields without treating the display role as a grant', () => {
+    const engine = AccessibleEngineSummarySchema.parse({
+      id: 'engine-1',
+      name: 'Operations',
+      baseUrl: 'https://operations.example.test/engine-rest',
+      type: 'operaton',
+      authType: 'basic',
+      username: null,
+      passwordEnc: null,
+      hasCredential: true,
+      environmentTagId: 'production',
+      runtimeAccessScope: 'resource_aware',
+      myRole: 'operator',
+      capabilities: {
+        type: 'operaton',
+        compatibilityProfile: 'camunda7-rest',
+        supportLevel: 'compatible',
+        operations: ['engine.read'],
+        queryCapabilities: { processDefinitionKey: true },
+      },
+    });
+
+    expect(engine).toMatchObject({
+      passwordEnc: null,
+      hasCredential: true,
+      myRole: 'operator',
+      runtimeAccessScope: 'resource_aware',
+    });
+  });
+
   it('exposes persisted configuration ownership and central-engine defaults safely', () => {
     const engine = EngineSchema.parse({
       id: 'engine-1',

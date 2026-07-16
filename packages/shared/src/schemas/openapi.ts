@@ -33,6 +33,7 @@ const {
 const {
   EngineSchema,
   EngineSchemaRaw,
+  AccessibleEngineSummarySchema,
   EngineConnectionModeSchema,
   EngineTransportDiagnosticsSchema,
   EndpointAuthenticationPolicyErrorSchema,
@@ -919,7 +920,7 @@ registry.registerPath({
   path: '/engines-api/engines',
   ...authzExtension('engine.inventory.read', 'GET', '/engines-api/engines'),
   responses: {
-    200: { description: 'List engines', content: { 'application/json': { schema: z.array(EngineSchema) } } },
+    200: { description: 'Authorization-filtered engine inventory', content: { 'application/json': { schema: z.array(AccessibleEngineSummarySchema) } } },
   },
 })
 

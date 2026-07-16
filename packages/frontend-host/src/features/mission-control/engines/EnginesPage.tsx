@@ -39,6 +39,7 @@ import type { AccessAuthorityMode, EngineOnboardingMode } from '../../../api/pla
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import type {
   CreateEngineRequest,
+  AccessibleEngineSummary,
   EngineAuthType,
   EngineConnectionMode,
   EngineType,
@@ -1387,7 +1388,7 @@ export default function Engines() {
   const hasSingleTag = Array.isArray(envTags) && envTags.length === 1
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
-  const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<any[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
+  const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
   const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({

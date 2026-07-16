@@ -56,6 +56,18 @@ export const ExternalEngineCapabilitiesSchema = z.object({
 }).passthrough();
 export type ExternalEngineCapabilities = z.infer<typeof ExternalEngineCapabilitiesSchema>;
 
+/**
+ * Capabilities EnterpriseGlue provides for a registered engine adapter. This
+ * is distinct from optional capabilities reported by an external registry.
+ */
+export const EngineCapabilitiesSchema = z.object({
+  type: EngineTypeSchema,
+  compatibilityProfile: z.literal('camunda7-rest'),
+  supportLevel: z.enum(['certified', 'compatible']),
+  operations: z.array(z.string()),
+  queryCapabilities: EngineRuntimeQueryCapabilitiesSchema,
+});
+
 const EngineRegistrationFieldsSchema = z.object({
   name: z.string().min(1).max(255),
   baseUrl: z.string().min(1).url(),
@@ -270,14 +282,63 @@ export const EngineSchema = EngineSchemaRaw.transform((e) => ({
 }));
 
 /**
- * Minimum stable contract for the authorization-filtered engine collection.
- * The route intentionally includes additional, permission-dependent display
- * metadata, so unknown fields must survive route-boundary validation.
+ * Sanitized engine inventory response. It is intentionally separate from the
+ * persistence-shaped EngineSchema: credentials remain write-only, while the
+ * evaluator-derived role is display metadata only and never a grant source.
+ *
+ * Passthrough preserves legacy display metadata while callers migrate to the
+ * declared fields. It must not be used to accept an engine write payload.
  */
 export const AccessibleEngineSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
+  baseUrl: z.string().optional(),
+  type: EngineTypeSchema.nullable().optional(),
+  authType: EngineAuthTypeSchema.nullable().optional(),
+  username: z.string().nullable().optional(),
+  passwordEnc: z.null().optional(),
+  hasCredential: z.boolean().optional(),
+  oauthTokenUrl: z.string().nullable().optional(),
+  oauthScopes: z.string().nullable().optional(),
+  oauthAudience: z.string().nullable().optional(),
+  externalId: z.string().nullable().optional(),
+  labels: z.record(z.string(), z.string()).optional(),
+  registrationSource: z.string().nullable().optional(),
+  sourceRef: z.string().nullable().optional(),
+  configKey: z.string().nullable().optional(),
+  sourceHash: z.string().nullable().optional(),
+  lastAppliedAt: z.number().nullable().optional(),
+  ownershipMode: z.enum(['manual', 'config_warn', 'config_locked']).nullable().optional(),
+  externalSystemId: z.string().nullable().optional(),
+  managementMode: z.string().nullable().optional(),
+  fieldOwnership: z.record(z.string(), z.enum(['manual', 'external'])).optional(),
+  driftStatus: z.string().nullable().optional(),
   lifecycleStatus: z.string().nullable().optional(),
+  lastExternalSyncAt: z.number().nullable().optional(),
+  reportedCapabilities: ExternalEngineCapabilitiesSchema.nullable().optional(),
+  capabilityStatus: EngineCapabilityStatusSchema.nullable().optional(),
+  capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema.optional(),
+  capabilities: EngineCapabilitiesSchema.optional(),
+  runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).optional(),
+  deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).optional(),
+  metadataDiscoveryEnabled: z.boolean().optional(),
+  deploymentDiscoveryEnabled: z.boolean().optional(),
+  reconciliationIntervalSeconds: z.number().int().positive().optional(),
+  lastMetadataReconciledAt: z.number().nullable().optional(),
+  lastMetadataReconciliationStatus: z.enum(['succeeded', 'failed']).nullable().optional(),
+  pipelineReceiptEnabled: z.boolean().optional(),
+  connectionMode: EngineConnectionModeSchema.optional(),
+  externalUpdatedAt: z.number().nullable().optional(),
+  active: z.boolean().nullable().optional(),
+  version: z.string().nullable().optional(),
+  ownerId: z.string().nullable().optional(),
+  delegateId: z.string().nullable().optional(),
+  environmentTagId: z.string().nullable().optional(),
+  environmentLocked: z.boolean().nullable().optional(),
+  tenantId: z.string().nullable().optional(),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+  myRole: z.enum(['owner', 'delegate', 'operator', 'deployer']).nullable().optional(),
 }).passthrough();
 
 export const EngineInsertSchema = z.object({
@@ -342,4 +403,5 @@ export type Engine = z.infer<typeof EngineSchema>;
 export type CreateEngineRequest = z.infer<typeof CreateEngineRequestSchema>;
 export type UpdateEngineRequest = z.infer<typeof UpdateEngineRequestSchema>;
 export type AccessibleEngineSummary = z.infer<typeof AccessibleEngineSummarySchema>;
+export type EngineCapabilities = z.infer<typeof EngineCapabilitiesSchema>;
 export type EngineHealth = z.infer<typeof EngineHealthSchema>;

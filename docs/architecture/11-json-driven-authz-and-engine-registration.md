@@ -2235,6 +2235,8 @@ This phase is required because the current implementation still carries compatib
 
 The Project Detail, Project Members, and Engine Members surfaces now import shared `RoleAssignment`, `RoleSummary`, `AuthzGroup`, `AuthzGroupMembership`, principal-type, invitation lookup/capability, direct-add/invitation mutation, deploy-grant, and manual-reissue contracts directly; project-specific aliases only name the UI context and no longer narrow or duplicate the transport schema. The lookup/capability and mutation schemas are also the OpenAPI source of truth; member-add responses explicitly distinguish a direct add from an invitation rather than incorrectly advertising a roster row with timestamps. Engine invite reissue now fails closed when required manual credentials are absent. The remaining interfaces in this unchecked item still need consolidation.
 
+Mission Control's authorization-filtered engine inventory now also has a shared sanitized response contract. It declares credentials as write-only state (`hasCredential` with a null redaction marker), evaluator-derived `myRole` as display-only metadata, adapter capabilities, configuration provenance, lifecycle, environment, and runtime/deployment controls; the list route validates against it, OpenAPI advertises it, and the Engines page consumes the inferred shared type. The remaining interfaces in this unchecked item still need consolidation.
+
 Local browser validation is currently exercised by the maintained Playwright smoke/rehearsal lanes. The embedded browser surface rejected the local development CA, so it cannot yet serve as independent manual-browser evidence; that final validation remains open rather than being inferred from the automated pass.
 
 Phase 0 exit criteria:
