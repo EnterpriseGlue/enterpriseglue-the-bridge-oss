@@ -122,6 +122,14 @@ EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod:images:p
 
 Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`. The production backend image runs as UID/GID `65532`, owns the empty projection directories, and never copies a customer bundle into an image layer. Repository-local `.local/` and root `config/` directories are excluded from the Docker build context as an additional safeguard.
 
+Before starting containers, validate the assembled source-build Compose plan without
+mutating Docker state:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/reviewed bundle.json" \
+./scripts/deploy-compose.sh source config
+```
+
 After startup, check `/ready` rather than relying on container liveness alone. An
 `apply` bootstrap stays unready until its bounded identity replay completes. The
 response and backend log contain only the bundle hash, enum-backed state, and a

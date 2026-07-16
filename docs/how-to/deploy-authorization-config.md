@@ -109,7 +109,7 @@ Required changes:
 - [x] ✅ Ensure backend production images can read `/etc/enterpriseglue/config` as a non-root user. The production image creates and grants the projection directory to the Chainguard runtime user.
 - [x] ✅ Keep secret files in a separate read-only mount with stricter permissions; never put them in the config bundle volume. The optional Compose overlay mounts the bundle file and secret directory independently as read-only paths.
 - [x] ✅ Add health/readiness output for bundle status, hash, local materialization state, and required stored-identity replay state without exposing configuration contents. Logs, bounded Prometheus gauges/info labels, OpenAPI, and persisted apply-run deployment receipts use the same sanitized status contract.
-- [ ] ⬜ Test paths containing spaces, missing mounts, read-only mounts, invalid JSON, wrong hash, unresolved secret refs, and restart idempotency.
+- [x] ✅ Test paths containing spaces, missing mounts, read-only mounts, invalid JSON, wrong hash, unresolved secret refs, and restart idempotency. The Docker harness preserves quoted bundle paths and rejects a missing mount before startup; the overlay contract keeps bundle and secrets read-only and separate. Bootstrap coverage fails closed for malformed JSON, hash mismatch, and unavailable secret references, and proves restart idempotency uses the same hash-bound key.
 
 ## OpenShift And Kubernetes Changes
 

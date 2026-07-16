@@ -124,6 +124,17 @@ describe('configBundleBootstrap', () => {
     expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'hash_mismatch' });
   });
 
+  it('fails closed when a mounted bundle contains malformed JSON', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    readFile.mockResolvedValue('{');
+
+    await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle could not be read');
+
+    expect(preview).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'bundle_read_failed' });
+  });
+
   it('rejects an invalid mounted bundle before apply and keeps its diagnostics safe', async () => {
     config.configExpectedTenantScope = 'tenant-a';
     preview.mockReturnValue({ valid: false, canonicalHash: undefined, errors: [{ message: 'invalid' }] });
