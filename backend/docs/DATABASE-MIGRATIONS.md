@@ -109,6 +109,35 @@ The Docker build compiles TypeScript:
 RUN pnpm run build
 ```
 
+### Isolated Docker PostgreSQL migration baseline
+
+`test/integration/postgres-schema-migration.test.ts` intentionally moves and
+drops schemas. When validating it against the local Docker stack, create a
+disposable database and pass it through the `MIGRATION_TEST_POSTGRES_*`
+overrides; never point the suite at the active application database. The test
+database can be created and removed with `psql` in the running `db` container.
+
+The local deployment helper's `.env.docker` supplies the PostgreSQL credentials
+and port. Use a throwaway database name, run the suite, then remove it even if
+the test fails:
+
+```bash
+set -a; source .env.docker; set +a
+TEST_DB=authz_migration_validation
+DB_CONTAINER=feat-sso-engine-assignments-db-1
+docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "CREATE DATABASE $TEST_DB"
+MIGRATION_TEST_POSTGRES_HOST=127.0.0.1 \
+MIGRATION_TEST_POSTGRES_PORT=55433 \
+MIGRATION_TEST_POSTGRES_USER="$POSTGRES_USER" \
+MIGRATION_TEST_POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+MIGRATION_TEST_POSTGRES_DATABASE="$TEST_DB" \
+  pnpm --dir backend exec vitest run test/integration/postgres-schema-migration.test.ts \
+  --config vitest.config.ts
+docker exec "$DB_CONTAINER" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  -c "DROP DATABASE IF EXISTS $TEST_DB WITH (FORCE)"
+```
+
 **How it works:**
 1. Docker build compiles TypeScript (including entities)
 2. Migrations run automatically when the container starts via `run-migrations.ts`

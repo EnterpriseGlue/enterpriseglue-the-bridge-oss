@@ -1,12 +1,17 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const migrationTestEnv = (name: string, fallback: string): string =>
+  process.env[`MIGRATION_TEST_${name}`] || process.env[name] || fallback;
+
+// This suite drops and recreates schemas. Point MIGRATION_TEST_POSTGRES_* at a
+// disposable database when running it outside the isolated CI test service.
 const baseEnv = {
   DATABASE_TYPE: 'postgres',
-  POSTGRES_HOST: 'localhost',
-  POSTGRES_PORT: '5432',
-  POSTGRES_USER: process.env.POSTGRES_USER || 'postgres',
-  POSTGRES_PASSWORD: process.env.POSTGRES_PASSWORD || 'postgres',
-  POSTGRES_DATABASE: process.env.POSTGRES_DATABASE || 'postgres',
+  POSTGRES_HOST: migrationTestEnv('POSTGRES_HOST', 'localhost'),
+  POSTGRES_PORT: migrationTestEnv('POSTGRES_PORT', '5432'),
+  POSTGRES_USER: migrationTestEnv('POSTGRES_USER', 'postgres'),
+  POSTGRES_PASSWORD: migrationTestEnv('POSTGRES_PASSWORD', 'postgres'),
+  POSTGRES_DATABASE: migrationTestEnv('POSTGRES_DATABASE', 'postgres'),
   POSTGRES_SSL: 'false',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
 };
