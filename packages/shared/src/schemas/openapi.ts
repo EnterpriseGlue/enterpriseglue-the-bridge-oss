@@ -1823,6 +1823,7 @@ const {
   AssignDelegateRequest,
   TransferEngineOwnershipRequest,
   SetEnvironmentRequest,
+  EngineEnvironmentUpdateResponseSchema,
   SetLockedRequest,
   RequestAccessRequest,
   AssignOwnerRequest,
@@ -2466,7 +2467,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/environment',
   ...authzExtension('engine.environment.set', 'POST', '/engines-api/engines/{engineId}/environment'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: SetEnvironmentRequest } } } },
-  responses: { 200: { description: 'Environment set', content: { 'application/json': { schema: z.object({ message: z.string() }) } } } },
+  responses: { 200: { description: 'Environment set', content: { 'application/json': { schema: EngineEnvironmentUpdateResponseSchema } } } },
 });
 
 registry.registerPath({

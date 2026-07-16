@@ -148,6 +148,10 @@ export const SetEnvironmentRequest = z.object({
   environmentTagId: z.string(),
 });
 
+export const EngineEnvironmentUpdateResponseSchema = z.object({
+  message: z.literal('Environment tag updated'),
+});
+
 export const SetLockedRequest = z.object({
   locked: z.boolean(),
 });
@@ -175,3 +179,4 @@ export type ReissuedManualEngineInvitation = z.infer<typeof ReissuedManualEngine
 export type EngineWithDetails = z.infer<typeof EngineWithDetailsSchema>;
 export type EngineEndpointAuthenticationSummary = z.infer<typeof EngineEndpointAuthenticationSummarySchema>;
 export type EngineGovernanceMetadata = z.infer<typeof EngineGovernanceMetadataSchema>;
+export type EngineEnvironmentUpdateResponse = z.infer<typeof EngineEnvironmentUpdateResponseSchema>;

@@ -50,6 +50,7 @@ import type {
   EngineType,
   UpdateEngineRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import type { EngineEnvironmentUpdateResponse } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import type {
   EngineMember as SharedEngineMember,
   EngineMembersResponse as SharedEngineMembersResponse,
@@ -1426,7 +1427,7 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to update engine', subtitle: getUiErrorMessage(e, 'Failed to update') })
   })
   const setEnvironmentM = useMutation({
-    mutationFn: ({ engineId, environmentTagId }: { engineId: string; environmentTagId: string | null }) => apiClient.post<any>(
+    mutationFn: ({ engineId, environmentTagId }: { engineId: string; environmentTagId: string | null }) => apiClient.post<EngineEnvironmentUpdateResponse>(
       `/engines-api/engines/${encodeURIComponent(engineId)}/environment`,
       { environmentTagId },
       { credentials: 'include' }
@@ -1449,7 +1450,7 @@ export default function Engines() {
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to delete engine', subtitle: getUiErrorMessage(e, 'Failed to delete') })
   })
   const testM = useMutation({
-    mutationFn: (id: string) => apiClient.post<any>(`/engines-api/engines/${encodeURIComponent(id)}/test`, {}, { credentials: 'include' }),
+    mutationFn: (id: string) => apiClient.post<EngineConnectionHealthResponse>(`/engines-api/engines/${encodeURIComponent(id)}/test`, {}, { credentials: 'include' }),
     onSuccess: (_data, id) => { qc.invalidateQueries({ queryKey: ['engines'] }); qc.invalidateQueries({ queryKey: ['engines','health', id] }) },
     onError: (e: any) => notify({ kind: 'error', title: 'Failed to test connection', subtitle: getUiErrorMessage(e, 'Failed to test connection') })
   })

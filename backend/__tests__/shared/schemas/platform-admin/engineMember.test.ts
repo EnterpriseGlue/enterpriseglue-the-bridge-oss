@@ -3,6 +3,7 @@ import {
   EngineMemberAddResponseSchema,
   EngineMemberCapabilitiesSchema,
   EngineMemberLookupSchema,
+  EngineEnvironmentUpdateResponseSchema,
   ReissuedManualEngineInvitationSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js';
 
@@ -36,5 +37,11 @@ describe('Engine member contracts', () => {
       inviteUrl: 'https://localhost/invite/token',
       oneTimePassword: 'one-time-password',
     })).toMatchObject({ invited: true, emailSent: false });
+  });
+
+  it('shares the environment update acknowledgement with OpenAPI and the engine UI', () => {
+    expect(EngineEnvironmentUpdateResponseSchema.parse({ message: 'Environment tag updated' }))
+      .toEqual({ message: 'Environment tag updated' });
+    expect(EngineEnvironmentUpdateResponseSchema.safeParse({ message: 'Updated' }).success).toBe(false);
   });
 });
