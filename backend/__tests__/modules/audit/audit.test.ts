@@ -15,6 +15,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -151,6 +152,7 @@ describe('GET /api/audit/logs', () => {
       PlatformPermissions.AUDIT_UNREDACTED_VIEW,
       expect.objectContaining({
         userId: 'user-1',
+        tenantId: 'tenant-a',
       })
     );
     const unredactedContext = (permissionService.hasPermission as unknown as Mock).mock.calls
@@ -189,7 +191,7 @@ describe('GET /api/audit/logs', () => {
     expect(response.body.logs[0].details).toEqual({ email: 'person@example.com' });
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       PlatformPermissions.AUDIT_UNREDACTED_VIEW,
-      expect.objectContaining({ userId: 'user-1' })
+      expect.objectContaining({ userId: 'user-1', tenantId: 'tenant-a' })
     );
     expect(piiRedactionService.redactPayload).not.toHaveBeenCalled();
   });

@@ -37,6 +37,7 @@ async function shouldRedactAuditPayload(req: Request): Promise<boolean> {
 
   const hasPermission = await permissionService.hasPermission(PlatformPermissions.AUDIT_UNREDACTED_VIEW, {
     userId: user.userId,
+    tenantId: req.tenant?.tenantId || null,
     resourceType: 'platform',
   });
 
