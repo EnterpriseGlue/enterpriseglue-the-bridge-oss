@@ -2106,7 +2106,7 @@ interface IdentityMockController {
 
 - [x] ✅ Serve metadata and produce signed assertions with configurable NameID, email, group attributes, roles, audience, recipient, timestamps, and session index. The SAML fixture exposes metadata and a browser-post response only on an ephemeral loopback HTTPS port; mutable attributes stay behind the test-process controller.
 - [x] ✅ Support certificate rotation, invalid signature, wrong audience/recipient, expired assertion, replayed response id, missing NameID, multi-valued attributes, and malformed XML. The test-only signer can rotate per-instance material and produce controlled audience, recipient, timestamp, and attribute variants; production validation rejects mismatched recipients after signature verification. The protocol lane covers malformed payloads, configured-email fallback without NameID, and multi-valued attributes, while the existing hash-only replay service and SAML callback tests reject a repeated signed response before provisioning.
-- [ ] ⬜ Verify raw assertions and private keys never appear in logs or API diagnostics.
+- [x] ✅ Verify raw assertions and private keys never appear in logs or API diagnostics. The SAML callback reduces failures to `authentication_failed` or `assertion_replayed` classifications, and the route-flow regression proves a parser error containing assertion text is neither logged nor reflected in the login redirect; test-only signing keys are created in a temporary directory and removed before use.
 
 #### Mock LDAP Directory
 
