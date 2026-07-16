@@ -24,9 +24,10 @@ import { ProjectOverviewModals } from './components/ProjectOverviewModals'
 import DeployDialog from '../../git/components/DeployDialog'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
-import type { Project, ProjectMember, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
+import type { Project, SyncDirection, BulkSyncResult } from './projectOverviewTypes'
 import type { ProjectOverviewBulkAction, ProjectOverviewRowAction } from './components/ProjectOverviewTable'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type { ProjectMemberAccessView } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { hasConnectedEngine } from '../utils/deployEligibility'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
@@ -111,7 +112,7 @@ export function getBulkPermissionDenial(
   projects: Project[],
   action: ProjectOverviewBulkAction,
   permissionIds: string[],
-  membershipByProjectId: Map<string, ProjectMember | null | undefined>,
+  membershipByProjectId: Map<string, ProjectMemberAccessView | null | undefined>,
   hasProjectPermissionForProject?: ProjectPermissionPredicate
 ): BulkPermissionDenial | null {
   if (projects.length === 0 || permissionIds.length === 0) return null
@@ -140,7 +141,7 @@ function getBulkPermissionReason(
   projects: Project[],
   action: ProjectOverviewBulkAction,
   permissionIds: string[],
-  membershipByProjectId: Map<string, ProjectMember | null | undefined>,
+  membershipByProjectId: Map<string, ProjectMemberAccessView | null | undefined>,
   hasProjectPermissionForProject?: ProjectPermissionPredicate
 ): string | null {
   return getBulkPermissionDenial(
@@ -157,7 +158,7 @@ function buildProjectOverviewBulkDiagnosticDecision(
   action: ProjectOverviewBulkAction,
   reason: string | null | undefined,
   permissionIds: string[],
-  membershipByProjectId: Map<string, ProjectMember | null | undefined>,
+  membershipByProjectId: Map<string, ProjectMemberAccessView | null | undefined>,
   hasProjectPermissionForProject?: ProjectPermissionPredicate
 ): UiAuthzDecision | null {
   if (!reason || projects.length === 0) return null
@@ -276,7 +277,7 @@ export default function ProjectOverview() {
   const membershipQueries = useQueries({
     queries: projectIds.map((projectId) => ({
       queryKey: ['project-members', projectId, 'me'],
-      queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${projectId}/members/me`),
+      queryFn: () => projectsApi.getMyMembership(projectId),
       enabled: !!projectId,
       staleTime: 60 * 1000,
     })),
@@ -466,7 +467,7 @@ export default function ProjectOverview() {
   }, [engineAccessQueries, hasProjectPermission, permissions, projectIds])
 
   const membershipByProjectId = React.useMemo(() => {
-    const memberships = new Map<string, ProjectMember | null | undefined>()
+    const memberships = new Map<string, ProjectMemberAccessView | null | undefined>()
     projectIds.forEach((projectId, index) => {
       memberships.set(projectId, membershipQueries[index]?.data)
     })

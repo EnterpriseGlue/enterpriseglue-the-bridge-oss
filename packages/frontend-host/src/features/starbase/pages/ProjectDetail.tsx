@@ -64,8 +64,6 @@ import type {
 import type {
   ProjectDeployGrantResponse as SharedProjectDeployGrantResponse,
   ProjectMemberAddResponse as SharedProjectMemberAddResponse,
-  ProjectMemberCapabilities as SharedProjectMemberCapabilities,
-  ProjectMemberLookup as SharedProjectMemberLookup,
   ReissuedManualProjectInvitation as SharedReissuedManualProjectInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
@@ -83,7 +81,6 @@ import {
   ProjectContents,
   ProjectRole,
   ProjectMember,
-  ProjectMembersResponse,
   ProjectPendingInvite,
   COLLABORATORS_PANEL_WIDTH,
   memberHeaders,
@@ -734,13 +731,13 @@ export default function ProjectDetail() {
 
   const membersQ = useQuery({
     queryKey: ['project-members', projectId],
-    queryFn: () => apiClient.get<ProjectMembersResponse>(`/starbase-api/projects/${projectId}/members`),
+    queryFn: () => projectsApi.getMembers(projectId!),
     enabled: !!projectId,
   })
 
   const myMembershipQ = useQuery({
     queryKey: ['project-members', projectId, 'me'],
-    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${projectId}/members/me`),
+    queryFn: () => projectsApi.getMyMembership(projectId!),
     enabled: !!projectId, // Always fetch - needed for deploy permission check
   })
 
@@ -1282,16 +1279,13 @@ export default function ProjectDetail() {
 
   const memberCapabilitiesQ = useQuery({
     queryKey: ['project-members', projectId, 'capabilities'],
-    queryFn: () => apiClient.get<SharedProjectMemberCapabilities>(`/starbase-api/projects/${projectId}/members/capabilities`),
+    queryFn: () => projectsApi.getMemberCapabilities(projectId!),
     enabled: addMemberModal.isOpen && !!projectId && canInviteMembers,
     staleTime: 30 * 1000,
   })
   const memberLookupQ = useQuery({
     queryKey: ['project-members', projectId, 'lookup', debouncedMemberEmail.toLowerCase()],
-    queryFn: () => apiClient.get<SharedProjectMemberLookup>(
-      `/starbase-api/projects/${projectId}/members/lookup`,
-      { email: debouncedMemberEmail.toLowerCase() }
-    ),
+    queryFn: () => projectsApi.lookupMember(projectId!, debouncedMemberEmail.toLowerCase()),
     enabled: addMemberModal.isOpen && !!projectId && canSearchMembers && isValidEmail(debouncedMemberEmail),
     staleTime: 30 * 1000,
   })
