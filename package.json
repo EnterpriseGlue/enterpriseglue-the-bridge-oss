@@ -85,7 +85,7 @@
     "test:authz:local-smoke": "./scripts/run-authz-local-login-test.sh test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts",
     "test:identity:local": "pnpm run test:identity:contract && pnpm run test:identity:routes && pnpm run test:identity:matrix && pnpm run test:identity:protocol && pnpm run test:identity:ui",
     "test:identity:verify": "pnpm run test:identity:local && pnpm run test:identity:browser && pnpm run test:identity:ldap",
-    "test:authz:structure": "node --test scripts/authz-test-lanes.test.mjs",
+    "test:authz:structure": "pnpm run guard:backend-authz && node --test scripts/authz-test-lanes.test.mjs",
     "test:authz:identity": "pnpm run test:identity-contract && pnpm run test:identity-integration && pnpm run test:legacy-auth-integration && pnpm run test:identity-persistence && pnpm run test:identity-provider-key-identity && pnpm run test:identity-mapping-config-key && pnpm run test:identity-mapping-matrix && pnpm run test:identity-protocol-mocks",
     "test:authz:config": "pnpm run test:config-bundles && pnpm run test:docker-config-bundles && pnpm run test:openshift-config-bundles && pnpm run test:config-bundle-cicd && pnpm run test:documentation-contracts && pnpm run test:secret-boundaries && pnpm run test:target-ownership && pnpm run test:engine-import",
     "test:authz:runtime": "pnpm run test:action-registry && pnpm run test:assignment-targets && pnpm run test:authz-group-key-identity && pnpm run test:managed-resource-key-identities && pnpm run test:runtime-resource-persistence && pnpm run test:deployment-lineage-persistence && pnpm run test:engine-connection-resolver && pnpm run test:deployment-eligibility-contract",

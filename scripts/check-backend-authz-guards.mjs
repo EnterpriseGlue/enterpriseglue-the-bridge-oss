@@ -32,6 +32,15 @@ const projectMembershipCommandFiles = [
   'packages/backend-host/src/modules/git/routes/createOnline.ts',
   'packages/backend-host/src/modules/starbase/routes/projects.ts',
 ];
+// `source = legacy` is a compatibility boundary, not an authorization-source
+// choice available to normal commands. Keep its remaining writers constrained
+// to the one-way membership reconciliation and the documented project-engine
+// bridge until the deployed cutover evidence permits their retirement.
+const legacyAuthorizationSourceWriterAllowlist = new Set([
+  'packages/shared/src/services/platform-admin/permissions.ts',
+  'packages/shared/src/services/platform-admin/legacy-project-role-assignments.ts',
+  'packages/shared/src/services/platform-admin/ProjectEngineTargetService.ts',
+]);
 const legacyRoleValues = [
   'admin',
   'developer',
@@ -201,6 +210,27 @@ function countMatchesByRule(matches) {
   return counts;
 }
 
+function findLegacyAuthorizationSourceWriters() {
+  const roots = [
+    'packages/shared/src/services',
+    'packages/backend-host/src',
+  ];
+  const matches = [];
+
+  for (const root of roots) {
+    for (const filePath of walkFiles(path.join(repoRoot, root))) {
+      const rel = relativePath(filePath);
+      const content = fs.readFileSync(filePath, 'utf8');
+      for (const match of content.matchAll(/\bsource\s*:\s*['"]legacy['"]/g)) {
+        const location = lineAndColumn(content, match.index || 0);
+        matches.push({ filePath: rel, line: location.line, column: location.column, text: match[0] });
+      }
+    }
+  }
+
+  return matches;
+}
+
 const files = Array.from(new Set([
   ...walkFiles(path.join(repoRoot, sourceRoot)),
   ...sharedMiddlewareRoleFallbackFiles
@@ -240,6 +270,27 @@ for (const filePath of files) {
   });
 }
 
+const unexpectedLegacySourceWriters = findLegacyAuthorizationSourceWriters()
+  .filter((match) => !legacyAuthorizationSourceWriterAllowlist.has(match.filePath));
+
+if (unexpectedLegacySourceWriters.length > 0) {
+  issues.push({
+    filePath: 'legacy authorization source writers',
+    overBaselineRules: [{
+      rule: 'unexpected-legacy-source-writer',
+      count: unexpectedLegacySourceWriters.length,
+      tolerated: 0,
+    }],
+    matches: unexpectedLegacySourceWriters.map((match) => ({
+      rule: 'unexpected-legacy-source-writer',
+      text: match.text,
+      line: match.line,
+      column: match.column,
+      filePath: match.filePath,
+    })),
+  });
+}
+
 if (issues.length > 0) {
   console.error('[backend-authz-guards] Backend route or shared middleware role checks exceeded the compatibility baseline.');
   console.error('[backend-authz-guards] Use requireAction, requireCompositeAction, or the shared evaluator instead.');
@@ -251,7 +302,7 @@ if (issues.length > 0) {
     for (const match of issue.matches.filter((entry) =>
       issue.overBaselineRules.some((rule) => rule.rule === entry.rule)
     ).slice(0, 10)) {
-      console.error(`  ${match.line}:${match.column} ${match.rule} ${JSON.stringify(match.text)}`);
+      console.error(`  ${match.filePath ? `${match.filePath}:` : ''}${match.line}:${match.column} ${match.rule} ${JSON.stringify(match.text)}`);
     }
   }
   process.exit(1);
