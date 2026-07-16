@@ -11,6 +11,10 @@ import type {
   LatestProjectDeploymentArtifact,
 } from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
 import {
+  ProjectEngineDeploymentViewSchema,
+  type ProjectEngineDeploymentView,
+} from '@enterpriseglue/shared/schemas/starbase/deployment-query.js';
+import {
   normalizeEngineDeploymentEnvironmentTag,
   toEngineDeploymentMeta,
   toNullableQueryNumber,
@@ -79,7 +83,7 @@ function mapFileDeploymentResult(
 }
 
 class EngineDeploymentQueryServiceImpl {
-  async listProjectDeployments(projectId: string, visibleEngineIds: string[], limit: number): Promise<EngineDeployment[]> {
+  async listProjectDeployments(projectId: string, visibleEngineIds: string[], limit: number): Promise<ProjectEngineDeploymentView[]> {
     if (visibleEngineIds.length === 0) {
       return [];
     }
@@ -95,11 +99,10 @@ class EngineDeploymentQueryServiceImpl {
       take: limit,
     });
 
-    for (const row of rows) {
-      row.environmentTag = normalizeEngineDeploymentEnvironmentTag(row.engineId, row.environmentTag);
-    }
-
-    return rows;
+    return rows.map((row) => ProjectEngineDeploymentViewSchema.parse({
+      ...row,
+      environmentTag: normalizeEngineDeploymentEnvironmentTag(row.engineId, row.environmentTag),
+    }));
   }
 
   async listLatestFileDeployments(projectId: string, fileId: string, visibleEngineIds: string[], limit: number, scanLimit: number): Promise<FileDeploymentSummary[]> {

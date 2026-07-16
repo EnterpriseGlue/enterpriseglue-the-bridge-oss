@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { EngineDeploymentSchemaRaw } from './engine-deployment.js';
+
+/** Project deployment metadata with the persisted raw engine response removed. */
+export const ProjectEngineDeploymentViewSchema = EngineDeploymentSchemaRaw.partial().transform(({ rawResponse: _rawResponse, ...deployment }) => deployment);
 
 /** A deployed engine artifact correlated to one Starbase file. */
 export const DeploymentArtifactSummarySchema = z.object({
@@ -43,6 +47,7 @@ export const LatestProjectDeploymentArtifactSchema = DeploymentArtifactProjectFi
 });
 
 export type DeploymentArtifactSummary = z.infer<typeof DeploymentArtifactSummarySchema>;
+export type ProjectEngineDeploymentView = z.infer<typeof ProjectEngineDeploymentViewSchema>;
 export type DeploymentArtifactProjectFileBase = z.infer<typeof DeploymentArtifactProjectFileBaseSchema>;
 export type FileDeploymentSummary = z.infer<typeof FileDeploymentSummarySchema>;
 export type LatestProjectDeploymentArtifact = z.infer<typeof LatestProjectDeploymentArtifactSchema>;

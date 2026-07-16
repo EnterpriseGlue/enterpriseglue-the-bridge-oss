@@ -27,6 +27,7 @@ const {
   FolderDeletePreviewSchema,
   FileDeploymentSummarySchema,
   LatestProjectDeploymentArtifactSchema,
+  ProjectEngineDeploymentViewSchema,
 } = await import('@enterpriseglue/shared/schemas/starbase/index.js');
 
 const {
@@ -2765,7 +2766,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/engine-deployments',
   ...authzExtension('project.deployments.read', 'GET', '/starbase-api/projects/:projectId/engine-deployments'),
   request: { params: z.object({ projectId: z.string() }), query: z.object({ limit: z.string().optional() }) },
-  responses: { 200: { description: 'Engine deployments for project', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'Sanitized engine deployments for project', content: { 'application/json': { schema: z.array(ProjectEngineDeploymentViewSchema) } } } },
 });
 
 // GET /starbase-api/projects/:projectId/engine-deployments/latest

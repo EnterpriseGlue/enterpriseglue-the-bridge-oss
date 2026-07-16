@@ -121,6 +121,7 @@ describe('starbase engine-deployments routes', () => {
         engineName: 'Engine One',
         environmentTag: 'prod',
         deployedAt: 1700000000,
+        rawResponse: '{"token":"must-not-leak"}',
       },
     ]);
 
@@ -136,6 +137,7 @@ describe('starbase engine-deployments routes', () => {
         environmentTag: 'prod',
       }),
     ]);
+    expect(response.body[0]).not.toHaveProperty('rawResponse');
     expect(deploymentFind).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({
         projectId: '11111111-1111-4111-8111-111111111111',

@@ -5,3 +5,4 @@ export * from './version.js';
 export * from './comment.js';
 export * from './folder.js';
 export * from './deployment-query.js';
+export * from './engine-deployment.js';
