@@ -5,8 +5,8 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { dashboardLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { In } from 'typeorm';
 
 const r = Router();
@@ -18,16 +18,13 @@ const r = Router();
 r.get('/api/dashboard/stats', requireAuth, requireAction('platform.dashboard.read'), dashboardLimiter, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
-  const projectMemberRepo = dataSource.getRepository(ProjectMember);
   const fileRepo = dataSource.getRepository(File);
+  const tenantId = req.tenant?.tenantId;
 
-  // Get projects the user is a member of (via project_members)
-  const memberProjects = await projectMemberRepo.find({
-    where: { userId },
-    select: ['projectId'],
-  });
-  
-  const projectIds = memberProjects.map((p) => p.projectId);
+  // Scope aggregates through the canonical evaluator snapshot. Legacy project
+  // memberships are retained only as migration inputs for scoped assignments.
+  const permissionSnapshot = await permissionService.getCurrentUserPermissions(userId, tenantId);
+  const projectIds = Array.from(new Set(permissionSnapshot.projects.map((project) => project.resourceId)));
   const totalProjects = projectIds.length;
 
   // If user has no projects, return zeros

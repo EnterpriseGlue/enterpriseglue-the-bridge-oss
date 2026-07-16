@@ -5,7 +5,6 @@ import { dashboardLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
-import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { In } from 'typeorm';
 import {
@@ -70,7 +69,6 @@ function hasAnyProjectPermission(
 r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.read'), dashboardLimiter, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
-  const projectMemberRepo = dataSource.getRepository(ProjectMember);
   const projectRepo = dataSource.getRepository(Project);
   const tenantId = req.tenant?.tenantId;
 
@@ -109,17 +107,10 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     ...runtimeVisibleEngineIds,
   ]));
 
-  // Get project memberships
-  const projectMemberRows = await projectMemberRepo.find({
-    where: { userId },
-    select: ['projectId', 'role'],
-  });
-
-  // Get project names for both legacy memberships and scoped RBAC project assignments.
-  const projectIds = Array.from(new Set([
-    ...projectMemberRows.map(p => p.projectId),
-    ...permissionSnapshot.projects.map((project) => project.resourceId),
-  ]));
+  // Visible projects come only from the evaluator snapshot. Legacy membership
+  // rows remain migration inputs and are synchronized into canonical scoped
+  // assignments; this endpoint must not make a second authorization decision.
+  const projectIds = Array.from(new Set(permissionSnapshot.projects.map((project) => project.resourceId)));
   let projectNameMap = new Map<string, string>();
   if (projectIds.length > 0) {
     const projectRows = await projectRepo.find({
@@ -131,11 +122,10 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     }
   }
 
-  const legacyRoleByProjectId = new Map(projectMemberRows.map((membership) => [membership.projectId, membership.role]));
   const projectMemberships = projectIds.map(projectId => ({
     projectId,
     projectName: projectNameMap.get(projectId) || 'Unknown',
-    role: legacyRoleByProjectId.get(projectId) || 'permission',
+    role: 'permission',
   }));
 
   // Compute visibility only from evaluator-backed permission snapshots.

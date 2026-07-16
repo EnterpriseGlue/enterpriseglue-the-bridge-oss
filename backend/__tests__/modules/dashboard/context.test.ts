@@ -3,7 +3,6 @@ import request from 'supertest';
 import express from 'express';
 import contextRouter from '../../../../packages/backend-host/src/modules/dashboard/routes/context.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { ProjectMember } from '@enterpriseglue/shared/db/entities/ProjectMember.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
@@ -103,12 +102,10 @@ describe('GET /api/dashboard/context', () => {
   });
 
   it('returns context for regular user', async () => {
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
@@ -143,12 +140,10 @@ describe('GET /api/dashboard/context', () => {
       ...emptyPermissions(),
       engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
     });
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
@@ -163,17 +158,17 @@ describe('GET /api/dashboard/context', () => {
     expect(response.body.canViewProcessData).toBe(true);
   });
 
-  it('returns project membership metadata without treating it as deployment permission', async () => {
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([
-      { projectId: 'project-1', role: 'owner' }
-    ]) };
+  it('returns evaluator-visible project metadata without treating it as deployment permission', async () => {
+    vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
+      ...emptyPermissions(),
+      projects: [{ resourceId: 'project-1', permissions: [] }],
+    });
     const projectRepo = { find: vi.fn().mockResolvedValue([
       { id: 'project-1', name: 'Test Project' }
     ]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
@@ -185,6 +180,7 @@ describe('GET /api/dashboard/context', () => {
     expect(response.status).toBe(200);
     expect(response.body.projectMemberships).toHaveLength(1);
     expect(response.body.projectMemberships[0].projectName).toBe('Test Project');
+    expect(response.body.projectMemberships[0].role).toBe('permission');
     expect(response.body.canViewDeployments).toBe(false);
   });
 
@@ -195,14 +191,12 @@ describe('GET /api/dashboard/context', () => {
       projects: [{ resourceId: 'project-2', permissions: ['project:deploy'] }],
       engines: [{ resourceId: 'engine-2', permissions: ['engine:deploy:view'] }],
     });
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([
       { id: 'project-2', name: 'Scoped Project' },
     ]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
@@ -228,12 +222,10 @@ describe('GET /api/dashboard/context', () => {
       engines: [{ resourceId: 'engine-central', permissions: [] }],
     });
     vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ id: 'engine-central' }]) };
         throw new Error('Unexpected repository');
@@ -260,12 +252,10 @@ describe('GET /api/dashboard/context', () => {
       ],
     });
     vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return {
           find: vi.fn().mockResolvedValue([
@@ -297,12 +287,10 @@ describe('GET /api/dashboard/context', () => {
       ...emptyPermissions(),
       platform: ['platform:settings:manage'],
     });
-    const projectMemberRepo = { find: vi.fn().mockResolvedValue([]) };
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === ProjectMember) return projectMemberRepo;
         if (entity === Project) return projectRepo;
         throw new Error('Unexpected repository');
       },
