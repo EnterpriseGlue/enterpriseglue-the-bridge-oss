@@ -91,15 +91,6 @@ export class EngineService {
   }
 
   /**
-   * Check if user has access to engine with at least the required role
-   */
-  async hasEngineAccess(userId: string, engineId: string, requiredRoles: EngineRole[], tenantId?: string | null): Promise<boolean> {
-    const role = await this.getEngineRole(userId, engineId, tenantId);
-    if (!role) return false;
-    return requiredRoles.includes(role);
-  }
-
-  /**
    * Get all engines a user has access to, optionally filtered by tenant
    */
   async getUserEngines(userId: string, tenantId?: string | null): Promise<EngineWithDetails[]> {

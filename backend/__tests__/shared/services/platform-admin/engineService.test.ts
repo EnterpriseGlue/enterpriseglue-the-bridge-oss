@@ -56,25 +56,6 @@ describe('EngineService', () => {
     expect(assignmentSpy).toHaveBeenCalledWith('user-1', 'engine-1', undefined);
   });
 
-  it('checks access for required roles', async () => {
-    const engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
-    };
-    vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('deployer');
-
-    (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: unknown) => {
-        if (entity === Engine) return engineRepo;
-        throw new Error('Unexpected repository');
-      },
-    });
-
-    const allowed = await service.hasEngineAccess('user-1', 'engine-1', ['deployer', 'owner']);
-    const denied = await service.hasEngineAccess('user-1', 'engine-1', ['owner']);
-    expect(allowed).toBe(true);
-    expect(denied).toBe(false);
-  });
-
   it('uses scoped RBAC engine assignments when legacy membership is absent', async () => {
     const engineRepo = {
       findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
