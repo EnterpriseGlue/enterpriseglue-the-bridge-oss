@@ -34,6 +34,7 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid';
+import type { SsoClaimsMapping } from '../hooks/useAuthzApi';
 
 // Types
 interface SsoProvider {
@@ -51,20 +52,6 @@ interface SsoProvider {
   defaultRole: string;
   hasClientSecret: boolean;
   hasCertificate: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface SsoClaimsMapping {
-  id: string;
-  providerId?: string;
-  claimType: string;
-  claimKey: string;
-  claimValue: string;
-  claimOperator?: string | null;
-  targetRole: string;
-  priority: number;
-  isActive: boolean;
   createdAt: number;
   updatedAt: number;
 }
