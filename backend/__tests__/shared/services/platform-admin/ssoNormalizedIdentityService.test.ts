@@ -63,6 +63,9 @@ describe('ssoNormalizedIdentityService', () => {
         groups: ['ops', 'ops', 'deployers'],
         roles: ['operator'],
         department: 'engineering',
+        access_token: 'raw-access-token',
+        saml_assertion: '<Assertion>raw-saml-assertion</Assertion>',
+        bindPassword: 'raw-directory-password',
       },
       now: 1234,
     });
@@ -94,6 +97,10 @@ describe('ssoNormalizedIdentityService', () => {
       tenantId: 'tenant-a', directoryTenantId: 'idp-tenant', providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1', emailHint: 'user@example.com', identityKey: expect.any(String),
     }));
     expect(syncMembershipsInStore).toHaveBeenCalledWith(dataSource, 'user-1', 'tenant-a', expect.objectContaining({ providerKey: 'provider-1', providerType: 'saml' }));
+    const persistedSnapshot = JSON.stringify(insert.mock.calls[0][0]);
+    expect(persistedSnapshot).not.toContain('raw-access-token');
+    expect(persistedSnapshot).not.toContain('raw-saml-assertion');
+    expect(persistedSnapshot).not.toContain('raw-directory-password');
   });
 
   it('updates an existing normalized identity snapshot by provider subject', async () => {
