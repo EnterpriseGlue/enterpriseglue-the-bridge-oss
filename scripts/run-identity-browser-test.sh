@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-http://localhost:5173}"
+browser_e2e_grep="${BROWSER_E2E_GREP:-@identity-lifecycle}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -17,19 +18,19 @@ NODE
 }
 
 if ! is_local_url "$base_url"; then
-  echo "[identity-browser] PLAYWRIGHT_BASE_URL must target localhost, loopback, or a .local host; got: $base_url" >&2
+  echo "[browser-e2e] PLAYWRIGHT_BASE_URL must target localhost, loopback, or a .local host; got: $base_url" >&2
   exit 2
 fi
 
 if ! curl --fail --silent --show-error --max-time 5 "$base_url/login" >/dev/null; then
-  echo "[identity-browser] Frontend is not reachable at $base_url/login. Start the local frontend or set PLAYWRIGHT_BASE_URL to its local URL." >&2
+  echo "[browser-e2e] Frontend is not reachable at $base_url/login. Start the local frontend or set PLAYWRIGHT_BASE_URL to its local URL." >&2
   exit 2
 fi
 
 headless_shell_path="$(pnpm exec playwright install chromium --dry-run 2>/dev/null | awk '/Chrome Headless Shell/{found=1; next} found && /Install location:/{sub(/^.*Install location:[[:space:]]*/, ""); print; exit}')"
 if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! find "$headless_shell_path" -type f -name 'chrome-headless-shell*' -perm -111 -print -quit | grep -q .; then
-  echo "[identity-browser] Playwright Chromium is not installed for this workspace. Run: pnpm exec playwright install chromium" >&2
+  echo "[browser-e2e] Playwright Chromium is not installed for this workspace. Run: pnpm exec playwright install chromium" >&2
   exit 2
 fi
 
-E2E_SEED_USER=false pnpm exec playwright test --config test/e2e/playwright.config.ts --grep @identity-lifecycle
+E2E_SEED_USER=false pnpm exec playwright test --config test/e2e/playwright.config.ts --grep "$browser_e2e_grep"

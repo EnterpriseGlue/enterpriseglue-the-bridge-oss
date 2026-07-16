@@ -13,6 +13,7 @@ automation that already use them.
 | `pnpm run test:identity:ui` | provider and mapping administration screens | none |
 | `pnpm run test:identity:local` | all of the preceding local-only lanes | none |
 | `pnpm run test:identity:browser` | configure, apply, login, and reconciliation browser lifecycle using the in-browser identity stack | local frontend and Playwright Chromium |
+| `pnpm run test:authz:browser` | Access Control responsive permission-catalog layout at tablet width | local frontend and Playwright Chromium |
 | `pnpm run test:identity:ldap` | real LDAPS bind, search, TLS, and nested-group flow | Docker |
 | `pnpm run test:identity:verify` | complete local identity verification, including browser lifecycle and LDAPS | local frontend, Playwright Chromium, and Docker |
 
@@ -34,6 +35,11 @@ broader `test:authz-refactor` lane keeps its compatibility-oriented CI scope
 and includes the protocol-mock lane, but deliberately does not start Docker.
 Use `test:identity:verify` when the local frontend, Playwright, and Docker are
 available and a complete local identity pass is appropriate.
+
+`test:authz:browser` uses the same guarded local browser runner, disables E2E
+seeding, and intercepts its API requests. It verifies the real Access Control
+permission catalog at a 768px viewport with a long permission label, including
+an explicit wrap rule and no document-level horizontal overflow.
 
 To point the browser lane at another local stack, set a loopback or `.local`
 URL explicitly:

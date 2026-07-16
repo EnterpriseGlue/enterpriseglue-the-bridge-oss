@@ -38,6 +38,8 @@ const PERMISSION_QUICK_FILTERS: Array<{ id: PermissionQuickFilter; label: string
   { id: 'deployment', label: 'Deployment' },
 ];
 
+const permissionTextCellStyle = { overflowWrap: 'anywhere' as const };
+
 function scopeTag(scope: string) {
   if (scope === 'platform') return <Tag type="purple">Platform</Tag>;
   if (scope === 'project') return <Tag type="blue">Project</Tag>;
@@ -100,8 +102,8 @@ export function PermissionsTable({
                       if (cell.info.header === 'scope') return <TableCell key={cell.id}>{scopeTag(String(cell.value))}</TableCell>;
                       if (cell.info.header === 'kind') return <TableCell key={cell.id}><Tag type={cell.value === 'custom' ? 'green' : 'gray'}>{String(cell.value)}</Tag></TableCell>;
                       if (cell.info.header === 'risk') return <TableCell key={cell.id}>{risk ? <Tag type="red" title={risk.description}>{risk.label}</Tag> : '-'}</TableCell>;
-                      if (cell.info.header === 'implications') return <TableCell key={cell.id}>{implications.length ? implications.map((item) => <Tag key={item} type="cool-gray">{item}</Tag>) : '-'}</TableCell>;
-                      return <TableCell key={cell.id}>{cell.value}</TableCell>;
+                      if (cell.info.header === 'implications') return <TableCell key={cell.id} style={permissionTextCellStyle}>{implications.length ? implications.map((item) => <Tag key={item} type="cool-gray">{item}</Tag>) : '-'}</TableCell>;
+                      return <TableCell key={cell.id} style={permissionTextCellStyle}>{cell.value}</TableCell>;
                     })}
                   </DataTableDataRow>;
                 })}

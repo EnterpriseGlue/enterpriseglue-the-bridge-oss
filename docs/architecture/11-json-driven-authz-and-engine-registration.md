@@ -2002,7 +2002,7 @@ Editor behavior:
 - [x] ✅ Show role config ownership: `config_locked` is read-only; `config_warn` permits edits and visibly marks local drift; manual roles remain editable. The Groups Access Control surface follows the same ownership behavior.
 - [x] ✅ Use a sticky Carbon action bar with Save and Cancel; do not put a save button in every permission row.
 - [x] ✅ Remove the unbounded role-permission matrix from the primary Roles workflow. Custom roles are edited in the focused scoped editor; system roles are duplicated before mutation. A bounded role-comparison view remains optional future work.
-- [ ] ⬜ Verify no page-level horizontal overflow at supported desktop and tablet widths and ensure long permission labels wrap inside their category.
+- [x] ✅ Verify no page-level horizontal overflow at supported desktop and tablet widths and ensure long permission labels wrap inside their category. The guarded `test:authz:browser` Playwright lane renders the live Access Control permission catalog at a 768px tablet viewport with a long label, asserts document width remains bounded, and requires the catalog cell's explicit `overflow-wrap: anywhere` rule.
 
 The separate `Permissions` tab remains the catalog administration and inspection surface. The `Assignments` tab remains the principal-to-scope assignment surface. The role editor selects what a role contains; it does not also assign users or groups.
 
