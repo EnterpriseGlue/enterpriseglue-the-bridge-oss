@@ -3,6 +3,7 @@ import {
   ApiClientWithTokenSchema,
   AuthzGroupMembershipSchema,
   AuthzGroupSchema,
+  PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
   ServiceAccountWithTokenSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
@@ -91,5 +92,21 @@ describe('authorization response contracts', () => {
       },
       token: 'reveal-once-service-token',
     }).account.id).toBe('service-account-a');
+  });
+
+  it('exposes permission catalog metadata through the shared response contract', () => {
+    expect(PermissionCatalogEntrySchema.parse({
+      key: 'project.deploy.create',
+      scope: 'project',
+      category: 'Deployment',
+      label: 'Deploy project resources',
+      description: 'Allows deployment to eligible project engine targets.',
+      kind: 'system',
+      isEditable: false,
+      isArchived: false,
+      createdById: null,
+      createdAt: 1,
+      updatedAt: 1,
+    }).key).toBe('project.deploy.create');
   });
 });

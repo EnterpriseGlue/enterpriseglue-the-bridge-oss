@@ -25,6 +25,7 @@ import type {
   IdentityProviderReconciliationPreview,
   IdentityProviderResponse,
   LegacyIdentityProviderCutoverResponse,
+  PermissionCatalogEntry as SharedPermissionCatalogEntry,
   ProjectEngineTarget as SharedProjectEngineTarget,
   ProjectEngineTargetCreate as SharedProjectEngineTargetCreate,
   ProjectEngineTargetUpdate as SharedProjectEngineTargetUpdate,
@@ -97,19 +98,7 @@ export interface SsoClaimsMapping {
   riskAcknowledged?: boolean;
 }
 
-export interface PermissionCatalogEntry {
-  key: string;
-  scope: AuthzResourceType;
-  category: string;
-  label: string;
-  description: string;
-  kind?: 'system' | 'custom';
-  isEditable?: boolean;
-  isArchived?: boolean;
-  createdById?: string | null;
-  createdAt?: number;
-  updatedAt?: number;
-}
+export type PermissionCatalogEntry = SharedPermissionCatalogEntry;
 
 export interface CurrentUserPermissions {
   userId: string;
