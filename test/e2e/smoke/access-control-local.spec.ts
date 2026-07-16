@@ -22,5 +22,9 @@ test.describe('Smoke: local Access Control authorization', () => {
     await expect(page.getByRole('tab', { name: 'Runtime Resources', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'SSO Engine Assignments', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Roles', exact: true })).toHaveAttribute('aria-selected', 'true');
+
+    await page.getByRole('tab', { name: 'Runtime Resources', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Runtime Resources' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Engine' })).toBeVisible();
   });
 });
