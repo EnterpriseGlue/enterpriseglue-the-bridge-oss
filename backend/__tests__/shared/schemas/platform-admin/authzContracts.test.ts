@@ -7,6 +7,8 @@ import {
   PermissionCatalogEntrySchema,
   RoleAssignmentSchema,
   RoleDetailSchema,
+  SsoAssignmentMappingSchema,
+  SsoGroupMappingSchema,
   ServiceAccountWithTokenSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
@@ -151,5 +153,19 @@ describe('authorization response contracts', () => {
       createdAt: 1,
       updatedAt: 1,
     }).connectionMode).toBe('customer_sidecar');
+  });
+
+  it('keeps legacy mapping response fields canonical during provider-neutral migration', () => {
+    expect(SsoAssignmentMappingSchema.parse({
+      id: 'assignment-mapping-a', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators',
+      targetScope: 'engine', targetSelectorType: 'engine_id', targetEngineId: 'engine-a', targetExternalEngineId: null,
+      targetLabelKey: null, targetLabelValue: null, targetRoleId: 'role-operator', syncMode: 'authoritative', priority: 10,
+      isActive: true, createdAt: 1, updatedAt: 1,
+    }).targetSelectorType).toBe('engine_id');
+    expect(SsoGroupMappingSchema.parse({
+      id: 'group-mapping-a', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators',
+      targetGroupId: 'group-operators', targetGroupKey: 'operators', targetGroupName: 'Operators', syncMode: 'additive',
+      priority: 20, isActive: true, createdAt: 1, updatedAt: 1,
+    }).targetGroupKey).toBe('operators');
   });
 });

@@ -48,6 +48,8 @@ import type {
   RuntimeResourceSet as SharedRuntimeResourceSet,
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
+  SsoAssignmentMapping as SharedSsoAssignmentMapping,
+  SsoGroupMapping as SharedSsoGroupMapping,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type {
   ConfigBundleApplyReconciliation,
@@ -237,47 +239,10 @@ export interface DeploymentEligibilityResult {
   reasons: string[];
 }
 
-export interface SsoAssignmentMapping {
-  id: string;
-  tenantId?: string | null;
-  providerId: string | null;
-  claimType: 'group' | 'role' | 'email_domain' | 'custom';
-  claimKey: string;
-  claimValue: string;
-  claimOperator?: SsoClaimOperator | null;
-  targetScope: 'engine';
-  targetSelectorType: 'engine_id' | 'all_engines' | 'external_engine_id' | 'engine_label';
-  targetEngineId: string | null;
-  targetExternalEngineId: string | null;
-  targetLabelKey: string | null;
-  targetLabelValue: string | null;
-  targetRoleId: string;
-  syncMode: 'authoritative' | 'additive';
-  priority: number;
-  isActive: boolean;
-  createdAt: number;
-  updatedAt: number;
-  riskAcknowledged?: boolean;
-}
-
-export interface SsoGroupMapping {
-  id: string;
-  tenantId?: string | null;
-  providerId: string | null;
-  claimType: 'group' | 'role' | 'email_domain' | 'custom';
-  claimKey: string;
-  claimValue: string;
-  claimOperator?: SsoClaimOperator | null;
-  targetGroupId: string;
-  targetGroupKey: string | null;
-  targetGroupName: string | null;
-  syncMode: 'authoritative' | 'additive';
-  priority: number;
-  isActive: boolean;
-  createdAt: number;
-  updatedAt: number;
-  riskAcknowledged?: boolean;
-}
+/** UI-only acknowledgement retained while legacy mapping forms remain supported. */
+export type SsoAssignmentMapping = SharedSsoAssignmentMapping & { riskAcknowledged?: boolean };
+/** UI-only acknowledgement retained while legacy mapping forms remain supported. */
+export type SsoGroupMapping = SharedSsoGroupMapping & { riskAcknowledged?: boolean };
 
 export type HumanIdentityEntitlementType = IdentityMappingResponse['entitlementType'];
 /** `scope` is retained solely to render and retire pre-migration rows. */
