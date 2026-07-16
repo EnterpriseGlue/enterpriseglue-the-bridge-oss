@@ -35,6 +35,19 @@ test.describe('Smoke: local Access Control authorization', () => {
     await expect(page.getByRole('tabpanel', { name: 'SSO Mappings' }).getByLabel('Test claims JSON')).toBeVisible();
 
     await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
-    await expect(page.getByRole('tabpanel', { name: 'Effective Access' }).getByRole('textbox', { name: 'User ID' })).toBeVisible();
+    const panel = page.getByRole('tabpanel', { name: 'Effective Access' });
+    const session = await page.evaluate(async () => (await fetch('/api/auth/me')).json());
+    const permissions = await page.evaluate(async () => (await fetch('/api/authz/permissions')).json());
+    const userId = session.user?.id || session.id;
+    const permission = permissions.find((item: { key: string; label: string; scope: string }) => item.key === 'platform.authz.roles.read')
+      || permissions.find((item: { key: string; label: string; scope: string }) => item.scope === 'platform');
+    if (!userId || !permission) throw new Error('Local administrator identity or platform permission is unavailable');
+
+    await panel.getByRole('textbox', { name: 'User ID' }).fill(userId);
+    await panel.getByRole('combobox', { name: 'Permission' }).click();
+    await page.getByRole('option', { name: `${permission.label} (${permission.key})` }).click();
+    await expect(panel.getByRole('button', { name: 'Evaluate' })).toBeEnabled();
+    await panel.getByRole('button', { name: 'Evaluate' }).click();
+    await expect(panel.getByText('Access allowed')).toBeVisible();
   });
 });
