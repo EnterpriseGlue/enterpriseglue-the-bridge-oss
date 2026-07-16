@@ -214,6 +214,7 @@ async function canViewDeploymentDiagnostics(req: Request): Promise<boolean> {
     Array.from(DEPLOYMENT_DIAGNOSTIC_PERMISSIONS).map((permission) =>
       permissionService.hasPermission(permission, {
         userId,
+        tenantId: req.tenant?.tenantId || null,
         resourceType: 'platform',
         resourceId: 'platform',
       })

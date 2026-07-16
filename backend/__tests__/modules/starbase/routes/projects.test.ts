@@ -12,6 +12,7 @@ const projectId = '00000000-0000-4000-8000-000000000001';
 
 const routeMocks = vi.hoisted(() => ({
   currentUser: { userId: 'user-1' } as any,
+  tenantId: null as string | null,
   evaluateDeploymentEligibility: vi.fn(),
   evaluateDeploymentEligibilityModes: vi.fn(),
   applyPreparedEngineImportToProject: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = routeMocks.currentUser;
+    req.tenant = { tenantId: routeMocks.tenantId };
     next();
   },
 }));
@@ -187,6 +189,7 @@ describe('starbase projects routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     routeMocks.currentUser = { userId: 'user-1' };
+    routeMocks.tenantId = null;
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
       [
         'project:files:view',
@@ -751,5 +754,22 @@ describe('starbase projects routes', () => {
         ],
       },
     });
+  });
+
+  it('scopes evaluated deployment-diagnostic permission checks to the request tenant', async () => {
+    routeMocks.tenantId = 'tenant-a';
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'project:files:view' || permission === 'platform:authz:check'
+    );
+    mockEngineAccessDataSource();
+
+    await request(app)
+      .get('/starbase-api/projects/project-1/engine-access')
+      .expect(200);
+
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'platform:authz:check',
+      expect.objectContaining({ userId: 'user-1', tenantId: 'tenant-a', resourceType: 'platform', resourceId: 'platform' }),
+    );
   });
 });
