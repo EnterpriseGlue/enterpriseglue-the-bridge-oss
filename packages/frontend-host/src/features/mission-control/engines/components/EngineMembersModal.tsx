@@ -124,7 +124,7 @@ const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
 
 interface EngineMembersModalProps {
   open: boolean
-  engine: { id: string; name: string; ownerId?: string } | null
+  engine: { id: string; name: string } | null
   canManage: boolean
   engineAccessAuthority?: 'manual' | 'transition_to_sso' | 'sso_managed'
   canViewMembers?: boolean
