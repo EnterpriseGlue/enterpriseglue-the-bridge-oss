@@ -55,7 +55,8 @@ import {
   type AuthzAuditFilterState,
   type SsoAssignmentDiagnostics,
 } from './access-control';
-import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
+import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
+import { accessControlTabFromSearchParams, type AccessControlTabId } from './access-control/accessControlTabPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
 import { findIdentityEntitlementMappingForMembership, findSsoAssignmentMappingForAssignment, findSsoGroupMappingForMembership, joinLineageParts } from './access-control/inspectionLineage';
@@ -303,23 +304,6 @@ const policyInspectionHeaders = [
   { key: 'priority', header: 'Priority' },
   { key: 'reason', header: 'Why shown' },
 ];
-
-type AccessControlTabId =
-  | 'roles'
-  | 'permissions'
-  | 'assignments'
-  | 'by_principal'
-  | 'by_resource'
-  | 'groups'
-  | 'effective_access'
-  | 'sso_mappings'
-  | 'sso_engine_assignments'
-  | 'engine_sets'
-  | 'runtime_resources'
-  | 'project_targets'
-  | 'policies'
-  | 'audit'
-  | 'external_registration';
 
 const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   roles: 'Roles',
@@ -972,7 +956,7 @@ export function getSsoTargetRoleOptions(
 
 
 export default function AccessControl() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const rolesQ = useRbacRoles();
   const permissionsQ = usePermissionCatalog();
   const assignmentsQ = useRoleAssignments();
@@ -1265,9 +1249,16 @@ export default function AccessControl() {
     showExternalRegistrationTab,
   ]);
   const [selectedTabId, setSelectedTabId] = React.useState<AccessControlTabId>(() => (
-    isEffectiveAccessTabRequested(searchParams) ? 'effective_access' : 'roles'
+    accessControlTabFromSearchParams(searchParams) || 'roles'
   ));
   const selectedTabIndex = Math.max(0, visibleTabIds.indexOf(selectedTabId));
+
+  React.useEffect(() => {
+    const requestedTabId = accessControlTabFromSearchParams(searchParams);
+    if (requestedTabId && visibleTabIds.includes(requestedTabId) && requestedTabId !== selectedTabId) {
+      setSelectedTabId(requestedTabId);
+    }
+  }, [searchParams, selectedTabId, visibleTabIds]);
 
   React.useEffect(() => {
     if (visibleTabIds.length === 0 || visibleTabIds.includes(selectedTabId)) return;
@@ -2349,7 +2340,11 @@ export default function AccessControl() {
         selectedIndex={selectedTabIndex}
         onChange={({ selectedIndex }: { selectedIndex: number }) => {
           const nextTabId = visibleTabIds[selectedIndex];
-          if (nextTabId) setSelectedTabId(nextTabId);
+          if (!nextTabId) return;
+          setSelectedTabId(nextTabId);
+          const nextSearchParams = new URLSearchParams(searchParams);
+          nextSearchParams.set('tab', nextTabId.replace(/_/g, '-'));
+          setSearchParams(nextSearchParams, { replace: true });
         }}
       >
         <TabList aria-label="Access control tabs">
