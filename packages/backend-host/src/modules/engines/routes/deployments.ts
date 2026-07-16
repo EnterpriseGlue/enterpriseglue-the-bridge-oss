@@ -21,7 +21,7 @@ import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js'
-import { DeploymentHistoryViewSchema, DeploymentReceiptCreateSchema, type DeploymentLineageIssue, type DeploymentLineageReadiness } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { DeploymentHistoryViewSchema, DeploymentLineageViewSchema, DeploymentReceiptCreateSchema, type DeploymentLineageIssue, type DeploymentLineageReadiness } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import { auditLog } from '@enterpriseglue/shared/services/audit.js'
 import {
   sanitize,
@@ -836,6 +836,41 @@ r.get('/engines-api/engines/:engineId/deployment-history', apiLimiter, requireAu
     ...deploymentLineageDiagnostics(row, artifactsByDeployment.get(row.id) || []),
   }))
   res.json(DeploymentHistoryViewSchema.array().parse(response))
+}))
+
+r.get('/engines-api/engines/:engineId/deployments/:deploymentId/lineage', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const deployment = await dataSource.getRepository(EngineDeployment).findOne({
+    where: { engineId: String(req.params.engineId), camundaDeploymentId: String(req.params.deploymentId) },
+  })
+  if (!deployment) return res.status(404).json({ message: 'Deployment lineage not found' })
+
+  const artifacts = await dataSource.getRepository(EngineDeploymentArtifact).find({
+    where: { engineDeploymentId: deployment.id },
+    order: { artifactKind: 'ASC', artifactKey: 'ASC', id: 'ASC' },
+  })
+  const response = {
+    id: deployment.id,
+    engineId: deployment.engineId,
+    engineDeploymentId: deployment.camundaDeploymentId,
+    projectId: deployment.projectId,
+    ingestionSource: deployment.ingestionSource,
+    lineageQuality: deployment.lineageQuality,
+    reconciledAt: deployment.reconciledAt,
+    status: deployment.status,
+    ...deploymentLineageDiagnostics(deployment, artifacts),
+    reconciliationStatus: deployment.reconciledAt ? 'reconciled' : 'pending',
+    artifacts: artifacts.map((artifact) => ({
+      artifactKind: artifact.artifactKind,
+      runtimeResourceId: artifact.artifactId || null,
+      runtimeResourceKey: artifact.artifactKey || null,
+      runtimeResourceVersion: artifact.artifactVersion,
+      runtimeTenantId: artifact.tenantId || null,
+      projectId: artifact.projectId || null,
+      fileId: artifact.fileId || null,
+    })),
+  }
+  res.json(DeploymentLineageViewSchema.parse(response))
 }))
 
 // Passthroughs to engine for listing/reading/deleting deployments

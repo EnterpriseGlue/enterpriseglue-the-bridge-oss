@@ -1168,6 +1168,7 @@ const {
   DeploymentReceiptResponseSchema,
   DeploymentReceiptViewSchema,
   DeploymentHistoryViewSchema,
+  DeploymentLineageViewSchema,
   EngineMetadataReconciliationResultSchema,
 } = await import('./platform-admin/deployment-receipt.js');
 registry.registerPath({
@@ -1198,6 +1199,16 @@ registry.registerPath({
   ...authzExtension('engine.deployments.read', 'GET', '/engines-api/engines/{engineId}/deployment-history'),
   request: { params: z.object({ engineId: z.string() }), query: z.object({ limit: z.coerce.number().int().min(1).max(200).optional() }) },
   responses: { 200: { description: 'Sanitized canonical deployment history for an engine', content: { 'application/json': { schema: z.array(DeploymentHistoryViewSchema) } } } },
+})
+registry.registerPath({
+  method: 'get',
+  path: '/engines-api/engines/{engineId}/deployments/{deploymentId}/lineage',
+  ...authzExtension('engine.deployments.read', 'GET', '/engines-api/engines/{engineId}/deployments/{deploymentId}/lineage'),
+  request: { params: z.object({ engineId: z.string(), deploymentId: z.string() }) },
+  responses: {
+    200: { description: 'Sanitized canonical deployment lineage and runtime artifact references', content: { 'application/json': { schema: DeploymentLineageViewSchema } } },
+    404: { description: 'Canonical deployment lineage was not found' },
+  },
 })
 
 registry.registerPath({

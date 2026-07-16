@@ -63,6 +63,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
         { method: 'GET', route: '/engines-api/engines/{engineId}/deployments/{id}', resourceResolver: 'engine.byId' },
         { method: 'GET', route: '/engines-api/engines/{engineId}/deployment-receipts', resourceResolver: 'engine.byId' },
         { method: 'GET', route: '/engines-api/engines/{engineId}/deployment-history', resourceResolver: 'engine.byId' },
+        { method: 'GET', route: '/engines-api/engines/{engineId}/deployments/{deploymentId}/lineage', resourceResolver: 'engine.byId' },
       ],
     },
   {

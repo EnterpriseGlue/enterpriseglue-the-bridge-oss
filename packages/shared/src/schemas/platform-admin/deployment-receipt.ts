@@ -77,6 +77,37 @@ export const DeploymentHistoryViewSchema = z.object({
   versionedArtifactCount: z.number().int().nonnegative(),
 });
 
+/**
+ * Safe deployment-to-runtime projection for operator diagnostics and bridge
+ * resolution. It deliberately excludes raw engine responses, file contents,
+ * content hashes, and commit messages retained by the persistence records.
+ */
+export const DeploymentLineageArtifactViewSchema = z.object({
+  artifactKind: z.string().min(1).max(64),
+  runtimeResourceId: z.string().nullable(),
+  runtimeResourceKey: z.string().nullable(),
+  runtimeResourceVersion: z.number().int().nonnegative(),
+  runtimeTenantId: z.string().nullable(),
+  projectId: z.string().nullable(),
+  fileId: z.string().nullable(),
+});
+
+export const DeploymentLineageViewSchema = DeploymentHistoryViewSchema.pick({
+  id: true,
+  engineId: true,
+  engineDeploymentId: true,
+  projectId: true,
+  ingestionSource: true,
+  lineageQuality: true,
+  reconciledAt: true,
+  status: true,
+  lineageReadiness: true,
+  lineageIssues: true,
+}).extend({
+  reconciliationStatus: z.enum(['reconciled', 'pending']),
+  artifacts: z.array(DeploymentLineageArtifactViewSchema),
+});
+
 export const RuntimeResourceObservationSchema = z.object({
   resourceKind: RuntimeResourceKindSchema,
   resourceKey: z.string().min(1),
@@ -124,6 +155,8 @@ export const ScheduledRuntimeInventoryReconciliationResultSchema = EngineMetadat
 export type DeploymentReceiptCreate = z.infer<typeof DeploymentReceiptCreateSchema>;
 export type DeploymentReceiptView = z.infer<typeof DeploymentReceiptViewSchema>;
 export type DeploymentHistoryView = z.infer<typeof DeploymentHistoryViewSchema>;
+export type DeploymentLineageArtifactView = z.infer<typeof DeploymentLineageArtifactViewSchema>;
+export type DeploymentLineageView = z.infer<typeof DeploymentLineageViewSchema>;
 export type DeploymentLineageReadiness = z.infer<typeof DeploymentLineageReadinessSchema>;
 export type DeploymentLineageIssue = z.infer<typeof DeploymentLineageIssueSchema>;
 export type RuntimeResourceKind = z.infer<typeof RuntimeResourceKindSchema>;

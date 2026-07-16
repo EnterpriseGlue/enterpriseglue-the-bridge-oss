@@ -1941,8 +1941,8 @@ The implementation should extend existing packages rather than introduce an auth
   - Requires engine edit authorization and runs idempotent deployment/process/decision metadata discovery with Runtime Resource Set rematerialization.
 - [x] ✅ `POST /engines-api/external/engines/:engineId/deployment-receipts`
   - Accepts an idempotent API-client or service-account receipt for a direct pipeline deployment only after API deployment eligibility passes; it stores sanitized lineage and updates runtime inventory.
-- [ ] ⬜ `GET /engines-api/engines/:engineId/deployments/:deploymentId/lineage`
-  - Returns sanitized ingestion source, lineage quality, project/file references, runtime keys, and reconciliation status.
+- [x] ✅ `GET /engines-api/engines/:engineId/deployments/:deploymentId/lineage`
+  - Returns sanitized ingestion source, lineage quality, project/file references, runtime keys, and reconciliation status from canonical history only; it never falls through to the raw engine deployment payload.
 
 Authorization:
 

@@ -184,7 +184,7 @@ describe('engines deployments routes', () => {
         if (entityName === 'EngineDeployment') {
           return {
             find: vi.fn().mockImplementation(() => Promise.resolve(deploymentHistoryRows)),
-            findOne: vi.fn().mockResolvedValue(null),
+            findOne: vi.fn().mockImplementation(() => Promise.resolve(deploymentHistoryRows[0] || null)),
             insert: vi.fn().mockImplementation((row) => {
               engineDeploymentInserts.push(row);
               return Promise.resolve({});
@@ -286,6 +286,42 @@ describe('engines deployments routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body[0]).toMatchObject({ lineageReadiness: 'bridge_ready', lineageIssues: [], artifactCount: 1, linkedArtifactCount: 1, versionedArtifactCount: 1 });
+  });
+
+  it('returns a sanitized canonical lineage view for one deployment', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'engine:deploy:view');
+    deploymentHistoryRows = [{
+      id: 'history-1', engineId: 'e1', camundaDeploymentId: 'camunda-1', projectId: 'project-1',
+      ingestionSource: 'pipeline_receipt', lineageQuality: 'reported', reportingPrincipalId: 'service-account-1',
+      deployedAt: 1700000000000, reconciledAt: 1700000001000, resourceCount: 1, status: 'success',
+      rawResponse: '{"secret":"must-not-leak"}', lineageJson: '{"internal":"must-not-leak"}',
+    }];
+    deploymentArtifactRows = [{
+      id: 'artifact-1', engineDeploymentId: 'history-1', artifactKind: 'process', artifactId: 'payments:3', artifactKey: 'payments', artifactVersion: 3,
+      tenantId: 'tenant-a', projectId: 'project-1', fileId: 'file-1', fileContentHash: 'must-not-leak', fileGitCommitMessage: 'must-not-leak',
+    }];
+
+    const response = await request(app).get('/engines-api/engines/e1/deployments/camunda-1/lineage');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'history-1', engineDeploymentId: 'camunda-1', ingestionSource: 'pipeline_receipt', lineageQuality: 'reported',
+      reconciliationStatus: 'reconciled', lineageReadiness: 'version_resolution_required',
+      artifacts: [{ artifactKind: 'process', runtimeResourceId: 'payments:3', runtimeResourceKey: 'payments', runtimeResourceVersion: 3, runtimeTenantId: 'tenant-a', projectId: 'project-1', fileId: 'file-1' }],
+    });
+    expect(response.body).not.toHaveProperty('rawResponse');
+    expect(response.body).not.toHaveProperty('lineageJson');
+    expect(response.body.artifacts[0]).not.toHaveProperty('fileContentHash');
+    expect(response.body.artifacts[0]).not.toHaveProperty('fileGitCommitMessage');
+  });
+
+  it('does not fall through to the raw engine deployment endpoint when canonical lineage is absent', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'engine:deploy:view');
+
+    const response = await request(app).get('/engines-api/engines/e1/deployments/missing/lineage');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ message: 'Deployment lineage not found' });
   });
 
   it('gets deployment by id through action metadata permission', async () => {

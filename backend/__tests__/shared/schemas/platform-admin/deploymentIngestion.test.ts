@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DeploymentHistoryViewSchema,
+  DeploymentLineageViewSchema,
   EngineMetadataReconciliationResultSchema,
   RuntimeResourceObservationSchema,
   ScheduledRuntimeInventoryReconciliationResultSchema,
@@ -32,6 +33,20 @@ describe('deployment ingestion contracts', () => {
     expect(() => DeploymentHistoryViewSchema.parse({ ...base, lineageQuality: 'guessed' })).toThrow();
     expect(() => DeploymentHistoryViewSchema.parse({ ...base, lineageReadiness: 'ready_enough' })).toThrow();
     expect(() => DeploymentHistoryViewSchema.parse({ ...base, lineageIssues: ['raw_database_error'] })).toThrow();
+  });
+
+  it('exposes only the sanitized lineage projection for an individual deployment', () => {
+    const result = DeploymentLineageViewSchema.parse({
+      id: 'history-1', engineId: 'engine-1', engineDeploymentId: 'deployment-1', projectId: 'project-1',
+      ingestionSource: 'pipeline_receipt', lineageQuality: 'reported', reconciledAt: 1, status: 'success',
+      lineageReadiness: 'version_resolution_required', lineageIssues: [], reconciliationStatus: 'reconciled',
+      artifacts: [{ artifactKind: 'process', runtimeResourceId: 'payments:3', runtimeResourceKey: 'payments', runtimeResourceVersion: 3, runtimeTenantId: null, projectId: 'project-1', fileId: 'file-1', fileContentHash: 'must-not-leak' }],
+      rawResponse: '{"secret":"must-not-leak"}', lineageJson: '{"internal":true}',
+    });
+
+    expect(result).not.toHaveProperty('rawResponse');
+    expect(result).not.toHaveProperty('lineageJson');
+    expect(result.artifacts[0]).not.toHaveProperty('fileContentHash');
   });
 
   it('shares strict runtime observation and reconciliation result shapes', () => {
