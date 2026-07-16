@@ -41,6 +41,7 @@ import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformS
 import { apiClient } from '../../../shared/api/client'
 import { getAccessibleEngines, requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
 import { filesApi } from '../../../api/starbase/files'
+import { foldersApi } from '../../../api/starbase/folders'
 import { projectsApi } from '../../../api/starbase/projects'
 import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
@@ -451,8 +452,11 @@ export default function ProjectDetail() {
       for (const id of batchDeleteIds) {
         const it = items.find((x) => x.id === id)
         if (!it) continue
-        const url = it.type === 'folder' ? `/starbase-api/folders/${id}` : `/starbase-api/files/${id}`
-        await apiClient.delete(url)
+        if (it.type === 'folder') {
+          await foldersApi.delete(id)
+        } else {
+          await filesApi.delete(id)
+        }
       }
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({
@@ -1434,7 +1438,7 @@ export default function ProjectDetail() {
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.delete(`/starbase-api/folders/${folder.id}`)
+      await foldersApi.delete(folder.id)
       deleteFolderModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({ kind: 'success', title: 'Folder deleted' })
@@ -1493,7 +1497,7 @@ export default function ProjectDetail() {
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.patch(`/starbase-api/folders/${folder.id}`, { parentFolderId: targetId })
+      await foldersApi.update(folder.id, { parentFolderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
@@ -1542,7 +1546,7 @@ export default function ProjectDetail() {
     if (!name) return
     try {
       setBusy(true)
-      const created = await apiClient.post<{ id?: string }>(`/starbase-api/projects/${projectId}/folders`, {
+      const created = await foldersApi.create(projectId, {
         name,
         parentFolderId: folderId ?? null,
       })
@@ -1771,7 +1775,7 @@ export default function ProjectDetail() {
                 if (!canDeleteFiles) return
                 if (file.type === 'folder') {
                   if (!file.id) return
-                  apiClient.get(`/starbase-api/folders/${file.id}/delete-preview`)
+                  foldersApi.getDeletePreview(file.id)
                     .then((preview: any) => {
                       deleteFolderModal.openModal({ id: file.id, name: file.name, preview })
                     })
