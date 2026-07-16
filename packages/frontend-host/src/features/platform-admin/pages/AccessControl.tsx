@@ -58,6 +58,13 @@ import {
 import { effectiveAccessSourceHeaders, isEffectiveAccessTabRequested, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
+import {
+  AuditReferenceLinks,
+  findAssignmentAuditEntries,
+  findMachineIdentityAuditEntries,
+  findMembershipAuditEntries,
+  formatAuditReferences,
+} from './access-control/auditReferences';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
 import { SsoAssignmentsPanel } from './access-control/SsoAssignmentsPanel';
@@ -186,7 +193,6 @@ import {
   type ExternalEngineSystem,
   type ExternalEngineSystemCreatePayload,
   type ExternalEngineSystemUpdatePayload,
-  type EffectiveAccessResult,
   type EngineSetDetail,
   type EngineSetSelector,
   type EngineSetSummary,
@@ -210,8 +216,6 @@ import {
   type SsoSyncRun,
   type AuthzResourceType,
 } from '../hooks/useAuthzApi';
-
-type EffectiveAccessSource = EffectiveAccessResult['sources'][number];
 
 interface RuntimeResourceInventoryRow {
   id: string;
@@ -1056,107 +1060,6 @@ function joinLineageParts(parts: Array<string | null | undefined>) {
   return filtered.length ? filtered.join('; ') : '-';
 }
 
-function parseAuditEntryContext(entry: AuthzAuditEntry): Record<string, unknown> {
-  if (!entry.context) return {};
-  try {
-    const parsed = JSON.parse(entry.context);
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
-  } catch {
-    return {};
-  }
-}
-
-function auditContextString(entry: AuthzAuditEntry) {
-  return entry.context || '';
-}
-
-function auditEntryReferences(entry: AuthzAuditEntry, values: Array<string | null | undefined>) {
-  const searchable = auditContextString(entry);
-  const context = parseAuditEntryContext(entry);
-  return values.filter(Boolean).some((value) => {
-    const normalized = String(value);
-    return entry.resourceId === normalized ||
-      Object.values(context).some((contextValue) => String(contextValue) === normalized) ||
-      searchable.includes(normalized);
-  });
-}
-
-function auditActionLooksMutating(action: string) {
-  return /\.(create|update|delete|remove|archive|enable|disable|sync|cleanup|reconcile|acknowledge|rotate|revoke)\b/.test(action);
-}
-
-function findAssignmentAuditEntries(
-  assignment: RoleAssignment,
-  entries: AuthzAuditEntry[],
-  mapping?: SsoAssignmentMapping | null,
-) {
-  const ids = [assignment.id, assignment.sourceMappingId, assignment.sourceRef, mapping?.id].filter(Boolean);
-  return entries.filter((entry) => {
-    if (!auditActionLooksMutating(entry.action)) return false;
-    if (entry.resourceType === 'role_assignment' && auditEntryReferences(entry, [assignment.id])) return true;
-    if (mapping && entry.resourceType === 'sso_assignment_mapping' && auditEntryReferences(entry, [mapping.id])) return true;
-    return auditEntryReferences(entry, ids);
-  });
-}
-
-function findMembershipAuditEntries(
-  membership: AuthzGroupMembership,
-  entries: AuthzAuditEntry[],
-  mapping?: SsoGroupMapping | IdentityEntitlementMapping | null,
-) {
-  const ids = [membership.id, membership.sourceRef, mapping?.id, membership.groupId, membership.userId].filter(Boolean);
-  return entries.filter((entry) => {
-    if (!auditActionLooksMutating(entry.action)) return false;
-    if (entry.resourceType === 'authz_group_membership' && auditEntryReferences(entry, [membership.id])) return true;
-    if (mapping && entry.resourceType === (membership.source === 'identity_provider' ? 'identity_entitlement_mapping' : 'sso_group_mapping') && auditEntryReferences(entry, [mapping.id])) return true;
-    return auditEntryReferences(entry, ids);
-  });
-}
-
-function findMachineIdentityAuditEntries(
-  principalType: 'api_client' | 'service_account',
-  principalId: string,
-  entries: AuthzAuditEntry[],
-) {
-  return entries.filter((entry) => {
-    if (!auditActionLooksMutating(entry.action)) return false;
-    if (entry.resourceType === principalType && auditEntryReferences(entry, [principalId])) return true;
-    if (entry.resourceType === 'role_assignment' && auditEntryReferences(entry, [principalId])) return true;
-    return auditEntryReferences(entry, [principalId, `${principalType}:${principalId}`]);
-  });
-}
-
-function findEffectiveAccessSourceAuditEntries(source: EffectiveAccessSource, entries: AuthzAuditEntry[]) {
-  const ids = [
-    source.assignmentId,
-    source.sourceMappingId,
-    source.sourceRef,
-    source.groupMembership?.id,
-    source.groupMembership?.sourceRef,
-    source.ssoMapping?.id,
-    source.ssoGroupMapping?.id,
-    source.identityEntitlementMapping?.id,
-    source.engineSetId,
-    source.materializationId,
-    source.engineRegistration?.registrationId,
-    source.engineRegistration?.engineId,
-    source.matchedEngineId,
-    source.principalId,
-    source.roleId,
-    source.scopeId,
-  ].filter(Boolean);
-  return entries.filter((entry) => {
-    if (!auditActionLooksMutating(entry.action)) return false;
-    if (source.assignmentId && entry.resourceType === 'role_assignment' && auditEntryReferences(entry, [source.assignmentId])) return true;
-    if (source.groupMembership?.id && entry.resourceType === 'authz_group_membership' && auditEntryReferences(entry, [source.groupMembership.id])) return true;
-    if (source.ssoMapping?.id && entry.resourceType === 'sso_assignment_mapping' && auditEntryReferences(entry, [source.ssoMapping.id])) return true;
-    if (source.ssoGroupMapping?.id && entry.resourceType === 'sso_group_mapping' && auditEntryReferences(entry, [source.ssoGroupMapping.id])) return true;
-    if (source.identityEntitlementMapping?.id && entry.resourceType === 'identity_entitlement_mapping' && auditEntryReferences(entry, [source.identityEntitlementMapping.id])) return true;
-    if (source.engineSetId && entry.resourceType === 'engine_set' && auditEntryReferences(entry, [source.engineSetId])) return true;
-    return auditEntryReferences(entry, ids);
-  });
-}
-
 function formatMachineDiagnosticCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
@@ -1180,44 +1083,6 @@ function countMachineIdentitiesWithAuditReferences(
     findMachineIdentityAuditEntries('service_account', account.id, entries).length > 0
   ).length;
   return apiClientCount + serviceAccountCount;
-}
-
-function formatAuditReferences(entries: AuthzAuditEntry[]) {
-  const sorted = [...entries].sort((a, b) => b.timestamp - a.timestamp).slice(0, 2);
-  if (sorted.length === 0) return '-';
-  return sorted
-    .map((entry) => `${entry.action} @ ${formatTimestamp(entry.timestamp)}`)
-    .join('; ');
-}
-
-function AuditReferenceLinks({
-  entries,
-  onOpen,
-}: {
-  entries: AuthzAuditEntry[];
-  onOpen?: (entry: AuthzAuditEntry) => void;
-}) {
-  const sorted = [...entries].sort((a, b) => b.timestamp - a.timestamp).slice(0, 2);
-  if (sorted.length === 0) return <>-</>;
-  if (!onOpen) return <>{formatAuditReferences(sorted)}</>;
-  return (
-    <div style={{ display: 'grid', justifyItems: 'start', gap: 'var(--spacing-1)' }}>
-      {sorted.map((entry) => {
-        const label = `${entry.action} @ ${formatTimestamp(entry.timestamp)}`;
-        return (
-          <Button
-            key={entry.id}
-            kind="ghost"
-            size="sm"
-            aria-label={`Open audit event ${label}`}
-            onClick={() => onOpen(entry)}
-          >
-            {label}
-          </Button>
-        );
-      })}
-    </div>
-  );
 }
 
 function formatAssignmentLineage(

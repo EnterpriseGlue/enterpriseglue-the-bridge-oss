@@ -1,6 +1,14 @@
 import React from 'react';
 import { Button } from '@carbon/react';
-import type { AuthzAuditEntry, EffectiveAccessResult } from '../../hooks/useAuthzApi';
+import type {
+  AuthzAuditEntry,
+  AuthzGroupMembership,
+  EffectiveAccessResult,
+  IdentityEntitlementMapping,
+  RoleAssignment,
+  SsoAssignmentMapping,
+  SsoGroupMapping,
+} from '../../hooks/useAuthzApi';
 
 type EffectiveAccessSource = EffectiveAccessResult['sources'][number];
 
@@ -15,6 +23,47 @@ function references(entry: AuthzAuditEntry, values: Array<string | null | undefi
 }
 function mutating(action: string) { return /\.(create|update|delete|remove|archive|enable|disable|sync|cleanup|reconcile|acknowledge|rotate|revoke)\b/.test(action); }
 function formatTimestamp(value: number | null | undefined) { return value ? new Date(value).toLocaleString() : '-'; }
+
+export function findAssignmentAuditEntries(
+  assignment: RoleAssignment,
+  entries: AuthzAuditEntry[],
+  mapping?: SsoAssignmentMapping | null,
+) {
+  const ids = [assignment.id, assignment.sourceMappingId, assignment.sourceRef, mapping?.id].filter(Boolean);
+  return entries.filter((entry) => {
+    if (!mutating(entry.action)) return false;
+    if (entry.resourceType === 'role_assignment' && references(entry, [assignment.id])) return true;
+    if (mapping && entry.resourceType === 'sso_assignment_mapping' && references(entry, [mapping.id])) return true;
+    return references(entry, ids);
+  });
+}
+
+export function findMembershipAuditEntries(
+  membership: AuthzGroupMembership,
+  entries: AuthzAuditEntry[],
+  mapping?: SsoGroupMapping | IdentityEntitlementMapping | null,
+) {
+  const ids = [membership.id, membership.sourceRef, mapping?.id, membership.groupId, membership.userId].filter(Boolean);
+  return entries.filter((entry) => {
+    if (!mutating(entry.action)) return false;
+    if (entry.resourceType === 'authz_group_membership' && references(entry, [membership.id])) return true;
+    if (mapping && entry.resourceType === (membership.source === 'identity_provider' ? 'identity_entitlement_mapping' : 'sso_group_mapping') && references(entry, [mapping.id])) return true;
+    return references(entry, ids);
+  });
+}
+
+export function findMachineIdentityAuditEntries(
+  principalType: 'api_client' | 'service_account',
+  principalId: string,
+  entries: AuthzAuditEntry[],
+) {
+  return entries.filter((entry) => {
+    if (!mutating(entry.action)) return false;
+    if (entry.resourceType === principalType && references(entry, [principalId])) return true;
+    if (entry.resourceType === 'role_assignment' && references(entry, [principalId])) return true;
+    return references(entry, [principalId, `${principalType}:${principalId}`]);
+  });
+}
 
 export function findEffectiveAccessSourceAuditEntries(source: EffectiveAccessSource, entries: AuthzAuditEntry[]) {
   const ids = [source.assignmentId, source.sourceMappingId, source.sourceRef, source.groupMembership?.id, source.groupMembership?.sourceRef, source.ssoMapping?.id, source.ssoGroupMapping?.id, source.identityEntitlementMapping?.id, source.engineSetId, source.materializationId, source.engineRegistration?.registrationId, source.engineRegistration?.engineId, source.matchedEngineId, source.principalId, source.roleId, source.scopeId];
