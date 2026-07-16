@@ -18,6 +18,9 @@ import type {
   ApiClient as SharedApiClient,
   ApiClientWithToken as SharedApiClientWithToken,
   CurrentUserPermissions as SharedCurrentUserPermissions,
+  CustomPermissionCreate as SharedCustomPermissionCreate,
+  CustomRoleCreate as SharedCustomRoleCreate,
+  CustomRoleUpdate as SharedCustomRoleUpdate,
   DeploymentEligibilityEvaluateResponse as SharedDeploymentEligibilityEvaluateResponse,
   EffectiveAccessEvaluateResponse,
   EngineSetDetail as SharedEngineSetDetail,
@@ -116,28 +119,10 @@ export type CurrentUserPermissions = SharedCurrentUserPermissions;
 export type RoleSummary = SharedRoleSummary;
 export type RoleDetail = SharedRoleDetail;
 
-export interface CreateCustomRolePayload {
-  name: string;
-  description?: string | null;
-  scope: AuthzResourceType;
-  permissionIds: string[];
-}
-
-export interface CreateCustomPermissionPayload {
-  key: string;
-  scope: AuthzResourceType;
-  category: string;
-  label: string;
-  description?: string | null;
-}
-
-export interface UpdateCustomRolePayload {
-  id: string;
-  name?: string;
-  description?: string | null;
-  permissionIds?: string[];
-  isArchived?: boolean;
-}
+export type CreateCustomRolePayload = SharedCustomRoleCreate;
+export type CreateCustomPermissionPayload = SharedCustomPermissionCreate;
+/** The API path owns the role id; the request body remains the shared schema. */
+export type UpdateCustomRolePayload = SharedCustomRoleUpdate & { id: string };
 
 export type RoleAssignment = SharedRoleAssignment;
 export type AuthzGroupSource = SharedAuthzGroupSource;
