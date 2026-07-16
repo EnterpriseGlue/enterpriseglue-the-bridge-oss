@@ -44,11 +44,16 @@ import { StarbaseTableShell } from '../../../starbase/components/StarbaseTableSh
 import type {
   EngineMember as SharedEngineMember,
   EngineMembersResponse as SharedEngineMembersResponse,
+  EngineRole as SharedEngineRole,
   PendingEngineInvite as SharedPendingEngineInvite,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
+import type {
+  RoleAssignment as SharedRoleAssignment,
+  RoleSummary as SharedRoleSummary,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 
 // Types
-type EngineRole = 'owner' | 'delegate' | 'operator' | 'deployer'
+type EngineRole = Exclude<SharedEngineRole, 'custom'>
 
 type EngineMember = SharedEngineMember
 
@@ -69,34 +74,13 @@ type PendingEngineInvite = SharedPendingEngineInvite
 type PendingEngineInviteStatus = PendingEngineInvite['status']
 type EngineMembersResponse = SharedEngineMembersResponse
 type MemberModalFlow = 'invite' | 'delegate'
-type AssignableEngineRole = 'delegate' | 'operator' | 'deployer'
+type AssignableEngineRole = Exclude<EngineRole, 'owner'>
 type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
-type ScopedAssignableRole = {
-  id: string
-  key?: string | null
-  name: string
-  description?: string | null
-  scope: 'engine'
-  kind: 'system' | 'custom'
-  isAssignable: boolean
-  isArchived: boolean
-}
-type ScopedRoleAssignment = {
-  id: string
-  userId?: string | null
-  principalType?: AuthzPrincipalType | null
-  principalId?: string | null
-  roleId: string
-  roleName: string | null
-  roleScope: 'engine' | null
-  scopeType?: 'engine' | null
-  scopeId?: string | null
-  resourceType: 'engine' | null
-  resourceId: string | null
-  source: 'manual' | 'sso' | 'api' | 'system' | 'legacy' | 'automation' | 'bootstrap'
-  sourceMappingId?: string | null
-  sourceRef?: string | null
-}
+type ScopedAssignableRole = SharedRoleSummary
+type ScopedRoleAssignment = SharedRoleAssignment
+type ScopedRoleAssignmentDisplay = Pick<SharedRoleAssignment, 'id' | 'roleId' | 'source'> & Partial<Pick<SharedRoleAssignment,
+  'userId' | 'principalType' | 'principalId' | 'sourceMappingId' | 'sourceRef'
+>>
 
 const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
   user: 'User',
@@ -210,15 +194,15 @@ function getEngineRoleDescription(role: AssignableEngineRole): string {
   }
 }
 
-function scopedAssignmentPrincipalType(assignment: ScopedRoleAssignment): AuthzPrincipalType {
+function scopedAssignmentPrincipalType(assignment: ScopedRoleAssignmentDisplay): AuthzPrincipalType {
   return assignment.principalType || 'user'
 }
 
-function scopedAssignmentPrincipalId(assignment: ScopedRoleAssignment): string {
+function scopedAssignmentPrincipalId(assignment: ScopedRoleAssignmentDisplay): string {
   return assignment.principalId || assignment.userId || ''
 }
 
-function formatScopedAssignmentPrincipal(assignment: ScopedRoleAssignment): string {
+function formatScopedAssignmentPrincipal(assignment: ScopedRoleAssignmentDisplay): string {
   const type = scopedAssignmentPrincipalType(assignment)
   const id = scopedAssignmentPrincipalId(assignment)
   return `${ASSIGNMENT_PRINCIPAL_TYPE_LABELS[type]}: ${id || 'unknown'}`
@@ -233,7 +217,7 @@ function formatScopedRoleName(roleId: string, roleName?: string | null): string 
   return roleId
 }
 
-export function formatScopedAssignmentSourceLineage(assignment: ScopedRoleAssignment | null | undefined): string {
+export function formatScopedAssignmentSourceLineage(assignment: ScopedRoleAssignmentDisplay | null | undefined): string {
   if (!assignment) return '-'
   const sourceLabel = assignment.source === 'sso'
     ? 'SSO-managed assignment'
@@ -254,11 +238,11 @@ export function formatScopedAssignmentSourceLineage(assignment: ScopedRoleAssign
   return parts.join('; ')
 }
 
-function isGovernanceScopedAssignment(assignment: ScopedRoleAssignment): boolean {
+function isGovernanceScopedAssignment(assignment: ScopedRoleAssignmentDisplay): boolean {
   return assignment.roleId === 'system.engine.owner' || assignment.roleId === 'system.engine.delegate'
 }
 
-function tagTypeForAssignmentSource(source: ScopedRoleAssignment['source']): 'blue' | 'green' | 'purple' | 'gray' {
+function tagTypeForAssignmentSource(source: ScopedRoleAssignmentDisplay['source']): 'blue' | 'green' | 'purple' | 'gray' {
   switch (source) {
     case 'manual':
       return 'green'
