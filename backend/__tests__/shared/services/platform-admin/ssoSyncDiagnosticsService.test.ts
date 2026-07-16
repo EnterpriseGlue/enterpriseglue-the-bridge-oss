@@ -481,6 +481,7 @@ describe('ssoSyncDiagnosticsService', () => {
           email: 'refresh@example.com',
           groups: ['old-group'],
           roles: ['deployer'],
+          __enterpriseglue_authz_attributes: { clearance: ['regulated'] },
         }),
       },
       {
@@ -566,6 +567,7 @@ describe('ssoSyncDiagnosticsService', () => {
       claimsJson: JSON.stringify({
         groups: ['group-a', 'group-b'],
         roles: ['deployer'],
+        __enterpriseglue_authz_attributes: { clearance: ['regulated'] },
       }),
       lastProviderCheckAt: 2500,
     }));

@@ -296,6 +296,19 @@ function parseClaimsSnapshot(claimsJson: string | null | undefined): SsoClaims |
   }
 }
 
+/**
+ * A provider refresh may only return groups and roles. Preserve custom
+ * attributes that were already sanitized at login, without treating the
+ * snapshot as an unrestricted claims document.
+ */
+function persistedAuthorizationAttributes(claims: SsoClaims): Record<string, unknown> {
+  const value = (claims as Record<string, unknown>).__enterpriseglue_authz_attributes;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => /^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(key))
+    .slice(0, 20));
+}
+
 function normalizeClaimArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return Array.from(new Set(value.map((item) => String(item || '').trim()).filter(Boolean)));
@@ -510,8 +523,16 @@ class SsoSyncDiagnosticsServiceClass {
           try {
             const refresh = await ssoProviderIdentityCheckService.refreshClaims(identity, claims);
             if (refresh.status === 'refreshed' && refresh.claims) {
+              const storedAuthorizationAttributes = persistedAuthorizationAttributes(claims);
               claims = refresh.claims;
-              const persistedClaims = allowlistedIdentityClaims(claims);
+              const authorizationAttributes = {
+                ...storedAuthorizationAttributes,
+                ...persistedAuthorizationAttributes(claims),
+              };
+              const persistedClaims = allowlistedIdentityClaims(
+                { ...authorizationAttributes, ...claims },
+                Object.keys(authorizationAttributes),
+              );
               result.refreshedIdentities = (result.refreshedIdentities ?? 0) + 1;
               await identityRepo.update({ id: identity.id }, {
                 groupsJson: stringifyJsonValue(normalizeClaimArray(persistedClaims.groups), '[]'),
