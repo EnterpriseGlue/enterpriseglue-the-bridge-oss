@@ -19,6 +19,7 @@ import {
   CreateInvitationRequestSchema,
   CreateInvitationResponseSchema,
   InvitationCapabilitiesResponseSchema,
+  InvitationInfoSchema,
   InvitationOnboardingResponseSchema,
   InvitationTokenParamsSchema,
   VerifyInvitationOtpRequestSchema,
@@ -151,7 +152,7 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUse
 
 router.get('/api/invitations/:token', apiLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
   const info = await invitationService.getInvitationInfo(String(req.params.token));
-  res.json(info);
+  res.json(InvitationInfoSchema.parse(info));
 }));
 
 router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), validateBody(VerifyInvitationOtpRequestSchema), asyncHandler(async (req, res) => {

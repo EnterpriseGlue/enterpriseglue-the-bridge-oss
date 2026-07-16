@@ -3,6 +3,7 @@ import {
   CreateInvitationRequestSchema,
   CreateInvitationResponseSchema,
   InvitationCapabilitiesResponseSchema,
+  InvitationInfoSchema,
   InvitationOnboardingResponseSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
@@ -32,6 +33,21 @@ describe('generic invitation contracts', () => {
       tenantSlug: 'default',
       deliveryMethod: 'email',
     })).toMatchObject({ requiresPasswordSet: true, deliveryMethod: 'email' });
+    expect(InvitationInfoSchema.parse({
+      email: 'invitee@example.com',
+      tenantSlug: 'default',
+      resourceType: 'platform_user',
+      resourceName: null,
+      resourceRole: null,
+      resourceRoles: [],
+      deliveryMethod: 'manual',
+      expiresAt: 1_700_000_000_000,
+      status: 'onboarding',
+    })).toMatchObject({ resourceType: 'platform_user', status: 'onboarding' });
+    expect(CreateInvitationRequestSchema.safeParse({
+      email: 'invitee@example.com',
+      resourceType: 'platform_user',
+    }).success).toBe(false);
   });
 
   it('publishes the same invitation contracts through OpenAPI', () => {
@@ -41,6 +57,11 @@ describe('generic invitation contracts', () => {
     const create = document.paths?.['/api/t/{tenantSlug}/invitations']?.post;
     const request = create?.requestBody?.content?.['application/json']?.schema;
     const response = create?.responses?.['201']?.content?.['application/json']?.schema;
+    const invitationInfo = document.paths?.['/api/invitations/{token}']?.get?.responses?.['200']
+      ?.content?.['application/json']?.schema;
+    const otp = document.paths?.['/api/invitations/{token}/verify-otp']?.post;
+    const onboarding = document.paths?.['/api/auth/complete-onboarding']?.post?.requestBody
+      ?.content?.['application/json']?.schema;
 
     expect(capabilities).toMatchObject({
       type: 'object',
@@ -53,6 +74,18 @@ describe('generic invitation contracts', () => {
     expect(response).toMatchObject({
       type: 'object',
       properties: { invited: { type: 'boolean', enum: [true] } },
+    });
+    expect(invitationInfo).toMatchObject({
+      type: 'object',
+      properties: { status: { type: 'string', enum: ['pending', 'expired', 'onboarding'] } },
+    });
+    expect(otp?.requestBody?.content?.['application/json']?.schema).toMatchObject({
+      type: 'object',
+      properties: { oneTimePassword: { type: 'string', minLength: 1 } },
+    });
+    expect(onboarding).toMatchObject({
+      type: 'object',
+      properties: { newPassword: { type: 'string', minLength: 8 } },
     });
   });
 });

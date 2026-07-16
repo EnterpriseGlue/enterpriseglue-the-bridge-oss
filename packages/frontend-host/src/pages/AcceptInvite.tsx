@@ -12,7 +12,13 @@ import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
 import { useAuth } from '../shared/hooks/useAuth';
-import type { User } from '../shared/types/auth';
+import type { LoginResponse } from '../shared/types/auth';
+import type {
+  CompleteOnboardingRequest,
+  InvitationInfo,
+  InvitationOnboardingResponse,
+  VerifyInvitationOtpRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 import logoPng from '../assets/logo.png';
 
 interface PublicBranding {
@@ -104,22 +110,6 @@ function makeLogoObjectUrl(raw: unknown): string | null {
   return URL.createObjectURL(new Blob([parsed.bytes], { type: parsed.mime }));
 }
 
-interface InviteInfo {
-  email: string;
-  tenantSlug: string;
-  resourceType: 'platform_user' | 'tenant' | 'project' | 'engine';
-  resourceName: string | null;
-  resourceRole: string | null;
-  resourceRoles: string[];
-  deliveryMethod: 'email' | 'manual';
-  expiresAt: number;
-  status: 'pending' | 'expired' | 'onboarding';
-}
-
-interface CompleteOnboardingResponse {
-  user: User;
-}
-
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
@@ -132,7 +122,7 @@ export default function AcceptInvite() {
   const [redeeming, setRedeeming] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<InvitationInfo | null>(null);
   const [completed, setCompleted] = useState(false);
   const [stage, setStage] = useState<'redeem' | 'verify' | 'set-password'>('verify');
   const [firstName, setFirstName] = useState('');
@@ -232,7 +222,7 @@ export default function AcceptInvite() {
   const loadInviteInfo = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<InviteInfo>(`/api/invitations/${token}`);
+      const data = await apiClient.get<InvitationInfo>(`/api/invitations/${token}`);
       setInviteInfo(data);
       if (data.status === 'onboarding') {
         setStage('set-password');
@@ -254,7 +244,7 @@ export default function AcceptInvite() {
 
     try {
       setRedeeming(true);
-      await apiClient.post(`/api/invitations/${token}/redeem`, {});
+      await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/redeem`, {});
       setStage('set-password');
       if (onboardingStageKey) {
         window.sessionStorage.setItem(onboardingStageKey, 'set-password');
@@ -273,7 +263,8 @@ export default function AcceptInvite() {
     try {
       setVerifying(true);
 
-      await apiClient.post(`/api/invitations/${token}/verify-otp`, { oneTimePassword });
+      const request: VerifyInvitationOtpRequest = { oneTimePassword };
+      await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/verify-otp`, request);
       setStage('set-password');
       if (onboardingStageKey) {
         window.sessionStorage.setItem(onboardingStageKey, 'set-password');
@@ -299,11 +290,12 @@ export default function AcceptInvite() {
 
     try {
       setCompleting(true);
-      const response = await apiClient.post<CompleteOnboardingResponse>('/api/auth/complete-onboarding', {
+      const request: CompleteOnboardingRequest = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         newPassword: password,
-      });
+      };
+      const response = await apiClient.post<LoginResponse>('/api/auth/complete-onboarding', request);
       setAuthenticatedUser(response.user);
       setCompleted(true);
       if (onboardingStageKey) {

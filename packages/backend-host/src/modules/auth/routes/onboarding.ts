@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireOnboarding } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
@@ -14,17 +13,15 @@ import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
+import {
+  CompleteOnboardingRequestSchema,
+  type CompleteOnboardingRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 
 const router = Router();
 
-const completeOnboardingSchema = z.object({
-  firstName: z.string().trim().min(1).max(100),
-  lastName: z.string().trim().min(1).max(100),
-  newPassword: z.string().min(8),
-});
-
-router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, validateBody(completeOnboardingSchema), asyncHandler(async (req, res) => {
-  const { firstName, lastName, newPassword } = req.body as z.infer<typeof completeOnboardingSchema>;
+router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, validateBody(CompleteOnboardingRequestSchema), asyncHandler(async (req, res) => {
+  const { firstName, lastName, newPassword } = req.body as CompleteOnboardingRequest;
   const validation = validatePassword(newPassword);
   if (!validation.valid) {
     return res.status(400).json({ error: validation.errors.join('. ') });

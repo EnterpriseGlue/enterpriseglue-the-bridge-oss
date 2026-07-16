@@ -1828,6 +1828,11 @@ const {
   InvitationCapabilitiesResponseSchema,
   CreateInvitationRequestSchema,
   CreateInvitationResponseSchema,
+  InvitationInfoSchema,
+  InvitationOnboardingResponseSchema,
+  InvitationTokenParamsSchema,
+  VerifyInvitationOtpRequestSchema,
+  CompleteOnboardingRequestSchema,
 } = await import('@enterpriseglue/shared/schemas/platform-admin/index.js');
 
 // Environment Tags
@@ -2922,7 +2927,7 @@ registry.registerPath({
   method: 'post',
   path: '/api/auth/complete-onboarding',
   ...authzExemption('POST', '/api/auth/complete-onboarding'),
-  request: { body: { content: { 'application/json': { schema: z.object({ firstName: z.string().min(1).max(100), lastName: z.string().min(1).max(100), newPassword: z.string().min(8) }) } } } },
+  request: { body: { content: { 'application/json': { schema: CompleteOnboardingRequestSchema } } } },
   responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number(), emailVerificationRequired: z.literal(false) }) } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' } },
 });
 
@@ -2932,6 +2937,30 @@ registry.registerPath({
   path: '/api/auth/logout',
   ...authzExemption('POST', '/api/auth/logout'),
   responses: { 200: { description: 'Logged out' } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/api/invitations/{token}',
+  ...authzExemption('GET', '/api/invitations/:token'),
+  request: { params: InvitationTokenParamsSchema },
+  responses: { 200: { description: 'Public invitation status', content: { 'application/json': { schema: InvitationInfoSchema } } }, 404: { description: 'Invitation not found' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/invitations/{token}/verify-otp',
+  ...authzExemption('POST', '/api/invitations/:token/verify-otp'),
+  request: {
+    params: InvitationTokenParamsSchema,
+    body: { content: { 'application/json': { schema: VerifyInvitationOtpRequestSchema } } },
+  },
+  responses: { 200: { description: 'Manual invitation verified for onboarding', content: { 'application/json': { schema: InvitationOnboardingResponseSchema } } }, 400: { description: 'Invalid or expired invitation' } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/api/invitations/{token}/redeem',
+  ...authzExemption('POST', '/api/invitations/:token/redeem'),
+  request: { params: InvitationTokenParamsSchema },
+  responses: { 200: { description: 'Email invitation redeemed for onboarding', content: { 'application/json': { schema: InvitationOnboardingResponseSchema } } }, 400: { description: 'Invalid or expired invitation' } },
 });
 
 // POST /api/auth/refresh
