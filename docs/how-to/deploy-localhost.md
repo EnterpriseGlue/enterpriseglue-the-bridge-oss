@@ -110,6 +110,9 @@ PLAYWRIGHT_BASE_URL='http://localhost:5173' \
 pnpm test:authz:local-login
 ```
 
+Run the same environment variables with `pnpm test:authz:local-access-control`
+to verify the authenticated administrator can open the Access Control UI.
+
 If Chromium is not installed for this workspace, run `pnpm exec playwright
 install chromium` once. The command fails rather than skipping if either
 credential is absent.

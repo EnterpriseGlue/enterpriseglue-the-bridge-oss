@@ -49,14 +49,15 @@ test('the local-safe lanes preserve every focused authorization check once', () 
   assert.equal(new Set(leafChecks).size, leafChecks.length, 'each focused check belongs to one lane');
 });
 
-test('browser, local-login, and LDAP-container boundaries stay opt-in', () => {
+test('browser, credentialed local authorization, and LDAP-container boundaries stay opt-in', () => {
   const localCommands = [...localLanes, 'test:authz-refactor']
     .map((name) => scripts[name])
     .join(' ');
 
-  assert.doesNotMatch(localCommands, /test:(?:identity:(?:browser|ldap)|authz:local-login)/);
+  assert.doesNotMatch(localCommands, /test:(?:identity:(?:browser|ldap)|authz:local-(?:login|access-control))/);
 });
 
-test('the local-login smoke fails clearly instead of silently skipping without credentials', () => {
+test('credentialed local authorization smokes use the guarded runner', () => {
   assert.match(scripts['test:authz:local-login'], /run-authz-local-login-test\.sh/);
+  assert.match(scripts['test:authz:local-access-control'], /run-authz-local-login-test\.sh/);
 });

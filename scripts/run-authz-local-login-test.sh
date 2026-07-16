@@ -3,6 +3,11 @@ set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-http://localhost:5173}"
 
+if [[ "$#" -eq 0 ]]; then
+  echo "[authz-local-login] Provide one or more Playwright test paths." >&2
+  exit 64
+fi
+
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
 const value = process.argv[2];
@@ -38,4 +43,4 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
 fi
 
 # Avoid mutating the local database: this smoke uses an existing disposable account.
-E2E_SEED_USER=false pnpm exec playwright test test/e2e/smoke/login.spec.ts --config test/e2e/playwright.config.ts
+E2E_SEED_USER=false pnpm exec playwright test "$@" --config test/e2e/playwright.config.ts

@@ -237,6 +237,9 @@ PLAYWRIGHT_BASE_URL='http://localhost:5173' \
 pnpm test:authz:local-login
 ```
 
+To also verify that the authenticated administrator can reach the Access
+Control UI, repeat the command with `pnpm test:authz:local-access-control`.
+
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
 - `ENTERPRISEGLUE_API_URL` as an Environment variable;
