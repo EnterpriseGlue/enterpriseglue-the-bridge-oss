@@ -60,7 +60,7 @@ import type {
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags } from './api/engines'
+import { getAccessibleEngines, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1408,7 +1408,7 @@ export default function Engines() {
   const hasSingleTag = Array.isArray(envTags) && envTags.length === 1
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
-  const listQ = useQuery({ queryKey: ['engines'], queryFn: () => apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines', undefined, { credentials: 'include' }) })
+  const listQ = useQuery({ queryKey: ['engines'], queryFn: getAccessibleEngines })
   const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({
