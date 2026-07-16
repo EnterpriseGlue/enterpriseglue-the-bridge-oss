@@ -171,9 +171,27 @@ curl --fail --silent --show-error \
 ```
 
 For the disposable local provider, configure `https://localhost:8180/realms/enterpriseglue-local`
-as the issuer and use an `https://localhost:5443/api/auth/identity/<provider-key>/callback`
-callback URL. The imported client is public and requires PKCE, so the local
-provider configuration does not need a client secret reference.
+as the issuer and use the application's shared
+`https://localhost:5443/api/auth/identity/callback` callback URL. The imported
+client is public and requires PKCE, so the local provider configuration does
+not need a client secret reference.
+
+To configure that provider through the application API, use an existing local
+platform-administrator account. The helper never reads Docker environment
+values or prints credentials, tokens, cookies, or API responses; it only
+targets local HTTPS hosts and connection-tests the newly configured provider.
+
+```bash
+LOCAL_OIDC_ADMIN_EMAIL='your-local-admin@example.test' \
+LOCAL_OIDC_ADMIN_PASSWORD='your-local-admin-password' \
+./scripts/configure-local-oidc-provider.sh
+```
+
+It defaults to the Keycloak issuer, public client, generated CA, TLS frontend,
+and provider key shown above. Override only the documented `LOCAL_OIDC_*`
+variables when rehearsing a different localhost instance. The provider is
+enabled only after the authenticated configuration call succeeds; remove or
+disable the disposable provider when the rehearsal is complete.
 
 Playwright does not import this disposable CA into Chromium. The guarded local
 browser lane can therefore opt into certificate-error handling only for this
