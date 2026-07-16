@@ -1,18 +1,10 @@
 import React from 'react';
 import { Button, DataTable, DataTableSkeleton, Dropdown, InlineNotification, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TableToolbar, TableToolbarContent, TableToolbarSearch, Tag, TextInput } from '@carbon/react';
 import { Add, TrashCan } from '@carbon/icons-react';
-import type { DeploymentEligibilityResult, ProjectEngineTarget, ProjectEngineTargetMode, ProjectEngineTargetSource } from '../../hooks/useAuthzApi';
+import type { DeploymentEligibilityResult, ProjectEngineTarget, ProjectEngineTargetMode } from '../../hooks/useAuthzApi';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
-const projectEngineTargetHeaders=[{key:'project',header:'Project'},{key:'engine',header:'Engine'},{key:'environment',header:'Environment'},{key:'status',header:'Status'},{key:'source',header:'Source'},{key:'modes',header:'Modes'},{key:'approval',header:'Approval'},{key:'external',header:'External refs'},{key:'diagnostics',header:'Diagnostics'},{key:'actions',header:''}];
-const PROJECT_ENGINE_TARGET_MODES:Array<{id:ProjectEngineTargetMode;label:string}>=[{id:'manual',label:'Manual'},{id:'ci',label:'CI'},{id:'api',label:'API'},{id:'import',label:'Import'}];
-const sourceOwned=new Set<ProjectEngineTargetSource>(['ci','api','external','system','automation','config']);
-const label=(value:string)=>value.split('_').map(x=>x[0]?.toUpperCase()+x.slice(1)).join(' ');
-const isSourceOwnedProjectTarget=(target:ProjectEngineTarget)=>sourceOwned.has(target.source)&&!(target.source==='config'&&target.ownershipMode==='config_warn');
-const formatProjectEngineTargetModes=(t:ProjectEngineTarget)=>[t.allowManualDeploy?'Manual':'',t.allowCiDeploy?'CI':'',t.allowApiDeploy?'API':'',t.allowImport?'Import':''].filter(Boolean).join(', ')||'-';
-const formatProjectEngineTargetExternalRefs=(t:ProjectEngineTarget)=>[t.externalSystemId?'system='+t.externalSystemId:'',t.externalProjectId?'project='+t.externalProjectId:'',t.externalEngineId?'engine='+t.externalEngineId:'',t.externalTargetId?'target='+t.externalTargetId:''].filter(Boolean).join(', ')||'-';
-const formatProjectEngineTargetDiagnostics=(t:ProjectEngineTarget)=>[t.policyTags.length?'Policies: '+t.policyTags.join(', '):'',t.diagnostics?Object.entries(t.diagnostics).map(([k,v])=>k+': '+(typeof v==='object'?JSON.stringify(v):String(v))).join(', '):''].filter(Boolean).join(' | ')||'-';
-const formatDeploymentEligibility=(r:DeploymentEligibilityResult)=>r.allowed?'Allowed':r.reasons.length?r.reasons.join('; '):'Denied';
+import { formatDeploymentEligibility, formatProjectEngineTargetDiagnostics, formatProjectEngineTargetExternalRefs, formatProjectEngineTargetModes, isSourceOwnedProjectTarget, projectEngineTargetHeaders, projectEngineTargetLabel, projectEngineTargetModes } from './projectEngineTargetPresentation';
 export function ProjectEngineTargetsPanel({
   targets,
   loading,
@@ -57,7 +49,7 @@ export function ProjectEngineTargetsPanel({
     engineId: '',
     mode: 'manual' as ProjectEngineTargetMode,
   });
-  const selectedEvaluateMode = PROJECT_ENGINE_TARGET_MODES.find((item) => item.id === evaluateForm.mode) || PROJECT_ENGINE_TARGET_MODES[0];
+  const selectedEvaluateMode = projectEngineTargetModes.find((item) => item.id === evaluateForm.mode) || projectEngineTargetModes[0];
   const filteredTargets = React.useMemo(() => targets.filter((target) => {
     const matchesProject = !projectFilter.trim() || target.projectId.toLowerCase().includes(projectFilter.trim().toLowerCase()) || (target.projectName || '').toLowerCase().includes(projectFilter.trim().toLowerCase());
     const matchesEngine = !engineFilter.trim() || target.engineId.toLowerCase().includes(engineFilter.trim().toLowerCase()) || (target.engineName || '').toLowerCase().includes(engineFilter.trim().toLowerCase());
@@ -106,7 +98,7 @@ export function ProjectEngineTargetsPanel({
             status: target.status,
             source: target.source,
             modes: formatProjectEngineTargetModes(target),
-            approval: label(target.approvalStatus),
+            approval: projectEngineTargetLabel(target.approvalStatus),
             external: formatProjectEngineTargetExternalRefs(target),
             diagnostics: formatProjectEngineTargetDiagnostics(target),
             actions: '',
@@ -151,7 +143,7 @@ export function ProjectEngineTargetsPanel({
                           if (cell.info.header === 'status') {
                             const status = String(cell.value);
                             const type = status === 'active' ? 'green' : status === 'disabled' ? 'gray' : 'red';
-                            return <TableCell key={cell.id}><Tag type={type}>{label(status)}</Tag></TableCell>;
+                            return <TableCell key={cell.id}><Tag type={type}>{projectEngineTargetLabel(status)}</Tag></TableCell>;
                           }
                           if (cell.info.header === 'source') {
                             return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'warm-gray' : target?.source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{target?.source === 'config' && target.ownershipMode === 'config_warn' ? 'Config warning' : target?.source === 'config' ? 'Managed by config' : cell.value}</Tag>{target?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
@@ -202,7 +194,7 @@ export function ProjectEngineTargetsPanel({
           id="target-evaluate-mode"
           titleText="Mode"
           label="Mode"
-          items={PROJECT_ENGINE_TARGET_MODES}
+          items={projectEngineTargetModes}
           itemToString={(item) => item?.label || ''}
           selectedItem={selectedEvaluateMode}
           onChange={({ selectedItem }) => setEvaluateForm((current) => ({ ...current, mode: (selectedItem?.id || 'manual') as ProjectEngineTargetMode }))}
