@@ -110,6 +110,7 @@ const {
   HistoricDecisionQueryParams,
   UserOperationLogQueryParams,
   MetricSchema,
+  MetricsResultSchema,
   MetricsQueryParams,
   ModificationInstructionSchema,
   ProcessInstanceModificationRequest,
@@ -1546,8 +1547,8 @@ registry.registerPath({ method: 'get', path: '/mission-control-api/history/user-
 
 // Metrics
 registry.register('Metric', MetricSchema);
-registry.registerPath({ method: 'get', path: '/mission-control-api/metrics', ...authzExtension('engine.runtime.metrics.read', 'GET', '/mission-control-api/metrics'), request: { query: MetricsQueryParams.partial() }, responses: { 200: { description: 'Query metrics', content: { 'application/json': { schema: z.array(MetricSchema) } } } } });
-registry.registerPath({ method: 'get', path: '/mission-control-api/metrics/{name}', ...authzExtension('engine.runtime.metrics.read', 'GET', '/mission-control-api/metrics/{name}'), request: { params: z.object({ name: z.string() }), query: MetricsQueryParams.partial() }, responses: { 200: { description: 'Get metric by name', content: { 'application/json': { schema: z.array(MetricSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/mission-control-api/metrics', ...authzExtension('engine.runtime.metrics.read', 'GET', '/mission-control-api/metrics'), request: { query: MetricsQueryParams.partial() }, responses: { 200: { description: 'Query metrics', content: { 'application/json': { schema: MetricsResultSchema } } } } });
+registry.registerPath({ method: 'get', path: '/mission-control-api/metrics/{name}', ...authzExtension('engine.runtime.metrics.read', 'GET', '/mission-control-api/metrics/{name}'), request: { params: z.object({ name: z.string() }), query: MetricsQueryParams.partial() }, responses: { 200: { description: 'Get metric by name', content: { 'application/json': { schema: MetricSchema } } } } });
 
 // -----------------------------
 // Modification & Restart

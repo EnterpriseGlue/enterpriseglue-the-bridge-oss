@@ -34,8 +34,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 }));
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/metrics-service.js', () => ({
-  listMetrics: vi.fn().mockResolvedValue([{ name: 'activity-instance-start', value: 100 }]),
-  getMetric: vi.fn().mockResolvedValue({ name: 'activity-instance-start', value: 100 }),
+  listMetrics: vi.fn().mockResolvedValue([{ timestamp: '2026-07-17T00:00:00.000Z', name: 'activity-instance-start', value: 100 }]),
+  getMetric: vi.fn().mockResolvedValue({ timestamp: '2026-07-17T00:00:00.000Z', name: 'activity-instance-start', value: 100 }),
 }));
 
 describe('mission-control metrics routes', () => {
@@ -68,6 +68,7 @@ describe('mission-control metrics routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toHaveLength(1);
+    expect(response.body[0]).toMatchObject({ name: 'activity-instance-start' });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'engine',
@@ -81,7 +82,7 @@ describe('mission-control metrics routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body.name).toBe('activity-instance-start');
+    expect(response.body).toMatchObject({ name: 'activity-instance-start' });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'engine',

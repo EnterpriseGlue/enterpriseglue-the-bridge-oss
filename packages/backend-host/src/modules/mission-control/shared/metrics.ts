@@ -4,7 +4,11 @@ import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { listMetrics, getMetric } from './metrics-service.js';
-import { MetricsQueryParams } from '@enterpriseglue/shared/schemas/mission-control/metrics.js';
+import {
+  MetricSchema,
+  MetricsQueryParams,
+  MetricsResultSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/metrics.js';
 
 const r = Router();
 
@@ -19,7 +23,7 @@ r.use(
 r.get('/mission-control-api/metrics', validateQuery(MetricsQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await listMetrics(engineId, req.query);
-  res.json(data);
+  res.json(MetricsResultSchema.parse(data));
 }));
 
 // Get specific metric by name
@@ -27,7 +31,7 @@ r.get('/mission-control-api/metrics/:name', validateQuery(MetricsQueryParams.par
   const engineId = (req as any).engineId as string;
   const metricName = String(req.params.name);
   const data = await getMetric(engineId, metricName, req.query);
-  res.json(data);
+  res.json(MetricSchema.parse(data));
 }));
 
 export default r;

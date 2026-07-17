@@ -2309,6 +2309,8 @@ Task aggregate reads now serialize a single shared non-negative-integer count re
 
 Migration plan and generate-request shapes now live in the shared Mission Control schema package. OpenAPI documents only the implemented `/migration/generate` endpoint and its engine-compatible plan response; the stale `/migration/plan/generate` entry has been removed.
 
+Metrics now serialize their existing shared contracts at the route boundary: collection reads return a metrics array and a named metric read returns one metric. OpenAPI now distinguishes those two response shapes.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.
