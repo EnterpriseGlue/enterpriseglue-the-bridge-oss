@@ -154,6 +154,28 @@ describe('mission-control direct routes', () => {
     });
   });
 
+  it('rejects malformed direct-operation payloads after authorization', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/direct/jobs/retries')
+      .send({ engineId: 'engine-1', processInstanceIds: 'i1', retries: -1 });
+
+    expect(response.status).toBe(400);
+    expect(setJobRetriesDirect).not.toHaveBeenCalled();
+  });
+
+  it('retains direct-operation defaults and compatible extension fields', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/direct/jobs/retries')
+      .send({ engineId: 'engine-1', processInstanceIds: ['i1'], adapterHint: 'legacy-engine' });
+
+    expect(response.status).toBe(200);
+    expect(setJobRetriesDirect).toHaveBeenCalledWith('engine-1', {
+      processInstanceIds: ['i1'],
+      retries: 1,
+      onlyFailed: true,
+    });
+  });
+
   it('denies direct delete when delete permission is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 

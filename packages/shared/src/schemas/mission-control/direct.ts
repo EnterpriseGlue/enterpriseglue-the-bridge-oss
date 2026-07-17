@@ -5,8 +5,10 @@ import { z } from 'zod'
 // handlers intentionally preserve compatible engine-specific request fields.
 const DirectOperationRequestBaseSchema = z.object({
   engineId: z.string(),
-  processInstanceIds: z.array(z.string()),
-})
+  // Existing direct routes treat an omitted selection as an empty selection.
+  // Keep that behavior while rejecting malformed selection values.
+  processInstanceIds: z.array(z.string()).default([]),
+}).passthrough()
 
 export const DirectProcessInstanceDeleteRequestSchema = DirectOperationRequestBaseSchema.extend({
   skipCustomListeners: z.boolean().optional(),
@@ -19,8 +21,8 @@ export const DirectProcessInstanceDeleteRequestSchema = DirectOperationRequestBa
 export const DirectProcessInstanceSuspensionRequestSchema = DirectOperationRequestBaseSchema
 
 export const DirectJobRetriesRequestSchema = DirectOperationRequestBaseSchema.extend({
-  retries: z.number().min(0),
-  onlyFailed: z.boolean().optional(),
+  retries: z.number().min(0).default(1),
+  onlyFailed: z.boolean().default(true),
 })
 
 export const DirectOperationFailureSchema = z.object({

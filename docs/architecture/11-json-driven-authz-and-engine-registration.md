@@ -2405,6 +2405,8 @@ Migration execution now shares the full async batch receipt (`id`, optional engi
 
 Direct process-instance delete, suspend, activate, and job-retry operations now share their per-instance success/failure receipt across backend serialization and OpenAPI. Their handlers retain permissive request handling for compatible engine-specific fields while the shared schemas document the supported transport inputs.
 
+Those direct-operation handlers now also validate the shared core request contracts after runtime-resource authorization. Empty legacy selections and omitted retry defaults remain compatible, while malformed engine identifiers, selections, retry counts, and boolean fields are rejected before an engine mutation is attempted.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

@@ -2,7 +2,13 @@ import { Router, Request, Response } from 'express'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
-import { DirectOperationResultSchema } from '@enterpriseglue/shared/schemas/mission-control/direct.js'
+import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
+import {
+  DirectJobRetriesRequestSchema,
+  DirectOperationResultSchema,
+  DirectProcessInstanceDeleteRequestSchema,
+  DirectProcessInstanceSuspensionRequestSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/direct.js'
 import {
   deleteProcessInstancesDirect,
   suspendActivateProcessInstancesDirect,
@@ -15,7 +21,7 @@ const r = Router()
 r.use(requireAuth)
 
 // Delete instances directly (no batch)
-r.post('/mission-control-api/direct/process-instances/delete', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.process-instances.delete', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/delete', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.process-instances.delete', { resourceKind: 'process_definition' }), validateBody(DirectProcessInstanceDeleteRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const {
       processInstanceIds = [],
@@ -41,7 +47,7 @@ r.post('/mission-control-api/direct/process-instances/delete', requireRuntimePro
 }))
 
 // Suspend/Activate directly
-r.post('/mission-control-api/direct/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.process-instances.suspend', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.process-instances.suspend', { resourceKind: 'process_definition' }), validateBody(DirectProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
     const engineId = (req as any).engineId as string
@@ -52,7 +58,7 @@ r.post('/mission-control-api/direct/process-instances/suspend', requireRuntimePr
   }
 }))
 
-r.post('/mission-control-api/direct/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.process-instances.activate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.process-instances.activate', { resourceKind: 'process_definition' }), validateBody(DirectProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
     const engineId = (req as any).engineId as string
@@ -64,7 +70,7 @@ r.post('/mission-control-api/direct/process-instances/activate', requireRuntimeP
 }))
 
 // Set retries directly
-r.post('/mission-control-api/direct/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.jobs.retry', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/direct/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.direct.jobs.retry', { resourceKind: 'process_definition' }), validateBody(DirectJobRetriesRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { processInstanceIds = [], retries = 1, onlyFailed = true } = req.body || {}
     const engineId = (req as any).engineId as string
