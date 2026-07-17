@@ -37,7 +37,7 @@ import { evaluateActionSnapshot, summarizeBulkActionUnavailableReasons, WhyUnava
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
-import type { ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
@@ -966,7 +966,7 @@ export default function ProcessesOverviewPage() {
       for (let attempt = 0; attempt < 5; attempt++) {
         await sleep(1000)
         try {
-          const incidents = await apiClient.get<any[]>(`/mission-control-api/process-instances/${id}/incidents${engineQs}`, undefined, { credentials: 'include' })
+          const incidents = await apiClient.get<ProcessInstanceIncident[]>(`/mission-control-api/process-instances/${id}/incidents${engineQs}`, undefined, { credentials: 'include' })
           const stillHas = Array.isArray(incidents) && incidents.length > 0
           if (!stillHas) {
             await instQ.refetch()

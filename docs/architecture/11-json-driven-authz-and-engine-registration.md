@@ -2265,6 +2265,8 @@ Process-definition list, resolve, and detail reads now validate one adapter-comp
 
 Batch detail now has one shared envelope for its persisted row, engine counters, runtime statistics, failed-job diagnostics, and evaluator-derived action decisions. The route validates after redaction, OpenAPI no longer uses unknown fields, and the Batch API/modal consume the same contract while retaining engine extensions.
 
+Process Overview's post-retry incident polling now imports the same shared incident row contract as Instance Detail instead of erasing the authorization-scoped response to `any[]`.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.
