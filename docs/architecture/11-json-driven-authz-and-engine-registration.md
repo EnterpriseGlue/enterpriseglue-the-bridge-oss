@@ -2275,6 +2275,8 @@ Task-variable updates retain their established 200 response but normalize an emp
 
 Task collection, detail, and variable reads now validate their shared passthrough task and variable contracts before returning data. This keeps engine-specific extension fields compatible while ensuring every Mission Control task read has the same backend, OpenAPI, and frontend transport shape.
 
+Job and job-definition collections and job detail now validate their shared passthrough contracts at the Mission Control boundary. Both engine-wide and resource-aware filtered paths preserve adapter extensions while matching the existing OpenAPI response schemas.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

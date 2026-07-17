@@ -16,7 +16,7 @@ export const JobSchema = z.object({
   priority: z.number().optional(),
   tenantId: z.string().optional().nullable(),
   createTime: z.string().optional().nullable(),
-});
+}).passthrough();
 
 export const JobDefinitionSchema = z.object({
   id: z.string(),
@@ -29,7 +29,7 @@ export const JobDefinitionSchema = z.object({
   suspended: z.boolean().optional(),
   tenantId: z.string().optional().nullable(),
   deploymentId: z.string().optional().nullable(),
-});
+}).passthrough();
 
 // Request schemas
 export const JobQueryParams = z.object({

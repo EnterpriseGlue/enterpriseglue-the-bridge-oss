@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -15,7 +16,9 @@ import {
   filterRuntimeItemsByProcessDefinitionKeys,
 } from './jobs-service.js';
 import {
+  JobDefinitionSchema,
   JobQueryParams,
+  JobSchema,
   JobDefinitionQueryParams,
   SetJobRetriesRequest,
   SetJobSuspensionStateRequest,
@@ -35,7 +38,7 @@ r.get('/mission-control-api/jobs', requireRuntimeCollectionAction('engine.runtim
   const keys = req.authorizedRuntimeResourceKeys;
   const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) {
-    return res.json(await listJobs(engineId, req.query));
+    return res.json(z.array(JobSchema).parse(await listJobs(engineId, req.query)));
   }
 
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
@@ -45,7 +48,7 @@ r.get('/mission-control-api/jobs', requireRuntimeCollectionAction('engine.runtim
     const data = await listJobs(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
     return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
-  res.json(collections.flat());
+  res.json(z.array(JobSchema).parse(collections.flat()));
 }));
 
 // Get job by ID
@@ -58,7 +61,7 @@ r.get('/mission-control-api/jobs/:id', requireRuntimeDefinitionAction('engine.ru
   const engineId = (req as any).engineId as string;
   const jobId = String(req.params.id);
   const data = await getJobById(engineId, jobId);
-  res.json(data);
+  res.json(JobSchema.parse(data));
 }));
 
 // Execute job
@@ -109,7 +112,7 @@ r.get('/mission-control-api/job-definitions', requireRuntimeCollectionAction('en
   const keys = req.authorizedRuntimeResourceKeys;
   const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) {
-    return res.json(await listJobDefinitions(engineId, req.query));
+    return res.json(z.array(JobDefinitionSchema).parse(await listJobDefinitions(engineId, req.query)));
   }
 
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
@@ -119,7 +122,7 @@ r.get('/mission-control-api/job-definitions', requireRuntimeCollectionAction('en
     const data = await listJobDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
     return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
-  res.json(collections.flat());
+  res.json(z.array(JobDefinitionSchema).parse(collections.flat()));
 }));
 
 // Set job definition retries
