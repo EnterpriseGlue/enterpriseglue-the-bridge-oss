@@ -174,6 +174,7 @@ describe('InvitationService', () => {
       status: 'pending',
       expiresAt: now + 24 * 60 * 60 * 1000,
     }));
+    expect(invitationRepo.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(sendInvitationEmail).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       invitationId: 'inv-1',

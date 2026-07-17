@@ -220,9 +220,8 @@ export class InvitationService {
       resourceType: input.resourceType,
       resourceId: input.resourceId || null,
       resourceName: input.resourceName || null,
-      // The retained database column is migration compatibility only. New
+      // The retained nullable column is migration compatibility only. New
       // invitations grant platform access through canonical group membership.
-      platformRole: null,
       resourceRole: input.resourceRole || null,
       resourceRolesJson: serializeRoles(input.resourceRoles),
       inviteTokenHash,

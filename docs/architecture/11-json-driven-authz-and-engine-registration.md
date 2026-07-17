@@ -1216,7 +1216,7 @@ external entitlement
 
 ### Current Authorization Migration Status And Next Steps
 
-The platform now has a group-backed baseline for new and existing active users, including local, invited, bootstrap, provider-neutral, Microsoft, Google, and legacy SAML accounts. Legacy `User.platformRole` remains compatibility data. New-account transactions no longer explicitly write its `user` value: the database non-privileged default preserves row compatibility while canonical group memberships establish access. Legacy SSO claim evaluation writes a provider-scoped `source = sso` membership to `platform-administrators`; it no longer overwrites the persisted role column. Existing local legacy administrators retain their separate `source = system` compatibility membership until explicit retirement, so an SSO provider cannot revoke local administration.
+The platform now has a group-backed baseline for new and existing active users, including local, invited, bootstrap, provider-neutral, Microsoft, Google, and legacy SAML accounts. Legacy `User.platformRole` remains compatibility data. New-account transactions no longer explicitly write its `user` value, and new invitations no longer write their nullable compatibility role field: database defaults preserve row compatibility while canonical group memberships establish access. Legacy SSO claim evaluation writes a provider-scoped `source = sso` membership to `platform-administrators`; it no longer overwrites the persisted role column. Existing local legacy administrators retain their separate `source = system` compatibility membership until explicit retirement, so an SSO provider cannot revoke local administration.
 
 Implement the remaining work in this order:
 

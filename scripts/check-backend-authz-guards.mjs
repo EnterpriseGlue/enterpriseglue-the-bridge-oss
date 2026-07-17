@@ -38,6 +38,7 @@ const projectMembershipCommandFiles = [
 const userCreationCompatibilityFiles = [
   'packages/shared/src/services/platform-admin/UserService.ts',
   'packages/shared/src/services/platform-admin/IdentityProviderProvisioningService.ts',
+  'packages/shared/src/services/invitations.ts',
   'packages/shared/src/services/microsoft.ts',
   'packages/shared/src/services/google.ts',
   'packages/shared/src/services/saml.ts',
