@@ -48,7 +48,7 @@ describe('processInstances API', () => {
       const result = await getProcessInstance('pi1');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/process-instances/pi1',
+        '/mission-control-api/process-instances/pi1?includeActionDecisions=true',
         undefined,
         { credentials: 'include' }
       );

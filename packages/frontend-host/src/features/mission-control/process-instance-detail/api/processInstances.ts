@@ -1,12 +1,14 @@
 import { apiClient } from '../../../../shared/api/client'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
-import type { ProcessInstanceDetail as SharedProcessInstanceDetail } from '@enterpriseglue/shared/schemas/mission-control/process.js'
-import type { RuntimeActivityInstanceTree } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type {
+  ActivityInstance,
+  ProcessInstanceDetail as SharedProcessInstanceDetail,
+  RuntimeActivityInstanceTree,
+} from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type {
   ProcessDefinition,
   Variable,
   VariableHistoryEntry,
-  ActivityInstance,
   ExecutionDetails,
   Incident,
   Job,

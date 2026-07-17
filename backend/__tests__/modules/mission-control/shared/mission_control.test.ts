@@ -14,6 +14,7 @@ import {
   listProcessDefinitions,
   listProcessInstancesDetailed,
   getProcessInstanceById,
+  listProcessInstanceActivityHistory,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
   getHistoricProcessInstanceById,
@@ -442,6 +443,35 @@ describe('mission-control shared mission_control routes', () => {
       resourceId: 'engine-77',
     }));
     expect(getProcessInstanceVariableHistory).toHaveBeenCalledWith('engine-77', 'pi-1', 'var-1');
+  });
+
+  it('serializes activity history through the shared passthrough contract', async () => {
+    vi.mocked(listProcessInstanceActivityHistory).mockResolvedValueOnce([
+      {
+        id: 'activity-1',
+        activityId: 'review-order',
+        activityName: 'Review order',
+        startTime: '2026-07-17T00:00:00.000Z',
+        endTime: null,
+        executionId: 'execution-1',
+        adapterDiagnostic: { retained: true },
+      },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/history/activity-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'activity-1',
+        activityId: 'review-order',
+        endTime: null,
+        adapterDiagnostic: { retained: true },
+      }),
+    ]);
+    expect(listProcessInstanceActivityHistory).toHaveBeenCalledWith('engine-77', 'pi-1');
   });
 
   it('rejects requests without variableInstanceId', async () => {

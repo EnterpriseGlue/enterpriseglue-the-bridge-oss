@@ -74,13 +74,27 @@ export const ActivityCountsByStateSchema = z.object({
 // Variables schema
 export const VariablesSchema = z.record(z.string(), z.object({ value: z.any(), type: z.string() }));
 
-// Activity instance schema
+// Historic activity-instance rows power the Instance Detail execution trail.
+// Keep the fields rendered by that UI explicit while retaining engine-specific
+// diagnostics and adapter extensions for compatibility.
 export const ActivityInstanceSchema = z.object({
   id: z.string(),
   activityId: z.string().optional(),
-  activityName: z.string().optional(),
+  activityName: z.string().nullable().optional(),
+  startTime: z.string().nullable().optional(),
   endTime: z.string().nullable().optional(),
-});
+  activityType: z.string().nullable().optional(),
+  activityInstanceId: z.string().nullable().optional(),
+  parentActivityInstanceId: z.string().nullable().optional(),
+  executionId: z.string().nullable().optional(),
+  calledProcessInstanceId: z.string().nullable().optional(),
+  taskId: z.string().nullable().optional(),
+  durationInMillis: z.number().nullable().optional(),
+  canceled: z.boolean().optional(),
+  completeScope: z.boolean().optional(),
+}).passthrough();
+
+export const ActivityInstanceListSchema = z.array(ActivityInstanceSchema);
 
 export interface RuntimeActivityInstanceTree {
   id?: string | null;
@@ -177,6 +191,7 @@ export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;
+export type ActivityInstanceList = z.infer<typeof ActivityInstanceListSchema>;
 export type ProcessInstanceIncident = z.infer<typeof ProcessInstanceIncidentSchema>;
 export type ProcessInstanceIncidentList = z.infer<typeof ProcessInstanceIncidentListSchema>;
 export type ProcessInstanceJob = z.infer<typeof ProcessInstanceJobSchema>;

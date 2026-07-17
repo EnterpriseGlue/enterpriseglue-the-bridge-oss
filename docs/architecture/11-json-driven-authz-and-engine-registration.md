@@ -2251,6 +2251,8 @@ Historic process-instance detail and collection reads now use that same shared p
 
 The live activity-instance tree now has a shared recursive passthrough schema through its runtime serializer, OpenAPI operation, and Instance Detail client; nested engine diagnostics remain compatible while the UI no longer fetches the tree as `unknown`.
 
+Historic activity-instance reads now use a shared passthrough contract through the PII-redacted backend serializer, OpenAPI operation, and Instance Detail execution trail. The contract captures its activity, timing, execution, hierarchy, and completion fields while retaining adapter diagnostics, replacing the local frontend row interface without narrowing existing engine responses.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

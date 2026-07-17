@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProcessInstanceDetailSchema, ProcessInstanceSchema, RuntimeActivityInstanceTreeSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
+import { ActivityInstanceListSchema, ProcessInstanceDetailSchema, ProcessInstanceSchema, RuntimeActivityInstanceTreeSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
 
 describe('process instance transport contract', () => {
   it('keeps every normalized runtime state and adapter extension', () => {
@@ -32,5 +32,19 @@ describe('process instance transport contract', () => {
       engineDiagnostic: { retained: true },
     });
     expect(detail).toMatchObject({ processDefinitionId: 'payments:3:abc', engineDiagnostic: { retained: true } });
+  });
+
+  it('keeps historic activity execution fields and adapter extensions', () => {
+    const history = ActivityInstanceListSchema.parse([{
+      id: 'activity-1',
+      activityId: 'review-order',
+      parentActivityInstanceId: null,
+      executionId: 'execution-1',
+      endTime: null,
+      adapterDiagnostic: { retained: true },
+    }]);
+    expect(history[0]).toMatchObject({
+      activityId: 'review-order', executionId: 'execution-1', adapterDiagnostic: { retained: true },
+    });
   });
 });

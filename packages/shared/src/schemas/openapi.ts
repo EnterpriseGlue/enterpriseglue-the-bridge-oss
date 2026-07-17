@@ -89,6 +89,7 @@ const {
   DirectOperationResultSchema,
   VariablesSchema: MissionControlVariablesSchema,
   ActivityInstanceSchema: MissionControlActivityInstanceSchema,
+  ActivityInstanceListSchema: MissionControlActivityInstanceListSchema,
   PreviewCountRequest,
   DeploymentSchema,
   DeploymentQueryParams,
@@ -759,7 +760,7 @@ registry.registerPath({
   ...authzExtension('engine.runtime.process-instances.activity-history.read', 'GET', '/mission-control-api/process-instances/{id}/history/activity-instances'),
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { description: 'Historic activity instances', content: { 'application/json': { schema: z.array(MissionControlActivityInstanceSchema) } } },
+    200: { description: 'Historic activity instances', content: { 'application/json': { schema: MissionControlActivityInstanceListSchema } } },
   },
 });
 

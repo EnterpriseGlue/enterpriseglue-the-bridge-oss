@@ -35,6 +35,7 @@ import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-d
 import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  ActivityInstanceListSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
   ProcessInstanceExternalTaskListSchema,
@@ -265,7 +266,7 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', r
     const instanceId = String(req.params.id)
     const data = await listProcessInstanceActivityHistory(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(redacted)
+    res.json(ActivityInstanceListSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity instances history')
   }

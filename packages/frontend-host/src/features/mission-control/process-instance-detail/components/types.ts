@@ -7,6 +7,7 @@ import type {
   ProcessInstanceExecutionDetails as SharedProcessInstanceExecutionDetails,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import type { ProcessInstanceExternalTask, ProcessInstanceIncident, ProcessInstanceJob } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ActivityInstance as SharedActivityInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 export type DecisionIo = HistoricDecisionIo
 
@@ -27,22 +28,7 @@ export type ProcessDefinition = {
   version: number
 }
 
-export type ActivityInstance = {
-  id: string
-  activityId: string
-  activityName?: string
-  startTime?: string
-  endTime?: string
-  activityType?: string
-  activityInstanceId?: string | null
-  parentActivityInstanceId?: string | null
-  executionId?: string | null
-  calledProcessInstanceId?: string | null
-  taskId?: string | null
-  durationInMillis?: number | null
-  canceled?: boolean
-  completeScope?: boolean
-}
+export type ActivityInstance = SharedActivityInstance
 
 export type Variable = {
   id?: string
