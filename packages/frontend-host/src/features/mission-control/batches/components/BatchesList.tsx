@@ -10,10 +10,11 @@ import BatchDetailModal from './BatchDetailModal'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
 import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
-import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards'
+import { GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type { Batch, BatchRuntimeActionDecisions } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 
-type RuntimeActionDecision = { allowed: boolean; reason?: string }
+type RuntimeActionDecision = BatchRuntimeActionDecisions['suspension']
 
 function rowDecision(actionId: string, decision?: RuntimeActionDecision): UiAuthzDecision {
   const allowed = decision?.allowed === true
@@ -26,27 +27,17 @@ function rowDecision(actionId: string, decision?: RuntimeActionDecision): UiAuth
   }
 }
 
-type Batch = {
-  id: string
-  camundaBatchId?: string
-  type: string
-  totalJobs?: number | null
-  jobsCreated?: number | null
-  progress: number
-  status: string
-  createdAt: number
-  suspended?: boolean
-  runtimeActionDecisions?: {
-    suspension?: RuntimeActionDecision
-    cancel?: RuntimeActionDecision
-    recordDelete?: RuntimeActionDecision
-  }
-}
+type BatchListItem = Batch & { runtimeActionDecisions?: BatchRuntimeActionDecisions }
 
 export default function BatchesList() {
   const { tenantNavigate } = useTenantNavigate()
   const { batchId } = useParams()
   const selectedEngineId = useSelectedEngine()
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId],
+  )
+  const batchesReadDecision = useActionDecision('engine.runtime.batches.read', selectedEngineResource)
   const listQ = useQuery({
     queryKey: ['batches', 'list', selectedEngineId],
     queryFn: () => {
@@ -55,12 +46,12 @@ export default function BatchesList() {
       params.set('includeActionDecisions', 'true')
       const query = params.toString()
       const suffix = query ? `?${query}` : ''
-      return apiClient.get<Batch[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
+      return apiClient.get<BatchListItem[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
     },
     refetchInterval: 5000,
     // The collection route applies the bounded runtime-resource filter. The
     // client snapshot intentionally does not contain its resource lineage.
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && batchesReadDecision.allowed,
   })
 
   const suspendMutation = useMutation({
@@ -133,6 +124,19 @@ export default function BatchesList() {
   const engineAccessError = isEngineAccessError(listQ.error)
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  }
+  if (selectedEngineId && !batchesReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-5)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Batches unavailable"
+          subtitle={batchesReadDecision.reason}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    )
   }
 
   return (

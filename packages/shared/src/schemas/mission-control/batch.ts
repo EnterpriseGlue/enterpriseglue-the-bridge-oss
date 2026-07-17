@@ -82,6 +82,7 @@ export const BatchFailedJobDetailSchema = z.object({
 export const BatchRuntimeActionDecisionsSchema = z.object({
   suspension: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
   cancel: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
+  recordDelete: z.object({ allowed: z.boolean(), reason: z.string().optional() }).optional(),
 }).passthrough();
 
 export const BatchDetailSchema = z.object({

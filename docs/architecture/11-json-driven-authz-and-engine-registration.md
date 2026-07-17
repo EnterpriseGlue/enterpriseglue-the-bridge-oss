@@ -2299,6 +2299,8 @@ Batch collection reads now validate the shared persisted batch contract after au
 
 The retained compatibility Mission Control router now validates active, detail, historic-detail, and historic process-instance collections after PII redaction through the same shared passthrough contracts as the current router, while preserving adapter extensions and runtime action decisions.
 
+The Batches list now imports the shared batch and runtime-action contracts (including record deletion) rather than retaining a local shadow shape. Its collection query is snapshot-guarded by the batch-read action and renders a clear unavailable state without issuing a request when that action is denied.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.
