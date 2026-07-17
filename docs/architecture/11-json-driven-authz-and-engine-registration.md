@@ -2307,7 +2307,7 @@ Decision-definition XML now uses its existing shared schema across its runtime r
 
 Task aggregate reads now serialize a single shared non-negative-integer count response, keeping the engine-wide-only safety boundary for resource-aware task counts unchanged.
 
-Migration plan and generate-request shapes now live in the shared Mission Control schema package. OpenAPI documents only the implemented `/migration/generate` endpoint and its engine-compatible plan response; the stale `/migration/plan/generate` entry has been removed.
+Migration plan and generate-request shapes now live in the shared Mission Control schema package. The primary `/migration/generate` endpoint and its documented `/migration/plan/generate` compatibility alias share the same engine-compatible response and authorization contract.
 
 Metrics now serialize their existing shared contracts at the route boundary: collection reads return a metrics array and a named metric read returns one metric. OpenAPI now distinguishes those two response shapes.
 

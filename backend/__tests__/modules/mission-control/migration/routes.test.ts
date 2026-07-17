@@ -105,6 +105,19 @@ describe('mission-control migration routes', () => {
     }));
   });
 
+  it('retains the documented migration plan generation compatibility alias', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/plan/generate')
+      .send({ engineId: 'engine-1', sourceDefinitionId: 'p1', targetDefinitionId: 'p2' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ instructions: [] });
+    expect(generateMigrationPlan).toHaveBeenCalledWith('engine-1', expect.objectContaining({
+      sourceDefinitionId: 'p1',
+      targetDefinitionId: 'p2',
+    }));
+  });
+
   it('executes migration async', async () => {
     const response = await request(app)
       .post('/mission-control-api/migration/execute-async')

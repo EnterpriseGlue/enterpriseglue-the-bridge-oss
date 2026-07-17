@@ -42,8 +42,9 @@ r.post('/mission-control-api/migration/preview', requireRuntimeMigrationAction('
   }
 }))
 
-// Generate migration plan (engine auto-mapping)
-r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+// Generate migration plan (engine auto-mapping). The `/plan/generate` form is
+// retained as a documented compatibility alias for existing callers.
+const generateMigrationPlanHandler = asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const enginePlan = await generateMigrationPlan(engineId, req.body)
@@ -51,7 +52,10 @@ r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction(
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to generate migration plan')
   }
-}))
+})
+
+r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), generateMigrationPlanHandler)
+r.post('/mission-control-api/migration/plan/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), generateMigrationPlanHandler)
 
 // Validate migration plan
 r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.validate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {

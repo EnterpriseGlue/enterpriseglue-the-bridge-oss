@@ -1373,6 +1373,15 @@ registry.register('MigrationExecuteRequest', MigrationExecuteRequestSchema)
 registry.register('MigrationCreateResponse', MigrationAsyncExecuteResponseSchema)
 registry.register('MigrationDirectResponse', MigrationDirectExecuteResponseSchema)
 
+// POST /mission-control-api/migration/plan/generate (documented compatibility alias)
+registry.registerPath({
+  method: 'post',
+  path: '/mission-control-api/migration/plan/generate',
+  ...authzExtension('engine.runtime.migrations.plan.generate', 'POST', '/mission-control-api/migration/plan/generate'),
+  request: { body: { content: { 'application/json': { schema: MigrationGenerateRequestSchema } } } },
+  responses: { 200: { description: 'Generated migration plan (compatibility alias)', content: { 'application/json': { schema: MigrationPlanSchema } } } },
+})
+
 // POST /mission-control-api/migration/plan/validate
 registry.registerPath({
   method: 'post',
