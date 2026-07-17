@@ -187,6 +187,54 @@ describe('users routes', () => {
     expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.not.objectContaining({ platformRole: expect.anything() }));
   });
 
+  it('keeps the deprecated platformRole alias compatible when the canonical role is omitted', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:create');
+    (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'u-legacy-admin', email: 'legacy-admin@example.com' });
+    (invitationService.createInvitation as unknown as Mock).mockResolvedValue({
+      invitationId: 'inv-legacy-admin',
+      inviteUrl: 'http://frontend.test/t/default/invite/token-legacy-admin',
+      oneTimePassword: 'RevealMe123!',
+      emailSent: false,
+    });
+
+    const response = await request(app)
+      .post('/api/users')
+      .send({ email: 'legacy-admin@example.com', platformRole: 'admin', sendEmail: false });
+
+    expect(response.status).toBe(201);
+    expect(userService.createPendingUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'legacy-admin@example.com',
+      platformRole: 'admin',
+    }));
+  });
+
+  it('prefers the canonical role over the deprecated platformRole alias when both are supplied', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:create');
+    (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'u-canonical-user', email: 'canonical-user@example.com' });
+    (invitationService.createInvitation as unknown as Mock).mockResolvedValue({
+      invitationId: 'inv-canonical-user',
+      inviteUrl: 'http://frontend.test/t/default/invite/token-canonical-user',
+      oneTimePassword: 'RevealMe123!',
+      emailSent: false,
+    });
+
+    const response = await request(app)
+      .post('/api/users')
+      .send({ email: 'canonical-user@example.com', role: 'user', platformRole: 'admin', sendEmail: false });
+
+    expect(response.status).toBe(201);
+    expect(userService.createPendingUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'canonical-user@example.com',
+      platformRole: 'user',
+    }));
+  });
+
   it('lists users with granular users:view permission', async () => {
     const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
     permissionGate.allowedPermissions.clear();
@@ -259,6 +307,20 @@ describe('users routes', () => {
 
     expect(response.status).toBe(200);
     expect(userService.updateUser).toHaveBeenCalledWith('user-2', { platformRole: 'admin' });
+  });
+
+  it('prefers the canonical role over the deprecated platformRole alias when updating platform access', async () => {
+    const { userService } = await import('@enterpriseglue/shared/services/platform-admin/UserService.js');
+    permissionGate.allowedPermissions.clear();
+    permissionGate.allowedPermissions.add('platform:users:update');
+    (userService.updateUser as unknown as Mock).mockResolvedValue({ id: 'user-2', platformRole: 'user' });
+
+    const response = await request(app)
+      .put('/api/users/user-2')
+      .send({ role: 'user', platformRole: 'admin' });
+
+    expect(response.status).toBe(200);
+    expect(userService.updateUser).toHaveBeenCalledWith('user-2', { platformRole: 'user' });
   });
 
   it('soft deactivates a user through DELETE /api/users/:id', async () => {

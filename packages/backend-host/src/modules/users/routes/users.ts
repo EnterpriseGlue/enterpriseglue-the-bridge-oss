@@ -15,7 +15,10 @@ const createUserSchema = z.object({
   email: z.string().email(),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  role: z.enum(['admin', 'user']).default('user'),
+  // `role` is the canonical user-management input. Keep the older
+  // `platformRole` alias readable at this boundary without allowing it to
+  // override an explicit canonical choice.
+  role: z.enum(['admin', 'user']).optional(),
   platformRole: z.enum(['admin', 'user']).optional(),
   sendEmail: z.boolean().default(true),
 });
@@ -46,7 +49,7 @@ router.get('/api/users', requireAuth, requireAction('platform.users.read'), asyn
  */
 router.post('/api/users', requireAuth, requireAction('platform.users.create'), createUserLimiter, validateBody(createUserSchema), asyncHandler(async (req, res) => {
   const { email, firstName, lastName, role, platformRole, sendEmail } = req.body;
-  const requestedPlatformRole = platformRole || role || 'user';
+  const requestedPlatformRole = role ?? platformRole ?? 'user';
 
   const user = await userService.createPendingUser({
     email,
@@ -106,7 +109,7 @@ router.get('/api/users/:id', requireAuth, requireAction('platform.users.read'), 
 router.put('/api/users/:id', requireAuth, requireAction('platform.users.update'), validateBody(updateUserSchema), asyncHandler(async (req, res) => {
   const userId = String(req.params.id);
   const { role, ...input } = req.body;
-  const requestedPlatformRole = input.platformRole || role;
+  const requestedPlatformRole = role ?? input.platformRole;
   const user = await userService.updateUser(
     userId,
     requestedPlatformRole ? { ...input, platformRole: requestedPlatformRole } : input
