@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { z } from 'zod';
 import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -10,14 +9,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-
-// Validation schemas
-const initRepoBodySchema = z.object({
-  projectId: z.string().uuid(),
-  providerId: z.string().uuid(),
-  remoteUrl: z.string().url(),
-  namespace: z.string().optional(),
-});
+import { CloneRepositoryRequestSchema, InitRepositoryRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 const gitService = new GitService();
@@ -39,7 +31,7 @@ async function canViewProjectRepository(req: Request, projectId: string): Promis
  * POST /git-api/repositories/init
  * Initialize a new Git repository for a project
  */
-router.post('/git-api/repositories/init', apiLimiter, requireAuth, validateBody(initRepoBodySchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/repositories/init', apiLimiter, requireAuth, validateBody(InitRepositoryRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const { projectId, providerId, remoteUrl, namespace } = req.body;
   const userId = req.user!.userId;
 
@@ -52,7 +44,7 @@ router.post('/git-api/repositories/init', apiLimiter, requireAuth, validateBody(
  * POST /git-api/repositories/clone
  * Clone an existing Git repository
  */
-router.post('/git-api/repositories/clone', apiLimiter, requireAuth, validateBody(initRepoBodySchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/repositories/clone', apiLimiter, requireAuth, validateBody(CloneRepositoryRequestSchema), requireAction('project.git.repositories.manage', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const { projectId, providerId, remoteUrl, namespace } = req.body;
   const userId = req.user!.userId;
 

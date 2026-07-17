@@ -11,6 +11,8 @@ import type {
   LockHolder as SharedLockHolder,
   LockResponse as SharedLockResponse,
   RollbackRequest as SharedRollbackRequest,
+  InitRepositoryRequest as SharedInitRepositoryRequest,
+  CloneRepositoryRequest as SharedCloneRepositoryRequest,
 } from '@enterpriseglue/shared/schemas/git/index.js';
 
 export interface Repository {
@@ -84,20 +86,8 @@ export interface Commit {
 }
 
 // Request types
-export interface InitRepositoryRequest {
-  projectId: string;
-  providerId: string;
-  remoteUrl: string;
-  namespace?: string;
-}
-
-export interface CloneRepositoryRequest {
-  projectId: string;
-  providerId: string;
-  remoteUrl: string;
-  namespace?: string;
-  conflictStrategy?: 'preferRemote' | 'preferLocal';
-}
+export type InitRepositoryRequest = SharedInitRepositoryRequest;
+export type CloneRepositoryRequest = SharedCloneRepositoryRequest;
 
 export interface CloneFromGitRequest {
   providerId: string;

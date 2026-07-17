@@ -57,6 +57,9 @@ export const CloneRepositoryRequestSchema = z.object({
   providerId: z.string().uuid(),
   remoteUrl: z.string().url(),
   namespace: z.string().optional(),
+  // Retained for the existing clone UI. Repository connection currently
+  // delegates conflict resolution to the subsequent sync flow.
+  conflictStrategy: z.enum(['preferRemote', 'preferLocal']).optional(),
 });
 
 export const RepositoryResponseSchema = RepositorySelectSchema;

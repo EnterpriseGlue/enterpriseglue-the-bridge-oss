@@ -2419,6 +2419,10 @@ The stale duplicate direct-router registration for migration execution has been 
 
 Single-job execution now shares the engine-selector request contract across backend validation and OpenAPI. It continues to accept adapter extension fields, but malformed engine selectors are rejected before authorization can invoke the engine.
 
+The Git client now imports the shared init-repository and existing-repository clone request contracts rather than maintaining local copies. The separate project-creation clone endpoint retains its distinct payload and response for a dedicated compatibility audit.
+
+The backend repository init and clone routes now validate those same shared schemas. The clone UI's `conflictStrategy` is explicitly retained as a compatibility input; repository connection continues to defer conflict resolution to the later sync flow.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.
