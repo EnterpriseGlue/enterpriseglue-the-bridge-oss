@@ -43,11 +43,11 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
   exit 2
 fi
 
-playwright_https_args=()
 if [[ -n "$local_ca_file" ]]; then
   # The local TLS proxy uses a generated development CA. Curl verifies it above;
   # Playwright must also tolerate that local-only CA for browser lifecycle tests.
-  playwright_https_args=(PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true PLAYWRIGHT_LOCAL_CA_FILE="$local_ca_file")
+  env E2E_SEED_USER=false PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true PLAYWRIGHT_LOCAL_CA_FILE="$local_ca_file" \
+    pnpm exec playwright test --config test/e2e/playwright.config.ts --grep "$browser_e2e_grep"
+else
+  env E2E_SEED_USER=false pnpm exec playwright test --config test/e2e/playwright.config.ts --grep "$browser_e2e_grep"
 fi
-
-env E2E_SEED_USER=false "${playwright_https_args[@]}" pnpm exec playwright test --config test/e2e/playwright.config.ts --grep "$browser_e2e_grep"

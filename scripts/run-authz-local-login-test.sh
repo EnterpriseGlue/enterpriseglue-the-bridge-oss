@@ -33,7 +33,6 @@ if [[ -z "${E2E_USER:-}" || -z "${E2E_PASSWORD:-}" ]]; then
 fi
 
 curl_args=(--fail --silent --show-error --max-time 5)
-playwright_https_args=()
 if [[ -n "$local_ca_file" ]]; then
   if [[ ! -f "$local_ca_file" ]]; then
     echo "[authz-local-login] PLAYWRIGHT_LOCAL_CA_FILE does not exist: $local_ca_file" >&2
@@ -42,7 +41,6 @@ if [[ -n "$local_ca_file" ]]; then
   curl_args+=(--cacert "$local_ca_file")
   # Playwright does not import the disposable local CA. This runner only
   # accepts loopback targets, so certificate-error handling stays local-only.
-  playwright_https_args=(PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true)
 fi
 
 if ! curl "${curl_args[@]}" "$base_url/login" >/dev/null; then
@@ -57,4 +55,8 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
 fi
 
 # Avoid mutating the local database: this smoke uses an existing disposable account.
-env E2E_SEED_USER=false "${playwright_https_args[@]}" pnpm exec playwright test "$@" --config test/e2e/playwright.config.ts
+if [[ -n "$local_ca_file" ]]; then
+  env E2E_SEED_USER=false PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true pnpm exec playwright test "$@" --config test/e2e/playwright.config.ts
+else
+  env E2E_SEED_USER=false pnpm exec playwright test "$@" --config test/e2e/playwright.config.ts
+fi
