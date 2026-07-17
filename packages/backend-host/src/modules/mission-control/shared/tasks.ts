@@ -19,10 +19,12 @@ import {
 import {
   TaskQueryParams,
   TaskCountResponseSchema,
+  TaskCompleteResponseSchema,
   ClaimTaskRequest,
   SetAssigneeRequest,
   CompleteTaskRequest,
   TaskVariablesRequest,
+  TaskFormSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/task.js';
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
 
@@ -97,7 +99,7 @@ r.get('/mission-control-api/tasks/:id/form', requireTaskAction('engine.runtime.t
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await getTaskFormById(engineId, taskId);
-  res.json(data);
+  res.json(TaskFormSchema.parse(data));
 }));
 
 // Claim task
@@ -129,7 +131,7 @@ r.post('/mission-control-api/tasks/:id/complete', requireTaskAction('engine.runt
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await completeTaskById(engineId, taskId, req.body);
-  res.json(data || {});
+  res.json(TaskCompleteResponseSchema.parse(data || {}));
 }));
 
 export default r;

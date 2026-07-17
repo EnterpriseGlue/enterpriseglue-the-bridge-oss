@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VariablesSchema } from './process.js';
 
 // Task schemas (API-only, no DB persistence)
 export const TaskSchema = z.object({
@@ -35,8 +36,12 @@ export const TaskFormSchema = z.object({
     defaultValue: z.any().optional().nullable(),
     validationConstraints: z.array(z.any()).optional(),
     properties: z.record(z.string(), z.any()).optional(),
-  })).optional(),
-});
+  }).passthrough()).optional(),
+}).passthrough();
+
+// Camunda returns the post-completion variables only when requested. The
+// empty object remains a valid response for ordinary completion calls.
+export const TaskCompleteResponseSchema = VariablesSchema;
 
 export const TaskCountResponseSchema = z.object({
   count: z.number().int().nonnegative(),
@@ -102,6 +107,7 @@ export const TaskVariablesRequest = z.object({
 // Types
 export type Task = z.infer<typeof TaskSchema>;
 export type TaskForm = z.infer<typeof TaskFormSchema>;
+export type TaskCompleteResponse = z.infer<typeof TaskCompleteResponseSchema>;
 export type TaskCountResponse = z.infer<typeof TaskCountResponseSchema>;
 export type TaskQueryParams = z.infer<typeof TaskQueryParams>;
 export type ClaimTaskRequest = z.infer<typeof ClaimTaskRequest>;

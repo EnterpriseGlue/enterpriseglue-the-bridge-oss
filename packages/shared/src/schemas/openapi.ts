@@ -97,6 +97,8 @@ const {
   EngineDeploymentRequestSchema,
   EngineDeploymentResponseSchema,
   TaskSchema,
+  TaskFormSchema,
+  TaskCompleteResponseSchema,
   TaskCountResponseSchema,
   TaskQueryParams,
   ClaimTaskRequest,
@@ -1458,11 +1460,11 @@ registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/count',
 registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/{id}', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Get task', content: { 'application/json': { schema: TaskSchema } } }, 404: { description: 'Not found' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/{id}/variables', ...authzExtension('engine.runtime.tasks.variables.read', 'GET', '/mission-control-api/tasks/{id}/variables'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Task variables', content: { 'application/json': { schema: MissionControlVariablesSchema } } } } });
 registry.registerPath({ method: 'put', path: '/mission-control-api/tasks/{id}/variables', ...authzExtension('engine.runtime.tasks.variables.update', 'PUT', '/mission-control-api/tasks/{id}/variables'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: TaskVariablesRequest } } } }, responses: { 200: { description: 'Variables updated', content: { 'application/json': { schema: z.unknown() } } } } });
-registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/{id}/form', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks/{id}/form'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Task form', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'get', path: '/mission-control-api/tasks/{id}/form', ...authzExtension('engine.runtime.tasks.read', 'GET', '/mission-control-api/tasks/{id}/form'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Task form', content: { 'application/json': { schema: TaskFormSchema } } } } });
 registry.registerPath({ method: 'post', path: '/mission-control-api/tasks/{id}/claim', ...authzExtension('engine.runtime.tasks.assignment.update', 'POST', '/mission-control-api/tasks/{id}/claim'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: ClaimTaskRequest } } } }, responses: { 204: { description: 'Claimed' } } });
 registry.registerPath({ method: 'post', path: '/mission-control-api/tasks/{id}/unclaim', ...authzExtension('engine.runtime.tasks.assignment.update', 'POST', '/mission-control-api/tasks/{id}/unclaim'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Unclaimed' } } });
 registry.registerPath({ method: 'post', path: '/mission-control-api/tasks/{id}/assignee', ...authzExtension('engine.runtime.tasks.assignment.update', 'POST', '/mission-control-api/tasks/{id}/assignee'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SetAssigneeRequest } } } }, responses: { 204: { description: 'Assignee set' } } });
-registry.registerPath({ method: 'post', path: '/mission-control-api/tasks/{id}/complete', ...authzExtension('engine.runtime.tasks.complete', 'POST', '/mission-control-api/tasks/{id}/complete'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: CompleteTaskRequest.partial() } } } }, responses: { 200: { description: 'Task completed', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'post', path: '/mission-control-api/tasks/{id}/complete', ...authzExtension('engine.runtime.tasks.complete', 'POST', '/mission-control-api/tasks/{id}/complete'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: CompleteTaskRequest.partial() } } } }, responses: { 200: { description: 'Task completed', content: { 'application/json': { schema: TaskCompleteResponseSchema } } } } });
 
 // External Tasks
 registry.register('ExternalTask', ExternalTaskSchema);
