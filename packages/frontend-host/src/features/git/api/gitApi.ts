@@ -22,6 +22,7 @@ import type {
 import type { CloneFromGitRequest, CloneFromGitResponse } from '@enterpriseglue/shared/schemas/git/index.js';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import type { GitProviderRepository } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 // Use relative path - proxied to backend in dev, same origin in production
 const API_BASE = '/git-api';
@@ -95,12 +96,7 @@ class GitApi {
   }
 
   // List repos from provider (for "connect to existing" flow)
-  async listProviderRepos(providerId: string): Promise<{
-    name: string;
-    fullName: string;
-    url: string;
-    isPrivate: boolean;
-  }[]> {
+  async listProviderRepos(providerId: string): Promise<GitProviderRepository[]> {
     return this.fetch(`/providers/${providerId}/repos`);
   }
 

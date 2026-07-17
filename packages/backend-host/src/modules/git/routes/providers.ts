@@ -8,6 +8,7 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
+import { GitProviderRepositorySchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { GitCredential } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitCredential.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
@@ -228,7 +229,7 @@ router.get('/git-api/providers/:id/repos', apiLimiter, requireAuth, validatePara
       isPrivate: r.private,
     }));
     
-    res.json(repoList);
+    res.json(GitProviderRepositorySchema.array().parse(repoList));
   } catch (error: any) {
     logger.error('Failed to list repos from provider:', error);
     

@@ -88,6 +88,7 @@ export const GitCredentialSchema = z.object({
 export const SaveGitCredentialRequestSchema = z.object({ providerId: z.string().min(1), token: z.string().min(1), name: z.string().optional() });
 export const RenameGitCredentialRequestSchema = z.object({ name: z.string().min(1) });
 export const GitCredentialNamespaceSchema = z.object({ name: z.string(), type: z.enum(['user', 'organization']), avatarUrl: z.string().optional() }).passthrough();
+export const GitProviderRepositorySchema = z.object({ name: z.string(), fullName: z.string(), url: z.string(), isPrivate: z.boolean() }).strict();
 
 export const RepositoryResponseSchema = RepositorySelectSchema;
 
@@ -102,3 +103,4 @@ export type GitCredential = z.infer<typeof GitCredentialSchema>;
 export type SaveGitCredentialRequest = z.infer<typeof SaveGitCredentialRequestSchema>;
 export type RenameGitCredentialRequest = z.infer<typeof RenameGitCredentialRequestSchema>;
 export type GitCredentialNamespace = z.infer<typeof GitCredentialNamespaceSchema>;
+export type GitProviderRepository = z.infer<typeof GitProviderRepositorySchema>;

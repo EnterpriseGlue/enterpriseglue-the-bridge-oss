@@ -7,6 +7,7 @@ export {
   CloneFromGitRequestSchema,
   CloneFromGitResponseSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
+  GitProviderRepositorySchema,
   RepositoryResponseSchema,
   type Repository,
   type RepositoryInsert,
@@ -15,6 +16,7 @@ export {
   type CloneFromGitRequest,
   type CloneFromGitResponse,
   type GitCredential, type SaveGitCredentialRequest, type RenameGitCredentialRequest, type GitCredentialNamespace,
+  type GitProviderRepository,
 } from './repository.js';
 
 // Deployment schemas
