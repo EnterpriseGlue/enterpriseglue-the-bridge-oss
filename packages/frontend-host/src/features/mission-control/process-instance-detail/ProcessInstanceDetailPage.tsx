@@ -745,13 +745,13 @@ export default function ProcessInstanceDetailPage() {
   const showIncidentBanner = incidentCount > 0
 
   const processVersion = React.useMemo(() => {
-    const fromHistory = Number((histQ.data as any)?.processDefinitionVersion)
+    const fromHistory = Number(histQ.data?.processDefinitionVersion)
     if (Number.isFinite(fromHistory) && fromHistory > 0) return Math.trunc(fromHistory)
 
     const fromRuntime = Number((runtimeQ.data as any)?.processDefinitionVersion)
     if (Number.isFinite(fromRuntime) && fromRuntime > 0) return Math.trunc(fromRuntime)
 
-    const defIdSource = String(defId || (histQ.data as any)?.processDefinitionId || '')
+    const defIdSource = String(defId || histQ.data?.processDefinitionId || '')
     const parsedFromId = Number(defIdSource.split(':')[1])
     if (Number.isFinite(parsedFromId) && parsedFromId > 0) return Math.trunc(parsedFromId)
 

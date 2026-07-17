@@ -2247,6 +2247,8 @@ The evaluator-filtered process-instance collection now serializes one shared run
 
 The process-instance detail route now uses a dedicated shared passthrough contract for its process-definition identifiers and runtime action decisions. Its backend serializer, OpenAPI operation, and Instance Detail client use that contract rather than returning/documenting an unknown engine object or maintaining a parallel frontend interface.
 
+Historic process-instance detail and collection reads now use that same shared passthrough contract after PII redaction, so historical identifiers, completion state, and adapter extensions are validated consistently through the route, OpenAPI, and Instance Detail client.
+
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.
 
 Project creation now shares its import-aware request and established 200 response contract across its backend validator/serializer, OpenAPI, and both local and Git-backed wizard paths, so enabled imports require an engine consistently.

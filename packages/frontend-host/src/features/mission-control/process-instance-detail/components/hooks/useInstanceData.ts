@@ -93,7 +93,7 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   const runtimeQ = useQuery({
     queryKey: ['mission-control', 'instance', instanceId, selectedEngineId],
     queryFn: () => getProcessInstance(instanceId, selectedEngineId),
-    enabled: !!instanceId && !!selectedEngineId && histQ.isFetched && !(histQ.data as any)?.endTime,
+    enabled: !!instanceId && !!selectedEngineId && histQ.isFetched && !histQ.data?.endTime,
     retry: false,
   })
 
@@ -105,8 +105,8 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   })
 
   // Derived process definition info
-  const defId = (histQ.data as any)?.processDefinitionId || runtimeQ.data?.definitionId || null
-  const defKey = (histQ.data as any)?.processDefinitionKey || runtimeQ.data?.definitionId?.split(':')[0] || ''
+  const defId = histQ.data?.processDefinitionId || runtimeQ.data?.definitionId || null
+  const defKey = histQ.data?.processDefinitionKey || runtimeQ.data?.definitionId?.split(':')[0] || ''
   const defName = useMemo(() => {
     const m = (defsQ.data || []).find(d => d.key === defKey)
     return m?.name || defKey || '--'
@@ -168,7 +168,7 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   const activityTreeQ = useQuery({
     queryKey: ['mission-control', 'activity-tree', instanceId, selectedEngineId],
     queryFn: () => getProcessInstanceActivityTree(instanceId, selectedEngineId),
-    enabled: activityTreeEnabled && !!instanceId && !!selectedEngineId && histQ.isFetched && !(histQ.data as any)?.endTime,
+    enabled: activityTreeEnabled && !!instanceId && !!selectedEngineId && histQ.isFetched && !histQ.data?.endTime,
     retry: false,
   })
 
@@ -270,10 +270,10 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   })
 
   // Parent process instance ID
-  const parentId = (histQ.data as any)?.superProcessInstanceId || null
+  const parentId = histQ.data?.superProcessInstanceId || null
 
   // Status
-  const status = (histQ.data as any)?.state || 'UNKNOWN'
+  const status = histQ.data?.state || 'UNKNOWN'
 
   return {
     // Queries

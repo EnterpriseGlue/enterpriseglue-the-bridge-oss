@@ -58,6 +58,7 @@ export const ProcessInstanceDetailSchema = ProcessInstanceSchema.extend({
   processDefinitionId: z.string().optional(),
   definitionId: z.string().optional(),
   processDefinitionName: z.string().optional(),
+  processDefinitionVersion: z.number().optional(),
 }).passthrough();
 
 export const ActivityCountByActivityIdSchema = z.record(z.string(), z.number().nonnegative());

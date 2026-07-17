@@ -16,6 +16,7 @@ import {
   getProcessInstanceById,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
+  getHistoricProcessInstanceById,
   listProcessInstanceJobs,
   previewProcessInstanceCount,
   suspendProcessInstanceById,
@@ -501,6 +502,20 @@ describe('mission-control shared mission_control routes', () => {
     expect(listHistoricProcessInstances).toHaveBeenCalledWith('engine-77', expect.objectContaining({
       processDefinitionKey: 'payments', maxResults: 25,
     }));
+  });
+
+  it('serializes historic process-instance details through the shared passthrough contract', async () => {
+    vi.mocked(getHistoricProcessInstanceById).mockResolvedValueOnce({
+      id: 'historic-1', processDefinitionId: 'payments:1:abc', processDefinitionKey: 'payments', processDefinitionVersion: 1,
+      adapterDiagnostic: 'retained',
+    } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/process-instances/historic-1')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ id: 'historic-1', processDefinitionKey: 'payments', adapterDiagnostic: 'retained' });
   });
 
   it('denies shared process instance reads when instance view permission is missing', async () => {

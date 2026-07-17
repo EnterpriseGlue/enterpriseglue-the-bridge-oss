@@ -853,7 +853,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'List historic process instances',
-      content: { 'application/json': { schema: z.array(MissionControlProcessInstanceSchema) } },
+      content: { 'application/json': { schema: z.array(MissionControlProcessInstanceDetailSchema) } },
     },
   },
 });
@@ -867,7 +867,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'Historic process instance details',
-      content: { 'application/json': { schema: MissionControlProcessInstanceSchema } },
+      content: { 'application/json': { schema: MissionControlProcessInstanceDetailSchema } },
     },
     404: { description: 'Not found' },
   },

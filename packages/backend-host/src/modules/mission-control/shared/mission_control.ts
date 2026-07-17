@@ -38,6 +38,7 @@ import {
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
   ProcessInstanceExternalTaskListSchema,
+  ProcessInstanceDetailSchema,
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
@@ -78,19 +79,6 @@ const requireHistoricProcessInstanceAction = (actionId: string) => requireRuntim
   definitionPath: 'history/process-instance',
   resourceKeyFields: ['processDefinitionKey', 'definitionKey'],
 })
-
-// Type for process instance output
-interface ProcessInstanceOutput {
-  id: string;
-  processDefinitionKey: string | undefined;
-  version: number | undefined;
-  superProcessInstanceId: string | null;
-  rootProcessInstanceId: string | null;
-  startTime: string | null;
-  endTime: string | null;
-  state: 'ACTIVE' | 'SUSPENDED' | 'COMPLETED' | 'CANCELED' | 'INCIDENT';
-  hasIncident?: boolean;
-}
 
 // Apply auth middleware only to /mission-control-api routes (not globally).
 // Engine authorization is route-specific so scoped RBAC grants can stay granular.
@@ -265,7 +253,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireProcessInst
     const instanceId = String(req.params.id)
     const data = await getProcessInstanceVariables(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(redacted)
+    res.json(ProcessInstanceDetailSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load instance variables')
   }
@@ -277,7 +265,7 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', r
     const instanceId = String(req.params.id)
     const data = await listProcessInstanceActivityHistory(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(redacted)
+    res.json(z.array(ProcessInstanceDetailSchema).parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity instances history')
   }

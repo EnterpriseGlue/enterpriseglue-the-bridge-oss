@@ -72,8 +72,8 @@ export async function getProcessInstanceExternalTasks(instanceId: string, engine
 }
 
 // Historical data
-export async function getHistoricalProcessInstance(instanceId: string, engineId?: string): Promise<unknown> {
-  return apiClient.get<unknown>(withEngineId(`/mission-control-api/history/process-instances/${instanceId}`, engineId), undefined, { credentials: 'include' })
+export async function getHistoricalProcessInstance(instanceId: string, engineId?: string): Promise<ProcessInstanceDetail> {
+  return apiClient.get<ProcessInstanceDetail>(withEngineId(`/mission-control-api/history/process-instances/${instanceId}`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getHistoricalVariableInstances(instanceId: string, engineId?: string): Promise<Variable[]> {
