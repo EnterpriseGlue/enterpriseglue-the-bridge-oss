@@ -2425,6 +2425,8 @@ The backend repository init and clone routes now validate those same shared sche
 
 The project-creation Git clone route now also uses shared request and exact import-receipt schemas across route validation, OpenAPI, and the Git client, replacing its undocumented `unknown` transport contract.
 
+Git credential list/detail/create/rename and namespace contracts now share redacted schemas across route serialization, validation, OpenAPI, and the online-project wizard. Tokens remain request-only and are never admitted to the credential response schema.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

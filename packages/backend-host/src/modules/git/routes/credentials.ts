@@ -14,7 +14,7 @@ import { oauthService } from '@enterpriseglue/shared/services/git/OAuthService.j
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
-import { GitCredentialSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
+import { GitCredentialNamespaceSchema, GitCredentialSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
@@ -167,7 +167,7 @@ router.get('/git-api/credentials/:credentialId/namespaces', apiLimiter, requireA
   const credentialId = String(req.params.credentialId);
   
   const namespaces = await credentialService.getNamespaces(userId, credentialId);
-  res.json(namespaces);
+  res.json(z.array(GitCredentialNamespaceSchema).parse(namespaces));
 }));
 
 // ============ OAuth Routes ============

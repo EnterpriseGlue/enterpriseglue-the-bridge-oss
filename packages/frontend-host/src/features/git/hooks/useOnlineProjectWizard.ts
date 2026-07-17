@@ -15,24 +15,11 @@ import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mis
 import type { CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
 import type { ProjectImportPreview as SharedProjectImportPreview } from '@enterpriseglue/shared/schemas/starbase/project.js'
 import type { CreateProjectResponse } from '@enterpriseglue/shared/schemas/starbase/project.js'
+import type { GitCredential as ProviderCredential, GitCredentialNamespace as Namespace } from '@enterpriseglue/shared/schemas/git/repository.js'
 
 export type AuthMethod = 'oauth' | 'pat'
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 export type ConnectionMode = 'select' | 'new'
-
-interface ProviderCredential {
-  id: string
-  providerId: string
-  name?: string
-  providerUsername?: string
-  authType: string
-}
-
-interface Namespace {
-  name: string
-  type: 'user' | 'organization'
-  avatarUrl?: string
-}
 
 export type EngineForImport = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>
 
