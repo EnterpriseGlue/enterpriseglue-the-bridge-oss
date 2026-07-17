@@ -14,6 +14,7 @@ import {
   listProcessDefinitions,
   listProcessInstancesDetailed,
   getProcessInstanceById,
+  getProcessInstanceVariables,
   listProcessInstanceActivityHistory,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
@@ -443,6 +444,31 @@ describe('mission-control shared mission_control routes', () => {
       resourceId: 'engine-77',
     }));
     expect(getProcessInstanceVariableHistory).toHaveBeenCalledWith('engine-77', 'pi-1', 'var-1');
+  });
+
+  it('serializes process variables through the shared passthrough contract', async () => {
+    vi.mocked(getProcessInstanceVariables).mockResolvedValueOnce({
+      approvalReason: {
+        value: 'Need manager sign-off',
+        type: 'String',
+        valueInfo: { serializationDataFormat: 'application/json' },
+        adapterDiagnostic: { retained: true },
+      },
+    } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/variables')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      approvalReason: expect.objectContaining({
+        type: 'String',
+        value: 'Need manager sign-off',
+        adapterDiagnostic: { retained: true },
+      }),
+    });
+    expect(getProcessInstanceVariables).toHaveBeenCalledWith('engine-77', 'pi-1');
   });
 
   it('serializes activity history through the shared passthrough contract', async () => {

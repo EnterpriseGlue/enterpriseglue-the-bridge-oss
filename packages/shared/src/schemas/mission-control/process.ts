@@ -71,8 +71,23 @@ export const ActivityCountsByStateSchema = z.object({
   completed: ActivityCountByActivityIdSchema,
 });
 
-// Variables schema
-export const VariablesSchema = z.record(z.string(), z.object({ value: z.any(), type: z.string() }));
+// Runtime variable values can carry engine-specific serialization metadata.
+// Keep the common display and scope fields explicit without dropping adapter
+// extensions after PII redaction.
+export const ProcessInstanceVariableSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().optional(),
+  type: z.string(),
+  value: z.unknown(),
+  valueInfo: z.unknown().optional(),
+  processInstanceId: z.string().nullable().optional(),
+  executionId: z.string().nullable().optional(),
+  activityInstanceId: z.string().nullable().optional(),
+  taskId: z.string().nullable().optional(),
+  createTime: z.string().nullable().optional(),
+}).passthrough();
+
+export const VariablesSchema = z.record(z.string(), ProcessInstanceVariableSchema);
 
 // Historic activity-instance rows power the Instance Detail execution trail.
 // Keep the fields rendered by that UI explicit while retaining engine-specific
@@ -189,6 +204,7 @@ export type ProcessInstanceDetail = z.infer<typeof ProcessInstanceDetailSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
+export type ProcessInstanceVariable = z.infer<typeof ProcessInstanceVariableSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;
 export type ActivityInstanceList = z.infer<typeof ActivityInstanceListSchema>;

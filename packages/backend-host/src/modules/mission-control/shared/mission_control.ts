@@ -42,6 +42,7 @@ import {
   ProcessInstanceDetailSchema,
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
+  VariablesSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { HistoricVariableInstanceListSchema, ProcessInstanceExecutionDetailsSchema } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 
@@ -254,7 +255,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireProcessInst
     const instanceId = String(req.params.id)
     const data = await getProcessInstanceVariables(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(redacted)
+    res.json(VariablesSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load instance variables')
   }

@@ -2253,6 +2253,8 @@ The live activity-instance tree now has a shared recursive passthrough schema th
 
 Historic activity-instance reads now use a shared passthrough contract through the PII-redacted backend serializer, OpenAPI operation, and Instance Detail execution trail. The contract captures its activity, timing, execution, hierarchy, and completion fields while retaining adapter diagnostics, replacing the local frontend row interface without narrowing existing engine responses.
 
+Runtime process variables now share one passthrough value contract at both active process-instance route implementations, OpenAPI, and the typed Instance Detail client. It preserves engine serialization metadata and extensions after redaction, while the historical-variable client imports its already canonical historic-row schema rather than reusing a local approximation.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

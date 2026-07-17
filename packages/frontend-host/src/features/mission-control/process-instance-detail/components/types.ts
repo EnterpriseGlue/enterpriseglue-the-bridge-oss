@@ -30,18 +30,7 @@ export type ProcessDefinition = {
 
 export type ActivityInstance = SharedActivityInstance
 
-export type Variable = {
-  id?: string
-  name: string
-  type: string
-  value: any
-  valueInfo?: any
-  processInstanceId?: string | null
-  executionId?: string | null
-  activityInstanceId?: string | null
-  taskId?: string | null
-  createTime?: string | null
-}
+export type Variable = HistoricVariableInstance
 
 export type VariableHistoryEntry = {
   id: string

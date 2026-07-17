@@ -8,6 +8,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import {
   listProcessInstances,
   getProcessInstance,
+  getProcessInstanceVariables,
   deleteProcessInstance,
   modifyProcessInstanceVariables,
 } from '../../../../../packages/backend-host/src/modules/mission-control/process-instances/service.js';
@@ -131,6 +132,29 @@ describe('mission-control process-instances routes', () => {
         variablesUpdate: { allowed: true },
       },
     });
+  });
+
+  it('serializes process variables through the shared passthrough contract', async () => {
+    (getProcessInstanceVariables as unknown as Mock).mockResolvedValueOnce({
+      approvalReason: {
+        value: 'Need manager sign-off',
+        type: 'String',
+        valueInfo: { serializationDataFormat: 'application/json' },
+        adapterDiagnostic: { retained: true },
+      },
+    });
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi1/variables')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      approvalReason: expect.objectContaining({
+        type: 'String', value: 'Need manager sign-off', adapterDiagnostic: { retained: true },
+      }),
+    });
+    expect(getProcessInstanceVariables).toHaveBeenCalledWith('engine-1', 'pi1');
   });
 
   it('deletes process instances through delete permission', async () => {
