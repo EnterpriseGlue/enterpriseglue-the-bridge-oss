@@ -2333,6 +2333,8 @@ Process-instance incidents now share one passthrough model across redaction-awar
 
 The process-instance job list now likewise has a shared passthrough display model, retaining engine diagnostics and the legacy `duedate` spelling while removing the duplicate Instance Detail interface.
 
+Failed external tasks for Process Instance Detail now use their own shared passthrough display model across the runtime route, OpenAPI, and retry UI, retaining engine-specific failure metadata.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

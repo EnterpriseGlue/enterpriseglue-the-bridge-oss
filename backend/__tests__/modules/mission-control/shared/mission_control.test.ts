@@ -346,6 +346,23 @@ describe('mission-control shared mission_control routes', () => {
     expect(listProcessInstanceJobs).toHaveBeenCalledWith('engine-77', 'instance-1');
   });
 
+  it('serializes failed external tasks through the shared passthrough contract', async () => {
+    const { listFailedExternalTasks } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js');
+    vi.mocked(listFailedExternalTasks).mockResolvedValueOnce([
+      { id: 'external-task-1', activityId: 'approve', retries: 0, errorMessage: 'Worker unavailable', engineExtension: { retryable: true } },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1/failed-external-tasks')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'external-task-1', activityId: 'approve', retries: 0, errorMessage: 'Worker unavailable', engineExtension: { retryable: true } },
+    ]);
+    expect(listFailedExternalTasks).toHaveBeenCalledWith('engine-77', 'instance-1');
+  });
+
   it('adds requested action decisions to compatibility process-instance details', async () => {
     vi.mocked(getProcessInstanceById).mockResolvedValueOnce({ id: 'instance-1', processDefinitionKey: 'payments' } as any);
 

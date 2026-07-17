@@ -95,6 +95,18 @@ export const ProcessInstanceJobSchema = z.object({
 
 export const ProcessInstanceJobListSchema = z.array(ProcessInstanceJobSchema);
 
+// Failed external tasks are rendered in the instance-detail retry flow. Keep
+// the fields it reads explicit and retain adapter-specific failure metadata.
+export const ProcessInstanceExternalTaskSchema = z.object({
+  id: z.string(),
+  activityId: z.string().nullable().optional(),
+  retries: z.number().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+  errorDetails: z.string().nullable().optional(),
+}).passthrough();
+
+export const ProcessInstanceExternalTaskListSchema = z.array(ProcessInstanceExternalTaskSchema);
+
 // Request schemas
 export const PreviewCountRequest = z.object({
   processDefinitionKey: z.string().optional(),
@@ -129,3 +141,5 @@ export type ProcessInstanceIncident = z.infer<typeof ProcessInstanceIncidentSche
 export type ProcessInstanceIncidentList = z.infer<typeof ProcessInstanceIncidentListSchema>;
 export type ProcessInstanceJob = z.infer<typeof ProcessInstanceJobSchema>;
 export type ProcessInstanceJobList = z.infer<typeof ProcessInstanceJobListSchema>;
+export type ProcessInstanceExternalTask = z.infer<typeof ProcessInstanceExternalTaskSchema>;
+export type ProcessInstanceExternalTaskList = z.infer<typeof ProcessInstanceExternalTaskListSchema>;

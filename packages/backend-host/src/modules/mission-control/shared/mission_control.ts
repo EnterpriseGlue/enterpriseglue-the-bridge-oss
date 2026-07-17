@@ -37,6 +37,7 @@ import {
   ActivityCountsByStateSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
+  ProcessInstanceExternalTaskListSchema,
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
@@ -437,7 +438,7 @@ r.get('/mission-control-api/process-instances/:id/failed-external-tasks', requir
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
     const data = await listFailedExternalTasks(engineId, instanceId)
-    res.json(data)
+    res.json(ProcessInstanceExternalTaskListSchema.parse(data))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load external tasks')
   }
