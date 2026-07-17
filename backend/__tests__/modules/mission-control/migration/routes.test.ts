@@ -228,6 +228,15 @@ describe('mission-control migration routes', () => {
     expect(previewMigrationCount).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed migration preview selections before previewing', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/preview')
+      .send({ engineId: 'engine-1', processInstanceIds: 'pi-1' });
+
+    expect(response.status).toBe(400);
+    expect(previewMigrationCount).not.toHaveBeenCalled();
+  });
+
   it('serializes active source activity counts through the shared response contract', async () => {
     vi.mocked(aggregateActiveSources).mockResolvedValueOnce({ approve: 2 });
 

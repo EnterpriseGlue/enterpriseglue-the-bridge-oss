@@ -90,6 +90,7 @@ const {
   MigrationGenerateRequestSchema,
   MigrationInstructionSchema,
   MigrationPlanSchema,
+  MigrationPreviewRequestSchema,
   MigrationValidationResultSchema,
   MigrationPreviewResponseSchema,
   PreviewCountResponseSchema,
@@ -1388,14 +1389,13 @@ registry.registerPath({
 })
 
 // POST /mission-control-api/migration/preview
-const MigrationPreviewRequest = z.object({ plan: MigrationPlanSchema.optional(), processInstanceIds: z.array(z.string()).optional() })
-registry.register('MigrationPreviewRequest', MigrationPreviewRequest)
+registry.register('MigrationPreviewRequest', MigrationPreviewRequestSchema)
 registry.register('MigrationPreviewResponse', MigrationPreviewResponseSchema)
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/preview',
   ...authzExtension('engine.runtime.migrations.preview', 'POST', '/mission-control-api/migration/preview'),
-  request: { body: { content: { 'application/json': { schema: MigrationPreviewRequest } } } },
+  request: { body: { content: { 'application/json': { schema: MigrationPreviewRequestSchema } } } },
   responses: { 200: { description: 'Preview affected instances count', content: { 'application/json': { schema: MigrationPreviewResponseSchema } } } },
 })
 

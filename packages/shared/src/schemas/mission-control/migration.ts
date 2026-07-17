@@ -81,6 +81,14 @@ export const MigrationPreviewResponseSchema = z.object({
   count: z.number().int().nonnegative(),
 }).strict();
 
+// Preview accepts engine-specific migration-plan extensions. Validate the
+// request envelope without narrowing plan payloads that adapters own.
+export const MigrationPreviewRequestSchema = z.object({
+  engineId: z.string(),
+  plan: z.record(z.string(), z.unknown()).optional(),
+  processInstanceIds: z.array(z.string()).optional(),
+}).passthrough();
+
 // Selected instances are resolved for runtime-resource authorization before
 // this schema runs. Preserve compatible adapter hints while validating the
 // selection the aggregation service consumes.
@@ -95,6 +103,7 @@ export const MigrationActiveSourcesResponseSchema = z.record(
 );
 
 export type MigrationPreviewResponse = z.infer<typeof MigrationPreviewResponseSchema>;
+export type MigrationPreviewRequest = z.infer<typeof MigrationPreviewRequestSchema>;
 export type MigrationActiveSourcesRequest = z.infer<typeof MigrationActiveSourcesRequestSchema>;
 export type MigrationActiveSourcesResponse = z.infer<typeof MigrationActiveSourcesResponseSchema>;
 export type MigrationInstruction = z.infer<typeof MigrationInstructionSchema>;

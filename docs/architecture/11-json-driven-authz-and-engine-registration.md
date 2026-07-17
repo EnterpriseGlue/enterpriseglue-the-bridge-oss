@@ -2409,6 +2409,8 @@ Those direct-operation handlers now also validate the shared core request contra
 
 Migration active-source aggregation now uses one shared selected-instance request contract across runtime authorization, backend validation, OpenAPI, and the migration wizard. Compatible adapter hints remain accepted, while malformed selections are rejected before any engine aggregation read.
 
+Migration preview now similarly shares a validated envelope across runtime authorization, backend, OpenAPI, and the wizard. Its migration plan remains deliberately passthrough-compatible for engine-specific plan extensions, while malformed engine ids and selected-instance lists fail before a preview read.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

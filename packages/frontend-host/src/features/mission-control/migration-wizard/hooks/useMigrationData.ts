@@ -13,6 +13,7 @@ import type {
   MigrationDirectExecuteResponse,
   MigrationExecuteRequest,
   MigrationPlan,
+  MigrationPreviewRequest,
   MigrationPreviewResponse,
   MigrationValidationResult,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
@@ -194,12 +195,19 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       (planWithOverrides as any)?.sourceProcessDefinitionId,
       instanceIds.join(','),
     ],
-    queryFn: async () =>
-      await apiClient.post<MigrationPreviewResponse>(
+    queryFn: async () => {
+      if (!selectedEngineId) throw new Error('An engine must be selected to preview migration instances')
+      const request: MigrationPreviewRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+        processInstanceIds: instanceIds,
+      }
+      return await apiClient.post<MigrationPreviewResponse>(
         '/mission-control-api/migration/preview',
-        { engineId: selectedEngineId, plan: planWithOverrides, processInstanceIds: instanceIds },
+        request,
         { credentials: 'include' }
-      ),
+      )
+    },
     // Migration guards resolve the selected source and target definitions
     // server-side. Permission snapshots deliberately omit that lineage.
     enabled: !!selectedEngineId && !!planWithOverrides,

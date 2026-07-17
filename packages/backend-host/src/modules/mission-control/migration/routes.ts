@@ -11,6 +11,7 @@ import {
   MigrationExecuteRequestSchema,
   MigrationPreviewResponseSchema,
   MigrationPlanSchema,
+  MigrationPreviewRequestSchema,
   MigrationValidationResultSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 import {
@@ -29,7 +30,7 @@ const r = Router()
 r.use('/mission-control-api', requireAuth)
 
 // Preview affected instances count
-r.post('/mission-control-api/migration/preview', requireRuntimeMigrationAction('engine.runtime.migrations.preview', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/preview', requireRuntimeMigrationAction('engine.runtime.migrations.preview', { resourceKind: 'process_definition' }), validateBody(MigrationPreviewRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { plan, processInstanceIds } = req.body || {}
     if (Array.isArray(processInstanceIds) && processInstanceIds.length > 0) {
