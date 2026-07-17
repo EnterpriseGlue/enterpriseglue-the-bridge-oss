@@ -39,7 +39,7 @@ const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<ProjectAssignmentPrincipalType, s
 
 const PROJECT_OWNER_ROLE = new Set<ProjectRole>(['owner'])
 
-function hasProjectOwnerRole(roles: ProjectRole[]): boolean {
+function hasLegacyProjectOwnerRole(roles: ProjectRole[]): boolean {
   return roles.some((role) => PROJECT_OWNER_ROLE.has(role))
 }
 
@@ -49,6 +49,16 @@ function scopedAssignmentPrincipalType(assignment: ProjectScopedRoleAssignmentRo
 
 function scopedAssignmentPrincipalId(assignment: ProjectScopedRoleAssignmentRow): string {
   return assignment.principalId || assignment.userId || ''
+}
+
+export function getCanonicalProjectOwnerMemberIds(assignments: ProjectScopedRoleAssignmentRow[]): ReadonlySet<string> {
+  const memberIds = new Set<string>()
+  for (const assignment of assignments) {
+    if (assignment.roleId !== 'system.project.owner' || scopedAssignmentPrincipalType(assignment) !== 'user') continue
+    const principalId = scopedAssignmentPrincipalId(assignment)
+    if (principalId) memberIds.add(principalId)
+  }
+  return memberIds
 }
 
 function formatScopedAssignmentPrincipal(assignment: ProjectScopedRoleAssignmentRow): string {
@@ -243,6 +253,10 @@ export const ProjectMembersModal = ({
   const manualProjectAccessEnabled = projectAccessAuthority !== 'sso_managed'
   const canOpenAddMember = manualProjectAccessEnabled && (canAddMembers || canInviteMembers)
   const canUseScopedAssignmentControls = manualProjectAccessEnabled && canAssignScopedAccess
+  const canonicalProjectOwnerMemberIds = React.useMemo(
+    () => getCanonicalProjectOwnerMemberIds(scopedRoleAssignments),
+    [scopedRoleAssignments],
+  )
   const sourceManagedProjectAccessReason = projectAccessAuthority === 'sso_managed'
     ? 'Project access is managed by SSO. Manual project member changes are disabled.'
     : projectAccessAuthority === 'transition_to_sso'
@@ -341,7 +355,10 @@ export const ProjectMembersModal = ({
                                 : member
                                   ? ((Array.isArray(member.roles) && member.roles.length > 0 ? member.roles : [member.role]) as ProjectRole[])
                                   : ([] as ProjectRole[])
-                              const isOwner = hasProjectOwnerRole(roles)
+                              // A canonical direct owner grant is authoritative when the
+                              // assignment list is available. The legacy owner label stays
+                              // restrictive until deployed cutover evidence closes that path.
+                              const isOwner = Boolean(member && canonicalProjectOwnerMemberIds.has(member.userId)) || hasLegacyProjectOwnerRole(roles)
                               // `deployAllowed` is `boolean` only when the server's
                               // canonical project file-edit decision makes this member
                               // eligible for a deploy grant. `null` is an ineligible

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
-import { ProjectMembersModal } from '@src/features/starbase/pages/components/ProjectMembersModal';
+import { getCanonicalProjectOwnerMemberIds, ProjectMembersModal } from '@src/features/starbase/pages/components/ProjectMembersModal';
 
 vi.mock('@carbon/react', async () => {
   const actual = await vi.importActual<any>('@carbon/react');
@@ -249,6 +249,42 @@ describe('ProjectMembersModal', () => {
     });
 
     expect(screen.queryByRole('button', { name: /options/i })).toBeNull();
+  });
+
+  it('protects a canonical project owner when its legacy member display role is ordinary', () => {
+    const canonicalOwnerWithLegacyEditor = {
+      userId: 'user-2',
+      role: 'editor',
+      roles: ['editor'],
+      deployAllowed: true,
+      user: { email: 'owner@example.com' },
+    } as any;
+    renderMembersModal({
+      members: [canonicalOwnerWithLegacyEditor],
+      scopedRoleAssignments: [{
+        id: 'project-owner-assignment',
+        userId: 'user-2',
+        principalType: 'user',
+        principalId: 'user-2',
+        roleId: 'system.project.owner',
+        source: 'manual',
+      }] as any,
+      canUpdateMemberRoles: true,
+      canManageMemberDeployGrant: true,
+      canTransferOwnership: true,
+      canRemoveMembers: true,
+    });
+
+    expect(screen.queryByRole('button', { name: /options/i })).toBeNull();
+  });
+
+  it('uses only direct user project-owner assignments to protect roster rows', () => {
+    const ownerMemberIds = getCanonicalProjectOwnerMemberIds([
+      { id: 'group-owner', roleId: 'system.project.owner', source: 'manual', principalType: 'group', principalId: 'project-owners' },
+      { id: 'user-owner', roleId: 'system.project.owner', source: 'manual', principalType: 'user', principalId: 'user-owner' },
+    ] as any);
+
+    expect([...ownerMemberIds]).toEqual(['user-owner']);
   });
 
   it('shows transfer ownership only when transfer permission is available', async () => {
