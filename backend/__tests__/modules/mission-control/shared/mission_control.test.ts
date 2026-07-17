@@ -465,6 +465,9 @@ describe('mission-control shared mission_control routes', () => {
       taskId: 'task-1',
       variables: [{ id: 'var-1', name: 'approvalReason' }],
     });
+    expect(response.body).toEqual(expect.objectContaining({
+      tasks: expect.any(Array), decisions: expect.any(Array), userOperations: expect.any(Array),
+    }));
     expect(getProcessInstanceExecutionDetails).toHaveBeenCalledWith('engine-77', 'pi1', {
       activityInstanceId: 'act-inst-1',
       executionId: 'exec-1',

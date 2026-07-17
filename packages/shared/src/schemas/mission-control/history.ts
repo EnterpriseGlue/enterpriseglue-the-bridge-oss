@@ -138,6 +138,17 @@ export const UserOperationLogEntrySchema = z.object({
 
 export const UserOperationLogEntryListSchema = z.array(UserOperationLogEntrySchema);
 
+/** Bounded lazy-detail envelope for one runtime activity instance. */
+export const ProcessInstanceExecutionDetailsSchema = z.object({
+  activityInstanceId: z.string(),
+  executionId: z.string().nullable(),
+  taskId: z.string().nullable(),
+  variables: z.array(HistoricVariableInstanceSchema),
+  tasks: z.array(HistoricTaskInstanceSchema),
+  decisions: z.array(HistoricDecisionInstanceSchema),
+  userOperations: z.array(UserOperationLogEntrySchema),
+}).strict();
+
 // Query params
 export const HistoricTaskQueryParams = z.object({
   taskId: z.string().optional(),
@@ -300,6 +311,7 @@ export type HistoricDecisionIo = z.infer<typeof HistoricDecisionIoSchema>;
 export type HistoricDecisionIoList = z.infer<typeof HistoricDecisionIoListSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;
 export type UserOperationLogEntryList = z.infer<typeof UserOperationLogEntryListSchema>;
+export type ProcessInstanceExecutionDetails = z.infer<typeof ProcessInstanceExecutionDetailsSchema>;
 export type HistoricTaskQueryParams = z.infer<typeof HistoricTaskQueryParams>;
 export type VariableHistoryQueryParams = z.infer<typeof VariableHistoryQueryParams>;
 export type HistoricVariableQueryParams = z.infer<typeof HistoricVariableQueryParams>;

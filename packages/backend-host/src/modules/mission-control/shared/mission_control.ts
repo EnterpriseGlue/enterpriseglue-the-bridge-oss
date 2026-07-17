@@ -42,7 +42,7 @@ import {
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
-import { HistoricVariableInstanceListSchema } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import { HistoricVariableInstanceListSchema, ProcessInstanceExecutionDetailsSchema } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 
 // Validation schemas
 const previewCountSchema = z.object({}).passthrough()
@@ -278,7 +278,7 @@ r.get('/mission-control-api/process-instances/:id/execution-details', requirePro
     const query = req.query as z.infer<typeof executionDetailsQuerySchema>
     const data = await getProcessInstanceExecutionDetails(engineId, instanceId, query)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
-    res.json(redacted)
+    res.json(ProcessInstanceExecutionDetailsSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load execution details')
   }

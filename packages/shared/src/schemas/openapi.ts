@@ -136,6 +136,7 @@ const {
   HistoricDecisionIoListSchema,
   UserOperationLogEntrySchema,
   UserOperationLogEntryListSchema,
+  ProcessInstanceExecutionDetailsSchema,
   HistoricTaskQueryParams,
   VariableHistoryQueryParams,
   HistoricVariableQueryParams,
@@ -776,7 +777,7 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: { description: 'Lazy execution details for a process instance activity', content: { 'application/json': { schema: z.unknown() } } },
+    200: { description: 'Lazy execution details for a process instance activity', content: { 'application/json': { schema: ProcessInstanceExecutionDetailsSchema } } },
     400: { description: 'Invalid query parameters', content: { 'application/json': { schema: InvalidQueryParametersResponseSchema } } },
   },
 });
