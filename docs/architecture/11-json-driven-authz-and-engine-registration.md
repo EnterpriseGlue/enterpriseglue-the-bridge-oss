@@ -2341,6 +2341,8 @@ Decision-definition list and detail reads now use their shared passthrough contr
 
 Process and Decision Instance Detail now import the shared historic decision, task, and user-operation display contracts instead of retaining duplicate local subsets.
 
+Historic decision collection reads now serialize through the same passthrough shared list contract documented in OpenAPI and consumed by Decision Overview, so required display fields are validated without discarding engine-specific extension data.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

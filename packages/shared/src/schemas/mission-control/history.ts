@@ -76,7 +76,9 @@ export const HistoricDecisionInstanceSchema = z.object({
   decisionRequirementsDefinitionId: z.string().optional().nullable(),
   decisionRequirementsDefinitionKey: z.string().optional().nullable(),
   tenantId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const HistoricDecisionInstanceListSchema = z.array(HistoricDecisionInstanceSchema);
 
 // Historic decision inputs and outputs share a display/read model. Keep
 // engine-specific fields intact while making the identifiers and decision IO
@@ -285,6 +287,7 @@ export type HistoricTaskInstance = z.infer<typeof HistoricTaskInstanceSchema>;
 export type HistoricVariableInstance = z.infer<typeof HistoricVariableInstanceSchema>;
 export type VariableHistoryEntry = z.infer<typeof VariableHistoryEntrySchema>;
 export type HistoricDecisionInstance = z.infer<typeof HistoricDecisionInstanceSchema>;
+export type HistoricDecisionInstanceList = z.infer<typeof HistoricDecisionInstanceListSchema>;
 export type HistoricDecisionIo = z.infer<typeof HistoricDecisionIoSchema>;
 export type HistoricDecisionIoList = z.infer<typeof HistoricDecisionIoListSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;

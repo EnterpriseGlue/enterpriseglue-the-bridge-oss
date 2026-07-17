@@ -26,6 +26,7 @@ import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
 import { useActionDecision } from '../../../../shared/auth/guards'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
+import type { DecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -46,15 +47,7 @@ type DecisionEditTarget = {
   mappingSource?: string
 }
 
-type DecisionDef = {
-  id: string
-  key: string
-  name?: string | null
-  version: number
-  versionTag?: string | null
-  decisionRequirementsDefinitionId?: string | null
-  decisionRequirementsDefinitionKey?: string | null
-}
+type DecisionDef = DecisionDefinition
 
 export default function Decisions() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()

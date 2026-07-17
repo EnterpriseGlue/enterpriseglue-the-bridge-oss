@@ -1,5 +1,6 @@
 import { apiClient } from '../../../../shared/api/client'
 import type { DecisionDefinition as SharedDecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
+import type { HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 export { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 
 // Types
@@ -19,15 +20,7 @@ export type DecisionInstance = {
   tenantId?: string
 }
 
-export type DecisionHistoryEntry = {
-  id: string
-  decisionDefinitionId?: string | null
-  decisionDefinitionKey?: string | null
-  decisionDefinitionName?: string | null
-  evaluationTime?: string | null
-  processInstanceId?: string | null
-  state?: string | null
-}
+export type DecisionHistoryEntry = SharedHistoricDecisionInstance
 
 // API Functions
 export async function listDecisionDefinitions(engineId?: string): Promise<DecisionDefinition[]> {

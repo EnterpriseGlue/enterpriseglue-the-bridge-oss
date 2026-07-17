@@ -118,6 +118,7 @@ const {
   HistoricVariableInstanceSchema,
   VariableHistoryEntrySchema,
   HistoricDecisionInstanceSchema,
+  HistoricDecisionInstanceListSchema,
   HistoricDecisionIoListSchema,
   UserOperationLogEntrySchema,
   HistoricTaskQueryParams,
@@ -1557,11 +1558,12 @@ registry.register('HistoricTaskInstance', HistoricTaskInstanceSchema);
 registry.register('HistoricVariableInstance', HistoricVariableInstanceSchema);
 registry.register('VariableHistoryEntry', VariableHistoryEntrySchema);
 registry.register('HistoricDecisionInstance', HistoricDecisionInstanceSchema);
+registry.register('HistoricDecisionInstanceList', HistoricDecisionInstanceListSchema);
 registry.register('HistoricDecisionIoList', HistoricDecisionIoListSchema);
 registry.register('UserOperationLogEntry', UserOperationLogEntrySchema);
 registry.registerPath({ method: 'get', path: '/mission-control-api/history/tasks', ...authzExtension('engine.runtime.history.tasks.read', 'GET', '/mission-control-api/history/tasks'), request: { query: HistoricTaskQueryParams.partial() }, responses: { 200: { description: 'Historic task instances', content: { 'application/json': { schema: z.array(HistoricTaskInstanceSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/history/variables', ...authzExtension('engine.runtime.history.variables.read', 'GET', '/mission-control-api/history/variables'), request: { query: HistoricVariableQueryParams.partial() }, responses: { 200: { description: 'Historic variable instances', content: { 'application/json': { schema: z.array(HistoricVariableInstanceSchema) } } } } });
-registry.registerPath({ method: 'get', path: '/mission-control-api/history/decisions', ...authzExtension('engine.runtime.history.decisions.read', 'GET', '/mission-control-api/history/decisions'), request: { query: HistoricDecisionQueryParams.partial() }, responses: { 200: { description: 'Historic decision instances', content: { 'application/json': { schema: z.array(HistoricDecisionInstanceSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/mission-control-api/history/decisions', ...authzExtension('engine.runtime.history.decisions.read', 'GET', '/mission-control-api/history/decisions'), request: { query: HistoricDecisionQueryParams.partial() }, responses: { 200: { description: 'Historic decision instances', content: { 'application/json': { schema: HistoricDecisionInstanceListSchema } } } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/history/decisions/{id}/inputs', ...authzExtension('engine.runtime.history.decisions.inputs.read', 'GET', '/mission-control-api/history/decisions/{id}/inputs'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Inputs for a historic decision instance', content: { 'application/json': { schema: HistoricDecisionIoListSchema } } }, 404: { description: 'Not found' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/history/decisions/{id}/outputs', ...authzExtension('engine.runtime.history.decisions.outputs.read', 'GET', '/mission-control-api/history/decisions/{id}/outputs'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Outputs for a historic decision instance', content: { 'application/json': { schema: HistoricDecisionIoListSchema } } }, 404: { description: 'Not found' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/history/user-operations', ...authzExtension('engine.runtime.history.user-operations.read', 'GET', '/mission-control-api/history/user-operations'), request: { query: UserOperationLogQueryParams.partial() }, responses: { 200: { description: 'User operation log', content: { 'application/json': { schema: z.array(UserOperationLogEntrySchema) } } } } });

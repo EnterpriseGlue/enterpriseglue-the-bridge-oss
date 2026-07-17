@@ -9,6 +9,7 @@ import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiReda
 import {
   listHistoricTasks,
   listHistoricVariables,
+  listHistoricDecisions,
   listHistoricDecisionInputs,
   listHistoricDecisionOutputs,
   listUserOperations,
@@ -166,6 +167,28 @@ describe('mission-control extended history routes', () => {
     expect(response.body).toEqual([{ id: 'var-1', value: 'secret' }]);
     expect(listHistoricVariables).toHaveBeenCalledWith('engine-1', {});
     expect(piiRedactionService.redactPayload).toHaveBeenCalledWith(expect.anything(), [{ id: 'var-1', value: 'secret' }], 'history');
+  });
+
+  it('serializes historic decisions through the shared contract without dropping engine extensions', async () => {
+    (listHistoricDecisions as unknown as Mock).mockResolvedValueOnce([{
+      id: 'decision-1',
+      decisionDefinitionKey: 'invoice',
+      state: 'EVALUATED',
+      engineExtension: { source: 'camunda' },
+    }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/decisions')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{
+      id: 'decision-1',
+      decisionDefinitionKey: 'invoice',
+      state: 'EVALUATED',
+      engineExtension: { source: 'camunda' },
+    }]);
+    expect(piiRedactionService.redactPayload).toHaveBeenCalledWith(expect.anything(), expect.any(Array), 'history');
   });
 
   it('reads historic decision inputs through decision input action permission', async () => {

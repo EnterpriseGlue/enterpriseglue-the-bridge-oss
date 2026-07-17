@@ -16,6 +16,7 @@ import {
   HistoricTaskQueryParams,
   HistoricVariableQueryParams,
   HistoricDecisionQueryParams,
+  HistoricDecisionInstanceListSchema,
   HistoricDecisionIoListSchema,
   UserOperationLogQueryParams,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js';
@@ -73,7 +74,7 @@ r.get('/mission-control-api/history/decisions', requireRuntimeCollectionAction('
     )))).flat()
     : await listHistoricDecisions(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
-  res.json(redacted);
+  res.json(HistoricDecisionInstanceListSchema.parse(redacted));
 }));
 
 // Get historic decision instance inputs
