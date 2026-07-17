@@ -89,6 +89,15 @@ export const ProcessInstanceVariableSchema = z.object({
 
 export const VariablesSchema = z.record(z.string(), ProcessInstanceVariableSchema);
 
+// EnterpriseGlue uses engineId only to resolve authorization and the target
+// engine. Keep values adapter-compatible: some engines accept the direct
+// variable map while established callers provide an enclosing `variables`
+// object with additional serialization metadata.
+export const ProcessInstanceVariablesModifyRequestSchema = z.object({
+  engineId: z.string().optional(),
+  modifications: z.record(z.string(), z.unknown()),
+});
+
 // Historic activity-instance rows power the Instance Detail execution trail.
 // Keep the fields rendered by that UI explicit while retaining engine-specific
 // diagnostics and adapter extensions for compatibility.
@@ -231,6 +240,7 @@ export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
 export type ProcessInstanceCollectionQueryParams = z.infer<typeof ProcessInstanceCollectionQueryParamsSchema>;
 export type ProcessInstanceVariable = z.infer<typeof ProcessInstanceVariableSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
+export type ProcessInstanceVariablesModifyRequest = z.infer<typeof ProcessInstanceVariablesModifyRequestSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;
 export type ActivityInstanceList = z.infer<typeof ActivityInstanceListSchema>;
 export type ProcessInstanceIncident = z.infer<typeof ProcessInstanceIncidentSchema>;

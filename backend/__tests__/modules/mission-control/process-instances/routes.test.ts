@@ -189,6 +189,15 @@ describe('mission-control process-instances routes', () => {
     });
   });
 
+  it('rejects malformed process instance variable updates before calling the engine', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/process-instances/pi1/variables')
+      .send({ engineId: 'engine-1', modifications: 'invalid' });
+
+    expect(response.status).toBe(400);
+    expect(modifyProcessInstanceVariables).not.toHaveBeenCalled();
+  });
+
   it('denies process instance reads when instance view permission is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 

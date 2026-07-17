@@ -28,7 +28,7 @@ import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
 import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
 import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
-import { getProcessInstanceVariableHistory } from './api/processInstances'
+import { getProcessInstanceVariableHistory, modifyProcessInstanceVariables } from './api/processInstances'
 import type { DecisionIo, HistoricDecisionInstanceLite, VariableHistoryTarget } from './components/types'
 import { ProcessInstanceDiagramPane } from './components/ProcessInstanceDiagramPane'
 import { ProcessInstanceBottomPane } from './components/ProcessInstanceBottomPane'
@@ -463,8 +463,10 @@ export default function ProcessInstanceDetailPage() {
     setAddVariableError(null)
     try {
       const parsed = parseTypedValue(addVariableValue, addVariableType)
-      const body = { modifications: { [key]: { value: parsed, type: addVariableType } }, engineId: selectedEngineId }
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+      await modifyProcessInstanceVariables(instanceId, {
+        modifications: { [key]: { value: parsed, type: addVariableType } },
+        engineId: selectedEngineId || undefined,
+      })
       await varsQ.refetch()
       setAddVariableOpen(false)
     } catch (e: any) {
@@ -509,8 +511,10 @@ export default function ProcessInstanceDetailPage() {
         throw new Error('No variables found to upload')
       }
 
-      const body = { modifications, engineId: selectedEngineId }
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+      await modifyProcessInstanceVariables(instanceId, {
+        modifications,
+        engineId: selectedEngineId || undefined,
+      })
       await varsQ.refetch()
       setBulkUploadOpen(false)
     } catch (e: any) {

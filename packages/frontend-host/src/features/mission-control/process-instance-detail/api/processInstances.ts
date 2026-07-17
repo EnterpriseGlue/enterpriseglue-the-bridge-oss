@@ -2,6 +2,7 @@ import { apiClient } from '../../../../shared/api/client'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
   ActivityInstance,
+  ProcessInstanceVariablesModifyRequest,
   Variables,
   ProcessInstanceDetail as SharedProcessInstanceDetail,
   RuntimeActivityInstanceTree,
@@ -31,6 +32,10 @@ export async function getProcessInstance(instanceId: string, engineId?: string):
 
 export async function getProcessInstanceVariables(instanceId: string, engineId?: string): Promise<Variables> {
   return apiClient.get<Variables>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variables`, engineId), undefined, { credentials: 'include' })
+}
+
+export async function modifyProcessInstanceVariables(instanceId: string, body: ProcessInstanceVariablesModifyRequest): Promise<void> {
+  await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
 }
 
 export async function getProcessInstanceVariableHistory(instanceId: string, variableInstanceId: string, engineId?: string): Promise<VariableHistoryEntry[]> {

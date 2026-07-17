@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
-import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
+import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import {
   listProcessInstances,
   getProcessInstance,
@@ -14,7 +14,7 @@ import {
 } from './service.js'
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
-import { ProcessInstanceDetailSchema, ProcessInstanceSchema, RuntimeActivityInstanceTreeSchema, VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { ProcessInstanceDetailSchema, ProcessInstanceSchema, ProcessInstanceVariablesModifyRequestSchema, RuntimeActivityInstanceTreeSchema, VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 const r = Router()
 
@@ -118,9 +118,8 @@ r.delete('/mission-control-api/process-instances/:id', requireProcessInstanceAct
 }))
 
 // Modify process instance variables
-r.post('/mission-control-api/process-instances/:id/variables', requireProcessInstanceAction('engine.runtime.process-instances.variables.update'), asyncHandler(async (req: Request, res: Response) => {
-  const { modifications } = req.body || {}
-  if (!modifications) throw Errors.validation('modifications required')
+r.post('/mission-control-api/process-instances/:id/variables', requireProcessInstanceAction('engine.runtime.process-instances.variables.update'), validateBody(ProcessInstanceVariablesModifyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const { modifications } = req.body
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
   await modifyProcessInstanceVariables(engineId, instanceId, modifications)

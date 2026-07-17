@@ -73,6 +73,7 @@ const {
   ProcessEditTargetSchema,
   DecisionEditTargetSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
+  ProcessInstanceVariablesModifyRequestSchema,
   ProcessInstanceCollectionQueryParamsSchema,
   ProcessInstanceDetailSchema: MissionControlProcessInstanceDetailSchema,
   ProcessInstanceIncidentListSchema,
@@ -2685,7 +2686,7 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-instances/{id}/variables',
   ...authzExtension('engine.runtime.process-instances.variables.update', 'POST', '/mission-control-api/process-instances/{id}/variables'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ modifications: z.record(z.string(), z.unknown()) }) } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: ProcessInstanceVariablesModifyRequestSchema } } } },
   responses: { 204: { description: 'Variables modified' } },
 });
 

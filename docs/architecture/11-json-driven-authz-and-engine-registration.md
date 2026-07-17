@@ -2283,6 +2283,8 @@ Decision History's compact and full query builders now derive their permitted fi
 
 Runtime process-instance collection filters now validate one shared query-string contract through the authorization-scoped route and OpenAPI. It documents engine selection, definition/activity/time filters, boolean wire values, pagination, and action-decision opt-in while retaining adapter extensions; Process Overview derives its input shape from the same contract.
 
+Process-instance variable updates now validate one shared engine-selection and variable-map request contract through the backend, OpenAPI, and typed Instance Detail client. The add, bulk-upload, and edit paths all use that client instead of maintaining separate direct request bodies.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.

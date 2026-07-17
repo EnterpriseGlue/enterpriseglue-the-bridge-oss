@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
-import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
+import { modifyProcessInstanceVariables } from '../../api/processInstances'
 
 interface UseVariableEditorProps {
   instanceId: string
@@ -63,8 +63,10 @@ export function useVariableEditor({ instanceId, varsQ, engineId }: UseVariableEd
           parsed = JSON.parse(editingVarValue || '{}')
         }
       }
-      const body = { modifications: { [editingVarKey]: { value: parsed, type: editingVarType } }, engineId }
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+      await modifyProcessInstanceVariables(instanceId, {
+        modifications: { [editingVarKey]: { value: parsed, type: editingVarType } },
+        engineId,
+      })
       await varsQ.refetch()
       closeVariableEditor()
     } catch (e: any) {
