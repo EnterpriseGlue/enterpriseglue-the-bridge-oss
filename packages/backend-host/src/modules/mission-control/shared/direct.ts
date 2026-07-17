@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import {
   DirectJobRetriesRequestSchema,
@@ -13,7 +13,6 @@ import {
   deleteProcessInstancesDirect,
   suspendActivateProcessInstancesDirect,
   setJobRetriesDirect,
-  executeMigrationDirect,
 } from './direct-service.js'
 
 const r = Router()
@@ -80,22 +79,5 @@ r.post('/mission-control-api/direct/jobs/retries', requireRuntimeProcessInstance
     throw Errors.internal(e?.message || 'Direct retries failed')
   }
 }))
-
-// Migration execute (sync)
-r.post('/mission-control-api/migration/execute-direct', requireRuntimeMigrationAction('engine.runtime.migrations.execute-direct', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
-  try {
-    const { plan, processInstanceIds, skipCustomListeners, skipIoMappings } = req.body || {}
-    const engineId = (req as any).engineId as string
-    const result = await executeMigrationDirect(engineId, {
-      plan,
-      processInstanceIds,
-      skipCustomListeners,
-      skipIoMappings,
-    })
-    res.json({ ok: true, engine: result })
-  } catch (e: any) {
-    throw Errors.internal(e?.message || 'Direct migration failed')
-  }
-})) 
 
 export default r
