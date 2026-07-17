@@ -2297,6 +2297,8 @@ Engine Detail project-target reads now validate the canonical target contract, i
 
 Batch collection reads now validate the shared persisted batch contract after authorization filtering. When runtime action decisions are requested, they are retained as a separately validated shared envelope rather than leaking raw metadata.
 
+The retained compatibility Mission Control router now validates active, detail, historic-detail, and historic process-instance collections after PII redaction through the same shared passthrough contracts as the current router, while preserving adapter extensions and runtime action decisions.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

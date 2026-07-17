@@ -41,6 +41,7 @@ import {
   ProcessInstanceJobListSchema,
   ProcessInstanceExternalTaskListSchema,
   ProcessInstanceDetailSchema,
+  ProcessInstanceSchema,
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
   VariablesSchema,
@@ -215,14 +216,14 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
       )))).flat()
       : await listProcessInstancesDetailed(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    if (req.query.includeActionDecisions !== 'true') return res.json(redacted)
-    res.json(await addRuntimeProcessInstanceActionDecisions({
+    if (req.query.includeActionDecisions !== 'true') return res.json(z.array(ProcessInstanceSchema).parse(redacted))
+    res.json(z.array(ProcessInstanceSchema).parse(await addRuntimeProcessInstanceActionDecisions({
       userId: req.user!.userId,
       tenantId: req.tenant?.tenantId || null,
       engineId,
       runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
       rows: redacted,
-    }))
+    })))
   } catch (e: any) {
     if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load process instances')
@@ -235,7 +236,7 @@ r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction
     const instanceId = String(req.params.id)
     const data = await getProcessInstanceById(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    if (req.query.includeActionDecisions !== 'true') return res.json(redacted)
+    if (req.query.includeActionDecisions !== 'true') return res.json(ProcessInstanceDetailSchema.parse(redacted))
     const [withDecisions] = await addRuntimeProcessInstanceActionDecisions({
       userId: req.user!.userId,
       tenantId: req.tenant?.tenantId || null,
@@ -244,7 +245,7 @@ r.get('/mission-control-api/process-instances/:id', requireProcessInstanceAction
       rows: [redacted],
       includeDetailActions: true,
     })
-    res.json(withDecisions)
+    res.json(ProcessInstanceDetailSchema.parse(withDecisions))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process instance')
   }
@@ -306,7 +307,7 @@ r.get('/mission-control-api/history/process-instances/:id', requireHistoricProce
     const instanceId = String(req.params.id)
     const data = await getHistoricProcessInstanceById(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
-    res.json(redacted)
+    res.json(ProcessInstanceDetailSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load historic process instance')
   }
@@ -330,7 +331,7 @@ r.get('/mission-control-api/history/process-instances', requireRuntimeCollection
       )))).flat()
       : await listHistoricProcessInstances(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
-    res.json(redacted)
+    res.json(z.array(ProcessInstanceDetailSchema).parse(redacted))
   } catch (e: any) {
     if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load historic process instances')
