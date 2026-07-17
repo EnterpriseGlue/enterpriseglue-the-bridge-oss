@@ -105,8 +105,8 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
   })
 
   // Derived process definition info
-  const defId = (histQ.data as any)?.processDefinitionId || (runtimeQ.data as any)?.definitionId || null
-  const defKey = (histQ.data as any)?.processDefinitionKey || (runtimeQ.data as any)?.definitionId?.split(':')[0] || ''
+  const defId = (histQ.data as any)?.processDefinitionId || runtimeQ.data?.definitionId || null
+  const defKey = (histQ.data as any)?.processDefinitionKey || runtimeQ.data?.definitionId?.split(':')[0] || ''
   const defName = useMemo(() => {
     const m = (defsQ.data || []).find(d => d.key === defKey)
     return m?.name || defKey || '--'

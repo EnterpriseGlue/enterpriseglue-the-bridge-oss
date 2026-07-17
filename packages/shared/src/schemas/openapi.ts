@@ -68,6 +68,7 @@ const {
   ProcessEditTargetSchema,
   DecisionEditTargetSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
+  ProcessInstanceDetailSchema: MissionControlProcessInstanceDetailSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
   ProcessInstanceExternalTaskListSchema,
@@ -720,7 +721,7 @@ registry.registerPath({
   ...authzExtension('engine.runtime.process-instances.read', 'GET', '/mission-control-api/process-instances/{id}'),
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { description: 'Process instance details (runtime)', content: { 'application/json': { schema: z.unknown() } } },
+    200: { description: 'Process instance details (runtime)', content: { 'application/json': { schema: MissionControlProcessInstanceDetailSchema } } },
     404: { description: 'Not found' },
   },
 });

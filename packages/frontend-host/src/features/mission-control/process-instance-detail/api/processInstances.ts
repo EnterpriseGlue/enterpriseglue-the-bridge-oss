@@ -1,5 +1,6 @@
 import { apiClient } from '../../../../shared/api/client'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
+import type { ProcessInstanceDetail as SharedProcessInstanceDetail } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type {
   ProcessDefinition,
   Variable,
@@ -12,24 +13,7 @@ import type {
 } from '../components/types'
 
 // Types
-export type ProcessInstanceDetail = {
-  id: string
-  businessKey?: string
-  processDefinitionId: string
-  processDefinitionKey: string
-  processDefinitionName?: string
-  startTime: string
-  endTime?: string
-  state: string
-  suspended: boolean
-  runtimeActionDecisions?: {
-    suspension: { allowed: boolean; reason?: string }
-    retry: { allowed: boolean; reason?: string }
-    terminate: { allowed: boolean; reason?: string }
-    modify?: { allowed: boolean; reason?: string }
-    variablesUpdate?: { allowed: boolean; reason?: string }
-  }
-}
+export type ProcessInstanceDetail = SharedProcessInstanceDetail
 
 const withEngineId = (path: string, engineId?: string) => {
   if (!engineId) return path

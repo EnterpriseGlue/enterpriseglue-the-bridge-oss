@@ -167,13 +167,7 @@ export default function ProcessInstanceDetailPage() {
     parentId,
     status,
   } = instanceData
-  const runtimeActionDecisions = (runtimeQ.data as { runtimeActionDecisions?: {
-    suspension?: { allowed: boolean; reason?: string }
-    retry?: { allowed: boolean; reason?: string }
-    terminate?: { allowed: boolean; reason?: string }
-    modify?: { allowed: boolean; reason?: string }
-    variablesUpdate?: { allowed: boolean; reason?: string }
-  } } | undefined)?.runtimeActionDecisions
+  const runtimeActionDecisions = runtimeQ.data?.runtimeActionDecisions
   const suspensionDecision = withRuntimeActionDecision(snapshotSuspensionDecision, runtimeActionDecisions?.suspension)
   const retryDecision = withRuntimeActionDecision(snapshotRetryDecision, runtimeActionDecisions?.retry)
   const terminateDecision = withRuntimeActionDecision(snapshotTerminateDecision, runtimeActionDecisions?.terminate)

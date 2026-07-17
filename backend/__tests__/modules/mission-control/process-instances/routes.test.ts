@@ -101,12 +101,13 @@ describe('mission-control process-instances routes', () => {
   });
 
   it('returns process instance detail', async () => {
+    (getProcessInstance as unknown as Mock).mockResolvedValueOnce({ id: 'pi1', processDefinitionId: 'pd1', definitionId: 'payments:1:abc', adapterDiagnostic: 'retained' });
     const response = await request(app)
       .get('/mission-control-api/process-instances/pi1')
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ id: 'pi1', processDefinitionId: 'pd1' });
+    expect(response.body).toMatchObject({ id: 'pi1', processDefinitionId: 'pd1', definitionId: 'payments:1:abc', adapterDiagnostic: 'retained' });
     expect(getProcessInstance).toHaveBeenCalledWith('engine-1', 'pi1');
   });
 

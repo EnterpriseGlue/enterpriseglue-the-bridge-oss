@@ -51,6 +51,15 @@ export const ProcessInstanceSchema = z.object({
   runtimeActionDecisions: ProcessInstanceRuntimeActionDecisionsSchema.optional(),
 }).passthrough();
 
+// Detail reads are engine-native objects as well. Keep their adapter-specific
+// fields while making the identifiers consumed by Instance Detail and its
+// authorization decisions explicit at the shared route boundary.
+export const ProcessInstanceDetailSchema = ProcessInstanceSchema.extend({
+  processDefinitionId: z.string().optional(),
+  definitionId: z.string().optional(),
+  processDefinitionName: z.string().optional(),
+}).passthrough();
+
 export const ActivityCountByActivityIdSchema = z.record(z.string(), z.number().nonnegative());
 
 export const ActivityCountsByStateSchema = z.object({
@@ -137,6 +146,7 @@ export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
 export type ProcessDefXml = z.infer<typeof ProcessDefXmlSchema>;
 export type ProcessInstanceStartResponse = z.infer<typeof ProcessInstanceStartResponseSchema>;
 export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
+export type ProcessInstanceDetail = z.infer<typeof ProcessInstanceDetailSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
