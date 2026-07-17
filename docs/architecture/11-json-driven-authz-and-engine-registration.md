@@ -2267,6 +2267,8 @@ Batch detail now has one shared envelope for its persisted row, engine counters,
 
 Process Overview's post-retry incident polling now imports the same shared incident row contract as Instance Detail instead of erasing the authorization-scoped response to `any[]`.
 
+The Mission Control service layer now carries the shared recursive runtime-activity tree and process-start response types into its already validated routes, removing the remaining internal `any` at those adapter boundaries.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

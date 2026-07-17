@@ -1,4 +1,5 @@
 import { camundaGet, camundaPost, camundaDelete } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import type { RuntimeActivityInstanceTree } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 export interface ProcessInstance {
   id: string
@@ -38,8 +39,8 @@ export async function getProcessInstanceVariables(engineId: string, id: string):
   return camundaGet<Record<string, any>>(engineId, `/process-instance/${encodeURIComponent(id)}/variables`)
 }
 
-export async function getActivityInstances(engineId: string, id: string): Promise<any> {
-  return camundaGet<any>(engineId, `/process-instance/${encodeURIComponent(id)}/activity-instances`)
+export async function getActivityInstances(engineId: string, id: string): Promise<RuntimeActivityInstanceTree> {
+  return camundaGet<RuntimeActivityInstanceTree>(engineId, `/process-instance/${encodeURIComponent(id)}/activity-instances`)
 }
 
 export interface DeleteProcessInstanceParams {
