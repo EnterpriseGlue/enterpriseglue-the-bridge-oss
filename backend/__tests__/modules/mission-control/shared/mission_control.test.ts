@@ -16,6 +16,7 @@ import {
   getProcessInstanceById,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
+  listProcessInstanceJobs,
   previewProcessInstanceCount,
   suspendProcessInstanceById,
   listHistoricProcessInstances,
@@ -327,6 +328,22 @@ describe('mission-control shared mission_control routes', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       resourceType: 'engine_runtime_resource', resourceId: 'resource-payments',
     }));
+  });
+
+  it('serializes process-instance jobs through the shared passthrough contract', async () => {
+    vi.mocked(listProcessInstanceJobs).mockResolvedValueOnce([
+      { id: 'job-1', dueDate: '2026-07-17T00:00:00.000Z', retries: 2, engineExtension: { retryable: true } },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1/jobs')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'job-1', dueDate: '2026-07-17T00:00:00.000Z', retries: 2, engineExtension: { retryable: true } },
+    ]);
+    expect(listProcessInstanceJobs).toHaveBeenCalledWith('engine-77', 'instance-1');
   });
 
   it('adds requested action decisions to compatibility process-instance details', async () => {

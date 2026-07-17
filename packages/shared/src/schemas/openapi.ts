@@ -58,6 +58,7 @@ const {
   ProcessInstanceStartResponseSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
   ProcessInstanceIncidentListSchema,
+  ProcessInstanceJobListSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
   MigrationActiveSourcesResponseSchema,
@@ -580,6 +581,7 @@ registry.register('MissionControlProcessInstance', MissionControlProcessInstance
 registry.register('MissionControlVariables', MissionControlVariablesSchema);
 registry.register('MissionControlActivityInstance', MissionControlActivityInstanceSchema);
 registry.register('MissionControlProcessInstanceIncidentList', ProcessInstanceIncidentListSchema);
+registry.register('MissionControlProcessInstanceJobList', ProcessInstanceJobListSchema);
 
 // GET /mission-control-api/process-definitions
 registry.registerPath({
@@ -2698,7 +2700,7 @@ registry.registerPath({
   path: '/mission-control-api/process-instances/{id}/jobs',
   ...authzExtension('engine.runtime.jobs.read', 'GET', '/mission-control-api/process-instances/{id}/jobs'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Jobs for process instance', content: { 'application/json': { schema: z.array(JobSchema) } } } },
+  responses: { 200: { description: 'Jobs for process instance', content: { 'application/json': { schema: ProcessInstanceJobListSchema } } } },
 });
 
 // GET /mission-control-api/process-instances/{id}/failed-external-tasks

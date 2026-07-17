@@ -82,6 +82,19 @@ export const ProcessInstanceIncidentSchema = z.object({
 
 export const ProcessInstanceIncidentListSchema = z.array(ProcessInstanceIncidentSchema);
 
+// The instance-detail job list is a narrow display view of engine-native jobs.
+// Preserve diagnostic extensions and the legacy `duedate` spelling returned by
+// some adapters.
+export const ProcessInstanceJobSchema = z.object({
+  id: z.string(),
+  dueDate: z.string().nullable().optional(),
+  duedate: z.string().nullable().optional(),
+  retries: z.number().nullable().optional(),
+  exceptionMessage: z.string().nullable().optional(),
+}).passthrough();
+
+export const ProcessInstanceJobListSchema = z.array(ProcessInstanceJobSchema);
+
 // Request schemas
 export const PreviewCountRequest = z.object({
   processDefinitionKey: z.string().optional(),
@@ -114,3 +127,5 @@ export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;
 export type ProcessInstanceIncident = z.infer<typeof ProcessInstanceIncidentSchema>;
 export type ProcessInstanceIncidentList = z.infer<typeof ProcessInstanceIncidentListSchema>;
+export type ProcessInstanceJob = z.infer<typeof ProcessInstanceJobSchema>;
+export type ProcessInstanceJobList = z.infer<typeof ProcessInstanceJobListSchema>;

@@ -36,6 +36,7 @@ import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
   ProcessInstanceIncidentListSchema,
+  ProcessInstanceJobListSchema,
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
@@ -299,7 +300,7 @@ r.get('/mission-control-api/process-instances/:id/jobs', requireProcessInstanceA
     const instanceId = String(req.params.id)
     const data = await listProcessInstanceJobs(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
-    res.json(redacted)
+    res.json(ProcessInstanceJobListSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load jobs')
   }

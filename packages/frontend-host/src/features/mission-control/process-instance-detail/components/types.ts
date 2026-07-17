@@ -1,5 +1,5 @@
 import type { HistoricDecisionIo } from '@enterpriseglue/shared/schemas/mission-control/history.js'
-import type { ProcessInstanceIncident } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessInstanceIncident, ProcessInstanceJob } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 export type DecisionIo = HistoricDecisionIo
 
@@ -122,13 +122,7 @@ export type VariableHistoryTarget = {
 
 export type Incident = ProcessInstanceIncident
 
-export type Job = {
-  id: string
-  dueDate?: string
-  duedate?: string
-  retries?: number
-  exceptionMessage?: string
-}
+export type Job = ProcessInstanceJob
 
 export type ExternalTask = {
   id: string
