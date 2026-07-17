@@ -16,6 +16,8 @@ import {
   HistoricTaskQueryParams,
   HistoricVariableQueryParams,
   HistoricDecisionQueryParams,
+  HistoricTaskInstanceListSchema,
+  HistoricVariableInstanceListSchema,
   HistoricDecisionInstanceListSchema,
   HistoricDecisionIoListSchema,
   UserOperationLogQueryParams,
@@ -40,7 +42,7 @@ r.get('/mission-control-api/history/tasks', requireRuntimeCollectionAction('engi
       await listHistoricTasks(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey', scopes,
     )))).flat()
     : await listHistoricTasks(engineId, query);
-  res.json(data);
+  res.json(HistoricTaskInstanceListSchema.parse(data));
 }));
 
 // Get historic variable instances
@@ -57,7 +59,7 @@ r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('
     )))).flat()
     : await listHistoricVariables(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
-  res.json(redacted);
+  res.json(HistoricVariableInstanceListSchema.parse(redacted));
 }));
 
 // Get historic decision instances

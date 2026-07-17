@@ -52,7 +52,7 @@ vi.mock('@enterpriseglue/shared/services/pii/PiiRedactionService.js', () => ({
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/history-extended-service.js', () => ({
   listHistoricTasks: vi.fn().mockResolvedValue([{ id: 'task-1' }]),
-  listHistoricVariables: vi.fn().mockResolvedValue([{ id: 'var-1', value: 'secret' }]),
+  listHistoricVariables: vi.fn().mockResolvedValue([{ id: 'var-1', name: 'customerReference', type: 'String', value: 'secret' }]),
   listHistoricDecisions: vi.fn().mockResolvedValue([{ id: 'decision-1' }]),
   listHistoricDecisionInputs: vi.fn().mockResolvedValue([{ id: 'input-1', value: 'secret', type: 'String' }]),
   listHistoricDecisionOutputs: vi.fn().mockResolvedValue([{ id: 'output-1', value: 'secret', type: 'String', ruleId: 'rule-1' }]),
@@ -164,9 +164,42 @@ describe('mission-control extended history routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'var-1', value: 'secret' }]);
+    expect(response.body).toEqual([{ id: 'var-1', name: 'customerReference', type: 'String', value: 'secret' }]);
     expect(listHistoricVariables).toHaveBeenCalledWith('engine-1', {});
-    expect(piiRedactionService.redactPayload).toHaveBeenCalledWith(expect.anything(), [{ id: 'var-1', value: 'secret' }], 'history');
+    expect(piiRedactionService.redactPayload).toHaveBeenCalledWith(expect.anything(), [{ id: 'var-1', name: 'customerReference', type: 'String', value: 'secret' }], 'history');
+  });
+
+  it('keeps extension fields when serializing historic task and variable collections', async () => {
+    (listHistoricTasks as unknown as Mock).mockResolvedValueOnce([{
+      id: 'task-1',
+      processDefinitionKey: 'invoice',
+      engineExtension: { source: 'camunda' },
+    }]);
+    (listHistoricVariables as unknown as Mock).mockResolvedValueOnce([{
+      id: 'var-1',
+      name: 'customerReference',
+      type: 'String',
+      engineExtension: { source: 'camunda' },
+    }]);
+
+    const [tasksResponse, variablesResponse] = await Promise.all([
+      request(app).get('/mission-control-api/history/tasks').query({ engineId: 'engine-1' }),
+      request(app).get('/mission-control-api/history/variables').query({ engineId: 'engine-1' }),
+    ]);
+
+    expect(tasksResponse.status).toBe(200);
+    expect(tasksResponse.body).toEqual([{
+      id: 'task-1',
+      processDefinitionKey: 'invoice',
+      engineExtension: { source: 'camunda' },
+    }]);
+    expect(variablesResponse.status).toBe(200);
+    expect(variablesResponse.body).toEqual([{
+      id: 'var-1',
+      name: 'customerReference',
+      type: 'String',
+      engineExtension: { source: 'camunda' },
+    }]);
   });
 
   it('serializes historic decisions through the shared contract without dropping engine extensions', async () => {

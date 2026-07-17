@@ -41,6 +41,7 @@ import {
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { HistoricVariableInstanceListSchema } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 
 // Validation schemas
 const previewCountSchema = z.object({}).passthrough()
@@ -388,7 +389,7 @@ r.get('/mission-control-api/history/variable-instances', requireRuntimeCollectio
       )))).flat()
       : await listHistoricVariableInstances(engineId, query as any)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
-    res.json(redacted)
+    res.json(HistoricVariableInstanceListSchema.parse(redacted))
   } catch (e: any) {
     if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load historic variables')

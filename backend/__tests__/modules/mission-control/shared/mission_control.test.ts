@@ -20,6 +20,7 @@ import {
   previewProcessInstanceCount,
   suspendProcessInstanceById,
   listHistoricProcessInstances,
+  listHistoricVariableInstances,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -206,6 +207,29 @@ describe('mission-control shared mission_control routes', () => {
       engineId: 'engine-77',
       active: true,
     }));
+  });
+
+  it('serializes historic variable instances through the shared contract without dropping engine extensions', async () => {
+    vi.mocked(listHistoricVariableInstances).mockResolvedValueOnce([{
+      id: 'var-1',
+      name: 'customerReference',
+      type: 'String',
+      value: 'reference-42',
+      engineExtension: { source: 'camunda' },
+    }] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{
+      id: 'var-1',
+      name: 'customerReference',
+      type: 'String',
+      value: 'reference-42',
+      engineExtension: { source: 'camunda' },
+    }]);
   });
 
   it('bounds compatibility process-definition and instance collections for resource-aware engines', async () => {

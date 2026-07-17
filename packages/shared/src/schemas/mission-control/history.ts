@@ -28,14 +28,16 @@ export const HistoricTaskInstanceSchema = z.object({
   tenantId: z.string().optional().nullable(),
   removalTime: z.string().optional().nullable(),
   rootProcessInstanceId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const HistoricTaskInstanceListSchema = z.array(HistoricTaskInstanceSchema);
 
 // Historic variable instance schemas
 export const HistoricVariableInstanceSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.string(),
-  value: z.any(),
+  type: z.string().optional().nullable(),
+  value: z.any().optional(),
   processDefinitionKey: z.string().optional().nullable(),
   processDefinitionId: z.string().optional().nullable(),
   processInstanceId: z.string().optional().nullable(),
@@ -52,7 +54,9 @@ export const HistoricVariableInstanceSchema = z.object({
   createTime: z.string().optional().nullable(),
   removalTime: z.string().optional().nullable(),
   rootProcessInstanceId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const HistoricVariableInstanceListSchema = z.array(HistoricVariableInstanceSchema);
 
 // Historic decision instance schemas
 export const HistoricDecisionInstanceSchema = z.object({
@@ -284,7 +288,9 @@ export const UserOperationLogQueryParams = z.object({
 
 // Types
 export type HistoricTaskInstance = z.infer<typeof HistoricTaskInstanceSchema>;
+export type HistoricTaskInstanceList = z.infer<typeof HistoricTaskInstanceListSchema>;
 export type HistoricVariableInstance = z.infer<typeof HistoricVariableInstanceSchema>;
+export type HistoricVariableInstanceList = z.infer<typeof HistoricVariableInstanceListSchema>;
 export type VariableHistoryEntry = z.infer<typeof VariableHistoryEntrySchema>;
 export type HistoricDecisionInstance = z.infer<typeof HistoricDecisionInstanceSchema>;
 export type HistoricDecisionInstanceList = z.infer<typeof HistoricDecisionInstanceListSchema>;
