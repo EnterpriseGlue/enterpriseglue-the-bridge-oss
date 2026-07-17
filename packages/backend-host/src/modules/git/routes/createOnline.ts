@@ -4,7 +4,6 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { z } from 'zod';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -31,17 +30,13 @@ import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/servic
 import {
   CreateOnlineProjectRequestSchema,
   CreateOnlineProjectResponseSchema,
+  CheckRepositoryExistsRequestSchema,
+  CheckRepositoryExistsResponseSchema,
+  type CheckRepositoryExistsRequest,
   type CreateOnlineProjectRequest,
 } from '@enterpriseglue/shared/schemas/git/online-project.js';
 
 const router = Router();
-
-const checkRepoExistsSchema = z.object({
-  providerId: z.unknown(),
-  repositoryName: z.unknown(),
-  namespace: z.unknown().optional(),
-  token: z.unknown().optional(),
-});
 
 /**
  * POST /git-api/create-online
@@ -286,9 +281,9 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(Crea
  * POST /git-api/check-repo-exists
  * Check if a repository name already exists
  */
-router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(checkRepoExistsSchema), requireAction('project.create.git.inspect', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(CheckRepositoryExistsRequestSchema), requireAction('project.create.git.inspect', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId, repositoryName, namespace, token } = req.body;
+  const { providerId, repositoryName, namespace, token } = req.body as CheckRepositoryExistsRequest;
 
   if (typeof providerId !== 'string' || typeof repositoryName !== 'string') {
     throw Errors.validation('providerId and repositoryName are required');
@@ -315,14 +310,14 @@ router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(
     const fullRepoName = namespaceStr ? `${namespaceStr}/${repositoryNameTrim}` : repositoryNameTrim;
     const existingRepo = await client.getRepository(fullRepoName);
     
-    res.json({ 
+    res.json(CheckRepositoryExistsResponseSchema.parse({
       exists: !!existingRepo,
       repository: existingRepo ? {
         name: existingRepo.name,
         fullName: existingRepo.fullName,
         url: existingRepo.htmlUrl,
       } : null
-    });
+    }));
   } catch (error: unknown) {
     const status = typeof error === 'object' && error !== null && 'status' in error
       ? (error as { status?: number }).status
@@ -330,7 +325,7 @@ router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(
 
     // If we get a 404, the repo doesn't exist
     if (status === 404) {
-      return res.json({ exists: false, repository: null });
+      return res.json(CheckRepositoryExistsResponseSchema.parse({ exists: false, repository: null }));
     }
     throw error;
   }

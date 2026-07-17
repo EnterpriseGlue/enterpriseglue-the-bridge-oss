@@ -3,6 +3,8 @@ import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import {
   CreateOnlineProjectRequestSchema,
   CreateOnlineProjectResponseSchema,
+  CheckRepositoryExistsRequestSchema,
+  CheckRepositoryExistsResponseSchema,
 } from '@enterpriseglue/shared/schemas/git/online-project.js';
 
 describe('online project creation transport contract', () => {
@@ -17,6 +19,19 @@ describe('online project creation transport contract', () => {
 
     expect(request.token).toBe('personal-access-token');
     expect(request.importFromEngine?.engineId).toBe('engine-1');
+  });
+
+  it('shares the repository-existence request and safe result', () => {
+    const request = CheckRepositoryExistsRequestSchema.parse({
+      providerId: 'provider-1', repositoryName: 'payments', token: 'personal-access-token',
+    });
+    const response = CheckRepositoryExistsResponseSchema.parse({
+      exists: true,
+      repository: { name: 'payments', fullName: 'acme/payments', url: 'https://example.test/acme/payments' },
+    });
+
+    expect(request.token).toBe('personal-access-token');
+    expect(response.repository?.fullName).toBe('acme/payments');
   });
 
   it('contains project and repository metadata but no submitted credentials', () => {

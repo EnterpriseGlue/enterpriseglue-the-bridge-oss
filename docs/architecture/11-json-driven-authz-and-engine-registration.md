@@ -2431,6 +2431,8 @@ Git provider repository listings now use one sanitized shared schema across back
 
 Online Git-project creation now shares its request and response contracts across backend validation, OpenAPI, and the project wizard. The existing personal-access-token field remains request-only for compatibility and is explicitly absent from the response contract.
 
+The Git repository-existence check now likewise shares its compatibility request, redacted result, route validation, and OpenAPI contract. It retains the stored-credential fallback and accepts the existing request token without ever returning it.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

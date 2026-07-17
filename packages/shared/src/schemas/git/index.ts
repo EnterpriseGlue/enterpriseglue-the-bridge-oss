@@ -57,6 +57,10 @@ export {
 export {
   CreateOnlineProjectRequestSchema,
   CreateOnlineProjectResponseSchema,
+  CheckRepositoryExistsRequestSchema,
+  CheckRepositoryExistsResponseSchema,
   type CreateOnlineProjectRequest,
   type CreateOnlineProjectResponse,
+  type CheckRepositoryExistsRequest,
+  type CheckRepositoryExistsResponse,
 } from './online-project.js';

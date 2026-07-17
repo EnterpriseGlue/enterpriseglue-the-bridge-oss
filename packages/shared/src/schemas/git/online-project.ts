@@ -17,6 +17,26 @@ export const CreateOnlineProjectRequestSchema = z.object({
   }).optional(),
 });
 
+// This preserves the existing credential fallback behavior: callers may send
+// a token, or omit it and use their stored provider credential.
+export const CheckRepositoryExistsRequestSchema = z.object({
+  providerId: z.unknown(),
+  repositoryName: z.unknown(),
+  namespace: z.unknown().optional(),
+  token: z.unknown().optional(),
+});
+
+const ExistingRepositorySummarySchema = z.object({
+  name: z.string(),
+  fullName: z.string(),
+  url: z.string(),
+});
+
+export const CheckRepositoryExistsResponseSchema = z.object({
+  exists: z.boolean(),
+  repository: ExistingRepositorySummarySchema.nullable(),
+});
+
 const OnlineProjectSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -40,3 +60,5 @@ export const CreateOnlineProjectResponseSchema = z.object({
 
 export type CreateOnlineProjectRequest = z.infer<typeof CreateOnlineProjectRequestSchema>;
 export type CreateOnlineProjectResponse = z.infer<typeof CreateOnlineProjectResponseSchema>;
+export type CheckRepositoryExistsRequest = z.infer<typeof CheckRepositoryExistsRequestSchema>;
+export type CheckRepositoryExistsResponse = z.infer<typeof CheckRepositoryExistsResponseSchema>;
