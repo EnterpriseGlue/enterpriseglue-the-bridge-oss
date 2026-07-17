@@ -2437,6 +2437,8 @@ The existing Git repository-inspection endpoint now also shares exact branch met
 
 Git synchronization now shares its bounded request, status, and successful-operation receipt across runtime validation, backend serialization, OpenAPI, and the Sync modal. Existing default push behavior and push/pull compatibility remain unchanged.
 
+The stale duplicate Git repository-list handler has been removed from the sync router. The canonical repository router remains registered first and is now the sole owner of that public endpoint, preventing two incompatible collection shapes from depending on router order.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

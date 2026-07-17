@@ -12,7 +12,6 @@ import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/v
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
-import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { credentialService } from '@enterpriseglue/shared/services/git/CredentialService.js';
@@ -37,10 +36,6 @@ async function hasProjectPermission(req: Request, projectId: string, permission:
     resourceType: 'project',
     resourceId: projectId,
   });
-}
-
-async function canViewProjectRepository(req: Request, projectId: string): Promise<boolean> {
-  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
 }
 
 async function canUseGitSync(req: Request, projectId: string, direction: 'push' | 'pull' | 'both' | 'status'): Promise<boolean> {
@@ -367,54 +362,6 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(GitSyncReques
       hint: 'Check your Git connection settings and token permissions, then try again.',
     });
   }
-}));
-
-/**
- * GET /git-api/repositories
- * List repositories for user's projects
- */
-router.get('/git-api/repositories', apiLimiter, requireAuth, requireAction('project.git.repositories.read', {
-  resourceResolver: 'project.visibleCollection',
-  collectionIdsFrom: 'query',
-  collectionIdsKey: 'projectId',
-}), asyncHandler(async (req: Request, res: Response) => {
-  const { projectId } = req.query;
-  const dataSource = await getDataSource();
-  const gitRepoRepo = dataSource.getRepository(GitRepository);
-
-  if (projectId && typeof projectId === 'string') {
-    if (!(await canViewProjectRepository(req, projectId))) {
-      throw Errors.validation('Project not found');
-    }
-  }
-
-  const qb = gitRepoRepo.createQueryBuilder('r')
-    .innerJoin(Project, 'p', 'r.projectId = p.id')
-    .select([
-      'r.id AS id',
-      'r.projectId AS "projectId"',
-      'r.providerId AS "providerId"',
-      'r.remoteUrl AS "remoteUrl"',
-      'r.namespace AS namespace',
-      'r.repositoryName AS "repositoryName"',
-      'r.defaultBranch AS "defaultBranch"',
-      'r.lastCommitSha AS "lastCommitSha"',
-      'r.lastSyncAt AS "lastSyncAt"',
-    ])
-
-  if (projectId && typeof projectId === 'string') {
-    qb.where('r.projectId = :projectId', { projectId });
-  }
-
-  const rows = await qb.getRawMany();
-  const repos = [];
-  for (const row of rows) {
-    if (await canViewProjectRepository(req, String(row.projectId))) {
-      repos.push(row);
-    }
-  }
-
-  res.json(repos);
 }));
 
 export default router;
