@@ -329,7 +329,7 @@ export async function provisionGoogleUser(userInfo: GoogleUserInfo, selectedId?:
       const userId = generateId();
       await userRepo.insert({
         id: userId, email: userInfo.email, authProvider: 'google', passwordHash: null, googleId: null,
-        firstName: userInfo.given_name || null, lastName: userInfo.family_name || null, platformRole: 'user',
+        firstName: userInfo.given_name || null, lastName: userInfo.family_name || null,
         isActive: true, mustResetPassword: false, failedLoginAttempts: 0, createdAt: now, updatedAt: now, lastLoginAt: now,
       });
       const newUser = await userRepo.findOneBy({ id: userId });

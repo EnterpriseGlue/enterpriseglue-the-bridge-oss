@@ -521,7 +521,6 @@ export async function provisionSamlUser(userInfo: SamlUserInfo, providerId: stri
         entraEmail: null,
         firstName: userInfo.given_name || null,
         lastName: userInfo.family_name || null,
-        platformRole: 'user',
         isActive: true,
         mustResetPassword: false,
         failedLoginAttempts: 0,

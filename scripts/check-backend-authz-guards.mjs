@@ -32,6 +32,17 @@ const projectMembershipCommandFiles = [
   'packages/backend-host/src/modules/git/routes/createOnline.ts',
   'packages/backend-host/src/modules/starbase/routes/projects.ts',
 ];
+// New account creation deliberately relies on the database's non-privileged
+// compatibility default. Canonical group memberships, not User.platformRole,
+// establish access in these transaction boundaries.
+const userCreationCompatibilityFiles = [
+  'packages/shared/src/services/platform-admin/UserService.ts',
+  'packages/shared/src/services/platform-admin/IdentityProviderProvisioningService.ts',
+  'packages/shared/src/services/microsoft.ts',
+  'packages/shared/src/services/google.ts',
+  'packages/shared/src/services/saml.ts',
+  'packages/shared/src/db/bootstrap.ts',
+];
 // `source = legacy` is a compatibility boundary, not an authorization-source
 // choice available to normal commands. Keep its remaining writers constrained
 // to the one-way membership reconciliation and the documented project-engine
@@ -138,6 +149,14 @@ const forbiddenPatterns = [
     fileSuffix: 'packages/backend-host/src/modules/starbase/routes/projects.ts',
     pattern: /source:\s*'legacy'/g,
   },
+  {
+    // Explicitly persisting the legacy compatibility default invites future
+    // authorization code to treat it as an active grant. The entity default
+    // retains existing-row compatibility without making a new role write.
+    id: 'user-creation-legacy-platform-role-write',
+    filePaths: userCreationCompatibilityFiles,
+    pattern: /\bplatformRole\s*:\s*['"]user['"]/g,
+  },
 ];
 
 // Maximum current route-local legacy-auth pattern counts by rule. New files must
@@ -237,6 +256,9 @@ const files = Array.from(new Set([
     .map((filePath) => path.join(repoRoot, filePath))
     .filter((filePath) => fs.existsSync(filePath)),
   ...sharedAuthorizationServiceFiles
+    .map((filePath) => path.join(repoRoot, filePath))
+    .filter((filePath) => fs.existsSync(filePath)),
+  ...userCreationCompatibilityFiles
     .map((filePath) => path.join(repoRoot, filePath))
     .filter((filePath) => fs.existsSync(filePath)),
 ])).sort((a, b) => a.localeCompare(b));

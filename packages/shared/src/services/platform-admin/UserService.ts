@@ -201,9 +201,8 @@ export class UserService {
         passwordHash,
         firstName: firstName || null,
         lastName: lastName || null,
-        // Compatibility storage is intentionally non-privileged. Effective
-        // administration is represented by the canonical group membership.
-        platformRole: 'user',
+        // The database keeps its non-privileged compatibility default while
+        // the canonical group membership below remains the access source.
         isActive: true,
         mustResetPassword: true,
         failedLoginAttempts: 0,
@@ -252,7 +251,6 @@ export class UserService {
         passwordHash: null,
         firstName: firstName || null,
         lastName: lastName || null,
-        platformRole: 'user',
         isActive: true,
         mustResetPassword: false,
         failedLoginAttempts: 0,

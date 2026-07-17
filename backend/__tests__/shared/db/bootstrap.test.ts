@@ -58,8 +58,8 @@ describe('bootstrapAdmin authorization boundary', () => {
     expect(save).toHaveBeenCalledWith(expect.objectContaining({
       id: 'admin-1',
       email: 'admin@example.com',
-      platformRole: 'user',
     }));
+    expect(save.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'admin-1');
     expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'admin-1');
     expect(save.mock.invocationCallOrder[0]).toBeLessThan(

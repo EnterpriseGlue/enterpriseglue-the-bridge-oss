@@ -47,6 +47,7 @@ describe('IdentityProviderProvisioningService', () => {
       tenantId: 'tenant-1', providerId: 'provider-1', providerType: 'ldap', subjectId: 'subject-1',
       identityKey: expect.any(String), status: 'active', emailHint: 'person@example.test',
     }));
+    expect(stores.user.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
 
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).toHaveBeenCalledWith(
       manager,

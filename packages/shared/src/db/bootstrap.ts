@@ -39,8 +39,8 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       passwordHash: passwordHash,
       firstName: 'Admin',
       lastName: 'User',
-      // Compatibility metadata only; access comes from the canonical group below.
-      platformRole: 'user',
+      // The database default remains non-privileged compatibility metadata;
+      // access comes from the canonical group below.
       isActive: true,
       mustResetPassword: false,
       failedLoginAttempts: 0,

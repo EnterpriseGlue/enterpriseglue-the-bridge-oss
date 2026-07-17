@@ -379,7 +379,6 @@ export async function provisionMicrosoftUser(userInfo: MicrosoftUserInfo, select
         entraEmail: null,
         firstName: userInfo.given_name || null,
         lastName: userInfo.family_name || null,
-        platformRole: 'user',
         isActive: true,
         mustResetPassword: false, // Microsoft handles password policy
         failedLoginAttempts: 0,

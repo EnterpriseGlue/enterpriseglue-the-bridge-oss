@@ -11,6 +11,7 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { AddExternalIdentities1700000000047 } from '@enterpriseglue/shared/db/migrations/1700000000047-add-external-identities.js';
 import { AddIdentityProviders1700000000056 } from '@enterpriseglue/shared/db/migrations/1700000000056-add-identity-providers.js';
 import { AddRuntimeResourceSets1700000000054 } from '@enterpriseglue/shared/db/migrations/1700000000054-add-runtime-resource-sets.js';
@@ -40,6 +41,10 @@ function uniqueColumnSets(target: Function): string[][] {
 }
 
 describe('canonical authorization persistence schema invariants', () => {
+  it('keeps the legacy platform-role column non-privileged by database default', () => {
+    expect(column(User, 'platformRole')?.options.default).toBe('user');
+  });
+
   it('enforces one canonical assignment per principal, role, scope, and source identity', () => {
     expect(uniqueColumnSets(RbacRoleAssignment)).toContainEqual(['assignmentKey']);
     expect(column(RbacRoleAssignment, 'assignmentKey')?.options.nullable).not.toBe(true);

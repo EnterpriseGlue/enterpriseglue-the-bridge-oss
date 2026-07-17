@@ -130,10 +130,10 @@ describe('microsoft service', () => {
     expect(ssoSyncDiagnosticsService.startRun).toHaveBeenCalledWith(expect.objectContaining({
       providerId: 'microsoft',
       trigger: 'login',
-      details: expect.objectContaining({ email: 'sso-user@example.com' }),
+      details: expect.objectContaining({ groupsCount: 1, rolesCount: 1 }),
     }));
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
-    expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
+    expect(userRepo.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ entraId: null, entraEmail: null }));
     expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
       providerId: 'legacy:microsoft', providerType: 'microsoft', subjectId: 'oid-123',
@@ -203,7 +203,7 @@ describe('microsoft service', () => {
       groupMembershipsCreated: 4,
       groupMembershipsRemoved: 1,
       assignmentsCreated: 1,
-      details: expect.objectContaining({ email: 'sso-user@example.com' }),
+      details: {},
     }));
     expect(ssoSyncDiagnosticsService.failRun).not.toHaveBeenCalled();
   });

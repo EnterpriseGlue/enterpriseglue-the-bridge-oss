@@ -72,7 +72,7 @@ describe('UserService authorization baseline', () => {
       createdByUserId: 'actor-1',
     });
 
-    expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
+    expect(userRepo.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
     expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
   });
@@ -86,7 +86,7 @@ describe('UserService authorization baseline', () => {
       createdByUserId: 'actor-1',
     });
 
-    expect(userRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ platformRole: 'user' }));
+    expect(userRepo.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
     expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, expect.any(String));
   });

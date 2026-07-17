@@ -129,7 +129,7 @@ describe('saml service - provisionSamlUser', () => {
       tenantId: 'tenant-a',
       providerId: 'provider-saml-1',
       trigger: 'login',
-      details: expect.objectContaining({ email: 'saml-user@example.com' }),
+      details: expect.objectContaining({ groupsCount: 1, rolesCount: 1 }),
     }));
     expect(dataSource.transaction).toHaveBeenCalledTimes(1);
     expect(externalIdentityService.upsertWithManager).toHaveBeenCalledWith(manager, expect.objectContaining({
@@ -211,7 +211,7 @@ describe('saml service - provisionSamlUser', () => {
       groupMembershipsCreated: 4,
       groupMembershipsRemoved: 1,
       assignmentsCreated: 1,
-      details: expect.objectContaining({ email: 'saml-user@example.com' }),
+      details: {},
     }));
     expect(ssoSyncDiagnosticsService.failRun).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({ authProvider: 'saml' }));
