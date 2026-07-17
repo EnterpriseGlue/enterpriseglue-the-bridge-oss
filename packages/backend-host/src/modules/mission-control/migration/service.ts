@@ -14,6 +14,7 @@ import {
   getProcessInstanceActivityTree,
   getProcessInstanceCount,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import type { MigrationPlan } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
 export function toEnginePlan(body: any) {
   // Engine-like shape: normalize instructions and strip extras
@@ -106,9 +107,13 @@ export async function previewMigrationCount(engineId: string, plan: any, process
   return typeof dto?.count === 'number' ? dto.count : 0
 }
 
-export async function generateMigrationPlan(engineId: string, planBody: any) {
+export async function generateMigrationPlan(engineId: string, planBody: any): Promise<MigrationPlan> {
   const plan = toEnginePlan(planBody)
-  return postMigrationGenerate<any>(engineId, plan)
+  const generated = await postMigrationGenerate<any>(engineId, plan)
+  // Some compatible adapters return only generated instructions. Retain the
+  // request's resolved definition ids so callers always receive the shared
+  // migration-plan shape without requiring adapters to echo them.
+  return toEnginePlan({ ...plan, ...(generated && typeof generated === 'object' ? generated : {}) })
 }
 
 export async function validateMigrationPlan(engineId: string, body: any) {

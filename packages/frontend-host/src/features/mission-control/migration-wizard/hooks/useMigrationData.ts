@@ -10,6 +10,7 @@ import type {
   MigrationActiveSourcesResponse,
   MigrationAsyncExecuteResponse,
   MigrationDirectExecuteResponse,
+  MigrationPlan,
   MigrationPreviewResponse,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
@@ -72,7 +73,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   const [updateEventTriggers, setUpdateEventTriggers] = React.useState(false)
 
   // Plan state
-  const [plan, setPlan] = React.useState<any | null>(null)
+  const [plan, setPlan] = React.useState<MigrationPlan | null>(null)
   const [validation, setValidation] = React.useState<any | null>(null)
   const [overrides, setOverrides] = React.useState<Record<number, string>>({})
   const [triggerOverrides, setTriggerOverrides] = React.useState<Record<number, boolean>>({})
@@ -122,7 +123,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       const targetDefinitionId = idFor(tgtKey, tgtVer)
       if (!sourceDefinitionId || !targetDefinitionId)
         throw new Error('Select both source and target process+version')
-      const next = await apiClient.post<any>(
+      const next = await apiClient.post<MigrationPlan>(
         '/mission-control-api/migration/generate',
         {
           engineId: selectedEngineId,
@@ -131,11 +132,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         },
         { credentials: 'include' }
       )
-      const enginePlan =
-        next && typeof next === 'object' && Array.isArray((next as any).instructions)
-          ? next
-          : (next as any)?.migrationPlan || next
-      setPlan(enginePlan)
+      setPlan(next)
       setOverrides({})
       setValidation(null)
     } catch (e: any) {

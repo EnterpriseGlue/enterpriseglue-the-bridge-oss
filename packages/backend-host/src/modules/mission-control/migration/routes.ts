@@ -7,6 +7,7 @@ import {
   MigrationAsyncExecuteResponseSchema,
   MigrationDirectExecuteResponseSchema,
   MigrationPreviewResponseSchema,
+  MigrationPlanSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 import {
   toEnginePlan,
@@ -48,7 +49,7 @@ const generateMigrationPlanHandler = asyncHandler(async (req: Request, res: Resp
   try {
     const engineId = (req as any).engineId as string
     const enginePlan = await generateMigrationPlan(engineId, req.body)
-    res.status(200).json(enginePlan)
+    res.status(200).json(MigrationPlanSchema.parse(enginePlan))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to generate migration plan')
   }

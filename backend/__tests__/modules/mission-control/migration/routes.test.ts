@@ -51,7 +51,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/migration/service.js', () => ({
   toEnginePlan: vi.fn(),
   previewMigrationCount: vi.fn().mockResolvedValue(0),
-  generateMigrationPlan: vi.fn().mockResolvedValue({ instructions: [] }),
+  generateMigrationPlan: vi.fn().mockResolvedValue({ sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2', instructions: [] }),
   validateMigrationPlan: vi.fn().mockResolvedValue({ instructionReports: [] }),
   executeMigration: vi.fn().mockResolvedValue(undefined),
   executeMigrationAsync: vi.fn().mockResolvedValue({ id: 'batch-local-1', camundaBatchId: 'b1', type: 'MIGRATE_INSTANCES' }),
@@ -95,7 +95,7 @@ describe('mission-control migration routes', () => {
       .send({ engineId: 'engine-1', sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ instructions: [] });
+    expect(response.body).toEqual({ sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2', instructions: [] });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',
@@ -111,7 +111,7 @@ describe('mission-control migration routes', () => {
       .send({ engineId: 'engine-1', sourceDefinitionId: 'p1', targetDefinitionId: 'p2' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ instructions: [] });
+    expect(response.body).toEqual({ sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2', instructions: [] });
     expect(generateMigrationPlan).toHaveBeenCalledWith('engine-1', expect.objectContaining({
       sourceDefinitionId: 'p1',
       targetDefinitionId: 'p2',
