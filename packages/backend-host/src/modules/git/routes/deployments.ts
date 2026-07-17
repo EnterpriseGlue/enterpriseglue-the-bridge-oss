@@ -5,7 +5,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
-import { DeployRequestSchema, RollbackRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
+import { DeploymentResponseSchema, DeploymentSelectSchema, DeployRequestSchema, RollbackRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
 import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
@@ -74,7 +74,7 @@ router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployReque
       tagName: validated.tagName,
     });
 
-    res.status(201).json(result);
+    res.status(201).json(DeploymentResponseSchema.parse(result));
   } catch (e: any) {
     const msg = String(e?.message || '')
 
@@ -171,7 +171,7 @@ router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('proje
     throw Errors.projectNotFound();
   }
 
-  res.json(await listDeployments(projectId, limit));
+  res.json((await listDeployments(projectId, limit)).map((deployment) => DeploymentSelectSchema.parse(deployment)));
 }));
 
 /**
@@ -186,7 +186,7 @@ router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, 
     throw Errors.projectNotFound();
   }
 
-  res.json(await listDeployments(projectId, limit));
+  res.json((await listDeployments(projectId, limit)).map((deployment) => DeploymentSelectSchema.parse(deployment)));
 }));
 
 /**
@@ -212,7 +212,7 @@ router.get('/git-api/deployments/:id', apiLimiter, requireAuth, requireAction('p
     throw Errors.notFound('Deployment');
   }
 
-  res.json(deployment);
+  res.json(DeploymentSelectSchema.parse(deployment));
 }));
 
 /**

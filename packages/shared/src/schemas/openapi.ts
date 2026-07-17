@@ -188,6 +188,7 @@ const {
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
   RollbackRequestSchema,
+  DeploymentSelectSchema,
   DeploymentResponseSchema,
   AcquireLockRequestSchema,
   LockResponseSchema,
@@ -3622,9 +3623,9 @@ registry.registerPath({ method: 'post', path: '/git-api/check-repo-exists', ...a
 registry.registerPath({ method: 'post', path: '/git-api/repo-info', ...authzExtension('project.create.git.inspect', 'POST', '/git-api/repo-info'), request: { body: { content: { 'application/json': { schema: RepositoryInfoRequestSchema } } } }, responses: { 200: { description: 'Repository info', content: { 'application/json': { schema: RepositoryInfoResponseSchema } } } } });
 
 // Git deployments
-registry.registerPath({ method: 'get', path: '/git-api/deployments', ...authzExtension('project.deployments.read', 'GET', '/git-api/deployments'), request: { query: z.object({ projectId: z.string().optional() }).passthrough() }, responses: { 200: { description: 'List git deployments', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
-registry.registerPath({ method: 'get', path: '/git-api/deployments/{id}', ...authzExtension('project.deployments.read', 'GET', '/git-api/deployments/:id'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Deployment details', content: { 'application/json': { schema: z.unknown() } } }, 404: { description: 'Not found' } } });
-registry.registerPath({ method: 'get', path: '/git-api/projects/{projectId}/deployments', ...authzExtension('project.deployments.read', 'GET', '/git-api/projects/:projectId/deployments'), request: { params: z.object({ projectId: z.string() }) }, responses: { 200: { description: 'Deployments for project', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/deployments', ...authzExtension('project.deployments.read', 'GET', '/git-api/deployments'), request: { query: z.object({ projectId: z.string().optional() }).passthrough() }, responses: { 200: { description: 'List git deployments', content: { 'application/json': { schema: z.array(DeploymentSelectSchema) } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/deployments/{id}', ...authzExtension('project.deployments.read', 'GET', '/git-api/deployments/:id'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Deployment details', content: { 'application/json': { schema: DeploymentSelectSchema } } }, 404: { description: 'Not found' } } });
+registry.registerPath({ method: 'get', path: '/git-api/projects/{projectId}/deployments', ...authzExtension('project.deployments.read', 'GET', '/git-api/projects/:projectId/deployments'), request: { params: z.object({ projectId: z.string() }) }, responses: { 200: { description: 'Deployments for project', content: { 'application/json': { schema: z.array(DeploymentSelectSchema) } } } } });
 
 // Git sync
 registry.registerPath({ method: 'post', path: '/git-api/sync', ...authzExtension('project.git.sync.run', 'POST', '/git-api/sync'), request: { body: { content: { 'application/json': { schema: GitSyncRequestSchema } } } }, responses: { 200: { description: 'Sync started', content: { 'application/json': { schema: GitSyncResponseSchema } } } } });

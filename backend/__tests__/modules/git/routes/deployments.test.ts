@@ -30,7 +30,7 @@ vi.mock('@enterpriseglue/shared/services/git/GitService.js', () => ({
   GitService: class {
     listDeployments = vi.fn().mockResolvedValue([]);
     getCommitHistory = vi.fn().mockResolvedValue([]);
-    deployProject = vi.fn().mockResolvedValue({ deploymentId: 'deployment-1' });
+    deployProject = vi.fn().mockResolvedValue({ deploymentId: 'deployment-1', commitSha: 'abc1234', filesChanged: 1 });
     rollbackToCommit = vi.fn().mockResolvedValue(undefined);
   },
 }));
@@ -148,7 +148,7 @@ describe('git deployments routes', () => {
   });
 
   it('placeholder test for git deployments', () => {
-    expect(true).toBe(true);
+    expect(deploymentsRouter).toBeDefined();
   });
 
   it('evaluates CI deployment eligibility when an engine target is provided', async () => {
@@ -243,9 +243,18 @@ describe('git deployments routes', () => {
       {
         id: 'deployment-1',
         projectId,
+        repositoryId: 'repository-1',
         commitSha: 'abc1234',
+        commitMessage: 'Deploy',
+        tag: null,
+        deployedBy: 'user-1',
         deployedAt: 1700000000,
+        environment: null,
         status: 'success',
+        errorMessage: null,
+        filesChanged: 1,
+        metadata: null,
+        accessToken: 'must-not-leak',
       },
     ]);
 
@@ -260,6 +269,7 @@ describe('git deployments routes', () => {
         projectId,
       }),
     ]);
+    expect(response.body[0]).not.toHaveProperty('accessToken');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       tenantId: 'tenant-a',

@@ -58,11 +58,12 @@ export const RollbackRequestSchema = z.object({
 });
 
 export const DeploymentResponseSchema = z.object({
-  deploymentId: z.string().uuid(),
+  deploymentId: z.string(),
   commitSha: z.string(),
   tag: z.string().optional(),
   filesChanged: z.number(),
-});
+  vcsCommitId: z.string().optional(),
+}).strict();
 
 // Types
 export type Deployment = z.infer<typeof DeploymentSelectSchema>;
