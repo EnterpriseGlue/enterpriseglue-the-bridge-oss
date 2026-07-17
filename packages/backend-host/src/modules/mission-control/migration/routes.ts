@@ -2,10 +2,12 @@ import { Router, Request, Response } from 'express'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import {
   MigrationActiveSourcesResponseSchema,
   MigrationAsyncExecuteResponseSchema,
   MigrationDirectExecuteResponseSchema,
+  MigrationExecuteRequestSchema,
   MigrationPreviewResponseSchema,
   MigrationPlanSchema,
   MigrationValidationResultSchema,
@@ -71,7 +73,7 @@ r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAc
 }))
 
 // Execute migration as async batch
-r.post('/mission-control-api/migration/execute-async', requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/execute-async', requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', { resourceKind: 'process_definition' }), validateBody(MigrationExecuteRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const result = await executeMigrationAsync(engineId, req.body)
@@ -82,7 +84,7 @@ r.post('/mission-control-api/migration/execute-async', requireRuntimeMigrationAc
 }))
 
 // Execute migration directly (synchronous)
-r.post('/mission-control-api/migration/execute-direct', requireRuntimeMigrationAction('engine.runtime.migrations.execute-direct', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/execute-direct', requireRuntimeMigrationAction('engine.runtime.migrations.execute-direct', { resourceKind: 'process_definition' }), validateBody(MigrationExecuteRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     await executeMigrationDirect(engineId, req.body)

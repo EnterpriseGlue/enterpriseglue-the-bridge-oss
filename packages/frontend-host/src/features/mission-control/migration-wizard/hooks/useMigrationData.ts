@@ -10,6 +10,7 @@ import type {
   MigrationActiveSourcesResponse,
   MigrationAsyncExecuteResponse,
   MigrationDirectExecuteResponse,
+  MigrationExecuteRequest,
   MigrationPlan,
   MigrationPreviewResponse,
   MigrationValidationResult,
@@ -241,17 +242,18 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       if (!auditReason?.trim()) {
         throw new Error('Audit reason is required')
       }
+      const request: MigrationExecuteRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+        processInstanceIds: instanceIds,
+        skipCustomListeners,
+        skipIoMappings,
+        variables: varsObj,
+        auditReason: auditReason.trim(),
+      }
       return apiClient.post<MigrationAsyncExecuteResponse>(
         '/mission-control-api/migration/execute-async',
-        {
-          engineId: selectedEngineId,
-          plan: planWithOverrides,
-          processInstanceIds: instanceIds,
-          skipCustomListeners,
-          skipIoMappings,
-          variables: varsObj,
-          auditReason: auditReason.trim(),
-        },
+        request,
         { credentials: 'include' }
       )
     },
@@ -264,17 +266,18 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       if (!auditReason?.trim()) {
         throw new Error('Audit reason is required')
       }
+      const request: MigrationExecuteRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+        processInstanceIds: instanceIds,
+        skipCustomListeners,
+        skipIoMappings,
+        variables: varsObj,
+        auditReason: auditReason.trim(),
+      }
       return apiClient.post<MigrationDirectExecuteResponse>(
         '/mission-control-api/migration/execute-direct',
-        {
-          engineId: selectedEngineId,
-          plan: planWithOverrides,
-          processInstanceIds: instanceIds,
-          skipCustomListeners,
-          skipIoMappings,
-          variables: varsObj,
-          auditReason: auditReason.trim(),
-        },
+        request,
         { credentials: 'include' }
       )
     },

@@ -2271,6 +2271,8 @@ The Mission Control service layer now carries the shared recursive runtime-activ
 
 Historic decision lists now use the canonical `/history/decisions` route and shared historic decision contract rather than retaining a stale local `decision-instances` shape. The retained detail client aggregates that decision row with the separately authorized shared input/output contracts, preserving its public helper while removing the obsolete undocumented endpoint and hand-maintained IO interfaces.
 
+Migration execution now validates the same shared request schema documented in OpenAPI after the runtime migration authorization guard resolves the source and target definitions. The wizard and retained execution helper construct that contract directly, including the mandatory audit reason, and direct execution now returns its documented `{ ok: true }` response rather than discarding it.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.

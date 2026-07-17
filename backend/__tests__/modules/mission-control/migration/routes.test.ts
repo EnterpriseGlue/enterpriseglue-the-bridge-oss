@@ -121,7 +121,12 @@ describe('mission-control migration routes', () => {
   it('executes migration async', async () => {
     const response = await request(app)
       .post('/mission-control-api/migration/execute-async')
-      .send({ engineId: 'engine-1', processInstanceIds: ['pi1'] });
+      .send({
+        engineId: 'engine-1',
+        plan: { sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2', instructions: [] },
+        processInstanceIds: ['pi1'],
+        auditReason: 'Move selected instances to the approved definition',
+      });
 
     expect(response.status).toBe(201);
     expect(response.body).toEqual({ id: 'batch-local-1', camundaBatchId: 'b1', type: 'MIGRATE_INSTANCES' });
@@ -132,6 +137,15 @@ describe('mission-control migration routes', () => {
     expect(executeMigrationAsync).toHaveBeenCalledWith('engine-1', expect.objectContaining({
       processInstanceIds: ['pi1'],
     }));
+  });
+
+  it('rejects an execution request that omits the shared migration plan or audit reason', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/execute-async')
+      .send({ engineId: 'engine-1', processInstanceIds: ['pi1'] });
+
+    expect(response.status).toBe(400);
+    expect(executeMigrationAsync).not.toHaveBeenCalled();
   });
 
   it('denies migration plan generation when instance view permission is missing', async () => {

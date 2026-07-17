@@ -14,7 +14,7 @@ import {
   getProcessInstanceActivityTree,
   getProcessInstanceCount,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
-import type { MigrationPlan } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
+import type { MigrationExecuteRequest, MigrationPlan } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
 export function toEnginePlan(body: any) {
   // Engine-like shape: normalize instructions and strip extras
@@ -122,7 +122,7 @@ export async function validateMigrationPlan(engineId: string, body: any) {
   return postMigrationValidate<any>(engineId, plan)
 }
 
-export async function executeMigrationAsync(engineId: string, body: any) {
+export async function executeMigrationAsync(engineId: string, body: MigrationExecuteRequest) {
   const { plan, processInstanceIds, skipCustomListeners, skipIoMappings, variables } = body || {}
   const enginePlan = toEnginePlan(plan)
   const engineReq: any = { migrationPlan: enginePlan }
@@ -140,7 +140,7 @@ export async function executeMigrationAsync(engineId: string, body: any) {
   return { id, camundaBatchId: engineDto?.id, type: 'MIGRATE_INSTANCES' }
 }
 
-export async function executeMigrationDirect(engineId: string, body: any) {
+export async function executeMigrationDirect(engineId: string, body: MigrationExecuteRequest) {
   const { plan, processInstanceIds, skipCustomListeners, skipIoMappings, variables } = body || {}
   const enginePlan = toEnginePlan(plan)
   const engineReq: any = { migrationPlan: enginePlan }

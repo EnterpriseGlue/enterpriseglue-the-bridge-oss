@@ -2,6 +2,7 @@ import { apiClient } from '../../../../shared/api/client'
 import type {
   MigrationAsyncExecuteResponse,
   MigrationDirectExecuteResponse,
+  MigrationExecuteRequest,
   MigrationInstruction,
   MigrationPlan,
   MigrationValidationResult,
@@ -13,14 +14,8 @@ export type { MigrationInstruction, MigrationPlan }
 
 export type MigrationValidationReport = MigrationValidationResult
 
-export type MigrationExecution = {
-  engineId?: string
+export type MigrationExecution = Omit<MigrationExecuteRequest, 'plan'> & {
   migrationPlan: MigrationPlan
-  processInstanceIds?: string[]
-  processInstanceQuery?: Record<string, unknown>
-  skipCustomListeners?: boolean
-  skipIoMappings?: boolean
-  auditReason: string
 }
 
 // API Functions
@@ -48,9 +43,9 @@ export async function validateMigrationPlan(
   }, { credentials: 'include' })
 }
 
-export async function executeMigration(execution: MigrationExecution): Promise<void> {
+export async function executeMigration(execution: MigrationExecution): Promise<MigrationDirectExecuteResponse> {
   const { migrationPlan, ...rest } = execution
-  await apiClient.post<void>('/mission-control-api/migration/execute-direct', { ...rest, plan: migrationPlan }, { credentials: 'include' })
+  return apiClient.post<MigrationDirectExecuteResponse>('/mission-control-api/migration/execute-direct', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }
 
 export async function executeMigrationAsync(execution: MigrationExecution): Promise<MigrationAsyncExecuteResponse> {
