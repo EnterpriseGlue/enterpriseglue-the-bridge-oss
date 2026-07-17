@@ -23,7 +23,7 @@ export const ExternalTaskSchema = z.object({
     type: z.string(),
   })).optional(),
   businessKey: z.string().optional().nullable(),
-});
+}).passthrough();
 
 // Request schemas
 export const FetchAndLockRequest = z.object({

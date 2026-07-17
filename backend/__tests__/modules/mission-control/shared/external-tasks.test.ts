@@ -43,8 +43,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 }));
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/external-tasks-service.js', () => ({
-  fetchAndLockTasks: vi.fn().mockResolvedValue([{ id: 'external-task-1' }]),
-  listExternalTasks: vi.fn().mockResolvedValue([{ id: 'external-task-1' }]),
+  fetchAndLockTasks: vi.fn().mockResolvedValue([{ id: 'external-task-1', topicName: 'topic-a' }]),
+  listExternalTasks: vi.fn().mockResolvedValue([{ id: 'external-task-1', topicName: 'topic-a' }]),
   completeTask: vi.fn().mockResolvedValue(undefined),
   failTask: vi.fn().mockResolvedValue(undefined),
   bpmnErrorTask: vi.fn().mockResolvedValue(undefined),
@@ -85,7 +85,7 @@ describe('mission-control external task routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'external-task-1' }]);
+    expect(response.body).toEqual([{ id: 'external-task-1', topicName: 'topic-a' }]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'engine',
@@ -142,8 +142,8 @@ describe('mission-control external task routes', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
     (listExternalTasks as unknown as Mock).mockResolvedValueOnce([
-      { id: 'external-task-allowed', processDefinitionId: 'definition-payments' },
-      { id: 'external-task-forbidden', processDefinitionId: 'definition-benefits' },
+      { id: 'external-task-allowed', topicName: 'topic-a', processDefinitionId: 'definition-payments' },
+      { id: 'external-task-forbidden', topicName: 'topic-b', processDefinitionId: 'definition-benefits' },
     ]);
     (camundaGet as unknown as Mock).mockImplementation(async (_engineId: string, path: string) => (
       path.endsWith('definition-payments') ? { key: 'payments' } : { key: 'benefits' }
@@ -154,7 +154,7 @@ describe('mission-control external task routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'external-task-allowed', processDefinitionId: 'definition-payments' }]);
+    expect(response.body).toEqual([{ id: 'external-task-allowed', topicName: 'topic-a', processDefinitionId: 'definition-payments' }]);
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-payments');
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition/definition-benefits');
   });
