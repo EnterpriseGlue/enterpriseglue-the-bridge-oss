@@ -55,6 +55,8 @@ export {
 
 // Online project creation schemas
 export {
+  CreateOnlineProjectRequestSchema,
   CreateOnlineProjectResponseSchema,
+  type CreateOnlineProjectRequest,
   type CreateOnlineProjectResponse,
 } from './online-project.js';

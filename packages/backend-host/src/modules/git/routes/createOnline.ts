@@ -4,8 +4,8 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
+import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
@@ -28,38 +28,13 @@ import {
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
-import { CreateOnlineProjectResponseSchema } from '@enterpriseglue/shared/schemas/git/online-project.js';
+import {
+  CreateOnlineProjectRequestSchema,
+  CreateOnlineProjectResponseSchema,
+  type CreateOnlineProjectRequest,
+} from '@enterpriseglue/shared/schemas/git/online-project.js';
 
 const router = Router();
-
-interface CreateOnlineRequest {
-  projectName: string;
-  providerId: string;
-  repositoryName: string;
-  namespace?: string;
-  isPrivate?: boolean;
-  description?: string;
-  // Auth - either token or use saved credentials
-  token?: string;
-  importFromEngine?: {
-    enabled?: boolean;
-    engineId?: string;
-  };
-}
-
-const createOnlineSchema = z.object({
-  projectName: z.unknown(),
-  providerId: z.unknown(),
-  repositoryName: z.unknown(),
-  namespace: z.unknown().optional(),
-  isPrivate: z.boolean().optional(),
-  description: z.string().optional(),
-  token: z.string().optional(),
-  importFromEngine: z.object({
-    enabled: z.boolean().optional(),
-    engineId: z.string().optional(),
-  }).optional(),
-});
 
 const checkRepoExistsSchema = z.object({
   providerId: z.unknown(),
@@ -80,7 +55,7 @@ const checkRepoExistsSchema = z.object({
  * 5. Initialize VCS
  * 6. Link repository to project
  */
-router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(createOnlineSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(CreateOnlineProjectRequestSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const {
     projectName,
@@ -91,7 +66,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     description,
     token,
     importFromEngine,
-  } = req.body as CreateOnlineRequest;
+  } = req.body as CreateOnlineProjectRequest;
 
   if (typeof projectName !== 'string') {
     throw Errors.validation('Project name is required');

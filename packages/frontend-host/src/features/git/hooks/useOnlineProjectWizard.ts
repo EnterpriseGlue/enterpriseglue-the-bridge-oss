@@ -12,7 +12,7 @@ import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
-import type { CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
+import type { CreateOnlineProjectRequest, CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
 import type { ProjectImportPreview as SharedProjectImportPreview } from '@enterpriseglue/shared/schemas/starbase/project.js'
 import type { CreateProjectResponse } from '@enterpriseglue/shared/schemas/starbase/project.js'
 import type { GitCredential as ProviderCredential, GitCredentialNamespace as Namespace } from '@enterpriseglue/shared/schemas/git/repository.js'
@@ -476,7 +476,7 @@ export function useOnlineProjectWizard({
       }
 
       try {
-        return await apiClient.post<CreateOnlineProjectResponse>('/git-api/create-online', {
+        const request: CreateOnlineProjectRequest = {
           projectName: projectName.trim(),
           providerId,
           repositoryName: repositoryName.trim(),
@@ -485,7 +485,8 @@ export function useOnlineProjectWizard({
           description: description.trim() || undefined,
           token: authMethod === 'pat' && token ? token : undefined,
           importFromEngine: importFromEnginePayload,
-        })
+        }
+        return await apiClient.post<CreateOnlineProjectResponse>('/git-api/create-online', request)
       } catch (error) {
         const parsed = parseApiError(error, 'Failed to create project')
         if (parsed.field) {

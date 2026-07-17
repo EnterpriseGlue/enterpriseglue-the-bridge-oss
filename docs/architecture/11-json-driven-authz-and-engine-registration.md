@@ -2429,6 +2429,8 @@ Git credential list/detail/create/rename and namespace contracts now share redac
 
 Git provider repository listings now use one sanitized shared schema across backend serialization, OpenAPI, and the Git client; provider tokens and raw provider responses remain outside that transport contract.
 
+Online Git-project creation now shares its request and response contracts across backend validation, OpenAPI, and the project wizard. The existing personal-access-token field remains request-only for compatibility and is explicitly absent from the response contract.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

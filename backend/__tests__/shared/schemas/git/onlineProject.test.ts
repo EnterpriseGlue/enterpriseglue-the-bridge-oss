@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
-import { CreateOnlineProjectResponseSchema } from '@enterpriseglue/shared/schemas/git/online-project.js';
+import {
+  CreateOnlineProjectRequestSchema,
+  CreateOnlineProjectResponseSchema,
+} from '@enterpriseglue/shared/schemas/git/online-project.js';
 
 describe('online project creation transport contract', () => {
+  it('retains the existing request-only personal access token flow', () => {
+    const request = CreateOnlineProjectRequestSchema.parse({
+      projectName: 'Payments',
+      providerId: 'provider-1',
+      repositoryName: 'payments',
+      token: 'personal-access-token',
+      importFromEngine: { enabled: true, engineId: 'engine-1' },
+    });
+
+    expect(request.token).toBe('personal-access-token');
+    expect(request.importFromEngine?.engineId).toBe('engine-1');
+  });
+
   it('contains project and repository metadata but no submitted credentials', () => {
     const response = CreateOnlineProjectResponseSchema.parse({
       project: { id: 'project-1', name: 'Payments' },
@@ -19,5 +35,6 @@ describe('online project creation transport contract', () => {
     const document = generateOpenApi();
     expect(document.components?.schemas?.CreateOnlineProjectResponse).toBeDefined();
     expect(document.paths?.['/git-api/create-online']?.post?.responses?.['201']).toBeDefined();
+    expect(document.paths?.['/git-api/create-online']?.post?.requestBody).toBeDefined();
   });
 });
