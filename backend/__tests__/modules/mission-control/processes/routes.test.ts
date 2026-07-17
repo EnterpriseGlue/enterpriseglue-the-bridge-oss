@@ -183,12 +183,13 @@ describe('mission-control processes routes', () => {
   });
 
   it('starts process instances through process start permission', async () => {
+    vi.mocked(startProcessInstance).mockResolvedValueOnce({ id: 'pi1', engineExtension: { traceId: 'start-1' } });
     const response = await request(app)
       .post('/mission-control-api/process-definitions/key/invoice/start')
       .send({ engineId: 'engine-1', businessKey: 'case-1', variables: { amount: { value: 100 } } });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ id: 'pi1' });
+    expect(response.body).toEqual({ id: 'pi1', engineExtension: { traceId: 'start-1' } });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:start', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',

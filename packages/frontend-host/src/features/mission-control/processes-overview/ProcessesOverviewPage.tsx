@@ -37,6 +37,7 @@ import { evaluateActionSnapshot, summarizeBulkActionUnavailableReasons, WhyUnava
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
+import type { ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
@@ -1029,7 +1030,7 @@ export default function ProcessesOverviewPage() {
       const businessKey = startBusinessKey.trim()
       if (businessKey) payload.businessKey = businessKey
       if (variables !== undefined) payload.variables = variables
-      const started = await apiClient.post<any>(
+      const started = await apiClient.post<ProcessInstanceStartResponse>(
         `/mission-control-api/process-definitions/key/${encodeURIComponent(selectedProcess.key)}/start`,
         payload,
         { credentials: 'include' }

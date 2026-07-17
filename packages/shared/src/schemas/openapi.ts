@@ -55,6 +55,7 @@ const {
   BatchOperationCreateResponseSchema,
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
+  ProcessInstanceStartResponseSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
@@ -2656,12 +2657,13 @@ registry.registerPath({
 });
 
 // POST /mission-control-api/process-definitions/key/{key}/start
+registry.register('ProcessInstanceStartResponse', ProcessInstanceStartResponseSchema)
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-definitions/key/{key}/start',
   ...authzExtension('engine.runtime.process-definitions.start', 'POST', '/mission-control-api/process-definitions/key/{key}/start'),
   request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ variables: z.record(z.string(), z.unknown()).optional(), businessKey: z.string().optional() }) } } } },
-  responses: { 200: { description: 'Process instance started', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Process instance started', content: { 'application/json': { schema: ProcessInstanceStartResponseSchema } } } },
 });
 
 // GET /mission-control-api/process-definitions/key/{key}/statistics

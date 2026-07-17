@@ -15,6 +15,13 @@ export const ProcessDefXmlSchema = z.object({
   bpmn20Xml: z.string(),
 });
 
+// Starting an instance returns an engine-native process-instance object. The
+// local API guarantees its id while preserving engine-specific fields for
+// compatibility with existing callers and adapters.
+export const ProcessInstanceStartResponseSchema = z.object({
+  id: z.string(),
+}).passthrough();
+
 // Process instance schemas (API-only, no DB persistence)
 export const RuntimeRowActionDecisionSchema = z.object({
   allowed: z.boolean(),
@@ -83,6 +90,7 @@ export const PreviewCountResponseSchema = z.object({
 // Types
 export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
 export type ProcessDefXml = z.infer<typeof ProcessDefXmlSchema>;
+export type ProcessInstanceStartResponse = z.infer<typeof ProcessInstanceStartResponseSchema>;
 export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;

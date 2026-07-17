@@ -13,6 +13,7 @@ import {
 } from './service.js'
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js'
+import { ProcessInstanceStartResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 const r = Router()
 
@@ -131,7 +132,7 @@ r.post('/mission-control-api/process-definitions/key/:key/start', requireProcess
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
   const data = await startProcessInstance(engineId, definitionKey, { variables, businessKey })
-  res.json(data)
+  res.json(ProcessInstanceStartResponseSchema.parse(data))
 }))
 
 export default r
