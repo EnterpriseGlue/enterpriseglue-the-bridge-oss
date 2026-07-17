@@ -12,6 +12,7 @@ import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
+import type { CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
 
 export type AuthMethod = 'oauth' | 'pat'
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -29,10 +30,6 @@ interface Namespace {
   name: string
   type: 'user' | 'organization'
   avatarUrl?: string
-}
-
-type CreateOnlineResponse = {
-  project: { id: string; name: string }
 }
 
 type CreateLocalResponse = { id: string; name: string }
@@ -507,7 +504,7 @@ export function useOnlineProjectWizard({
       }
 
       try {
-        return await apiClient.post<CreateOnlineResponse>('/git-api/create-online', {
+        return await apiClient.post<CreateOnlineProjectResponse>('/git-api/create-online', {
           projectName: projectName.trim(),
           providerId,
           repositoryName: repositoryName.trim(),
@@ -525,7 +522,7 @@ export function useOnlineProjectWizard({
         throw new Error(parsed.message || 'Failed to create project')
       }
     },
-    onSuccess: (data: CreateOnlineResponse) => {
+    onSuccess: (data: CreateOnlineProjectResponse) => {
       queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
       queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
       resetForm()

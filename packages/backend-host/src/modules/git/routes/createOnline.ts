@@ -28,6 +28,7 @@ import {
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { CreateOnlineProjectResponseSchema } from '@enterpriseglue/shared/schemas/git/online-project.js';
 
 const router = Router();
 
@@ -273,7 +274,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     logger.info('Repository linked to project', { projectId, repoId, remoteUrl: remoteRepo.cloneUrl });
 
     // Return success
-    res.status(201).json({
+    res.status(201).json(CreateOnlineProjectResponseSchema.parse({
       project: {
         id: projectId,
         name: projectNameTrim,
@@ -286,7 +287,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
         cloneUrl: remoteRepo.cloneUrl,
         private: remoteRepo.private,
       },
-    });
+    }));
 
   } catch (error: unknown) {
     if (error instanceof AppError) throw error;

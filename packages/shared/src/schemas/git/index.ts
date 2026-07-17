@@ -44,3 +44,9 @@ export {
   type LockHolder,
   type LockResponse,
 } from './lock.js';
+
+// Online project creation schemas
+export {
+  CreateOnlineProjectResponseSchema,
+  type CreateOnlineProjectResponse,
+} from './online-project.js';

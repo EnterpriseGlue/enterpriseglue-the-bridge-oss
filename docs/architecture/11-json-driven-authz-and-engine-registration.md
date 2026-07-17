@@ -2241,6 +2241,8 @@ This phase is required because the current implementation still carries compatib
 
 Dashboard context and statistics are also shared by their evaluator-backed routes, OpenAPI, and dashboard consumer rather than locally duplicated or documented as unknown.
 
+Git-backed project creation now shares a redacted project/repository response contract across its runtime serializer, OpenAPI route, and wizard; submitted Git tokens remain request-only.
+
 The generic tenant invitation flow now likewise has one shared request, readiness, reveal-once response, token, public-status, OTP/redeem, and onboarding contract. Its backend validator/response serializer, OpenAPI operations, `InviteMemberModal`, and `AcceptInvite` all consume that contract, while onboarding completion reuses the shared authenticated login response contract, so SSO/email readiness and manual invite fields cannot silently drift. The public token-status, OTP, and redemption routes are explicitly classified as high-risk opaque-token exemptions with rate-limit and single-use rationale rather than being omitted from authorization inventory.
 
 Platform branding now has shared administrator, public-login, and bounded-update contracts. The settings route, public branding serializer, OpenAPI, branding service, administrator tab, login, invitation acceptance, and authenticated layout import those contracts; the public form adds only the safe SSO auto-redirect flag. This removes four independently maintained frontend response shapes while keeping the public and settings boundaries explicit.
