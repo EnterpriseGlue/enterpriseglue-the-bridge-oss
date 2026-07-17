@@ -58,6 +58,9 @@ const {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
   MigrationActiveSourcesResponseSchema,
+  MigrationAsyncExecuteResponseSchema,
+  MigrationDirectExecuteResponseSchema,
+  MigrationExecuteRequestSchema,
   MigrationGenerateRequestSchema,
   MigrationInstructionSchema,
   MigrationPlanSchema,
@@ -1366,21 +1369,9 @@ registry.register('MigrationGenerateInput', MigrationGenerateRequestSchema)
 const MigrationValidateRequest = z.object({ plan: MigrationPlanSchema })
 registry.register('MigrationValidateRequest', MigrationValidateRequest)
 
-const MigrationExecuteRequest = z.object({
-  plan: MigrationPlanSchema,
-  processInstanceIds: z.array(z.string()).optional(),
-  skipCustomListeners: z.boolean().optional(),
-  skipIoMappings: z.boolean().optional(),
-  variables: MissionControlVariablesSchema.optional(),
-  auditReason: z.string().min(1).max(2000),
-})
-registry.register('MigrationExecuteRequest', MigrationExecuteRequest)
-
-const MigrationCreateResponse = z.object({ id: z.string(), camundaBatchId: z.string().optional(), type: z.literal('MIGRATE_INSTANCES') })
-registry.register('MigrationCreateResponse', MigrationCreateResponse)
-
-const MigrationDirectResponse = z.object({ ok: z.boolean() })
-registry.register('MigrationDirectResponse', MigrationDirectResponse)
+registry.register('MigrationExecuteRequest', MigrationExecuteRequestSchema)
+registry.register('MigrationCreateResponse', MigrationAsyncExecuteResponseSchema)
+registry.register('MigrationDirectResponse', MigrationDirectExecuteResponseSchema)
 
 // POST /mission-control-api/migration/plan/validate
 registry.registerPath({
@@ -1396,8 +1387,8 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/execute-async',
   ...authzExtension('engine.runtime.migrations.execute-async', 'POST', '/mission-control-api/migration/execute-async'),
-  request: { body: { content: { 'application/json': { schema: MigrationExecuteRequest } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: MigrationCreateResponse } } } },
+  request: { body: { content: { 'application/json': { schema: MigrationExecuteRequestSchema } } } },
+  responses: { 201: { description: 'Created', content: { 'application/json': { schema: MigrationAsyncExecuteResponseSchema } } } },
 })
 
 // POST /mission-control-api/migration/execute-direct
@@ -1405,8 +1396,8 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/execute-direct',
   ...authzExtension('engine.runtime.migrations.execute-direct', 'POST', '/mission-control-api/migration/execute-direct'),
-  request: { body: { content: { 'application/json': { schema: MigrationExecuteRequest } } } },
-  responses: { 200: { description: 'Executed', content: { 'application/json': { schema: MigrationDirectResponse } } } },
+  request: { body: { content: { 'application/json': { schema: MigrationExecuteRequestSchema } } } },
+  responses: { 200: { description: 'Executed', content: { 'application/json': { schema: MigrationDirectExecuteResponseSchema } } } },
 })
 
 // POST /mission-control-api/migration/preview

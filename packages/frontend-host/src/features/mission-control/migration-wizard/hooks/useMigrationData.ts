@@ -8,6 +8,8 @@ import { useToast } from '../../../../shared/notifications/ToastProvider'
 import { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
   MigrationActiveSourcesResponse,
+  MigrationAsyncExecuteResponse,
+  MigrationDirectExecuteResponse,
   MigrationPreviewResponse,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
@@ -241,7 +243,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       if (!auditReason?.trim()) {
         throw new Error('Audit reason is required')
       }
-      return apiClient.post<{ id: string }>(
+      return apiClient.post<MigrationAsyncExecuteResponse>(
         '/mission-control-api/migration/execute-async',
         {
           engineId: selectedEngineId,
@@ -264,7 +266,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       if (!auditReason?.trim()) {
         throw new Error('Audit reason is required')
       }
-      return apiClient.post<{ ok: boolean }>(
+      return apiClient.post<MigrationDirectExecuteResponse>(
         '/mission-control-api/migration/execute-direct',
         {
           engineId: selectedEngineId,

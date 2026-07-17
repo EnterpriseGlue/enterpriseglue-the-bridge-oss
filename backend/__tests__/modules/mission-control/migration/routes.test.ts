@@ -54,7 +54,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/migrat
   generateMigrationPlan: vi.fn().mockResolvedValue({ instructions: [] }),
   validateMigrationPlan: vi.fn().mockResolvedValue({ instructionReports: [] }),
   executeMigration: vi.fn().mockResolvedValue(undefined),
-  executeMigrationAsync: vi.fn().mockResolvedValue({ batchId: 'b1' }),
+  executeMigrationAsync: vi.fn().mockResolvedValue({ id: 'batch-local-1', camundaBatchId: 'b1', type: 'MIGRATE_INSTANCES' }),
   executeMigrationDirect: vi.fn().mockResolvedValue(undefined),
   aggregateActiveSources: vi.fn().mockResolvedValue({}),
 }));
@@ -111,7 +111,7 @@ describe('mission-control migration routes', () => {
       .send({ engineId: 'engine-1', processInstanceIds: ['pi1'] });
 
     expect(response.status).toBe(201);
-    expect(response.body).toEqual({ batchId: 'b1' });
+    expect(response.body).toEqual({ id: 'batch-local-1', camundaBatchId: 'b1', type: 'MIGRATE_INSTANCES' });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:modify', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',

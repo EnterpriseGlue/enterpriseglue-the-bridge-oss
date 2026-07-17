@@ -4,6 +4,8 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   MigrationActiveSourcesResponseSchema,
+  MigrationAsyncExecuteResponseSchema,
+  MigrationDirectExecuteResponseSchema,
   MigrationPreviewResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 import {
@@ -67,7 +69,7 @@ r.post('/mission-control-api/migration/execute-async', requireRuntimeMigrationAc
   try {
     const engineId = (req as any).engineId as string
     const result = await executeMigrationAsync(engineId, req.body)
-    res.status(201).json(result)
+    res.status(201).json(MigrationAsyncExecuteResponseSchema.parse(result))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to start migration batch')
   }
@@ -78,7 +80,7 @@ r.post('/mission-control-api/migration/execute-direct', requireRuntimeMigrationA
   try {
     const engineId = (req as any).engineId as string
     await executeMigrationDirect(engineId, req.body)
-    res.status(200).json({ ok: true })
+    res.status(200).json(MigrationDirectExecuteResponseSchema.parse({ ok: true }))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to execute migration')
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VariablesSchema } from './process.js';
 
 export const MigrationInstructionSchema = z.object({
   sourceActivityIds: z.array(z.string()),
@@ -28,6 +29,27 @@ export const MigrationGenerateRequestSchema = z.object({
   })).optional(),
 });
 
+export const MigrationExecuteRequestSchema = z.object({
+  engineId: z.string().optional(),
+  plan: MigrationPlanSchema,
+  processInstanceIds: z.array(z.string()).optional(),
+  processInstanceQuery: z.record(z.string(), z.unknown()).optional(),
+  skipCustomListeners: z.boolean().optional(),
+  skipIoMappings: z.boolean().optional(),
+  variables: VariablesSchema.optional(),
+  auditReason: z.string().min(1).max(2000),
+});
+
+export const MigrationAsyncExecuteResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.literal('MIGRATE_INSTANCES'),
+}).strict();
+
+export const MigrationDirectExecuteResponseSchema = z.object({
+  ok: z.literal(true),
+}).strict();
+
 // Migration plans retain engine-compatible shapes. These aggregate responses,
 // however, are owned by EnterpriseGlue and have stable public contracts.
 export const MigrationPreviewResponseSchema = z.object({
@@ -44,3 +66,6 @@ export type MigrationActiveSourcesResponse = z.infer<typeof MigrationActiveSourc
 export type MigrationInstruction = z.infer<typeof MigrationInstructionSchema>;
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
 export type MigrationGenerateRequest = z.infer<typeof MigrationGenerateRequestSchema>;
+export type MigrationExecuteRequest = z.infer<typeof MigrationExecuteRequestSchema>;
+export type MigrationAsyncExecuteResponse = z.infer<typeof MigrationAsyncExecuteResponseSchema>;
+export type MigrationDirectExecuteResponse = z.infer<typeof MigrationDirectExecuteResponseSchema>;

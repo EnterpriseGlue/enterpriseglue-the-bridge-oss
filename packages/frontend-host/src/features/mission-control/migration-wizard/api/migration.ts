@@ -1,5 +1,7 @@
 import { apiClient } from '../../../../shared/api/client'
 import type {
+  MigrationAsyncExecuteResponse,
+  MigrationDirectExecuteResponse,
   MigrationInstruction,
   MigrationPlan,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
@@ -57,7 +59,7 @@ export async function executeMigration(execution: MigrationExecution): Promise<v
   await apiClient.post<void>('/mission-control-api/migration/execute-direct', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }
 
-export async function executeMigrationAsync(execution: MigrationExecution): Promise<{ id: string }> {
+export async function executeMigrationAsync(execution: MigrationExecution): Promise<MigrationAsyncExecuteResponse> {
   const { migrationPlan, ...rest } = execution
-  return apiClient.post<{ id: string }>('/mission-control-api/migration/execute-async', { ...rest, plan: migrationPlan }, { credentials: 'include' })
+  return apiClient.post<MigrationAsyncExecuteResponse>('/mission-control-api/migration/execute-async', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }
