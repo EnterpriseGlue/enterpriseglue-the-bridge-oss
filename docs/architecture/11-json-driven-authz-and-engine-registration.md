@@ -2277,6 +2277,8 @@ Process-instance preview counts now validate their documented shared request con
 
 Batch create, suspend, activate, retry, and suspension-update payloads now use shared schemas through backend validation, OpenAPI, and the Batch client. The retained client helpers target the actual authorized process-instance batch routes and return the documented operation receipt instead of calling obsolete endpoints with a local batch shape; adapter-specific selection fields remain compatible.
 
+Process-instance and process-definition modification requests now explicitly carry their engine selector in the shared contract used by authorization and the frontend modification hook. The backend removes that EnterpriseGlue routing field before calling the engine adapter, so the documented request and typed UI match without changing the adapter payload.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.

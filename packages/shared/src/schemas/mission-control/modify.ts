@@ -6,19 +6,19 @@ export const ModificationInstructionSchema = z.discriminatedUnion('type', [
     type: z.literal('startBeforeActivity'),
     activityId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.string(), z.any()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal('startAfterActivity'),
     activityId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.string(), z.any()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal('startTransition'),
     transitionId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.string(), z.any()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal('cancel'),
@@ -31,6 +31,7 @@ export const ModificationInstructionSchema = z.discriminatedUnion('type', [
 
 // Sync modification for a single process instance
 export const ProcessInstanceModificationRequest = z.object({
+  engineId: z.string().optional(),
   instructions: z.array(ModificationInstructionSchema).min(1),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
@@ -39,9 +40,10 @@ export const ProcessInstanceModificationRequest = z.object({
 
 // Async modification for multiple instances by definition
 export const ProcessDefinitionModificationAsyncRequest = z.object({
+  engineId: z.string().optional(),
   instructions: z.array(ModificationInstructionSchema).min(1),
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.string(), z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.unknown()).optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
   annotation: z.string().min(1).max(2000).optional(),
@@ -49,8 +51,9 @@ export const ProcessDefinitionModificationAsyncRequest = z.object({
 
 // Async restart of completed instances by definition
 export const ProcessDefinitionRestartAsyncRequest = z.object({
+  engineId: z.string().optional(),
   processInstanceIds: z.array(z.string()).optional(),
-  historicProcessInstanceQuery: z.record(z.string(), z.any()).optional(),
+  historicProcessInstanceQuery: z.record(z.string(), z.unknown()).optional(),
   initialVariables: z.boolean().optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),

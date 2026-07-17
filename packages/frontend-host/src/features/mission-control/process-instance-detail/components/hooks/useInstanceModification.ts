@@ -3,6 +3,10 @@ import type { ModificationOperation, ModificationVariable } from '../types'
 import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
 import { useToast } from '../../../../../shared/notifications/ToastProvider'
+import type {
+  ModificationInstruction,
+  ProcessInstanceModification,
+} from '@enterpriseglue/shared/schemas/mission-control/modify.js'
 
 interface UseInstanceModificationProps {
   instanceId: string
@@ -135,7 +139,7 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
     if (modPlan.length === 0) return
     setApplyBusy(true)
     try {
-      const instructions: any[] = []
+      const instructions: ModificationInstruction[] = []
       for (const op of modPlan) {
         const vars = op.variables?.filter(v => v.name.trim())
         const varsObj = vars && vars.length > 0
@@ -162,11 +166,11 @@ export function useInstanceModification({ instanceId, status, actQ, incidentsQ, 
         setApplyBusy(false)
         return
       }
-      const payload: any = { instructions, engineId }
+      const payload: ProcessInstanceModification = { instructions, engineId }
       if (options?.skipCustomListeners) payload.skipCustomListeners = true
       if (options?.skipIoMappings) payload.skipIoMappings = true
       if (options?.annotation) payload.annotation = options.annotation
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/modify`, payload, { credentials: 'include' })
+      await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/modify`, payload, { credentials: 'include' })
       await Promise.allSettled([actQ.refetch(), incidentsQ.refetch(), runtimeQ.refetch()])
       const opCount = modPlan.length
       notify({ kind: 'success', title: `Successfully applied ${opCount} modification${opCount === 1 ? '' : 's'}` })

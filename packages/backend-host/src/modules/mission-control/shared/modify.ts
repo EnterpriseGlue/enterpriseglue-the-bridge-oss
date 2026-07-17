@@ -38,7 +38,8 @@ r.use('/mission-control-api', requireAuth)
 r.post('/mission-control-api/process-instances/:id/modify', requireProcessInstanceAction('engine.runtime.process-instances.modify'), validateBody(ProcessInstanceModificationRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
-  await modifyProcessInstance(engineId, instanceId, req.body)
+  const { engineId: _requestEngineId, ...enginePayload } = req.body
+  await modifyProcessInstance(engineId, instanceId, enginePayload)
   res.status(204).end()
 }))
 
@@ -46,7 +47,8 @@ r.post('/mission-control-api/process-instances/:id/modify', requireProcessInstan
 r.post('/mission-control-api/process-definitions/:id/modification/execute-async', requireProcessDefinitionAction('engine.runtime.process-definitions.modification.execute-async'), validateBody(ProcessDefinitionModificationAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
-  const { batchId, camundaBatchId } = await modifyProcessDefinitionAsync(engineId, definitionId, req.body)
+  const { engineId: _requestEngineId, ...enginePayload } = req.body
+  const { batchId, camundaBatchId } = await modifyProcessDefinitionAsync(engineId, definitionId, enginePayload)
   res.status(201).json(ProcessDefinitionModificationAsyncResponseSchema.parse({ id: batchId, camundaBatchId, type: 'MODIFY_INSTANCES' }))
 }))
 
@@ -54,7 +56,8 @@ r.post('/mission-control-api/process-definitions/:id/modification/execute-async'
 r.post('/mission-control-api/process-definitions/:id/restart/execute-async', requireProcessDefinitionAction('engine.runtime.process-definitions.restart.execute-async'), validateBody(ProcessDefinitionRestartAsyncRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
-  const { batchId, camundaBatchId } = await restartProcessDefinitionAsync(engineId, definitionId, req.body)
+  const { engineId: _requestEngineId, ...enginePayload } = req.body
+  const { batchId, camundaBatchId } = await restartProcessDefinitionAsync(engineId, definitionId, enginePayload)
   res.status(201).json(ProcessDefinitionRestartAsyncResponseSchema.parse({ id: batchId, camundaBatchId, type: 'RESTART_INSTANCES' }))
 }))
 
