@@ -12,6 +12,7 @@ import type {
   MigrationDirectExecuteResponse,
   MigrationPlan,
   MigrationPreviewResponse,
+  MigrationValidationResult,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
 export interface MigrationDataParams {
@@ -74,7 +75,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   // Plan state
   const [plan, setPlan] = React.useState<MigrationPlan | null>(null)
-  const [validation, setValidation] = React.useState<any | null>(null)
+  const [validation, setValidation] = React.useState<MigrationValidationResult | null>(null)
   const [overrides, setOverrides] = React.useState<Record<number, string>>({})
   const [triggerOverrides, setTriggerOverrides] = React.useState<Record<number, boolean>>({})
   const [removed, setRemoved] = React.useState<Record<number, boolean>>({})
@@ -205,7 +206,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   // Validate mutation — result handling is done by the component via mutateAsync
   const validateMutation = useMutation({
     mutationFn: async () => {
-      return apiClient.post<any>(
+      return apiClient.post<MigrationValidationResult>(
         '/mission-control-api/migration/plan/validate',
         { engineId: selectedEngineId, plan: planWithOverrides },
         { credentials: 'include' }

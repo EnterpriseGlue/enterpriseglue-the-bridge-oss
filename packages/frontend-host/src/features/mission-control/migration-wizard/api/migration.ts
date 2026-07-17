@@ -4,20 +4,14 @@ import type {
   MigrationDirectExecuteResponse,
   MigrationInstruction,
   MigrationPlan,
+  MigrationValidationResult,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 // Types
 export type { MigrationInstruction, MigrationPlan }
 
-export type MigrationValidationReport = {
-  instructionReports: InstructionReport[]
-}
-
-export type InstructionReport = {
-  instruction: MigrationInstruction
-  failures: string[]
-}
+export type MigrationValidationReport = MigrationValidationResult
 
 export type MigrationExecution = {
   engineId?: string
@@ -46,8 +40,8 @@ export async function validateMigrationPlan(
   plan: MigrationPlan,
   processInstanceIds?: string[],
   engineId?: string
-): Promise<MigrationValidationReport> {
-  return apiClient.post<MigrationValidationReport>('/mission-control-api/migration/plan/validate', {
+): Promise<MigrationValidationResult> {
+  return apiClient.post<MigrationValidationResult>('/mission-control-api/migration/plan/validate', {
     ...(engineId ? { engineId } : {}),
     plan,
     processInstanceIds,

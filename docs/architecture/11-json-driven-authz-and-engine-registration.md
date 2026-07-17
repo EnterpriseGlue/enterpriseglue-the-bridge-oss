@@ -2285,6 +2285,8 @@ Decision evaluation by key now validates the same shared result schema as evalua
 
 Migration-plan generation now normalizes engine responses to the shared plan contract. Compatible adapters that return generated instructions without echoing resolved source and target identifiers retain those identifiers from the authorized request, while the route and Migration Wizard consume the typed response directly.
 
+Migration-plan validation now has one shared passthrough result contract for instruction reports and engine-specific failure/warning diagnostics. The route validates it, OpenAPI no longer uses `unknown`, and the Migration Wizard consumes the typed reports without a local duplicate interface.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

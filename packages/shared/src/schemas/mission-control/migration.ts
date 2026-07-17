@@ -50,6 +50,31 @@ export const MigrationDirectExecuteResponseSchema = z.object({
   ok: z.literal(true),
 }).strict();
 
+// Validation diagnostics differ between compatible engine versions. Preserve
+// extension fields while giving the wizard one stable report/list boundary.
+export const MigrationValidationDiagnosticSchema = z.object({
+  errorMessage: z.string().optional(),
+  warningMessage: z.string().optional(),
+  message: z.string().optional(),
+}).passthrough();
+
+export const MigrationValidationInstructionSchema = z.object({
+  sourceActivityIds: z.array(z.string()).optional(),
+  targetActivityIds: z.array(z.string()).optional(),
+  targetActivityId: z.string().optional(),
+  updateEventTrigger: z.boolean().optional(),
+}).passthrough();
+
+export const MigrationValidationInstructionReportSchema = z.object({
+  instruction: MigrationValidationInstructionSchema.optional(),
+  failures: z.array(MigrationValidationDiagnosticSchema).optional(),
+  warnings: z.array(MigrationValidationDiagnosticSchema).optional(),
+}).passthrough();
+
+export const MigrationValidationResultSchema = z.object({
+  instructionReports: z.array(MigrationValidationInstructionReportSchema).default([]),
+}).passthrough();
+
 // Migration plans retain engine-compatible shapes. These aggregate responses,
 // however, are owned by EnterpriseGlue and have stable public contracts.
 export const MigrationPreviewResponseSchema = z.object({
@@ -69,3 +94,6 @@ export type MigrationGenerateRequest = z.infer<typeof MigrationGenerateRequestSc
 export type MigrationExecuteRequest = z.infer<typeof MigrationExecuteRequestSchema>;
 export type MigrationAsyncExecuteResponse = z.infer<typeof MigrationAsyncExecuteResponseSchema>;
 export type MigrationDirectExecuteResponse = z.infer<typeof MigrationDirectExecuteResponseSchema>;
+export type MigrationValidationDiagnostic = z.infer<typeof MigrationValidationDiagnosticSchema>;
+export type MigrationValidationInstructionReport = z.infer<typeof MigrationValidationInstructionReportSchema>;
+export type MigrationValidationResult = z.infer<typeof MigrationValidationResultSchema>;

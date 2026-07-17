@@ -82,6 +82,7 @@ const {
   MigrationGenerateRequestSchema,
   MigrationInstructionSchema,
   MigrationPlanSchema,
+  MigrationValidationResultSchema,
   MigrationPreviewResponseSchema,
   PreviewCountResponseSchema,
   DirectProcessInstanceDeleteRequestSchema,
@@ -1391,7 +1392,7 @@ registry.registerPath({
   path: '/mission-control-api/migration/plan/validate',
   ...authzExtension('engine.runtime.migrations.plan.validate', 'POST', '/mission-control-api/migration/plan/validate'),
   request: { body: { content: { 'application/json': { schema: MigrationValidateRequest } } } },
-  responses: { 200: { description: 'Validation result', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Validation result', content: { 'application/json': { schema: MigrationValidationResultSchema } } } },
 })
 
 // POST /mission-control-api/migration/execute-async

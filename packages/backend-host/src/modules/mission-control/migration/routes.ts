@@ -8,6 +8,7 @@ import {
   MigrationDirectExecuteResponseSchema,
   MigrationPreviewResponseSchema,
   MigrationPlanSchema,
+  MigrationValidationResultSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 import {
   toEnginePlan,
@@ -63,7 +64,7 @@ r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAc
   try {
     const engineId = (req as any).engineId as string
     const result = await validateMigrationPlan(engineId, req.body)
-    res.status(200).json(result)
+    res.status(200).json(MigrationValidationResultSchema.parse(result))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to validate migration plan')
   }

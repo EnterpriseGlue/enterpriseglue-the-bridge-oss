@@ -267,8 +267,8 @@ export default function MigrationWizard() {
   const handleReviewAndExecute = React.useCallback(async () => {
     try {
       const data = await validateMutation.mutateAsync()
-      const reports: any[] = data?.instructionReports || []
-      const hasIssues = reports.some((rep: any) => (rep?.failures?.length || 0) > 0 || (rep?.warnings?.length || 0) > 0)
+      const reports = data.instructionReports
+      const hasIssues = reports.some((rep) => (rep.failures?.length || 0) > 0 || (rep.warnings?.length || 0) > 0)
       if (hasIssues) {
         setValidation(data)
       } else {
@@ -569,9 +569,9 @@ export default function MigrationWizard() {
       </div>
 
       {validation && (() => {
-        const reports: any[] = validation?.instructionReports || []
-        const errorCount = reports.reduce((sum: number, rep: any) => sum + (rep?.failures?.length || 0), 0)
-        const warningCount = reports.reduce((sum: number, rep: any) => sum + (rep?.warnings?.length || 0), 0)
+        const reports = validation.instructionReports
+        const errorCount = reports.reduce((sum, rep) => sum + (rep.failures?.length || 0), 0)
+        const warningCount = reports.reduce((sum, rep) => sum + (rep.warnings?.length || 0), 0)
         if (errorCount === 0 && warningCount === 0) return null
         return (
           <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', padding: 'var(--spacing-4)', display: 'grid', gap: 'var(--spacing-3)' }}>
@@ -613,21 +613,21 @@ export default function MigrationWizard() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {validation.instructionReports.flatMap((rep: any) => {
-                  const src = (rep?.instruction?.sourceActivityIds || []).join(', ')
-                  const tgt = rep?.instruction?.targetActivityId || ''
-                  const failures = (rep?.failures || []).map((f: any) => ({ level: 'Error', msg: f?.errorMessage || String(f) }))
-                  const warnings = (rep?.warnings || []).map((w: any) => ({ level: 'Warning', msg: w?.warningMessage || String(w) }))
+                {validation.instructionReports.flatMap((rep) => {
+                  const src = (rep.instruction?.sourceActivityIds || []).join(', ')
+                  const tgt = rep.instruction?.targetActivityId || rep.instruction?.targetActivityIds?.join(', ') || ''
+                  const failures = (rep.failures || []).map((failure) => ({ level: 'Error' as const, msg: failure.errorMessage || failure.message || 'Validation failure' }))
+                  const warnings = (rep.warnings || []).map((warning) => ({ level: 'Warning' as const, msg: warning.warningMessage || warning.message || 'Validation warning' }))
                   const rows = [...failures, ...warnings].filter((r) => (!showErrorsOnly || r.level==='Error') && (!showWarningsOnly || r.level==='Warning'))
                   if (rows.length === 0) return []
-                  return rows.map((r: any, i: number) => (
-                    <TableRow key={`${src}->${tgt}-${r.level}-${i}`}>
+                  return rows.map((row, i) => (
+                    <TableRow key={`${src}->${tgt}-${row.level}-${i}`}>
                       <TableCell style={{ fontFamily: 'var(--font-mono)' }}>{src}</TableCell>
                       <TableCell style={{ fontFamily: 'var(--font-mono)' }}>{tgt}</TableCell>
                       <TableCell>
-                        <Tag size="sm" type={r.level === 'Error' ? 'red' : 'magenta'}>{r.level}</Tag>
+                        <Tag size="sm" type={row.level === 'Error' ? 'red' : 'magenta'}>{row.level}</Tag>
                       </TableCell>
-                      <TableCell>{r.msg}</TableCell>
+                      <TableCell>{row.msg}</TableCell>
                     </TableRow>
                   ))
                 })}
