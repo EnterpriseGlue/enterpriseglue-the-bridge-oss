@@ -15,12 +15,19 @@ startup path against a fresh disposable backend and database:
 pnpm run test:config-bootstrap:local
 ```
 
-The rehearsal creates a temporary `preview_only` bundle, uses a separate Docker
-Compose project and ephemeral Postgres host port, verifies the sanitized
-`/ready` bootstrap state, force-recreates the backend, then removes its
-containers and volume. It does not modify the active local stack or apply any
-configuration records. Set `LOCAL_CONFIG_BOOTSTRAP_ENV_FILE` only when the
-default `.env.docker` is not the intended local Docker environment.
+The default rehearsal creates a temporary `preview_only` bundle, uses a
+separate Docker Compose project and ephemeral Postgres host port, verifies the
+sanitized `/ready` bootstrap state, force-recreates the backend, then removes
+its containers and volume. It does not modify the active local stack or apply
+any configuration records. To rehearse hash-bound startup apply and its
+idempotent backend restart against the same disposable database, run:
+
+```bash
+pnpm run test:config-bootstrap:local:apply
+```
+
+Set `LOCAL_CONFIG_BOOTSTRAP_ENV_FILE` only when the default `.env.docker` is
+not the intended local Docker environment.
 
 For implementation completion and verification status across authorization, identity, and engine registration, use [the architecture tracker](../architecture/11-json-driven-authz-and-engine-registration.md); this runbook intentionally lists only operationally supported deployment paths.
 

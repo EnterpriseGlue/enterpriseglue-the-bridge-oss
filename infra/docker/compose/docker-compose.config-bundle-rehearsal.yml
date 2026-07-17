@@ -4,5 +4,6 @@
 services:
   backend:
     environment:
-      EG_CONFIG_BOOTSTRAP_MODE: validate
+      EG_CONFIG_BOOTSTRAP_MODE: ${LOCAL_CONFIG_BOOTSTRAP_MODE:-validate}
       EG_CONFIG_FAIL_CLOSED: "true"
+      EG_CONFIG_EXPECTED_TENANT_SCOPE: ${LOCAL_CONFIG_BOOTSTRAP_EXPECTED_TENANT_SCOPE:-platform}

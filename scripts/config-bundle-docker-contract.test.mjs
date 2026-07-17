@@ -40,17 +40,21 @@ test('the optional bundle overlay is read-only and never combines config with se
   assert.doesNotMatch(overlay, /EG_CONFIG_BUNDLE_HOST_PATH[^\n]*var\/run\/secrets/);
 });
 
-test('the local bootstrap rehearsal uses an isolated project and validate-only startup', () => {
+test('the local bootstrap rehearsal uses an isolated project for validate and apply startup', () => {
   const rehearsal = read('scripts/run-local-config-bootstrap-rehearsal.sh');
   const overlay = read('infra/docker/compose/docker-compose.config-bundle-rehearsal.yml');
 
   assert.match(rehearsal, /--project-name "\$project_name"/);
   assert.match(rehearsal, /mktemp -d/);
   assert.match(rehearsal, /down --volumes --remove-orphans/);
+  assert.match(rehearsal, /run_compose\(\)/);
+  assert.match(rehearsal, /run_compose down --volumes --remove-orphans/);
   assert.match(rehearsal, /up --force-recreate -d backend/);
-  assert.match(rehearsal, /mode!==\'validate\'/);
-  assert.match(overlay, /EG_CONFIG_BOOTSTRAP_MODE: validate/);
+  assert.match(rehearsal, /LOCAL_CONFIG_BOOTSTRAP_MODE/);
+  assert.match(rehearsal, /bootstrapMode === 'apply' \? 'additive' : 'preview_only'/);
+  assert.match(overlay, /EG_CONFIG_BOOTSTRAP_MODE: \$\{LOCAL_CONFIG_BOOTSTRAP_MODE:-validate\}/);
   assert.match(overlay, /EG_CONFIG_FAIL_CLOSED: "true"/);
+  assert.match(overlay, /EG_CONFIG_EXPECTED_TENANT_SCOPE: \$\{LOCAL_CONFIG_BOOTSTRAP_EXPECTED_TENANT_SCOPE:-platform\}/);
 });
 
 test('the Compose harness preserves bundle paths with spaces and rejects a missing bundle before startup', () => {
