@@ -2435,6 +2435,8 @@ The Git repository-existence check now likewise shares its compatibility request
 
 The existing Git repository-inspection endpoint now also shares exact branch metadata schemas across backend validation and serialization, OpenAPI, and the typed Git client.
 
+Git synchronization now shares its bounded request, status, and successful-operation receipt across runtime validation, backend serialization, OpenAPI, and the Sync modal. Existing default push behavior and push/pull compatibility remain unchanged.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

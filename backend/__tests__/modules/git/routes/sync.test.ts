@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import syncRouter from '../../../../../packages/backend-host/src/modules/git/routes/sync.js';
+import { GitSyncRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -162,6 +163,13 @@ describe('git sync routes', () => {
 
   it('placeholder test for git sync', () => {
     expect(true).toBe(true);
+  });
+
+  it('defaults a valid sync request to push', () => {
+    expect(GitSyncRequestSchema.parse({
+      projectId: '11111111-1111-4111-8111-111111111111',
+      message: 'Synchronize models',
+    }).direction).toBe('push');
   });
 
   it('returns sync status through scoped git-pull permission without legacy edit role', async () => {

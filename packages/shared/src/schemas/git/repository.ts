@@ -93,6 +93,34 @@ export const RepositoryInfoResponseSchema = z.object({
   })),
 }).strict();
 
+export const GitSyncStatusQuerySchema = z.object({
+  projectId: z.string().uuid(),
+});
+
+export const GitSyncStatusResponseSchema = z.object({
+  hasLocalChanges: z.boolean(),
+  hasRemoteChanges: z.boolean(),
+  lastSyncAt: z.number().nullable(),
+  localCommitCount: z.number().int().nonnegative(),
+  remoteCommitCount: z.number().int().nonnegative(),
+}).strict();
+
+export const GitSyncRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  direction: z.enum(['push', 'pull', 'both']).default('push'),
+  message: z.string().min(1).max(500),
+});
+
+export const GitSyncResponseSchema = z.object({
+  success: z.literal(true),
+  pushed: z.boolean(),
+  pulled: z.boolean(),
+  filesChanged: z.number().int().nonnegative(),
+  commitSha: z.string().optional(),
+  error: z.string().optional(),
+  isFirstSync: z.boolean().optional(),
+}).strict();
+
 export const GitCredentialSchema = z.object({
   id: z.string(), userId: z.string(), providerId: z.string(),
   providerName: z.string(), providerType: z.string(),
@@ -116,6 +144,10 @@ export type CloneFromGitRequest = z.infer<typeof CloneFromGitRequestSchema>;
 export type CloneFromGitResponse = z.infer<typeof CloneFromGitResponseSchema>;
 export type RepositoryInfoRequest = z.infer<typeof RepositoryInfoRequestSchema>;
 export type RepositoryInfoResponse = z.infer<typeof RepositoryInfoResponseSchema>;
+export type GitSyncStatusQuery = z.input<typeof GitSyncStatusQuerySchema>;
+export type GitSyncStatusResponse = z.infer<typeof GitSyncStatusResponseSchema>;
+export type GitSyncRequest = z.infer<typeof GitSyncRequestSchema>;
+export type GitSyncResponse = z.infer<typeof GitSyncResponseSchema>;
 export type GitCredential = z.infer<typeof GitCredentialSchema>;
 export type SaveGitCredentialRequest = z.infer<typeof SaveGitCredentialRequestSchema>;
 export type RenameGitCredentialRequest = z.infer<typeof RenameGitCredentialRequestSchema>;

@@ -26,6 +26,7 @@ import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformS
 import { useAuth } from '../../../shared/hooks/useAuth';
 import { ProjectPermission } from '../../../shared/auth/permissions';
 import { evaluateActionSnapshot } from '../../../shared/auth/guards';
+import type { GitSyncRequest, GitSyncStatusResponse } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 interface SyncModalProps {
   open: boolean;
@@ -45,14 +46,6 @@ interface RepoInfo {
   defaultBranch: string;
   lastSyncAt: number | null;
   lastCommitSha: string | null;
-}
-
-interface SyncStatus {
-  hasLocalChanges: boolean;
-  hasRemoteChanges: boolean;
-  lastSyncAt: number | null;
-  localCommitCount: number;
-  remoteCommitCount: number;
 }
 
 export default function SyncModal({ 
@@ -125,7 +118,7 @@ export default function SyncModal({
   const statusQuery = useQuery({
     queryKey: ['git', 'sync-status', projectId],
     queryFn: async () => {
-      return apiClient.get<SyncStatus>('/git-api/sync/status', { projectId }).catch(() => null);
+      return apiClient.get<GitSyncStatusResponse>('/git-api/sync/status', { projectId }).catch(() => null);
     },
     enabled: open && !!repoQuery.data && canReadSyncStatus,
   });
@@ -136,11 +129,12 @@ export default function SyncModal({
       if (syncUnavailableReason) {
         throw new Error(syncUnavailableReason);
       }
-      return apiClient.post('/git-api/sync', {
+      const request: GitSyncRequest = {
         projectId,
         direction,
         message: commitMessage.trim(),
-      });
+      };
+      return apiClient.post('/git-api/sync', request);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['git', 'deployments', projectId] });

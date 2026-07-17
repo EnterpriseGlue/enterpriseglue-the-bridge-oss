@@ -5,7 +5,6 @@
 
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
@@ -21,17 +20,13 @@ import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
-
-// Validation schemas
-const syncStatusQuerySchema = z.object({
-  projectId: z.string().uuid(),
-});
-
-const syncBodySchema = z.object({
-  projectId: z.string().uuid(),
-  direction: z.enum(['push', 'pull', 'both']).default('push'),
-  message: z.string().min(1).max(500),
-});
+import {
+  GitSyncRequestSchema,
+  GitSyncResponseSchema,
+  GitSyncStatusQuerySchema,
+  GitSyncStatusResponseSchema,
+  type GitSyncRequest,
+} from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
@@ -63,7 +58,7 @@ async function canUseGitSync(req: Request, projectId: string, direction: 'push' 
  * GET /git-api/sync/status
  * Get sync status for a project
  */
-router.get('/git-api/sync/status', apiLimiter, requireAuth, validateQuery(syncStatusQuerySchema), requireAction('project.git.sync.status', {
+router.get('/git-api/sync/status', apiLimiter, requireAuth, validateQuery(GitSyncStatusQuerySchema), requireAction('project.git.sync.status', {
   resourceIdFrom: 'query',
   acceptedPermissions: [ProjectPermissions.GIT_PULL, ProjectPermissions.GIT_PUSH],
 }), asyncHandler(async (req: Request, res: Response) => {
@@ -109,25 +104,25 @@ router.get('/git-api/sync/status', apiLimiter, requireAuth, validateQuery(syncSt
   const hasRemoteChanges = false;
   const remoteCommitCount = 0;
 
-  res.json({
+  res.json(GitSyncStatusResponseSchema.parse({
     hasLocalChanges,
     hasRemoteChanges,
     lastSyncAt: repo.lastSyncAt ? Number(repo.lastSyncAt) : null,
     localCommitCount,
     remoteCommitCount,
-  });
+  }));
 }));
 
 /**
  * POST /git-api/sync
  * Sync project with remote repository
  */
-router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchema), requireAction('project.git.sync.run', {
+router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(GitSyncRequestSchema), requireAction('project.git.sync.run', {
   resourceIdFrom: 'body',
   acceptedPermissions: [ProjectPermissions.GIT_PULL, ProjectPermissions.GIT_PUSH],
 }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { projectId, direction, message } = req.body;
+  const { projectId, direction, message } = req.body as GitSyncRequest;
   const commitMessage = message.trim();
 
   if (!(await canUseGitSync(req, projectId, direction))) {
@@ -329,10 +324,10 @@ router.post('/git-api/sync', apiLimiter, requireAuth, validateBody(syncBodySchem
       logger.info('Push complete', { projectId, commitSha, didPush });
     }
 
-    res.json({
+    res.json(GitSyncResponseSchema.parse({
       success: true,
       ...results,
-    });
+    }));
 
   } catch (error: any) {
     logger.error('Sync failed', { projectId, direction, error });

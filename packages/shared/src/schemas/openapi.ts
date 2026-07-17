@@ -188,6 +188,10 @@ const {
   CheckRepositoryExistsResponseSchema,
   RepositoryInfoRequestSchema,
   RepositoryInfoResponseSchema,
+  GitSyncStatusQuerySchema,
+  GitSyncStatusResponseSchema,
+  GitSyncRequestSchema,
+  GitSyncResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/git/index.js');
 
 const registry = new OpenAPIRegistry();
@@ -3607,8 +3611,8 @@ registry.registerPath({ method: 'get', path: '/git-api/deployments/{id}', ...aut
 registry.registerPath({ method: 'get', path: '/git-api/projects/{projectId}/deployments', ...authzExtension('project.deployments.read', 'GET', '/git-api/projects/:projectId/deployments'), request: { params: z.object({ projectId: z.string() }) }, responses: { 200: { description: 'Deployments for project', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
 
 // Git sync
-registry.registerPath({ method: 'post', path: '/git-api/sync', ...authzExtension('project.git.sync.run', 'POST', '/git-api/sync'), request: { body: { content: { 'application/json': { schema: z.object({ projectId: z.string() }) } } } }, responses: { 200: { description: 'Sync started', content: { 'application/json': { schema: z.unknown() } } } } });
-registry.registerPath({ method: 'get', path: '/git-api/sync/status', ...authzExtension('project.git.sync.status', 'GET', '/git-api/sync/status'), request: { query: z.object({ projectId: z.string() }) }, responses: { 200: { description: 'Sync status', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'post', path: '/git-api/sync', ...authzExtension('project.git.sync.run', 'POST', '/git-api/sync'), request: { body: { content: { 'application/json': { schema: GitSyncRequestSchema } } } }, responses: { 200: { description: 'Sync started', content: { 'application/json': { schema: GitSyncResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/sync/status', ...authzExtension('project.git.sync.status', 'GET', '/git-api/sync/status'), request: { query: GitSyncStatusQuerySchema }, responses: { 200: { description: 'Sync status', content: { 'application/json': { schema: GitSyncStatusResponseSchema } } } } });
 
 // Git lock heartbeat
 registry.registerPath({ method: 'put', path: '/git-api/locks/{lockId}/heartbeat', ...authzExtension('project.git.locks.heartbeat', 'PUT', '/git-api/locks/:lockId/heartbeat'), request: { params: z.object({ lockId: z.string() }) }, responses: { 200: { description: 'Lock heartbeat renewed' } } });
