@@ -33,7 +33,7 @@ import styles from '../../process-instance-detail/styles/InstanceDetail.module.c
 import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
 import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
-import type { HistoricDecisionIo } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type { HistoricDecisionIo, HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -51,15 +51,7 @@ type DecisionEditTarget = {
   mappingSource?: string
 }
 
-type HistoricDecisionInstance = {
-  id: string
-  decisionDefinitionId?: string | null
-  decisionDefinitionKey?: string | null
-  decisionDefinitionName?: string | null
-  rootDecisionInstanceId?: string | null
-  evaluationTime?: string | null
-  processInstanceId?: string | null
-}
+type HistoricDecisionInstance = SharedHistoricDecisionInstance
 
 type DecisionIo = HistoricDecisionIo
 

@@ -2339,6 +2339,8 @@ Optional authentication now populates the outbound BPMN request context only aft
 
 Decision-definition list and detail reads now use their shared passthrough contract through runtime serialization, OpenAPI, and Decision Overview. This also corrects the detail route to validate a decision definition rather than incorrectly treating it as an evaluation-result array.
 
+Process and Decision Instance Detail now import the shared historic decision, task, and user-operation display contracts instead of retaining duplicate local subsets.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

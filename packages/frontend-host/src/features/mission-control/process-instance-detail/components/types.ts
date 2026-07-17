@@ -1,18 +1,14 @@
-import type { HistoricDecisionIo } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type {
+  HistoricDecisionIo,
+  HistoricDecisionInstance,
+  HistoricTaskInstance,
+  UserOperationLogEntry,
+} from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import type { ProcessInstanceExternalTask, ProcessInstanceIncident, ProcessInstanceJob } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 export type DecisionIo = HistoricDecisionIo
 
-export type HistoricDecisionInstanceLite = {
-  id: string
-  decisionDefinitionId?: string | null
-  decisionDefinitionKey?: string | null
-  decisionDefinitionName?: string | null
-  evaluationTime?: string | null
-  processInstanceId?: string | null
-  activityId?: string | null
-  activityInstanceId?: string | null
-}
+export type HistoricDecisionInstanceLite = HistoricDecisionInstance
 
 export type HistoricVariableInstanceLite = {
   id: string
@@ -25,30 +21,9 @@ export type HistoricVariableInstanceLite = {
   taskId?: string | null
 }
 
-export type HistoricTaskInstanceLite = {
-  id: string
-  name?: string | null
-  assignee?: string | null
-  owner?: string | null
-  startTime?: string | null
-  endTime?: string | null
-  deleteReason?: string | null
-  taskDefinitionKey?: string | null
-  activityInstanceId?: string | null
-  executionId?: string | null
-}
+export type HistoricTaskInstanceLite = HistoricTaskInstance
 
-export type UserOperationLogEntryLite = {
-  id: string
-  operationType?: string | null
-  entityType?: string | null
-  property?: string | null
-  orgValue?: string | null
-  newValue?: string | null
-  annotation?: string | null
-  timestamp?: string | null
-  userId?: string | null
-}
+export type UserOperationLogEntryLite = UserOperationLogEntry
 
 export type ExecutionDetails = {
   activityInstanceId: string
