@@ -13,7 +13,12 @@ import {
 } from './service.js'
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js'
-import { ProcessDefinitionSchema, ProcessInstanceStartResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import {
+  ActivityCountByActivityIdSchema,
+  ProcessDefinitionSchema,
+  ProcessDefXmlSchema,
+  ProcessInstanceStartResponseSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { ProcessEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const r = Router()
@@ -116,7 +121,7 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireProcessDefiniti
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinitionXml(engineId, definitionId)
-  res.json(data)
+  res.json(ProcessDefXmlSchema.parse(data))
 }))
 
 // Get process definition statistics (activity instance counts)
@@ -124,7 +129,7 @@ r.get('/mission-control-api/process-definitions/key/:key/statistics', requirePro
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
   const data = await getProcessDefinitionStatistics(engineId, definitionKey)
-  res.json(data)
+  res.json(ActivityCountByActivityIdSchema.parse(data))
 }))
 
 // Start process instance

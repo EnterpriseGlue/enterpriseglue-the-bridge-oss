@@ -2663,7 +2663,7 @@ registry.registerPath({
   path: '/mission-control-api/process-definitions/key/{key}/statistics',
   ...authzExtension('engine.runtime.process-definitions.read', 'GET', '/mission-control-api/process-definitions/key/{key}/statistics'),
   request: { params: z.object({ key: z.string() }) },
-  responses: { 200: { description: 'Process definition statistics', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Process definition statistics', content: { 'application/json': { schema: ActivityCountByActivityIdSchema } } } },
 });
 
 // GET /mission-control-api/process-instances/{id}/activity-instances (runtime)

@@ -2279,6 +2279,8 @@ Job and job-definition collections and job detail now validate their shared pass
 
 External-task fetch-and-lock and collection reads now use the shared passthrough task schema across broad and resource-aware filtered paths. Required engine task identity fields are checked at the boundary while adapter-specific payload and variable extensions remain intact.
 
+Process-definition XML and activity-statistics reads now validate their shared XML and activity-count contracts, and the statistics OpenAPI response no longer uses `unknown`.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

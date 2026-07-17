@@ -13,6 +13,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import {
   listProcessDefinitions,
   getProcessDefinition,
+  getProcessDefinitionStatistics,
   startProcessInstance,
 } from '../../../../../packages/backend-host/src/modules/mission-control/processes/service.js';
 
@@ -180,6 +181,20 @@ describe('mission-control processes routes', () => {
       resourceId: 'engine-1',
     }));
     expect(getProcessDefinition).toHaveBeenCalledWith('engine-1', 'pd1');
+  });
+
+  it('validates process definition XML and activity statistics through shared contracts', async () => {
+    vi.mocked(getProcessDefinitionStatistics).mockResolvedValueOnce({ taskA: 2 });
+
+    const [xmlResponse, statisticsResponse] = await Promise.all([
+      request(app).get('/mission-control-api/process-definitions/pd1/xml').query({ engineId: 'engine-1' }),
+      request(app).get('/mission-control-api/process-definitions/key/process1/statistics').query({ engineId: 'engine-1' }),
+    ]);
+
+    expect(xmlResponse.status).toBe(200);
+    expect(xmlResponse.body).toEqual({ id: 'pd1', bpmn20Xml: '<bpmn/>' });
+    expect(statisticsResponse.status).toBe(200);
+    expect(statisticsResponse.body).toEqual({ taskA: 2 });
   });
 
   it('starts process instances through process start permission', async () => {
