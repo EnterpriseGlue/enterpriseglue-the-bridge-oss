@@ -13,6 +13,7 @@ import type {
   RollbackRequest as SharedRollbackRequest,
   InitRepositoryRequest as SharedInitRepositoryRequest,
   CloneRepositoryRequest as SharedCloneRepositoryRequest,
+  CloneFromGitRequest as SharedCloneFromGitRequest,
   GitProviderSummary as SharedGitProviderSummary,
 } from '@enterpriseglue/shared/schemas/git/index.js';
 
@@ -77,14 +78,7 @@ export interface Commit {
 // Request types
 export type InitRepositoryRequest = SharedInitRepositoryRequest;
 export type CloneRepositoryRequest = SharedCloneRepositoryRequest;
-
-export interface CloneFromGitRequest {
-  providerId: string;
-  repoUrl: string;
-  branch?: string;
-  projectName?: string;
-  conflictStrategy?: 'preferRemote' | 'preferLocal';
-}
+export type CloneFromGitRequest = SharedCloneFromGitRequest;
 
 export type DeployRequest = SharedDeployRequest;
 export type RollbackRequest = SharedRollbackRequest;
