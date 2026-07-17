@@ -27,6 +27,7 @@ import {
 import {
   AuthzCheckBatchRequestSchema,
   AuthzCheckRequestSchema,
+  CurrentUserPermissionsSchema,
   EffectiveAccessEvaluateRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { registerConfigBundleRoutes } from './authz/config-bundles.js';
@@ -185,7 +186,7 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
     // Runtime-resource visibility is resolved server-side per request. Keep
     // this client snapshot deliberately coarse so process/decision keys and
     // tenant lineage cannot become a second authorization authority.
-    res.json({
+    res.json(CurrentUserPermissionsSchema.parse({
       userId: snapshot.userId,
       tenantId: req.tenant?.tenantId || null,
       platform: snapshot.platform,
@@ -193,7 +194,7 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
       engines: snapshot.engines.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
       authorizationVersion: snapshot.authorizationVersion,
       generatedAt: snapshot.generatedAt,
-    });
+    }));
   } catch (error: any) {
     logger.error('Get current user permissions error:', error);
     throw Errors.internal('Failed to get current user permissions');
