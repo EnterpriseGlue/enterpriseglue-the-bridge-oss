@@ -17,5 +17,10 @@ describe('migration OpenAPI contracts', () => {
       type: 'array',
       items: { type: 'string' },
     });
+    expect(schemas?.ActiveSourcesRequest?.properties).toMatchObject({
+      engineId: { type: 'string' },
+      processInstanceIds: { type: 'array', items: { type: 'string' } },
+    });
+    expect(paths?.['/mission-control-api/migration/active-sources']?.post?.requestBody).toBeDefined();
   });
 });

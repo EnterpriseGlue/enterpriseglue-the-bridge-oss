@@ -81,12 +81,21 @@ export const MigrationPreviewResponseSchema = z.object({
   count: z.number().int().nonnegative(),
 }).strict();
 
+// Selected instances are resolved for runtime-resource authorization before
+// this schema runs. Preserve compatible adapter hints while validating the
+// selection the aggregation service consumes.
+export const MigrationActiveSourcesRequestSchema = z.object({
+  engineId: z.string(),
+  processInstanceIds: z.array(z.string()).default([]),
+}).passthrough();
+
 export const MigrationActiveSourcesResponseSchema = z.record(
   z.string(),
   z.number().int().nonnegative(),
 );
 
 export type MigrationPreviewResponse = z.infer<typeof MigrationPreviewResponseSchema>;
+export type MigrationActiveSourcesRequest = z.infer<typeof MigrationActiveSourcesRequestSchema>;
 export type MigrationActiveSourcesResponse = z.infer<typeof MigrationActiveSourcesResponseSchema>;
 export type MigrationInstruction = z.infer<typeof MigrationInstructionSchema>;
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;

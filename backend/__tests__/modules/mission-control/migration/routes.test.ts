@@ -238,4 +238,13 @@ describe('mission-control migration routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ approve: 2 });
   });
+
+  it('rejects malformed active-source selections before aggregation', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/active-sources')
+      .send({ engineId: 'engine-1', processInstanceIds: 'pi-1' });
+
+    expect(response.status).toBe(400);
+    expect(aggregateActiveSources).not.toHaveBeenCalled();
+  });
 });

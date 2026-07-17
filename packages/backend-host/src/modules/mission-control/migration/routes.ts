@@ -5,6 +5,7 @@ import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAc
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import {
   MigrationActiveSourcesResponseSchema,
+  MigrationActiveSourcesRequestSchema,
   MigrationAsyncExecuteResponseSchema,
   MigrationDirectExecuteResponseSchema,
   MigrationExecuteRequestSchema,
@@ -95,9 +96,9 @@ r.post('/mission-control-api/migration/execute-direct', requireRuntimeMigrationA
 }))
 
 // Aggregate active source activities across selected instances
-r.post('/mission-control-api/migration/active-sources', requireRuntimeProcessInstanceSelectionAction('engine.runtime.migrations.active-sources.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/active-sources', requireRuntimeProcessInstanceSelectionAction('engine.runtime.migrations.active-sources.read', { resourceKind: 'process_definition' }), validateBody(MigrationActiveSourcesRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const ids: string[] = Array.isArray(req.body?.processInstanceIds) ? req.body.processInstanceIds : []
+    const ids = req.body.processInstanceIds
     const engineId = (req as any).engineId as string
     const counts = await aggregateActiveSources(engineId, ids)
     res.status(200).json(MigrationActiveSourcesResponseSchema.parse(counts))

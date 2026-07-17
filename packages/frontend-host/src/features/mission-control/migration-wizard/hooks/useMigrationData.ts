@@ -7,6 +7,7 @@ import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
 import { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
+  MigrationActiveSourcesRequest,
   MigrationActiveSourcesResponse,
   MigrationAsyncExecuteResponse,
   MigrationDirectExecuteResponse,
@@ -309,9 +310,14 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     queryKey: ['mission-control', 'migration', 'active-src', instanceIds.join(',')],
     queryFn: async () => {
       if (instanceIds.length === 0) return {} as Record<string, number>
+      if (!selectedEngineId) return {} as Record<string, number>
+      const request: MigrationActiveSourcesRequest = {
+        engineId: selectedEngineId,
+        processInstanceIds: instanceIds,
+      }
       return await apiClient.post<MigrationActiveSourcesResponse>(
         '/mission-control-api/migration/active-sources',
-        { engineId: selectedEngineId, processInstanceIds: instanceIds },
+        request,
         { credentials: 'include' }
       )
     },

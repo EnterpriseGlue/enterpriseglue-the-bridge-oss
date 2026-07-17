@@ -82,6 +82,7 @@ const {
   ProcessInstanceExternalTaskListSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  MigrationActiveSourcesRequestSchema,
   MigrationActiveSourcesResponseSchema,
   MigrationAsyncExecuteResponseSchema,
   MigrationDirectExecuteResponseSchema,
@@ -1399,14 +1400,13 @@ registry.registerPath({
 })
 
 // POST /mission-control-api/migration/active-sources
-const ActiveSourcesRequest = z.object({ processInstanceIds: z.array(z.string()) })
-registry.register('ActiveSourcesRequest', ActiveSourcesRequest)
+registry.register('ActiveSourcesRequest', MigrationActiveSourcesRequestSchema)
 registry.register('ActiveSourcesResponse', MigrationActiveSourcesResponseSchema)
 registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/active-sources',
   ...authzExtension('engine.runtime.migrations.active-sources.read', 'POST', '/mission-control-api/migration/active-sources'),
-  request: { body: { content: { 'application/json': { schema: ActiveSourcesRequest } } } },
+  request: { body: { content: { 'application/json': { schema: MigrationActiveSourcesRequestSchema } } } },
   responses: { 200: { description: 'Active source activity counts keyed by activityId', content: { 'application/json': { schema: MigrationActiveSourcesResponseSchema } } } },
 })
 
