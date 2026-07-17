@@ -26,6 +26,7 @@ import {
   TaskVariablesRequest,
   TaskFormSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/task.js';
+import { VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
 
 const r = Router();
@@ -91,7 +92,7 @@ r.put('/mission-control-api/tasks/:id/variables', requireTaskAction('engine.runt
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await updateTaskVariablesById(engineId, taskId, req.body);
-  res.json(data);
+  res.json(VariablesSchema.parse(data || {}));
 }));
 
 // Get task form
