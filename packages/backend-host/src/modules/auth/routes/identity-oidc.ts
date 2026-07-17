@@ -16,6 +16,7 @@ import { auditFromRequest, logAudit, AuditActions } from '@enterpriseglue/shared
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { buildSignedSamlState, buildSsoState, getSsoRedirectUrl, parseSignedSamlState, parseSsoState } from './sso-state.js';
 
 const router = Router();
@@ -89,7 +90,7 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_SUCCESS, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap' } }));
     await setProviderSession(req, res, user as any, provider);
     const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id]);
-    res.json({
+    res.json(AuthenticatedSessionLoginResponseSchema.parse({
       user: {
         id: user.id,
         email: user.email,
@@ -99,7 +100,7 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
         session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
       },
       expiresIn: config.jwtAccessTokenExpires,
-    });
+    }));
   } catch (error) {
     if ((error as any)?.statusCode === 403) throw error;
     await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: provider.id, details: { providerKey: provider.key, protocol: 'ldap', reason: 'invalid_directory_credentials' } }));

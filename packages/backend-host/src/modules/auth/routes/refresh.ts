@@ -10,6 +10,7 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { IsNull, MoreThan } from 'typeorm';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 
 const router = Router();
 
@@ -87,9 +88,9 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     path: '/',
   });
 
-  res.json({
+  res.json(RefreshAccessTokenResponseSchema.parse({
     expiresIn: config.jwtAccessTokenExpires,
-  });
+  }));
 }));
 
 export default router;

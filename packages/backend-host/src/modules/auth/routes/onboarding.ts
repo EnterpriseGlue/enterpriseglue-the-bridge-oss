@@ -17,6 +17,7 @@ import {
   CompleteOnboardingRequestSchema,
   type CompleteOnboardingRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
+import { AuthenticatedSessionOnboardingResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 
 const router = Router();
 
@@ -77,7 +78,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
     path: '/',
   });
 
-  res.json({
+  res.json(AuthenticatedSessionOnboardingResponseSchema.parse({
     user: {
       ...result.user,
       platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
@@ -88,7 +89,7 @@ router.post('/api/auth/complete-onboarding', apiLimiter, requireOnboarding, vali
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: false,
-  });
+  }));
 }));
 
 export default router;

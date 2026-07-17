@@ -23,6 +23,7 @@ import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilit
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { AuthenticatedSessionUserSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 
 const router = Router();
 
@@ -52,7 +53,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
   const isEmailVerified = Boolean(user.isEmailVerified) || isAdminVerificationExempt;
   const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
 
-  res.json({
+  res.json(AuthenticatedSessionUserSchema.parse({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
@@ -65,7 +66,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
     session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
-  });
+  }));
 }));
 
 const updateProfileSchema = z.object({
@@ -114,7 +115,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
   });
   const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
 
-  res.json({
+  res.json(AuthenticatedSessionUserSchema.parse({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
@@ -127,7 +128,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
     session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
-  });
+  }));
 }));
 
 /**

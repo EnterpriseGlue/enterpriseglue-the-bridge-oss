@@ -2473,6 +2473,8 @@ Failed external tasks for Process Instance Detail now use their own shared passt
 
 Optional authentication now populates the outbound BPMN request context only after canonical-principal, active-user, and session-version validation succeeds; malformed, inactive, or revoked sessions remain anonymous and establish no downstream identity context.
 
+The authenticated browser-session response is now one shared schema used by local login, onboarding, refresh, profile, and direct-LDAP login serializers as well as OpenAPI. It validates the response-only principal and request-derived tenant context while retaining established profile extensions, so the session contract cannot drift between a route and its published API.
+
 Decision-definition list and detail reads now use their shared passthrough contract through runtime serialization, OpenAPI, and Decision Overview. This also corrects the detail route to validate a decision definition rather than incorrectly treating it as an evaluation-result array.
 
 Process and Decision Instance Detail now import the shared historic decision, task, and user-operation display contracts instead of retaining duplicate local subsets.

@@ -17,6 +17,7 @@ import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
+import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 
 const router = Router();
 
@@ -209,7 +210,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   });
 
   // Return user info (tokens are in cookies, not in body)
-  res.json({
+  res.json(AuthenticatedSessionLoginResponseSchema.parse({
     user: {
       id: user.id,
       email: user.email,
@@ -223,7 +224,7 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: !isEmailVerified, // Flag for frontend
-  });
+  }));
 }));
 
 export default router;

@@ -47,6 +47,13 @@ const {
 } = await import('@enterpriseglue/shared/schemas/dashboard.js');
 
 const {
+  AuthenticatedSessionLoginResponseSchema,
+  AuthenticatedSessionOnboardingResponseSchema,
+  AuthenticatedSessionUserSchema,
+  RefreshAccessTokenResponseSchema,
+} = await import('@enterpriseglue/shared/schemas/auth/session.js');
+
+const {
   EngineSchema,
   EngineSchemaRaw,
   AccessibleEngineSummarySchema,
@@ -2839,24 +2846,13 @@ registry.registerPath({
 // Auth API
 // -----------------------------
 
-const authenticatedSessionContextSchema = z.object({
-  principal: z.object({ type: z.literal('user'), id: z.string() }),
-  tenant: z.object({ id: z.string().nullable() }),
-});
-
-const authenticatedSessionUserSchema = z.object({
-  id: z.string(),
-  email: z.string().email(),
-  session: authenticatedSessionContextSchema,
-}).passthrough();
-
 // POST /api/auth/login
 registry.registerPath({
   method: 'post',
   path: '/api/auth/login',
   ...authzExemption('POST', '/api/auth/login'),
   request: { body: { content: { 'application/json': { schema: z.object({ email: z.string().email(), password: z.string() }) } } } },
-  responses: { 200: { description: 'Login successful', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number(), emailVerificationRequired: z.boolean().optional() }) } } }, 401: { description: 'Invalid credentials' } },
+  responses: { 200: { description: 'Login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid credentials' } },
 });
 
 // POST /api/auth/complete-onboarding
@@ -2865,7 +2861,7 @@ registry.registerPath({
   path: '/api/auth/complete-onboarding',
   ...authzExemption('POST', '/api/auth/complete-onboarding'),
   request: { body: { content: { 'application/json': { schema: CompleteOnboardingRequestSchema } } } },
-  responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number(), emailVerificationRequired: z.literal(false) }) } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' } },
+  responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: AuthenticatedSessionOnboardingResponseSchema } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' } },
 });
 
 // POST /api/auth/logout
@@ -2905,7 +2901,7 @@ registry.registerPath({
   method: 'post',
   path: '/api/auth/refresh',
   ...authzExemption('POST', '/api/auth/refresh'),
-  responses: { 200: { description: 'Token refreshed', content: { 'application/json': { schema: z.object({ user: z.unknown() }) } } }, 401: { description: 'Not authenticated' } },
+  responses: { 200: { description: 'Token refreshed', content: { 'application/json': { schema: RefreshAccessTokenResponseSchema } } }, 401: { description: 'Not authenticated' } },
 });
 
 // GET /api/auth/me
@@ -2913,7 +2909,7 @@ registry.registerPath({
   method: 'get',
   path: '/api/auth/me',
   ...authzExemption('GET', '/api/auth/me'),
-  responses: { 200: { description: 'Current user profile', content: { 'application/json': { schema: authenticatedSessionUserSchema } } }, 401: { description: 'Not authenticated' } },
+  responses: { 200: { description: 'Current user profile', content: { 'application/json': { schema: AuthenticatedSessionUserSchema } } }, 401: { description: 'Not authenticated' } },
 });
 
 // PATCH /api/auth/me
@@ -2922,7 +2918,7 @@ registry.registerPath({
   path: '/api/auth/me',
   ...authzExemption('PATCH', '/api/auth/me'),
   request: { body: { content: { 'application/json': { schema: z.object({ firstName: z.string().optional(), lastName: z.string().optional() }) } } } },
-  responses: { 200: { description: 'Profile updated', content: { 'application/json': { schema: authenticatedSessionUserSchema } } } },
+  responses: { 200: { description: 'Profile updated', content: { 'application/json': { schema: AuthenticatedSessionUserSchema } } } },
 });
 
 // POST /api/auth/change-password
@@ -3024,10 +3020,10 @@ registry.registerPath({ method: 'get', path: '/api/auth/saml/metadata', ...authz
 registry.registerPath({ method: 'get', path: '/api/auth/saml/status', ...authzExemption('GET', '/api/auth/saml/status'), responses: { 200: { description: 'SAML config status', content: { 'application/json': { schema: SamlAuthenticationStatusSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/auth/identity/{key}/start', ...authzExemption('GET', '/api/auth/identity/{key}/start'), request: { params: z.object({ key: z.string() }) }, responses: { 302: { description: 'Redirect to the selected OIDC identity provider' } } });
 registry.registerPath({ method: 'get', path: '/api/auth/identity/callback', ...authzExemption('GET', '/api/auth/identity/callback'), responses: { 302: { description: 'Provider-neutral OIDC callback redirect' } } });
-registry.registerPath({ method: 'post', path: '/api/auth/identity/{key}/ldap/login', ...authzExemption('POST', '/api/auth/identity/{key}/ldap/login'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'LDAP identity login', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number() }) } } }, 401: { description: 'Invalid directory credentials' } } });
+registry.registerPath({ method: 'post', path: '/api/auth/identity/{key}/ldap/login', ...authzExemption('POST', '/api/auth/identity/{key}/ldap/login'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
 registry.registerPath({ method: 'get', path: '/api/auth/providers/enabled', ...authzExemption('GET', '/api/auth/providers/enabled'), responses: { 200: { description: 'Enabled provider-neutral direct-login options', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), key: z.string(), protocol: z.enum(['oidc', 'saml', 'ldap']), loginMethod: z.enum(['redirect', 'password']) })) } } } } });
 registry.registerPath({ method: 'get', path: '/api/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/providers/{providerId}/start'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to the selected provider-neutral OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found' } } });
-registry.registerPath({ method: 'post', path: '/api/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/providers/{providerId}/login'), request: { params: z.object({ providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Provider-neutral LDAP identity login', content: { 'application/json': { schema: z.object({ user: authenticatedSessionUserSchema, expiresIn: z.number() }) } } }, 401: { description: 'Invalid directory credentials' } } });
+registry.registerPath({ method: 'post', path: '/api/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/providers/{providerId}/login'), request: { params: z.object({ providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/providers/saml/callback', ...authzExemption('POST', '/api/auth/providers/saml/callback'), request: { body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } } } }, responses: { 302: { description: 'Provider-neutral SAML callback redirect' }, 401: { description: 'Invalid identity provider state' } } });
 
 // Tenant SSO config
