@@ -175,6 +175,7 @@ const {
   CloneRepositoryRequestSchema,
   CloneFromGitRequestSchema,
   CloneFromGitResponseSchema,
+  GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
   RollbackRequestSchema,
   DeploymentResponseSchema,
@@ -3579,9 +3580,9 @@ registry.registerPath({ method: 'get', path: '/git-api/providers/{id}', ...authz
 registry.registerPath({ method: 'get', path: '/git-api/providers/{id}/repos', ...authzExemption('GET', '/git-api/providers/:id/repos'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'List repos for provider', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
 
 // Credentials
-registry.registerPath({ method: 'get', path: '/git-api/credentials', ...authzExemption('GET', '/git-api/credentials'), responses: { 200: { description: 'List git credentials', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/credentials', ...authzExemption('GET', '/git-api/credentials'), responses: { 200: { description: 'List redacted git credentials', content: { 'application/json': { schema: z.array(GitCredentialSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/git-api/credentials/{providerId}', ...authzExemption('GET', '/git-api/credentials/:providerId'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'Git credential metadata for provider', content: { 'application/json': { schema: z.unknown() } } }, 404: { description: 'Not found' } } });
-registry.registerPath({ method: 'post', path: '/git-api/credentials', ...authzExemption('POST', '/git-api/credentials'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 201: { description: 'Credential created', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'post', path: '/git-api/credentials', ...authzExemption('POST', '/git-api/credentials'), request: { body: { content: { 'application/json': { schema: SaveGitCredentialRequestSchema } } } }, responses: { 201: { description: 'Credential created', content: { 'application/json': { schema: GitCredentialSchema } } } } });
 registry.registerPath({ method: 'patch', path: '/git-api/credentials/{credentialId}', ...authzExemption('PATCH', '/git-api/credentials/:credentialId'), request: { params: z.object({ credentialId: z.string() }), body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Credential updated', content: { 'application/json': { schema: z.unknown() } } } } });
 registry.registerPath({ method: 'delete', path: '/git-api/credentials/{providerId}', ...authzExemption('DELETE', '/git-api/credentials/:providerId'), request: { params: z.object({ providerId: z.string() }) }, responses: { 204: { description: 'Provider credentials deleted' } } });
 registry.registerPath({ method: 'get', path: '/git-api/credentials/{providerId}/validate', ...authzExemption('GET', '/git-api/credentials/:providerId/validate'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'Credential validation result', content: { 'application/json': { schema: z.object({ valid: z.boolean() }) } } } } });

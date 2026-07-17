@@ -78,6 +78,17 @@ export const CloneFromGitResponseSchema = z.object({
   repositoryId: z.string(),
 }).strict();
 
+export const GitCredentialSchema = z.object({
+  id: z.string(), userId: z.string(), providerId: z.string(),
+  providerName: z.string(), providerType: z.string(),
+  name: z.string().optional(), authType: z.enum(['pat', 'oauth']),
+  providerUsername: z.string().optional(), expiresAt: z.number().optional(),
+  scopes: z.string().optional(), createdAt: z.number(), updatedAt: z.number(),
+}).strict();
+export const SaveGitCredentialRequestSchema = z.object({ providerId: z.string().min(1), token: z.string().min(1), name: z.string().optional() });
+export const RenameGitCredentialRequestSchema = z.object({ name: z.string().min(1) });
+export const GitCredentialNamespaceSchema = z.object({ name: z.string(), type: z.enum(['user', 'organization']), avatarUrl: z.string().optional() }).passthrough();
+
 export const RepositoryResponseSchema = RepositorySelectSchema;
 
 // Types
@@ -87,3 +98,7 @@ export type InitRepositoryRequest = z.infer<typeof InitRepositoryRequestSchema>;
 export type CloneRepositoryRequest = z.infer<typeof CloneRepositoryRequestSchema>;
 export type CloneFromGitRequest = z.infer<typeof CloneFromGitRequestSchema>;
 export type CloneFromGitResponse = z.infer<typeof CloneFromGitResponseSchema>;
+export type GitCredential = z.infer<typeof GitCredentialSchema>;
+export type SaveGitCredentialRequest = z.infer<typeof SaveGitCredentialRequestSchema>;
+export type RenameGitCredentialRequest = z.infer<typeof RenameGitCredentialRequestSchema>;
+export type GitCredentialNamespace = z.infer<typeof GitCredentialNamespaceSchema>;

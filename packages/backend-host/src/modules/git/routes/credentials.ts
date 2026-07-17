@@ -14,20 +14,11 @@ import { oauthService } from '@enterpriseglue/shared/services/git/OAuthService.j
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
+import { GitCredentialSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
 // Validation schemas
-const saveCredentialSchema = z.object({
-  providerId: z.string().min(1),
-  token: z.string().min(1),
-  name: z.string().optional(),
-});
-
-const renameCredentialSchema = z.object({
-  name: z.string().min(1),
-});
-
 const credentialIdParamsSchema = z.object({
   credentialId: z.string().min(1),
 });
@@ -86,7 +77,7 @@ function parseProviderId(value: unknown): string | null {
 router.get('/git-api/credentials', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const credentials = await credentialService.listCredentials(userId);
-  res.json(credentials);
+  res.json(z.array(GitCredentialSchema).parse(credentials));
 }));
 
 /**
@@ -103,14 +94,14 @@ router.get('/git-api/credentials/:providerId', apiLimiter, requireAuth, asyncHan
     throw Errors.notFound('Credentials');
   }
   
-  res.json(credential);
+  res.json(GitCredentialSchema.parse(credential));
 }));
 
 /**
  * POST /git-api/credentials
  * Save a Personal Access Token
  */
-router.post('/git-api/credentials', apiLimiter, requireAuth, validateBody(saveCredentialSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/credentials', apiLimiter, requireAuth, validateBody(SaveGitCredentialRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const { providerId, token, name } = req.body;
   
@@ -122,14 +113,14 @@ router.post('/git-api/credentials', apiLimiter, requireAuth, validateBody(saveCr
     accessToken: token,
   });
   
-  res.status(201).json(credential);
+  res.status(201).json(GitCredentialSchema.parse(credential));
 }));
 
 /**
  * PATCH /git-api/credentials/:credentialId
  * Rename a credential
  */
-router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, validateParams(credentialIdParamsSchema), validateBody(renameCredentialSchema), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, validateParams(credentialIdParamsSchema), validateBody(RenameGitCredentialRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const credentialId = String(req.params.credentialId);
   const { name } = req.body;
