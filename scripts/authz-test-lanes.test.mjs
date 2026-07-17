@@ -139,11 +139,13 @@ test('the frontend shared API type barrel re-exports canonical transport schemas
 test('the auth contract has one generated declaration source', () => {
   assert.match(sharedAuthContractSource, /role\?: PlatformRole/);
   for (const contract of ['auth', 'index']) {
-    assert.equal(
-      existsSync(new URL(`../packages/shared/src/contracts/${contract}.d.ts`, import.meta.url)),
-      false,
-      `a hand-maintained ${contract} declaration can drift from the generated public contract`,
-    );
+    for (const extension of ['d.ts', 'js']) {
+      assert.equal(
+        existsSync(new URL(`../packages/shared/src/contracts/${contract}.${extension}`, import.meta.url)),
+        false,
+        `a hand-maintained ${contract}.${extension} sibling can drift from the generated public contract`,
+      );
+    }
   }
 });
 
