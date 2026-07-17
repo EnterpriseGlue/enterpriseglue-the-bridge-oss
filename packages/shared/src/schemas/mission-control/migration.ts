@@ -42,6 +42,30 @@ export const MigrationGenerateRequestSchema = z.union([
   }),
 ]);
 
+// Validation historically accepts either a plan directly or the current
+// envelope that carries a selected engine and optional instance selection.
+// Both plan naming dialects remain accepted, and plan extension fields stay
+// adapter-owned.
+const MigrationValidationPlanPayloadSchema = z.union([
+  z.object({
+    sourceProcessDefinitionId: z.string(),
+    targetProcessDefinitionId: z.string(),
+  }).passthrough(),
+  z.object({
+    sourceDefinitionId: z.string(),
+    targetDefinitionId: z.string(),
+  }).passthrough(),
+]);
+
+export const MigrationPlanValidationRequestSchema = z.union([
+  z.object({
+    engineId: z.string().optional(),
+    plan: MigrationValidationPlanPayloadSchema,
+    processInstanceIds: z.array(z.string()).optional(),
+  }).passthrough(),
+  MigrationValidationPlanPayloadSchema,
+]);
+
 export const MigrationExecuteRequestSchema = z.object({
   engineId: z.string().optional(),
   plan: MigrationPlanSchema,
@@ -122,6 +146,7 @@ export type MigrationActiveSourcesResponse = z.infer<typeof MigrationActiveSourc
 export type MigrationInstruction = z.infer<typeof MigrationInstructionSchema>;
 export type MigrationPlan = z.infer<typeof MigrationPlanSchema>;
 export type MigrationGenerateRequest = z.infer<typeof MigrationGenerateRequestSchema>;
+export type MigrationPlanValidationRequest = z.infer<typeof MigrationPlanValidationRequestSchema>;
 export type MigrationExecuteRequest = z.infer<typeof MigrationExecuteRequestSchema>;
 export type MigrationAsyncExecuteResponse = z.infer<typeof MigrationAsyncExecuteResponseSchema>;
 export type MigrationDirectExecuteResponse = z.infer<typeof MigrationDirectExecuteResponseSchema>;

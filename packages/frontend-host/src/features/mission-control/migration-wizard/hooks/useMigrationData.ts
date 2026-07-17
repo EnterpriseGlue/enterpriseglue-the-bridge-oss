@@ -13,6 +13,7 @@ import type {
   MigrationDirectExecuteResponse,
   MigrationExecuteRequest,
   MigrationPlan,
+  MigrationPlanValidationRequest,
   MigrationPreviewRequest,
   MigrationPreviewResponse,
   MigrationValidationResult,
@@ -216,9 +217,14 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   // Validate mutation — result handling is done by the component via mutateAsync
   const validateMutation = useMutation({
     mutationFn: async () => {
+      if (!selectedEngineId) throw new Error('An engine must be selected to validate a migration plan')
+      const request: MigrationPlanValidationRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+      }
       return apiClient.post<MigrationValidationResult>(
         '/mission-control-api/migration/plan/validate',
-        { engineId: selectedEngineId, plan: planWithOverrides },
+        request,
         { credentials: 'include' }
       )
     },

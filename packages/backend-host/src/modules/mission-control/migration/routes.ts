@@ -12,6 +12,7 @@ import {
   MigrationGenerateRequestSchema,
   MigrationPreviewResponseSchema,
   MigrationPlanSchema,
+  MigrationPlanValidationRequestSchema,
   MigrationPreviewRequestSchema,
   MigrationValidationResultSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/migration.js'
@@ -65,7 +66,7 @@ r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction(
 r.post('/mission-control-api/migration/plan/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), validateBody(MigrationGenerateRequestSchema), generateMigrationPlanHandler)
 
 // Validate migration plan
-r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.validate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.validate', { resourceKind: 'process_definition' }), validateBody(MigrationPlanValidationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const result = await validateMigrationPlan(engineId, req.body)

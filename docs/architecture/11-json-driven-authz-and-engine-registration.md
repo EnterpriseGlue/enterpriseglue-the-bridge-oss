@@ -2413,6 +2413,8 @@ Migration preview now similarly shares a validated envelope across runtime autho
 
 Migration-plan generation now validates one shared compatibility union across both the current process-definition field names and the older definition field names. Both documented generation endpoints retain either form and adapter-specific override fields, while incomplete hybrid payloads are rejected before an engine request.
 
+Migration-plan validation now shares its wrapped and direct-plan compatibility union across route validation, OpenAPI, service callers, and the wizard. Both definition-name dialects and adapter-specific plan extensions remain accepted; malformed selected-instance envelopes are rejected before validation reaches an engine.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

@@ -90,6 +90,7 @@ const {
   MigrationGenerateRequestSchema,
   MigrationInstructionSchema,
   MigrationPlanSchema,
+  MigrationPlanValidationRequestSchema,
   MigrationPreviewRequestSchema,
   MigrationValidationResultSchema,
   MigrationPreviewResponseSchema,
@@ -1345,8 +1346,7 @@ registry.register('MigrationInstruction', MigrationInstructionSchema)
 registry.register('MigrationPlan', MigrationPlanSchema)
 registry.register('MigrationGenerateInput', MigrationGenerateRequestSchema)
 
-const MigrationValidateRequest = z.object({ plan: MigrationPlanSchema })
-registry.register('MigrationValidateRequest', MigrationValidateRequest)
+registry.register('MigrationValidateRequest', MigrationPlanValidationRequestSchema)
 
 registry.register('MigrationExecuteRequest', MigrationExecuteRequestSchema)
 registry.register('MigrationCreateResponse', MigrationAsyncExecuteResponseSchema)
@@ -1366,7 +1366,7 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/migration/plan/validate',
   ...authzExtension('engine.runtime.migrations.plan.validate', 'POST', '/mission-control-api/migration/plan/validate'),
-  request: { body: { content: { 'application/json': { schema: MigrationValidateRequest } } } },
+  request: { body: { content: { 'application/json': { schema: MigrationPlanValidationRequestSchema } } } },
   responses: { 200: { description: 'Validation result', content: { 'application/json': { schema: MigrationValidationResultSchema } } } },
 })
 

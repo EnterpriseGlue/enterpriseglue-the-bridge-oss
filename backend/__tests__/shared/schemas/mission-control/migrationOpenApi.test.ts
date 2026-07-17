@@ -28,5 +28,6 @@ describe('migration OpenAPI contracts', () => {
       plan: { type: 'object' },
       processInstanceIds: { type: 'array', items: { type: 'string' } },
     });
+    expect(schemas?.MigrationValidateRequest?.anyOf ?? schemas?.MigrationValidateRequest?.oneOf).toHaveLength(3);
   });
 });

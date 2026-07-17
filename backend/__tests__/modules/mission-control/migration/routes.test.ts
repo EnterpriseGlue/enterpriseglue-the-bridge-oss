@@ -10,6 +10,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   generateMigrationPlan,
+  validateMigrationPlan,
   executeMigrationAsync,
   previewMigrationCount,
   aggregateActiveSources,
@@ -155,6 +156,19 @@ describe('mission-control migration routes', () => {
 
     expect(response.status).toBe(400);
     expect(executeMigrationAsync).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed wrapped migration validation selections', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/plan/validate')
+      .send({
+        engineId: 'engine-1',
+        plan: { sourceProcessDefinitionId: 'p1', targetProcessDefinitionId: 'p2' },
+        processInstanceIds: 'pi-1',
+      });
+
+    expect(response.status).toBe(400);
+    expect(validateMigrationPlan).not.toHaveBeenCalled();
   });
 
   it('denies migration plan generation when instance view permission is missing', async () => {
