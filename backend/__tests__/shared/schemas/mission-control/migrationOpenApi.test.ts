@@ -9,6 +9,7 @@ describe('migration OpenAPI contracts', () => {
 
     expect(paths?.['/mission-control-api/migration/generate']?.post).toBeDefined();
     expect(paths?.['/mission-control-api/migration/plan/generate']?.post).toBeDefined();
+    expect(schemas?.MigrationGenerateInput?.anyOf ?? schemas?.MigrationGenerateInput?.oneOf).toHaveLength(2);
     expect(schemas?.MigrationPlan?.properties).toMatchObject({
       sourceProcessDefinitionId: { type: 'string' },
       targetProcessDefinitionId: { type: 'string' },

@@ -9,6 +9,7 @@ import {
   MigrationAsyncExecuteResponseSchema,
   MigrationDirectExecuteResponseSchema,
   MigrationExecuteRequestSchema,
+  MigrationGenerateRequestSchema,
   MigrationPreviewResponseSchema,
   MigrationPlanSchema,
   MigrationPreviewRequestSchema,
@@ -60,8 +61,8 @@ const generateMigrationPlanHandler = asyncHandler(async (req: Request, res: Resp
   }
 })
 
-r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), generateMigrationPlanHandler)
-r.post('/mission-control-api/migration/plan/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), generateMigrationPlanHandler)
+r.post('/mission-control-api/migration/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), validateBody(MigrationGenerateRequestSchema), generateMigrationPlanHandler)
+r.post('/mission-control-api/migration/plan/generate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.generate', { resourceKind: 'process_definition' }), validateBody(MigrationGenerateRequestSchema), generateMigrationPlanHandler)
 
 // Validate migration plan
 r.post('/mission-control-api/migration/plan/validate', requireRuntimeMigrationAction('engine.runtime.migrations.plan.validate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {

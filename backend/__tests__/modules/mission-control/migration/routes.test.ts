@@ -118,6 +118,15 @@ describe('mission-control migration routes', () => {
     }));
   });
 
+  it('rejects generation requests that match neither supported compatibility shape', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/migration/generate')
+      .send({ engineId: 'engine-1', sourceDefinitionId: 'p1' });
+
+    expect(response.status).toBe(400);
+    expect(generateMigrationPlan).not.toHaveBeenCalled();
+  });
+
   it('executes migration async', async () => {
     const response = await request(app)
       .post('/mission-control-api/migration/execute-async')

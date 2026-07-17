@@ -3,6 +3,7 @@ import type {
   MigrationAsyncExecuteResponse,
   MigrationDirectExecuteResponse,
   MigrationExecuteRequest,
+  MigrationGenerateRequest,
   MigrationInstruction,
   MigrationPlan,
   MigrationValidationResult,
@@ -24,11 +25,12 @@ export async function generateMigrationPlan(
   targetDefinitionId: string,
   engineId?: string
 ): Promise<MigrationPlan> {
-  return apiClient.post<MigrationPlan>('/mission-control-api/migration/generate', {
+  const request: MigrationGenerateRequest = {
     ...(engineId ? { engineId } : {}),
     sourceProcessDefinitionId: sourceDefinitionId,
     targetProcessDefinitionId: targetDefinitionId,
-  }, { credentials: 'include' })
+  }
+  return apiClient.post<MigrationPlan>('/mission-control-api/migration/generate', request, { credentials: 'include' })
 }
 
 export async function validateMigrationPlan(

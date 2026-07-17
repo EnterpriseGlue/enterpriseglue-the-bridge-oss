@@ -16,9 +16,8 @@ export const MigrationPlanSchema = z.object({
   updateEventTriggers: z.boolean().optional(),
 });
 
-export const MigrationGenerateRequestSchema = z.object({
-  sourceDefinitionId: z.string(),
-  targetDefinitionId: z.string(),
+const MigrationGenerateRequestBaseSchema = z.object({
+  engineId: z.string().optional(),
   updateEventTriggers: z.boolean().optional(),
   overrides: z.array(z.object({
     sourceActivityIds: z.array(z.string()).optional(),
@@ -27,7 +26,21 @@ export const MigrationGenerateRequestSchema = z.object({
     targetActivityIds: z.array(z.string()).optional(),
     updateEventTrigger: z.boolean().optional(),
   })).optional(),
-});
+}).passthrough();
+
+// Both generation aliases are public compatibility endpoints. Older callers
+// name source/target definitions directly; the wizard uses the engine-native
+// process-definition names. Keep both forms valid at the shared boundary.
+export const MigrationGenerateRequestSchema = z.union([
+  MigrationGenerateRequestBaseSchema.extend({
+    sourceProcessDefinitionId: z.string(),
+    targetProcessDefinitionId: z.string(),
+  }),
+  MigrationGenerateRequestBaseSchema.extend({
+    sourceDefinitionId: z.string(),
+    targetDefinitionId: z.string(),
+  }),
+]);
 
 export const MigrationExecuteRequestSchema = z.object({
   engineId: z.string().optional(),

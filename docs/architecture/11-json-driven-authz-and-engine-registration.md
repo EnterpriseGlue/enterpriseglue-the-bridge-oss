@@ -2411,6 +2411,8 @@ Migration active-source aggregation now uses one shared selected-instance reques
 
 Migration preview now similarly shares a validated envelope across runtime authorization, backend, OpenAPI, and the wizard. Its migration plan remains deliberately passthrough-compatible for engine-specific plan extensions, while malformed engine ids and selected-instance lists fail before a preview read.
 
+Migration-plan generation now validates one shared compatibility union across both the current process-definition field names and the older definition field names. Both documented generation endpoints retain either form and adapter-specific override fields, while incomplete hybrid payloads are rejected before an engine request.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.
