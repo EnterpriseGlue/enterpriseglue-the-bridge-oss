@@ -94,6 +94,24 @@ describe('mission-control direct routes', () => {
     }));
   });
 
+  it('serializes the shared per-instance direct-operation receipt', async () => {
+    vi.mocked(deleteProcessInstancesDirect).mockResolvedValueOnce([
+      { id: 'i1', ok: true },
+      { id: 'i2', ok: false, error: 'instance is already ended' },
+    ]);
+
+    const response = await request(app)
+      .post('/mission-control-api/direct/process-instances/delete')
+      .send({ engineId: 'engine-1', processInstanceIds: ['i1', 'i2'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      total: 2,
+      succeeded: ['i1'],
+      failed: [{ id: 'i2', ok: false, error: 'instance is already ended' }],
+    });
+  });
+
   it('suspends process instances directly', async () => {
     const response = await request(app)
       .post('/mission-control-api/direct/process-instances/suspend')

@@ -13,3 +13,4 @@ export * from './history.js';
 export * from './metrics.js';
 export * from './migration.js';
 export * from './modify.js';
+export * from './direct.js';

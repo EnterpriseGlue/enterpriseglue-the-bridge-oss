@@ -1,9 +1,8 @@
 import { Router, Request, Response } from 'express'
-import { z } from 'zod'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
-import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
+import { DirectOperationResultSchema } from '@enterpriseglue/shared/schemas/mission-control/direct.js'
 import {
   deleteProcessInstancesDirect,
   suspendActivateProcessInstancesDirect,
@@ -35,7 +34,7 @@ r.post('/mission-control-api/direct/process-instances/delete', requireRuntimePro
       skipSubprocesses,
       deleteReason,
     })
-    res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
+    res.json(DirectOperationResultSchema.parse({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) }))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct delete failed')
   }
@@ -47,7 +46,7 @@ r.post('/mission-control-api/direct/process-instances/suspend', requireRuntimePr
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
     const engineId = (req as any).engineId as string
     const results = await suspendActivateProcessInstancesDirect(engineId, ids, true)
-    res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
+    res.json(DirectOperationResultSchema.parse({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) }))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct suspend failed')
   }
@@ -58,7 +57,7 @@ r.post('/mission-control-api/direct/process-instances/activate', requireRuntimeP
     const ids: string[] = (req.body?.processInstanceIds || []) as string[]
     const engineId = (req as any).engineId as string
     const results = await suspendActivateProcessInstancesDirect(engineId, ids, false)
-    res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
+    res.json(DirectOperationResultSchema.parse({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) }))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct activate failed')
   }
@@ -70,7 +69,7 @@ r.post('/mission-control-api/direct/jobs/retries', requireRuntimeProcessInstance
     const { processInstanceIds = [], retries = 1, onlyFailed = true } = req.body || {}
     const engineId = (req as any).engineId as string
     const results = await setJobRetriesDirect(engineId, { processInstanceIds, retries, onlyFailed })
-    res.json({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) })
+    res.json(DirectOperationResultSchema.parse({ total: results.length, succeeded: results.filter(r => r.ok).map(r => r.id), failed: results.filter(r => !r.ok) }))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Direct retries failed')
   }

@@ -2313,6 +2313,8 @@ Metrics now serialize their existing shared contracts at the route boundary: col
 
 Migration execution now shares the full async batch receipt (`id`, optional engine batch id, and operation type) and direct success receipt across route serialization, OpenAPI, and migration clients; compatibility input fields such as a process-instance query remain accepted.
 
+Direct process-instance delete, suspend, activate, and job-retry operations now share their per-instance success/failure receipt across backend serialization and OpenAPI. Their handlers retain permissive request handling for compatible engine-specific fields while the shared schemas document the supported transport inputs.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

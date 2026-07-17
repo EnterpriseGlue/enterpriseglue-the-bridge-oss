@@ -66,6 +66,10 @@ const {
   MigrationPlanSchema,
   MigrationPreviewResponseSchema,
   PreviewCountResponseSchema,
+  DirectProcessInstanceDeleteRequestSchema,
+  DirectProcessInstanceSuspensionRequestSchema,
+  DirectJobRetriesRequestSchema,
+  DirectOperationResultSchema,
   VariablesSchema: MissionControlVariablesSchema,
   ActivityInstanceSchema: MissionControlActivityInstanceSchema,
   PreviewCountRequest,
@@ -1436,15 +1440,15 @@ registry.registerPath({
 // -----------------------------
 // Direct operations (no batch)
 // -----------------------------
-const DirectIds = z.object({ processInstanceIds: z.array(z.string()), skipCustomListeners: z.boolean().optional(), skipIoMappings: z.boolean().optional(), failIfNotExists: z.boolean().optional(), skipSubprocesses: z.boolean().optional() })
-const DirectSuspend = z.object({ processInstanceIds: z.array(z.string()) })
-const DirectRetries = z.object({ processInstanceIds: z.array(z.string()), retries: z.number().min(0), onlyFailed: z.boolean().optional() })
-const DirectResult = z.object({ total: z.number(), succeeded: z.array(z.string()), failed: z.array(z.object({ id: z.string(), ok: z.boolean(), error: z.string().optional() })) })
+registry.register('DirectProcessInstanceDeleteRequest', DirectProcessInstanceDeleteRequestSchema)
+registry.register('DirectProcessInstanceSuspensionRequest', DirectProcessInstanceSuspensionRequestSchema)
+registry.register('DirectJobRetriesRequest', DirectJobRetriesRequestSchema)
+registry.register('DirectOperationResult', DirectOperationResultSchema)
 
-registry.registerPath({ method: 'post', path: '/mission-control-api/direct/process-instances/delete', ...authzExtension('engine.runtime.direct.process-instances.delete', 'POST', '/mission-control-api/direct/process-instances/delete'), request: { body: { content: { 'application/json': { schema: DirectIds } } } }, responses: { 200: { description: 'Result', content: { 'application/json': { schema: DirectResult } } } } })
-registry.registerPath({ method: 'post', path: '/mission-control-api/direct/process-instances/suspend', ...authzExtension('engine.runtime.direct.process-instances.suspend', 'POST', '/mission-control-api/direct/process-instances/suspend'), request: { body: { content: { 'application/json': { schema: DirectSuspend } } } }, responses: { 200: { description: 'Result', content: { 'application/json': { schema: DirectResult } } } } })
-registry.registerPath({ method: 'post', path: '/mission-control-api/direct/process-instances/activate', ...authzExtension('engine.runtime.direct.process-instances.activate', 'POST', '/mission-control-api/direct/process-instances/activate'), request: { body: { content: { 'application/json': { schema: DirectSuspend } } } }, responses: { 200: { description: 'Result', content: { 'application/json': { schema: DirectResult } } } } })
-registry.registerPath({ method: 'post', path: '/mission-control-api/direct/jobs/retries', ...authzExtension('engine.runtime.direct.jobs.retry', 'POST', '/mission-control-api/direct/jobs/retries'), request: { body: { content: { 'application/json': { schema: DirectRetries } } } }, responses: { 200: { description: 'Result', content: { 'application/json': { schema: DirectResult } } } } })
+registry.registerPath({ method: 'post', path: '/mission-control-api/direct/process-instances/delete', ...authzExtension('engine.runtime.direct.process-instances.delete', 'POST', '/mission-control-api/direct/process-instances/delete'), request: { body: { content: { 'application/json': { schema: DirectProcessInstanceDeleteRequestSchema } } } }, responses: { 200: { description: 'Result for each requested process instance', content: { 'application/json': { schema: DirectOperationResultSchema } } } } })
+registry.registerPath({ method: 'post', path: '/mission-control-api/direct/process-instances/suspend', ...authzExtension('engine.runtime.direct.process-instances.suspend', 'POST', '/mission-control-api/direct/process-instances/suspend'), request: { body: { content: { 'application/json': { schema: DirectProcessInstanceSuspensionRequestSchema } } } }, responses: { 200: { description: 'Result for each requested process instance', content: { 'application/json': { schema: DirectOperationResultSchema } } } } })
+registry.registerPath({ method: 'post', path: '/mission-control-api/direct/process-instances/activate', ...authzExtension('engine.runtime.direct.process-instances.activate', 'POST', '/mission-control-api/direct/process-instances/activate'), request: { body: { content: { 'application/json': { schema: DirectProcessInstanceSuspensionRequestSchema } } } }, responses: { 200: { description: 'Result for each requested process instance', content: { 'application/json': { schema: DirectOperationResultSchema } } } } })
+registry.registerPath({ method: 'post', path: '/mission-control-api/direct/jobs/retries', ...authzExtension('engine.runtime.direct.jobs.retry', 'POST', '/mission-control-api/direct/jobs/retries'), request: { body: { content: { 'application/json': { schema: DirectJobRetriesRequestSchema } } } }, responses: { 200: { description: 'Result for each requested process instance', content: { 'application/json': { schema: DirectOperationResultSchema } } } } })
 
 // -----------------------------
 // Mission Control API - Extended Endpoints
