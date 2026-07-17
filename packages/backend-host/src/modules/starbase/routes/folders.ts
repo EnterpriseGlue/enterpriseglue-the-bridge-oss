@@ -20,7 +20,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import { applyProjectArchiveToProject } from '@enterpriseglue/shared/services/starbase/index.js'
 import { unixTimestamp } from '@enterpriseglue/shared/utils/id.js'
 import { projectIdParamSchema, folderIdParamSchema, uuidSchema } from '@enterpriseglue/shared/schemas/common.js'
-import { CreateFolderRequest, UpdateFolderRequest } from '@enterpriseglue/shared/schemas/starbase/folder.js'
+import { CreateFolderRequest, FolderSummarySchema, UpdateFolderRequest } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 import { buildStarbaseFileName, sanitizeFileNameSegment } from '@enterpriseglue/shared/utils/starbase-filenames.js'
 import { z } from 'zod'
 
@@ -392,7 +392,7 @@ r.get('/starbase-api/projects/:projectId/folders', apiLimiter, requireAuth, requ
   });
   const out = result.map((r: any) => ({ id: String(r.id), name: String(r.name), parentFolderId: r.parentFolderId || null }));
   
-  res.json(out);
+  res.json(z.array(FolderSummarySchema).parse(out));
 }));
 
 /**

@@ -149,6 +149,8 @@ describe('starbase folders routes', () => {
     expect(response.body).toEqual([
       { id: folderId, name: 'Test Folder', parentFolderId: null },
     ]);
+    expect(response.body[0]).not.toHaveProperty('projectId');
+    expect(response.body[0]).not.toHaveProperty('createdBy');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'project',

@@ -8,6 +8,7 @@ import type {
   ProjectRole as SharedProjectRole,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import type { UserSearchResult } from '@enterpriseglue/shared/schemas/platform-admin/admin.js'
+import type { FolderSummary as SharedFolderSummary } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 export type FileItem = { 
   id: string
   name: string
@@ -21,15 +22,7 @@ export type Project = { id: string; name: string; filesCount?: number; foldersCo
 
 export type UserSearchItem = UserSearchResult
 
-export type FolderSummary = { 
-  id: string
-  name: string
-  parentFolderId: string | null
-  createdBy?: string | null
-  updatedBy?: string | null
-  createdAt?: number
-  updatedAt?: number 
-}
+export type FolderSummary = SharedFolderSummary
 
 export type ProjectContents = { 
   breadcrumb: FolderSummary[]
