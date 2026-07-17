@@ -37,6 +37,7 @@ import { EngineAccessError, isEngineAccessError } from '../shared/components/Eng
 import { ApplyModificationsModal } from './components/modals/ApplyModificationsModal'
 import { useActionDecision } from '../../../shared/auth/guards'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 import {
   SPLIT_PANE_STORAGE_KEY,
   SPLIT_PANE_VERTICAL_STORAGE_KEY,
@@ -45,20 +46,6 @@ import {
 } from './components/utils'
 
 const INSTANCE_COUNTS_STORAGE_KEY = 'mission-control-show-instance-counts'
-
-type ProcessEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  processKey: string
-  processVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
-}
 
 function withRuntimeActionDecision(
   fallback: UiAuthzDecision,

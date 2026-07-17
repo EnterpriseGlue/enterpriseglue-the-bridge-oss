@@ -19,6 +19,7 @@ import {
   DecisionEvaluationResultSchema,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
+import { DecisionEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js';
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js';
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js';
 
@@ -56,11 +57,11 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
   });
   if (!target) throw Errors.notFound('Deployed decision mapping');
 
-  res.json({
+  res.json(DecisionEditTargetSchema.parse({
     ...target,
     decisionKey,
     decisionVersion,
-  });
+  }));
 }));
 
 // List decision definitions

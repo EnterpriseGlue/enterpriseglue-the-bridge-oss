@@ -27,25 +27,12 @@ import { useActionDecision } from '../../../../shared/auth/guards'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
 import type { DecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
+import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
 const SPLIT_PANE_STORAGE_KEY = 'decisions-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '60%'
-
-type DecisionEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  decisionKey: string
-  decisionVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
-}
 
 type DecisionDef = DecisionDefinition
 

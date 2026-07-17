@@ -38,24 +38,11 @@ import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-ac
 import { AuthContext } from '../../../contexts/AuthContext'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import type { ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
 const Viewer = React.lazy(() => import('../../shared/components/Viewer'))
-
-type ProcessEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  processKey: string
-  processVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
-}
 
 function deniedReason(decision: UiAuthzDecision): string | null {
   if (decision.allowed) return null

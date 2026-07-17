@@ -34,22 +34,9 @@ import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
 import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 import type { HistoricDecisionIo, HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
-
-type DecisionEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  decisionKey: string
-  decisionVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
-}
 
 type HistoricDecisionInstance = SharedHistoricDecisionInstance
 

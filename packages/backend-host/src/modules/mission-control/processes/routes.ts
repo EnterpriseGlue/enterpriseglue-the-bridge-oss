@@ -14,6 +14,7 @@ import {
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js'
 import { ProcessInstanceStartResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { ProcessEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const r = Router()
 
@@ -95,11 +96,11 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
   })
   if (!target) throw Errors.notFound('Deployed process mapping')
 
-  res.json({
+  res.json(ProcessEditTargetSchema.parse({
     ...target,
     processKey,
     processVersion,
-  })
+  }))
 }))
 
 // Get process definition by ID

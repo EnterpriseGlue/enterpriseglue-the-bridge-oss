@@ -57,6 +57,8 @@ const {
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceStartResponseSchema,
+  ProcessEditTargetSchema,
+  DecisionEditTargetSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
@@ -649,21 +651,7 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-definitions/edit-target (resolve Starbase edit target for a deployed process version)
-const ProcessEditTargetResponse = z.object({
-  canShowEditButton: z.boolean(),
-  canEdit: z.boolean(),
-  engineId: z.string(),
-  processKey: z.string(),
-  processVersion: z.number(),
-  projectId: z.string(),
-  fileId: z.string(),
-  engineDeploymentId: z.string().optional(),
-  commitId: z.string().nullable().optional(),
-  fileVersionNumber: z.number().nullable().optional(),
-  mappingSource: z.enum(['git-commit', 'db-timestamp', 'db-latest', 'deployment-timestamp']).optional(),
-  artifactCreatedAt: z.number().optional(),
-});
-registry.register('ProcessEditTarget', ProcessEditTargetResponse);
+registry.register('ProcessEditTarget', ProcessEditTargetSchema);
 registry.registerPath({
   method: 'get',
   path: '/mission-control-api/process-definitions/edit-target',
@@ -677,7 +665,7 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: { description: 'Starbase file target for the deployed process version', content: { 'application/json': { schema: ProcessEditTargetResponse } } },
+    200: { description: 'Starbase file target for the deployed process version', content: { 'application/json': { schema: ProcessEditTargetSchema } } },
     404: { description: 'No deployed process mapping found' },
   },
 });
@@ -1513,21 +1501,7 @@ registry.registerPath({ method: 'post', path: '/mission-control-api/decision-def
 registry.registerPath({ method: 'post', path: '/mission-control-api/decision-definitions/key/{key}/evaluate', ...authzExtension('engine.runtime.decisions.evaluate', 'POST', '/mission-control-api/decision-definitions/key/{key}/evaluate'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: EvaluateDecisionRequest } } } }, responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: DecisionEvaluationResultSchema } } } } });
 
 // GET /mission-control-api/decision-definitions/edit-target (resolve Starbase edit target for a deployed decision version)
-const DecisionEditTargetResponse = z.object({
-  canShowEditButton: z.boolean(),
-  canEdit: z.boolean(),
-  engineId: z.string(),
-  decisionKey: z.string(),
-  decisionVersion: z.number(),
-  projectId: z.string(),
-  fileId: z.string(),
-  engineDeploymentId: z.string().optional(),
-  commitId: z.string().nullable().optional(),
-  fileVersionNumber: z.number().nullable().optional(),
-  mappingSource: z.enum(['git-commit', 'db-timestamp', 'db-latest', 'deployment-timestamp']).optional(),
-  artifactCreatedAt: z.number().optional(),
-});
-registry.register('DecisionEditTarget', DecisionEditTargetResponse);
+registry.register('DecisionEditTarget', DecisionEditTargetSchema);
 registry.registerPath({
   method: 'get',
   path: '/mission-control-api/decision-definitions/edit-target',
@@ -1541,7 +1515,7 @@ registry.registerPath({
     }),
   },
   responses: {
-    200: { description: 'Starbase file target for the deployed decision version', content: { 'application/json': { schema: DecisionEditTargetResponse } } },
+    200: { description: 'Starbase file target for the deployed decision version', content: { 'application/json': { schema: DecisionEditTargetSchema } } },
     404: { description: 'No deployed decision mapping found' },
   },
 });
