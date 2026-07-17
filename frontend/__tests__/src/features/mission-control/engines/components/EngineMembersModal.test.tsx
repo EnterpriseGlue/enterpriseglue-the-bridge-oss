@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import EngineMembersModal, { isCurrentEngineDelegate } from '@src/features/mission-control/engines/components/EngineMembersModal';
+import EngineMembersModal, { getCanonicalGovernanceMemberIds, isCurrentEngineDelegate } from '@src/features/mission-control/engines/components/EngineMembersModal';
 import { apiClient } from '@src/shared/api/client';
 
 vi.mock('@carbon/react', async () => {
@@ -260,6 +260,65 @@ describe('EngineMembersModal', () => {
     expect(await screen.findByText('Delegate User')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^options$/i })).toBeNull();
     expect(screen.queryByText('Remove delegate')).toBeNull();
+  });
+
+  it('protects a canonical governance member even when its legacy display role is ordinary', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url.includes('/members')) {
+        return {
+          members: [
+            {
+              id: 'member-owner',
+              engineId: 'engine-1',
+              userId: 'user-owner',
+              role: 'operator',
+              grantedAt: Date.now(),
+              user: { id: 'user-owner', email: 'owner@example.com', firstName: 'Canonical', lastName: 'Owner' },
+            },
+          ],
+          pendingInvites: [],
+        };
+      }
+
+      if (url === '/api/authz/role-assignments') {
+        return [{
+          id: 'assignment-owner',
+          userId: 'user-owner',
+          principalType: 'user',
+          principalId: 'user-owner',
+          roleId: 'system.engine.owner',
+          roleName: 'Engine Owner',
+          roleScope: 'engine',
+          resourceType: 'engine',
+          resourceId: 'engine-1',
+          scopeType: 'engine',
+          scopeId: 'engine-1',
+          source: 'manual',
+        }];
+      }
+
+      if (url === '/api/authz/roles' || url.includes('/access-requests')) return [];
+      return [];
+    });
+
+    renderModal({ canUpdateMemberRoles: true, canRemoveMembers: true });
+
+    expect(await screen.findByText('Canonical Owner')).toBeInTheDocument();
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(
+      '/api/authz/role-assignments',
+      { resourceType: 'engine', resourceId: 'engine-1' },
+      { credentials: 'include' },
+    ));
+    expect(screen.queryByRole('button', { name: /^options$/i })).toBeNull();
+  });
+
+  it('uses only direct user governance grants for member-row protection', () => {
+    const governanceMemberIds = getCanonicalGovernanceMemberIds([
+      { id: 'group-owner', roleId: 'system.engine.owner', source: 'manual', principalType: 'group', principalId: 'group-owners' },
+      { id: 'user-delegate', roleId: 'system.engine.delegate', source: 'manual', principalType: 'user', principalId: 'user-delegate' },
+    ] as any);
+
+    expect([...governanceMemberIds]).toEqual(['user-delegate']);
   });
 
   it('uses engine governance metadata rather than the member display role to identify the removable delegate', () => {

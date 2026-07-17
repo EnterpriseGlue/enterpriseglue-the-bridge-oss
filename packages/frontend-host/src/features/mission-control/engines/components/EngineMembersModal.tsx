@@ -127,7 +127,7 @@ function tagTypeForRole(role: string): 'red' | 'magenta' | 'teal' | 'blue' | 'gr
 
 const ENGINE_GOVERNANCE_MEMBER_ROLES = new Set(['owner', 'delegate'])
 
-function isGovernanceEngineMember(member: EngineMember | null | undefined): boolean {
+function isLegacyGovernanceEngineMember(member: EngineMember | null | undefined): boolean {
   return ENGINE_GOVERNANCE_MEMBER_ROLES.has(String(member?.role || ''))
 }
 
@@ -249,6 +249,26 @@ export function formatScopedAssignmentSourceLineage(assignment: ScopedRoleAssign
 
 function isGovernanceScopedAssignment(assignment: ScopedRoleAssignmentDisplay): boolean {
   return assignment.roleId === 'system.engine.owner' || assignment.roleId === 'system.engine.delegate'
+}
+
+export function getCanonicalGovernanceMemberIds(assignments: ScopedRoleAssignmentDisplay[]): ReadonlySet<string> {
+  const memberIds = new Set<string>()
+  for (const assignment of assignments) {
+    if (!isGovernanceScopedAssignment(assignment) || scopedAssignmentPrincipalType(assignment) !== 'user') continue
+    const principalId = scopedAssignmentPrincipalId(assignment)
+    if (principalId) memberIds.add(principalId)
+  }
+  return memberIds
+}
+
+export function isGovernanceEngineMember(
+  member: EngineMember | null | undefined,
+  canonicalGovernanceMemberIds: ReadonlySet<string>,
+): boolean {
+  if (!member) return false
+  // Legacy member roles remain a restrictive UI fallback until the deployed
+  // provider cutover proves every historical governance row has a canonical grant.
+  return canonicalGovernanceMemberIds.has(member.userId) || isLegacyGovernanceEngineMember(member)
 }
 
 function tagTypeForAssignmentSource(source: ScopedRoleAssignmentDisplay['source']): 'blue' | 'green' | 'purple' | 'gray' {
@@ -693,6 +713,10 @@ export default function EngineMembersModal({
   ), [engine?.id, roleAssignmentsQ.data])
   const governanceScopedAssignments = React.useMemo(() => scopedAssignments.filter(isGovernanceScopedAssignment), [scopedAssignments])
   const ordinaryScopedAssignments = React.useMemo(() => scopedAssignments.filter((assignment) => !isGovernanceScopedAssignment(assignment)), [scopedAssignments])
+  const canonicalGovernanceMemberIds = React.useMemo(
+    () => getCanonicalGovernanceMemberIds(governanceScopedAssignments),
+    [governanceScopedAssignments],
+  )
 
   async function syncCustomRoleAssignments(userId: string, nextRoleIds: string[]) {
     const next = new Set(nextRoleIds)
@@ -976,7 +1000,7 @@ export default function EngineMembersModal({
                                   ? visiblePendingInvites.find((invite) => `invite:${invite.invitationId}` === row.id)
                                   : null
                                 const member = pendingInvite ? null : members.find((item) => item.userId === row.id)
-                                const isGovernanceMember = isGovernanceEngineMember(member)
+                                const isGovernanceMember = isGovernanceEngineMember(member, canonicalGovernanceMemberIds)
                                 const canReissuePendingInvite = Boolean(
                                   canInviteMembers && pendingInvite && pendingInvite.deliveryMethod === 'manual' && pendingInvite.status !== 'onboarding'
                                 )
