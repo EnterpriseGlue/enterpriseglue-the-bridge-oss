@@ -107,7 +107,7 @@ test('the disposable local administrator has canonical break-glass memberships',
   assert.match(e2eGlobalSetup, /system\.group\.authenticated_users/);
   assert.match(e2eGlobalSetup, /system\.group\.platform_administrators/);
   assert.match(e2eGlobalSetup, /INSERT INTO \$\{schema\}\.authz_group_memberships/);
-  assert.match(e2eGlobalSetup, /e2e-smoke-fixture/);
+  assert.match(e2eGlobalSetup, /e2e-smoke-fixture:\$\{userId\}/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {

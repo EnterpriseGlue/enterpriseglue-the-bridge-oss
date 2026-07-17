@@ -92,7 +92,7 @@ async function fetchJson<T>(
   return data as T;
 }
 
-async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null) {
+async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null, membershipSourceRef?: string | null) {
   const pgModule = await import('pg');
   const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
   const schema = process.env.POSTGRES_SCHEMA || 'main';
@@ -113,6 +113,10 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
     options: `-c search_path=${schema}`,
   });
+
+  if (membershipSourceRef) {
+    await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = $1`, [membershipSourceRef]);
+  }
 
   const projectIdsResult = await pool.query(
     `SELECT id FROM ${schema}.projects WHERE owner_id = $1`,
@@ -211,6 +215,7 @@ export default async function globalTeardown() {
     adminEmail?: string;
     adminPassword?: string;
     engineId?: string;
+    membershipSourceRef?: string;
   };
 
   if (!data.userId) {
@@ -257,7 +262,7 @@ export default async function globalTeardown() {
 
     if (data.userId) {
       try {
-        await cleanupDatabaseArtifacts(data.userId, data.engineId || null);
+        await cleanupDatabaseArtifacts(data.userId, data.engineId || null, data.membershipSourceRef || null);
       } catch (error) {
         console.warn('E2E DB cleanup failed after API cleanup.', error);
       }

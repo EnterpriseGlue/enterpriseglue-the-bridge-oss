@@ -119,6 +119,7 @@ export default async function globalSetup() {
   const passwordHash = await hashPassword(password);
   const now = Date.now();
   const userId = randomUUID();
+  const membershipSourceRef = `e2e-smoke-fixture:${userId}`;
 
   await pool.query(
     `INSERT INTO ${schema}.users
@@ -160,7 +161,7 @@ export default async function globalSetup() {
           (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          ON CONFLICT (group_id, user_id, source, source_ref) DO NOTHING`,
-        [randomUUID(), null, groupId, administratorId, 'system', 'e2e-smoke-fixture', null, null, now, now]
+        [randomUUID(), null, groupId, administratorId, 'system', membershipSourceRef, null, null, now, now]
       );
     }
   }
@@ -206,6 +207,7 @@ export default async function globalSetup() {
       adminPassword,
       engineId,
       cleanupAdmin: Boolean(adminUserId),
+      membershipSourceRef,
     })
   );
 
