@@ -178,6 +178,8 @@ const {
   GitProviderRepositorySchema,
   GitProviderSummarySchema,
   GitProviderDetailSchema,
+  GitOAuthConfigSchema,
+  GitOAuthAuthorizeResponseSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
   RollbackRequestSchema,
@@ -3630,7 +3632,7 @@ registry.registerPath({ method: 'get', path: '/git-api/locks/{fileId}/events', .
 // Git OAuth
 registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize', ...authzExemption('GET', '/git-api/oauth/:providerId/authorize'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to OAuth provider' } } });
 registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize/redirect', ...authzExemption('GET', '/git-api/oauth/:providerId/authorize/redirect'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'OAuth redirect' } } });
-registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/config', ...authzExemption('GET', '/git-api/oauth/:providerId/config'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'OAuth config', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/config', ...authzExemption('GET', '/git-api/oauth/:providerId/config'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'OAuth capability metadata without client configuration', content: { 'application/json': { schema: GitOAuthConfigSchema } } } } });
 registry.registerPath({ method: 'post', path: '/git-api/oauth/{providerId}/refresh', ...authzExemption('POST', '/git-api/oauth/:providerId/refresh'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'Token refreshed' } } });
 registry.registerPath({ method: 'get', path: '/git-api/oauth/authorize/redirect', ...authzExemption('GET', '/git-api/oauth/authorize/redirect'), responses: { 302: { description: 'Generic OAuth redirect' } } });
 registry.registerPath({ method: 'post', path: '/git-api/oauth/callback', ...authzExemption('POST', '/git-api/oauth/callback'), responses: { 200: { description: 'OAuth callback processed' } } });

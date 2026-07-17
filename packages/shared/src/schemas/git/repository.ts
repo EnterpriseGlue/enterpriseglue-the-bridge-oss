@@ -189,6 +189,8 @@ export const GitProviderSummarySchema = z.object({
 export const GitProviderDetailSchema = GitProviderSummarySchema.extend({
   effectiveBaseUrl: z.string(), effectiveApiUrl: z.string(), isActive: z.boolean(),
 }).strict();
+export const GitOAuthConfigSchema = z.object({ supportsOAuth: z.boolean(), isConfigured: z.boolean(), scopes: z.array(z.string()) }).strict();
+export const GitOAuthAuthorizeResponseSchema = z.object({ authUrl: z.string(), state: z.string() }).strict();
 
 export const RepositoryResponseSchema = RepositorySelectSchema;
 
@@ -219,3 +221,5 @@ export type GitCredentialNamespace = z.infer<typeof GitCredentialNamespaceSchema
 export type GitProviderRepository = z.infer<typeof GitProviderRepositorySchema>;
 export type GitProviderSummary = z.infer<typeof GitProviderSummarySchema>;
 export type GitProviderDetail = z.infer<typeof GitProviderDetailSchema>;
+export type GitOAuthConfig = z.infer<typeof GitOAuthConfigSchema>;
+export type GitOAuthAuthorizeResponse = z.infer<typeof GitOAuthAuthorizeResponseSchema>;

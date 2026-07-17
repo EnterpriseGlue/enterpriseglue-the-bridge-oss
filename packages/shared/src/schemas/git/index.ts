@@ -23,6 +23,8 @@ export {
   GitProviderRepositorySchema,
   GitProviderSummarySchema,
   GitProviderDetailSchema,
+  GitOAuthConfigSchema,
+  GitOAuthAuthorizeResponseSchema,
   RepositoryResponseSchema,
   type Repository,
   type RepositoryInsert,
@@ -47,6 +49,8 @@ export {
   type GitProviderRepository,
   type GitProviderSummary,
   type GitProviderDetail,
+  type GitOAuthConfig,
+  type GitOAuthAuthorizeResponse,
 } from './repository.js';
 
 // Deployment schemas

@@ -2443,6 +2443,8 @@ Project-level Git connection status, connect, token-update, and disconnect opera
 
 Public Git-provider list and detail responses now share safe metadata contracts across backend serialization, OpenAPI, and the Git client. OAuth client ids, scopes, and encrypted client secrets are excluded from these user-facing routes.
 
+Git OAuth capability and authorization-start responses now also use explicit shared contracts; configuration reports only supported/configured flags and scopes, never client credentials.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

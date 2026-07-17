@@ -14,7 +14,7 @@ import { oauthService } from '@enterpriseglue/shared/services/git/OAuthService.j
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
-import { GitCredentialNamespaceSchema, GitCredentialSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
+import { GitCredentialNamespaceSchema, GitCredentialSchema, GitOAuthAuthorizeResponseSchema, GitOAuthConfigSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
@@ -180,7 +180,7 @@ router.get('/git-api/oauth/:providerId/config', apiLimiter, requireAuth, asyncHa
   const providerId = String(req.params.providerId);
   
   const oauthConfig = await oauthService.getOAuthConfig(providerId);
-  res.json(oauthConfig);
+  res.json(GitOAuthConfigSchema.parse(oauthConfig));
 }));
 
 /**
@@ -197,10 +197,10 @@ router.get('/git-api/oauth/:providerId/authorize', apiLimiter, requireAuth, asyn
   
   const result = await oauthService.startOAuthFlow(userId, providerId, redirectUri);
   
-  res.json({
+  res.json(GitOAuthAuthorizeResponseSchema.parse({
     authUrl: result.authUrl,
     state: result.state,
-  });
+  }));
 }));
 
 router.get('/git-api/oauth/:providerId/authorize/redirect', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
