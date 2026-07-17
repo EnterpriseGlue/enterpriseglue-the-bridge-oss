@@ -13,7 +13,9 @@ import {
 } from './service.js';
 import {
   DecisionDefinitionXmlSchema,
+  DecisionDefinitionListSchema,
   DecisionDefinitionQueryParams,
+  DecisionDefinitionSchema,
   DecisionEvaluationResultSchema,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
@@ -67,7 +69,7 @@ r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionActio
   const keys = req.authorizedRuntimeResourceKeys;
   const scopes = req.authorizedRuntimeResourceScopes;
   if (!keys) {
-    return res.json(await listDecisionDefinitions(engineId, req.query));
+    return res.json(DecisionDefinitionListSchema.parse(await listDecisionDefinitions(engineId, req.query)));
   }
 
   const requestedKey = typeof req.query.key === 'string' ? req.query.key : null;
@@ -78,7 +80,7 @@ r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionActio
     // Keep the local boundary authoritative if the engine ignores the query.
     return filterRuntimeItemsByResourceKey(definitions, [decisionDefinitionKey], 'key', scopes);
   }));
-  res.json(collections.flat());
+  res.json(DecisionDefinitionListSchema.parse(collections.flat()));
 }));
 
 // Get decision definition by ID
@@ -86,7 +88,7 @@ r.get('/mission-control-api/decision-definitions/:id', requireRuntimeDefinitionA
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinition(engineId, definitionId);
-  res.json(DecisionEvaluationResultSchema.parse(data));
+  res.json(DecisionDefinitionSchema.parse(data));
 }));
 
 // Get decision definition XML

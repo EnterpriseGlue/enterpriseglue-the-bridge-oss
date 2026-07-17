@@ -1,19 +1,9 @@
 import { apiClient } from '../../../../shared/api/client'
+import type { DecisionDefinition as SharedDecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
 export { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 
 // Types
-export type DecisionDefinition = {
-  id: string
-  key: string
-  name?: string | null
-  version: number
-  versionTag?: string | null
-  category?: string
-  decisionRequirementsDefinitionId?: string
-  decisionRequirementsDefinitionKey?: string
-  historyTimeToLive?: number
-  tenantId?: string
-}
+export type DecisionDefinition = SharedDecisionDefinition
 
 export type DecisionInstance = {
   id: string

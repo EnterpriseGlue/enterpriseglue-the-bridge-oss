@@ -14,7 +14,9 @@ export const DecisionDefinitionSchema = z.object({
   decisionRequirementsDefinitionKey: z.string().optional().nullable(),
   historyTimeToLive: z.number().optional().nullable(),
   versionTag: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const DecisionDefinitionListSchema = z.array(DecisionDefinitionSchema);
 
 export const DecisionDefinitionXmlSchema = z.object({
   id: z.string().optional(),
@@ -66,6 +68,7 @@ export const DecisionEvaluationResultSchema = z.array(z.record(z.string(), Decis
 
 // Types
 export type DecisionDefinition = z.infer<typeof DecisionDefinitionSchema>;
+export type DecisionDefinitionList = z.infer<typeof DecisionDefinitionListSchema>;
 export type DecisionDefinitionXml = z.infer<typeof DecisionDefinitionXmlSchema>;
 export type DecisionDefinitionQueryParams = z.infer<typeof DecisionDefinitionQueryParams>;
 export type EvaluateDecisionRequest = z.infer<typeof EvaluateDecisionRequest>;

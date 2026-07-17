@@ -13,6 +13,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import {
   listDecisionDefinitions,
   evaluateDecisionById,
+  fetchDecisionDefinition,
   fetchDecisionDefinitionXml,
 } from '../../../../../packages/backend-host/src/modules/mission-control/decisions/service.js';
 
@@ -145,18 +146,37 @@ describe('mission-control decisions routes', () => {
   });
 
   it('lists decision definitions', async () => {
+    vi.mocked(listDecisionDefinitions).mockResolvedValueOnce([
+      { id: 'd1', key: 'decision1', version: 1, engineExtension: { source: 'engine' } },
+    ] as any);
     const response = await request(app)
       .get('/mission-control-api/decision-definitions')
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([]);
+    expect(response.body).toEqual([
+      { id: 'd1', key: 'decision1', version: 1, engineExtension: { source: 'engine' } },
+    ]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
     expect(listDecisionDefinitions).toHaveBeenCalledWith('engine-1', {});
+  });
+
+  it('serializes decision definition detail through the shared response contract', async () => {
+    vi.mocked(fetchDecisionDefinition).mockResolvedValueOnce({
+      id: 'd1', key: 'decision1', version: 1, engineExtension: { source: 'engine' },
+    } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/decision-definitions/d1')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ id: 'd1', key: 'decision1', version: 1, engineExtension: { source: 'engine' } });
+    expect(fetchDecisionDefinition).toHaveBeenCalledWith('engine-1', 'd1');
   });
 
   it('serializes decision definition XML through the shared response contract', async () => {
@@ -216,8 +236,8 @@ describe('mission-control decisions routes', () => {
       { resourceKey: 'credit-decision' },
     ]);
     (listDecisionDefinitions as unknown as Mock).mockResolvedValue([
-      { id: 'credit:1', key: 'credit-decision' },
-      { id: 'fraud:1', key: 'fraud-decision' },
+      { id: 'credit:1', key: 'credit-decision', version: 1 },
+      { id: 'fraud:1', key: 'fraud-decision', version: 1 },
     ]);
 
     const response = await request(app)
@@ -226,7 +246,7 @@ describe('mission-control decisions routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
-      { id: 'credit:1', key: 'credit-decision' },
+      { id: 'credit:1', key: 'credit-decision', version: 1 },
     ]);
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'engine-1',
@@ -249,8 +269,8 @@ describe('mission-control decisions routes', () => {
         : [{ resourceKey: 'hr-eligibility' }]
     ));
     (listDecisionDefinitions as unknown as Mock).mockResolvedValue([
-      { id: 'payments:1', key: 'payments-risk' },
-      { id: 'hr:1', key: 'hr-eligibility' },
+      { id: 'payments:1', key: 'payments-risk', version: 1 },
+      { id: 'hr:1', key: 'hr-eligibility', version: 1 },
     ]);
 
     const [paymentsResponse, hrResponse] = await Promise.all([
@@ -259,9 +279,9 @@ describe('mission-control decisions routes', () => {
     ]);
 
     expect(paymentsResponse.status).toBe(200);
-    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-risk' }]);
+    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-risk', version: 1 }]);
     expect(hrResponse.status).toBe(200);
-    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-eligibility' }]);
+    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-eligibility', version: 1 }]);
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'central-engine', resourceKind: 'decision_definition', permission: 'engine:instance:view', userId: 'payments-user',
     }));

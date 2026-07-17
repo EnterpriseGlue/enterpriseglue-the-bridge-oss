@@ -101,6 +101,7 @@ const {
   MessageCorrelationResultsSchema,
   SignalEventSchema,
   DecisionDefinitionSchema,
+  DecisionDefinitionListSchema,
   DecisionDefinitionXmlSchema,
   DecisionDefinitionQueryParams,
   DecisionEvaluationResultSchema,
@@ -1497,7 +1498,8 @@ registry.registerPath({ method: 'post', path: '/mission-control-api/signals', ..
 
 // Decisions
 registry.register('DecisionDefinition', DecisionDefinitionSchema);
-registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions'), request: { query: DecisionDefinitionQueryParams.partial() }, responses: { 200: { description: 'List decision definitions', content: { 'application/json': { schema: z.array(DecisionDefinitionSchema) } } } } });
+registry.register('DecisionDefinitionList', DecisionDefinitionListSchema);
+registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions'), request: { query: DecisionDefinitionQueryParams.partial() }, responses: { 200: { description: 'List decision definitions', content: { 'application/json': { schema: DecisionDefinitionListSchema } } } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions/{id}', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Get decision definition', content: { 'application/json': { schema: DecisionDefinitionSchema } } }, 404: { description: 'Not found' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions/{id}/xml', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions/{id}/xml'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'DMN XML', content: { 'application/json': { schema: DecisionDefinitionXmlSchema } } } } });
 registry.register('DecisionEvaluationResult', DecisionEvaluationResultSchema);
