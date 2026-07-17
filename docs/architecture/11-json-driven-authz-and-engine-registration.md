@@ -2241,6 +2241,8 @@ This phase is required because the current implementation still carries compatib
 
 Dashboard context and statistics are also shared by their evaluator-backed routes, OpenAPI, and dashboard consumer rather than locally duplicated or documented as unknown.
 
+Both browser consumers of the coarse effective-permissions snapshot now parse the shared authorization schema before treating the response as a visibility input; malformed snapshots fail closed instead of becoming a second client-side authorization model.
+
 Git-backed project creation now shares a redacted project/repository response contract across its runtime serializer, OpenAPI route, and wizard; submitted Git tokens remain request-only.
 
 The evaluator-filtered process-instance collection now serializes one shared runtime contract, including suspended and incident states, action decisions, and safe adapter extensions; Dashboard and Mission Control list consumers no longer maintain separate instance shapes.

@@ -118,6 +118,7 @@ import type {
   SsoSyncEventsQuery as SharedSsoSyncEventsQuery,
   SsoSyncRunsQuery as SharedSsoSyncRunsQuery,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { CurrentUserPermissionsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { EngineMetadataReconciliationResult as SharedEngineMetadataReconciliationResult } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
 import type {
   ConfigBundleApplyReconciliation,
@@ -363,7 +364,7 @@ export const authzQueryKeys = {
 export function useCurrentUserPermissions() {
   return useQuery({
     queryKey: authzQueryKeys.myPermissions,
-    queryFn: () => apiClient.get<CurrentUserPermissions>('/api/authz/me/permissions'),
+    queryFn: async () => CurrentUserPermissionsSchema.parse(await apiClient.get<unknown>('/api/authz/me/permissions')),
   });
 }
 

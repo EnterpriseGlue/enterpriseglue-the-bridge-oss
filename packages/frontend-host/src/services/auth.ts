@@ -6,6 +6,7 @@
 
 import { apiClient } from '../shared/api/client';
 import { parseApiError, getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
+import { CurrentUserPermissionsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type {
   LoginRequest,
   LoginResponse,
@@ -93,9 +94,9 @@ class AuthService {
    * Get current user's effective RBAC permissions.
    */
   async getMyPermissions(): Promise<CurrentUserPermissions> {
-    return apiClient.get<CurrentUserPermissions>('/api/authz/me/permissions', undefined, {
+    return CurrentUserPermissionsSchema.parse(await apiClient.get<unknown>('/api/authz/me/permissions', undefined, {
       credentials: 'include',
-    });
+    }));
   }
 
   /**
