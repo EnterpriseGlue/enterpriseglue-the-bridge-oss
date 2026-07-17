@@ -253,7 +253,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireProcessInst
     const instanceId = String(req.params.id)
     const data = await getProcessInstanceVariables(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(ProcessInstanceDetailSchema.parse(redacted))
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load instance variables')
   }
@@ -265,7 +265,7 @@ r.get('/mission-control-api/process-instances/:id/history/activity-instances', r
     const instanceId = String(req.params.id)
     const data = await listProcessInstanceActivityHistory(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'processDetails')
-    res.json(z.array(ProcessInstanceDetailSchema).parse(redacted))
+    res.json(redacted)
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load activity instances history')
   }
