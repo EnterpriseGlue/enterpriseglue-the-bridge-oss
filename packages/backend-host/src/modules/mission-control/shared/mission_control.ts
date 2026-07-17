@@ -35,6 +35,7 @@ import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-d
 import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
+  ProcessInstanceIncidentListSchema,
   ProcessDefXmlSchema,
   PreviewCountResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
@@ -361,7 +362,7 @@ r.get('/mission-control-api/process-instances/:id/incidents', requireProcessInst
     const instanceId = String(req.params.id)
     const data = await listProcessInstanceIncidents(engineId, instanceId)
     const redacted = await piiRedactionService.redactPayload(req, data, 'errors')
-    res.json(redacted)
+    res.json(ProcessInstanceIncidentListSchema.parse(redacted))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load incidents')
   }

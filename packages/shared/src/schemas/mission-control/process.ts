@@ -67,6 +67,21 @@ export const ActivityInstanceSchema = z.object({
   endTime: z.string().nullable().optional(),
 });
 
+// Incidents are engine-native runtime rows. The common fields power the
+// instance-detail UI, while passthrough retains adapter-specific diagnostics.
+export const ProcessInstanceIncidentSchema = z.object({
+  id: z.string(),
+  incidentType: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  activityId: z.string().nullable().optional(),
+  configuration: z.string().nullable().optional(),
+  jobId: z.string().nullable().optional(),
+  incidentMessage: z.string().nullable().optional(),
+  incidentTimestamp: z.string().nullable().optional(),
+}).passthrough();
+
+export const ProcessInstanceIncidentListSchema = z.array(ProcessInstanceIncidentSchema);
+
 // Request schemas
 export const PreviewCountRequest = z.object({
   processDefinitionKey: z.string().optional(),
@@ -97,3 +112,5 @@ export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;
+export type ProcessInstanceIncident = z.infer<typeof ProcessInstanceIncidentSchema>;
+export type ProcessInstanceIncidentList = z.infer<typeof ProcessInstanceIncidentListSchema>;

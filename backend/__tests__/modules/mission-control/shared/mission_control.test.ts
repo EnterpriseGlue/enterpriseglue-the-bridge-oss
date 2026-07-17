@@ -313,7 +313,7 @@ describe('mission-control shared mission_control routes', () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
       context.resourceType === 'engine_runtime_resource' && context.resourceId === 'resource-payments'
     );
-    const incidents = [{ id: 'incident-1', incidentType: 'failedJob' }];
+    const incidents = [{ id: 'incident-1', incidentType: 'failedJob', engineExtension: { retryable: true } }];
     const { listProcessInstanceIncidents } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js');
     vi.mocked(listProcessInstanceIncidents).mockResolvedValueOnce(incidents as any);
 

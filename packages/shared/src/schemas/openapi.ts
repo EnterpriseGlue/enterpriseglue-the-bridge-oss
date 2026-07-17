@@ -57,6 +57,7 @@ const {
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceStartResponseSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
+  ProcessInstanceIncidentListSchema,
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
   MigrationActiveSourcesResponseSchema,
@@ -578,6 +579,7 @@ registry.register('MissionControlProcessDefinitionXml', MissionControlProcessDef
 registry.register('MissionControlProcessInstance', MissionControlProcessInstanceSchema);
 registry.register('MissionControlVariables', MissionControlVariablesSchema);
 registry.register('MissionControlActivityInstance', MissionControlActivityInstanceSchema);
+registry.register('MissionControlProcessInstanceIncidentList', ProcessInstanceIncidentListSchema);
 
 // GET /mission-control-api/process-definitions
 registry.registerPath({
@@ -795,7 +797,7 @@ registry.registerPath({
   ...authzExtension('engine.runtime.process-instances.incidents.read', 'GET', '/mission-control-api/process-instances/{id}/incidents'),
   request: { params: z.object({ id: z.string() }) },
   responses: {
-    200: { description: 'Incidents for an instance', content: { 'application/json': { schema: z.array(z.unknown()) } } },
+    200: { description: 'Incidents for an instance', content: { 'application/json': { schema: ProcessInstanceIncidentListSchema } } },
   },
 });
 

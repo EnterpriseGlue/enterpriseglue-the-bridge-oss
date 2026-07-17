@@ -2329,6 +2329,8 @@ Decision evaluation now uses its shared array of Camunda variable envelopes acro
 
 Historic decision input and output reads now share one passthrough IO model across redaction-aware runtime routes, OpenAPI, and both decision-detail surfaces, removing their duplicated frontend `DecisionIo` shape.
 
+Process-instance incidents now share one passthrough model across redaction-aware runtime serialization, OpenAPI, and Instance Detail. Standard incident fields remain typed while adapter-specific diagnostic fields are retained for compatibility.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.
