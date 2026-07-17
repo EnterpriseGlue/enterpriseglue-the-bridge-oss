@@ -52,6 +52,7 @@ const {
   SavedFilterCreateRequestSchema,
   SavedFilterUpdateRequestSchema,
   BatchSchema,
+  BatchOperationCreateResponseSchema,
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
@@ -1251,8 +1252,7 @@ registry.registerPath({
 // -----------------------------
 registry.register('Batch', BatchSchema)
 
-const CreateBatchResponse = z.object({ id: z.string(), camundaBatchId: z.string().optional(), type: z.string() })
-registry.register('CreateBatchResponse', CreateBatchResponse)
+registry.register('BatchOperationCreateResponse', BatchOperationCreateResponseSchema)
 
 const CreateDeleteBatchRequest = z.object({
   processInstanceIds: z.array(z.string()).optional(),
@@ -1292,7 +1292,7 @@ registry.registerPath({
   path: '/mission-control-api/batches/process-instances/delete',
   ...authzExtension('engine.runtime.batches.process-instances.delete', 'POST', '/mission-control-api/batches/process-instances/delete'),
   request: { body: { content: { 'application/json': { schema: CreateDeleteBatchRequest } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: CreateBatchResponse } } } },
+  responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
 // Create: suspend instances (async)
@@ -1301,7 +1301,7 @@ registry.registerPath({
   path: '/mission-control-api/batches/process-instances/suspend',
   ...authzExtension('engine.runtime.batches.process-instances.suspend', 'POST', '/mission-control-api/batches/process-instances/suspend'),
   request: { body: { content: { 'application/json': { schema: CreateSuspendActivateBatchRequest } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: CreateBatchResponse } } } },
+  responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
 // Create: activate instances (async)
@@ -1310,7 +1310,7 @@ registry.registerPath({
   path: '/mission-control-api/batches/process-instances/activate',
   ...authzExtension('engine.runtime.batches.process-instances.activate', 'POST', '/mission-control-api/batches/process-instances/activate'),
   request: { body: { content: { 'application/json': { schema: CreateSuspendActivateBatchRequest } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: CreateBatchResponse } } } },
+  responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
 // Create: set job retries (async)
@@ -1319,7 +1319,7 @@ registry.registerPath({
   path: '/mission-control-api/batches/jobs/retries',
   ...authzExtension('engine.runtime.batches.jobs.retry', 'POST', '/mission-control-api/batches/jobs/retries'),
   request: { body: { content: { 'application/json': { schema: CreateRetriesBatchRequest } } } },
-  responses: { 201: { description: 'Created', content: { 'application/json': { schema: CreateBatchResponse } } } },
+  responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
 // List batches

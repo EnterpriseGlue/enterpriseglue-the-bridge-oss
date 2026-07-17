@@ -58,5 +58,17 @@ export const BatchInsertSchema = z.object({
   updatedAt: z.number().optional(),
 });
 
+export const BatchOperationCreateResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.enum([
+    'DELETE_INSTANCES',
+    'SUSPEND_INSTANCES',
+    'ACTIVATE_INSTANCES',
+    'SET_JOB_RETRIES',
+  ]),
+}).strict();
+
 // Types
 export type Batch = z.infer<typeof BatchSchema>;
+export type BatchOperationCreateResponse = z.infer<typeof BatchOperationCreateResponseSchema>;

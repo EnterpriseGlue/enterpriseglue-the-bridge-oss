@@ -19,6 +19,7 @@ import { markBatchPollerViewer } from '../../../poller/batchPoller.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Batch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Batch.js'
+import { BatchOperationCreateResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
 const r = Router()
@@ -121,7 +122,7 @@ r.post('/mission-control-api/batches/process-instances/delete', requireRuntimePr
   const engineId = (req as any).engineId as string
   const engineDto: any = await deleteProcessInstancesBatch(engineId, stripLocalAuditFields(body))
   const { id } = await insertLocalBatch('DELETE_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
-  res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' })
+  res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' }))
 }))
 
 r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
@@ -130,7 +131,7 @@ r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeP
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, engineBody)
   const { id } = await insertLocalBatch('SUSPEND_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
-  res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' })
+  res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' }))
 }))
 
 r.post('/mission-control-api/batches/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.activate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
@@ -138,7 +139,7 @@ r.post('/mission-control-api/batches/process-instances/activate', requireRuntime
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, stripLocalAuditFields(body))
   const { id } = await insertLocalBatch('ACTIVATE_INSTANCES', engineDto?.id, body, engineDto, engineId, req.authorizedRuntimeResourceKeys)
-  res.status(201).json({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' })
+  res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' }))
 }))
 
 r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.jobs.retry', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
@@ -160,7 +161,7 @@ r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanc
     logger.error('[BATCH RETRY] Background processing failed:', err)
   })
 
-  res.status(201).json({ id, type: 'SET_JOB_RETRIES' })
+  res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, type: 'SET_JOB_RETRIES' }))
 }))
 
 r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
