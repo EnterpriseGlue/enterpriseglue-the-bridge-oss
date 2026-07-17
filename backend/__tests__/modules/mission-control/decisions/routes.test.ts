@@ -13,6 +13,7 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 import {
   listDecisionDefinitions,
   evaluateDecisionById,
+  evaluateDecisionByKey,
   fetchDecisionDefinition,
   fetchDecisionDefinitionXml,
 } from '../../../../../packages/backend-host/src/modules/mission-control/decisions/service.js';
@@ -201,6 +202,18 @@ describe('mission-control decisions routes', () => {
       resourceId: 'engine-1',
     }));
     expect(evaluateDecisionById).toHaveBeenCalledWith('engine-1', 'd1', {
+      variables: { amount: { value: 10, type: 'Integer' } },
+    });
+  });
+
+  it('validates decision evaluation by key through the shared response contract', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/decision-definitions/key/decision1/evaluate')
+      .send({ engineId: 'engine-1', variables: { amount: { value: 10, type: 'Integer' } } });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ result: { value: 'approved', type: 'String' } }]);
+    expect(evaluateDecisionByKey).toHaveBeenCalledWith('engine-1', 'decision1', {
       variables: { amount: { value: 10, type: 'Integer' } },
     });
   });

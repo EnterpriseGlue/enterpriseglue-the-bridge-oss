@@ -2281,6 +2281,8 @@ External-task fetch-and-lock and collection reads now use the shared passthrough
 
 Process-definition XML and activity-statistics reads now validate their shared XML and activity-count contracts, and the statistics OpenAPI response no longer uses `unknown`.
 
+Decision evaluation by key now validates the same shared result schema as evaluation by decision id, so both authorization-scoped routes preserve typed variable results consistently.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

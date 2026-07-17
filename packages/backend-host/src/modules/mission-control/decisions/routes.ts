@@ -118,7 +118,7 @@ r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireRun
   const engineId = (req as any).engineId as string;
   const definitionKey = String(req.params.key);
   const data = await evaluateDecisionByKey(engineId, definitionKey, req.body);
-  res.json(data);
+  res.json(DecisionEvaluationResultSchema.parse(data));
 }));
 
 export default r;
