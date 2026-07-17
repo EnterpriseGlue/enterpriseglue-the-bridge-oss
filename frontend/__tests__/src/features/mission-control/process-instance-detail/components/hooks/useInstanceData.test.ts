@@ -28,7 +28,6 @@ vi.mock('@src/features/mission-control/process-instance-detail/api/processInstan
   fetchProcessDefinitionXml: vi.fn(),
   getHistoricalProcessInstance: vi.fn(),
   getHistoricalVariableInstances: vi.fn(),
-  getCalledProcessInstances: vi.fn(),
   listProcessDefinitions: vi.fn(),
 }));
 

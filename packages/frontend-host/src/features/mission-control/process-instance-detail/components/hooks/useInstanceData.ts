@@ -14,7 +14,6 @@ import {
   fetchProcessDefinitionXml,
   getHistoricalProcessInstance,
   getHistoricalVariableInstances,
-  getCalledProcessInstances,
   listProcessDefinitions,
 } from '../../api/processInstances'
 
@@ -252,13 +251,6 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
     return set
   }, [activityIdToInstances, incidentActivityIds])
 
-  // Called process instances - disabled as endpoint doesn't exist yet
-  const calledQ = useQuery({
-    queryKey: ['mission-control', 'called', instanceId],
-    queryFn: () => getCalledProcessInstances(instanceId, selectedEngineId),
-    enabled: false,
-  })
-
   // Parent process instance ID
   const parentId = histQ.data?.superProcessInstanceId || null
 
@@ -278,7 +270,6 @@ export function useInstanceData(instanceId: string, options: UseInstanceDataOpti
     incidentsQ,
     retryJobsQ,
     retryExtTasksQ,
-    calledQ,
 
     // Derived data
     defId,

@@ -10,7 +10,6 @@ import {
   getProcessInstanceExternalTasks,
   getHistoricalProcessInstance,
   getHistoricalVariableInstances,
-  getCalledProcessInstances,
   listProcessDefinitions,
   type ProcessInstanceDetail,
 } from '@src/features/mission-control/process-instance-detail/api/processInstances';
@@ -279,28 +278,6 @@ describe('processInstances API', () => {
         { credentials: 'include' }
       );
       expect(result).toEqual(mockVariables);
-    });
-  });
-
-  describe('getCalledProcessInstances', () => {
-    it('gets called process instances', async () => {
-      const mockCalled = [
-        {
-          id: 'pi2',
-          processDefinitionKey: 'subProcess',
-          callActivityId: 'callActivity1',
-        },
-      ];
-      vi.mocked(apiClient.get).mockResolvedValue(mockCalled);
-
-      const result = await getCalledProcessInstances('pi1');
-
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/process-instances/pi1/called-process-instances',
-        undefined,
-        { credentials: 'include' }
-      );
-      expect(result).toEqual(mockCalled);
     });
   });
 

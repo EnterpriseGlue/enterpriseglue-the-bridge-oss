@@ -2257,6 +2257,8 @@ Runtime process variables now share one passthrough value contract at both activ
 
 Process Overview's secondary Instance Detail and retry client now imports the same shared variable, activity-history, job, and external-task contracts rather than fetching those authorization-scoped responses as `unknown`; its modal boundary is typed by the same response shapes.
 
+The permanently disabled Instance Detail `called-process-instances` client was removed: no backend route or OpenAPI action exists for it, while the existing authorized activity-history response supplies call-instance navigation. This eliminates an unreferenced `unknown` request rather than adding a misleading authorization surface.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

@@ -84,10 +84,6 @@ export async function getHistoricalVariableInstances(instanceId: string, engineI
   return apiClient.get<HistoricVariableInstance[]>(withEngineId(`/mission-control-api/history/variable-instances?processInstanceId=${encodeURIComponent(instanceId)}`, engineId), undefined, { credentials: 'include' })
 }
 
-export async function getCalledProcessInstances(instanceId: string, engineId?: string): Promise<unknown[]> {
-  return apiClient.get<unknown[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/called-process-instances`, engineId), undefined, { credentials: 'include' })
-}
-
 export async function listProcessDefinitions(engineId?: string): Promise<ProcessDefinition[]> {
   const params = new URLSearchParams()
   if (engineId) params.set('engineId', engineId)
