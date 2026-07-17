@@ -107,10 +107,10 @@ This matrix lists current executable settings; see [Deploy Authorization Configu
 | EG_CONFIG_EXPECTED_SHA256 | No | unset | Optional SHA-256 of the mounted payload |
 | EG_CONFIG_EXPECTED_TENANT_SCOPE | No | unset | Expected `platform` or tenant scope; required for bootstrap apply |
 | EG_CONFIG_FAIL_CLOSED | No | true in production | Stop startup after a configured bootstrap failure |
-| EG_CONFIG_REQUIRE_SECRET_PREFLIGHT | No | false | Require referenced `env://` or `file://` secrets to be available before configured bootstrap validation or apply |
+| EG_CONFIG_REQUIRE_SECRET_PREFLIGHT | No | false | Require referenced `env://`, `file://`, or `docker://` secrets to be available before configured bootstrap validation or apply |
 | EG_CONFIG_MAX_BYTES | No | 1048576 | Maximum mounted payload size in bytes |
-| EG_CONFIG_SECRET_PROVIDER | No | env | `env` or `file` secret-reference provider |
-| EG_CONFIG_SECRET_FILE_ROOT | No | unset | Required allowed root for `file://` secret references |
+| EG_CONFIG_SECRET_PROVIDER | No | env | `env`, `file`, or `docker` secret-reference provider |
+| EG_CONFIG_SECRET_FILE_ROOT | No | unset | Required allowed root for `file://`; optional Docker secret mount root (defaults to `/run/secrets`) |
 
 SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Settings → SSO**
 using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not

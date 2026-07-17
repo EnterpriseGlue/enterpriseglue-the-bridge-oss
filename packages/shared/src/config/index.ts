@@ -138,7 +138,7 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   configFailClosed: z.boolean().default(false),
   configRequireSecretPreflight: z.boolean().default(false),
   configMaxBytes: z.number().int().positive().max(10 * 1024 * 1024).default(1024 * 1024),
-  configSecretProvider: z.enum(['env', 'file']).default('env'),
+  configSecretProvider: z.enum(['env', 'file', 'docker']).default('env'),
   configSecretFileRoot: z.string().min(1).optional(),
 
   // Environment

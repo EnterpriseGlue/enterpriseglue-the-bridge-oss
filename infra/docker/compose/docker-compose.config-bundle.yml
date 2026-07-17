@@ -7,7 +7,7 @@ services:
       EG_CONFIG_BUNDLE_PATH: /etc/enterpriseglue/config/bundle.json
       EG_CONFIG_REQUIRE_SECRET_PREFLIGHT: ${EG_CONFIG_REQUIRE_SECRET_PREFLIGHT:-false}
       EG_CONFIG_SECRET_PROVIDER: ${EG_CONFIG_SECRET_PROVIDER:-env}
-      EG_CONFIG_SECRET_FILE_ROOT: /var/run/secrets/enterpriseglue
+      EG_CONFIG_SECRET_FILE_ROOT: ${EG_CONFIG_SECRET_FILE_ROOT:-/var/run/secrets/enterpriseglue}
     volumes:
       - "${EG_CONFIG_BUNDLE_HOST_PATH:?set-an-absolute-or-repository-relative-bundle-file}:/etc/enterpriseglue/config/bundle.json:ro"
       # Reserved for file-backed secret references. Keep it separate from the

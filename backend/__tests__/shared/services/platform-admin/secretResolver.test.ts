@@ -78,4 +78,23 @@ describe('SecretResolver', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('resolves bounded Docker secret names only from the configured mount root', () => {
+    const root = mkdtempSync(join(tmpdir(), 'enterpriseglue-docker-secret-root-'));
+    const secretPath = join(root, 'oidc-client-secret');
+    writeFileSync(secretPath, 'docker-secret');
+    const resolver = new SecretResolver(() => ({ provider: 'docker', fileRoot: root }));
+    const fileResolver = new SecretResolver(() => ({ provider: 'file', fileRoot: root }));
+    try {
+      expect(resolver.checkExternalReference('docker://oidc-client-secret')).toEqual({ available: true });
+      expect(resolver.resolveStored('ref:docker://oidc-client-secret')).toBe('docker-secret');
+      expect(resolver.checkExternalReference('docker://../outside')).toEqual({ available: false, reason: 'docker_secret_invalid_name' });
+      expect(resolver.checkExternalReference('docker://missing')).toEqual({ available: false, reason: 'docker_secret_unavailable' });
+      expect(fileResolver.checkExternalReference('docker://oidc-client-secret')).toEqual({ available: false, reason: 'docker_secret_provider_not_configured' });
+      expect(() => resolver.resolveStored('ref:docker://../outside')).toThrow('docker://<secret-name>');
+      expect(() => fileResolver.resolveStored('ref:docker://oidc-client-secret')).toThrow('EG_CONFIG_SECRET_PROVIDER=docker');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

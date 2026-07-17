@@ -4,6 +4,7 @@ import {
   ConfigBundleApplyRunSchema,
   ConfigBundleIdentityReplayTaskSchema,
   ConfigBundleRuntimeReconciliationTaskSchema,
+  ConfigBundleSecretReferenceStatusSchema,
   ConfigEnginesFileSchema,
   ConfigIdentityProvidersFileSchema,
   ConfigProjectEngineTargetsFileSchema,
@@ -16,6 +17,15 @@ import {
 } from '@enterpriseglue/shared/services/platform-admin/config-bundle-hash.js';
 
 describe('EnterpriseGlue configuration bundle contracts', () => {
+  it('documents sanitized Docker secret preflight failures without accepting secret bytes', () => {
+    expect(ConfigBundleSecretReferenceStatusSchema.parse({
+      reference: 'docker://oidc-client-secret',
+      locations: ['./identity-providers.json.identityProviders.0.oidc.clientSecretRef'],
+      available: false,
+      reason: 'docker_secret_unavailable',
+    })).toMatchObject({ reference: 'docker://oidc-client-secret', reason: 'docker_secret_unavailable' });
+  });
+
   it('accepts a deterministic production manifest with only declared imports', () => {
     const result = EnterpriseGlueConfigBundleSchema.parse({
       apiVersion: 'enterpriseglue.ai/v1alpha1',

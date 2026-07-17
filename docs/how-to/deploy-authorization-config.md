@@ -58,8 +58,8 @@ Do not make automatic startup apply the default. Existing standalone installatio
 | `EG_CONFIG_EXPECTED_TENANT_SCOPE` | `platform` or tenant id | Required target scope for bootstrap apply |
 | `EG_CONFIG_FAIL_CLOSED` | `true`, `false` | Keep readiness false when configured bootstrap validation/apply fails; production default `true` |
 | `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT` | `true`, `false` | Require all bundle secret references to be available before configured startup validation or apply; default `false` |
-| `EG_CONFIG_SECRET_PROVIDER` | `env`, `file`, provider extension id | Resolve secret references without placing secret values in bundles |
-| `EG_CONFIG_SECRET_FILE_ROOT` | Absolute directory | Allowed root for file-based secret references |
+| `EG_CONFIG_SECRET_PROVIDER` | `env`, `file`, `docker` | Resolve secret references without placing secret values in bundles |
+| `EG_CONFIG_SECRET_FILE_ROOT` | Absolute directory | Required allowed root for `file://`; optional `docker://` mount root (defaults to `/run/secrets`) |
 | `EG_CONFIG_MAX_BYTES` | Positive integer | Bundle upload/read size limit |
 
 Names are target contracts and must be added to shared configuration validation, backend `.env.example`, Docker/OpenShift templates, configuration reference, and configuration matrix together.
@@ -320,12 +320,13 @@ Bundles contain references only. Supported initial reference forms should be nar
 ```text
 env://OIDC_CLIENT_SECRET
 file:///var/run/secrets/enterpriseglue/oidc-client-secret
+docker://oidc-client-secret
 ```
 
-`env://NAME` references remain environment-backed. File-backed references use `file://` only when `EG_CONFIG_SECRET_PROVIDER=file` and `EG_CONFIG_SECRET_FILE_ROOT` are configured; paths outside that root are rejected. External secret-manager adapters can be extensions. All resolution goes through the shared `SecretResolver` and returns redacted diagnostics.
+`env://NAME` references remain environment-backed. File-backed references use `file://` only when `EG_CONFIG_SECRET_PROVIDER=file` and `EG_CONFIG_SECRET_FILE_ROOT` are configured; paths outside that root are rejected. Docker references use the bounded `docker://<secret-name>` form only when `EG_CONFIG_SECRET_PROVIDER=docker`; they resolve only to a direct file under `/run/secrets` (or the configured mount root), so paths, URLs, and traversal are rejected. Kubernetes/OpenShift projected secrets continue to use `file://` with their explicit projected-secret root. External secret-manager adapters, including Vault, remain extensions. All resolution goes through the shared `SecretResolver` and returns redacted diagnostics.
 
 Set `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT=true` when a configured bootstrap must
-prove that every referenced `env://` or `file://` secret is available before it
+prove that every referenced `env://`, `file://`, or `docker://` secret is available before it
 is considered valid. This is opt-in so existing standalone deployments and
 validation-only bundle workflows keep their current behavior. For `apply`, the
 service binds the write to the same status-only availability hash so a secret
@@ -349,6 +350,29 @@ services:
     volumes:
       - ${EG_CONFIG_SECRETS_HOST_PATH:?set-a-private-secret-directory}:/var/run/secrets/enterpriseglue:ro
 ```
+
+For a Compose-managed Docker secret, mount the secret at the exact name used by
+the reference. Keep the source name separate from the mount target so a bundle
+can remain stable across environments:
+
+```yaml
+services:
+  backend:
+    environment:
+      EG_CONFIG_SECRET_PROVIDER: docker
+      EG_CONFIG_SECRET_FILE_ROOT: /run/secrets
+    secrets:
+      - source: oidc_client_secret_source
+        target: oidc-client-secret
+        mode: 0444
+secrets:
+  oidc_client_secret_source:
+    file: ./private/oidc-client-secret
+```
+
+The matching bundle field is `"clientSecretRef": "docker://oidc-client-secret"`.
+`docker://` accepts one portable secret-name segment only; it cannot refer to a
+host path or another URL.
 
 The bundle would refer to a file without including its value:
 

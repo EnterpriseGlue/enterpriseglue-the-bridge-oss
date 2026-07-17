@@ -122,6 +122,9 @@ export const ConfigBundleSecretReferenceStatusSchema = z.object({
     'file_provider_not_configured',
     'file_outside_root',
     'file_unavailable',
+    'docker_secret_provider_not_configured',
+    'docker_secret_invalid_name',
+    'docker_secret_unavailable',
     'environment_variable_missing',
   ]).optional(),
 });

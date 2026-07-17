@@ -35,6 +35,7 @@ test('the optional bundle overlay is read-only and never combines config with se
   const overlay = read('infra/docker/compose/docker-compose.config-bundle.yml');
 
   assert.match(overlay, /EG_CONFIG_BUNDLE_PATH: \/etc\/enterpriseglue\/config\/bundle\.json/);
+  assert.match(overlay, /EG_CONFIG_SECRET_FILE_ROOT: \$\{EG_CONFIG_SECRET_FILE_ROOT:-\/var\/run\/secrets\/enterpriseglue\}/);
   assert.match(overlay, /EG_CONFIG_BUNDLE_HOST_PATH[^\n]*:\/etc\/enterpriseglue\/config\/bundle\.json:ro/);
   assert.match(overlay, /EG_CONFIG_SECRETS_HOST_PATH[^\n]*:\/var\/run\/secrets\/enterpriseglue:ro/);
   assert.doesNotMatch(overlay, /EG_CONFIG_BUNDLE_HOST_PATH[^\n]*var\/run\/secrets/);
