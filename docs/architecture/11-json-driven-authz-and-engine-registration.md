@@ -2249,6 +2249,8 @@ The engine-scoped project import preview now shares its request and metadata-onl
 
 Project creation now shares its import-aware request and established 200 response contract across its backend validator/serializer, OpenAPI, and both local and Git-backed wizard paths, so enabled imports require an engine consistently.
 
+Governance user search now serializes its existing safe shared result contract and is consumed by Platform Admin, Engine Members, and Project Detail; focused coverage proves unselected ORM fields cannot leak through that result.
+
 The generic tenant invitation flow now likewise has one shared request, readiness, reveal-once response, token, public-status, OTP/redeem, and onboarding contract. Its backend validator/response serializer, OpenAPI operations, `InviteMemberModal`, and `AcceptInvite` all consume that contract, while onboarding completion reuses the shared authenticated login response contract, so SSO/email readiness and manual invite fields cannot silently drift. The public token-status, OTP, and redemption routes are explicitly classified as high-risk opaque-token exemptions with rate-limit and single-use rationale rather than being omitted from authorization inventory.
 
 Platform branding now has shared administrator, public-login, and bounded-update contracts. The settings route, public branding serializer, OpenAPI, branding service, administrator tab, login, invitation acceptance, and authenticated layout import those contracts; the public form adds only the safe SSO auto-redirect flag. This removes four independently maintained frontend response shapes while keeping the public and settings boundaries explicit.

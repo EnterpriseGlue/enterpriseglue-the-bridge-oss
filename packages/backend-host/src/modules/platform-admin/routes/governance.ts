@@ -17,6 +17,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { addCaseInsensitiveLike } from '@enterpriseglue/shared/infrastructure/persistence/adapters/index.js';
 import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { UserSearchResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
 
 const router = Router();
 
@@ -60,7 +61,7 @@ router.get('/users/search', apiLimiter, requirePermission({ permission: Platform
 
     const result = await qb.getMany();
 
-    res.json(result);
+    res.json(z.array(UserSearchResultSchema).parse(result));
   } catch (error) {
     logger.error('Search users error:', error);
     throw Errors.internal('Failed to search users');

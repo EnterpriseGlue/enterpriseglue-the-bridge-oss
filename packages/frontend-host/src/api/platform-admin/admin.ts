@@ -21,6 +21,7 @@ import type {
   GovernanceEngineSummary,
   GovernanceProjectSummary,
   UserListItem,
+  UserSearchResult,
 } from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
 import type {
   GitProviderAdminSummary,
@@ -37,6 +38,7 @@ export type {
   PlatformSettings,
   ProjectEngineTargetPolicyMode,
   UserListItem,
+  UserSearchResult,
 };
 
 // Types
@@ -75,7 +77,7 @@ export const platformAdminApi = {
     apiClient.get<UserListItem[]>('/api/users', params),
 
   searchUsers: (query: string) =>
-    apiClient.get<UserListItem[]>('/api/admin/users/search', { q: query }),
+    apiClient.get<UserSearchResult[]>('/api/admin/users/search', { q: query }),
 
   // Governance - Projects
   getProjectsForGovernance: (params?: { search?: string }) =>

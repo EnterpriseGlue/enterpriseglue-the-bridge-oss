@@ -7,6 +7,7 @@ import type {
   ProjectPendingInviteStatus as SharedProjectPendingInviteStatus,
   ProjectRole as SharedProjectRole,
 } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
+import type { UserSearchResult } from '@enterpriseglue/shared/schemas/platform-admin/admin.js'
 export type FileItem = { 
   id: string
   name: string
@@ -18,12 +19,7 @@ export type FileItem = {
 
 export type Project = { id: string; name: string; filesCount?: number; foldersCount?: number }
 
-export type UserSearchItem = {
-  id: string
-  email: string
-  firstName?: string | null
-  lastName?: string | null
-}
+export type UserSearchItem = UserSearchResult
 
 export type FolderSummary = { 
   id: string

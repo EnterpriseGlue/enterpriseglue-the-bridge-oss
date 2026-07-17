@@ -63,13 +63,14 @@ import type {
   RoleAssignment as SharedRoleAssignment,
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import type { UserSearchResult } from '@enterpriseglue/shared/schemas/platform-admin/admin.js'
 
 // Types
 type EngineRole = Exclude<SharedEngineRole, 'custom'>
 
 type EngineMember = SharedEngineMember
 
-type UserSearchItem = { id: string; email: string; firstName?: string | null; lastName?: string | null }
+type UserSearchItem = UserSearchResult
 type PendingEngineInvite = SharedPendingEngineInvite
 type PendingEngineInviteStatus = PendingEngineInvite['status']
 type MemberModalFlow = 'invite' | 'delegate'

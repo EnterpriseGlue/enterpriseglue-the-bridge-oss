@@ -12,6 +12,10 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
   logAudit: vi.fn(),
 }));
 
+vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
+  requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   policyService: {
     listPolicies: vi.fn().mockResolvedValue([]),
@@ -40,7 +44,27 @@ describe('platform-admin governance routes', () => {
     });
   });
 
-  it('placeholder test for governance routes', () => {
-    expect(true).toBe(true);
+  it('serializes governance user-search results through the shared safe schema', async () => {
+    const qb = {
+      select: vi.fn().mockReturnThis(),
+      take: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{
+        id: 'user-1', email: 'owner@example.test', firstName: 'Owner', lastName: null,
+        passwordHash: 'must-not-leak',
+      }]),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ createQueryBuilder: vi.fn().mockReturnValue(qb) }),
+    });
+
+    const response = await request(app).get('/users/search').query({ q: 'owner' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{
+      id: 'user-1', email: 'owner@example.test', firstName: 'Owner', lastName: null,
+    }]);
+    expect(response.body[0]).not.toHaveProperty('passwordHash');
   });
 });
