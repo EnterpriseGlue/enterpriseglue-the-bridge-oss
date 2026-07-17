@@ -2319,6 +2319,8 @@ Async process-definition modification and restart operations now likewise serial
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.
 
+The live Process Overview bulk-operation client imports that same receipt rather than returning `unknown`; older unreferenced compatibility helpers remain isolated until their legacy routes are reconciled.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

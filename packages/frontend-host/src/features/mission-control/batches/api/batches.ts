@@ -1,4 +1,5 @@
 import { apiClient } from '../../../../shared/api/client'
+import type { BatchOperationCreateResponse } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 
 // Types
 export type Batch = {
@@ -88,12 +89,12 @@ export async function createRetriesBatch(params: CreateBatchParams & { retries: 
 }
 
 // Bulk operations on process instances
-export async function createBulkRetryBatch(processInstanceIds: string[], engineId?: string, auditReason?: string): Promise<unknown> {
-  return apiClient.post<unknown>('/mission-control-api/batches/jobs/retries', { processInstanceIds, engineId, auditReason }, { credentials: 'include' })
+export async function createBulkRetryBatch(processInstanceIds: string[], engineId?: string, auditReason?: string): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/jobs/retries', { processInstanceIds, engineId, auditReason }, { credentials: 'include' })
 }
 
-export async function createBulkDeleteBatch(processInstanceIds: string[], deleteReason?: string, engineId?: string): Promise<unknown> {
-  return apiClient.post<unknown>('/mission-control-api/batches/process-instances/delete', {
+export async function createBulkDeleteBatch(processInstanceIds: string[], deleteReason?: string, engineId?: string): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/process-instances/delete', {
     processInstanceIds,
     deleteReason: deleteReason || 'Canceled via Mission Control',
     auditReason: deleteReason || 'Canceled via Mission Control',
@@ -103,10 +104,10 @@ export async function createBulkDeleteBatch(processInstanceIds: string[], delete
   }, { credentials: 'include' })
 }
 
-export async function createBulkSuspendBatch(processInstanceIds: string[], engineId?: string, auditReason?: string): Promise<unknown> {
-  return apiClient.post<unknown>('/mission-control-api/batches/process-instances/suspend', { processInstanceIds, engineId, auditReason }, { credentials: 'include' })
+export async function createBulkSuspendBatch(processInstanceIds: string[], engineId?: string, auditReason?: string): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/process-instances/suspend', { processInstanceIds, engineId, auditReason }, { credentials: 'include' })
 }
 
-export async function createBulkActivateBatch(processInstanceIds: string[], engineId?: string, auditReason?: string): Promise<unknown> {
-  return apiClient.post<unknown>('/mission-control-api/batches/process-instances/activate', { processInstanceIds, engineId, auditReason }, { credentials: 'include' })
+export async function createBulkActivateBatch(processInstanceIds: string[], engineId?: string, auditReason?: string): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/process-instances/activate', { processInstanceIds, engineId, auditReason }, { credentials: 'include' })
 }

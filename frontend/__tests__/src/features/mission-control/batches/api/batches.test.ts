@@ -17,6 +17,7 @@ import {
   type Batch,
   type BatchStatistics,
 } from '@src/features/mission-control/batches/api/batches';
+import type { BatchOperationCreateResponse } from '@enterpriseglue/shared/schemas/mission-control/batch.js';
 import { apiClient } from '@src/shared/api/client';
 
 vi.mock('@src/shared/api/client', () => ({
@@ -262,7 +263,8 @@ describe('batches API', () => {
 
   describe('createBulkRetryBatch', () => {
     it('creates bulk retry batch', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ success: true });
+      const receipt: BatchOperationCreateResponse = { id: 'batch-1', type: 'SET_JOB_RETRIES' };
+      vi.mocked(apiClient.post).mockResolvedValue(receipt);
 
       const result = await createBulkRetryBatch(['i1', 'i2', 'i3']);
 
@@ -271,13 +273,14 @@ describe('batches API', () => {
         { processInstanceIds: ['i1', 'i2', 'i3'] },
         { credentials: 'include' }
       );
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual(receipt);
     });
   });
 
   describe('createBulkDeleteBatch', () => {
     it('creates bulk delete batch with custom reason', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ success: true });
+      const receipt: BatchOperationCreateResponse = { id: 'batch-1', camundaBatchId: 'engine-batch-1', type: 'DELETE_INSTANCES' };
+      vi.mocked(apiClient.post).mockResolvedValue(receipt);
 
       const result = await createBulkDeleteBatch(['i1', 'i2'], 'Custom reason');
 
@@ -293,11 +296,11 @@ describe('batches API', () => {
 	        },
 	        { credentials: 'include' }
 	      );
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual(receipt);
     });
 
     it('creates bulk delete batch with default reason', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ success: true });
+      vi.mocked(apiClient.post).mockResolvedValue({ id: 'batch-1', type: 'DELETE_INSTANCES' } satisfies BatchOperationCreateResponse);
 
       await createBulkDeleteBatch(['i1']);
 
@@ -318,7 +321,8 @@ describe('batches API', () => {
 
   describe('createBulkSuspendBatch', () => {
     it('creates bulk suspend batch', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ success: true });
+      const receipt: BatchOperationCreateResponse = { id: 'batch-1', type: 'SUSPEND_INSTANCES' };
+      vi.mocked(apiClient.post).mockResolvedValue(receipt);
 
       const result = await createBulkSuspendBatch(['i1', 'i2']);
 
@@ -327,13 +331,14 @@ describe('batches API', () => {
         { processInstanceIds: ['i1', 'i2'] },
         { credentials: 'include' }
       );
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual(receipt);
     });
   });
 
   describe('createBulkActivateBatch', () => {
     it('creates bulk activate batch', async () => {
-      vi.mocked(apiClient.post).mockResolvedValue({ success: true });
+      const receipt: BatchOperationCreateResponse = { id: 'batch-1', type: 'ACTIVATE_INSTANCES' };
+      vi.mocked(apiClient.post).mockResolvedValue(receipt);
 
       const result = await createBulkActivateBatch(['i1', 'i2', 'i3']);
 
@@ -342,7 +347,7 @@ describe('batches API', () => {
         { processInstanceIds: ['i1', 'i2', 'i3'] },
         { credentials: 'include' }
       );
-      expect(result).toEqual({ success: true });
+      expect(result).toEqual(receipt);
     });
   });
 });
