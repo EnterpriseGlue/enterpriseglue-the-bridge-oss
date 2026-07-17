@@ -186,6 +186,8 @@ const {
   CreateOnlineProjectResponseSchema,
   CheckRepositoryExistsRequestSchema,
   CheckRepositoryExistsResponseSchema,
+  RepositoryInfoRequestSchema,
+  RepositoryInfoResponseSchema,
 } = await import('@enterpriseglue/shared/schemas/git/index.js');
 
 const registry = new OpenAPIRegistry();
@@ -3597,7 +3599,7 @@ registry.registerPath({ method: 'post', path: '/git-api/clone', ...authzExtensio
 registry.register('CreateOnlineProjectResponse', CreateOnlineProjectResponseSchema);
 registry.registerPath({ method: 'post', path: '/git-api/create-online', ...authzExtension('project.create.git.create', 'POST', '/git-api/create-online'), request: { body: { content: { 'application/json': { schema: CreateOnlineProjectRequestSchema } } } }, responses: { 201: { description: 'Online repo created without submitted credentials', content: { 'application/json': { schema: CreateOnlineProjectResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/git-api/check-repo-exists', ...authzExtension('project.create.git.inspect', 'POST', '/git-api/check-repo-exists'), request: { body: { content: { 'application/json': { schema: CheckRepositoryExistsRequestSchema } } } }, responses: { 200: { description: 'Check result', content: { 'application/json': { schema: CheckRepositoryExistsResponseSchema } } } } });
-registry.registerPath({ method: 'post', path: '/git-api/repo-info', ...authzExtension('project.create.git.inspect', 'POST', '/git-api/repo-info'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Repository info', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'post', path: '/git-api/repo-info', ...authzExtension('project.create.git.inspect', 'POST', '/git-api/repo-info'), request: { body: { content: { 'application/json': { schema: RepositoryInfoRequestSchema } } } }, responses: { 200: { description: 'Repository info', content: { 'application/json': { schema: RepositoryInfoResponseSchema } } } } });
 
 // Git deployments
 registry.registerPath({ method: 'get', path: '/git-api/deployments', ...authzExtension('project.deployments.read', 'GET', '/git-api/deployments'), request: { query: z.object({ projectId: z.string().optional() }).passthrough() }, responses: { 200: { description: 'List git deployments', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });

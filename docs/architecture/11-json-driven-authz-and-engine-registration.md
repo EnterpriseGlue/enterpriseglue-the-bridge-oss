@@ -2433,6 +2433,8 @@ Online Git-project creation now shares its request and response contracts across
 
 The Git repository-existence check now likewise shares its compatibility request, redacted result, route validation, and OpenAPI contract. It retains the stored-credential fallback and accepts the existing request token without ever returning it.
 
+The existing Git repository-inspection endpoint now also shares exact branch metadata schemas across backend validation and serialization, OpenAPI, and the typed Git client.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.
