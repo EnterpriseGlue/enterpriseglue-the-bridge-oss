@@ -19,7 +19,7 @@ import { markBatchPollerViewer } from '../../../poller/batchPoller.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Batch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Batch.js'
-import { BatchDetailSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
+import { BatchDetailSchema, BatchRuntimeActionDecisionsSchema, BatchSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 import { BatchOperationCreateResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
@@ -192,9 +192,17 @@ r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.run
     }
     return suspended === undefined ? row : { ...row, suspended }
   })
-  res.json(req.query.includeActionDecisions === 'true'
-    ? await Promise.all(withSuspended.map(async (row) => ({ ...row, runtimeActionDecisions: await batchRuntimeActionDecisions(req, row) })))
-    : withSuspended)
+  if (req.query.includeActionDecisions !== 'true') {
+    return res.json(BatchSchema.array().parse(withSuspended))
+  }
+  const withDecisions = await Promise.all(withSuspended.map(async (row) => ({
+    ...row,
+    runtimeActionDecisions: await batchRuntimeActionDecisions(req, row),
+  })))
+  res.json(withDecisions.map(({ runtimeActionDecisions, ...row }) => ({
+    ...BatchSchema.parse(row),
+    runtimeActionDecisions: BatchRuntimeActionDecisionsSchema.parse(runtimeActionDecisions),
+  })))
 }))
 
 r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {

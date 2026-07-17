@@ -2295,6 +2295,8 @@ Engine Detail runtime-resource inventory now validates the shared sanitized pers
 
 Engine Detail project-target reads now validate the canonical target contract, including deployment eligibility switches, ownership/provenance, approval state, and safe diagnostics.
 
+Batch collection reads now validate the shared persisted batch contract after authorization filtering. When runtime action decisions are requested, they are retained as a separately validated shared envelope rather than leaking raw metadata.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

@@ -173,9 +173,9 @@ describe('mission-control batches routes', () => {
       },
     });
     batchRepo.find.mockResolvedValue([
-      { id: 'batch-payments', createdAt: 2, metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }) },
-      { id: 'batch-hr', createdAt: 1, metadata: JSON.stringify({ authz: { processDefinitionKeys: ['hr'] } }) },
-      { id: 'batch-legacy', createdAt: 0, metadata: null },
+      { ...batchDetailRow, id: 'batch-payments', createdAt: 2, metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }) },
+      { ...batchDetailRow, id: 'batch-hr', createdAt: 1, metadata: JSON.stringify({ authz: { processDefinitionKeys: ['hr'] } }) },
+      { ...batchDetailRow, id: 'batch-legacy', createdAt: 0, metadata: null },
     ]);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
@@ -190,7 +190,7 @@ describe('mission-control batches routes', () => {
 
   it('bounds and pages batch records after resource-aware filtering', async () => {
     batchRepo.find.mockResolvedValue(Array.from({ length: 102 }, (_, index) => ({
-      id: `batch-${index}`, engineId: 'engine-1', createdAt: 1000 - index,
+      ...batchDetailRow, id: `batch-${index}`, engineId: 'engine-1', createdAt: 1000 - index,
       metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }),
     })));
 
