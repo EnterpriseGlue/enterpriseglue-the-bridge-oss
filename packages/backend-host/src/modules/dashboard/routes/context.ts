@@ -15,30 +15,14 @@ import {
   type CurrentUserPermissionsSnapshot,
   type Permission,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  DashboardContextSchema,
+  type DashboardContext,
+} from '@enterpriseglue/shared/schemas/dashboard.js';
 
 const r = Router();
 
-export type DashboardContext = {
-  isPlatformAdmin: boolean;
-  // Engine access
-  ownedEngineIds: string[]; // Deprecated display metadata; authorization never reads it.
-  delegatedEngineIds: string[]; // Deprecated display metadata; authorization never reads it.
-  accessibleEngineIds: string[]; // Engines visible through the evaluator.
-  runtimeScopedEngineIds: string[]; // Resource-aware engines visible through process or decision scope
-  // Project access
-  projectMemberships: Array<{
-    projectId: string;
-    projectName: string;
-    role: string;
-  }>;
-  // Computed visibility flags
-  canViewActiveUsers: boolean;
-  canViewAllProjects: boolean;
-  canViewEngines: boolean;
-  canViewProcessData: boolean;
-  canViewDeployments: boolean;
-  canViewMetrics: boolean;
-};
+export type { DashboardContext } from '@enterpriseglue/shared/schemas/dashboard.js';
 
 function hasPlatformPermission(permissions: Permission[], permission: Permission): boolean {
   return permissions.includes(permission);
@@ -155,7 +139,7 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
     canViewMetrics: canViewEngineInstances,
   };
 
-  res.json(context);
+  res.json(DashboardContextSchema.parse(context));
 }));
 
 export default r;

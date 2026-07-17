@@ -39,6 +39,11 @@ const {
 } = await import('@enterpriseglue/shared/schemas/starbase/index.js');
 
 const {
+  DashboardContextSchema,
+  DashboardStatsSchema,
+} = await import('@enterpriseglue/shared/schemas/dashboard.js');
+
+const {
   EngineSchema,
   EngineSchemaRaw,
   AccessibleEngineSummarySchema,
@@ -3540,8 +3545,10 @@ registry.registerPath({ method: 'get', path: '/api/audit/stats', ...authzExtensi
 // -----------------------------
 // Dashboard API
 // -----------------------------
-registry.registerPath({ method: 'get', path: '/api/dashboard/context', ...authzExtension('platform.dashboard.read', 'GET', '/api/dashboard/context'), responses: { 200: { description: 'Dashboard context data', content: { 'application/json': { schema: z.unknown() } } } } });
-registry.registerPath({ method: 'get', path: '/api/dashboard/stats', ...authzExtension('platform.dashboard.read', 'GET', '/api/dashboard/stats'), responses: { 200: { description: 'Dashboard statistics', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.register('DashboardContext', DashboardContextSchema);
+registry.register('DashboardStats', DashboardStatsSchema);
+registry.registerPath({ method: 'get', path: '/api/dashboard/context', ...authzExtension('platform.dashboard.read', 'GET', '/api/dashboard/context'), responses: { 200: { description: 'Dashboard context data', content: { 'application/json': { schema: DashboardContextSchema } } } } });
+registry.registerPath({ method: 'get', path: '/api/dashboard/stats', ...authzExtension('platform.dashboard.read', 'GET', '/api/dashboard/stats'), responses: { 200: { description: 'Dashboard statistics', content: { 'application/json': { schema: DashboardStatsSchema } } } } });
 
 // -----------------------------
 // Notifications API

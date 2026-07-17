@@ -7,6 +7,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { DashboardStatsSchema } from '@enterpriseglue/shared/schemas/dashboard.js';
 import { In } from 'typeorm';
 
 const r = Router();
@@ -29,11 +30,11 @@ r.get('/api/dashboard/stats', requireAuth, requireAction('platform.dashboard.rea
 
   // If user has no projects, return zeros
   if (projectIds.length === 0) {
-    return res.json({
+    return res.json(DashboardStatsSchema.parse({
       totalProjects: 0,
       totalFiles: 0,
       fileTypes: { bpmn: 0, dmn: 0, form: 0 }
-    });
+    }));
   }
 
   // Get total files count and breakdown by type for user's projects
@@ -59,7 +60,7 @@ r.get('/api/dashboard/stats', requireAuth, requireAction('platform.dashboard.rea
     else if (type === 'form') formCount = fileCount;
   }
 
-  res.json({
+  res.json(DashboardStatsSchema.parse({
     totalProjects,
     totalFiles,
     fileTypes: {
@@ -67,7 +68,7 @@ r.get('/api/dashboard/stats', requireAuth, requireAction('platform.dashboard.rea
       dmn: dmnCount,
       form: formCount
     }
-  });
+  }));
 }));
 
 export default r;

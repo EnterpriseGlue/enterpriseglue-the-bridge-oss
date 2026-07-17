@@ -11,23 +11,7 @@ import { getAccessibleEngines } from '../features/mission-control/engines/api/en
 import { useAuth } from '../shared/hooks/useAuth'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
 import { evaluateActionSnapshot, WhyUnavailableLink } from '../shared/auth/guards'
-
-type DashboardContext = {
-  isPlatformAdmin: boolean
-  runtimeScopedEngineIds?: string[]
-  projectMemberships?: Array<{ projectId: string; projectName?: string; role?: string }>
-  canViewActiveUsers: boolean
-  canViewEngines: boolean
-  canViewProcessData: boolean
-  canViewDeployments: boolean
-  canViewMetrics: boolean
-}
-
-type DashboardStatsResponse = {
-  totalProjects: number
-  totalFiles: number
-  fileTypes: { bpmn: number; dmn: number; form: number }
-}
+import type { DashboardContext, DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
 
 type ProcessInstance = {
   id: string
@@ -106,7 +90,7 @@ export default function Dashboard() {
   // Fetch dashboard stats
   const statsQuery = useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: () => apiClient.get<DashboardStatsResponse>('/api/dashboard/stats'),
+    queryFn: () => apiClient.get<DashboardStats>('/api/dashboard/stats'),
     enabled: canReadDashboard,
   })
 
