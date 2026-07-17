@@ -6,19 +6,7 @@ export { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 // Types
 export type DecisionDefinition = SharedDecisionDefinition
 
-export type DecisionInstance = {
-  id: string
-  decisionDefinitionId: string
-  decisionDefinitionKey: string
-  decisionDefinitionName?: string
-  evaluationTime: string
-  processDefinitionId?: string
-  processDefinitionKey?: string
-  processInstanceId?: string
-  activityId?: string
-  activityInstanceId?: string
-  tenantId?: string
-}
+export type DecisionInstance = SharedHistoricDecisionInstance
 
 export type DecisionHistoryEntry = SharedHistoricDecisionInstance
 
@@ -50,7 +38,7 @@ export async function listDecisionInstances(params: GetDecisionInstancesParams):
   if (params.processInstanceId) searchParams.set('processInstanceId', params.processInstanceId)
   if (params.evaluatedAfter) searchParams.set('evaluatedAfter', params.evaluatedAfter)
   if (params.evaluatedBefore) searchParams.set('evaluatedBefore', params.evaluatedBefore)
-  return apiClient.get<DecisionInstance[]>(`/mission-control-api/history/decision-instances?${searchParams}`, undefined, { credentials: 'include' })
+  return apiClient.get<DecisionInstance[]>(`/mission-control-api/history/decisions?${searchParams}`, undefined, { credentials: 'include' })
 }
 
 export interface GetDecisionHistoryParams extends GetDecisionInstancesParams {

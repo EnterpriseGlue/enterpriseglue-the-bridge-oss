@@ -106,6 +106,17 @@ export const HistoricDecisionIoSchema = z.object({
 
 export const HistoricDecisionIoListSchema = z.array(HistoricDecisionIoSchema);
 
+/**
+ * Client-side aggregate for the historic decision detail surface. The engine
+ * exposes the decision row, inputs, and outputs as separately authorized
+ * resources; Mission Control combines those established responses without
+ * inventing a second engine-specific detail model.
+ */
+export const HistoricDecisionInstanceDetailSchema = HistoricDecisionInstanceSchema.extend({
+  inputs: HistoricDecisionIoListSchema,
+  outputs: HistoricDecisionIoListSchema,
+});
+
 // User operation log schemas
 export const UserOperationLogEntrySchema = z.object({
   id: z.string(),
@@ -309,6 +320,7 @@ export type HistoricDecisionInstance = z.infer<typeof HistoricDecisionInstanceSc
 export type HistoricDecisionInstanceList = z.infer<typeof HistoricDecisionInstanceListSchema>;
 export type HistoricDecisionIo = z.infer<typeof HistoricDecisionIoSchema>;
 export type HistoricDecisionIoList = z.infer<typeof HistoricDecisionIoListSchema>;
+export type HistoricDecisionInstanceDetail = z.infer<typeof HistoricDecisionInstanceDetailSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;
 export type UserOperationLogEntryList = z.infer<typeof UserOperationLogEntryListSchema>;
 export type ProcessInstanceExecutionDetails = z.infer<typeof ProcessInstanceExecutionDetailsSchema>;

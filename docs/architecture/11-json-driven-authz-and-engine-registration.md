@@ -2269,6 +2269,8 @@ Process Overview's post-retry incident polling now imports the same shared incid
 
 The Mission Control service layer now carries the shared recursive runtime-activity tree and process-start response types into its already validated routes, removing the remaining internal `any` at those adapter boundaries.
 
+Historic decision lists now use the canonical `/history/decisions` route and shared historic decision contract rather than retaining a stale local `decision-instances` shape. The retained detail client aggregates that decision row with the separately authorized shared input/output contracts, preserving its public helper while removing the obsolete undocumented endpoint and hand-maintained IO interfaces.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.
