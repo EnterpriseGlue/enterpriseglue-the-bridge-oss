@@ -45,6 +45,7 @@ import {
   type ProjectEngineAccessedEngine,
   type ProjectEngineAccessPendingRequest,
 } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
+import { ProjectOverviewListSchema } from '@enterpriseglue/shared/schemas/starbase/project.js';
 
 // Validation schemas
 const projectIdParamSchema = z.object({ projectId: z.string().uuid() });
@@ -368,7 +369,7 @@ r.get('/starbase-api/projects', apiLimiter, requireAuth, requireAction('project.
     };
   });
   
-  res.json(out);
+  res.json(ProjectOverviewListSchema.parse(out));
 }));
 
 /**

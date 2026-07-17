@@ -8,6 +8,7 @@ extendZodWithOpenApi(z);
 // Dynamic imports ensure schema modules evaluate AFTER extendZodWithOpenApi.
 const {
   ProjectSchema,
+  ProjectOverviewListSchema,
   CreateProjectRequest,
   RenameProjectRequest,
   FileSchema,
@@ -226,6 +227,7 @@ registry.registerPath({
 });
 
 registry.register('Project', ProjectSchema);
+registry.register('ProjectOverviewList', ProjectOverviewListSchema);
 const ProjectImportPreviewRequestOpenApiSchema = z.object({
   engineId: z.string(),
 });
@@ -252,7 +254,7 @@ registry.registerPath({
   responses: {
     200: {
       description: 'List projects',
-      content: { 'application/json': { schema: z.array(ProjectSchema) } },
+      content: { 'application/json': { schema: ProjectOverviewListSchema } },
     },
   },
 });
