@@ -2255,6 +2255,8 @@ Historic activity-instance reads now use a shared passthrough contract through t
 
 Runtime process variables now share one passthrough value contract at both active process-instance route implementations, OpenAPI, and the typed Instance Detail client. It preserves engine serialization metadata and extensions after redaction, while the historical-variable client imports its already canonical historic-row schema rather than reusing a local approximation.
 
+Process Overview's secondary Instance Detail and retry client now imports the same shared variable, activity-history, job, and external-task contracts rather than fetching those authorization-scoped responses as `unknown`; its modal boundary is typed by the same response shapes.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

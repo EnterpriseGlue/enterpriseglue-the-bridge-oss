@@ -6,8 +6,12 @@ import type {
 import type {
   ActivityCountByActivityId,
   ActivityCountsByState as SharedActivityCountsByState,
+  ActivityInstance,
   ProcessInstance as SharedProcessInstance,
+  ProcessInstanceExternalTask,
+  ProcessInstanceJob,
   PreviewCountResponse,
+  Variables,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
@@ -94,22 +98,22 @@ export async function deleteSavedProcessFilter(filterId: string): Promise<void> 
 }
 
 // Instance-specific APIs
-export async function fetchInstanceVariables(instanceId: string, engineId?: string): Promise<Record<string, { value: unknown; type: string }>> {
+export async function fetchInstanceVariables(instanceId: string, engineId?: string): Promise<Variables> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<Record<string, { value: unknown; type: string }>>(`/mission-control-api/process-instances/${instanceId}/variables${params}`, undefined, { credentials: 'include' })
+  return apiClient.get<Variables>(`/mission-control-api/process-instances/${instanceId}/variables${params}`, undefined, { credentials: 'include' })
 }
 
-export async function listInstanceActivityHistory(instanceId: string, engineId?: string): Promise<unknown[]> {
+export async function listInstanceActivityHistory(instanceId: string, engineId?: string): Promise<ActivityInstance[]> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<unknown[]>(`/mission-control-api/process-instances/${instanceId}/history/activity-instances${params}`, undefined, { credentials: 'include' })
+  return apiClient.get<ActivityInstance[]>(`/mission-control-api/process-instances/${instanceId}/history/activity-instances${params}`, undefined, { credentials: 'include' })
 }
 
-export async function listInstanceJobs(instanceId: string, engineId?: string): Promise<unknown[]> {
+export async function listInstanceJobs(instanceId: string, engineId?: string): Promise<ProcessInstanceJob[]> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<unknown[]>(`/mission-control-api/process-instances/${instanceId}/jobs${params}`, undefined, { credentials: 'include' })
+  return apiClient.get<ProcessInstanceJob[]>(`/mission-control-api/process-instances/${instanceId}/jobs${params}`, undefined, { credentials: 'include' })
 }
 
-export async function listInstanceExternalTasks(instanceId: string, engineId?: string): Promise<unknown[]> {
+export async function listInstanceExternalTasks(instanceId: string, engineId?: string): Promise<ProcessInstanceExternalTask[]> {
   const params = engineId ? `?engineId=${encodeURIComponent(engineId)}` : ''
-  return apiClient.get<unknown[]>(`/mission-control-api/process-instances/${instanceId}/failed-external-tasks${params}`, undefined, { credentials: 'include' })
+  return apiClient.get<ProcessInstanceExternalTask[]>(`/mission-control-api/process-instances/${instanceId}/failed-external-tasks${params}`, undefined, { credentials: 'include' })
 }
