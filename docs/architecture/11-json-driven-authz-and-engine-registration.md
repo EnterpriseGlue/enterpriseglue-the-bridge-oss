@@ -2343,7 +2343,7 @@ Process and Decision Instance Detail now import the shared historic decision, ta
 
 Historic decision collection reads now serialize through the same passthrough shared list contract documented in OpenAPI and consumed by Decision Overview, so required display fields are validated without discarding engine-specific extension data.
 
-Historic task and variable collections now follow that same passthrough contract at every history endpoint, including the previously untyped variable-instance route; Process Instance Detail imports the shared historic-variable display type rather than retaining a local subset.
+Historic task, variable, and user-operation collections now follow that same passthrough contract at every history endpoint, including the previously untyped variable-instance route; Process Instance Detail imports the shared historic-variable display type rather than retaining a local subset.
 
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 

@@ -56,7 +56,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared
   listHistoricDecisions: vi.fn().mockResolvedValue([{ id: 'decision-1' }]),
   listHistoricDecisionInputs: vi.fn().mockResolvedValue([{ id: 'input-1', value: 'secret', type: 'String' }]),
   listHistoricDecisionOutputs: vi.fn().mockResolvedValue([{ id: 'output-1', value: 'secret', type: 'String', ruleId: 'rule-1' }]),
-  listUserOperations: vi.fn().mockResolvedValue([{ id: 'op-1', property: 'assignee' }]),
+  listUserOperations: vi.fn().mockResolvedValue([{ id: 'op-1', property: 'assignee', engineExtension: { source: 'camunda' } }]),
 }));
 
 describe('mission-control extended history routes', () => {
@@ -250,7 +250,7 @@ describe('mission-control extended history routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'op-1', property: 'assignee' }]);
+    expect(response.body).toEqual([{ id: 'op-1', property: 'assignee', engineExtension: { source: 'camunda' } }]);
     expect(listUserOperations).toHaveBeenCalledWith('engine-1', {});
   });
 

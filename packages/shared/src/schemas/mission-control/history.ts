@@ -134,7 +134,9 @@ export const UserOperationLogEntrySchema = z.object({
   jobDefinitionId: z.string().optional().nullable(),
   removalTime: z.string().optional().nullable(),
   rootProcessInstanceId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const UserOperationLogEntryListSchema = z.array(UserOperationLogEntrySchema);
 
 // Query params
 export const HistoricTaskQueryParams = z.object({
@@ -297,6 +299,7 @@ export type HistoricDecisionInstanceList = z.infer<typeof HistoricDecisionInstan
 export type HistoricDecisionIo = z.infer<typeof HistoricDecisionIoSchema>;
 export type HistoricDecisionIoList = z.infer<typeof HistoricDecisionIoListSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;
+export type UserOperationLogEntryList = z.infer<typeof UserOperationLogEntryListSchema>;
 export type HistoricTaskQueryParams = z.infer<typeof HistoricTaskQueryParams>;
 export type VariableHistoryQueryParams = z.infer<typeof VariableHistoryQueryParams>;
 export type HistoricVariableQueryParams = z.infer<typeof HistoricVariableQueryParams>;

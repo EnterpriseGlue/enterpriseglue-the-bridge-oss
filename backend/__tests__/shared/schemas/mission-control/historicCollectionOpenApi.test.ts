@@ -7,8 +7,10 @@ describe('historic collection contracts', () => {
 
     expect(document.components?.schemas?.HistoricTaskInstanceList).toMatchObject({ type: 'array' });
     expect(document.components?.schemas?.HistoricVariableInstanceList).toMatchObject({ type: 'array' });
+    expect(document.components?.schemas?.UserOperationLogEntryList).toMatchObject({ type: 'array' });
     expect(document.paths?.['/mission-control-api/history/tasks']?.get?.responses?.['200']).toBeDefined();
     expect(document.paths?.['/mission-control-api/history/variables']?.get?.responses?.['200']).toBeDefined();
     expect(document.paths?.['/mission-control-api/history/variable-instances']?.get?.responses?.['200']).toBeDefined();
+    expect(document.paths?.['/mission-control-api/history/user-operations']?.get?.responses?.['200']).toBeDefined();
   });
 });

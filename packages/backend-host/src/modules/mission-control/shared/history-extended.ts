@@ -20,6 +20,7 @@ import {
   HistoricVariableInstanceListSchema,
   HistoricDecisionInstanceListSchema,
   HistoricDecisionIoListSchema,
+  UserOperationLogEntryListSchema,
   UserOperationLogQueryParams,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js';
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
@@ -119,7 +120,7 @@ r.get('/mission-control-api/history/user-operations', requireRuntimeCollectionAc
     )))).flat()
     : await listUserOperations(engineId, query);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
-  res.json(redacted);
+  res.json(UserOperationLogEntryListSchema.parse(redacted));
 }));
 
 export default r;
