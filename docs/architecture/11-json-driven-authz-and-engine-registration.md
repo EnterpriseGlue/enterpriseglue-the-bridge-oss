@@ -2323,6 +2323,8 @@ The live Process Overview bulk-operation client imports that same receipt rather
 
 Process-instance start now has a shared passthrough receipt across the backend route, OpenAPI, and Process Overview. It guarantees the created instance id while retaining all engine-native extension fields for compatibility.
 
+Message correlation now documents and serializes the engine-compatible result array rather than a single response object. Each result keeps its standard correlation fields and passthrough extension data, so result-enabled and empty-result correlations retain their native behavior.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

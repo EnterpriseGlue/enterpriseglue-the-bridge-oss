@@ -16,7 +16,12 @@ export const MessageCorrelationResultSchema = z.object({
     id: z.string(),
     processInstanceId: z.string().optional().nullable(),
   }).optional().nullable(),
-});
+}).passthrough();
+
+// Camunda returns one result per matched execution/process definition. Even a
+// correlation with no enabled result uses an empty array, so preserve the
+// engine's array boundary rather than collapsing it to a single object.
+export const MessageCorrelationResultsSchema = z.array(MessageCorrelationResultSchema);
 
 // Request schemas
 export const CorrelateMessageRequest = z.object({
@@ -60,5 +65,6 @@ export const SignalEventSchema = z.object({
 
 // Types
 export type MessageCorrelationResult = z.infer<typeof MessageCorrelationResultSchema>;
+export type MessageCorrelationResults = z.infer<typeof MessageCorrelationResultsSchema>;
 export type CorrelateMessageRequest = z.infer<typeof CorrelateMessageRequest>;
 export type SignalEvent = z.infer<typeof SignalEventSchema>;

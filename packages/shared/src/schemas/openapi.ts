@@ -95,6 +95,7 @@ const {
   ExternalTaskQueryParams,
   CorrelateMessageRequest,
   MessageCorrelationResultSchema,
+  MessageCorrelationResultsSchema,
   SignalEventSchema,
   DecisionDefinitionSchema,
   DecisionDefinitionXmlSchema,
@@ -1482,7 +1483,8 @@ registry.registerPath({ method: 'post', path: '/mission-control-api/external-tas
 
 // Messages & Signals
 registry.register('MessageCorrelationResult', MessageCorrelationResultSchema);
-registry.registerPath({ method: 'post', path: '/mission-control-api/messages', ...authzExtension('engine.runtime.messages.correlate', 'POST', '/mission-control-api/messages'), request: { body: { content: { 'application/json': { schema: CorrelateMessageRequest } } } }, responses: { 200: { description: 'Message correlated', content: { 'application/json': { schema: MessageCorrelationResultSchema } } } } });
+registry.register('MessageCorrelationResults', MessageCorrelationResultsSchema);
+registry.registerPath({ method: 'post', path: '/mission-control-api/messages', ...authzExtension('engine.runtime.messages.correlate', 'POST', '/mission-control-api/messages'), request: { body: { content: { 'application/json': { schema: CorrelateMessageRequest } } } }, responses: { 200: { description: 'One result for each correlated execution or process definition', content: { 'application/json': { schema: MessageCorrelationResultsSchema } } } } });
 registry.registerPath({ method: 'post', path: '/mission-control-api/signals', ...authzExtension('engine.runtime.signals.deliver', 'POST', '/mission-control-api/signals'), request: { body: { content: { 'application/json': { schema: SignalEventSchema } } } }, responses: { 204: { description: 'Signal delivered' } } });
 
 // Decisions

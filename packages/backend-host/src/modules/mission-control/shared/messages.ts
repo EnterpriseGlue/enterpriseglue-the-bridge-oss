@@ -4,7 +4,7 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { sendMessage, sendSignal } from './messages-service.js';
-import { CorrelateMessageRequest, SignalEventSchema } from '@enterpriseglue/shared/schemas/mission-control/message.js';
+import { CorrelateMessageRequest, MessageCorrelationResultsSchema, SignalEventSchema } from '@enterpriseglue/shared/schemas/mission-control/message.js';
 
 const r = Router();
 
@@ -14,7 +14,7 @@ r.use(requireAuth);
 r.post('/mission-control-api/messages', requireAction('engine.runtime.messages.correlate', { resourceIdFrom: 'body' }), validateBody(CorrelateMessageRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const data = await sendMessage(engineId, req.body);
-  res.json(data);
+  res.json(MessageCorrelationResultsSchema.parse(data));
 }));
 
 // Deliver signal

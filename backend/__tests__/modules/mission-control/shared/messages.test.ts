@@ -35,7 +35,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 }));
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/messages-service.js', () => ({
-  sendMessage: vi.fn().mockResolvedValue([{ id: 'i1', processInstanceId: 'pi1' }]),
+  sendMessage: vi.fn().mockResolvedValue([{ resultType: 'Execution', execution: { id: 'i1', processInstanceId: 'pi1' }, engineExtension: { traceId: 'message-1' } }]),
   sendSignal: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -68,7 +68,7 @@ describe('mission-control messages routes', () => {
       .send({ engineId: 'engine-1', messageName: 'TestMessage', businessKey: 'test-key' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toBeDefined();
+    expect(response.body).toEqual([{ resultType: 'Execution', execution: { id: 'i1', processInstanceId: 'pi1' }, engineExtension: { traceId: 'message-1' } }]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:modify', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'engine',
