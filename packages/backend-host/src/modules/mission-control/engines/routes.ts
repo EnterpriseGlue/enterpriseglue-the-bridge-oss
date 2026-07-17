@@ -33,6 +33,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import {
   AccessibleEngineSummarySchema,
   CreateEngineRequestSchema,
+  EngineConnectionHealthResponseSchema,
   EndpointAuthenticationPolicyMessages,
   EngineRuntimeQueryCapabilitiesSchema,
   ExternalEngineRegistrationRequestSchema,
@@ -1632,7 +1633,7 @@ r.post('/engines-api/engines/:id/test', engineLimiter, requireAuth, requireActio
     throw Errors.validation('Cannot test a disabled engine; reactivate it from Access Control before testing the connection')
   }
 
-  return res.json(await testEngineConnectionAndRecord(dataSource, eng))
+  return res.json(EngineConnectionHealthResponseSchema.parse(await testEngineConnectionAndRecord(dataSource, eng)))
 }))
 
 // Get last health entry
@@ -1651,13 +1652,13 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngi
       if (r.ok) {
         let version: string | null = null
         try { const data: any = await r.json(); version = data?.version || null } catch {}
-        return res.json({ id: 'env-health', engineId: '__env__', status: 'connected', latencyMs, message: null, checkedAt: Date.now(), version })
+        return res.json(EngineConnectionHealthResponseSchema.parse({ id: 'env-health', engineId: '__env__', status: 'connected', latencyMs, message: null, checkedAt: Date.now(), version }))
       } else {
-        return res.json({ id: 'env-health', engineId: '__env__', status: 'disconnected', latencyMs, message: `${r.status} ${r.statusText}`, checkedAt: Date.now(), version: null })
+        return res.json(EngineConnectionHealthResponseSchema.parse({ id: 'env-health', engineId: '__env__', status: 'disconnected', latencyMs, message: `${r.status} ${r.statusText}`, checkedAt: Date.now(), version: null }))
       }
     } catch (e: any) {
       const latencyMs = Date.now() - started
-      return res.json({ id: 'env-health', engineId: '__env__', status: 'disconnected', latencyMs, message: e?.message || 'Failed to connect', checkedAt: Date.now(), version: null })
+      return res.json(EngineConnectionHealthResponseSchema.parse({ id: 'env-health', engineId: '__env__', status: 'disconnected', latencyMs, message: e?.message || 'Failed to connect', checkedAt: Date.now(), version: null }))
     }
   }
   // Select all then sort in memory
@@ -1666,11 +1667,11 @@ r.get('/engines-api/engines/:id/health', engineLimiter, requireAuth, requireEngi
     // Auto-ping once if no health yet
     const eng = await engineRepo.findOneBy({ id: engineId })
     if (eng) {
-      return res.json(await testEngineConnectionAndRecord(dataSource, eng))
+      return res.json(EngineConnectionHealthResponseSchema.parse(await testEngineConnectionAndRecord(dataSource, eng)))
     }
   }
   const last = rows.sort((a: any, b: any) => (b.checkedAt as number) - (a.checkedAt as number))[0]
-  res.json(last || null)
+  res.json(EngineConnectionHealthResponseSchema.nullable().parse(last || null))
 }))
 
 r.get('/engines-api/saved-filters', apiLimiter, requireAuth, requireAction('engine.saved-filters.read', { resourceResolver: 'engine.visibleCollection' }), asyncHandler(async (req: Request, res: Response) => {
