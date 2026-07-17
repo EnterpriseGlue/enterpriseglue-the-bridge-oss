@@ -43,6 +43,29 @@ export const ProjectOverviewProjectSchema = z.object({
 
 export const ProjectOverviewListSchema = z.array(ProjectOverviewProjectSchema);
 
+export const ProjectImportPreviewRequestSchema = z.object({
+  engineId: z.string().min(1),
+});
+
+// Import preview exposes only derived file metadata. XML content remains inside
+// the import service and is not returned to the browser.
+export const ProjectImportPreviewResponseSchema = z.object({
+  engineId: z.string(),
+  allowed: z.literal(true),
+  targetAction: z.literal('create_import_target'),
+  counts: z.object({
+    bpmn: z.number().int().nonnegative(),
+    dmn: z.number().int().nonnegative(),
+  }),
+  files: z.array(z.object({
+    name: z.string(),
+    type: z.enum(['bpmn', 'dmn']),
+    bpmnProcessId: z.string().nullable(),
+    dmnDecisionId: z.string().nullable(),
+  })),
+  warnings: z.array(z.string()),
+});
+
 // Insert schema (request payloads)
 export const ProjectInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -59,4 +82,5 @@ export type Project = z.infer<typeof ProjectSchema>;
 export type ProjectOverviewMember = z.infer<typeof ProjectOverviewMemberSchema>;
 export type ProjectOverviewProject = z.infer<typeof ProjectOverviewProjectSchema>;
 export type ProjectOverviewList = z.infer<typeof ProjectOverviewListSchema>;
+export type ProjectImportPreview = z.infer<typeof ProjectImportPreviewResponseSchema>;
 export type CreateProject = z.infer<typeof CreateProjectRequest>;

@@ -9,6 +9,8 @@ extendZodWithOpenApi(z);
 const {
   ProjectSchema,
   ProjectOverviewListSchema,
+  ProjectImportPreviewRequestSchema,
+  ProjectImportPreviewResponseSchema,
   CreateProjectRequest,
   RenameProjectRequest,
   FileSchema,
@@ -236,25 +238,6 @@ registry.registerPath({
 
 registry.register('Project', ProjectSchema);
 registry.register('ProjectOverviewList', ProjectOverviewListSchema);
-const ProjectImportPreviewRequestOpenApiSchema = z.object({
-  engineId: z.string(),
-});
-const ProjectImportPreviewResponseOpenApiSchema = z.object({
-  engineId: z.string(),
-  allowed: z.literal(true),
-  targetAction: z.literal('create_import_target'),
-  counts: z.object({
-    bpmn: z.number(),
-    dmn: z.number(),
-  }),
-  files: z.array(z.object({
-    name: z.string(),
-    type: z.enum(['bpmn', 'dmn']),
-    bpmnProcessId: z.string().nullable(),
-    dmnDecisionId: z.string().nullable(),
-  })),
-  warnings: z.array(z.string()),
-});
 registry.registerPath({
   method: 'get',
   path: '/starbase-api/projects',
@@ -284,19 +267,19 @@ registry.registerPath({
   },
 });
 
-registry.register('ProjectImportPreviewRequest', ProjectImportPreviewRequestOpenApiSchema);
-registry.register('ProjectImportPreviewResponse', ProjectImportPreviewResponseOpenApiSchema);
+registry.register('ProjectImportPreviewRequest', ProjectImportPreviewRequestSchema);
+registry.register('ProjectImportPreviewResponse', ProjectImportPreviewResponseSchema);
 registry.registerPath({
   method: 'post',
   path: '/starbase-api/projects/import-preview',
   ...authzExtension('project.import.preview', 'POST', '/starbase-api/projects/import-preview'),
   request: {
-    body: { content: { 'application/json': { schema: ProjectImportPreviewRequestOpenApiSchema } } },
+    body: { content: { 'application/json': { schema: ProjectImportPreviewRequestSchema } } },
   },
   responses: {
     200: {
       description: 'Preview latest BPMN/DMN definitions available for project import from an engine',
-      content: { 'application/json': { schema: ProjectImportPreviewResponseOpenApiSchema } },
+      content: { 'application/json': { schema: ProjectImportPreviewResponseSchema } },
     },
   },
 });

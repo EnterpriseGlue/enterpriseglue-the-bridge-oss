@@ -45,7 +45,11 @@ import {
   type ProjectEngineAccessedEngine,
   type ProjectEngineAccessPendingRequest,
 } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
-import { ProjectOverviewListSchema } from '@enterpriseglue/shared/schemas/starbase/project.js';
+import {
+  ProjectImportPreviewRequestSchema,
+  ProjectImportPreviewResponseSchema,
+  ProjectOverviewListSchema,
+} from '@enterpriseglue/shared/schemas/starbase/project.js';
 
 // Validation schemas
 const projectIdParamSchema = z.object({ projectId: z.string().uuid() });
@@ -65,7 +69,6 @@ const createProjectBodySchema = z.object({
   }
 });
 const renameProjectBodySchema = z.object({ name: z.string().min(1).max(255) });
-const importPreviewBodySchema = z.object({ engineId: z.string().min(1) });
 const projectDeploymentTargetStatusSchema = z.enum(['active', 'disabled', 'archived']);
 const projectDeploymentTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation']);
 const projectDeploymentTargetsQuerySchema = z.object({
@@ -462,13 +465,13 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
   res.json({ id, name: trimmed, ownerId: userId, createdAt: now, updatedAt: now });
 }));
 
-r.post('/starbase-api/projects/import-preview', apiLimiter, requireAuth, validateBody(importPreviewBodySchema), requireAction('project.import.preview', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/import-preview', apiLimiter, requireAuth, validateBody(ProjectImportPreviewRequestSchema), requireAction('project.import.preview', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {
   const preview = await previewLatestEngineImport(
     req.user!.userId,
     String(req.body.engineId).trim(),
     req.tenant?.tenantId || null
   );
-  res.json(preview);
+  res.json(ProjectImportPreviewResponseSchema.parse(preview));
 }));
 
 /**

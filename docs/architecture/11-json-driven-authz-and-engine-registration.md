@@ -2245,6 +2245,8 @@ Git-backed project creation now shares a redacted project/repository response co
 
 The evaluator-filtered process-instance collection now serializes one shared runtime contract, including suspended and incident states, action decisions, and safe adapter extensions; Dashboard and Mission Control list consumers no longer maintain separate instance shapes.
 
+The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.
+
 The generic tenant invitation flow now likewise has one shared request, readiness, reveal-once response, token, public-status, OTP/redeem, and onboarding contract. Its backend validator/response serializer, OpenAPI operations, `InviteMemberModal`, and `AcceptInvite` all consume that contract, while onboarding completion reuses the shared authenticated login response contract, so SSO/email readiness and manual invite fields cannot silently drift. The public token-status, OTP, and redemption routes are explicitly classified as high-risk opaque-token exemptions with rate-limit and single-use rationale rather than being omitted from authorization inventory.
 
 Platform branding now has shared administrator, public-login, and bounded-update contracts. The settings route, public branding serializer, OpenAPI, branding service, administrator tab, login, invitation acceptance, and authenticated layout import those contracts; the public form adds only the safe SSO auto-redirect flag. This removes four independently maintained frontend response shapes while keeping the public and settings boundaries explicit.

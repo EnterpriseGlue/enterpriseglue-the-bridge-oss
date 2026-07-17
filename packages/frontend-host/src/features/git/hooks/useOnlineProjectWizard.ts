@@ -13,6 +13,7 @@ import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 import type { CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
+import type { ProjectImportPreview as SharedProjectImportPreview } from '@enterpriseglue/shared/schemas/starbase/project.js'
 
 export type AuthMethod = 'oauth' | 'pat'
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -36,22 +37,7 @@ type CreateLocalResponse = { id: string; name: string }
 
 export type EngineForImport = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>
 
-export type EngineImportPreview = {
-  engineId: string
-  allowed: true
-  targetAction: 'create_import_target'
-  counts: {
-    bpmn: number
-    dmn: number
-  }
-  files: Array<{
-    name: string
-    type: 'bpmn' | 'dmn'
-    bpmnProcessId: string | null
-    dmnDecisionId: string | null
-  }>
-  warnings: string[]
-}
+export type EngineImportPreview = SharedProjectImportPreview
 
 type EnginePermissionCheck = (engineId: string | null | undefined, permission: string) => boolean
 
