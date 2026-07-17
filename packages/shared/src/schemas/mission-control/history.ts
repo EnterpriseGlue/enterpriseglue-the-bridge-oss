@@ -78,6 +78,28 @@ export const HistoricDecisionInstanceSchema = z.object({
   tenantId: z.string().optional().nullable(),
 });
 
+// Historic decision inputs and outputs share a display/read model. Keep
+// engine-specific fields intact while making the identifiers and decision IO
+// fields used by Mission Control explicit.
+export const HistoricDecisionIoSchema = z.object({
+  id: z.string(),
+  decisionInstanceId: z.string().optional(),
+  clauseId: z.string().nullable().optional(),
+  clauseName: z.string().nullable().optional(),
+  ruleId: z.string().nullable().optional(),
+  ruleOrder: z.number().nullable().optional(),
+  variableName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  value: z.any().optional(),
+  valueInfo: z.record(z.string(), z.unknown()).optional(),
+  errorMessage: z.string().nullable().optional(),
+  createTime: z.string().optional(),
+  removalTime: z.string().nullable().optional(),
+  rootProcessInstanceId: z.string().nullable().optional(),
+}).passthrough();
+
+export const HistoricDecisionIoListSchema = z.array(HistoricDecisionIoSchema);
+
 // User operation log schemas
 export const UserOperationLogEntrySchema = z.object({
   id: z.string(),
@@ -263,6 +285,8 @@ export type HistoricTaskInstance = z.infer<typeof HistoricTaskInstanceSchema>;
 export type HistoricVariableInstance = z.infer<typeof HistoricVariableInstanceSchema>;
 export type VariableHistoryEntry = z.infer<typeof VariableHistoryEntrySchema>;
 export type HistoricDecisionInstance = z.infer<typeof HistoricDecisionInstanceSchema>;
+export type HistoricDecisionIo = z.infer<typeof HistoricDecisionIoSchema>;
+export type HistoricDecisionIoList = z.infer<typeof HistoricDecisionIoListSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;
 export type HistoricTaskQueryParams = z.infer<typeof HistoricTaskQueryParams>;
 export type VariableHistoryQueryParams = z.infer<typeof VariableHistoryQueryParams>;

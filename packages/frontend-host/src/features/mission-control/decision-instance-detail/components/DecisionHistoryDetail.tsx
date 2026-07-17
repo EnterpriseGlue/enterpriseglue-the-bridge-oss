@@ -33,6 +33,7 @@ import styles from '../../process-instance-detail/styles/InstanceDetail.module.c
 import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
 import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
+import type { HistoricDecisionIo } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
@@ -60,14 +61,7 @@ type HistoricDecisionInstance = {
   processInstanceId?: string | null
 }
 
-type DecisionIo = {
-  id?: string
-  clauseId?: string | null
-  clauseName?: string | null
-  type?: string | null
-  value?: any
-  ruleId?: string | null
-}
+type DecisionIo = HistoricDecisionIo
 
 function fmt(ts?: string | null) {
   if (!ts) return '--'

@@ -10,6 +10,7 @@ import {
   listHistoricTasks,
   listHistoricVariables,
   listHistoricDecisionInputs,
+  listHistoricDecisionOutputs,
   listUserOperations,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/history-extended-service.js';
 
@@ -52,8 +53,8 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared
   listHistoricTasks: vi.fn().mockResolvedValue([{ id: 'task-1' }]),
   listHistoricVariables: vi.fn().mockResolvedValue([{ id: 'var-1', value: 'secret' }]),
   listHistoricDecisions: vi.fn().mockResolvedValue([{ id: 'decision-1' }]),
-  listHistoricDecisionInputs: vi.fn().mockResolvedValue([{ id: 'input-1', value: 'secret' }]),
-  listHistoricDecisionOutputs: vi.fn().mockResolvedValue([{ id: 'output-1', value: 'secret' }]),
+  listHistoricDecisionInputs: vi.fn().mockResolvedValue([{ id: 'input-1', value: 'secret', type: 'String' }]),
+  listHistoricDecisionOutputs: vi.fn().mockResolvedValue([{ id: 'output-1', value: 'secret', type: 'String', ruleId: 'rule-1' }]),
   listUserOperations: vi.fn().mockResolvedValue([{ id: 'op-1', property: 'assignee' }]),
 }));
 
@@ -173,8 +174,18 @@ describe('mission-control extended history routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ id: 'input-1', value: 'secret' }]);
+    expect(response.body).toEqual([{ id: 'input-1', value: 'secret', type: 'String' }]);
     expect(listHistoricDecisionInputs).toHaveBeenCalledWith('engine-1', 'decision-1');
+  });
+
+  it('reads historic decision outputs through decision output action permission', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/history/decisions/decision-1/outputs')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'output-1', value: 'secret', type: 'String', ruleId: 'rule-1' }]);
+    expect(listHistoricDecisionOutputs).toHaveBeenCalledWith('engine-1', 'decision-1');
   });
 
   it('reads user operations through history user-operation action permission', async () => {

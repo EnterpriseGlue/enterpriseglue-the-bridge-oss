@@ -16,6 +16,7 @@ import {
   HistoricTaskQueryParams,
   HistoricVariableQueryParams,
   HistoricDecisionQueryParams,
+  HistoricDecisionIoListSchema,
   UserOperationLogQueryParams,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js';
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
@@ -85,7 +86,7 @@ r.get('/mission-control-api/history/decisions/:id/inputs', requireRuntimeDefinit
   const decisionId = String(req.params.id);
   const data = await listHistoricDecisionInputs(engineId, decisionId);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
-  res.json(redacted);
+  res.json(HistoricDecisionIoListSchema.parse(redacted));
 }));
 
 // Get historic decision instance outputs
@@ -98,7 +99,7 @@ r.get('/mission-control-api/history/decisions/:id/outputs', requireRuntimeDefini
   const decisionId = String(req.params.id);
   const data = await listHistoricDecisionOutputs(engineId, decisionId);
   const redacted = await piiRedactionService.redactPayload(req, data, 'history');
-  res.json(redacted);
+  res.json(HistoricDecisionIoListSchema.parse(redacted));
 }));
 
 // Get user operation log

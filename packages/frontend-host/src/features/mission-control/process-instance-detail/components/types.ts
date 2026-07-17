@@ -1,11 +1,6 @@
-export type DecisionIo = {
-  id?: string
-  clauseId?: string | null
-  clauseName?: string | null
-  type?: string | null
-  value?: any
-  ruleId?: string | null
-}
+import type { HistoricDecisionIo } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+
+export type DecisionIo = HistoricDecisionIo
 
 export type HistoricDecisionInstanceLite = {
   id: string
