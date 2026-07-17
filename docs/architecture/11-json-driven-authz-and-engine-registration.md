@@ -2263,6 +2263,8 @@ Variable-history reads now validate their normalized, PII-redacted rows through 
 
 Process-definition list, resolve, and detail reads now validate one adapter-compatible shared schema through both current and legacy Mission Control router implementations. Process Overview and Instance Detail import that same definition type, while adapter-specific fields remain preserved.
 
+Batch detail now has one shared envelope for its persisted row, engine counters, runtime statistics, failed-job diagnostics, and evaluator-derived action decisions. The route validates after redaction, OpenAPI no longer uses unknown fields, and the Batch API/modal consume the same contract while retaining engine extensions.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

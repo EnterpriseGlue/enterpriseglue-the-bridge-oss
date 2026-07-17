@@ -61,6 +61,7 @@ const {
   SavedFilterCreateRequestSchema,
   SavedFilterUpdateRequestSchema,
   BatchSchema,
+  BatchDetailSchema,
   BatchOperationCreateResponseSchema,
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
@@ -1278,11 +1279,6 @@ const CreateRetriesBatchRequest = z.object({
 })
 registry.register('CreateRetriesBatchRequest', CreateRetriesBatchRequest)
 
-const BatchDetailSchema = z.object({
-  batch: BatchSchema,
-  engine: z.unknown().nullable().optional(),
-  statistics: z.unknown().nullable().optional(),
-})
 registry.register('BatchDetail', BatchDetailSchema)
 
 // Create: delete instances (async)

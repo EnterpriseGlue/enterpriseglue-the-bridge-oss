@@ -22,6 +22,7 @@ export const BatchSchemaRaw = z.object({
   updatedAt: z.number(),
   completedAt: z.number().nullable(),
   lastError: z.string().nullable(),
+  suspended: z.boolean().optional(),
 });
 
 // Batch schemas
@@ -46,7 +47,50 @@ export const BatchSchema = BatchSchemaRaw.transform((b) => ({
   updatedAt: Number(b.updatedAt ?? 0),
   completedAt: b.completedAt ? Number(b.completedAt) : undefined,
   lastError: b.lastError ?? undefined,
+  suspended: b.suspended,
 }));
+
+export const BatchEngineInfoSchema = z.object({
+  id: z.string().optional(),
+  totalJobs: z.number().nullable().optional(),
+  jobsCreated: z.number().nullable().optional(),
+  completedJobs: z.number().nullable().optional(),
+  failedJobs: z.number().nullable().optional(),
+  remainingJobs: z.number().nullable().optional(),
+  invocationsPerBatchJob: z.number().nullable().optional(),
+  seedJobDefinitionId: z.string().nullable().optional(),
+  monitorJobDefinitionId: z.string().nullable().optional(),
+  batchJobDefinitionId: z.string().nullable().optional(),
+}).passthrough();
+
+export const BatchStatisticsSchema = z.object({
+  remainingJobs: z.number().nullable().optional(),
+  completedJobs: z.number().nullable().optional(),
+  failedJobs: z.number().nullable().optional(),
+}).passthrough();
+
+export const BatchFailedJobDetailSchema = z.object({
+  id: z.string().optional(),
+  exceptionMessage: z.string().nullable().optional(),
+  retries: z.number().nullable().optional(),
+  jobDefinitionId: z.string().nullable().optional(),
+  processInstanceId: z.string().nullable().optional(),
+  executionId: z.string().nullable().optional(),
+  stacktrace: z.string().nullable().optional(),
+}).passthrough();
+
+export const BatchRuntimeActionDecisionsSchema = z.object({
+  suspension: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
+  cancel: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
+}).passthrough();
+
+export const BatchDetailSchema = z.object({
+  batch: BatchSchema,
+  engine: BatchEngineInfoSchema.nullable().optional(),
+  statistics: BatchStatisticsSchema.nullable().optional(),
+  failedJobDetails: z.array(BatchFailedJobDetailSchema).optional(),
+  runtimeActionDecisions: BatchRuntimeActionDecisionsSchema.optional(),
+}).strict();
 
 export const BatchInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -71,4 +115,9 @@ export const BatchOperationCreateResponseSchema = z.object({
 
 // Types
 export type Batch = z.infer<typeof BatchSchema>;
+export type BatchEngineInfo = z.infer<typeof BatchEngineInfoSchema>;
+export type BatchStatistics = z.infer<typeof BatchStatisticsSchema>;
+export type BatchFailedJobDetail = z.infer<typeof BatchFailedJobDetailSchema>;
+export type BatchRuntimeActionDecisions = z.infer<typeof BatchRuntimeActionDecisionsSchema>;
+export type BatchDetail = z.infer<typeof BatchDetailSchema>;
 export type BatchOperationCreateResponse = z.infer<typeof BatchOperationCreateResponseSchema>;

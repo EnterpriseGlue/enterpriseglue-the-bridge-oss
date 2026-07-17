@@ -19,6 +19,7 @@ import { markBatchPollerViewer } from '../../../poller/batchPoller.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Batch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Batch.js'
+import { BatchDetailSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 import { BatchOperationCreateResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
@@ -422,7 +423,7 @@ r.get('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine
     ...(runtimeActionDecisions ? { runtimeActionDecisions } : {}),
   }, 'errors')
 
-  res.json(redacted)
+  res.json(BatchDetailSchema.parse(redacted))
 }))
 
 r.delete('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine.runtime.batches.cancel', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {

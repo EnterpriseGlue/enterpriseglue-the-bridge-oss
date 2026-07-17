@@ -17,6 +17,30 @@ import {
 
 const { logger } = vi.hoisted(() => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 
+const batchDetailRow = {
+  id: 'batch-1',
+  engineId: 'engine-1',
+  camundaBatchId: null,
+  type: 'DELETE_INSTANCES',
+  payload: null,
+  totalJobs: null,
+  jobsCreated: null,
+  completedJobs: null,
+  failedJobs: null,
+  remainingJobs: null,
+  invocationsPerBatchJob: null,
+  seedJobDefinitionId: null,
+  monitorJobDefinitionId: null,
+  batchJobDefinitionId: null,
+  status: 'RUNNING',
+  progress: null,
+  createdBy: null,
+  createdAt: 0,
+  updatedAt: 0,
+  completedAt: null,
+  lastError: null,
+};
+
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
@@ -237,10 +261,7 @@ describe('mission-control batches routes', () => {
 
   it('marks the batch poller viewer on detail fetch', async () => {
     batchRepo.findOne.mockResolvedValue({
-      id: 'batch-1',
-      engineId: 'engine-1',
-      status: 'RUNNING',
-      camundaBatchId: null,
+      ...batchDetailRow,
       metadata: null,
     });
 
@@ -253,7 +274,7 @@ describe('mission-control batches routes', () => {
 
   it('returns per-batch action decisions only when requested', async () => {
     batchRepo.findOne.mockResolvedValue({
-      id: 'batch-1', engineId: 'engine-1', status: 'RUNNING', camundaBatchId: null,
+      ...batchDetailRow,
       metadata: JSON.stringify({ authz: { processDefinitionKeys: ['payments'] } }),
     });
 

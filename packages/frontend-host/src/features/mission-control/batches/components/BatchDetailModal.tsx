@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ComposedModal, ModalHeader, ModalBody, ModalFooter, Button, InlineNotification, InlineLoading, ProgressBar } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
+import type { BatchDetail, BatchRuntimeActionDecisions } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 
-type RuntimeActionDecision = { allowed: boolean; reason?: string }
+type RuntimeActionDecision = BatchRuntimeActionDecisions['suspension']
 
 function deniedReason(decision?: RuntimeActionDecision): string | null {
   if (decision?.allowed) return null
@@ -27,7 +28,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
       params.set('includeActionDecisions', 'true')
-      return apiClient.get<any>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
+      return apiClient.get<BatchDetail>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
     },
     enabled: open && !!batchId && !!selectedEngineId,
     refetchInterval: open ? 5000 : false,
@@ -35,9 +36,9 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   const status = String(q.data?.batch?.status || '').toUpperCase()
   const progress = Number(q.data?.batch?.progress || 0)
-  const batch = q.data?.batch || {}
-  const engine = q.data?.engine || {}
-  const stats = q.data?.statistics || {}
+  const batch = q.data?.batch
+  const engine = q.data?.engine
+  const stats = q.data?.statistics
 
   const totalJobs = (engine?.totalJobs ?? batch?.totalJobs) as number | undefined
   const jobsCreated = (engine?.jobsCreated ?? batch?.jobsCreated) as number | undefined

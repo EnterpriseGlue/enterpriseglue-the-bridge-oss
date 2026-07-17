@@ -1,29 +1,10 @@
 import { apiClient } from '../../../../shared/api/client'
-import type { BatchOperationCreateResponse } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
+import type { Batch as SharedBatch, BatchDetail, BatchOperationCreateResponse, BatchStatistics as SharedBatchStatistics } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 
 // Types
-export type Batch = {
-  id: string
-  type: string
-  totalJobs: number
-  jobsCreated: number
-  batchJobsPerSeed: number
-  invocationsPerBatchJob: number
-  seedJobDefinitionId: string
-  monitorJobDefinitionId: string
-  batchJobDefinitionId: string
-  suspended: boolean
-  tenantId?: string
-  createUserId?: string
-  startTime?: string
-  executionStartTime?: string
-}
+export type Batch = SharedBatch
 
-export type BatchStatistics = {
-  remainingJobs: number
-  completedJobs: number
-  failedJobs: number
-}
+export type BatchStatistics = SharedBatchStatistics
 
 // API Functions
 export async function getBatches(engineId?: string): Promise<Batch[]> {
@@ -34,12 +15,12 @@ export async function getBatches(engineId?: string): Promise<Batch[]> {
   return apiClient.get<Batch[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
 }
 
-export async function getBatch(batchId: string, engineId?: string): Promise<Batch> {
+export async function getBatch(batchId: string, engineId?: string): Promise<BatchDetail> {
   const params = new URLSearchParams()
   if (engineId) params.set('engineId', engineId)
   const query = params.toString()
   const suffix = query ? `?${query}` : ''
-  return apiClient.get<Batch>(`/mission-control-api/batches/${batchId}${suffix}`, undefined, { credentials: 'include' })
+  return apiClient.get<BatchDetail>(`/mission-control-api/batches/${batchId}${suffix}`, undefined, { credentials: 'include' })
 }
 
 export async function getBatchStatistics(batchId: string, engineId?: string): Promise<BatchStatistics> {
