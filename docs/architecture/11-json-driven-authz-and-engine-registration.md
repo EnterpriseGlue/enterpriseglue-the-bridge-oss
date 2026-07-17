@@ -2423,6 +2423,8 @@ The Git client now imports the shared init-repository and existing-repository cl
 
 The backend repository init and clone routes now validate those same shared schemas. The clone UI's `conflictStrategy` is explicitly retained as a compatibility input; repository connection continues to defer conflict resolution to the later sync flow.
 
+The project-creation Git clone route now also uses shared request and exact import-receipt schemas across route validation, OpenAPI, and the Git client, replacing its undocumented `unknown` transport contract.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

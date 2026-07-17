@@ -173,6 +173,8 @@ const {
   RepositorySelectSchema,
   InitRepositoryRequestSchema,
   CloneRepositoryRequestSchema,
+  CloneFromGitRequestSchema,
+  CloneFromGitResponseSchema,
   DeployRequestSchema,
   RollbackRequestSchema,
   DeploymentResponseSchema,
@@ -3586,7 +3588,7 @@ registry.registerPath({ method: 'get', path: '/git-api/credentials/{providerId}/
 registry.registerPath({ method: 'get', path: '/git-api/credentials/{credentialId}/namespaces', ...authzExemption('GET', '/git-api/credentials/:credentialId/namespaces'), request: { params: z.object({ credentialId: z.string() }) }, responses: { 200: { description: 'Available namespaces', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
 
 // Clone & create
-registry.registerPath({ method: 'post', path: '/git-api/clone', ...authzExtension('project.create.git.create', 'POST', '/git-api/clone'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 201: { description: 'Repository cloned', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'post', path: '/git-api/clone', ...authzExtension('project.create.git.create', 'POST', '/git-api/clone'), request: { body: { content: { 'application/json': { schema: CloneFromGitRequestSchema } } } }, responses: { 201: { description: 'Repository cloned', content: { 'application/json': { schema: CloneFromGitResponseSchema } } } } });
 registry.register('CreateOnlineProjectResponse', CreateOnlineProjectResponseSchema);
 registry.registerPath({ method: 'post', path: '/git-api/create-online', ...authzExtension('project.create.git.create', 'POST', '/git-api/create-online'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 201: { description: 'Online repo created without submitted credentials', content: { 'application/json': { schema: CreateOnlineProjectResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/git-api/check-repo-exists', ...authzExtension('project.create.git.inspect', 'POST', '/git-api/check-repo-exists'), request: { body: { content: { 'application/json': { schema: z.object({ url: z.string() }) } } } }, responses: { 200: { description: 'Check result', content: { 'application/json': { schema: z.object({ exists: z.boolean() }) } } } } });

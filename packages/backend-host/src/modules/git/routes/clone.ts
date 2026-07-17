@@ -25,6 +25,7 @@ import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { CloneFromGitRequestSchema, CloneFromGitResponseSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
@@ -35,14 +36,7 @@ const repoInfoSchema = z.object({
 
 type RepoInfoBody = z.infer<typeof repoInfoSchema>;
 
-const cloneSchema = z.object({
-  providerId: z.string(),
-  repoUrl: z.string(),
-  branch: z.string().optional(),
-  projectName: z.string().optional(),
-});
-
-type CloneBody = z.infer<typeof cloneSchema>;
+type CloneBody = z.infer<typeof CloneFromGitRequestSchema>;
 
 // Git provider types
 type GitProviderType = 'github' | 'gitlab' | 'azure-devops' | 'bitbucket';
@@ -120,7 +114,7 @@ router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfo
  * POST /git-api/clone
  * Clone a repository and create a new project
  */
-router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(CloneFromGitRequestSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const { providerId, repoUrl, branch: requestedBranch, projectName } = req.body as CloneBody;
   const userId = req.user!.userId;
 
@@ -430,13 +424,13 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       }
     }
 
-    res.status(201).json({
+    res.status(201).json(CloneFromGitResponseSchema.parse({
       projectId,
       projectName: finalProjectName,
       filesImported,
       foldersCreated: sortedFolders.length,
       repositoryId,
-    });
+    }));
   } catch (error: any) {
     logger.error('Failed to clone repository', { providerId: providerIdStr, repoUrl: repoUrlStr, error });
     throw Errors.internal(error.message || 'Failed to clone repository');

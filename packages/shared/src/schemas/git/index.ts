@@ -4,11 +4,15 @@ export {
   RepositoryInsertSchema,
   InitRepositoryRequestSchema,
   CloneRepositoryRequestSchema,
+  CloneFromGitRequestSchema,
+  CloneFromGitResponseSchema,
   RepositoryResponseSchema,
   type Repository,
   type RepositoryInsert,
   type InitRepositoryRequest,
   type CloneRepositoryRequest,
+  type CloneFromGitRequest,
+  type CloneFromGitResponse,
 } from './repository.js';
 
 // Deployment schemas

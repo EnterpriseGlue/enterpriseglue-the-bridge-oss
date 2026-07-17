@@ -19,6 +19,7 @@ import type {
   LockResponse,
   LockHolder,
 } from '../types/git';
+import type { CloneFromGitRequest, CloneFromGitResponse } from '@enterpriseglue/shared/schemas/git/index.js';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 
@@ -116,19 +117,7 @@ class GitApi {
     });
   }
 
-  async cloneFromGit(data: {
-    providerId: string;
-    repoUrl: string;
-    branch?: string;
-    projectName?: string;
-    conflictStrategy?: 'preferRemote' | 'preferLocal';
-  }): Promise<{
-    projectId: string;
-    projectName: string;
-    filesImported: number;
-    foldersCreated: number;
-    repositoryId: string;
-  }> {
+  async cloneFromGit(data: CloneFromGitRequest): Promise<CloneFromGitResponse> {
     return this.fetch('/clone', {
       method: 'POST',
       body: JSON.stringify(data),

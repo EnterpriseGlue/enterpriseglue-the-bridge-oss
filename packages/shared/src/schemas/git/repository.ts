@@ -62,6 +62,22 @@ export const CloneRepositoryRequestSchema = z.object({
   conflictStrategy: z.enum(['preferRemote', 'preferLocal']).optional(),
 });
 
+export const CloneFromGitRequestSchema = z.object({
+  providerId: z.string(),
+  repoUrl: z.string(),
+  branch: z.string().optional(),
+  projectName: z.string().optional(),
+  conflictStrategy: z.enum(['preferRemote', 'preferLocal']).optional(),
+});
+
+export const CloneFromGitResponseSchema = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  filesImported: z.number().int().nonnegative(),
+  foldersCreated: z.number().int().nonnegative(),
+  repositoryId: z.string(),
+}).strict();
+
 export const RepositoryResponseSchema = RepositorySelectSchema;
 
 // Types
@@ -69,3 +85,5 @@ export type Repository = z.infer<typeof RepositorySelectSchema>;
 export type RepositoryInsert = z.infer<typeof RepositoryInsertSchema>;
 export type InitRepositoryRequest = z.infer<typeof InitRepositoryRequestSchema>;
 export type CloneRepositoryRequest = z.infer<typeof CloneRepositoryRequestSchema>;
+export type CloneFromGitRequest = z.infer<typeof CloneFromGitRequestSchema>;
+export type CloneFromGitResponse = z.infer<typeof CloneFromGitResponseSchema>;
