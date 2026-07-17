@@ -178,6 +178,8 @@ export const GitCredentialSchema = z.object({
   providerUsername: z.string().optional(), expiresAt: z.number().optional(),
   scopes: z.string().optional(), createdAt: z.number(), updatedAt: z.number(),
 }).strict();
+export const GitCredentialIdParamsSchema = z.object({ credentialId: z.string().min(1) });
+export const GitProviderIdParamsSchema = z.object({ providerId: z.string().min(1) });
 export const SaveGitCredentialRequestSchema = z.object({ providerId: z.string().min(1), token: z.string().min(1), name: z.string().optional() });
 export const RenameGitCredentialRequestSchema = z.object({ name: z.string().min(1) });
 export const GitCredentialNamespaceSchema = z.object({ name: z.string(), type: z.enum(['user', 'organization']), avatarUrl: z.string().optional() }).passthrough();
@@ -191,6 +193,7 @@ export const GitProviderDetailSchema = GitProviderSummarySchema.extend({
 }).strict();
 export const GitOAuthConfigSchema = z.object({ supportsOAuth: z.boolean(), isConfigured: z.boolean(), scopes: z.array(z.string()) }).strict();
 export const GitOAuthAuthorizeResponseSchema = z.object({ authUrl: z.string(), state: z.string() }).strict();
+export const GitOAuthCallbackRequestSchema = z.object({ code: z.string().min(1), state: z.string().min(1) }).strict();
 
 export const RepositoryResponseSchema = RepositorySelectSchema;
 
@@ -215,6 +218,8 @@ export type ProjectGitConnection = z.infer<typeof ProjectGitConnectionSchema>;
 export type ProjectGitConnectionReceipt = z.infer<typeof ProjectGitConnectionReceiptSchema>;
 export type ProjectGitConnectionOperationReceipt = z.infer<typeof ProjectGitConnectionOperationReceiptSchema>;
 export type GitCredential = z.infer<typeof GitCredentialSchema>;
+export type GitCredentialIdParams = z.input<typeof GitCredentialIdParamsSchema>;
+export type GitProviderIdParams = z.input<typeof GitProviderIdParamsSchema>;
 export type SaveGitCredentialRequest = z.infer<typeof SaveGitCredentialRequestSchema>;
 export type RenameGitCredentialRequest = z.infer<typeof RenameGitCredentialRequestSchema>;
 export type GitCredentialNamespace = z.infer<typeof GitCredentialNamespaceSchema>;
@@ -223,3 +228,4 @@ export type GitProviderSummary = z.infer<typeof GitProviderSummarySchema>;
 export type GitProviderDetail = z.infer<typeof GitProviderDetailSchema>;
 export type GitOAuthConfig = z.infer<typeof GitOAuthConfigSchema>;
 export type GitOAuthAuthorizeResponse = z.infer<typeof GitOAuthAuthorizeResponseSchema>;
+export type GitOAuthCallbackRequest = z.infer<typeof GitOAuthCallbackRequestSchema>;

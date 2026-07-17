@@ -4,8 +4,8 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { z } from 'zod';
+import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
@@ -14,18 +14,9 @@ import { oauthService } from '@enterpriseglue/shared/services/git/OAuthService.j
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
-import { GitCredentialNamespaceSchema, GitCredentialSchema, GitOAuthAuthorizeResponseSchema, GitOAuthConfigSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
+import { GitCredentialIdParamsSchema, GitCredentialNamespaceSchema, GitCredentialSchema, GitOAuthAuthorizeResponseSchema, GitOAuthCallbackRequestSchema, GitOAuthConfigSchema, GitProviderIdParamsSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
-
-// Validation schemas
-const credentialIdParamsSchema = z.object({
-  credentialId: z.string().min(1),
-});
-
-const providerIdParamsSchema = z.object({
-  providerId: z.string().min(1),
-});
 
 // Store pending OAuth provider redirects temporarily.
 // In production, this should live in a shared store (e.g. Redis).
@@ -120,7 +111,7 @@ router.post('/git-api/credentials', apiLimiter, requireAuth, validateBody(SaveGi
  * PATCH /git-api/credentials/:credentialId
  * Rename a credential
  */
-router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, validateParams(credentialIdParamsSchema), validateBody(RenameGitCredentialRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, validateParams(GitCredentialIdParamsSchema), validateBody(RenameGitCredentialRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const credentialId = String(req.params.credentialId);
   const { name } = req.body;
@@ -176,7 +167,7 @@ router.get('/git-api/credentials/:credentialId/namespaces', apiLimiter, requireA
  * GET /git-api/oauth/:providerId/config
  * Get OAuth configuration for a provider
  */
-router.get('/git-api/oauth/:providerId/config', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/oauth/:providerId/config', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const providerId = String(req.params.providerId);
   
   const oauthConfig = await oauthService.getOAuthConfig(providerId);
@@ -187,7 +178,7 @@ router.get('/git-api/oauth/:providerId/config', apiLimiter, requireAuth, asyncHa
  * GET /git-api/oauth/:providerId/authorize
  * Start OAuth flow - returns authorization URL
  */
-router.get('/git-api/oauth/:providerId/authorize', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/oauth/:providerId/authorize', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const providerId = String(req.params.providerId);
   
@@ -203,7 +194,7 @@ router.get('/git-api/oauth/:providerId/authorize', apiLimiter, requireAuth, asyn
   }));
 }));
 
-router.get('/git-api/oauth/:providerId/authorize/redirect', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/oauth/:providerId/authorize/redirect', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const safeProviderId = parseProviderId(String(req.params.providerId));
   if (!safeProviderId) {
     throw Errors.validation('Invalid providerId');
@@ -264,12 +255,8 @@ router.get('/git-api/oauth/authorize/redirect', apiLimiter, requireAuth, asyncHa
  * POST /git-api/oauth/callback
  * Handle OAuth callback - exchange code for tokens
  */
-router.post('/git-api/oauth/callback', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/oauth/callback', apiLimiter, requireAuth, validateBody(GitOAuthCallbackRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const { code, state } = req.body;
-  
-  if (!code || !state) {
-    throw Errors.validation('code and state are required');
-  }
   
   // Build redirect URI (must match the one used in authorize)
   const baseUrl = config.frontendUrl;
@@ -306,7 +293,7 @@ router.post('/git-api/oauth/callback', apiLimiter, requireAuth, asyncHandler(asy
  * POST /git-api/oauth/:providerId/refresh
  * Refresh OAuth token
  */
-router.post('/git-api/oauth/:providerId/refresh', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/oauth/:providerId/refresh', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const providerId = String(req.params.providerId);
   

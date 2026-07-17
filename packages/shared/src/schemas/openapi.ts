@@ -180,6 +180,8 @@ const {
   GitProviderDetailSchema,
   GitOAuthConfigSchema,
   GitOAuthAuthorizeResponseSchema,
+  GitOAuthCallbackRequestSchema,
+  GitProviderIdParamsSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
   RollbackRequestSchema,
@@ -3630,12 +3632,12 @@ registry.registerPath({ method: 'put', path: '/git-api/locks/{lockId}/heartbeat'
 registry.registerPath({ method: 'get', path: '/git-api/locks/{fileId}/events', ...authzExtension('project.git.locks.read', 'GET', '/git-api/locks/:fileId/events'), request: { params: z.object({ fileId: z.string().uuid() }) }, responses: { 200: { description: 'SSE stream of lock and file events', content: { 'text/event-stream': { schema: z.string() } } } } });
 
 // Git OAuth
-registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize', ...authzExemption('GET', '/git-api/oauth/:providerId/authorize'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to OAuth provider' } } });
-registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize/redirect', ...authzExemption('GET', '/git-api/oauth/:providerId/authorize/redirect'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'OAuth redirect' } } });
-registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/config', ...authzExemption('GET', '/git-api/oauth/:providerId/config'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'OAuth capability metadata without client configuration', content: { 'application/json': { schema: GitOAuthConfigSchema } } } } });
-registry.registerPath({ method: 'post', path: '/git-api/oauth/{providerId}/refresh', ...authzExemption('POST', '/git-api/oauth/:providerId/refresh'), request: { params: z.object({ providerId: z.string() }) }, responses: { 200: { description: 'Token refreshed' } } });
+registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize', ...authzExemption('GET', '/git-api/oauth/:providerId/authorize'), request: { params: GitProviderIdParamsSchema }, responses: { 200: { description: 'OAuth authorization URL and opaque state', content: { 'application/json': { schema: GitOAuthAuthorizeResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/authorize/redirect', ...authzExemption('GET', '/git-api/oauth/:providerId/authorize/redirect'), request: { params: GitProviderIdParamsSchema }, responses: { 302: { description: 'OAuth redirect' } } });
+registry.registerPath({ method: 'get', path: '/git-api/oauth/{providerId}/config', ...authzExemption('GET', '/git-api/oauth/:providerId/config'), request: { params: GitProviderIdParamsSchema }, responses: { 200: { description: 'OAuth capability metadata without client configuration', content: { 'application/json': { schema: GitOAuthConfigSchema } } } } });
+registry.registerPath({ method: 'post', path: '/git-api/oauth/{providerId}/refresh', ...authzExemption('POST', '/git-api/oauth/:providerId/refresh'), request: { params: GitProviderIdParamsSchema }, responses: { 200: { description: 'Token refreshed' } } });
 registry.registerPath({ method: 'get', path: '/git-api/oauth/authorize/redirect', ...authzExemption('GET', '/git-api/oauth/authorize/redirect'), responses: { 302: { description: 'Generic OAuth redirect' } } });
-registry.registerPath({ method: 'post', path: '/git-api/oauth/callback', ...authzExemption('POST', '/git-api/oauth/callback'), responses: { 200: { description: 'OAuth callback processed' } } });
+registry.registerPath({ method: 'post', path: '/git-api/oauth/callback', ...authzExemption('POST', '/git-api/oauth/callback'), request: { body: { content: { 'application/json': { schema: GitOAuthCallbackRequestSchema } } } }, responses: { 200: { description: 'OAuth credential saved without token material', content: { 'application/json': { schema: GitCredentialSchema } } } } });
 
 // Git project connection
 registry.registerPath({ method: 'get', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.read', 'GET', '/git-api/project-connection'), request: { query: ProjectGitConnectionQuerySchema }, responses: { 200: { description: 'Project connection state without a service token', content: { 'application/json': { schema: ProjectGitConnectionSchema } } } } });
