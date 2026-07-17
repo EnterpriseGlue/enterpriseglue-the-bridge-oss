@@ -94,6 +94,7 @@ export class MockBrowserIdentityStack {
             'platform:sso-assignments:view', 'platform:sso-assignments:manage',
           ],
           projects: [], engines: [], generatedAt: Date.now(),
+          authorizationVersion: 'browser-authz-v1',
         });
       }
       if (path === '/api/dashboard/context') return json(route, { isPlatformAdmin: true, canViewActiveUsers: false, canViewEngines: false, canViewProcessData: false, canViewDeployments: false, canViewMetrics: false });
