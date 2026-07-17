@@ -74,7 +74,31 @@ export const ProjectInsertSchema = z.object({
 });
 
 // Request schemas
-export const CreateProjectRequest = ProjectInsertSchema.pick({ name: true });
+export const ProjectImportFromEngineSchema = z.object({
+  enabled: z.boolean().optional(),
+  engineId: z.string().min(1).optional(),
+}).superRefine((value, ctx) => {
+  if (value.enabled && !value.engineId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['engineId'],
+      message: 'Engine selection is required when import is enabled',
+    });
+  }
+});
+
+export const CreateProjectRequest = z.object({
+  name: z.string().min(1).max(255),
+  importFromEngine: ProjectImportFromEngineSchema.optional(),
+});
+
+export const CreateProjectResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  ownerId: z.string(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
 export const RenameProjectRequest = z.object({ name: z.string().min(1) });
 
 // Types
@@ -84,3 +108,4 @@ export type ProjectOverviewProject = z.infer<typeof ProjectOverviewProjectSchema
 export type ProjectOverviewList = z.infer<typeof ProjectOverviewListSchema>;
 export type ProjectImportPreview = z.infer<typeof ProjectImportPreviewResponseSchema>;
 export type CreateProject = z.infer<typeof CreateProjectRequest>;
+export type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>;

@@ -46,6 +46,8 @@ import {
   type ProjectEngineAccessPendingRequest,
 } from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js';
 import {
+  CreateProjectRequest,
+  CreateProjectResponseSchema,
   ProjectImportPreviewRequestSchema,
   ProjectImportPreviewResponseSchema,
   ProjectOverviewListSchema,
@@ -53,21 +55,6 @@ import {
 
 // Validation schemas
 const projectIdParamSchema = z.object({ projectId: z.string().uuid() });
-const createProjectBodySchema = z.object({
-  name: z.string().min(1).max(255),
-  importFromEngine: z.object({
-    enabled: z.boolean().optional(),
-    engineId: z.string().min(1).optional(),
-  }).optional(),
-}).superRefine((value: { importFromEngine?: { enabled?: boolean; engineId?: string } }, ctx: z.RefinementCtx) => {
-  if (value.importFromEngine?.enabled && !value.importFromEngine.engineId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['importFromEngine', 'engineId'],
-      message: 'Engine selection is required when import is enabled',
-    });
-  }
-});
 const renameProjectBodySchema = z.object({ name: z.string().min(1).max(255) });
 const projectDeploymentTargetStatusSchema = z.enum(['active', 'disabled', 'archived']);
 const projectDeploymentTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation']);
@@ -380,7 +367,7 @@ r.get('/starbase-api/projects', apiLimiter, requireAuth, requireAction('project.
  * 
  * ✨ Migrated to TypeORM
  */
-r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, requireAction('project.projects.create', { resourceResolver: 'platform.self' }), validateBody(createProjectBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, requireAction('project.projects.create', { resourceResolver: 'platform.self' }), validateBody(CreateProjectRequest), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const {
     name,
@@ -462,7 +449,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
     }
   });
 
-  res.json({ id, name: trimmed, ownerId: userId, createdAt: now, updatedAt: now });
+  res.json(CreateProjectResponseSchema.parse({ id, name: trimmed, ownerId: userId, createdAt: now, updatedAt: now }));
 }));
 
 r.post('/starbase-api/projects/import-preview', apiLimiter, requireAuth, validateBody(ProjectImportPreviewRequestSchema), requireAction('project.import.preview', { resourceResolver: 'engine.byId', resourceIdFrom: 'body', resourceIdKey: 'engineId' }), asyncHandler(async (req: Request, res: Response) => {

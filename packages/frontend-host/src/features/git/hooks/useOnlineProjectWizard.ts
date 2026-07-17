@@ -14,6 +14,7 @@ import { getAccessibleEngines } from '../../mission-control/engines/api/engines'
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 import type { CreateOnlineProjectResponse } from '@enterpriseglue/shared/schemas/git/online-project.js'
 import type { ProjectImportPreview as SharedProjectImportPreview } from '@enterpriseglue/shared/schemas/starbase/project.js'
+import type { CreateProjectResponse } from '@enterpriseglue/shared/schemas/starbase/project.js'
 
 export type AuthMethod = 'oauth' | 'pat'
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -32,8 +33,6 @@ interface Namespace {
   type: 'user' | 'organization'
   avatarUrl?: string
 }
-
-type CreateLocalResponse = { id: string; name: string }
 
 export type EngineForImport = Pick<AccessibleEngineSummary, 'id' | 'name' | 'baseUrl'>
 
@@ -523,7 +522,7 @@ export function useOnlineProjectWizard({
   const createLocalMutation = useMutation({
     mutationFn: async () => {
       try {
-        return await apiClient.post<CreateLocalResponse>('/starbase-api/projects', {
+        return await apiClient.post<CreateProjectResponse>('/starbase-api/projects', {
           name: projectName.trim(),
           importFromEngine: importFromEnginePayload,
         })
@@ -532,7 +531,7 @@ export function useOnlineProjectWizard({
         throw new Error(parsed.message || 'Failed to create project')
       }
     },
-    onSuccess: async (data: CreateLocalResponse) => {
+    onSuccess: async (data: CreateProjectResponse) => {
       await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
       resetForm()
       onClose()

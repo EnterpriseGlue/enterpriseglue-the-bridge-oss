@@ -12,6 +12,7 @@ const {
   ProjectImportPreviewRequestSchema,
   ProjectImportPreviewResponseSchema,
   CreateProjectRequest,
+  CreateProjectResponseSchema,
   RenameProjectRequest,
   FileSchema,
   FileSchemaRaw,
@@ -252,6 +253,7 @@ registry.registerPath({
 
 // POST /projects (create project)
 registry.register('CreateProjectRequest', CreateProjectRequest);
+registry.register('CreateProjectResponse', CreateProjectResponseSchema);
 registry.registerPath({
   method: 'post',
   path: '/starbase-api/projects',
@@ -260,9 +262,9 @@ registry.registerPath({
     body: { content: { 'application/json': { schema: CreateProjectRequest } } },
   },
   responses: {
-    201: {
+    200: {
       description: 'Project created',
-      content: { 'application/json': { schema: ProjectSchema } },
+      content: { 'application/json': { schema: CreateProjectResponseSchema } },
     },
   },
 });
