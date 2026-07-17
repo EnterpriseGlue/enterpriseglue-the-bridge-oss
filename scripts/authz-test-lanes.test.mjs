@@ -59,6 +59,17 @@ test('the local-safe lanes preserve every focused authorization check once', () 
   assert.equal(new Set(leafChecks).size, leafChecks.length, 'each focused check belongs to one lane');
 });
 
+test('legacy protocol fixtures run in isolated Vitest processes', () => {
+  const command = scripts['test:legacy-auth-integration'];
+  const commands = [...command.matchAll(/vitest run ([^&]+)/g)].map((match) => match[1]);
+
+  assert.deepEqual(commands, [
+    '__tests__/modules/auth/routes/microsoft-flow.e2e.test.ts --config vitest.config.ts --reporter=dot ',
+    '__tests__/modules/auth/routes/google-flow.e2e.test.ts --config vitest.config.ts --reporter=dot ',
+    '__tests__/modules/auth/routes/saml-flow.e2e.test.ts --config vitest.config.ts --reporter=dot',
+  ]);
+});
+
 test('browser, credentialed local authorization, and LDAP-container boundaries stay opt-in', () => {
   const localCommands = [...localLanes]
     .map((name) => scripts[name])

@@ -2359,6 +2359,8 @@ Mission Control's authorization-filtered engine inventory now also has a shared 
 
 Local browser validation is exercised by the maintained Playwright smoke/rehearsal lanes and an independent authenticated manual check against the non-TLS local frontend. On 2026-07-17, a local administrator signed in at `http://localhost:5173`, reached the tenant Dashboard, and opened Access Control. The Roles tab rendered the canonical scoped role catalogue; the Assignments tab rendered canonical group-backed baseline assignments alongside explicitly labelled legacy compatibility rows; and the SSO Mappings tab exposed the retained legacy platform/group mapping diagnostics. After rebuilding the current frontend image, the same authenticated local session followed `/t/default/admin/access-control?tab=project-targets`; the Project Targets tab was selected from the deep link and rendered its canonical controls alongside retained `legacy` target rows. This confirms the local UI preserves compatibility state rather than silently removing it. The embedded browser still rejects the local development CA at the TLS endpoint, so this manual evidence does not replace the protocol-faithful OIDC rehearsal or constitute deployed legacy-provider cutover evidence.
 
+The local-safe legacy protocol lane executes the Microsoft, Google, and SAML mocked flows in isolated Vitest processes. Their route fixtures intentionally mock the same service-module paths with different provider behavior, so process isolation prevents module-state leakage while keeping every provider flow mandatory in the aggregate gate.
+
 Phase 0 exit criteria:
 
 - [ ] ⬜ No new authorization write uses a legacy user/role/member field.
