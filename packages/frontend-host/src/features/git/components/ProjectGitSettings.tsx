@@ -19,20 +19,12 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { ProjectPermission } from '../../../shared/auth/permissions'
 import { AuthContext } from '../../../contexts/AuthContext'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
-
-interface GitConnectionInfo {
-  connected: boolean
-  providerId?: string
-  repositoryName?: string
-  namespace?: string
-  defaultBranch?: string
-  remoteUrl?: string
-  hasToken?: boolean
-  lastValidatedAt?: number | null
-  tokenScopeHint?: string | null
-  connectedByUserId?: string | null
-  lastSyncAt?: number | null
-}
+import type {
+  DisconnectProjectGitConnectionRequest,
+  ProjectGitConnection,
+  ProjectGitConnectionRequest,
+  UpdateProjectGitConnectionTokenRequest,
+} from '@enterpriseglue/shared/schemas/git/repository.js'
 
 interface ProjectGitSettingsProps {
   projectId: string
@@ -114,7 +106,7 @@ export function ProjectGitSettings({
   // Fetch connection status
   const connectionQ = useQuery({
     queryKey: ['git-connection', projectId],
-    queryFn: () => apiClient.get<GitConnectionInfo>('/git-api/project-connection', { projectId }),
+    queryFn: () => apiClient.get<ProjectGitConnection>('/git-api/project-connection', { projectId }),
     enabled: open && !!projectId && !readConnectionUnavailableReason,
   })
 
@@ -140,7 +132,7 @@ export function ProjectGitSettings({
 
   // Connect mutation
   const connectMutation = useMutation({
-    mutationFn: (data: { projectId: string; providerId: string; repositoryName: string; namespace?: string; defaultBranch: string; token: string }) =>
+    mutationFn: (data: ProjectGitConnectionRequest) =>
       apiClient.post('/git-api/project-connection', data),
     onSuccess: () => {
       setError(null)
@@ -155,7 +147,7 @@ export function ProjectGitSettings({
 
   // Update token mutation
   const updateTokenMutation = useMutation({
-    mutationFn: (data: { projectId: string; token: string }) =>
+    mutationFn: (data: UpdateProjectGitConnectionTokenRequest) =>
       apiClient.put('/git-api/project-connection/token', data),
     onSuccess: () => {
       setError(null)
@@ -173,7 +165,7 @@ export function ProjectGitSettings({
   const disconnectMutation = useMutation({
     mutationFn: () => apiClient.delete('/git-api/project-connection', {
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId }),
+      body: JSON.stringify({ projectId } satisfies DisconnectProjectGitConnectionRequest),
     }),
     onSuccess: () => {
       setError(null)

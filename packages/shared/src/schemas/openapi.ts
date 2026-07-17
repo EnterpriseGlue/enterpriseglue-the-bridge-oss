@@ -192,6 +192,13 @@ const {
   GitSyncStatusResponseSchema,
   GitSyncRequestSchema,
   GitSyncResponseSchema,
+  ProjectGitConnectionQuerySchema,
+  ProjectGitConnectionRequestSchema,
+  UpdateProjectGitConnectionTokenRequestSchema,
+  DisconnectProjectGitConnectionRequestSchema,
+  ProjectGitConnectionSchema,
+  ProjectGitConnectionReceiptSchema,
+  ProjectGitConnectionOperationReceiptSchema,
 } = await import('@enterpriseglue/shared/schemas/git/index.js');
 
 const registry = new OpenAPIRegistry();
@@ -3627,10 +3634,10 @@ registry.registerPath({ method: 'get', path: '/git-api/oauth/authorize/redirect'
 registry.registerPath({ method: 'post', path: '/git-api/oauth/callback', ...authzExemption('POST', '/git-api/oauth/callback'), responses: { 200: { description: 'OAuth callback processed' } } });
 
 // Git project connection
-registry.registerPath({ method: 'get', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.read', 'GET', '/git-api/project-connection'), request: { query: z.object({ projectId: z.string() }) }, responses: { 200: { description: 'Project connection state', content: { 'application/json': { schema: z.unknown() } } } } });
-registry.registerPath({ method: 'post', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.manage', 'POST', '/git-api/project-connection'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Project connection established', content: { 'application/json': { schema: z.unknown() } } } } });
-registry.registerPath({ method: 'put', path: '/git-api/project-connection/token', ...authzExtension('project.git.repositories.manage', 'PUT', '/git-api/project-connection/token'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Connection token updated' } } });
-registry.registerPath({ method: 'delete', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.manage', 'DELETE', '/git-api/project-connection'), request: { body: { content: { 'application/json': { schema: z.unknown() } } } }, responses: { 200: { description: 'Project connection disconnected', content: { 'application/json': { schema: z.object({ success: z.boolean() }) } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.read', 'GET', '/git-api/project-connection'), request: { query: ProjectGitConnectionQuerySchema }, responses: { 200: { description: 'Project connection state without a service token', content: { 'application/json': { schema: ProjectGitConnectionSchema } } } } });
+registry.registerPath({ method: 'post', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.manage', 'POST', '/git-api/project-connection'), request: { body: { content: { 'application/json': { schema: ProjectGitConnectionRequestSchema } } } }, responses: { 200: { description: 'Project connection established', content: { 'application/json': { schema: ProjectGitConnectionReceiptSchema } } } } });
+registry.registerPath({ method: 'put', path: '/git-api/project-connection/token', ...authzExtension('project.git.repositories.manage', 'PUT', '/git-api/project-connection/token'), request: { body: { content: { 'application/json': { schema: UpdateProjectGitConnectionTokenRequestSchema } } } }, responses: { 200: { description: 'Connection token updated', content: { 'application/json': { schema: ProjectGitConnectionOperationReceiptSchema } } } } });
+registry.registerPath({ method: 'delete', path: '/git-api/project-connection', ...authzExtension('project.git.repositories.manage', 'DELETE', '/git-api/project-connection'), request: { body: { content: { 'application/json': { schema: DisconnectProjectGitConnectionRequestSchema } } } }, responses: { 200: { description: 'Project connection disconnected', content: { 'application/json': { schema: ProjectGitConnectionOperationReceiptSchema } } } } });
 
 export function generateOpenApi(): any {
   const generator = new OpenApiGeneratorV3(registry.definitions);

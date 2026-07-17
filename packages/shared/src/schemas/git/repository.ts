@@ -121,6 +121,56 @@ export const GitSyncResponseSchema = z.object({
   isFirstSync: z.boolean().optional(),
 }).strict();
 
+// Project service tokens are accepted only by write requests. Connection
+// status is intentionally redacted to `hasToken` and never exposes a secret.
+export const ProjectGitConnectionQuerySchema = z.object({
+  projectId: z.string().uuid(),
+});
+
+export const ProjectGitConnectionRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  providerId: z.string().min(1),
+  repositoryName: z.string().min(1),
+  namespace: z.string().optional(),
+  defaultBranch: z.string().default('main'),
+  token: z.string().min(1),
+});
+
+export const UpdateProjectGitConnectionTokenRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  token: z.string().min(1),
+});
+
+export const DisconnectProjectGitConnectionRequestSchema = z.object({
+  projectId: z.string().uuid(),
+});
+
+export const ProjectGitConnectionSchema = z.union([
+  z.object({ connected: z.literal(false) }).strict(),
+  z.object({
+    connected: z.literal(true),
+    providerId: z.string(),
+    repositoryName: z.string(),
+    namespace: z.string().nullable(),
+    defaultBranch: z.string(),
+    remoteUrl: z.string(),
+    hasToken: z.boolean(),
+    lastValidatedAt: z.number().nullable(),
+    tokenScopeHint: z.string().nullable(),
+    connectedByUserId: z.string().nullable(),
+    lastSyncAt: z.number().nullable(),
+  }).strict(),
+]);
+
+export const ProjectGitConnectionReceiptSchema = z.object({
+  success: z.literal(true),
+  repoFullName: z.string(),
+}).strict();
+
+export const ProjectGitConnectionOperationReceiptSchema = z.object({
+  success: z.literal(true),
+}).strict();
+
 export const GitCredentialSchema = z.object({
   id: z.string(), userId: z.string(), providerId: z.string(),
   providerName: z.string(), providerType: z.string(),
@@ -148,6 +198,13 @@ export type GitSyncStatusQuery = z.input<typeof GitSyncStatusQuerySchema>;
 export type GitSyncStatusResponse = z.infer<typeof GitSyncStatusResponseSchema>;
 export type GitSyncRequest = z.infer<typeof GitSyncRequestSchema>;
 export type GitSyncResponse = z.infer<typeof GitSyncResponseSchema>;
+export type ProjectGitConnectionQuery = z.input<typeof ProjectGitConnectionQuerySchema>;
+export type ProjectGitConnectionRequest = z.input<typeof ProjectGitConnectionRequestSchema>;
+export type UpdateProjectGitConnectionTokenRequest = z.input<typeof UpdateProjectGitConnectionTokenRequestSchema>;
+export type DisconnectProjectGitConnectionRequest = z.input<typeof DisconnectProjectGitConnectionRequestSchema>;
+export type ProjectGitConnection = z.infer<typeof ProjectGitConnectionSchema>;
+export type ProjectGitConnectionReceipt = z.infer<typeof ProjectGitConnectionReceiptSchema>;
+export type ProjectGitConnectionOperationReceipt = z.infer<typeof ProjectGitConnectionOperationReceiptSchema>;
 export type GitCredential = z.infer<typeof GitCredentialSchema>;
 export type SaveGitCredentialRequest = z.infer<typeof SaveGitCredentialRequestSchema>;
 export type RenameGitCredentialRequest = z.infer<typeof RenameGitCredentialRequestSchema>;

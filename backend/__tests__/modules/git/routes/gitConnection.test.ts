@@ -128,6 +128,8 @@ describe('git project connection routes', () => {
       defaultBranch: 'main',
       hasToken: true,
     });
+    expect(response.body).not.toHaveProperty('token');
+    expect(response.body).not.toHaveProperty('encryptedToken');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       tenantId: 'tenant-a',
