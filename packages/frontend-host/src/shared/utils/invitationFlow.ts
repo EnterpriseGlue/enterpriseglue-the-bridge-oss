@@ -1,9 +1,12 @@
-export type InvitationDeliveryMethod = 'email' | 'manual'
+import type {
+  InvitationCapabilitiesResponse,
+  InvitationDeliveryMethod as SharedInvitationDeliveryMethod,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js'
 
-export interface InvitationCapabilities {
-  ssoRequired: boolean
-  emailConfigured: boolean
-}
+// These values are API transport contracts. Keep the established helper names
+// as aliases so callers do not maintain their own invitation policy shape.
+export type InvitationDeliveryMethod = SharedInvitationDeliveryMethod
+export type InvitationCapabilities = InvitationCapabilitiesResponse
 
 export interface InvitationDeliveryOption {
   value: InvitationDeliveryMethod

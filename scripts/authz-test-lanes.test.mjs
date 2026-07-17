@@ -16,6 +16,7 @@ const frontendAuthTypes = readFileSync(new URL('../packages/frontend-host/src/sh
 const frontendAuthService = readFileSync(new URL('../packages/frontend-host/src/services/auth.ts', import.meta.url), 'utf8');
 const frontendAuthzApi = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts', import.meta.url), 'utf8');
 const frontendSharedApiTypes = readFileSync(new URL('../packages/frontend-host/src/shared/api/types.ts', import.meta.url), 'utf8');
+const frontendInvitationFlow = readFileSync(new URL('../packages/frontend-host/src/shared/utils/invitationFlow.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -127,6 +128,13 @@ test('the frontend shared API type barrel re-exports canonical transport schemas
   assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/starbase\/project\.js/);
   assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/starbase\/file\.js/);
   assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/mission-control\/process\.js/);
+});
+
+test('the invitation delivery helper uses the shared capabilities contract', () => {
+  assert.match(frontendInvitationFlow, /@enterpriseglue\/shared\/schemas\/platform-admin\/invitation\.js/);
+  assert.match(frontendInvitationFlow, /InvitationCapabilitiesResponse/);
+  assert.match(frontendInvitationFlow, /InvitationDeliveryMethod as SharedInvitationDeliveryMethod/);
+  assert.doesNotMatch(frontendInvitationFlow, /export interface InvitationCapabilities/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {

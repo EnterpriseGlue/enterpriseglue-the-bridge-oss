@@ -2245,6 +2245,8 @@ Both browser consumers of the coarse effective-permissions snapshot now parse th
 
 The retained frontend shared-API type barrel is now a compatibility re-export of the canonical Starbase and Mission Control schema-derived types, rather than a second set of project, file, version, comment, engine, process-definition, and process-instance interfaces.
 
+The shared invitation-delivery helper also aliases the canonical invitation capabilities and delivery-method schema types; its reveal-once display state remains local because it is not a persistent API response contract.
+
 Git-backed project creation now shares a redacted project/repository response contract across its runtime serializer, OpenAPI route, and wizard; submitted Git tokens remain request-only.
 
 The evaluator-filtered process-instance collection now serializes one shared runtime contract, including suspended and incident states, action decisions, and safe adapter extensions; Dashboard and Mission Control list consumers no longer maintain separate instance shapes.
