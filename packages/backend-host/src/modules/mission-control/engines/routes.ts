@@ -45,6 +45,7 @@ import {
   SavedFilterUpdateRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/saved-filter.js'
 import { engineRegistrationJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js'
+import { EngineMetadataReconciliationResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
@@ -1471,7 +1472,7 @@ r.get('/engines-api/engines/:id/runtime-resources', engineLimiter, requireAuth, 
 r.post('/engines-api/engines/:id/runtime-resources/reconcile', engineLimiter, requireAuth, reconciliationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = String(req.params.id)
   const tenantId = req.tenant?.tenantId || null
-  res.json(await engineMetadataReconciliationService.reconcileEngine(engineId, tenantId))
+  res.json(EngineMetadataReconciliationResultSchema.parse(await engineMetadataReconciliationService.reconcileEngine(engineId, tenantId)))
 }))
 
 r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.project-access.requests.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.PROJECT_ACCESS_VIEW, EnginePermissions.MEMBERS_MANAGE] }), asyncHandler(async (req: Request, res: Response) => {
