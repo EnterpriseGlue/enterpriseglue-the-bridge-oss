@@ -339,6 +339,7 @@ describe('auth middleware', () => {
       await optionalAuth(req as Request, res as Response, next);
 
       expect(req.user).toBeDefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(next).toHaveBeenCalled();
     });
 
@@ -346,6 +347,7 @@ describe('auth middleware', () => {
       await optionalAuth(req as Request, res as Response, next);
 
       expect(req.user).toBeUndefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
       expect(next).toHaveBeenCalled();
     });
 

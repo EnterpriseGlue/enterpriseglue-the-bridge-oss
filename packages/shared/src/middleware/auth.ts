@@ -218,6 +218,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       });
       if (user && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
         req.user = { ...payload, email: user.email };
+        updateBpmnEngineRequestContext({ userId: payload.userId });
       }
     }
   } catch {

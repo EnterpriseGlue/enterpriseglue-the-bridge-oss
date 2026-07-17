@@ -2335,6 +2335,8 @@ The process-instance job list now likewise has a shared passthrough display mode
 
 Failed external tasks for Process Instance Detail now use their own shared passthrough display model across the runtime route, OpenAPI, and retry UI, retaining engine-specific failure metadata.
 
+Optional authentication now populates the outbound BPMN request context only after canonical-principal, active-user, and session-version validation succeeds; malformed, inactive, or revoked sessions remain anonymous and establish no downstream identity context.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.
