@@ -75,7 +75,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/processes/service.js', () => ({
   listProcessDefinitions: vi.fn().mockResolvedValue([]),
-  getProcessDefinition: vi.fn().mockResolvedValue({ id: 'pd1', key: 'process1' }),
+  getProcessDefinition: vi.fn().mockResolvedValue({ id: 'pd1', key: 'process1', version: 1 }),
   getProcessDefinitionXml: vi.fn().mockResolvedValue({ id: 'pd1', bpmn20Xml: '<bpmn/>' }),
   getProcessDefinitionStatistics: vi.fn().mockResolvedValue({}),
   startProcessInstance: vi.fn().mockResolvedValue({ id: 'pi1' }),
@@ -174,7 +174,7 @@ describe('mission-control processes routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ id: 'pd1', key: 'process1' });
+    expect(response.body).toMatchObject({ id: 'pd1', key: 'process1', version: 1 });
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',
@@ -225,8 +225,8 @@ describe('mission-control processes routes', () => {
         : [{ resourceKey: 'hr-onboard', runtimeTenantId: 'people' }]
     ));
     (listProcessDefinitions as unknown as Mock).mockResolvedValue([
-      { id: 'payments:1', key: 'payments-order', tenantId: 'finance' },
-      { id: 'hr:1', key: 'hr-onboard', tenantId: 'people' },
+      { id: 'payments:1', key: 'payments-order', version: 1, tenantId: 'finance' },
+      { id: 'hr:1', key: 'hr-onboard', version: 1, tenantId: 'people' },
     ]);
 
     const [paymentsResponse, hrResponse] = await Promise.all([
@@ -235,9 +235,9 @@ describe('mission-control processes routes', () => {
     ]);
 
     expect(paymentsResponse.status).toBe(200);
-    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-order', tenantId: 'finance' }]);
+    expect(paymentsResponse.body).toEqual([{ id: 'payments:1', key: 'payments-order', version: 1, tenantId: 'finance' }]);
     expect(hrResponse.status).toBe(200);
-    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-onboard', tenantId: 'people' }]);
+    expect(hrResponse.body).toEqual([{ id: 'hr:1', key: 'hr-onboard', version: 1, tenantId: 'people' }]);
     expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'central-engine', resourceKind: 'process_definition', permission: 'engine:instance:view', userId: 'payments-user',
     }));

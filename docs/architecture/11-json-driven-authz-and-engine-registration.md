@@ -2261,6 +2261,8 @@ The permanently disabled Instance Detail `called-process-instances` client was r
 
 Variable-history reads now validate their normalized, PII-redacted rows through the existing shared schema, OpenAPI contract, Instance Detail client, and modals, replacing the final local duplicate of that history-entry interface.
 
+Process-definition list, resolve, and detail reads now validate one adapter-compatible shared schema through both current and legacy Mission Control router implementations. Process Overview and Instance Detail import that same definition type, while adapter-specific fields remain preserved.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

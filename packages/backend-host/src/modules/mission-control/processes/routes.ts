@@ -13,7 +13,7 @@ import {
 } from './service.js'
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js'
-import { ProcessInstanceStartResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { ProcessDefinitionSchema, ProcessInstanceStartResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { ProcessEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const r = Router()
@@ -60,7 +60,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
   const keys = req.authorizedRuntimeResourceKeys
   const scopes = req.authorizedRuntimeResourceScopes
   if (!keys) {
-    return res.json(await listProcessDefinitions(engineId, baseQuery))
+    return res.json(z.array(ProcessDefinitionSchema).parse(await listProcessDefinitions(engineId, baseQuery)))
   }
 
   const visibleKeys = keys.filter((candidate) => !key || candidate === key)
@@ -70,7 +70,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     // Do not trust an upstream key filter to be enforced consistently.
     return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key', scopes)
   }))
-  res.json(collections.flat())
+  res.json(z.array(ProcessDefinitionSchema).parse(collections.flat()))
 }))
 
 // Resolve Starbase edit target for a deployed process version
@@ -108,7 +108,7 @@ r.get('/mission-control-api/process-definitions/:id', requireProcessDefinitionAc
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinition(engineId, definitionId)
-  res.json(data)
+  res.json(ProcessDefinitionSchema.parse(data))
 }))
 
 // Get process definition XML

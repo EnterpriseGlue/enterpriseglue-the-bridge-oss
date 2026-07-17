@@ -7,6 +7,7 @@ import type {
   ActivityCountByActivityId,
   ActivityCountsByState as SharedActivityCountsByState,
   ActivityInstance,
+  ProcessDefinition as SharedProcessDefinition,
   ProcessInstance as SharedProcessInstance,
   ProcessInstanceExternalTask,
   ProcessInstanceJob,
@@ -16,14 +17,7 @@ import type {
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 // Types
-export type ProcessDefinition = {
-  id: string
-  key: string
-  name: string
-  version: number
-  versionTag?: string
-  suspended: boolean
-}
+export type ProcessDefinition = SharedProcessDefinition
 
 export type ProcessInstance = SharedProcessInstance
 

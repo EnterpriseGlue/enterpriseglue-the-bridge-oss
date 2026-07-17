@@ -8,7 +8,7 @@ export const ProcessDefinitionSchema = z.object({
   version: z.number(),
   versionTag: z.string().optional(),
   suspended: z.boolean().optional(),
-});
+}).passthrough();
 
 export const ProcessDefXmlSchema = z.object({
   id: z.string().optional(),

@@ -36,6 +36,7 @@ import {
   ActivityCountByActivityIdSchema,
   ActivityCountsByStateSchema,
   ActivityInstanceListSchema,
+  ProcessDefinitionSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
   ProcessInstanceExternalTaskListSchema,
@@ -95,7 +96,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
     const keys = req.authorizedRuntimeResourceKeys
     const scopes = req.authorizedRuntimeResourceScopes
     if (!keys) {
-      return res.json(await listProcessDefinitions(engineId, req.query as { key?: string; nameLike?: string; latest?: string; maxResults?: number }))
+      return res.json(z.array(ProcessDefinitionSchema).parse(await listProcessDefinitions(engineId, req.query as { key?: string; nameLike?: string; latest?: string; maxResults?: number })))
     }
 
     const requestedKey = typeof req.query.key === 'string' ? req.query.key : null
@@ -105,7 +106,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
       const definitions = await listProcessDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), key: processDefinitionKey })
       return filterRuntimeItemsByResourceKey(definitions, [processDefinitionKey], 'key', scopes)
     }))
-    res.json(collections.flat())
+    res.json(z.array(ProcessDefinitionSchema).parse(collections.flat()))
   } catch (e: any) {
     if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to load process definitions')
@@ -124,7 +125,7 @@ r.get('/mission-control-api/process-definitions/resolve', requireRuntimeDefiniti
   try {
     const engineId = (req as any).engineId as string
     const data = await resolveProcessDefinition(engineId, req.query as { key?: string; version?: string })
-    res.json(data)
+    res.json(ProcessDefinitionSchema.parse(data))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to resolve process definition')
   }
@@ -135,7 +136,7 @@ r.get('/mission-control-api/process-definitions/:id', requireRuntimeDefinitionAc
     const engineId = (req as any).engineId as string
     const definitionId = String(req.params.id)
     const data = await getProcessDefinitionById(engineId, definitionId)
-    res.json(data)
+    res.json(ProcessDefinitionSchema.parse(data))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load process definition')
   }
