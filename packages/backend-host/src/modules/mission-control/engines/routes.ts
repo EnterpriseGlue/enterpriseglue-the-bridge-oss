@@ -46,7 +46,7 @@ import {
 } from '@enterpriseglue/shared/schemas/mission-control/saved-filter.js'
 import { engineRegistrationJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js'
 import { EngineMetadataReconciliationResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
-import { RuntimeResourceSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import { ProjectEngineTargetSchema, RuntimeResourceSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
@@ -1482,7 +1482,7 @@ r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, va
     status: 'all',
     tenantId: req.tenant?.tenantId || null,
   })
-  res.json(targets)
+  res.json(ProjectEngineTargetSchema.array().parse(targets))
 }))
 
 r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT, EnginePermissions.SECRETS_MANAGE] }), engineRegistrationJsonPayloadLimit, validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
