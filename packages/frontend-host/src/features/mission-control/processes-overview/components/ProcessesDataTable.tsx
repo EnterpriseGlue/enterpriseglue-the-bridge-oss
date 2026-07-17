@@ -17,23 +17,9 @@ import { CompactDataTable } from "../../../../shared/components/ui/compact-data-
 import { STATE_COLORS } from "../../../shared/components/viewer/viewerConstants"
 import { CopyableLink } from '../../shared/components/CopyableLink'
 import { formatDurationMs } from '../../process-instance-detail/components/activityDetailUtils'
+import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
-type ProcInst = {
-  id: string
-  processDefinitionKey?: string
-  businessKey?: string
-  superProcessInstanceId?: string | null
-  rootProcessInstanceId?: string | null
-  startTime?: string | null
-  endTime?: string | null
-  state?: string
-  hasIncident?: boolean
-  runtimeActionDecisions?: {
-    suspension?: { allowed: boolean; reason?: string }
-    retry?: { allowed: boolean; reason?: string }
-    terminate?: { allowed: boolean; reason?: string }
-  }
-}
+type ProcInst = ProcessInstance
 
 interface ProcessesDataTableProps {
   data: ProcInst[]

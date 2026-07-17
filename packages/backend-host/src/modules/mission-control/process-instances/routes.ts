@@ -14,6 +14,7 @@ import {
 } from './service.js'
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
+import { ProcessInstanceSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 const r = Router()
 
@@ -60,14 +61,14 @@ r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('
       processDefinitionKey,
       ...baseQuery,
     })
-  if (req.query.includeActionDecisions !== 'true') return res.json(data)
-  res.json(await addRuntimeProcessInstanceActionDecisions({
+  if (req.query.includeActionDecisions !== 'true') return res.json(z.array(ProcessInstanceSchema).parse(data))
+  res.json(z.array(ProcessInstanceSchema).parse(await addRuntimeProcessInstanceActionDecisions({
     userId: req.user!.userId,
     tenantId: req.tenant?.tenantId || null,
     engineId,
     runtimeAccessScope: (req as Request & { runtimeAccessScope?: 'engine_wide' | 'resource_aware' }).runtimeAccessScope || 'engine_wide',
     rows: data,
-  }))
+  })))
 }))
 
 // Get process instance by ID

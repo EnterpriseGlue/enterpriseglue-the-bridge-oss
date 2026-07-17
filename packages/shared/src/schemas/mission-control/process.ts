@@ -33,18 +33,23 @@ export const ProcessInstanceRuntimeActionDecisionsSchema = z.object({
   retry: RuntimeRowActionDecisionSchema,
   terminate: RuntimeRowActionDecisionSchema,
   migration: RuntimeRowActionDecisionSchema.optional(),
-});
+  modify: RuntimeRowActionDecisionSchema.optional(),
+  variablesUpdate: RuntimeRowActionDecisionSchema.optional(),
+}).passthrough();
 
 export const ProcessInstanceSchema = z.object({
   id: z.string(),
   processDefinitionKey: z.string().optional(),
+  businessKey: z.string().optional(),
+  version: z.number().optional(),
   superProcessInstanceId: z.string().nullable().optional(),
   rootProcessInstanceId: z.string().nullable().optional(),
   startTime: z.string().nullable().optional(),
   endTime: z.string().nullable().optional(),
-  state: z.enum(['ACTIVE', 'COMPLETED', 'CANCELED']).optional(),
+  state: z.enum(['ACTIVE', 'SUSPENDED', 'COMPLETED', 'CANCELED', 'INCIDENT']).optional(),
+  hasIncident: z.boolean().optional(),
   runtimeActionDecisions: ProcessInstanceRuntimeActionDecisionsSchema.optional(),
-});
+}).passthrough();
 
 export const ActivityCountByActivityIdSchema = z.record(z.string(), z.number().nonnegative());
 

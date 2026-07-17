@@ -6,6 +6,7 @@ import type {
 import type {
   ActivityCountByActivityId,
   ActivityCountsByState as SharedActivityCountsByState,
+  ProcessInstance as SharedProcessInstance,
   PreviewCountResponse,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
@@ -20,22 +21,7 @@ export type ProcessDefinition = {
   suspended: boolean
 }
 
-export type ProcessInstance = {
-  id: string
-  processDefinitionKey?: string
-  businessKey?: string
-  superProcessInstanceId?: string | null
-  rootProcessInstanceId?: string | null
-  startTime?: string | null
-  endTime?: string | null
-  state?: string
-  hasIncident?: boolean
-  runtimeActionDecisions?: {
-    suspension: { allowed: boolean; reason?: string }
-    retry: { allowed: boolean; reason?: string }
-    terminate: { allowed: boolean; reason?: string }
-  }
-}
+export type ProcessInstance = SharedProcessInstance
 
 export type ActivityCountsByState = SharedActivityCountsByState
 

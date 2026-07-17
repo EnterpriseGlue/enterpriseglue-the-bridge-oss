@@ -12,14 +12,7 @@ import { useAuth } from '../shared/hooks/useAuth'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
 import { evaluateActionSnapshot, WhyUnavailableLink } from '../shared/auth/guards'
 import type { DashboardContext, DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
-
-type ProcessInstance = {
-  id: string
-  state: string
-  hasIncident?: boolean
-  startTime?: string
-  endTime?: string
-}
+import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 // Simple bar component
 function SimpleBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
