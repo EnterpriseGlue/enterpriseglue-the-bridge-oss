@@ -1,71 +1,13 @@
-// Shared API types for frontend
+// Compatibility barrel for established frontend API imports. The canonical
+// transport types live beside their shared schemas so the route, OpenAPI, and
+// browser cannot silently diverge.
 
-export interface Project {
-  id: string;
-  name: string;
-  createdAt: number;
-}
-
-export interface File {
-  id: string;
-  projectId?: string;
-  folderId?: string | null;
-  name: string;
-  type?: 'bpmn' | 'dmn' | 'form';
-  xml?: string;
-  bpmnProcessId?: string | null;
-  dmnDecisionId?: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface Version {
-  id: string;
-  fileId: string;
-  author?: string;
-  message: string;
-  xml: string;
-  createdAt: number;
-}
-
-export interface Comment {
-  id: string;
-  author?: string;
-  message: string;
-  createdAt: number;
-}
-
-export interface Engine {
-  id: string;
-  name: string;
-  baseUrl: string;
-  type?: 'ion' | 'operaton' | 'camunda7';
-  authType?: 'none' | 'basic' | 'bearer' | 'oauth2-client-credentials';
-  username?: string;
-  oauthTokenUrl?: string;
-  oauthScopes?: string;
-  oauthAudience?: string;
-  active: boolean;
-  version?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ProcessDefinition {
-  id: string;
-  key: string;
-  name?: string;
-  version: number;
-  versionTag?: string;
-  suspended?: boolean;
-}
-
-export interface ProcessInstance {
-  id: string;
-  processDefinitionKey?: string;
-  superProcessInstanceId?: string | null;
-  rootProcessInstanceId?: string | null;
-  startTime?: string | null;
-  endTime?: string | null;
-  state?: 'ACTIVE' | 'COMPLETED' | 'CANCELED';
-}
+export type { Project } from '@enterpriseglue/shared/schemas/starbase/project.js';
+export type { File } from '@enterpriseglue/shared/schemas/starbase/file.js';
+export type { Version } from '@enterpriseglue/shared/schemas/starbase/version.js';
+export type { Comment } from '@enterpriseglue/shared/schemas/starbase/comment.js';
+export type { Engine } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
+export type {
+  ProcessDefinition,
+  ProcessInstance,
+} from '@enterpriseglue/shared/schemas/mission-control/process.js';

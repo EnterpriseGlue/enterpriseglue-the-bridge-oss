@@ -2243,6 +2243,8 @@ Dashboard context and statistics are also shared by their evaluator-backed route
 
 Both browser consumers of the coarse effective-permissions snapshot now parse the shared authorization schema before treating the response as a visibility input; malformed snapshots fail closed instead of becoming a second client-side authorization model.
 
+The retained frontend shared-API type barrel is now a compatibility re-export of the canonical Starbase and Mission Control schema-derived types, rather than a second set of project, file, version, comment, engine, process-definition, and process-instance interfaces.
+
 Git-backed project creation now shares a redacted project/repository response contract across its runtime serializer, OpenAPI route, and wizard; submitted Git tokens remain request-only.
 
 The evaluator-filtered process-instance collection now serializes one shared runtime contract, including suspended and incident states, action decisions, and safe adapter extensions; Dashboard and Mission Control list consumers no longer maintain separate instance shapes.

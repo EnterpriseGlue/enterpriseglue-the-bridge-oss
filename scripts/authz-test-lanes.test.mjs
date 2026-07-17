@@ -15,6 +15,7 @@ const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refacto
 const frontendAuthTypes = readFileSync(new URL('../packages/frontend-host/src/shared/types/auth.ts', import.meta.url), 'utf8');
 const frontendAuthService = readFileSync(new URL('../packages/frontend-host/src/services/auth.ts', import.meta.url), 'utf8');
 const frontendAuthzApi = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts', import.meta.url), 'utf8');
+const frontendSharedApiTypes = readFileSync(new URL('../packages/frontend-host/src/shared/api/types.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -119,6 +120,13 @@ test('the frontend effective-permissions snapshot imports the shared authorizati
   assert.doesNotMatch(frontendAuthTypes, /CurrentUserPermissions,\s*\n\s*EffectiveResourcePermissions,\s*\n[\s\S]*?@enterpriseglue\/shared\/contracts\/auth\.js/);
   assert.match(frontendAuthService, /CurrentUserPermissionsSchema\.parse\(await apiClient\.get<unknown>\('\/api\/authz\/me\/permissions'/);
   assert.match(frontendAuthzApi, /CurrentUserPermissionsSchema\.parse\(await apiClient\.get<unknown>\('\/api\/authz\/me\/permissions'/);
+});
+
+test('the frontend shared API type barrel re-exports canonical transport schemas', () => {
+  assert.doesNotMatch(frontendSharedApiTypes, /\binterface\s+(?:Project|File|Version|Comment|Engine|ProcessDefinition|ProcessInstance)\b/);
+  assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/starbase\/project\.js/);
+  assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/starbase\/file\.js/);
+  assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/mission-control\/process\.js/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {
