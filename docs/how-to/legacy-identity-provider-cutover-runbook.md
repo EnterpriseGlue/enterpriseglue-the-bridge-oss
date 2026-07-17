@@ -56,6 +56,7 @@ export LEGACY_PROVIDER_ID='<persisted-legacy-provider-id>'
 export TARGET_PROVIDER_KEY='<direct-provider-key>'
 export EVIDENCE_DIR="./legacy-cutover-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$EVIDENCE_DIR"
+: > "$EVIDENCE_DIR/verified-mappings-status.txt"
 ```
 
 If the deployment uses browser cookie authentication, run the same requests
@@ -142,12 +143,30 @@ resolve the mismatch rather than forcing retirement.
 curl --fail-with-body -sS -H "$EG_AUTH_HEADER" \
   "$EG_BASE_URL/api/authz/legacy-mapping-retirement-readiness" \
   > "$EVIDENCE_DIR/legacy-mapping-retirement-readiness-after-verification.json"
+
+curl --fail-with-body -sS -H "$EG_AUTH_HEADER" \
+  "$EG_BASE_URL/api/authz/legacy-mapping-coverage" \
+  > "$EVIDENCE_DIR/legacy-mapping-coverage-after-verification.json"
 ```
 
 Proceed only when `ready: true` and `blockers` is empty. The response provides
 the active legacy count and verified-replacement count; save it with the change
 record. A non-ready response is a stop condition, even if a manual sign-in
 appeared to succeed.
+
+Validate the sanitized evidence directory before calling either retirement
+endpoint. The verifier does not contact the deployment, print artifact
+contents, or replace review; it proves that the captured API gates agree with
+one another and that every covered mapping has a recorded `204` verification.
+
+```bash
+pnpm run verify:legacy-cutover-evidence -- \
+  --evidence-dir "$EVIDENCE_DIR" --stage pre-retirement
+```
+
+Any verifier failure is a stop condition. Correct the provider, mapping, or
+evidence mismatch and re-run the relevant deployed check; do not edit the
+artifact merely to satisfy the verifier.
 
 ## 4. Retire mappings at the intended scope
 
@@ -197,6 +216,14 @@ successful replacement-provider sign-in, and no unexpected legacy login route.
 The request refuses an environment-managed legacy provider; keep that provider
 and its environment secret intact while its separately planned migration is
 completed.
+
+After recording the fresh target-provider sign-in and negative-access evidence,
+run the final local evidence consistency check:
+
+```bash
+pnpm run verify:legacy-cutover-evidence -- \
+  --evidence-dir "$EVIDENCE_DIR" --stage post-cutover
+```
 
 ## Evidence, success, and rollback
 

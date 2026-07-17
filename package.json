@@ -78,6 +78,8 @@
     "test:identity-ldap-container": "./scripts/run-ldap-protocol-mock.sh pnpm --dir backend exec vitest run test/integration/identity/directLdapContainer.test.ts --config vitest.config.ts --reporter=dot",
     "test:identity:ldap": "pnpm run test:identity-ldap-container",
     "test:identity:browser": "pnpm run test:e2e:identity-lifecycle",
+    "test:legacy-cutover-evidence": "node --test scripts/verify-legacy-identity-cutover-evidence.test.mjs",
+    "verify:legacy-cutover-evidence": "node scripts/verify-legacy-identity-cutover-evidence.mjs",
     "test:oidc:local-rehearsal": "./scripts/run-local-oidc-rehearsal-test.sh",
     "test:saml:local-rehearsal": "./scripts/run-local-saml-rehearsal-test.sh",
     "test:ldap:local-rehearsal": "./scripts/run-local-ldap-rehearsal-test.sh",

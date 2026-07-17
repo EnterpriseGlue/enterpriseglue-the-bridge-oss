@@ -92,6 +92,7 @@ legacy-cutover-YYYYMMDD-HHMMSS/
 ├── legacy-mapping-retirement-readiness-before.json
 ├── provider-migration-readiness-before.json
 ├── verified-mappings-status.txt
+├── legacy-mapping-coverage-after-verification.json
 ├── legacy-mapping-retirement-readiness-after-verification.json
 ├── tenant-retirement-result.json                 # only when used
 ├── global-retirement-result.json                  # only when used
