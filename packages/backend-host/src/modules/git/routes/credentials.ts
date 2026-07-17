@@ -299,7 +299,7 @@ router.post('/git-api/oauth/callback', apiLimiter, requireAuth, asyncHandler(asy
     scopes: tokens.scope,
   });
   
-  res.json(credential);
+  res.json(GitCredentialSchema.parse(credential));
 }));
 
 /**
