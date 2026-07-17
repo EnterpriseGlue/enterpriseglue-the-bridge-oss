@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -17,6 +17,7 @@ const frontendAuthService = readFileSync(new URL('../packages/frontend-host/src/
 const frontendAuthzApi = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts', import.meta.url), 'utf8');
 const frontendSharedApiTypes = readFileSync(new URL('../packages/frontend-host/src/shared/api/types.ts', import.meta.url), 'utf8');
 const frontendInvitationFlow = readFileSync(new URL('../packages/frontend-host/src/shared/utils/invitationFlow.ts', import.meta.url), 'utf8');
+const sharedAuthContractSource = readFileSync(new URL('../packages/shared/src/contracts/auth.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
   'test:identity-contract',
@@ -133,6 +134,15 @@ test('the frontend shared API type barrel re-exports canonical transport schemas
   assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/starbase\/project\.js/);
   assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/starbase\/file\.js/);
   assert.match(frontendSharedApiTypes, /@enterpriseglue\/shared\/schemas\/mission-control\/process\.js/);
+});
+
+test('the auth contract has one generated declaration source', () => {
+  assert.match(sharedAuthContractSource, /role\?: PlatformRole/);
+  assert.equal(
+    existsSync(new URL('../packages/shared/src/contracts/auth.d.ts', import.meta.url)),
+    false,
+    'a hand-maintained sibling declaration can drift from the generated public contract',
+  );
 });
 
 test('the invitation delivery helper uses the shared capabilities contract', () => {
