@@ -100,6 +100,7 @@ const {
   DecisionDefinitionSchema,
   DecisionDefinitionXmlSchema,
   DecisionDefinitionQueryParams,
+  DecisionEvaluationResultSchema,
   EvaluateDecisionRequest,
   JobSchema,
   JobDefinitionSchema,
@@ -1492,8 +1493,9 @@ registry.register('DecisionDefinition', DecisionDefinitionSchema);
 registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions'), request: { query: DecisionDefinitionQueryParams.partial() }, responses: { 200: { description: 'List decision definitions', content: { 'application/json': { schema: z.array(DecisionDefinitionSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions/{id}', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Get decision definition', content: { 'application/json': { schema: DecisionDefinitionSchema } } }, 404: { description: 'Not found' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/decision-definitions/{id}/xml', ...authzExtension('engine.runtime.decisions.read', 'GET', '/mission-control-api/decision-definitions/{id}/xml'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'DMN XML', content: { 'application/json': { schema: DecisionDefinitionXmlSchema } } } } });
-registry.registerPath({ method: 'post', path: '/mission-control-api/decision-definitions/{id}/evaluate', ...authzExtension('engine.runtime.decisions.evaluate', 'POST', '/mission-control-api/decision-definitions/{id}/evaluate'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: EvaluateDecisionRequest } } } }, responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
-registry.registerPath({ method: 'post', path: '/mission-control-api/decision-definitions/key/{key}/evaluate', ...authzExtension('engine.runtime.decisions.evaluate', 'POST', '/mission-control-api/decision-definitions/key/{key}/evaluate'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: EvaluateDecisionRequest } } } }, responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
+registry.register('DecisionEvaluationResult', DecisionEvaluationResultSchema);
+registry.registerPath({ method: 'post', path: '/mission-control-api/decision-definitions/{id}/evaluate', ...authzExtension('engine.runtime.decisions.evaluate', 'POST', '/mission-control-api/decision-definitions/{id}/evaluate'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: EvaluateDecisionRequest } } } }, responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: DecisionEvaluationResultSchema } } } } });
+registry.registerPath({ method: 'post', path: '/mission-control-api/decision-definitions/key/{key}/evaluate', ...authzExtension('engine.runtime.decisions.evaluate', 'POST', '/mission-control-api/decision-definitions/key/{key}/evaluate'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: EvaluateDecisionRequest } } } }, responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: DecisionEvaluationResultSchema } } } } });
 
 // GET /mission-control-api/decision-definitions/edit-target (resolve Starbase edit target for a deployed decision version)
 const DecisionEditTargetResponse = z.object({
@@ -2719,7 +2721,7 @@ registry.registerPath({
   path: '/mission-control-api/decision-definitions/key/{key}/evaluate',
   ...authzExtension('engine.runtime.decisions.evaluate', 'POST', '/mission-control-api/decision-definitions/key/{key}/evaluate'),
   request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: EvaluateDecisionRequest } } } },
-  responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: z.array(z.unknown()) } } } },
+  responses: { 200: { description: 'Decision result', content: { 'application/json': { schema: DecisionEvaluationResultSchema } } } },
 });
 
 // PUT /mission-control-api/batches/{id}/suspended

@@ -76,8 +76,8 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/decisi
   listDecisionDefinitions: vi.fn().mockResolvedValue([]),
   fetchDecisionDefinition: vi.fn().mockResolvedValue({ id: 'd1', key: 'decision1' }),
   fetchDecisionDefinitionXml: vi.fn().mockResolvedValue({ id: 'd1', dmnXml: '<definitions />' }),
-  evaluateDecisionById: vi.fn().mockResolvedValue([{ result: 'approved' }]),
-  evaluateDecisionByKey: vi.fn().mockResolvedValue([{ result: 'approved' }]),
+  evaluateDecisionById: vi.fn().mockResolvedValue([{ result: { value: 'approved', type: 'String' } }]),
+  evaluateDecisionByKey: vi.fn().mockResolvedValue([{ result: { value: 'approved', type: 'String' } }]),
 }));
 
 describe('mission-control decisions routes', () => {
@@ -175,7 +175,7 @@ describe('mission-control decisions routes', () => {
       .send({ engineId: 'engine-1', variables: { amount: { value: 10, type: 'Integer' } } });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([{ result: 'approved' }]);
+    expect(response.body).toEqual([{ result: { value: 'approved', type: 'String' } }]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',

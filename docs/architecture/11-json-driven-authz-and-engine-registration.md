@@ -2325,6 +2325,8 @@ Process-instance start now has a shared passthrough receipt across the backend r
 
 Message correlation now documents and serializes the engine-compatible result array rather than a single response object. Each result keeps its standard correlation fields and passthrough extension data, so result-enabled and empty-result correlations retain their native behavior.
 
+Decision evaluation now uses its shared array of Camunda variable envelopes across runtime routes and OpenAPI, retaining variable extension data instead of advertising untyped array items.
+
 External-engine lifecycle notes now use one bounded, trimmed shared contract across decommission/reactivation routes and OpenAPI, matching the audit-safe operator input persisted by those flows.
 
 External-engine-system route validation now composes the canonical shared schemas while retaining two explicit legacy compatibility bounds: direct route writes permit existing manual defaults, and caller-provided system keys remain restricted to stable lowercase identifier syntax.

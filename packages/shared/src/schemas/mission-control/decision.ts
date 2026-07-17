@@ -57,14 +57,17 @@ export const EvaluateDecisionRequest = z.object({
   })),
 });
 
-export const DecisionEvaluationResultSchema = z.array(z.record(z.string(), z.object({
+export const DecisionEvaluationVariableSchema = z.object({
   value: z.any(),
-  type: z.string(),
-})));
+  type: z.string().optional(),
+}).passthrough();
+
+export const DecisionEvaluationResultSchema = z.array(z.record(z.string(), DecisionEvaluationVariableSchema));
 
 // Types
 export type DecisionDefinition = z.infer<typeof DecisionDefinitionSchema>;
 export type DecisionDefinitionXml = z.infer<typeof DecisionDefinitionXmlSchema>;
 export type DecisionDefinitionQueryParams = z.infer<typeof DecisionDefinitionQueryParams>;
 export type EvaluateDecisionRequest = z.infer<typeof EvaluateDecisionRequest>;
+export type DecisionEvaluationVariable = z.infer<typeof DecisionEvaluationVariableSchema>;
 export type DecisionEvaluationResult = z.infer<typeof DecisionEvaluationResultSchema>;

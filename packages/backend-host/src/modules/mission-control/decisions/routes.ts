@@ -14,6 +14,7 @@ import {
 import {
   DecisionDefinitionXmlSchema,
   DecisionDefinitionQueryParams,
+  DecisionEvaluationResultSchema,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
 import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js';
@@ -85,7 +86,7 @@ r.get('/mission-control-api/decision-definitions/:id', requireRuntimeDefinitionA
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinition(engineId, definitionId);
-  res.json(data);
+  res.json(DecisionEvaluationResultSchema.parse(data));
 }));
 
 // Get decision definition XML
@@ -101,7 +102,7 @@ r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeD
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await evaluateDecisionById(engineId, definitionId, req.body);
-  res.json(data);
+  res.json(DecisionEvaluationResultSchema.parse(data));
 }));
 
 // Evaluate decision by key
