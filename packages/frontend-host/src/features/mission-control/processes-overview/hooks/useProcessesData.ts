@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef } from 'react'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
+import type { PreviewCountRequest } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import {
   listProcessDefinitions,
   fetchProcessDefinitionXml,
@@ -180,7 +181,7 @@ export function useProcessesData({
 
   // Build preview count body for advanced filters
   const previewBody = useMemo(() => {
-    const body: any = {}
+    const body: PreviewCountRequest = {}
     if (selectedEngineId) body.engineId = selectedEngineId
     if (defIdForVersion) body.processDefinitionId = defIdForVersion
     else if (currentKey) body.processDefinitionKey = currentKey
@@ -190,7 +191,7 @@ export function useProcessesData({
 
     const name = varName.trim()
     if (name) {
-      let value: any = varValue
+      let value: unknown = varValue
       if (varType === 'Boolean') value = String(varValue).toLowerCase() === 'true'
       else if (varType === 'Long' || varType === 'Double') {
         const n = Number(varValue)

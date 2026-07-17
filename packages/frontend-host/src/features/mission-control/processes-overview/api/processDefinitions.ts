@@ -11,6 +11,7 @@ import type {
   ProcessInstance as SharedProcessInstance,
   ProcessInstanceExternalTask,
   ProcessInstanceJob,
+  PreviewCountRequest,
   PreviewCountResponse,
   Variables,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
@@ -75,7 +76,7 @@ export async function listProcessInstances(params: GetProcessInstancesParams): P
   return apiClient.get<ProcessInstance[]>(`/mission-control-api/process-instances?${searchParams.toString()}`, undefined, { credentials: 'include' })
 }
 
-export async function fetchPreviewCount(body: Record<string, unknown>): Promise<PreviewCountResponse> {
+export async function fetchPreviewCount(body: PreviewCountRequest): Promise<PreviewCountResponse> {
   return apiClient.post<PreviewCountResponse>('/mission-control-api/process-instances/preview-count', body, { credentials: 'include' })
 }
 

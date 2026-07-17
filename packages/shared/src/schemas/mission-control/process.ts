@@ -177,17 +177,19 @@ export const ProcessInstanceExternalTaskListSchema = z.array(ProcessInstanceExte
 
 // Request schemas
 export const PreviewCountRequest = z.object({
+  engineId: z.string().optional(),
   processDefinitionKey: z.string().optional(),
   processDefinitionId: z.string().optional(),
   active: z.boolean().optional(),
   suspended: z.boolean().optional(),
+  withIncident: z.boolean().optional(),
   withIncidents: z.boolean().optional(),
   variables: z.array(z.object({
     name: z.string(),
     operator: z.string(),
     value: z.any(),
   })).optional(),
-});
+}).passthrough();
 
 // The engine-compatible request remains intentionally permissive at the route
 // boundary, while every preview response has this stable public shape.
@@ -203,6 +205,7 @@ export type ProcessInstance = z.infer<typeof ProcessInstanceSchema>;
 export type ProcessInstanceDetail = z.infer<typeof ProcessInstanceDetailSchema>;
 export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityIdSchema>;
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
+export type PreviewCountRequest = z.infer<typeof PreviewCountRequest>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
 export type ProcessInstanceVariable = z.infer<typeof ProcessInstanceVariableSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;

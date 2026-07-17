@@ -2273,6 +2273,8 @@ Historic decision lists now use the canonical `/history/decisions` route and sha
 
 Migration execution now validates the same shared request schema documented in OpenAPI after the runtime migration authorization guard resolves the source and target definitions. The wizard and retained execution helper construct that contract directly, including the mandatory audit reason, and direct execution now returns its documented `{ ok: true }` response rather than discarding it.
 
+Process-instance preview counts now validate their documented shared request contract at the backend boundary. It makes engine selection, definition filters, incident spelling compatibility, and variable criteria explicit while retaining engine-specific filter extensions; the Process Overview builds the same type instead of posting an unbounded local record.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.

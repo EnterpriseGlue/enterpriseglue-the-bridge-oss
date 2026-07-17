@@ -43,13 +43,13 @@ import {
   ProcessInstanceDetailSchema,
   ProcessInstanceSchema,
   ProcessDefXmlSchema,
+  PreviewCountRequest,
   PreviewCountResponseSchema,
   VariablesSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { HistoricVariableInstanceListSchema, ProcessInstanceExecutionDetailsSchema, VariableHistoryEntrySchema } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 
 // Validation schemas
-const previewCountSchema = z.object({}).passthrough()
 const variableHistoryQuerySchema = z.object({
   variableInstanceId: z.string().min(1),
 }).passthrough()
@@ -185,7 +185,7 @@ r.get('/mission-control-api/process-definitions/:id/activity-counts-by-state', r
 r.post('/mission-control-api/process-instances/preview-count', requireRuntimeCollectionAction('engine.runtime.process-instances.read', {
   resourceKind: 'process_definition',
   engineIdFrom: 'body',
-}), validateBody(previewCountSchema), asyncHandler(async (req: Request, res: Response) => {
+}), validateBody(PreviewCountRequest), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys
