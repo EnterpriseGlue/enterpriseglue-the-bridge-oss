@@ -114,6 +114,39 @@ export const BatchOperationCreateResponseSchema = z.object({
   ]),
 }).strict();
 
+// Batch creation requests are authorized against the selected process
+// instances before validation. Preserve adapter-specific selection fields so
+// existing engine integrations remain compatible while documenting the fields
+// EnterpriseGlue owns.
+export const BatchProcessInstanceSelectionRequestSchema = z.object({
+  engineId: z.string().optional(),
+  processInstanceIds: z.array(z.string()).optional(),
+  processInstanceQuery: z.record(z.string(), z.unknown()).optional(),
+  auditReason: z.string().min(1).max(2000).optional(),
+}).passthrough();
+
+export const BatchDeleteOperationRequestSchema = BatchProcessInstanceSelectionRequestSchema.extend({
+  deleteReason: z.string().optional(),
+  skipCustomListeners: z.boolean().optional(),
+  skipIoMappings: z.boolean().optional(),
+  failIfNotExists: z.boolean().optional(),
+  skipSubprocesses: z.boolean().optional(),
+});
+
+export const BatchProcessInstanceSuspensionRequestSchema = BatchProcessInstanceSelectionRequestSchema.extend({
+  suspended: z.boolean().optional(),
+});
+
+export const BatchRetryOperationRequestSchema = BatchProcessInstanceSelectionRequestSchema.extend({
+  retries: z.number().int().min(0).optional(),
+  jobIds: z.array(z.string()).optional(),
+});
+
+export const BatchSuspensionUpdateRequestSchema = z.object({
+  engineId: z.string().optional(),
+  suspended: z.boolean(),
+});
+
 // Types
 export type Batch = z.infer<typeof BatchSchema>;
 export type BatchEngineInfo = z.infer<typeof BatchEngineInfoSchema>;
@@ -122,3 +155,8 @@ export type BatchFailedJobDetail = z.infer<typeof BatchFailedJobDetailSchema>;
 export type BatchRuntimeActionDecisions = z.infer<typeof BatchRuntimeActionDecisionsSchema>;
 export type BatchDetail = z.infer<typeof BatchDetailSchema>;
 export type BatchOperationCreateResponse = z.infer<typeof BatchOperationCreateResponseSchema>;
+export type BatchProcessInstanceSelectionRequest = z.infer<typeof BatchProcessInstanceSelectionRequestSchema>;
+export type BatchDeleteOperationRequest = z.infer<typeof BatchDeleteOperationRequestSchema>;
+export type BatchProcessInstanceSuspensionRequest = z.infer<typeof BatchProcessInstanceSuspensionRequestSchema>;
+export type BatchRetryOperationRequest = z.infer<typeof BatchRetryOperationRequestSchema>;
+export type BatchSuspensionUpdateRequest = z.infer<typeof BatchSuspensionUpdateRequestSchema>;

@@ -162,6 +162,15 @@ describe('mission-control batches routes', () => {
     expect(batchRepo.insert).toHaveBeenCalled();
   });
 
+  it('rejects malformed batch payloads after their runtime authorization guard', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/batches/process-instances/delete')
+      .send({ engineId: 'engine-1', processInstanceIds: 'p1' });
+
+    expect(response.status).toBe(400);
+    expect(deleteProcessInstancesBatch).not.toHaveBeenCalled();
+  });
+
   it('shows only batches with authorized process definition lineage on resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {

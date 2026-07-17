@@ -3,6 +3,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
+import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import { getRuntimeResourceActionDecision, requireRuntimeCollectionAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import {
   processRetries,
@@ -19,8 +20,16 @@ import { markBatchPollerViewer } from '../../../poller/batchPoller.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Batch } from '@enterpriseglue/shared/infrastructure/persistence/entities/Batch.js'
-import { BatchDetailSchema, BatchRuntimeActionDecisionsSchema, BatchSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
-import { BatchOperationCreateResponseSchema } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
+import {
+  BatchDeleteOperationRequestSchema,
+  BatchDetailSchema,
+  BatchOperationCreateResponseSchema,
+  BatchProcessInstanceSuspensionRequestSchema,
+  BatchRetryOperationRequestSchema,
+  BatchRuntimeActionDecisionsSchema,
+  BatchSchema,
+  BatchSuspensionUpdateRequestSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filter.js'
 
 const r = Router()
@@ -109,7 +118,7 @@ function stripLocalAuditFields<T extends Record<string, any>>(body: T): Omit<T, 
   return engineBody
 }
 
-r.post('/mission-control-api/batches/process-instances/delete', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/delete', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' }), validateBody(BatchDeleteOperationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...(req.body || {}) }
   if (typeof body.deleteReason !== 'string' || !body.deleteReason.trim()) {
     body.deleteReason = 'Canceled via Mission Control'
@@ -126,7 +135,7 @@ r.post('/mission-control-api/batches/process-instances/delete', requireRuntimePr
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' }))
 }))
 
-r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), validateBody(BatchProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: true }
   const engineBody = stripLocalAuditFields(body)
   const engineId = (req as any).engineId as string
@@ -135,7 +144,7 @@ r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeP
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' }))
 }))
 
-r.post('/mission-control-api/batches/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.activate', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.activate', { resourceKind: 'process_definition' }), validateBody(BatchProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: false }
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, stripLocalAuditFields(body))
@@ -143,7 +152,7 @@ r.post('/mission-control-api/batches/process-instances/activate', requireRuntime
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' }))
 }))
 
-r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.jobs.retry', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.jobs.retry', { resourceKind: 'process_definition' }), validateBody(BatchRetryOperationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const { processInstanceIds } = req.body
   
   if (!Array.isArray(processInstanceIds) || processInstanceIds.length === 0) {
@@ -205,7 +214,7 @@ r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.run
   })))
 }))
 
-r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), validateBody(BatchSuspensionUpdateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const suspended = (req.body as { suspended?: boolean })?.suspended
   if (typeof suspended !== 'boolean') {
     throw Errors.validation('suspended (boolean) is required')

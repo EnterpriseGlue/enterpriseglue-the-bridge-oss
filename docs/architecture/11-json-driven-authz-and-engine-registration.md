@@ -2275,6 +2275,8 @@ Migration execution now validates the same shared request schema documented in O
 
 Process-instance preview counts now validate their documented shared request contract at the backend boundary. It makes engine selection, definition filters, incident spelling compatibility, and variable criteria explicit while retaining engine-specific filter extensions; the Process Overview builds the same type instead of posting an unbounded local record.
 
+Batch create, suspend, activate, retry, and suspension-update payloads now use shared schemas through backend validation, OpenAPI, and the Batch client. The retained client helpers target the actual authorized process-instance batch routes and return the documented operation receipt instead of calling obsolete endpoints with a local batch shape; adapter-specific selection fields remain compatible.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.

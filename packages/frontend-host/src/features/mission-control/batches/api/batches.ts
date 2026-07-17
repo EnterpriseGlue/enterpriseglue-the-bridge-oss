@@ -1,5 +1,13 @@
 import { apiClient } from '../../../../shared/api/client'
-import type { Batch as SharedBatch, BatchDetail, BatchOperationCreateResponse, BatchStatistics as SharedBatchStatistics } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
+import type {
+  Batch as SharedBatch,
+  BatchDeleteOperationRequest,
+  BatchDetail,
+  BatchOperationCreateResponse,
+  BatchProcessInstanceSelectionRequest,
+  BatchRetryOperationRequest,
+  BatchStatistics as SharedBatchStatistics,
+} from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 
 // Types
 export type Batch = SharedBatch
@@ -48,25 +56,22 @@ export async function activateBatch(batchId: string, engineId?: string): Promise
   await apiClient.put(`/mission-control-api/batches/${batchId}/suspended`, { suspended: false, engineId }, { credentials: 'include' })
 }
 
-export interface CreateBatchParams {
-  processInstanceIds?: string[]
-  processInstanceQuery?: Record<string, unknown>
+export type CreateBatchParams = BatchProcessInstanceSelectionRequest
+
+export async function createDeleteBatch(params: BatchDeleteOperationRequest): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/process-instances/delete', params, { credentials: 'include' })
 }
 
-export async function createDeleteBatch(params: CreateBatchParams & { engineId?: string }): Promise<Batch> {
-  return apiClient.post<Batch>('/mission-control-api/batches/delete', params, { credentials: 'include' })
+export async function createSuspendBatch(params: CreateBatchParams): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/process-instances/suspend', params, { credentials: 'include' })
 }
 
-export async function createSuspendBatch(params: CreateBatchParams & { engineId?: string }): Promise<Batch> {
-  return apiClient.post<Batch>('/mission-control-api/batches/suspend', params, { credentials: 'include' })
+export async function createActivateBatch(params: CreateBatchParams): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/process-instances/activate', params, { credentials: 'include' })
 }
 
-export async function createActivateBatch(params: CreateBatchParams & { engineId?: string }): Promise<Batch> {
-  return apiClient.post<Batch>('/mission-control-api/batches/activate', params, { credentials: 'include' })
-}
-
-export async function createRetriesBatch(params: CreateBatchParams & { retries: number; engineId?: string }): Promise<Batch> {
-  return apiClient.post<Batch>('/mission-control-api/batches/retries', params, { credentials: 'include' })
+export async function createRetriesBatch(params: BatchRetryOperationRequest): Promise<BatchOperationCreateResponse> {
+  return apiClient.post<BatchOperationCreateResponse>('/mission-control-api/batches/jobs/retries', params, { credentials: 'include' })
 }
 
 // Bulk operations on process instances

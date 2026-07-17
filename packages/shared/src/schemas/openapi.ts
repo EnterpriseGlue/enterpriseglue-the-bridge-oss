@@ -61,8 +61,12 @@ const {
   SavedFilterCreateRequestSchema,
   SavedFilterUpdateRequestSchema,
   BatchSchema,
+  BatchDeleteOperationRequestSchema,
   BatchDetailSchema,
   BatchOperationCreateResponseSchema,
+  BatchProcessInstanceSuspensionRequestSchema,
+  BatchRetryOperationRequestSchema,
+  BatchSuspensionUpdateRequestSchema,
   ProcessDefinitionSchema: MissionControlProcessDefinitionSchema,
   ProcessDefXmlSchema: MissionControlProcessDefXmlSchema,
   ProcessInstanceStartResponseSchema,
@@ -1257,30 +1261,9 @@ registry.register('Batch', BatchSchema)
 
 registry.register('BatchOperationCreateResponse', BatchOperationCreateResponseSchema)
 
-const CreateDeleteBatchRequest = z.object({
-  processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.string(), z.any()).optional(),
-  deleteReason: z.string().optional(),
-  skipCustomListeners: z.boolean().optional(),
-  skipIoMappings: z.boolean().optional(),
-  failIfNotExists: z.boolean().optional(),
-  skipSubprocesses: z.boolean().optional(),
-})
-registry.register('CreateDeleteBatchRequest', CreateDeleteBatchRequest)
-
-const CreateSuspendActivateBatchRequest = z.object({
-  processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.string(), z.any()).optional(),
-  suspended: z.boolean().optional(),
-})
-registry.register('CreateSuspendActivateBatchRequest', CreateSuspendActivateBatchRequest)
-
-const CreateRetriesBatchRequest = z.object({
-  retries: z.number().min(0),
-  jobIds: z.array(z.string()).optional(),
-  processInstanceIds: z.array(z.string()).optional(),
-})
-registry.register('CreateRetriesBatchRequest', CreateRetriesBatchRequest)
+registry.register('CreateDeleteBatchRequest', BatchDeleteOperationRequestSchema)
+registry.register('CreateSuspendActivateBatchRequest', BatchProcessInstanceSuspensionRequestSchema)
+registry.register('CreateRetriesBatchRequest', BatchRetryOperationRequestSchema)
 
 registry.register('BatchDetail', BatchDetailSchema)
 
@@ -1289,7 +1272,7 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/batches/process-instances/delete',
   ...authzExtension('engine.runtime.batches.process-instances.delete', 'POST', '/mission-control-api/batches/process-instances/delete'),
-  request: { body: { content: { 'application/json': { schema: CreateDeleteBatchRequest } } } },
+  request: { body: { content: { 'application/json': { schema: BatchDeleteOperationRequestSchema } } } },
   responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
@@ -1298,7 +1281,7 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/batches/process-instances/suspend',
   ...authzExtension('engine.runtime.batches.process-instances.suspend', 'POST', '/mission-control-api/batches/process-instances/suspend'),
-  request: { body: { content: { 'application/json': { schema: CreateSuspendActivateBatchRequest } } } },
+  request: { body: { content: { 'application/json': { schema: BatchProcessInstanceSuspensionRequestSchema } } } },
   responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
@@ -1307,7 +1290,7 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/batches/process-instances/activate',
   ...authzExtension('engine.runtime.batches.process-instances.activate', 'POST', '/mission-control-api/batches/process-instances/activate'),
-  request: { body: { content: { 'application/json': { schema: CreateSuspendActivateBatchRequest } } } },
+  request: { body: { content: { 'application/json': { schema: BatchProcessInstanceSuspensionRequestSchema } } } },
   responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
@@ -1316,7 +1299,7 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/batches/jobs/retries',
   ...authzExtension('engine.runtime.batches.jobs.retry', 'POST', '/mission-control-api/batches/jobs/retries'),
-  request: { body: { content: { 'application/json': { schema: CreateRetriesBatchRequest } } } },
+  request: { body: { content: { 'application/json': { schema: BatchRetryOperationRequestSchema } } } },
   responses: { 201: { description: 'Created', content: { 'application/json': { schema: BatchOperationCreateResponseSchema } } } },
 })
 
@@ -1333,7 +1316,7 @@ registry.registerPath({
   method: 'put',
   path: '/mission-control-api/batches/{id}/suspended',
   ...authzExtension('engine.runtime.batches.suspension.update', 'PUT', '/mission-control-api/batches/{id}/suspended'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ suspended: z.boolean() }) } } } },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: BatchSuspensionUpdateRequestSchema } } } },
   responses: { 204: { description: 'Suspension state updated' }, 404: { description: 'Not found' } },
 })
 
