@@ -6,6 +6,22 @@ Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
 Status: **Partially implemented runbook.** API-driven configuration-bundle preview, hash-bound apply, export, apply history, and the `pnpm authz:config` CLI are available. File-based bootstrap validation/apply, optional dev/source-production/published-image/self-host/OpenShift mounts, host-based bootstrap input, Engine Set/runtime-resource materialization receipts, and durable stored-identity replay continuation are available behind disabled-by-default settings. Existing deployments continue to start without a bundle.
 
+### Disposable local Docker validation rehearsal
+
+Run the following from the repository root to validate the mounted-bundle
+startup path against a fresh disposable backend and database:
+
+```bash
+pnpm run test:config-bootstrap:local
+```
+
+The rehearsal creates a temporary `preview_only` bundle, uses a separate Docker
+Compose project and ephemeral Postgres host port, verifies the sanitized
+`/ready` bootstrap state, force-recreates the backend, then removes its
+containers and volume. It does not modify the active local stack or apply any
+configuration records. Set `LOCAL_CONFIG_BOOTSTRAP_ENV_FILE` only when the
+default `.env.docker` is not the intended local Docker environment.
+
 For implementation completion and verification status across authorization, identity, and engine registration, use [the architecture tracker](../architecture/11-json-driven-authz-and-engine-registration.md); this runbook intentionally lists only operationally supported deployment paths.
 
 Related guides:

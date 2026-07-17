@@ -1,0 +1,8 @@
+# Disposable local validation overlay for the configuration-bundle startup path.
+# It is intentionally separate from docker-compose.config-bundle.yml so normal
+# deployments continue to take their bootstrap mode from the deployment env file.
+services:
+  backend:
+    environment:
+      EG_CONFIG_BOOTSTRAP_MODE: validate
+      EG_CONFIG_FAIL_CLOSED: "true"
