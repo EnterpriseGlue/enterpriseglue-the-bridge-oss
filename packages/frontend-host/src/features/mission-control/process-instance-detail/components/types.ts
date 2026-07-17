@@ -3,6 +3,7 @@ import type {
   HistoricDecisionInstance,
   HistoricTaskInstance,
   HistoricVariableInstance,
+  VariableHistoryEntry as SharedVariableHistoryEntry,
   UserOperationLogEntry,
   ProcessInstanceExecutionDetails as SharedProcessInstanceExecutionDetails,
 } from '@enterpriseglue/shared/schemas/mission-control/history.js'
@@ -32,19 +33,7 @@ export type ActivityInstance = SharedActivityInstance
 
 export type Variable = HistoricVariableInstance
 
-export type VariableHistoryEntry = {
-  id: string
-  variableInstanceId: string
-  variableName: string
-  value: any
-  type?: string | null
-  time?: string | null
-  activityInstanceId?: string | null
-  executionId?: string | null
-  taskId?: string | null
-  revision?: number | null
-  serializerName?: string | null
-}
+export type VariableHistoryEntry = SharedVariableHistoryEntry
 
 export type VariableHistoryTarget = {
   variableInstanceId?: string | null

@@ -2259,6 +2259,8 @@ Process Overview's secondary Instance Detail and retry client now imports the sa
 
 The permanently disabled Instance Detail `called-process-instances` client was removed: no backend route or OpenAPI action exists for it, while the existing authorized activity-history response supplies call-instance navigation. This eliminates an unreferenced `unknown` request rather than adding a misleading authorization surface.
 
+Variable-history reads now validate their normalized, PII-redacted rows through the existing shared schema, OpenAPI contract, Instance Detail client, and modals, replacing the final local duplicate of that history-entry interface.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

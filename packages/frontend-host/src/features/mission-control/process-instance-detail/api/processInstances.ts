@@ -6,10 +6,9 @@ import type {
   ProcessInstanceDetail as SharedProcessInstanceDetail,
   RuntimeActivityInstanceTree,
 } from '@enterpriseglue/shared/schemas/mission-control/process.js'
-import type { HistoricVariableInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type { HistoricVariableInstance, VariableHistoryEntry } from '@enterpriseglue/shared/schemas/mission-control/history.js'
 import type {
   ProcessDefinition,
-  VariableHistoryEntry,
   ExecutionDetails,
   Incident,
   Job,

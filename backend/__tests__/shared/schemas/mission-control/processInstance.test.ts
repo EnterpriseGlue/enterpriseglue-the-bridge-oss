@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ActivityInstanceListSchema, ProcessInstanceDetailSchema, ProcessInstanceSchema, RuntimeActivityInstanceTreeSchema, VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
+import { VariableHistoryEntrySchema } from '@enterpriseglue/shared/schemas/mission-control/history.js';
 
 describe('process instance transport contract', () => {
   it('keeps every normalized runtime state and adapter extension', () => {
@@ -60,5 +61,18 @@ describe('process instance transport contract', () => {
     expect(variables.approvalReason).toMatchObject({
       type: 'String', adapterDiagnostic: { retained: true },
     });
+  });
+
+  it('keeps normalized variable-history metadata in the shared row contract', () => {
+    const entry = VariableHistoryEntrySchema.parse({
+      id: 'detail-1',
+      variableInstanceId: 'variable-1',
+      variableName: 'approvalReason',
+      value: 'Need manager sign-off',
+      type: 'String',
+      activityInstanceId: null,
+      revision: 2,
+    });
+    expect(entry).toMatchObject({ variableName: 'approvalReason', revision: 2 });
   });
 });
