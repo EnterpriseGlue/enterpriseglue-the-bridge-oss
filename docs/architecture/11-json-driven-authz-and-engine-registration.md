@@ -2249,6 +2249,8 @@ The process-instance detail route now uses a dedicated shared passthrough contra
 
 Historic process-instance detail and collection reads now use that same shared passthrough contract after PII redaction, so historical identifiers, completion state, and adapter extensions are validated consistently through the route, OpenAPI, and Instance Detail client.
 
+The live activity-instance tree now has a shared recursive passthrough schema through its runtime serializer, OpenAPI operation, and Instance Detail client; nested engine diagnostics remain compatible while the UI no longer fetches the tree as `unknown`.
+
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.
 
 Project creation now shares its import-aware request and established 200 response contract across its backend validator/serializer, OpenAPI, and both local and Git-backed wizard paths, so enabled imports require an engine consistently.

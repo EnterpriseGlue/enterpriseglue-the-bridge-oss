@@ -1,6 +1,7 @@
 import { apiClient } from '../../../../shared/api/client'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type { ProcessInstanceDetail as SharedProcessInstanceDetail } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { RuntimeActivityInstanceTree } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type {
   ProcessDefinition,
   Variable,
@@ -38,8 +39,8 @@ export async function getProcessInstanceActivityHistory(instanceId: string, engi
   return apiClient.get<ActivityInstance[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/history/activity-instances`, engineId), undefined, { credentials: 'include' })
 }
 
-export async function getProcessInstanceActivityTree(instanceId: string, engineId?: string): Promise<unknown> {
-  return apiClient.get<unknown>(withEngineId(`/mission-control-api/process-instances/${instanceId}/activity-instances`, engineId), undefined, { credentials: 'include' })
+export async function getProcessInstanceActivityTree(instanceId: string, engineId?: string): Promise<RuntimeActivityInstanceTree> {
+  return apiClient.get<RuntimeActivityInstanceTree>(withEngineId(`/mission-control-api/process-instances/${instanceId}/activity-instances`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceExecutionDetails(

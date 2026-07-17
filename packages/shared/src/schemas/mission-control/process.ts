@@ -82,6 +82,30 @@ export const ActivityInstanceSchema = z.object({
   endTime: z.string().nullable().optional(),
 });
 
+export interface RuntimeActivityInstanceTree {
+  id?: string | null;
+  activityId?: string | null;
+  activityName?: string | null;
+  activityType?: string | null;
+  parentActivityInstanceId?: string | null;
+  childActivityInstances?: RuntimeActivityInstanceTree[] | null;
+  childTransitionInstances?: RuntimeActivityInstanceTree[] | null;
+  executionIds?: string[] | null;
+  [key: string]: unknown;
+}
+
+/** Engine-native recursive activity tree used by Instance Detail. */
+export const RuntimeActivityInstanceTreeSchema: z.ZodType<RuntimeActivityInstanceTree> = z.lazy(() => z.object({
+  id: z.string().nullable().optional(),
+  activityId: z.string().nullable().optional(),
+  activityName: z.string().nullable().optional(),
+  activityType: z.string().nullable().optional(),
+  parentActivityInstanceId: z.string().nullable().optional(),
+  childActivityInstances: z.array(RuntimeActivityInstanceTreeSchema).nullable().optional(),
+  childTransitionInstances: z.array(RuntimeActivityInstanceTreeSchema).nullable().optional(),
+  executionIds: z.array(z.string()).nullable().optional(),
+}).passthrough());
+
 // Incidents are engine-native runtime rows. The common fields power the
 // instance-detail UI, while passthrough retains adapter-specific diagnostics.
 export const ProcessInstanceIncidentSchema = z.object({

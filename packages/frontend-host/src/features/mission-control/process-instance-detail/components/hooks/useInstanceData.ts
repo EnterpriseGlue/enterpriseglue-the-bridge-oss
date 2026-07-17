@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import type { ActivityInstance, ProcessDefinition } from '../types'
+import type { RuntimeActivityInstanceTree } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { useSelectedEngine } from '../../../../../components/EngineSelector'
 import {
   getProcessInstance,
@@ -28,20 +29,9 @@ interface UseInstanceDataOptions {
   externalTasksEnabled?: boolean
 }
 
-type RuntimeActivityTreeNode = {
-  id?: string | null
-  activityId?: string | null
-  activityName?: string | null
-  activityType?: string | null
-  parentActivityInstanceId?: string | null
-  childActivityInstances?: RuntimeActivityTreeNode[] | null
-  childTransitionInstances?: RuntimeActivityTreeNode[] | null
-  executionIds?: string[] | null
-}
-
-export function flattenRuntimeActivityTree(tree: unknown): ActivityInstance[] {
+export function flattenRuntimeActivityTree(tree: RuntimeActivityInstanceTree | null | undefined): ActivityInstance[] {
   const flattened: ActivityInstance[] = []
-  const visit = (node: RuntimeActivityTreeNode | null | undefined, parentId?: string | null) => {
+  const visit = (node: RuntimeActivityInstanceTree | null | undefined, parentId?: string | null) => {
     if (!node) return
     const nodeId = node.id ? String(node.id) : ''
     const activityId = node.activityId ? String(node.activityId) : ''
@@ -66,7 +56,7 @@ export function flattenRuntimeActivityTree(tree: unknown): ActivityInstance[] {
     }
   }
 
-  visit(tree as RuntimeActivityTreeNode)
+  visit(tree)
   return flattened
 }
 

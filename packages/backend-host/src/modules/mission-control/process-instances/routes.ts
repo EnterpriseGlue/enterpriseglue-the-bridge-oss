@@ -14,7 +14,7 @@ import {
 } from './service.js'
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
-import { ProcessInstanceDetailSchema, ProcessInstanceSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { ProcessInstanceDetailSchema, ProcessInstanceSchema, RuntimeActivityInstanceTreeSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 const r = Router()
 
@@ -101,7 +101,7 @@ r.get('/mission-control-api/process-instances/:id/activity-instances', requirePr
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
   const data = await getActivityInstances(engineId, instanceId)
-  res.json(data)
+  res.json(RuntimeActivityInstanceTreeSchema.parse(data))
 }))
 
 // Delete process instance

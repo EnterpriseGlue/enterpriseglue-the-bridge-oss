@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProcessInstanceDetailSchema, ProcessInstanceSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
+import { ProcessInstanceDetailSchema, ProcessInstanceSchema, RuntimeActivityInstanceTreeSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
 
 describe('process instance transport contract', () => {
   it('keeps every normalized runtime state and adapter extension', () => {
@@ -13,6 +13,11 @@ describe('process instance transport contract', () => {
       adapterDiagnostic: 'retained',
     });
     expect(instance).toMatchObject({ state: 'SUSPENDED', hasIncident: true, adapterDiagnostic: 'retained' });
+  });
+
+  it('validates recursive runtime activity trees while retaining adapter diagnostics', () => {
+    const tree = RuntimeActivityInstanceTreeSchema.parse({ id: 'root', activityId: 'start', childActivityInstances: [{ id: 'child', activityId: 'task', adapterDiagnostic: true }] });
+    expect(tree.childActivityInstances?.[0]).toMatchObject({ id: 'child', adapterDiagnostic: true });
   });
 
   it('keeps detail identifiers, action decisions, and adapter extensions in one contract', () => {

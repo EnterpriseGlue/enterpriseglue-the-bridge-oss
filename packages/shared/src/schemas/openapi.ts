@@ -2667,12 +2667,22 @@ registry.registerPath({
 });
 
 // GET /mission-control-api/process-instances/{id}/activity-instances (runtime)
+const RuntimeActivityInstanceTreeOpenApiSchema = z.object({
+  id: z.string().nullable().optional(),
+  activityId: z.string().nullable().optional(),
+  activityName: z.string().nullable().optional(),
+  activityType: z.string().nullable().optional(),
+  parentActivityInstanceId: z.string().nullable().optional(),
+  executionIds: z.array(z.string()).nullable().optional(),
+  childActivityInstances: z.array(z.object({ id: z.string().nullable().optional(), activityId: z.string().nullable().optional() }).passthrough()).nullable().optional(),
+  childTransitionInstances: z.array(z.object({ id: z.string().nullable().optional(), activityId: z.string().nullable().optional() }).passthrough()).nullable().optional(),
+}).passthrough();
 registry.registerPath({
   method: 'get',
   path: '/mission-control-api/process-instances/{id}/activity-instances',
   ...authzExtension('engine.runtime.process-instances.activity-tree.read', 'GET', '/mission-control-api/process-instances/{id}/activity-instances'),
   request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'Runtime activity instance tree', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Runtime activity instance tree', content: { 'application/json': { schema: RuntimeActivityInstanceTreeOpenApiSchema } } } },
 });
 
 // GET /mission-control-api/process-instances/{id}/jobs
