@@ -197,6 +197,27 @@ export const PreviewCountResponseSchema = z.object({
   count: z.number().int().nonnegative(),
 }).strict();
 
+// Runtime process-instance collection filters use their query-string wire
+// representation so the shared route validation does not alter the
+// Camunda-compatible adapter request. Unknown adapter filters remain intact.
+export const ProcessInstanceCollectionQueryParamsSchema = z.object({
+  engineId: z.string().optional(),
+  processDefinitionKey: z.string().optional(),
+  processDefinitionId: z.string().optional(),
+  superProcessInstanceId: z.string().optional(),
+  activityId: z.string().optional(),
+  startedAfter: z.string().optional(),
+  startedBefore: z.string().optional(),
+  active: z.enum(['true', 'false', '1', '0']).optional(),
+  suspended: z.enum(['true', 'false', '1', '0']).optional(),
+  withIncidents: z.enum(['true', 'false', '1', '0']).optional(),
+  completed: z.enum(['true', 'false', '1', '0']).optional(),
+  canceled: z.enum(['true', 'false', '1', '0']).optional(),
+  includeActionDecisions: z.enum(['true']).optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
+}).passthrough();
+
 // Types
 export type ProcessDefinition = z.infer<typeof ProcessDefinitionSchema>;
 export type ProcessDefXml = z.infer<typeof ProcessDefXmlSchema>;
@@ -207,6 +228,7 @@ export type ActivityCountByActivityId = z.infer<typeof ActivityCountByActivityId
 export type ActivityCountsByState = z.infer<typeof ActivityCountsByStateSchema>;
 export type PreviewCountRequest = z.infer<typeof PreviewCountRequest>;
 export type PreviewCountResponse = z.infer<typeof PreviewCountResponseSchema>;
+export type ProcessInstanceCollectionQueryParams = z.infer<typeof ProcessInstanceCollectionQueryParamsSchema>;
 export type ProcessInstanceVariable = z.infer<typeof ProcessInstanceVariableSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;

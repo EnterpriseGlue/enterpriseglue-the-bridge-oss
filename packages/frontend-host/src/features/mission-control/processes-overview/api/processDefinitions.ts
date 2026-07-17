@@ -11,6 +11,7 @@ import type {
   ProcessInstance as SharedProcessInstance,
   ProcessInstanceExternalTask,
   ProcessInstanceJob,
+  ProcessInstanceCollectionQueryParams as SharedProcessInstanceCollectionQueryParams,
   PreviewCountRequest,
   PreviewCountResponse,
   Variables,
@@ -44,18 +45,23 @@ export async function fetchActivityCountsByState(definitionId: string, engineId?
   return apiClient.get<ActivityCountsByState>(`/mission-control-api/process-definitions/${definitionId}/activity-counts-by-state${params}`, undefined, { credentials: 'include' })
 }
 
-export interface GetProcessInstancesParams {
-  engineId?: string
+export type GetProcessInstancesParams = Omit<
+  Pick<
+    SharedProcessInstanceCollectionQueryParams,
+    | 'engineId'
+    | 'processDefinitionId'
+    | 'processDefinitionKey'
+    | 'activityId'
+    | 'startedAfter'
+    | 'startedBefore'
+  >,
+  never
+> & {
   active?: boolean
   completed?: boolean
   canceled?: boolean
   withIncidents?: boolean
   suspended?: boolean
-  processDefinitionId?: string
-  processDefinitionKey?: string
-  activityId?: string
-  startedAfter?: string
-  startedBefore?: string
   includeActionDecisions?: boolean
 }
 

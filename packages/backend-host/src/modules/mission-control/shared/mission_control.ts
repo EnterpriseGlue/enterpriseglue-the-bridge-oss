@@ -41,6 +41,7 @@ import {
   ProcessInstanceJobListSchema,
   ProcessInstanceExternalTaskListSchema,
   ProcessInstanceDetailSchema,
+  ProcessInstanceCollectionQueryParamsSchema,
   ProcessInstanceSchema,
   ProcessDefXmlSchema,
   PreviewCountRequest,
@@ -199,7 +200,7 @@ r.post('/mission-control-api/process-instances/preview-count', requireRuntimeCol
     throw Errors.internal(e?.message || 'Failed to preview count')
   }
 }))
-r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('engine.runtime.process-instances.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-instances', requireRuntimeCollectionAction('engine.runtime.process-instances.read', { resourceKind: 'process_definition' }), validateQuery(ProcessInstanceCollectionQueryParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const keys = req.authorizedRuntimeResourceKeys

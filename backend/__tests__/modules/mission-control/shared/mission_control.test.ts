@@ -212,6 +212,15 @@ describe('mission-control shared mission_control routes', () => {
     }));
   });
 
+  it('rejects malformed process-instance collection filters before querying the engine', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-77', active: 'not-a-boolean' });
+
+    expect(response.status).toBe(400);
+    expect(listProcessInstancesDetailed).not.toHaveBeenCalled();
+  });
+
   it('serializes historic variable instances through the shared contract without dropping engine extensions', async () => {
     vi.mocked(listHistoricVariableInstances).mockResolvedValueOnce([{
       id: 'var-1',

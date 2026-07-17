@@ -73,6 +73,7 @@ const {
   ProcessEditTargetSchema,
   DecisionEditTargetSchema,
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
+  ProcessInstanceCollectionQueryParamsSchema,
   ProcessInstanceDetailSchema: MissionControlProcessInstanceDetailSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
@@ -709,15 +710,7 @@ registry.registerPath({
   path: '/mission-control-api/process-instances',
   ...authzExtension('engine.runtime.process-instances.read', 'GET', '/mission-control-api/process-instances'),
   request: {
-    query: z.object({
-      processDefinitionKey: z.string().optional(),
-      active: z.string().optional(),
-      suspended: z.string().optional(),
-      withIncidents: z.string().optional(),
-      completed: z.string().optional(),
-      canceled: z.string().optional(),
-      includeActionDecisions: z.enum(['true']).optional(),
-    }),
+    query: ProcessInstanceCollectionQueryParamsSchema,
   },
   responses: {
     200: { description: 'List process instances (runtime + historic)', content: { 'application/json': { schema: z.array(MissionControlProcessInstanceSchema) } } },
