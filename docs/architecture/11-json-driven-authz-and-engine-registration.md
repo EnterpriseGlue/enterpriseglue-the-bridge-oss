@@ -2291,6 +2291,8 @@ Engine connection-test, recorded-health, and authenticated environment-health re
 
 Per-engine runtime/deployment reconciliation now validates its shared created/updated/deactivated/materialization and deployment-discovery summary before returning from the Engine Detail action.
 
+Engine Detail runtime-resource inventory now validates the shared sanitized persistence schema after tenant filtering, so the resource-aware authorization inventory cannot drift from its documented API contract.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

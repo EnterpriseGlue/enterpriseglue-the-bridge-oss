@@ -46,6 +46,7 @@ import {
 } from '@enterpriseglue/shared/schemas/mission-control/saved-filter.js'
 import { engineRegistrationJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js'
 import { EngineMetadataReconciliationResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { RuntimeResourceSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
@@ -1466,7 +1467,7 @@ r.get('/engines-api/engines/:id/runtime-resources', engineLimiter, requireAuth, 
     },
     order: { resourceKind: 'ASC', resourceKey: 'ASC', id: 'ASC' },
   })
-  res.json(resources.filter((resource) => (resource.tenantId || null) === tenantId))
+  res.json(RuntimeResourceSchema.array().parse(resources.filter((resource) => (resource.tenantId || null) === tenantId)))
 }))
 
 r.post('/engines-api/engines/:id/runtime-resources/reconcile', engineLimiter, requireAuth, reconciliationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {

@@ -385,7 +385,11 @@ describe('mission-control engines routes', () => {
   it('lists only tenant-visible sanitized runtime inventory for an authorized engine viewer', async () => {
     const resourceRepo = {
       find: vi.fn().mockResolvedValue([
-        { id: 'resource-payments', tenantId: null, engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', isActive: true, lineageJson: '{}' },
+        {
+          id: 'resource-payments', tenantId: null, engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '',
+          engineResourceId: null, deploymentId: null, projectId: null, fileId: null, version: 1, labelsJson: '{}', lineageJson: '{}', source: 'engine_discovery',
+          sourceRef: null, observedAt: 1, isActive: true, createdAt: 1, updatedAt: 1,
+        },
         { id: 'resource-foreign', tenantId: 'tenant-b', engineId: 'e1', resourceKind: 'decision_definition', resourceKey: 'foreign', isActive: true, lineageJson: '{}' },
       ]),
     };
