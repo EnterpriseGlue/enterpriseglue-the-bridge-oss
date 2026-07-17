@@ -14,7 +14,7 @@ import { oauthService } from '@enterpriseglue/shared/services/git/OAuthService.j
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
-import { GitCredentialIdParamsSchema, GitCredentialNamespaceSchema, GitCredentialSchema, GitOAuthAuthorizeResponseSchema, GitOAuthCallbackRequestSchema, GitOAuthConfigSchema, GitProviderIdParamsSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
+import { GitCredentialIdParamsSchema, GitCredentialNamespaceSchema, GitCredentialOperationReceiptSchema, GitCredentialSchema, GitCredentialValidationResponseSchema, GitOAuthAuthorizeResponseSchema, GitOAuthCallbackRequestSchema, GitOAuthConfigSchema, GitProviderIdParamsSchema, RenameGitCredentialRequestSchema, SaveGitCredentialRequestSchema } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
@@ -75,7 +75,7 @@ router.get('/git-api/credentials', apiLimiter, requireAuth, asyncHandler(async (
  * GET /git-api/credentials/:providerId
  * Get credential for a specific provider
  */
-router.get('/git-api/credentials/:providerId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/credentials/:providerId', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const providerId = String(req.params.providerId);
   
@@ -122,14 +122,14 @@ router.patch('/git-api/credentials/:credentialId', apiLimiter, requireAuth, vali
     throw Errors.notFound('Credential');
   }
   
-  res.json({ success: true });
+  res.json(GitCredentialOperationReceiptSchema.parse({ success: true }));
 }));
 
 /**
  * DELETE /git-api/credentials/:providerId
  * Delete credentials for a provider
  */
-router.delete('/git-api/credentials/:providerId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/git-api/credentials/:providerId', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const providerId = String(req.params.providerId);
   
@@ -141,19 +141,19 @@ router.delete('/git-api/credentials/:providerId', apiLimiter, requireAuth, async
  * GET /git-api/credentials/:providerId/validate
  * Check if credentials are valid
  */
-router.get('/git-api/credentials/:providerId/validate', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/credentials/:providerId/validate', apiLimiter, requireAuth, validateParams(GitProviderIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const providerId = String(req.params.providerId);
   
   const isValid = await credentialService.hasValidCredentials(userId, providerId);
-  res.json({ valid: isValid });
+  res.json(GitCredentialValidationResponseSchema.parse({ valid: isValid }));
 }));
 
 /**
  * GET /git-api/credentials/:credentialId/namespaces
  * Get available namespaces (user + organizations) for a credential
  */
-router.get('/git-api/credentials/:credentialId/namespaces', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/credentials/:credentialId/namespaces', apiLimiter, requireAuth, validateParams(GitCredentialIdParamsSchema), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const credentialId = String(req.params.credentialId);
   

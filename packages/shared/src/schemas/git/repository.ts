@@ -178,11 +178,14 @@ export const GitCredentialSchema = z.object({
   providerUsername: z.string().optional(), expiresAt: z.number().optional(),
   scopes: z.string().optional(), createdAt: z.number(), updatedAt: z.number(),
 }).strict();
-export const GitCredentialIdParamsSchema = z.object({ credentialId: z.string().min(1) });
-export const GitProviderIdParamsSchema = z.object({ providerId: z.string().min(1) });
+const GitIdentifierSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/);
+export const GitCredentialIdParamsSchema = z.object({ credentialId: GitIdentifierSchema });
+export const GitProviderIdParamsSchema = z.object({ providerId: GitIdentifierSchema });
+export const GitCredentialOperationReceiptSchema = z.object({ success: z.literal(true) }).strict();
+export const GitCredentialValidationResponseSchema = z.object({ valid: z.boolean() }).strict();
 export const SaveGitCredentialRequestSchema = z.object({ providerId: z.string().min(1), token: z.string().min(1), name: z.string().optional() });
 export const RenameGitCredentialRequestSchema = z.object({ name: z.string().min(1) });
-export const GitCredentialNamespaceSchema = z.object({ name: z.string(), type: z.enum(['user', 'organization']), avatarUrl: z.string().optional() }).passthrough();
+export const GitCredentialNamespaceSchema = z.object({ name: z.string(), type: z.enum(['user', 'organization']), avatarUrl: z.string().optional() });
 export const GitProviderRepositorySchema = z.object({ name: z.string(), fullName: z.string(), url: z.string(), isPrivate: z.boolean() }).strict();
 export const GitProviderSummarySchema = z.object({
   id: z.string(), name: z.string(), type: z.string(), baseUrl: z.string(), apiUrl: z.string(),
@@ -220,6 +223,8 @@ export type ProjectGitConnectionOperationReceipt = z.infer<typeof ProjectGitConn
 export type GitCredential = z.infer<typeof GitCredentialSchema>;
 export type GitCredentialIdParams = z.input<typeof GitCredentialIdParamsSchema>;
 export type GitProviderIdParams = z.input<typeof GitProviderIdParamsSchema>;
+export type GitCredentialOperationReceipt = z.infer<typeof GitCredentialOperationReceiptSchema>;
+export type GitCredentialValidationResponse = z.infer<typeof GitCredentialValidationResponseSchema>;
 export type SaveGitCredentialRequest = z.infer<typeof SaveGitCredentialRequestSchema>;
 export type RenameGitCredentialRequest = z.infer<typeof RenameGitCredentialRequestSchema>;
 export type GitCredentialNamespace = z.infer<typeof GitCredentialNamespaceSchema>;

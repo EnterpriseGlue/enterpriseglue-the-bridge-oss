@@ -88,4 +88,25 @@ describe('git credentials routes', () => {
       userId: 'user-1', providerId: 'provider-1', accessToken: 'access-token', refreshToken: 'refresh-token',
     }));
   });
+
+  it('uses the shared credential responses and strips unknown namespace fields', async () => {
+    vi.mocked(credentialService.renameCredential).mockResolvedValue(true);
+    vi.mocked(credentialService.hasValidCredentials).mockResolvedValue(true);
+    vi.mocked(credentialService.getNamespaces).mockResolvedValue([
+      { name: 'example', type: 'organization', avatarUrl: 'https://example.test/avatar', accessToken: 'must-not-leak' } as any,
+    ]);
+
+    const renamed = await request(app).patch('/git-api/credentials/credential-1').send({ name: 'Work account' });
+    const validated = await request(app).get('/git-api/credentials/provider-1/validate');
+    const namespaces = await request(app).get('/git-api/credentials/credential-1/namespaces');
+    const invalidProvider = await request(app).get('/git-api/credentials/%20/validate');
+
+    expect(renamed.status).toBe(200);
+    expect(renamed.body).toEqual({ success: true });
+    expect(validated.status).toBe(200);
+    expect(validated.body).toEqual({ valid: true });
+    expect(namespaces.status).toBe(200);
+    expect(namespaces.body).toEqual([{ name: 'example', type: 'organization', avatarUrl: 'https://example.test/avatar' }]);
+    expect(invalidProvider.status).toBe(400);
+  });
 });
