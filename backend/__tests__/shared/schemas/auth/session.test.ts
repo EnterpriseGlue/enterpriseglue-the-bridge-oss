@@ -37,6 +37,22 @@ describe('authenticated browser-session contracts', () => {
     expect(() => RefreshAccessTokenResponseSchema.parse({ user: {}, expiresIn: 900 })).toThrow();
   });
 
+  it('normalizes persisted PostgreSQL timestamp strings in the browser response', () => {
+    expect(AuthenticatedSessionUserSchema.parse({
+      id: 'user-1',
+      email: 'user@example.com',
+      createdAt: '1700000000000',
+      lastLoginAt: '1700000000123',
+      session,
+    })).toMatchObject({ createdAt: 1700000000000, lastLoginAt: 1700000000123 });
+    expect(AuthenticatedSessionUserSchema.parse({
+      id: 'user-1', email: 'user@example.com', createdAt: 1, lastLoginAt: null, session,
+    }).lastLoginAt).toBeNull();
+    expect(() => AuthenticatedSessionUserSchema.parse({
+      id: 'user-1', email: 'user@example.com', createdAt: 'not-a-timestamp', session,
+    })).toThrow();
+  });
+
   it('rejects a malformed response-only principal context', () => {
     expect(() => AuthenticatedSessionUserSchema.parse({
       id: 'user-1', email: 'user@example.com', session: { principal: { type: 'service_account', id: 'user-1' }, tenant: { id: null } },

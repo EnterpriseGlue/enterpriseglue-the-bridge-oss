@@ -16,7 +16,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
-    await page.goto('/admin/access-control');
+    await page.goto('/t/default/admin/access-control');
     await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Assignments', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Runtime Resources', exact: true })).toBeVisible();

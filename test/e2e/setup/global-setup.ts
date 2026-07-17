@@ -85,11 +85,11 @@ export default async function globalSetup() {
 
     await pool.query(
       `INSERT INTO ${schema}.users
-        (id, email, auth_provider, password_hash, first_name, last_name, platform_role,
+        (id, email, auth_provider, password_hash, first_name, last_name,
          is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
          email_verification_token, email_verification_token_expiry, created_at, updated_at,
          last_login_at, created_by_user_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         adminUserId,
         adminEmail,
@@ -97,7 +97,6 @@ export default async function globalSetup() {
         adminHash,
         'E2E',
         'Admin',
-        'admin',
         true,
         false,
         0,
@@ -123,11 +122,11 @@ export default async function globalSetup() {
 
   await pool.query(
     `INSERT INTO ${schema}.users
-      (id, email, auth_provider, password_hash, first_name, last_name, platform_role,
+      (id, email, auth_provider, password_hash, first_name, last_name,
        is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
        email_verification_token, email_verification_token_expiry, created_at, updated_at,
        last_login_at, created_by_user_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
     [
       userId,
       email,
@@ -135,7 +134,6 @@ export default async function globalSetup() {
       passwordHash,
       'E2E',
       'Smoke',
-      'admin',
       true,
       false,
       0,
@@ -150,9 +148,18 @@ export default async function globalSetup() {
     ]
   );
 
+  // Tenant-scoped browser routes require an active tenant membership. Keep it
+  // at the lowest collaboration level; platform administration below is
+  // granted only by canonical system-group memberships.
+  await pool.query(
+    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [randomUUID(), 'tenant-default', userId, 'member', now]
+  );
+
   // Keep the disposable E2E administrator aligned with the canonical
-  // authorization model. SSO-enforced local break-glass login intentionally
-  // ignores the compatibility User.platformRole field.
+  // authorization model. SSO-enforced local break-glass login is granted by
+  // these active canonical group memberships.
   const e2eAdministratorIds = [userId, adminUserId].filter((id): id is string => Boolean(id));
   for (const administratorId of e2eAdministratorIds) {
     for (const groupId of [E2E_PLATFORM_GROUP_IDS.authenticatedUsers, E2E_PLATFORM_GROUP_IDS.platformAdministrators]) {

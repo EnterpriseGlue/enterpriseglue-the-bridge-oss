@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+// PostgreSQL bigint columns can be hydrated as strings, while SQLite and
+// in-memory adapters provide numbers. Normalize at the HTTP boundary so the
+// browser session contract remains numeric across supported databases.
+const TimestampSchema = z.union([
+  z.number(),
+  z.string().regex(/^\d+$/).transform(Number),
+]);
+
 /**
  * Request-derived identity context returned by authenticated browser endpoints.
  * It deliberately is not a reusable JWT claim: tenant selection can differ on
@@ -26,8 +34,8 @@ export const AuthenticatedSessionUserSchema = z.object({
   isActive: z.boolean().optional(),
   isEmailVerified: z.boolean().optional(),
   mustResetPassword: z.boolean().optional(),
-  createdAt: z.number().optional(),
-  lastLoginAt: z.number().optional(),
+  createdAt: TimestampSchema.optional(),
+  lastLoginAt: TimestampSchema.nullable().optional(),
   session: AuthenticatedSessionContextSchema,
 }).passthrough();
 

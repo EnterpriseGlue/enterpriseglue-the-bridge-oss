@@ -100,9 +100,12 @@ test('credentialed local authorization smokes use the guarded runner', () => {
 test('seeded local authorization smoke confines temporary fixtures to the local Compose database', () => {
   assert.match(scripts['test:authz:local-smoke:seeded'], /run-authz-local-seeded-smoke\.sh/);
   assert.match(localSeededAuthzSmokeRunner, /E2E_SEED_USER=true/);
+  assert.match(localSeededAuthzSmokeRunner, /E2E_DIRECT_DB_CLEANUP=true/);
   assert.match(localSeededAuthzSmokeRunner, /E2E_SEED_FILE=/);
   assert.match(localSeededAuthzSmokeRunner, /POSTGRES_HOST=127\.0\.0\.1/);
   assert.match(localSeededAuthzSmokeRunner, /docker compose.*port db 5432/);
+  assert.match(localSeededAuthzSmokeRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
+  assert.match(localSeededAuthzSmokeRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localSeededAuthzSmokeRunner, /localhost, loopback, or a \.local host/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/login\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
@@ -112,7 +115,9 @@ test('the disposable local administrator has canonical break-glass memberships',
   assert.match(e2eGlobalSetup, /system\.group\.authenticated_users/);
   assert.match(e2eGlobalSetup, /system\.group\.platform_administrators/);
   assert.match(e2eGlobalSetup, /INSERT INTO \$\{schema\}\.authz_group_memberships/);
+  assert.match(e2eGlobalSetup, /INSERT INTO \$\{schema\}\.tenant_memberships/);
   assert.match(e2eGlobalSetup, /e2e-smoke-fixture:\$\{userId\}/);
+  assert.doesNotMatch(e2eGlobalSetup, /platform_role/);
 });
 
 test('the frontend effective-permissions snapshot imports the shared authorization contract', () => {

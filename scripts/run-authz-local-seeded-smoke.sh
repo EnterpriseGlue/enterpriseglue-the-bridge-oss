@@ -4,6 +4,7 @@ set -Eeuo pipefail
 base_url="${PLAYWRIGHT_BASE_URL:-http://localhost:5173}"
 api_base_url="${E2E_API_BASE_URL:-http://localhost:8787}"
 backend_env_file="${EG_BACKEND_ENV_FILE:-.env.docker}"
+local_ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-}"
 compose_file="infra/docker/compose/docker-compose.yml"
 
 is_local_url() {
@@ -53,11 +54,20 @@ if [[ ! "$db_port" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+curl_args=(--fail --silent --show-error --max-time 5)
+if [[ -n "$local_ca_file" ]]; then
+  if [[ ! -f "$local_ca_file" ]]; then
+    echo "[authz-local-seeded-smoke] PLAYWRIGHT_LOCAL_CA_FILE does not exist: $local_ca_file" >&2
+    exit 2
+  fi
+  curl_args+=(--cacert "$local_ca_file")
+fi
+
 if ! curl --fail --silent --show-error --max-time 5 "$api_base_url/ready" >/dev/null; then
   echo "[authz-local-seeded-smoke] Backend is not ready at $api_base_url/ready." >&2
   exit 2
 fi
-if ! curl --fail --silent --show-error --max-time 5 "$base_url/login" >/dev/null; then
+if ! curl "${curl_args[@]}" "$base_url/login" >/dev/null; then
   echo "[authz-local-seeded-smoke] Frontend is not reachable at $base_url/login." >&2
   exit 2
 fi
@@ -70,14 +80,20 @@ trap cleanup EXIT
 
 # The existing Playwright setup creates canonical baseline and administrator
 # memberships, and global teardown deletes its disposable local rows again.
-env \
+playwright_env=(
   E2E_SEED_USER=true \
+  E2E_DIRECT_DB_CLEANUP=true \
   E2E_SEED_FILE="$seed_dir/user.json" \
   E2E_API_BASE_URL="$api_base_url" \
   PLAYWRIGHT_BASE_URL="$base_url" \
   POSTGRES_HOST=127.0.0.1 \
-  POSTGRES_PORT="$db_port" \
-  pnpm exec playwright test \
-    test/e2e/smoke/login.spec.ts \
-    test/e2e/smoke/access-control-local.spec.ts \
-    --config test/e2e/playwright.config.ts
+  POSTGRES_PORT="$db_port"
+)
+if [[ -n "$local_ca_file" ]]; then
+  playwright_env+=(PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true)
+fi
+
+env "${playwright_env[@]}" pnpm exec playwright test \
+  test/e2e/smoke/login.spec.ts \
+  test/e2e/smoke/access-control-local.spec.ts \
+  --config test/e2e/playwright.config.ts

@@ -117,6 +117,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   if (membershipSourceRef) {
     await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = $1`, [membershipSourceRef]);
   }
+  await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [userId]);
 
   const projectIdsResult = await pool.query(
     `SELECT id FROM ${schema}.projects WHERE owner_id = $1`,
@@ -189,6 +190,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
       `DELETE FROM ${schema}.invitations WHERE user_id = ANY($1::text[]) OR email LIKE ANY($2::text[])`,
       [staleUserIds, staleUserEmailPatterns]
     );
+    await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
   }
   await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
   await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
@@ -228,69 +230,53 @@ export default async function globalTeardown() {
     password: data.adminPassword || getAdminCredentials().password,
   };
 
-  if (adminEmail && adminPassword) {
-    // Login sets httpOnly cookies — fetchJson captures them automatically
-    await fetchJson('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: adminEmail, password: adminPassword }),
-    });
-
-    // Make a GET request to acquire a CSRF token (login endpoint is exempt from CSRF middleware)
-    await fetchJson('/api/dashboard/context', undefined, { allowStatuses: [401, 403, 404, 500] });
-
-    await fetchJson(
-      `/api/users/${data.userId}`,
-      { method: 'DELETE' },
-      { allowStatuses: [404] }
-    );
-
-    if (data.engineId) {
-      await fetchJson(
-        `/engines-api/engines/${data.engineId}`,
-        { method: 'DELETE' },
-        { allowStatuses: [403, 404] }
-      );
-    }
-
-    if (data.cleanupAdmin && data.adminUserId) {
-      await fetchJson(
-        `/api/users/${data.adminUserId}`,
-        { method: 'DELETE' },
-        { allowStatuses: [400, 403, 404, 500] }
-      );
-    }
-
-    if (data.userId) {
-      try {
-        await cleanupDatabaseArtifacts(data.userId, data.engineId || null, data.membershipSourceRef || null);
-      } catch (error) {
-        console.warn('E2E DB cleanup failed after API cleanup.', error);
-      }
-    }
-  } else {
+  if (adminEmail && adminPassword && process.env.E2E_DIRECT_DB_CLEANUP !== 'true') {
     try {
-      await cleanupDatabaseArtifacts(data.userId, data.engineId || null);
-
+      // Login sets httpOnly cookies — fetchJson captures them automatically.
+      // SSO policy can legitimately reject a retained local administrator, so
+      // API cleanup is opportunistic; the local fixture cleanup below remains
+      // authoritative and does not depend on a deployed IdP or break-glass row.
+      await fetchJson('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+      });
+      await fetchJson('/api/dashboard/context', undefined, { allowStatuses: [401, 403, 404, 500] });
+      await fetchJson(`/api/users/${data.userId}`, { method: 'DELETE' }, { allowStatuses: [404] });
+      if (data.engineId) {
+        await fetchJson(`/engines-api/engines/${data.engineId}`, { method: 'DELETE' }, { allowStatuses: [403, 404] });
+      }
       if (data.cleanupAdmin && data.adminUserId) {
-        const pgModule = await import('pg');
-        const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
-        const schema = process.env.POSTGRES_SCHEMA || 'main';
-        const pool = new Pool({
-          host: process.env.POSTGRES_HOST,
-          port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
-          user: process.env.POSTGRES_USER,
-          password: process.env.POSTGRES_PASSWORD,
-          database: process.env.POSTGRES_DATABASE,
-          ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
-          options: `-c search_path=${schema}`,
-        });
-        await pool.query(`DELETE FROM ${schema}.users WHERE id = $1`, [data.adminUserId]);
-        await pool.end();
+        await fetchJson(`/api/users/${data.adminUserId}`, { method: 'DELETE' }, { allowStatuses: [400, 403, 404, 500] });
       }
     } catch (error) {
-      console.warn('E2E cleanup skipped: missing ADMIN_EMAIL/ADMIN_PASSWORD and DB cleanup failed.', error);
-      return;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`E2E API cleanup was unavailable; using direct local fixture cleanup. ${message}`);
     }
+  }
+
+  try {
+    await cleanupDatabaseArtifacts(data.userId, data.engineId || null, data.membershipSourceRef || null);
+
+    if (data.cleanupAdmin && data.adminUserId) {
+      const pgModule = await import('pg');
+      const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
+      const schema = process.env.POSTGRES_SCHEMA || 'main';
+      const pool = new Pool({
+        host: process.env.POSTGRES_HOST,
+        port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+        user: process.env.POSTGRES_USER,
+        password: process.env.POSTGRES_PASSWORD,
+        database: process.env.POSTGRES_DATABASE,
+        ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        options: `-c search_path=${schema}`,
+      });
+      await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [data.adminUserId]);
+      await pool.query(`DELETE FROM ${schema}.users WHERE id = $1`, [data.adminUserId]);
+      await pool.end();
+    }
+  } catch (error) {
+    console.warn('E2E direct local fixture cleanup failed.', error);
+    return;
   }
 
   await rm(SEED_FILE, { force: true });
