@@ -7,6 +7,12 @@ const API_BASE_URL = process.env.E2E_API_BASE_URL || process.env.API_BASE_URL ||
 
 const SEED_DIR = path.resolve(process.cwd(), 'test/e2e/.seed');
 const SEED_FILE = path.join(SEED_DIR, 'user.json');
+// Persisted system group ids from AuthzGroupService. Keep this setup module
+// dependency-free so Playwright does not need to load TypeORM decorators.
+const E2E_PLATFORM_GROUP_IDS = {
+  authenticatedUsers: 'system.group.authenticated_users',
+  platformAdministrators: 'system.group.platform_administrators',
+} as const;
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${url}`, {
@@ -142,6 +148,22 @@ export default async function globalSetup() {
       adminUserId,
     ]
   );
+
+  // Keep the disposable E2E administrator aligned with the canonical
+  // authorization model. SSO-enforced local break-glass login intentionally
+  // ignores the compatibility User.platformRole field.
+  const e2eAdministratorIds = [userId, adminUserId].filter((id): id is string => Boolean(id));
+  for (const administratorId of e2eAdministratorIds) {
+    for (const groupId of [E2E_PLATFORM_GROUP_IDS.authenticatedUsers, E2E_PLATFORM_GROUP_IDS.platformAdministrators]) {
+      await pool.query(
+        `INSERT INTO ${schema}.authz_group_memberships
+          (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         ON CONFLICT (group_id, user_id, source, source_ref) DO NOTHING`,
+        [randomUUID(), null, groupId, administratorId, 'system', 'e2e-smoke-fixture', null, null, now, now]
+      );
+    }
+  }
 
   const engineId = randomUUID();
   const engineBaseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:9080/engine-rest';

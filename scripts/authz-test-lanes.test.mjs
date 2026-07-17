@@ -8,6 +8,8 @@ const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsa
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
+const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
+const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
@@ -88,6 +90,24 @@ test('credentialed local authorization smokes use the guarded runner', () => {
   assert.match(localAuthzSmokeRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
   assert.match(localAuthzSmokeRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localAuthzSmokeRunner, /localhost, loopback, or a \.local host/);
+});
+
+test('seeded local authorization smoke confines temporary fixtures to the local Compose database', () => {
+  assert.match(scripts['test:authz:local-smoke:seeded'], /run-authz-local-seeded-smoke\.sh/);
+  assert.match(localSeededAuthzSmokeRunner, /E2E_SEED_USER=true/);
+  assert.match(localSeededAuthzSmokeRunner, /E2E_SEED_FILE=/);
+  assert.match(localSeededAuthzSmokeRunner, /POSTGRES_HOST=127\.0\.0\.1/);
+  assert.match(localSeededAuthzSmokeRunner, /docker compose.*port db 5432/);
+  assert.match(localSeededAuthzSmokeRunner, /localhost, loopback, or a \.local host/);
+  assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/login\.spec\.ts/);
+  assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
+});
+
+test('the disposable local administrator has canonical break-glass memberships', () => {
+  assert.match(e2eGlobalSetup, /system\.group\.authenticated_users/);
+  assert.match(e2eGlobalSetup, /system\.group\.platform_administrators/);
+  assert.match(e2eGlobalSetup, /INSERT INTO \$\{schema\}\.authz_group_memberships/);
+  assert.match(e2eGlobalSetup, /e2e-smoke-fixture/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {

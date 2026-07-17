@@ -345,6 +345,21 @@ authenticated local administrator through the Effective Access UI. This proves
 the local evaluator path; it does not replace representative external-provider
 sign-in evidence required for a legacy-provider cutover.
 
+When no existing disposable account is available, the local Compose stack can
+run the equivalent smoke with a temporary canonical administrator fixture. It
+discovers only the Compose database's loopback port, creates the fixture through
+the maintained E2E setup, and removes it during global teardown. It rejects
+non-local frontend or API URLs and never prints credentials:
+
+```bash
+EG_BACKEND_ENV_FILE=.env.docker \
+pnpm test:authz:local-smoke:seeded
+```
+
+This command is for an isolated local Docker database only. It is not suitable
+for a shared, staging, or production database, and it remains local mechanics
+evidence rather than a deployed identity-provider cutover approval.
+
 If Chromium is not installed for this workspace, run `pnpm exec playwright
 install chromium` once. The command fails rather than skipping if either
 credential is absent.
