@@ -24,7 +24,7 @@ export const TaskSchema = z.object({
   suspended: z.boolean().optional(),
   formKey: z.string().optional().nullable(),
   tenantId: z.string().optional().nullable(),
-});
+}).passthrough();
 
 export const TaskFormSchema = z.object({
   key: z.string().optional().nullable(),

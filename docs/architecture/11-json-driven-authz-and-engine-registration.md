@@ -2273,6 +2273,8 @@ Task-form reads now validate the existing engine-compatible shared form schema (
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.
 
+Task collection, detail, and variable reads now validate their shared passthrough task and variable contracts before returning data. This keeps engine-specific extension fields compatible while ensuring every Mission Control task read has the same backend, OpenAPI, and frontend transport shape.
+
 Lazy execution details for a selected runtime activity now share one strict envelope of historic variables, tasks, decisions, and user operations across backend serialization, OpenAPI, and Instance Detail, replacing its local interface and unknown OpenAPI response.
 
 The engine-scoped project import preview now shares its request and metadata-only response contract across the route validator/serializer, OpenAPI, and Git-backed project wizard; imported XML remains server-side.

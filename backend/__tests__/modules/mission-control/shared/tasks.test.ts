@@ -58,7 +58,7 @@ vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared
   unclaimTaskById: vi.fn().mockResolvedValue(undefined),
   setTaskAssigneeById: vi.fn().mockResolvedValue(undefined),
   completeTaskById: vi.fn().mockResolvedValue({}),
-  getTaskVariablesById: vi.fn().mockResolvedValue({ var1: { value: 'test' } }),
+  getTaskVariablesById: vi.fn().mockResolvedValue({ var1: { value: 'test', type: 'String' } }),
   updateTaskVariablesById: vi.fn().mockResolvedValue({}),
   getTaskFormById: vi.fn().mockResolvedValue({ key: 'form1' }),
 }));

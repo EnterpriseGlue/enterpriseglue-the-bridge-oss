@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -17,6 +18,7 @@ import {
   getTaskFormById,
 } from './tasks-service.js';
 import {
+  TaskSchema,
   TaskQueryParams,
   TaskCountResponseSchema,
   TaskCompleteResponseSchema,
@@ -51,12 +53,12 @@ r.get('/mission-control-api/tasks', requireRuntimeCollectionAction('engine.runti
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
   const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null;
   const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query;
-  if (!visibleKeys) return res.json(await listTasks(engineId, query));
+  if (!visibleKeys) return res.json(z.array(TaskSchema).parse(await listTasks(engineId, query)));
   const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
     const data = await listTasks(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
     return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
   }));
-  res.json(collections.flat());
+  res.json(z.array(TaskSchema).parse(collections.flat()));
 }));
 
 // Get task count
@@ -76,7 +78,7 @@ r.get('/mission-control-api/tasks/:id', requireTaskAction('engine.runtime.tasks.
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await getTaskById(engineId, taskId);
-  res.json(data);
+  res.json(TaskSchema.parse(data));
 }));
 
 // Get task variables
@@ -84,7 +86,7 @@ r.get('/mission-control-api/tasks/:id/variables', requireTaskAction('engine.runt
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await getTaskVariablesById(engineId, taskId);
-  res.json(data);
+  res.json(VariablesSchema.parse(data));
 }));
 
 // Update task variables
