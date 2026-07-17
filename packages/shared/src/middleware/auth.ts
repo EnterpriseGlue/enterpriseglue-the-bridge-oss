@@ -218,6 +218,16 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       });
       if (user && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
         req.user = { ...payload, email: user.email };
+        // Optional authentication must establish the same tenant-aware request
+        // context as required authentication. If the enterprise resolver cannot
+        // resolve that context, clear the tentative identity and continue as an
+        // anonymous request rather than exposing a partially authenticated user.
+        try {
+          await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
+        } catch {
+          delete req.user;
+          return next();
+        }
         updateBpmnEngineRequestContext({ userId: payload.userId });
       }
     }

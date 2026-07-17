@@ -343,6 +343,49 @@ describe('auth middleware', () => {
       expect(next).toHaveBeenCalled();
     });
 
+    it('runs the enterprise tenant resolver before attaching an optional identity', async () => {
+      const resolver = vi.fn(async (request: Request) => {
+        request.tenantRole = 'tenant_member';
+      });
+      req = {
+        ...req,
+        headers: { authorization: `Bearer ${TEST_BEARER_TOKEN}` },
+        app: { locals: { enterpriseTenantAuthorizationResolver: resolver } } as any,
+      };
+      const user = { id: 'user-1', isActive: true, authSessionVersion: 2, email: 'user@example.com' };
+      const tokenPayload = { principalType: 'user' as const, principalId: 'user-1', type: 'access' as const, authSessionVersion: 2 };
+      (jwt.verifyToken as any).mockReturnValue(tokenPayload);
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue(user) }),
+      });
+
+      await optionalAuth(req as Request, res as Response, next);
+
+      expect(resolver).toHaveBeenCalledWith(req, { tokenPayload: { ...tokenPayload, userId: 'user-1' }, user });
+      expect(req.user).toMatchObject({ userId: 'user-1', principalType: 'user', principalId: 'user-1' });
+      expect(req.tenantRole).toBe('tenant_member');
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).toHaveBeenCalledWith({ userId: 'user-1' });
+      expect(next).toHaveBeenCalledWith();
+    });
+
+    it('continues anonymously when optional tenant resolution fails', async () => {
+      req = {
+        ...req,
+        headers: { authorization: `Bearer ${TEST_BEARER_TOKEN}` },
+        app: { locals: { enterpriseTenantAuthorizationResolver: vi.fn().mockRejectedValue(new Error('tenant unavailable')) } } as any,
+      };
+      (jwt.verifyToken as any).mockReturnValue({ principalType: 'user', principalId: 'user-1', type: 'access', authSessionVersion: 2 });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, authSessionVersion: 2, email: 'user@example.com' }) }),
+      });
+
+      await optionalAuth(req as Request, res as Response, next);
+
+      expect(req.user).toBeUndefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledWith();
+    });
+
     it('continues without user when no token', async () => {
       await optionalAuth(req as Request, res as Response, next);
 
