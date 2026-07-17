@@ -2441,6 +2441,8 @@ The stale duplicate Git repository-list handler has been removed from the sync r
 
 Project-level Git connection status, connect, token-update, and disconnect operations now share request and redacted response contracts across route validation, OpenAPI, and Project Git Settings. Service tokens remain write-request-only and status exposes only `hasToken`.
 
+Public Git-provider list and detail responses now share safe metadata contracts across backend serialization, OpenAPI, and the Git client. OAuth client ids, scopes, and encrypted client secrets are excluded from these user-facing routes.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.

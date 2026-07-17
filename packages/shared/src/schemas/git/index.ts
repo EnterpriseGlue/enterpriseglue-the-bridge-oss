@@ -21,6 +21,8 @@ export {
   ProjectGitConnectionOperationReceiptSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   GitProviderRepositorySchema,
+  GitProviderSummarySchema,
+  GitProviderDetailSchema,
   RepositoryResponseSchema,
   type Repository,
   type RepositoryInsert,
@@ -43,6 +45,8 @@ export {
   type ProjectGitConnectionOperationReceipt,
   type GitCredential, type SaveGitCredentialRequest, type RenameGitCredentialRequest, type GitCredentialNamespace,
   type GitProviderRepository,
+  type GitProviderSummary,
+  type GitProviderDetail,
 } from './repository.js';
 
 // Deployment schemas

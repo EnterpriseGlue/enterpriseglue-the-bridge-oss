@@ -74,4 +74,27 @@ describe('GET /git-api/providers', () => {
     expect(response.body).toHaveLength(1);
     expect(response.body[0].name).toBe('GitHub');
   });
+
+  it('redacts OAuth client configuration from provider details', async () => {
+    const providerRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'p1', name: 'GitHub', type: 'github', baseUrl: 'https://github.com', apiUrl: 'https://api.github.com',
+        customBaseUrl: null, customApiUrl: null, supportsOAuth: true, supportsPAT: true, isActive: true,
+        oauthClientId: 'client-id', oauthClientSecret: 'encrypted-secret', oauthScopes: 'repo',
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === GitProvider) return providerRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/git-api/providers/p1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).not.toHaveProperty('oauthClientSecret');
+    expect(response.body).not.toHaveProperty('oauthClientId');
+    expect(response.body).not.toHaveProperty('oauthScopes');
+  });
 });

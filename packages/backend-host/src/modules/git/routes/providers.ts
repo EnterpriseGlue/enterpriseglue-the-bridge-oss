@@ -8,7 +8,11 @@ import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
-import { GitProviderRepositorySchema } from '@enterpriseglue/shared/schemas/git/repository.js';
+import {
+  GitProviderDetailSchema,
+  GitProviderRepositorySchema,
+  GitProviderSummarySchema,
+} from '@enterpriseglue/shared/schemas/git/repository.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { GitCredential } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitCredential.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
@@ -52,7 +56,7 @@ router.get('/git-api/providers', apiLimiter, requireAuth, asyncHandler(async (re
     supportsPAT: p.supportsPAT,
   }));
 
-  res.json(providersWithEffectiveUrls);
+  res.json(GitProviderSummarySchema.array().parse(providersWithEffectiveUrls));
 }));
 
 /**
@@ -70,11 +74,18 @@ router.get('/git-api/providers/:id', apiLimiter, requireAuth, validateParams(pro
     throw Errors.providerNotFound();
   }
 
-  res.json({
-    ...provider,
+  res.json(GitProviderDetailSchema.parse({
+    id: provider.id,
+    name: provider.name,
+    type: provider.type,
+    baseUrl: provider.customBaseUrl || provider.baseUrl,
+    apiUrl: provider.customApiUrl || provider.apiUrl,
+    supportsOAuth: provider.supportsOAuth,
+    supportsPAT: provider.supportsPAT,
     effectiveBaseUrl: provider.customBaseUrl || provider.baseUrl,
     effectiveApiUrl: provider.customApiUrl || provider.apiUrl,
-  });
+    isActive: provider.isActive,
+  }));
 }));
 
 /**

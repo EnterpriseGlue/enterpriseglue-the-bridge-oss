@@ -13,6 +13,7 @@ import type {
   RollbackRequest as SharedRollbackRequest,
   InitRepositoryRequest as SharedInitRepositoryRequest,
   CloneRepositoryRequest as SharedCloneRepositoryRequest,
+  GitProviderSummary as SharedGitProviderSummary,
 } from '@enterpriseglue/shared/schemas/git/index.js';
 
 export interface Repository {
@@ -30,19 +31,7 @@ export interface Repository {
   updatedAt: number;
 }
 
-export interface GitProvider {
-  id: string;
-  tenantId?: string | null;
-  name: string;
-  type: 'github' | 'gitlab' | 'azure-devops' | 'bitbucket';
-  baseUrl: string;
-  apiUrl: string;
-  supportsOAuth?: boolean;
-  supportsPAT?: boolean;
-  isActive?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-}
+export type GitProvider = SharedGitProviderSummary;
 
 export interface Deployment {
   id: string;

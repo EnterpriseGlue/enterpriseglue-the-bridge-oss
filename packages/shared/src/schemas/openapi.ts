@@ -176,6 +176,8 @@ const {
   CloneFromGitRequestSchema,
   CloneFromGitResponseSchema,
   GitProviderRepositorySchema,
+  GitProviderSummarySchema,
+  GitProviderDetailSchema,
   GitCredentialSchema, SaveGitCredentialRequestSchema, RenameGitCredentialRequestSchema, GitCredentialNamespaceSchema,
   DeployRequestSchema,
   RollbackRequestSchema,
@@ -3592,8 +3594,8 @@ registry.registerPath({ method: 'get', path: '/git-api/admin/providers', ...auth
 registry.registerPath({ method: 'put', path: '/git-api/admin/providers/{id}', ...authzExtension('platform.git.providers.manage', 'PUT', '/git-api/admin/providers/:id'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdateGitProviderRequestSchema } } } }, responses: { 200: { description: 'Provider updated without OAuth client settings', content: { 'application/json': { schema: GitProviderAdminUpdateResponseSchema } } } } });
 
 // Providers
-registry.registerPath({ method: 'get', path: '/git-api/providers', ...authzExemption('GET', '/git-api/providers'), responses: { 200: { description: 'List git providers', content: { 'application/json': { schema: z.array(z.unknown()) } } } } });
-registry.registerPath({ method: 'get', path: '/git-api/providers/{id}', ...authzExemption('GET', '/git-api/providers/:id'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Provider details', content: { 'application/json': { schema: z.unknown() } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/providers', ...authzExemption('GET', '/git-api/providers'), responses: { 200: { description: 'List safe git provider metadata', content: { 'application/json': { schema: z.array(GitProviderSummarySchema) } } } } });
+registry.registerPath({ method: 'get', path: '/git-api/providers/{id}', ...authzExemption('GET', '/git-api/providers/:id'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Safe provider details without OAuth client configuration', content: { 'application/json': { schema: GitProviderDetailSchema } } } } });
 registry.registerPath({ method: 'get', path: '/git-api/providers/{id}/repos', ...authzExemption('GET', '/git-api/providers/:id/repos'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'List sanitized repos for provider', content: { 'application/json': { schema: z.array(GitProviderRepositorySchema) } } } } });
 
 // Credentials
