@@ -3,6 +3,7 @@ export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
   ActivityInstance,
   ProcessInstanceVariablesModifyRequest,
+  ProcessInstanceRetryRequest,
   Variables,
   ProcessInstanceDetail as SharedProcessInstanceDetail,
   RuntimeActivityInstanceTree,
@@ -36,6 +37,10 @@ export async function getProcessInstanceVariables(instanceId: string, engineId?:
 
 export async function modifyProcessInstanceVariables(instanceId: string, body: ProcessInstanceVariablesModifyRequest): Promise<void> {
   await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+}
+
+export async function retryProcessInstance(instanceId: string, body: ProcessInstanceRetryRequest): Promise<void> {
+  await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/retry`, body, { credentials: 'include' })
 }
 
 export async function getProcessInstanceVariableHistory(instanceId: string, variableInstanceId: string, engineId?: string): Promise<VariableHistoryEntry[]> {

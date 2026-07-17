@@ -75,6 +75,7 @@ const {
   ProcessInstanceSchema: MissionControlProcessInstanceSchema,
   ProcessInstanceVariablesModifyRequestSchema,
   ProcessInstanceCollectionQueryParamsSchema,
+  ProcessInstanceRetryRequestSchema,
   ProcessInstanceDetailSchema: MissionControlProcessInstanceDetailSchema,
   ProcessInstanceIncidentListSchema,
   ProcessInstanceJobListSchema,
@@ -823,13 +824,8 @@ registry.registerPath({
   method: 'post',
   path: '/mission-control-api/process-instances/{id}/retry',
   ...authzExtension('engine.runtime.process-instances.retry', 'POST', '/mission-control-api/process-instances/{id}/retry'),
-  request: { params: z.object({ id: z.string() }) },
-  responses: {
-    200: {
-      description: 'Jobs retried',
-      content: { 'application/json': { schema: z.object({ retriedJobs: z.number() }) } },
-    },
-  },
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: ProcessInstanceRetryRequestSchema } } } },
+  responses: { 204: { description: 'Retry requested' } },
 });
 
 // DELETE /mission-control-api/process-instances/{id} (delete instance)

@@ -42,6 +42,7 @@ import {
   ProcessInstanceExternalTaskListSchema,
   ProcessInstanceDetailSchema,
   ProcessInstanceCollectionQueryParamsSchema,
+  ProcessInstanceRetryRequestSchema,
   ProcessInstanceSchema,
   ProcessDefXmlSchema,
   PreviewCountRequest,
@@ -54,13 +55,6 @@ import { HistoricVariableInstanceListSchema, ProcessInstanceExecutionDetailsSche
 const variableHistoryQuerySchema = z.object({
   variableInstanceId: z.string().min(1),
 }).passthrough()
-
-const retrySchema = z.object({
-  jobIds: z.array(z.string()).optional(),
-  externalTaskIds: z.array(z.string()).optional(),
-  dueDate: z.string().optional(),
-  retries: z.number().int().min(0).optional(),
-})
 
 const executionDetailsQuerySchema = z.object({
   activityInstanceId: z.string().min(1),
@@ -439,11 +433,12 @@ r.get('/mission-control-api/process-instances/:id/failed-external-tasks', requir
 }))
 
 // Retry failed jobs and external tasks for a process instance
-r.post('/mission-control-api/process-instances/:id/retry', requireProcessInstanceAction('engine.runtime.process-instances.retry'), validateBody(retrySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-instances/:id/retry', requireProcessInstanceAction('engine.runtime.process-instances.retry'), validateBody(ProcessInstanceRetryRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
-    await retryProcessInstanceFailures(engineId, instanceId, req.body || {})
+    const { engineId: _requestEngineId, ...retryRequest } = req.body
+    await retryProcessInstanceFailures(engineId, instanceId, retryRequest)
     res.status(204).end()
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to retry')

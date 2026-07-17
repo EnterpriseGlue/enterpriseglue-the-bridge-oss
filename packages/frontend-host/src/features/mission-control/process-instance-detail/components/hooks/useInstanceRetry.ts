@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useAlert } from '../../../../../shared/hooks/useAlert'
-import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
+import { retryProcessInstance } from '../../api/processInstances'
+import type { ProcessInstanceRetryRequest } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface UseInstanceRetryProps {
@@ -74,7 +75,7 @@ export function useInstanceRetry({
     }
     setRetryBusy(true)
     try {
-      const payload: any = {}
+      const payload: ProcessInstanceRetryRequest = {}
       if (selectedJobs.length > 0) payload.jobIds = selectedJobs
       if (selectedExtTasks.length > 0) payload.externalTaskIds = selectedExtTasks
       if (retryDueMode === 'set' && retryDueInput) {
@@ -82,7 +83,7 @@ export function useInstanceRetry({
         if (!isNaN(dt.getTime())) payload.dueDate = dt.toISOString()
       }
       if (engineId) payload.engineId = engineId
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/retry`, payload, { credentials: 'include' })
+      await retryProcessInstance(instanceId, payload)
       await Promise.allSettled([retryJobsQ.refetch(), retryExtTasksQ.refetch(), incidentsQ.refetch(), actQ.refetch()])
       setRetryModalOpen(false)
     } catch (e: any) {

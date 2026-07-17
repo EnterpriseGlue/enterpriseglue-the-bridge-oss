@@ -24,6 +24,7 @@ import {
   suspendProcessInstanceById,
   listHistoricProcessInstances,
   listHistoricVariableInstances,
+  retryProcessInstanceFailures,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -219,6 +220,23 @@ describe('mission-control shared mission_control routes', () => {
 
     expect(response.status).toBe(400);
     expect(listProcessInstancesDetailed).not.toHaveBeenCalled();
+  });
+
+  it('validates retry requests and keeps their engine selector out of the engine adapter payload', async () => {
+    const retryResponse = await request(app)
+      .post('/mission-control-api/process-instances/instance-1/retry')
+      .send({ engineId: 'engine-77', jobIds: ['job-1'], retries: 2 });
+
+    expect(retryResponse.status).toBe(204);
+    expect(retryProcessInstanceFailures).toHaveBeenCalledWith('engine-77', 'instance-1', { jobIds: ['job-1'], retries: 2 });
+
+    vi.clearAllMocks();
+    const invalidResponse = await request(app)
+      .post('/mission-control-api/process-instances/instance-1/retry')
+      .send({ engineId: 'engine-77', retries: -1 });
+
+    expect(invalidResponse.status).toBe(400);
+    expect(retryProcessInstanceFailures).not.toHaveBeenCalled();
   });
 
   it('serializes historic variable instances through the shared contract without dropping engine extensions', async () => {

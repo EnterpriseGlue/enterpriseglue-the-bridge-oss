@@ -2285,6 +2285,8 @@ Runtime process-instance collection filters now validate one shared query-string
 
 Process-instance variable updates now validate one shared engine-selection and variable-map request contract through the backend, OpenAPI, and typed Instance Detail client. The add, bulk-upload, and edit paths all use that client instead of maintaining separate direct request bodies.
 
+Process-instance retry now uses one shared request contract through the runtime route, OpenAPI, and Instance Detail hook. The backend removes the EnterpriseGlue engine selector before adapter calls, and the OpenAPI operation now correctly records its empty `204` response.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.

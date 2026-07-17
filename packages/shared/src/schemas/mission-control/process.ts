@@ -98,6 +98,14 @@ export const ProcessInstanceVariablesModifyRequestSchema = z.object({
   modifications: z.record(z.string(), z.unknown()),
 });
 
+export const ProcessInstanceRetryRequestSchema = z.object({
+  engineId: z.string().optional(),
+  jobIds: z.array(z.string()).optional(),
+  externalTaskIds: z.array(z.string()).optional(),
+  dueDate: z.string().optional(),
+  retries: z.number().int().min(0).optional(),
+});
+
 // Historic activity-instance rows power the Instance Detail execution trail.
 // Keep the fields rendered by that UI explicit while retaining engine-specific
 // diagnostics and adapter extensions for compatibility.
@@ -241,6 +249,7 @@ export type ProcessInstanceCollectionQueryParams = z.infer<typeof ProcessInstanc
 export type ProcessInstanceVariable = z.infer<typeof ProcessInstanceVariableSchema>;
 export type Variables = z.infer<typeof VariablesSchema>;
 export type ProcessInstanceVariablesModifyRequest = z.infer<typeof ProcessInstanceVariablesModifyRequestSchema>;
+export type ProcessInstanceRetryRequest = z.infer<typeof ProcessInstanceRetryRequestSchema>;
 export type ActivityInstance = z.infer<typeof ActivityInstanceSchema>;
 export type ActivityInstanceList = z.infer<typeof ActivityInstanceListSchema>;
 export type ProcessInstanceIncident = z.infer<typeof ProcessInstanceIncidentSchema>;
