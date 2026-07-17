@@ -2,6 +2,9 @@ services:
   backend:
     environment:
       NODE_EXTRA_CA_CERTS: /etc/enterpriseglue/local-oidc-ca.crt
+      # The TLS rehearsal reaches the SPA through this proxy, so redirects,
+      # CORS, and secure cookies must use the same public origin.
+      FRONTEND_URL: https://localhost:${KEYCLOAK_HTTPS_FRONTEND_PORT:-5443}
     volumes:
       - ${KEYCLOAK_TLS_DIR:-./.local/docker/keycloak-tls}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro
     ports:

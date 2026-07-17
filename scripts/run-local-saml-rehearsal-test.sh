@@ -3,6 +3,20 @@ set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
 ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+load_local_admin_credentials() {
+  if [[ -n "${LOCAL_SAML_ADMIN_EMAIL:-}" && -n "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]; then
+    return
+  fi
+  if [[ -f "$root_dir/.env.docker" ]]; then
+    set -a
+    source "$root_dir/.env.docker"
+    set +a
+  fi
+  : "${LOCAL_SAML_ADMIN_EMAIL:=${ADMIN_EMAIL:-}}"
+  : "${LOCAL_SAML_ADMIN_PASSWORD:=${ADMIN_PASSWORD:-}}"
+}
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -27,10 +41,22 @@ if [[ ! -f "$ca_file" ]]; then
   exit 2
 fi
 
+load_local_admin_credentials
+if [[ -z "${LOCAL_SAML_ADMIN_EMAIL:-}" || -z "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]; then
+  echo '[local-saml-rehearsal] Local administrator credentials are required to refresh the disposable SAML provider.' >&2
+  exit 2
+fi
+
 if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/dev/null; then
   echo "[local-saml-rehearsal] Frontend is not reachable at $base_url/login." >&2
   exit 2
 fi
+
+LOCAL_SAML_ADMIN_EMAIL="$LOCAL_SAML_ADMIN_EMAIL" \
+LOCAL_SAML_ADMIN_PASSWORD="$LOCAL_SAML_ADMIN_PASSWORD" \
+LOCAL_SAML_APP_URL="$base_url" \
+LOCAL_SAML_CA_FILE="$ca_file" \
+"$root_dir/scripts/configure-local-saml-provider.sh"
 
 headless_shell_path="$(pnpm exec playwright install chromium --dry-run 2>/dev/null | awk '/Chrome Headless Shell/{found=1; next} found && /Install location:/{sub(/^.*Install location:[[:space:]]*/, ""); print; exit}')"
 if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! find "$headless_shell_path" -type f -name 'chrome-headless-shell*' -perm -111 -print -quit | grep -q .; then
@@ -39,6 +65,7 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
 fi
 
 LOCAL_SAML_REHEARSAL=true \
+PLAYWRIGHT_BASE_URL="$base_url" \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" \
 E2E_SEED_USER=false \

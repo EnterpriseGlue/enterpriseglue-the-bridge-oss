@@ -155,7 +155,10 @@ The TLS overlay deliberately makes Keycloak share the backend's local network
 namespace. Consequently, `https://localhost:8180` is both the browser-visible
 issuer and the address used by the backend for discovery and token exchange;
 there is no Docker-only issuer hostname to leak into application settings.
-The TLS frontend proxy is available at `https://localhost:5443`.
+The TLS frontend proxy is available at `https://localhost:5443`. The overlay
+also makes that proxy the backend's public frontend origin, so callback
+redirects, credentialed CORS, and secure cookies remain on the same TLS origin
+rather than falling back to the non-TLS development frontend.
 
 When rebuilding or recreating the backend while this overlay is running, also
 recreate `keycloak` in the same Compose command (or run `up -d --force-recreate
@@ -266,10 +269,14 @@ LOCAL_SAML_ADMIN_PASSWORD='your-local-admin-password' \
 ./scripts/configure-local-saml-provider.sh
 ```
 
-Then run the guarded browser lane. It signs in through Keycloak, receives a
-signed HTTP-POST assertion at the provider-specific callback, and verifies the
-EnterpriseGlue session without printing fixture credentials, assertions,
-cookies, or tokens.
+Then run the guarded browser lane. It refreshes the disposable certificate from
+Keycloak metadata and reprovisions the local SAML provider before signing in,
+so a recreated Keycloak container cannot leave a stale signing certificate in
+the test setup. The runner uses explicitly supplied `LOCAL_SAML_ADMIN_*`
+credentials when present, otherwise the ignored local `.env.docker` values; it
+never prints credentials, assertions, cookies, or tokens. It then receives a
+signed HTTP-POST assertion at the provider-specific callback and verifies the
+EnterpriseGlue session.
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://localhost:5443 \
@@ -288,7 +295,11 @@ finishes. It writes the generated CA and service-bind password into the ignored
 local secret directory, then configures the provider with opaque file
 references and runs a connection check before opening the browser login form.
 The backend must include the existing file-reference overlay shown for the SAML
-rehearsal above.
+rehearsal above. To keep repeated disposable runs deterministic, that local
+provider explicitly enables verified-email linking for the fixture's verified
+directory identities only; production providers remain opt-in and default to
+disabled. The runner uses explicit `LOCAL_LDAP_ADMIN_*` credentials when
+provided, otherwise the ignored local `.env.docker` credentials.
 
 ```bash
 PLAYWRIGHT_BASE_URL=https://localhost:5443 \

@@ -106,7 +106,7 @@ provider_payload="$(jq -nc \
   --arg bindDn "$EG_LDAP_TEST_BIND_DN" \
   --arg bindPasswordRef "file://${container_secret_root}/local-openldap-bind-password" \
   --arg tlsTrustRef "file://${container_secret_root}/local-openldap-ca.crt" \
-  '{key:$key,protocol:"ldap",isEnabled:true,authenticationMode:"direct",configuration:{url:$url,bindDn:$bindDn,bindPasswordRef:$bindPasswordRef,userBaseDn:"ou=people,dc=identity-mock,dc=test",userSearchFilter:"(&(mail={username})(employeeType=active))",userEnumerationFilter:"(&(objectClass=inetOrgPerson)(employeeType=active))",pageSize:1,groupBaseDn:"ou=groups,dc=identity-mock,dc=test",groupIdAttribute:"businessCategory",membershipMode:"group_search",nestedGroups:true,tlsTrustRef:$tlsTrustRef},sync:{connectorCapability:"ldap_directory"}}')"
+  '{key:$key,protocol:"ldap",isEnabled:true,authenticationMode:"direct",configuration:{url:$url,bindDn:$bindDn,bindPasswordRef:$bindPasswordRef,userBaseDn:"ou=people,dc=identity-mock,dc=test",userSearchFilter:"(&(mail={username})(employeeType=active))",userEnumerationFilter:"(&(objectClass=inetOrgPerson)(employeeType=active))",pageSize:1,groupBaseDn:"ou=groups,dc=identity-mock,dc=test",groupIdAttribute:"businessCategory",membershipMode:"group_search",nestedGroups:true,tlsTrustRef:$tlsTrustRef,allowVerifiedEmailLinking:true},sync:{connectorCapability:"ldap_directory"}}')"
 all_cookies="$session_cookies;$csrf_cookie"
 provider_status="$(curl "${curl_args[@]}" --output /dev/null --write-out '%{http_code}' \
   --header 'Content-Type: application/json' \

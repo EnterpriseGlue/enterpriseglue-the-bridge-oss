@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
 ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -31,10 +32,16 @@ if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/d
 fi
 
 if [[ "${LOCAL_LDAP_FIXTURE_ACTIVE:-}" != 'true' ]]; then
-  if [[ -z "${LOCAL_LDAP_ADMIN_EMAIL:-}" && -z "${LOCAL_LDAP_ADMIN_PASSWORD:-}" && -z "${ADMIN_EMAIL:-}" && -z "${ADMIN_PASSWORD:-}" && -f .local/docker/env/oidc-rehearsal.env ]]; then
-    set -a
-    source .local/docker/env/oidc-rehearsal.env
-    set +a
+  if [[ -z "${LOCAL_LDAP_ADMIN_EMAIL:-}" || -z "${LOCAL_LDAP_ADMIN_PASSWORD:-}" ]]; then
+    if [[ -f "$root_dir/.env.docker" ]]; then
+      set -a
+      source "$root_dir/.env.docker"
+      set +a
+    elif [[ -z "${ADMIN_EMAIL:-}" || -z "${ADMIN_PASSWORD:-}" ]] && [[ -f "$root_dir/.local/docker/env/oidc-rehearsal.env" ]]; then
+      set -a
+      source "$root_dir/.local/docker/env/oidc-rehearsal.env"
+      set +a
+    fi
   fi
   : "${LOCAL_LDAP_ADMIN_EMAIL:=${ADMIN_EMAIL:-}}"
   : "${LOCAL_LDAP_ADMIN_PASSWORD:=${ADMIN_PASSWORD:-}}"
@@ -58,6 +65,7 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
 fi
 
 LOCAL_LDAP_REHEARSAL=true \
+PLAYWRIGHT_BASE_URL="$base_url" \
 LOCAL_LDAP_TEST_USERNAME='browser-login@identity-mock.test' \
 LOCAL_LDAP_TEST_PASSWORD="$EG_LDAP_TEST_BROWSER_USER_PASSWORD" \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \

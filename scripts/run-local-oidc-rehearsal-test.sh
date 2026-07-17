@@ -61,6 +61,7 @@ if [[ -z "$headless_shell_path" ]] || [[ ! -d "$headless_shell_path" ]] || ! fin
 fi
 
 LOCAL_OIDC_REHEARSAL=true \
+PLAYWRIGHT_BASE_URL="$base_url" \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" \
 E2E_SEED_USER=false \
