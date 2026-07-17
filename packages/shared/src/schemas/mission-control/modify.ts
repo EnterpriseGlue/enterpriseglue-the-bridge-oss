@@ -59,7 +59,21 @@ export const ProcessDefinitionRestartAsyncRequest = z.object({
   instructions: z.array(ModificationInstructionSchema).optional(),
 })
 
+export const ProcessDefinitionModificationAsyncResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.literal('MODIFY_INSTANCES'),
+}).strict()
+
+export const ProcessDefinitionRestartAsyncResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.literal('RESTART_INSTANCES'),
+}).strict()
+
 export type ModificationInstruction = z.infer<typeof ModificationInstructionSchema>
 export type ProcessInstanceModification = z.infer<typeof ProcessInstanceModificationRequest>
 export type ProcessDefinitionModificationAsync = z.infer<typeof ProcessDefinitionModificationAsyncRequest>
 export type ProcessDefinitionRestartAsync = z.infer<typeof ProcessDefinitionRestartAsyncRequest>
+export type ProcessDefinitionModificationAsyncResponse = z.infer<typeof ProcessDefinitionModificationAsyncResponseSchema>
+export type ProcessDefinitionRestartAsyncResponse = z.infer<typeof ProcessDefinitionRestartAsyncResponseSchema>

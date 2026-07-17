@@ -12,6 +12,8 @@ import {
   ProcessInstanceModificationRequest,
   ProcessDefinitionModificationAsyncRequest,
   ProcessDefinitionRestartAsyncRequest,
+  ProcessDefinitionModificationAsyncResponseSchema,
+  ProcessDefinitionRestartAsyncResponseSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/modify.js'
 
 const r = Router()
@@ -45,7 +47,7 @@ r.post('/mission-control-api/process-definitions/:id/modification/execute-async'
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const { batchId, camundaBatchId } = await modifyProcessDefinitionAsync(engineId, definitionId, req.body)
-  res.status(201).json({ id: batchId, camundaBatchId, type: 'MODIFY_INSTANCES' })
+  res.status(201).json(ProcessDefinitionModificationAsyncResponseSchema.parse({ id: batchId, camundaBatchId, type: 'MODIFY_INSTANCES' }))
 }))
 
 // POST /mission-control-api/process-definitions/:id/restart/execute-async (batch)
@@ -53,7 +55,7 @@ r.post('/mission-control-api/process-definitions/:id/restart/execute-async', req
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const { batchId, camundaBatchId } = await restartProcessDefinitionAsync(engineId, definitionId, req.body)
-  res.status(201).json({ id: batchId, camundaBatchId, type: 'RESTART_INSTANCES' })
+  res.status(201).json(ProcessDefinitionRestartAsyncResponseSchema.parse({ id: batchId, camundaBatchId, type: 'RESTART_INSTANCES' }))
 }))
 
 export default r

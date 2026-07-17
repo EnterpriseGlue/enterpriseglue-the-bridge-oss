@@ -123,6 +123,8 @@ const {
   ProcessInstanceModificationRequest,
   ProcessDefinitionModificationAsyncRequest,
   ProcessDefinitionRestartAsyncRequest,
+  ProcessDefinitionModificationAsyncResponseSchema,
+  ProcessDefinitionRestartAsyncResponseSchema,
 } = await import('./mission-control/index.js');
 
 const {
@@ -1561,6 +1563,8 @@ registry.register('ModificationInstruction', ModificationInstructionSchema)
 registry.register('ProcessInstanceModificationRequest', ProcessInstanceModificationRequest)
 registry.register('ProcessDefinitionModificationAsyncRequest', ProcessDefinitionModificationAsyncRequest)
 registry.register('ProcessDefinitionRestartAsyncRequest', ProcessDefinitionRestartAsyncRequest)
+registry.register('ProcessDefinitionModificationAsyncResponse', ProcessDefinitionModificationAsyncResponseSchema)
+registry.register('ProcessDefinitionRestartAsyncResponse', ProcessDefinitionRestartAsyncResponseSchema)
 
 // POST /mission-control-api/process-instances/{id}/modify
 registry.registerPath({
@@ -1577,7 +1581,7 @@ registry.registerPath({
   path: '/mission-control-api/process-definitions/{id}/modification/execute-async',
   ...authzExtension('engine.runtime.process-definitions.modification.execute-async', 'POST', '/mission-control-api/process-definitions/{id}/modification/execute-async'),
   request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: ProcessDefinitionModificationAsyncRequest } } } },
-  responses: { 201: { description: 'Batch created', content: { 'application/json': { schema: z.object({ id: z.string(), camundaBatchId: z.string().optional(), type: z.literal('MODIFY_INSTANCES') }) } } } },
+  responses: { 201: { description: 'Batch created', content: { 'application/json': { schema: ProcessDefinitionModificationAsyncResponseSchema } } } },
 })
 
 // POST /mission-control-api/process-definitions/{id}/restart/execute-async
@@ -1586,7 +1590,7 @@ registry.registerPath({
   path: '/mission-control-api/process-definitions/{id}/restart/execute-async',
   ...authzExtension('engine.runtime.process-definitions.restart.execute-async', 'POST', '/mission-control-api/process-definitions/{id}/restart/execute-async'),
   request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: ProcessDefinitionRestartAsyncRequest } } } },
-  responses: { 201: { description: 'Batch created', content: { 'application/json': { schema: z.object({ id: z.string(), camundaBatchId: z.string().optional(), type: z.literal('RESTART_INSTANCES') }) } } } },
+  responses: { 201: { description: 'Batch created', content: { 'application/json': { schema: ProcessDefinitionRestartAsyncResponseSchema } } } },
 })
 
 // -----------------------------
