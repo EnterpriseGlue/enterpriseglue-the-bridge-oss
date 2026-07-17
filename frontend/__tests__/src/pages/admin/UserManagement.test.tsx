@@ -7,6 +7,8 @@ import {
   getUserDisplayStatus,
   getUserRowActions,
   isDirectUserRoleAssignment,
+  toCreateUserRequest,
+  toUpdateUserRequest,
   type AdminManagedUser,
   type UserRoleAssignmentLineageInput,
 } from '../../../../../packages/frontend-host/src/pages/admin/UserManagement';
@@ -61,6 +63,22 @@ describe('UserManagement', () => {
   it('reads bootstrap access from the legacy user wire field', () => {
     expect(getUserBootstrapAccess(makeUser({ platformRole: 'admin' }))).toBe('admin')
     expect(getUserBootstrapAccess(makeUser({ platformRole: 'user' }))).toBe('user')
+  })
+
+  it('uses the canonical role field for user-management writes', () => {
+    expect(toCreateUserRequest({ email: 'admin@example.test', bootstrapAccess: 'admin', sendEmail: true }, 'admin@example.test')).toEqual({
+      email: 'admin@example.test',
+      firstName: undefined,
+      lastName: undefined,
+      sendEmail: true,
+      role: 'admin',
+    })
+    expect(toUpdateUserRequest({ firstName: 'Admin', bootstrapAccess: 'user', isActive: true })).toEqual({
+      firstName: 'Admin',
+      lastName: undefined,
+      isActive: true,
+      role: 'user',
+    })
   })
 
   it('marks a pending local invite as deletable when local login is enabled', () => {

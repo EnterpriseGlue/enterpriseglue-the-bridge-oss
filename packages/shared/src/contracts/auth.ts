@@ -95,6 +95,9 @@ export interface CreateUserRequest {
   email: string;
   firstName?: string;
   lastName?: string;
+  /** Canonical user-management access selection. */
+  role?: PlatformRole;
+  /** @deprecated Use `role`; retained for older API clients only. */
   platformRole?: PlatformRole;
   sendEmail?: boolean;
 }
@@ -110,6 +113,9 @@ export interface CreateUserResponse {
 export interface UpdateUserRequest {
   firstName?: string;
   lastName?: string;
+  /** Canonical user-management access selection. */
+  role?: PlatformRole;
+  /** @deprecated Use `role`; retained for older API clients only. */
   platformRole?: PlatformRole;
   isActive?: boolean;
 }

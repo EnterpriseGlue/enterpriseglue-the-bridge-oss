@@ -78,30 +78,32 @@ type UserEditForm = {
   isActive?: boolean;
 }
 
-const USER_BOOTSTRAP_ACCESS_FIELD = `platform${'Role'}`;
+// The response retains a compatibility field until session/profile contract
+// retirement. Browser writes use the canonical `role` request field.
+const USER_BOOTSTRAP_ACCESS_RESPONSE_FIELD = `platform${'Role'}`;
 
 export function getUserBootstrapAccess(user: object | null | undefined): BootstrapAccessValue {
-  const candidate = user ? (user as Record<string, unknown>)[USER_BOOTSTRAP_ACCESS_FIELD] : undefined;
+  const candidate = user ? (user as Record<string, unknown>)[USER_BOOTSTRAP_ACCESS_RESPONSE_FIELD] : undefined;
   return candidate === 'admin' ? 'admin' : 'user';
 }
 
-function toCreateUserRequest(form: UserInviteForm, normalizedEmail: string): CreateUserRequest {
+export function toCreateUserRequest(form: UserInviteForm, normalizedEmail: string): CreateUserRequest {
   return {
     email: normalizedEmail,
     firstName: form.firstName,
     lastName: form.lastName,
     sendEmail: form.sendEmail,
-    [USER_BOOTSTRAP_ACCESS_FIELD]: form.bootstrapAccess,
-  } as CreateUserRequest;
+    role: form.bootstrapAccess,
+  };
 }
 
-function toUpdateUserRequest(form: UserEditForm): UpdateUserRequest {
+export function toUpdateUserRequest(form: UserEditForm): UpdateUserRequest {
   return {
     firstName: form.firstName,
     lastName: form.lastName,
     isActive: form.isActive,
-    [USER_BOOTSTRAP_ACCESS_FIELD]: form.bootstrapAccess,
-  } as UpdateUserRequest;
+    role: form.bootstrapAccess,
+  };
 }
 
 export function getUserDisplayStatus(user: AdminManagedUser): { label: 'Active' | 'Inactive' | 'Pending'; tagType: 'green' | 'red' | 'blue' } {
