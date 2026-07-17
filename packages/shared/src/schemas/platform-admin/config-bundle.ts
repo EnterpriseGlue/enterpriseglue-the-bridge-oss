@@ -81,6 +81,15 @@ export const ConfigBundleRequestSchema = z.object({
   files: z.record(z.string(), z.unknown()),
 }).strict();
 
+/**
+ * A deliberately narrow remote-source request. The backend accepts only
+ * HTTPS raw-file URLs from the supported public Git hosts; it never clones a
+ * repository or follows redirects supplied by the caller.
+ */
+export const ConfigBundleRemoteImportRequestSchema = z.object({
+  url: z.string().url().max(2048),
+}).strict();
+
 export const ConfigBundleValidationIssueSchema = z.object({
   path: z.string(),
   message: z.string(),
@@ -667,6 +676,7 @@ export const IdentityMockFixturesSchema = z.object({
 
 export type EnterpriseGlueConfigBundle = z.infer<typeof EnterpriseGlueConfigBundleSchema>;
 export type ConfigBundleRequest = z.infer<typeof ConfigBundleRequestSchema>;
+export type ConfigBundleRemoteImportRequest = z.infer<typeof ConfigBundleRemoteImportRequestSchema>;
 export type ConfigBundleApplyRequest = z.infer<typeof ConfigBundleApplyRequestSchema>;
 export type ConfigBundleValidationIssue = z.infer<typeof ConfigBundleValidationIssueSchema>;
 export type ConfigBundlePreviewResponse = z.infer<typeof ConfigBundlePreviewResponseSchema>;

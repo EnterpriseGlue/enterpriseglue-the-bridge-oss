@@ -66,6 +66,7 @@ describe('authorization route inventory validation', () => {
   it('documents typed configuration bundle lifecycle contracts', () => {
     const openApi = generateOpenApi();
     const preview = openApi.paths['/api/authz/config-bundles/preview'].post;
+    const remoteImport = openApi.paths['/api/authz/config-bundles/import-url'].post;
     const secretPreflight = openApi.paths['/api/authz/config-bundles/validate-secret-refs'].post;
     const diff = openApi.paths['/api/authz/config-bundles/diff'].post;
     const apply = openApi.paths['/api/authz/config-bundles/apply'].post;
@@ -75,6 +76,7 @@ describe('authorization route inventory validation', () => {
     const document = JSON.stringify(openApi);
 
     expect(preview.requestBody).toBeDefined();
+    expect(remoteImport.requestBody.content['application/json'].schema).toBeDefined();
     expect(preview.responses['200'].content['application/json'].schema).toBeDefined();
     expect(secretPreflight.responses['200'].content['application/json'].schema).toBeDefined();
     expect(diff.responses['200'].content['application/json'].schema).toBeDefined();
@@ -209,7 +211,7 @@ describe('authorization route inventory validation', () => {
       },
       {
         actionId: 'platform.config-bundles.preview', permissionId: 'platform:config-bundles:preview', operation: 'read', risk: 'medium', audit: true,
-        routes: [['POST', '/api/authz/config-bundles/preview'], ['POST', '/api/authz/config-bundles/validate-secret-refs'], ['POST', '/api/authz/config-bundles/import-zip'], ['POST', '/api/authz/config-bundles/diff']],
+        routes: [['POST', '/api/authz/config-bundles/preview'], ['POST', '/api/authz/config-bundles/validate-secret-refs'], ['POST', '/api/authz/config-bundles/import-zip'], ['POST', '/api/authz/config-bundles/import-url'], ['POST', '/api/authz/config-bundles/diff']],
       },
       {
         actionId: 'platform.config-bundles.apply', permissionId: 'platform:config-bundles:apply', operation: 'manage', risk: 'high', audit: true,

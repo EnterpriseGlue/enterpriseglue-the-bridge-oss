@@ -76,6 +76,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/authz/config-bundles/preview', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/validate-secret-refs', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/import-zip', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/authz/config-bundles/import-url', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/diff', resourceResolver: 'platform.self' },
       ],
     },

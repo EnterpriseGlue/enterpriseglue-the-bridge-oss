@@ -40,6 +40,13 @@ const configBundleSecretPreflightMock = vi.hoisted(() => ({
     references: [{ reference: 'MISSING_ENGINE_TOKEN', locations: ['./engines.json.engines.0.auth.tokenRef'], available: false, reason: 'environment_variable_missing' }],
   }),
 }));
+const configBundleRemoteSourceMock = vi.hoisted(() => ({
+  import: vi.fn().mockResolvedValue({
+    payload: { bundle: { metadata: { key: 'remote.authz' } }, files: {} },
+    sourceHost: 'raw.githubusercontent.com',
+    sourceKind: 'json',
+  }),
+}));
 const platformSettingsServiceMock = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false }),
 }));
@@ -95,6 +102,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeRecon
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
   configBundleSecretPreflightService: configBundleSecretPreflightMock,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRemoteSourceService.js', () => ({
+  configBundleRemoteSourceService: configBundleRemoteSourceMock,
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js', () => ({
   platformSettingsService: platformSettingsServiceMock,
@@ -2313,6 +2323,16 @@ describe('platform-admin authz routes', () => {
 
     expect(invalidResponse.status).toBe(422);
     expect(invalidResponse.body).toMatchObject({ valid: false });
+  });
+
+  it('imports a bounded Git raw-file source through the config preview permission', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/import-url')
+      .send({ url: 'https://raw.githubusercontent.com/acme/config/main/bundle.json' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ bundle: { metadata: { key: 'remote.authz' } }, files: {} });
+    expect(configBundleRemoteSourceMock.import).toHaveBeenCalledWith('https://raw.githubusercontent.com/acme/config/main/bundle.json');
   });
 
   it('rejects oversized configuration bundle JSON before preview compilation', async () => {

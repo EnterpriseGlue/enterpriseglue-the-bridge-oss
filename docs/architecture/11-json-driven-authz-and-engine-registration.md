@@ -1974,7 +1974,7 @@ Recommended placement:
 
 UI capabilities:
 
-- [ ] ⬜ Upload folder zip, single JSON file, or paste Git URL.
+- [x] ✅ Upload folder zip, single JSON file, or paste Git URL. Git import is intentionally limited to HTTPS raw JSON/ZIP files from GitHub or GitLab: it accepts no credentials, query strings, redirects, arbitrary hosts, or oversized payloads, then feeds the existing preview/diff/apply envelope without mutating state.
 - [x] ✅ Show schema validation results before diff in Platform Settings > Configuration Bundles.
 - [x] ✅ Show object diff grouped by Engines, Engine Sets, Runtime Resource Sets, Roles, Groups, Identity Providers, Identity Mappings, Assignments, and Project-engine targets, while retaining attention-first review priority.
 - [x] ✅ Show and require acknowledgement for all-engine/any-label selectors, broad identity-mapping operators, and destructive authoritative removals. Regex mappings are not part of the current config schema; external-only mode and secret-reference diagnostics remain pending.

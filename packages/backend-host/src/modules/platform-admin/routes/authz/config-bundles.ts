@@ -9,6 +9,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { configBundleArchiveService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleArchiveService.js';
+import { configBundleRemoteSourceService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleRemoteSourceService.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 import { configBundleExportService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleExportService.js';
@@ -17,7 +18,7 @@ import { configBundleRuntimeReconciliationTaskService } from '@enterpriseglue/sh
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
-import { ConfigBundleApplyRequestSchema, ConfigBundleRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import { ConfigBundleApplyRequestSchema, ConfigBundleRemoteImportRequestSchema, ConfigBundleRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
   let result: Record<string, unknown> = {};
@@ -61,6 +62,19 @@ export function registerConfigBundleRoutes(
       details: { fileCount: Object.keys(payload.files).length, actorType: req.apiClient ? 'api_client' : 'user' },
     });
     res.json(payload);
+  }));
+
+  router.post('/api/authz/config-bundles/import-url', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), validateBody(ConfigBundleRemoteImportRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+    const result = await configBundleRemoteSourceService.import(req.body.url);
+    await logAudit({
+      tenantId: req.tenant?.tenantId || undefined,
+      userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+      action: 'authz.config_bundle.import_url',
+      resourceType: 'config_bundle',
+      resourceId: String((result.payload.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
+      details: { sourceHost: result.sourceHost, sourceKind: result.sourceKind, actorType: req.apiClient ? 'api_client' : 'user' },
+    });
+    res.json(result.payload);
   }));
 
   router.post('/api/authz/config-bundles/preview', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {

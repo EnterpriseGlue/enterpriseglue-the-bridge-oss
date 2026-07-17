@@ -92,4 +92,19 @@ describe('ConfigurationBundleSettingsTab', () => {
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:config-bundle');
     click.mockRestore();
   });
+
+  it('imports a bounded Git raw-file URL into the editable bundle source', async () => {
+    let requestedUrl: string | null = null;
+    server.use(http.post('/api/authz/config-bundles/import-url', async ({ request }) => {
+      requestedUrl = String((await request.json() as { url?: string }).url || '');
+      return HttpResponse.json({ bundle: { metadata: { key: 'remote.authz' } }, files: {} });
+    }));
+
+    renderTab();
+    fireEvent.change(screen.getByLabelText('Git raw file URL'), { target: { value: 'https://raw.githubusercontent.com/acme/config/main/bundle.json' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import Git URL' }));
+
+    await waitFor(() => expect(requestedUrl).toBe('https://raw.githubusercontent.com/acme/config/main/bundle.json'));
+    expect((screen.getByLabelText('Configuration bundle JSON') as HTMLTextAreaElement).value).toContain('remote.authz');
+  });
 });

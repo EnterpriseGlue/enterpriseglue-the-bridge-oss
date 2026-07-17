@@ -66,12 +66,13 @@ export default function ConfigurationBundleSettingsTab() {
   const applyAccess = useActionDecision('platform.config-bundles.apply', resource);
   const exportAccess = useActionDecision('platform.config-bundles.export', resource);
   const [source, setSource] = useState(placeholder);
+  const [remoteUrl, setRemoteUrl] = useState('');
   const [preview, setPreview] = useState<ConfigBundlePreviewResponse | null>(null);
   const [diff, setDiff] = useState<ConfigBundleDiffResponse | null>(null);
   const [secretPreflight, setSecretPreflight] = useState<ConfigBundleSecretPreflightResponse | null>(null);
   const [applyResult, setApplyResult] = useState<ConfigBundleApplyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'preview' | 'preflight' | 'apply' | null>(null);
+  const [busy, setBusy] = useState<'import' | 'preview' | 'preflight' | 'apply' | null>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [changeQuery, setChangeQuery] = useState('');
@@ -149,6 +150,15 @@ export default function ConfigurationBundleSettingsTab() {
     catch { setError('The selected configuration file could not be read.'); }
     finally { event.target.value = ''; }
   };
+  const importRemote = async () => {
+    if (!remoteUrl.trim()) return;
+    setBusy('import'); setError(null);
+    try {
+      const input = await apiClient.post<{ bundle: unknown; files: Record<string, unknown> }>('/api/authz/config-bundles/import-url', { url: remoteUrl.trim() });
+      setSource(JSON.stringify(input, null, 2)); setPreview(null); setDiff(null); setSecretPreflight(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setCiCommandCopied(false); setRemoteUrl('');
+    } catch (value) { setError(parseApiError(value, 'Configuration Git import failed').message); }
+    finally { setBusy(null); }
+  };
   const exportJson = async () => {
     let output = source;
     try {
@@ -203,6 +213,7 @@ export default function ConfigurationBundleSettingsTab() {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Configuration Bundles</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Validate, review, and apply JSON-managed authorization, identity, engine, and deployment-target configuration.</p></div>{preview?.valid && <Tag type="green">Preview valid</Tag>}</div>
     {(error || queryError) && <InlineNotification kind="error" title="Configuration bundle" subtitle={error || parseApiError(queryError, 'Configuration history could not be loaded').message} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
     <TextArea id="configuration-bundle-json" labelText="Configuration bundle JSON" value={source} onChange={(event) => setSource(event.target.value)} rows={22} helperText="Use the same bundle and files shape as CI/CD. Folder-style ZIP archives must contain bundle.json. Secret references only; plaintext secrets are rejected." />
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', alignItems: 'end', marginTop: 'var(--spacing-4)' }}><TextInput id="configuration-bundle-git-url" labelText="Git raw file URL" value={remoteUrl} onChange={(event) => setRemoteUrl(event.target.value)} disabled={busy !== null} helperText="HTTPS raw JSON or ZIP URL from GitHub or GitLab only; redirects, credentials, queries, and arbitrary hosts are rejected." style={{ flex: '1 1 28rem' }} /><GuardedAction actionId="platform.config-bundles.preview" resource={resource}><Button kind="tertiary" disabled={!remoteUrl.trim() || busy !== null} onClick={importRemote}>Import Git URL</Button></GuardedAction></div>
     <Select id="configuration-identity-reconciliation-mode" labelText="Stored identity snapshot replay" value={identityReconciliationMode} disabled={busy !== null} onChange={(event) => setIdentityReconciliationMode(event.target.value as ConfigBundleIdentitySnapshot['mode'])} helperText="Runs only after the configuration transaction commits. Preview does not replay snapshots; source-scoped mapping cleanup still applies.">
       <SelectItem value="apply" text="Apply bounded membership changes" />
       <SelectItem value="preview" text="Preview bounded membership changes" />
