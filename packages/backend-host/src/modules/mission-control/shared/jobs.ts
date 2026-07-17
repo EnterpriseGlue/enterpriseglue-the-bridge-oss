@@ -20,6 +20,7 @@ import {
   JobQueryParams,
   JobSchema,
   JobDefinitionQueryParams,
+  ExecuteJobRequest,
   SetJobRetriesRequest,
   SetJobSuspensionStateRequest,
   SetJobDefinitionRetriesRequest,
@@ -71,7 +72,7 @@ r.post('/mission-control-api/jobs/:id/execute', requireRuntimeDefinitionAction('
   definitionReferenceField: 'processDefinitionId',
   definitionReferencePath: 'process-definition',
   engineIdFrom: 'body',
-}), asyncHandler(async (req: Request, res: Response) => {
+}), validateBody(ExecuteJobRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobId = String(req.params.id);
   await executeJobById(engineId, jobId);

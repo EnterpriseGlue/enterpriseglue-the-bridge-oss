@@ -44,4 +44,13 @@ describe('direct-operation transport contracts', () => {
       expect(paths?.[path]?.post?.responses?.['200']).toBeDefined();
     }
   });
+
+  it('documents the engine selector required for single-job execution', () => {
+    const document = generateOpenApi();
+    const executeJob = document.paths?.['/mission-control-api/jobs/{id}/execute']?.post;
+    expect(executeJob?.requestBody).toBeDefined();
+    expect(document.components?.schemas?.ExecuteJobRequest?.properties).toMatchObject({
+      engineId: { type: 'string' },
+    });
+  });
 });

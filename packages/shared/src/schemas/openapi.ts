@@ -135,6 +135,7 @@ const {
   EvaluateDecisionRequest,
   JobSchema,
   JobDefinitionSchema,
+  ExecuteJobRequest,
   JobQueryParams,
   JobDefinitionQueryParams,
   SetJobRetriesRequest,
@@ -1489,9 +1490,10 @@ registry.registerPath({
 // Jobs
 registry.register('Job', JobSchema);
 registry.register('JobDefinition', JobDefinitionSchema);
+registry.register('ExecuteJobRequest', ExecuteJobRequest);
 registry.registerPath({ method: 'get', path: '/mission-control-api/jobs', ...authzExtension('engine.runtime.jobs.read', 'GET', '/mission-control-api/jobs'), request: { query: JobQueryParams.partial() }, responses: { 200: { description: 'Query jobs', content: { 'application/json': { schema: z.array(JobSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/jobs/{id}', ...authzExtension('engine.runtime.jobs.read', 'GET', '/mission-control-api/jobs/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Get job', content: { 'application/json': { schema: JobSchema } } }, 404: { description: 'Not found' } } });
-registry.registerPath({ method: 'post', path: '/mission-control-api/jobs/{id}/execute', ...authzExtension('engine.runtime.jobs.execute', 'POST', '/mission-control-api/jobs/{id}/execute'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Job executed' } } });
+registry.registerPath({ method: 'post', path: '/mission-control-api/jobs/{id}/execute', ...authzExtension('engine.runtime.jobs.execute', 'POST', '/mission-control-api/jobs/{id}/execute'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: ExecuteJobRequest } } } }, responses: { 204: { description: 'Job executed' } } });
 registry.registerPath({ method: 'put', path: '/mission-control-api/jobs/{id}/retries', ...authzExtension('engine.runtime.jobs.retries.update', 'PUT', '/mission-control-api/jobs/{id}/retries'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SetJobRetriesRequest } } } }, responses: { 204: { description: 'Retries set' } } });
 registry.registerPath({ method: 'put', path: '/mission-control-api/jobs/{id}/suspended', ...authzExtension('engine.runtime.jobs.suspension.update', 'PUT', '/mission-control-api/jobs/{id}/suspended'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SetJobSuspensionStateRequest } } } }, responses: { 204: { description: 'Suspension state updated' } } });
 registry.registerPath({ method: 'get', path: '/mission-control-api/job-definitions', ...authzExtension('engine.runtime.job-definitions.read', 'GET', '/mission-control-api/job-definitions'), request: { query: JobDefinitionQueryParams.partial() }, responses: { 200: { description: 'Query job definitions', content: { 'application/json': { schema: z.array(JobDefinitionSchema) } } } } });

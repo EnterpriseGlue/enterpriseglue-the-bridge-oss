@@ -119,6 +119,15 @@ describe('mission-control jobs routes', () => {
     expect(executeJobById).toHaveBeenCalledWith('engine-1', 'j1');
   });
 
+  it('rejects malformed job execution engine selectors', async () => {
+    const response = await request(app)
+      .post('/mission-control-api/jobs/j1/execute')
+      .send({ engineId: 1 });
+
+    expect(response.status).toBe(400);
+    expect(executeJobById).not.toHaveBeenCalled();
+  });
+
   it('updates job retries through the retry action', async () => {
     const response = await request(app)
       .put('/mission-control-api/jobs/j1/retries')

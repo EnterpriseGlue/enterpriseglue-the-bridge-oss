@@ -2417,6 +2417,8 @@ Migration-plan validation now shares its wrapped and direct-plan compatibility u
 
 The stale duplicate direct-router registration for migration execution has been removed. The public endpoint remains served by the canonical migration router, with its shared execute request validation and exact `{ ok: true }` receipt, so route order can no longer select a divergent response shape.
 
+Single-job execution now shares the engine-selector request contract across backend validation and OpenAPI. It continues to accept adapter extension fields, but malformed engine selectors are rejected before authorization can invoke the engine.
+
 Async process-definition modification and restart operations now likewise serialize their exact typed batch receipts through shared schemas, instead of separately maintaining literal response objects in their routes and OpenAPI declarations.
 
 The delete, suspend, activate, and retry batch-creation routes now share one bounded operation receipt across backend serialization and OpenAPI, including the explicit locally handled retry operation that has no engine batch id.
