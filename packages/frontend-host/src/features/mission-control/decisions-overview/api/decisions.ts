@@ -1,6 +1,9 @@
 import { apiClient } from '../../../../shared/api/client'
 import type { DecisionDefinition as SharedDecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
-import type { HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type {
+  HistoricDecisionInstance as SharedHistoricDecisionInstance,
+  HistoricDecisionQueryParams as SharedHistoricDecisionQueryParams,
+} from '@enterpriseglue/shared/schemas/mission-control/history.js'
 export { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
 
 // Types
@@ -21,14 +24,10 @@ export async function fetchDecisionDefinition(definitionId: string): Promise<Dec
   return apiClient.get<DecisionDefinition>(`/mission-control-api/decision-definitions/${definitionId}`, undefined, { credentials: 'include' })
 }
 
-export interface GetDecisionInstancesParams {
-  engineId?: string
-  decisionDefinitionId?: string
-  decisionDefinitionKey?: string
-  processInstanceId?: string
-  evaluatedAfter?: string
-  evaluatedBefore?: string
-}
+export type GetDecisionInstancesParams = { engineId?: string } & Pick<
+  SharedHistoricDecisionQueryParams,
+  'decisionDefinitionId' | 'decisionDefinitionKey' | 'processInstanceId' | 'evaluatedAfter' | 'evaluatedBefore'
+>
 
 export async function listDecisionInstances(params: GetDecisionInstancesParams): Promise<DecisionInstance[]> {
   const searchParams = new URLSearchParams()
@@ -41,14 +40,20 @@ export async function listDecisionInstances(params: GetDecisionInstancesParams):
   return apiClient.get<DecisionInstance[]>(`/mission-control-api/history/decisions?${searchParams}`, undefined, { credentials: 'include' })
 }
 
-export interface GetDecisionHistoryParams extends GetDecisionInstancesParams {
-  decisionRequirementsDefinitionId?: string
-  decisionRequirementsDefinitionKey?: string
-  rootDecisionInstancesOnly?: boolean
-  sortBy?: 'evaluationTime' | 'tenantId'
-  sortOrder?: 'asc' | 'desc'
-  maxResults?: number
-}
+export type GetDecisionHistoryParams = { engineId?: string } & Pick<
+  SharedHistoricDecisionQueryParams,
+  | 'decisionDefinitionId'
+  | 'decisionDefinitionKey'
+  | 'decisionRequirementsDefinitionId'
+  | 'decisionRequirementsDefinitionKey'
+  | 'processInstanceId'
+  | 'evaluatedAfter'
+  | 'evaluatedBefore'
+  | 'rootDecisionInstancesOnly'
+  | 'sortBy'
+  | 'sortOrder'
+  | 'maxResults'
+>
 
 export function buildDecisionHistoryQuery(params: GetDecisionHistoryParams): URLSearchParams {
   const searchParams = new URLSearchParams()

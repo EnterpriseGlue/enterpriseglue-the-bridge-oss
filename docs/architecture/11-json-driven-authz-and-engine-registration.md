@@ -2279,6 +2279,8 @@ Batch create, suspend, activate, retry, and suspension-update payloads now use s
 
 Process-instance and process-definition modification requests now explicitly carry their engine selector in the shared contract used by authorization and the frontend modification hook. The backend removes that EnterpriseGlue routing field before calling the engine adapter, so the documented request and typed UI match without changing the adapter payload.
 
+Decision History's compact and full query builders now derive their permitted filters, sort values, and pagination fields from the shared historic-decision query contract, retaining only the frontend transport's engine selector as an addition.
+
 Task-form reads now validate the existing engine-compatible shared form schema (including adapter extensions), and task completion validates its optional returned variable map rather than documenting both responses as unknown.
 
 Task-variable updates retain their established 200 response but normalize an empty engine body to the shared variable map, so the route and OpenAPI no longer expose an ambiguous unknown response.
