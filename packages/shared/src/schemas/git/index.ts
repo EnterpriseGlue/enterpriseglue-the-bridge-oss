@@ -78,6 +78,8 @@ export {
   LockHeartbeatRequestSchema,
   LockHolderSchema,
   LockResponseSchema,
+  LockListResponseSchema,
+  LockHeartbeatResponseSchema,
   LockVisibilityStateSchema,
   LockSessionStatusSchema,
   type Lock,
@@ -87,6 +89,8 @@ export {
   type LockHeartbeatRequest,
   type LockHolder,
   type LockResponse,
+  type LockListResponse,
+  type LockHeartbeatResponse,
 } from './lock.js';
 
 // Online project creation schemas

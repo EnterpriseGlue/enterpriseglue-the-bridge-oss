@@ -192,6 +192,8 @@ const {
   DeploymentResponseSchema,
   AcquireLockRequestSchema,
   LockResponseSchema,
+  LockListResponseSchema,
+  LockHeartbeatResponseSchema,
   CreateOnlineProjectRequestSchema,
   CreateOnlineProjectResponseSchema,
   CheckRepositoryExistsRequestSchema,
@@ -1728,7 +1730,7 @@ registry.registerPath({
   ...authzExtension('project.git.locks.read', 'GET', '/git-api/locks'),
   request: { query: z.object({ projectId: z.string().uuid() }) },
   responses: {
-    200: { description: 'Active locks', content: { 'application/json': { schema: z.object({ locks: z.array(LockResponseSchema) }) } } },
+    200: { description: 'Active locks', content: { 'application/json': { schema: LockListResponseSchema } } },
     400: { description: 'Bad request' },
   },
 });
@@ -3632,7 +3634,7 @@ registry.registerPath({ method: 'post', path: '/git-api/sync', ...authzExtension
 registry.registerPath({ method: 'get', path: '/git-api/sync/status', ...authzExtension('project.git.sync.status', 'GET', '/git-api/sync/status'), request: { query: GitSyncStatusQuerySchema }, responses: { 200: { description: 'Sync status', content: { 'application/json': { schema: GitSyncStatusResponseSchema } } } } });
 
 // Git lock heartbeat
-registry.registerPath({ method: 'put', path: '/git-api/locks/{lockId}/heartbeat', ...authzExtension('project.git.locks.heartbeat', 'PUT', '/git-api/locks/:lockId/heartbeat'), request: { params: z.object({ lockId: z.string() }) }, responses: { 200: { description: 'Lock heartbeat renewed' } } });
+registry.registerPath({ method: 'put', path: '/git-api/locks/{lockId}/heartbeat', ...authzExtension('project.git.locks.heartbeat', 'PUT', '/git-api/locks/:lockId/heartbeat'), request: { params: z.object({ lockId: z.string() }) }, responses: { 200: { description: 'Lock heartbeat renewed', content: { 'application/json': { schema: LockHeartbeatResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/git-api/locks/{fileId}/events', ...authzExtension('project.git.locks.read', 'GET', '/git-api/locks/:fileId/events'), request: { params: z.object({ fileId: z.string().uuid() }) }, responses: { 200: { description: 'SSE stream of lock and file events', content: { 'text/event-stream': { schema: z.string() } } } } });
 
 // Git OAuth

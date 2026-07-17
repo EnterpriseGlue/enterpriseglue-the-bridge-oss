@@ -10,12 +10,18 @@ import { projectMemberService } from '@enterpriseglue/shared/services/platform-a
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const lockManagerMock = vi.hoisted(() => ({
-  acquireLock: vi.fn().mockResolvedValue({ id: 'lock-1' }),
+  acquireLock: vi.fn().mockResolvedValue({
+    id: '11111111-1111-4111-8111-111111111111', fileId: '22222222-2222-4222-8222-222222222222', userId: '33333333-3333-4333-8333-333333333333',
+    acquiredAt: 1, lastInteractionAt: 1, expiresAt: 2, heartbeatAt: 1, visibilityState: 'visible', visibilityChangedAt: 1, sessionStatus: 'active',
+  }),
   releaseLock: vi.fn().mockResolvedValue(undefined),
   getLockRecord: vi.fn().mockResolvedValue(null),
   getLockHolder: vi.fn().mockResolvedValue(null),
   getProjectLocks: vi.fn().mockResolvedValue([]),
-  touchLock: vi.fn().mockResolvedValue({ id: 'lock-1' }),
+  touchLock: vi.fn().mockResolvedValue({
+    id: '11111111-1111-4111-8111-111111111111', fileId: '22222222-2222-4222-8222-222222222222', userId: '33333333-3333-4333-8333-333333333333',
+    acquiredAt: 1, lastInteractionAt: 1, expiresAt: 2, heartbeatAt: 1, visibilityState: 'visible', visibilityChangedAt: 1, sessionStatus: 'active',
+  }),
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -101,7 +107,10 @@ describe('git locks routes', () => {
     (projectMemberService.hasRole as unknown as Mock).mockResolvedValue(true);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([]);
-    lockManagerMock.acquireLock.mockResolvedValue({ id: 'lock-1' });
+    lockManagerMock.acquireLock.mockResolvedValue({
+      id: '11111111-1111-4111-8111-111111111111', fileId: '22222222-2222-4222-8222-222222222222', userId: '33333333-3333-4333-8333-333333333333',
+      acquiredAt: 1, lastInteractionAt: 1, expiresAt: 2, heartbeatAt: 1, visibilityState: 'visible', visibilityChangedAt: 1, sessionStatus: 'active', accessToken: 'must-not-leak',
+    } as any);
     lockManagerMock.getProjectLocks.mockResolvedValue([]);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -127,10 +136,6 @@ describe('git locks routes', () => {
     });
   });
 
-  it('placeholder test for git locks', () => {
-    expect(true).toBe(true);
-  });
-
   it('acquires a lock through scoped files-edit permission without legacy edit role', async () => {
     const fileId = '11111111-1111-4111-8111-111111111111';
     (projectMemberService.hasRole as unknown as Mock).mockResolvedValue(false);
@@ -150,25 +155,42 @@ describe('git locks routes', () => {
     expect(lockManagerMock.acquireLock).toHaveBeenCalledWith(fileId, 'user-1', expect.objectContaining({
       force: false,
     }));
+    expect(response.body).not.toHaveProperty('accessToken');
   });
 
   it('lists project locks through scoped files-view permission without legacy project access', async () => {
     const projectId = '22222222-2222-4222-8222-222222222222';
     (projectMemberService.hasAccess as unknown as Mock).mockResolvedValue(false);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:files:view');
-    lockManagerMock.getProjectLocks.mockResolvedValue([{ id: 'lock-1' }]);
+    lockManagerMock.getProjectLocks.mockResolvedValue([{
+      id: '11111111-1111-4111-8111-111111111111', fileId: '22222222-2222-4222-8222-222222222222', userId: '33333333-3333-4333-8333-333333333333',
+      acquiredAt: 1, lastInteractionAt: 1, expiresAt: 2, heartbeatAt: 1, visibilityState: 'visible', visibilityChangedAt: 1, sessionStatus: 'active', userName: 'User', extra: 'must-not-leak',
+    }]);
 
     const response = await request(app)
       .get('/git-api/locks')
       .query({ projectId });
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ locks: [{ id: 'lock-1' }] });
+    expect(response.body).toEqual({ locks: [expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111', userName: 'User' })] });
+    expect(response.body.locks[0]).not.toHaveProperty('extra');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       tenantId: 'tenant-a',
       resourceType: 'project',
       resourceId: projectId,
     }));
+  });
+
+  it('returns a shared heartbeat receipt for the current lock holder', async () => {
+    lockManagerMock.getLockRecord.mockResolvedValue({ id: 'lock-1', fileId: 'file-1', userId: 'user-1', released: false });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const response = await request(app)
+      .put('/git-api/locks/11111111-1111-4111-8111-111111111111/heartbeat')
+      .send({ visibilityState: 'visible' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({ success: true, lock: expect.objectContaining({ sessionStatus: 'active' }) }));
   });
 });

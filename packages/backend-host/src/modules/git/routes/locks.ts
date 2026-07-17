@@ -5,7 +5,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
-import { AcquireLockRequestSchema, LockHeartbeatRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
+import { AcquireLockRequestSchema, LockHeartbeatRequestSchema, LockHeartbeatResponseSchema, LockListResponseSchema, LockResponseSchema } from '@enterpriseglue/shared/schemas/git/index.js';
 import { subscribeLockEvents, emitLockEvent } from '../lockEvents.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -93,7 +93,7 @@ router.post('/git-api/locks', apiLimiter, requireAuth, validateBody(AcquireLockR
     });
   }
 
-  res.status(201).json(lock);
+  res.status(201).json(LockResponseSchema.parse(lock));
 }));
 
 /**
@@ -152,7 +152,7 @@ router.get('/git-api/locks', apiLimiter, requireAuth, requireAction('project.git
 
   const locks = await lockManager.getProjectLocks(projectId);
 
-  res.json({ locks });
+  res.json(LockListResponseSchema.parse({ locks }));
 }));
 
 /**
@@ -181,7 +181,7 @@ router.put('/git-api/locks/:lockId/heartbeat', apiLimiter, requireAuth, validate
     hasInteraction: validated.hasInteraction,
   });
 
-  res.json({ success: true, lock: updated ?? undefined });
+  res.json(LockHeartbeatResponseSchema.parse({ success: true, lock: updated ?? undefined }));
 }));
 
 /**
