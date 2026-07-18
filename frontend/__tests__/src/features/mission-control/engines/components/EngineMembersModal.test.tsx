@@ -327,7 +327,7 @@ describe('EngineMembersModal', () => {
       engineId: 'engine-1',
       userId: 'user-delegate',
       role: 'operator' as const,
-      grantedAt: 1,
+      createdAt: 1,
       user: null,
     };
     const delegateDisplayMember = { ...operatorMember, userId: 'user-other', role: 'delegate' as const };
