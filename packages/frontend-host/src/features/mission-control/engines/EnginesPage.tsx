@@ -167,6 +167,14 @@ export function getEngineActionPermissions(engine: EngineActionSubject, hasPermi
 
 type EngineActionPermissions = ReturnType<typeof getEngineActionPermissions>
 type EngineInventory = AccessibleEngineSummary
+type EngineInventoryPresentation = {
+  registrationSource?: string | null
+  externalId?: string | null
+  ownershipMode?: string | null
+  lifecycleStatus?: string | null
+  driftStatus?: string | null
+  capabilityStatus?: string | null
+}
 
 function getEngineInventoryReadDecision(engine: EngineActionSubject, permissions: CurrentUserPermissions | null | undefined) {
   return evaluateActionSnapshot(permissions, 'engine.inventory.read', { type: 'engine', id: engine?.id ?? null })
@@ -195,23 +203,23 @@ export type EngineRowDiagnosticTag = {
   title?: string
 }
 
-export function isExternallyRegisteredEngine(engine: EngineInventory | null | undefined): boolean {
+export function isExternallyRegisteredEngine(engine: EngineInventoryPresentation | null | undefined): boolean {
   return engine?.registrationSource === 'external_api' || Boolean(engine?.externalId)
 }
 
-export function isExternallyManagedEngine(engine: EngineInventory | null | undefined): boolean {
+export function isExternallyManagedEngine(engine: EngineInventoryPresentation | null | undefined): boolean {
   return engine?.registrationSource === 'external_api'
 }
 
-export function isConfigLockedEngine(engine: EngineInventory | null | undefined): boolean {
+export function isConfigLockedEngine(engine: EngineInventoryPresentation | null | undefined): boolean {
   return engine?.registrationSource === 'config' && engine?.ownershipMode === 'config_locked'
 }
 
-export function isConfigWarnEngine(engine: EngineInventory | null | undefined): boolean {
+export function isConfigWarnEngine(engine: EngineInventoryPresentation | null | undefined): boolean {
   return engine?.registrationSource === 'config' && engine?.ownershipMode === 'config_warn'
 }
 
-export function formatEngineRegistrationSource(engine: EngineInventory | null | undefined): string {
+export function formatEngineRegistrationSource(engine: EngineInventoryPresentation | null | undefined): string {
   if (engine?.registrationSource === 'config') return 'Configuration'
   if (engine?.registrationSource === 'external_api') return 'External API'
   if (engine?.registrationSource === 'user' || engine?.registrationSource === 'manual') return 'Manual'
@@ -294,7 +302,7 @@ export function formatEngineCapabilitySummary(capabilities: EngineInventory['cap
   ].filter(Boolean).join(', ') || '-'
 }
 
-export function formatEngineCapabilityDiagnostics(diagnostics: EngineInventory['capabilityDiagnostics']): string {
+export function formatEngineCapabilityDiagnostics(diagnostics: Partial<NonNullable<EngineInventory['capabilityDiagnostics']>> | null | undefined): string {
   if (!diagnostics || typeof diagnostics !== 'object') return '-'
   if (diagnostics.status === 'in_sync') return 'All expected operations and query capabilities reported'
   if (Array.isArray(diagnostics.missingOperations) && diagnostics.missingOperations.length > 0) {
@@ -319,7 +327,7 @@ function getStringStatus(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-export function getEngineRowDiagnosticTags(engine: EngineInventory | null | undefined): EngineRowDiagnosticTag[] {
+export function getEngineRowDiagnosticTags(engine: EngineInventoryPresentation | null | undefined): EngineRowDiagnosticTag[] {
   if (!engine) return []
   const tags: EngineRowDiagnosticTag[] = []
   if (engine.registrationSource === 'config' || engine.ownershipMode === 'config_locked' || engine.ownershipMode === 'config_warn') {
@@ -360,7 +368,7 @@ export function getEngineRowDiagnosticTags(engine: EngineInventory | null | unde
   return tags
 }
 
-export function getEngineLifecycleUnavailableReason(engine: EngineInventory | null | undefined, actionLabel: string): string | null {
+export function getEngineLifecycleUnavailableReason(engine: EngineInventoryPresentation | null | undefined, actionLabel: string): string | null {
   const lifecycleStatus = getStringStatus(engine?.lifecycleStatus || 'active')
   if (lifecycleStatus === 'decommissioned') {
     return `Engine is decommissioned. Reactivate it from Access Control before ${actionLabel}.`
@@ -373,7 +381,7 @@ export function getEngineLifecycleUnavailableReason(engine: EngineInventory | nu
 
 export function getEngineTestUnavailableReason(
   actions: Pick<EngineActionPermissions, 'canTest'> | null | undefined,
-  engine?: EngineInventory | null
+  engine?: EngineInventoryPresentation | null
 ): string | null {
   if (!actions?.canTest) return `Missing permission ${EnginePermission.ENGINE_EDIT}`
   return getEngineLifecycleUnavailableReason(engine, 'testing the connection')
@@ -386,7 +394,7 @@ export function getEngineMembersUnavailableReason(actions: Pick<EngineActionPerm
 export function getEngineDeleteUnavailableReason(
   actions: Pick<EngineActionPermissions, 'canDelete'> | null | undefined,
   manualEngineOnboardingAllowed: boolean,
-  engine?: EngineInventory | null
+  engine?: EngineInventoryPresentation | null
 ): string | null {
   if (!actions?.canDelete) return `Missing permission ${EnginePermission.ENGINE_DELETE}`
   if (!manualEngineOnboardingAllowed) return 'Manual engine deletion is disabled by the current onboarding policy'
@@ -435,11 +443,13 @@ type RuntimeResourceSetAccessInventory = {
 
 type SsoEngineAccessSnapshot = SharedSsoEngineAccessSnapshot
 
-export function formatProjectEngineTargetProject(target: ProjectEngineTargetView | null | undefined): string {
+type ProjectEngineTargetPresentation = Partial<ProjectEngineTargetView>
+
+export function formatProjectEngineTargetProject(target: ProjectEngineTargetPresentation | null | undefined): string {
   return target?.projectName || target?.projectId || '-'
 }
 
-export function formatProjectEngineTargetModes(target: ProjectEngineTargetView | null | undefined): string {
+export function formatProjectEngineTargetModes(target: ProjectEngineTargetPresentation | null | undefined): string {
   if (!target) return '-'
   const modes = [
     target.allowManualDeploy ? 'Manual' : null,
@@ -454,7 +464,7 @@ export function formatProjectEngineTargetStatus(value: unknown): string {
   return formatEngineRegistrationStatus(value || 'active')
 }
 
-export function formatEngineAccessMemberName(member: EngineAccessMember | null | undefined): string {
+export function formatEngineAccessMemberName(member: Partial<EngineAccessMember> & Pick<EngineAccessMember, 'userId'> | null | undefined): string {
   if (!member) return '-'
   const fullName = `${member.user?.firstName || ''}${member.user?.firstName && member.user?.lastName ? ' ' : ''}${member.user?.lastName || ''}`.trim()
   return fullName || member.user?.email || member.userId || '-'
@@ -1266,12 +1276,12 @@ export function buildEngineMutationPayload(
 ): CreateEngineRequest
 export function buildEngineMutationPayload(
   form: EngineMutationForm,
-  editing: AccessibleEngineSummary,
+  editing: EngineInventoryPresentation & { hasCredential?: boolean },
   options?: { canManageSecrets?: boolean }
 ): UpdateEngineRequest
 export function buildEngineMutationPayload(
   form: EngineMutationForm,
-  editing?: AccessibleEngineSummary | null,
+  editing?: (EngineInventoryPresentation & { hasCredential?: boolean }) | null,
   options: { canManageSecrets?: boolean } = {}
 ): EngineMutationPayload {
   if (editing && isExternallyManagedEngine(editing)) {

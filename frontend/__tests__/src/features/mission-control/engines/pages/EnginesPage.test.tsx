@@ -36,6 +36,7 @@ import EnginesPage, {
   isExternallyManagedEngine,
   isExternallyRegisteredEngine,
 } from '@src/features/mission-control/engines/EnginesPage';
+import type { EngineMutationForm } from '@src/features/mission-control/engines/EnginesPage';
 import { apiClient } from '@src/shared/api/client';
 import { EnginePermission } from '@src/shared/auth/permissions';
 
@@ -74,6 +75,29 @@ vi.mock('@src/shared/notifications/ToastProvider', () => ({
 }));
 
 describe('EnginesPage', () => {
+  function engineForm(overrides: Partial<EngineMutationForm>): EngineMutationForm {
+    return {
+      name: 'Test Engine',
+      baseUrl: 'https://engine.example.test',
+      type: 'operaton',
+      authType: 'none',
+      connectionMode: 'direct',
+      username: '',
+      passwordEnc: '',
+      oauthTokenUrl: '',
+      oauthScopes: '',
+      oauthAudience: '',
+      environmentTagId: '',
+      runtimeAccessScope: 'engine_wide',
+      deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true,
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     authState.permissions = {
@@ -495,7 +519,7 @@ describe('EnginesPage', () => {
   it('does not derive engine actions from legacy display roles', () => {
     const noScopedPermissions = () => false;
 
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'owner' }, noScopedPermissions)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, noScopedPermissions)).toMatchObject({
       canEdit: false,
       canDelete: false,
       canTest: false,
@@ -504,7 +528,7 @@ describe('EnginesPage', () => {
       canViewMembers: false,
       canManageMembers: false,
     });
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'delegate' }, noScopedPermissions)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, noScopedPermissions)).toMatchObject({
       canEdit: false,
       canDelete: false,
       canTest: false,
@@ -513,7 +537,7 @@ describe('EnginesPage', () => {
       canViewMembers: false,
       canManageMembers: false,
     });
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'operator' }, noScopedPermissions)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, noScopedPermissions)).toMatchObject({
       canEdit: false,
       canDelete: false,
       canTest: false,
@@ -522,7 +546,7 @@ describe('EnginesPage', () => {
       canViewMembers: false,
       canManageMembers: false,
     });
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: 'deployer' }, noScopedPermissions)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, noScopedPermissions)).toMatchObject({
       canEdit: false,
       canDelete: false,
       canTest: false,
@@ -546,7 +570,7 @@ describe('EnginesPage', () => {
     ]);
     const hasScopedPermission = (_engineId: string | null | undefined, permission: string) => scopedPermissions.has(permission as any);
 
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: null }, hasScopedPermission)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, hasScopedPermission)).toMatchObject({
       canEdit: true,
       canDelete: true,
       canTest: true,
@@ -584,7 +608,7 @@ describe('EnginesPage', () => {
     ]);
     const hasAction = (_engineId: string | null | undefined, actionId: string) => actionDecisions.has(actionId);
 
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: null }, noScopedPermissions, hasAction)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, noScopedPermissions, hasAction)).toMatchObject({
       canEdit: true,
       canDelete: true,
       canTest: true,
@@ -612,7 +636,7 @@ describe('EnginesPage', () => {
     const noScopedPermissions = () => false;
     const noActions = () => false;
 
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: null }, noScopedPermissions, noActions)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, noScopedPermissions, noActions)).toMatchObject({
       canEdit: false,
       canDelete: false,
       canTest: false,
@@ -651,7 +675,7 @@ describe('EnginesPage', () => {
     ]);
     const hasScopedPermission = (_engineId: string | null | undefined, permission: string) => scopedPermissions.has(permission as any);
 
-    expect(getEngineActionPermissions({ id: 'engine-1', myRole: null }, hasScopedPermission)).toMatchObject({
+    expect(getEngineActionPermissions({ id: 'engine-1' }, hasScopedPermission)).toMatchObject({
       canViewMembers: true,
       canManageMembers: false,
       canLookupMembers: true,
@@ -806,30 +830,27 @@ describe('EnginesPage', () => {
   });
 
   it('strips source-owned fields from externally managed engine update payloads', () => {
-    expect(buildEngineMutationPayload({
+    expect(buildEngineMutationPayload(engineForm({
       name: 'Display Name',
       baseUrl: 'https://manual.example.com/engine-rest',
       type: 'operaton',
-      externalId: 'new-external-id',
-      labels: { team: 'payments' },
       authType: 'basic',
       username: 'manual-user',
       passwordEnc: 'manual-secret',
       oauthTokenUrl: 'https://idp.example.com/token',
       oauthScopes: 'engine',
       oauthAudience: 'engine-api',
-      version: '1.2.3',
       environmentTagId: 'env-prod',
       runtimeAccessScope: 'resource_aware',
       deploymentIntegration: 'direct_engine',
-    }, { registrationSource: 'external_api' })).toEqual({
+    }), { registrationSource: 'external_api' })).toEqual({
       name: 'Display Name',
       environmentTagId: 'env-prod',
     });
   });
 
   it('keeps normal engine update payload cleanup for locally managed engines', () => {
-    expect(buildEngineMutationPayload({
+    expect(buildEngineMutationPayload(engineForm({
       name: 'Manual Engine',
       baseUrl: 'https://manual.example.com/engine-rest',
       type: 'operaton',
@@ -842,7 +863,7 @@ describe('EnginesPage', () => {
       environmentTagId: '',
       runtimeAccessScope: 'resource_aware',
       deploymentIntegration: 'direct_engine',
-    }, { registrationSource: 'user' })).toMatchObject({
+    }), { registrationSource: 'user' })).toMatchObject({
       name: 'Manual Engine',
       baseUrl: 'https://manual.example.com/engine-rest',
       type: 'operaton',
@@ -858,20 +879,20 @@ describe('EnginesPage', () => {
   });
 
   it('keeps an existing write-only engine credential when an edit omits a replacement', () => {
-    expect(buildEngineMutationPayload({
+    expect(buildEngineMutationPayload(engineForm({
       name: 'Manual Engine',
       baseUrl: 'https://manual.example.com/engine-rest',
       type: 'operaton',
       authType: 'basic',
       username: 'manual-user',
       passwordEnc: '',
-    }, { registrationSource: 'user', hasCredential: true })).toMatchObject({
+    }), { registrationSource: 'user', hasCredential: true })).toMatchObject({
       passwordEnc: undefined,
     });
   });
 
   it('strips authentication fields from engine update payloads without secret management', () => {
-    expect(buildEngineMutationPayload({
+    expect(buildEngineMutationPayload(engineForm({
       name: 'Manual Engine',
       baseUrl: 'https://manual.example.com/engine-rest',
       type: 'operaton',
@@ -882,7 +903,7 @@ describe('EnginesPage', () => {
       oauthScopes: 'engine',
       oauthAudience: 'engine-api',
       environmentTagId: 'env-prod',
-    }, { registrationSource: 'user' }, { canManageSecrets: false })).toMatchObject({
+    }), { registrationSource: 'user' }, { canManageSecrets: false })).toMatchObject({
       name: 'Manual Engine',
       baseUrl: 'https://manual.example.com/engine-rest',
       type: 'operaton',
