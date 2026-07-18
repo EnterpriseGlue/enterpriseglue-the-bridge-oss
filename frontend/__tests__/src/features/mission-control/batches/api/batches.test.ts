@@ -39,14 +39,25 @@ describe('batches API', () => {
       const mockBatches: Batch[] = [
         {
           id: 'b1',
+          camundaBatchId: null,
           type: 'delete',
+          payload: null,
           totalJobs: 100,
           jobsCreated: 100,
-          batchJobsPerSeed: 10,
+          completedJobs: 0,
+          failedJobs: 0,
+          remainingJobs: 100,
           invocationsPerBatchJob: 10,
           seedJobDefinitionId: 'seed1',
           monitorJobDefinitionId: 'monitor1',
           batchJobDefinitionId: 'batch1',
+          status: 'active',
+          progress: null,
+          createdBy: undefined,
+          createdAt: 1,
+          updatedAt: 1,
+          completedAt: undefined,
+          lastError: undefined,
           suspended: false,
         },
       ];
@@ -79,14 +90,25 @@ describe('batches API', () => {
     it('gets batch by id', async () => {
       const mockBatch: Batch = {
         id: 'b1',
+        camundaBatchId: null,
         type: 'delete',
+        payload: null,
         totalJobs: 50,
         jobsCreated: 50,
-        batchJobsPerSeed: 5,
+        completedJobs: 0,
+        failedJobs: 0,
+        remainingJobs: 50,
         invocationsPerBatchJob: 10,
         seedJobDefinitionId: 'seed1',
         monitorJobDefinitionId: 'monitor1',
         batchJobDefinitionId: 'batch1',
+        status: 'active',
+        progress: null,
+        createdBy: undefined,
+        createdAt: 1,
+        updatedAt: 1,
+        completedAt: undefined,
+        lastError: undefined,
         suspended: false,
       };
       vi.mocked(apiClient.get).mockResolvedValue(mockBatch);
@@ -193,7 +215,7 @@ describe('batches API', () => {
       const result = await createDeleteBatch({ processInstanceIds: ['i1', 'i2'] });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/mission-control-api/batches/delete',
+        '/mission-control-api/batches/process-instances/delete',
         { processInstanceIds: ['i1', 'i2'] },
         { credentials: 'include' }
       );
@@ -206,7 +228,7 @@ describe('batches API', () => {
       await createDeleteBatch({ processInstanceQuery: { businessKey: 'test' } });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/mission-control-api/batches/delete',
+        '/mission-control-api/batches/process-instances/delete',
         { processInstanceQuery: { businessKey: 'test' } },
         { credentials: 'include' }
       );
@@ -221,7 +243,7 @@ describe('batches API', () => {
       const result = await createSuspendBatch({ processInstanceIds: ['i1'] });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/mission-control-api/batches/suspend',
+        '/mission-control-api/batches/process-instances/suspend',
         { processInstanceIds: ['i1'] },
         { credentials: 'include' }
       );
@@ -237,7 +259,7 @@ describe('batches API', () => {
       const result = await createActivateBatch({ processInstanceIds: ['i1'] });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/mission-control-api/batches/activate',
+        '/mission-control-api/batches/process-instances/activate',
         { processInstanceIds: ['i1'] },
         { credentials: 'include' }
       );
@@ -253,7 +275,7 @@ describe('batches API', () => {
       const result = await createRetriesBatch({ processInstanceIds: ['i1'], retries: 3 });
 
       expect(apiClient.post).toHaveBeenCalledWith(
-        '/mission-control-api/batches/retries',
+        '/mission-control-api/batches/jobs/retries',
         { processInstanceIds: ['i1'], retries: 3 },
         { credentials: 'include' }
       );
