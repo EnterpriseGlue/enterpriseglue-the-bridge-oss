@@ -11,7 +11,7 @@ const authState = vi.hoisted(() => ({
   permissions: {
     userId: 'admin-1',
     platform: ['platform:authz:roles:view', 'platform:authz:roles:manage'],
-    projects: [], engines: [], generatedAt: 1,
+    tenantId: null, projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
   } as CurrentUserPermissions,
 }));
 

@@ -12,7 +12,7 @@ const authState = vi.hoisted(() => ({
   permissions: {
     userId: 'admin-1',
     platform: ['platform:sso-providers:view', 'platform:sso-providers:manage'],
-    projects: [], engines: [], generatedAt: 1,
+    tenantId: null, projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
   } as CurrentUserPermissions,
 }));
 
@@ -40,7 +40,7 @@ describe('IdentityProvidersSettingsTab', () => {
     authState.permissions = {
       userId: 'admin-1',
       platform: ['platform:sso-providers:view', 'platform:sso-providers:manage'],
-      projects: [], engines: [], generatedAt: 1,
+      tenantId: null, projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
     };
   });
 
@@ -52,7 +52,7 @@ describe('IdentityProvidersSettingsTab', () => {
   });
 
   it('does not request provider data without the read action', () => {
-    authState.permissions = { userId: 'viewer-1', platform: [], projects: [], engines: [], generatedAt: 1 };
+    authState.permissions = { userId: 'viewer-1', tenantId: null, platform: [], projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1 };
     renderTab();
     expect(screen.getByText('Identity providers unavailable')).toBeInTheDocument();
   });

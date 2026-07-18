@@ -12,7 +12,7 @@ const authState = vi.hoisted(() => ({
   permissions: {
     userId: 'admin-1',
     platform: ['platform:sso-assignments:view', 'platform:sso-assignments:manage'],
-    projects: [], engines: [], generatedAt: 1,
+    tenantId: null, projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
   } as CurrentUserPermissions,
 }));
 
@@ -42,7 +42,7 @@ describe('IdentityMappingsSettingsTab', () => {
     authState.permissions = {
       userId: 'admin-1',
       platform: ['platform:sso-assignments:view', 'platform:sso-assignments:manage'],
-      projects: [], engines: [], generatedAt: 1,
+      tenantId: null, projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
     };
   });
 
@@ -94,7 +94,7 @@ describe('IdentityMappingsSettingsTab', () => {
   });
 
   it('does not load mapping data without the read action', () => {
-    authState.permissions = { userId: 'viewer-1', platform: [], projects: [], engines: [], generatedAt: 1 };
+    authState.permissions = { userId: 'viewer-1', tenantId: null, platform: [], projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1 };
     renderTab();
     expect(screen.getByText('Identity mappings unavailable')).toBeInTheDocument();
   });

@@ -8,6 +8,7 @@ import type { CurrentUserPermissions } from '@src/shared/types/auth';
 const authState = vi.hoisted(() => ({
   permissions: {
     userId: 'admin-1',
+    tenantId: null,
     platform: [
       'platform:sso-providers:view',
       'platform:sso-providers:manage',
@@ -16,6 +17,7 @@ const authState = vi.hoisted(() => ({
     ],
     projects: [],
     engines: [],
+    authorizationVersion: 'test-authz-v1',
     generatedAt: 1,
   } as CurrentUserPermissions,
 }));
@@ -139,6 +141,7 @@ describe('SsoSettingsTab', () => {
     vi.clearAllMocks();
     authState.permissions = {
       userId: 'admin-1',
+      tenantId: null,
       platform: [
         'platform:sso-providers:view',
         'platform:sso-providers:manage',
@@ -147,6 +150,7 @@ describe('SsoSettingsTab', () => {
       ],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
     mockApiDefaults();
@@ -155,9 +159,11 @@ describe('SsoSettingsTab', () => {
   it('renders unavailable state without SSO settings permission', () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: [],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 
@@ -170,9 +176,11 @@ describe('SsoSettingsTab', () => {
   it('renders read-only provider rows with disabled row actions when manage permission is missing', async () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:sso-providers:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 
@@ -196,9 +204,11 @@ describe('SsoSettingsTab', () => {
   it('renders read-only platform-role mapping rows with disabled row actions when manage permission is missing', async () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:sso-platform-role-mappings:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 

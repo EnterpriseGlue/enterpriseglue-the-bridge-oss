@@ -7,7 +7,7 @@ import { apiClient } from '@src/shared/api/client';
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
 
 const authState = vi.hoisted(() => ({
-  permissions: { userId: 'admin-1', platform: ['platform:authz:roles:view', 'platform:authz:roles:manage'], projects: [], engines: [], generatedAt: 1 } as CurrentUserPermissions,
+  permissions: { userId: 'admin-1', tenantId: null, platform: ['platform:authz:roles:view', 'platform:authz:roles:manage'], projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1 } as CurrentUserPermissions,
 }));
 
 vi.mock('@src/shared/api/client', () => ({ apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
@@ -37,7 +37,7 @@ describe('RoleLibrarySettingsTab interactions', () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
-    authState.permissions = { userId: 'admin-1', platform: ['platform:authz:roles:view', 'platform:authz:roles:manage'], projects: [], engines: [], generatedAt: 1 };
+    authState.permissions = { userId: 'admin-1', tenantId: null, platform: ['platform:authz:roles:view', 'platform:authz:roles:manage'], projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1 };
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/api/authz/roles') return roles;
       if (url === '/api/authz/permissions') return permissions;

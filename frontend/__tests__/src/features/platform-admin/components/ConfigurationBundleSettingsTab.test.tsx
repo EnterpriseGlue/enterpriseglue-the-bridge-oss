@@ -12,7 +12,7 @@ const authState = vi.hoisted(() => ({
   permissions: {
     userId: 'admin-1',
     platform: ['platform:config-bundles:view', 'platform:config-bundles:preview', 'platform:config-bundles:apply', 'platform:config-bundles:export'],
-    projects: [], engines: [], generatedAt: 1,
+    tenantId: null, projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1,
   } as CurrentUserPermissions,
   refreshPermissions: vi.fn().mockResolvedValue(null),
 }));
@@ -26,7 +26,7 @@ function renderTab() {
 
 describe('ConfigurationBundleSettingsTab', () => {
   beforeEach(() => {
-    authState.permissions = { userId: 'admin-1', platform: ['platform:config-bundles:view', 'platform:config-bundles:preview', 'platform:config-bundles:apply', 'platform:config-bundles:export'], projects: [], engines: [], generatedAt: 1 };
+    authState.permissions = { userId: 'admin-1', tenantId: null, platform: ['platform:config-bundles:view', 'platform:config-bundles:preview', 'platform:config-bundles:apply', 'platform:config-bundles:export'], projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1 };
     authState.refreshPermissions.mockClear();
   });
 
