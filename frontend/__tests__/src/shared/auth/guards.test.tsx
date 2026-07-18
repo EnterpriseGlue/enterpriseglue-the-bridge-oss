@@ -19,9 +19,11 @@ function getRenderedMenuItem(label: string): HTMLElement {
 
 const basePermissions: CurrentUserPermissions = {
   userId: 'user-1',
+  tenantId: null,
   platform: [],
   projects: [],
   engines: [],
+  authorizationVersion: 'test-authz-v1',
   generatedAt: 1,
 };
 

@@ -190,9 +190,11 @@ describe('AccessControl groups', () => {
   it('allows read-only group inspection while disabling group management actions', () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:authz:roles:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 

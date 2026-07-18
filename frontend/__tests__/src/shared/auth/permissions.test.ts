@@ -17,9 +17,11 @@ import type { CurrentUserPermissions } from '@src/shared/types/auth';
 
 const baseSnapshot: CurrentUserPermissions = {
   userId: 'user-1',
+  tenantId: null,
   platform: [],
   projects: [],
   engines: [],
+  authorizationVersion: 'test-authz-v1',
   generatedAt: 1,
 };
 

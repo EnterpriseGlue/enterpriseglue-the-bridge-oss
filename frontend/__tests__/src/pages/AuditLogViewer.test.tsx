@@ -15,9 +15,11 @@ const authState: {
   user: { capabilities: {} },
   permissions: {
     userId: 'user-1',
+    tenantId: null,
     platform: [PlatformPermission.AUDIT_VIEW],
     projects: [],
     engines: [],
+    authorizationVersion: 'test-authz-v1',
     generatedAt: 1,
   },
   hasPlatformPermission: vi.fn(),
@@ -63,9 +65,11 @@ describe('AuditLogViewer', () => {
     authState.user = { capabilities: {} };
     authState.permissions = {
       userId: 'user-1',
+      tenantId: null,
       platform: [PlatformPermission.AUDIT_VIEW],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
     authState.hasPlatformPermission.mockImplementation((permission: string) =>
@@ -88,9 +92,11 @@ describe('AuditLogViewer', () => {
   it('requests unredacted audit payloads only when the elevated toggle is enabled', async () => {
     authState.permissions = {
       userId: 'user-1',
+      tenantId: null,
       platform: [PlatformPermission.AUDIT_VIEW, PlatformPermission.AUDIT_UNREDACTED_VIEW],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
     authState.hasPlatformPermission.mockImplementation((permission: string) =>

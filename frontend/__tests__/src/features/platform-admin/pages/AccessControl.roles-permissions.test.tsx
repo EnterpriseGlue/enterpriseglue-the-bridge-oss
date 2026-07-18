@@ -153,9 +153,11 @@ describe('AccessControl roles and permissions', () => {
   it('hides denied Access Control tabs and disables known management actions', () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:authz:roles:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 
@@ -182,9 +184,11 @@ describe('AccessControl roles and permissions', () => {
   it('allows read-only Engine Set inspection while disabling management actions', () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:engine-sets:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 
@@ -202,9 +206,11 @@ describe('AccessControl roles and permissions', () => {
   it('allows read-only project target inspection while disabling management actions', () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:project-engine-targets:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 
@@ -224,9 +230,11 @@ describe('AccessControl roles and permissions', () => {
   it('allows read-only policy inspection while disabling management actions', () => {
     authState.permissions = {
       userId: 'viewer-1',
+      tenantId: null,
       platform: ['platform:authz:roles:view'],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 
