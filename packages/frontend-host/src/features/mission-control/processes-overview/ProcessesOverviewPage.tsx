@@ -232,6 +232,7 @@ export default function ProcessesOverviewPage() {
   )
   const permissionSnapshot = authContext?.permissions ?? null
   const instanceRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.retry', selectedEngineResource)
+  const startProcessDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.start', selectedEngineResource)
   const bulkRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.jobs.retry', selectedEngineResource)
   const bulkDeleteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.delete', selectedEngineResource)
   const bulkSuspendDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.suspend', selectedEngineResource)
@@ -921,7 +922,9 @@ export default function ProcessesOverviewPage() {
   const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
   const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
   const migrateTitle = migrateEligibility.summary || 'Migrate'
-  const startTitle = 'Start process instance'
+  const startTitle = startProcessDecision.allowed
+    ? 'Start process instance'
+    : startProcessDecision.reason || 'Action unavailable'
   const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
   const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
   const bulkMigrateDiagnosticDecision = migrateEligibility.firstDeniedDecision
@@ -1119,7 +1122,7 @@ export default function ProcessesOverviewPage() {
                   setStartError(null)
                   setStartProcessOpen(true)
                 }}
-                disabled={!selectedProcess?.key}
+                disabled={!selectedProcess?.key || !startProcessDecision.allowed}
                 title={startTitle}
               >
                 Start

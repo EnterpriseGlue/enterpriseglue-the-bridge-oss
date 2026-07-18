@@ -75,6 +75,12 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
             state: 'ACTIVE',
             hasIncident: true,
             startTime: new Date().toISOString(),
+            runtimeActionDecisions: {
+              retry: { allowed: true },
+              suspension: { allowed: true },
+              terminate: { allowed: true },
+              migration: { allowed: true },
+            },
           },
         ],
         isLoading: false,
