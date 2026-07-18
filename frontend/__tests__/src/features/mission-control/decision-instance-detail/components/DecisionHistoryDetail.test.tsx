@@ -40,9 +40,11 @@ function renderDecisionHistoryDetail() {
     user: null,
     permissions: {
       userId: 'user-1',
+      tenantId: null,
       platform: [],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     },
     isAuthenticated: true,

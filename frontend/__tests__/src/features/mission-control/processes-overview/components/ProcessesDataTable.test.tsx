@@ -42,11 +42,14 @@ function renderTable(
       state: 'ACTIVE',
     },
   ];
+  const tableData = (actionDecisions
+    ? rows.map((row) => ({ ...row, runtimeActionDecisions: actionDecisions }))
+    : rows) as ProcessesDataTableData;
 
   render(
     <MemoryRouter>
       <ProcessesDataTable
-        data={actionDecisions ? rows.map((row) => ({ ...row, runtimeActionDecisions: actionDecisions })) : rows}
+        data={tableData}
         onTerminate={vi.fn()}
         onRetry={vi.fn()}
         onActivate={onActivate}

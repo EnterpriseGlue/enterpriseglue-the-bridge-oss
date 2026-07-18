@@ -30,9 +30,11 @@ const authContextValue: AuthContextValue = {
   user: null,
   permissions: {
     userId: 'user-1',
+    tenantId: null,
     platform: [],
     projects: [],
     engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view', 'engine:instance:retry'] }],
+    authorizationVersion: 'test-authz-v1',
     generatedAt: 1,
   },
   isAuthenticated: true,
