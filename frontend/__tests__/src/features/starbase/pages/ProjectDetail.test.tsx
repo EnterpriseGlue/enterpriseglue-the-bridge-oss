@@ -168,7 +168,11 @@ describe('ProjectDetail', () => {
       sourceRef: 'sso-group:release-ops',
       sourceMappingId: 'mapping-1',
     })).toBe('SSO-managed assignment; Source ref sso-group:release-ops; SSO mapping mapping-1')
-    expect(formatProjectRoleAssignmentSourceLineage({ source: 'manual' })).toBe('Manual assignment')
+    expect(formatProjectRoleAssignmentSourceLineage({
+      source: 'manual',
+      sourceRef: null,
+      sourceMappingId: null,
+    })).toBe('Manual assignment')
   })
 
   it('formats inherited project role assignment source lineage', () => {

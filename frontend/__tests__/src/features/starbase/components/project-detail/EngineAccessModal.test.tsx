@@ -52,6 +52,7 @@ describe('EngineAccessModal', () => {
             {
               engineId: 'engine-1',
               engineName: 'Dev Engine',
+              baseUrl: 'https://engine.example.test',
               environment: { name: 'Development', color: '#0f62fe' },
               deploymentTarget: {
                 id: 'target-1',
@@ -72,6 +73,7 @@ describe('EngineAccessModal', () => {
                 ci: { allowed: false, reasons: ['Missing permission engine:deploy'] },
               },
               health: { status: 'connected', latencyMs: 42 },
+              grantedAt: 1704067200,
             },
           ],
           pendingRequests: [],
