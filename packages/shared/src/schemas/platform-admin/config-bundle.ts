@@ -199,6 +199,18 @@ export const ConfigBundleDiffResponseSchema = ConfigBundlePreviewResponseSchema.
   }),
 });
 
+/**
+ * Non-secret, bounded CI provenance attached to a reviewed configuration apply.
+ * It identifies the repository artifact being applied without accepting a
+ * human actor override or any credential material.
+ */
+export const ConfigBundleCiProvenanceSchema = z.object({
+  repository: z.string().min(3).max(255).regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/, 'Use an owner/repository identifier'),
+  revision: z.string().regex(/^[0-9a-f]{40}$/i, 'Use a full immutable commit SHA'),
+  workflowRunId: z.string().min(1).max(64).regex(/^[0-9]+$/, 'Use a numeric workflow run id'),
+  workflow: z.string().min(1).max(160).optional(),
+}).strict();
+
 export const ConfigBundleApplyRequestSchema = ConfigBundleRequestSchema.extend({
   expectedPreviewHash: z.string().min(1),
   expectedSecretPreflightHash: z.string().min(1).max(255).optional(),
@@ -206,6 +218,7 @@ export const ConfigBundleApplyRequestSchema = ConfigBundleRequestSchema.extend({
   idempotencyKey: z.string().min(8).max(160).optional(),
   expectedTenantScope: z.string().min(1).max(255).optional(),
   identityReconciliationMode: ConfigBundleIdentityReconciliationModeSchema.optional(),
+  ciProvenance: ConfigBundleCiProvenanceSchema.optional(),
 });
 
 export const ConfigBundleIdentitySnapshotSchema = z.object({
@@ -680,6 +693,7 @@ export const IdentityMockFixturesSchema = z.object({
 export type EnterpriseGlueConfigBundle = z.infer<typeof EnterpriseGlueConfigBundleSchema>;
 export type ConfigBundleRequest = z.infer<typeof ConfigBundleRequestSchema>;
 export type ConfigBundleRemoteImportRequest = z.infer<typeof ConfigBundleRemoteImportRequestSchema>;
+export type ConfigBundleCiProvenance = z.infer<typeof ConfigBundleCiProvenanceSchema>;
 export type ConfigBundleApplyRequest = z.infer<typeof ConfigBundleApplyRequestSchema>;
 export type ConfigBundleValidationIssue = z.infer<typeof ConfigBundleValidationIssueSchema>;
 export type ConfigBundlePreviewResponse = z.infer<typeof ConfigBundlePreviewResponseSchema>;

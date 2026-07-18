@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ConfigBundleApplyRequestSchema,
   ConfigBundleApplyResultSchema,
   ConfigBundleApplyRunSchema,
   ConfigBundleIdentityReplayTaskSchema,
@@ -289,5 +290,19 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     expect(ConfigBundleApplyRunSchema.parse({ id: 'run-1', bundleKey: 'acme-prod-authz', bundleApiVersion: 'enterpriseglue.ai/v1alpha1', idempotencyKey: 'idempotency-1', actorId: 'user-1', status: 'succeeded', errorMessage: null, completedAt: 2, createdAt: 1, canonicalHash: 'hash-1', reconciliation }).canonicalHash).toBe('hash-1');
     expect(ConfigBundleIdentityReplayTaskSchema.parse({ id: 'identity-task-1', providerId: 'provider-1', syncRunId: 'sync-1', status: 'queued', attempts: 0, nextAttemptAt: 2, scanned: 500, created: 2, removed: 1, failed: 0, lastError: null, completedAt: null, createdAt: 1, updatedAt: 1 }).providerId).toBe('provider-1');
     expect(ConfigBundleRuntimeReconciliationTaskSchema.parse({ id: 'runtime-task-1', status: 'queued', attempts: 0, nextAttemptAt: 2, engineSetIds: ['set-1'], runtimeResourceSetIds: ['resource-set-1'], engineIds: ['engine-1'], lastError: null, completedAt: null, createdAt: 1, updatedAt: 1 }).engineIds).toEqual(['engine-1']);
+  });
+
+  it('accepts only bounded immutable CI provenance on an apply request', () => {
+    const request = {
+      bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
+      files: {},
+      expectedPreviewHash: 'preview-hash',
+      ciProvenance: { repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', revision: 'a'.repeat(40), workflowRunId: '123456', workflow: 'Configuration Bundle' },
+    };
+    expect(ConfigBundleApplyRequestSchema.safeParse(request).success).toBe(true);
+    expect(ConfigBundleApplyRequestSchema.safeParse({
+      ...request,
+      ciProvenance: { ...request.ciProvenance, revision: 'main' },
+    }).success).toBe(false);
   });
 });

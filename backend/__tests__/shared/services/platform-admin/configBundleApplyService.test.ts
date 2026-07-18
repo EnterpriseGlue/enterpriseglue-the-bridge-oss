@@ -176,6 +176,7 @@ describe('configBundleApplyService', () => {
       expectedPreviewHash: preview.canonicalHash!,
       tenantId: 'tenant-a',
       actorId: 'admin-1',
+      ciProvenance: { repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', revision: 'a'.repeat(40), workflowRunId: '123456', workflow: 'Configuration Bundle' },
     });
 
     expect(result).toMatchObject({
@@ -208,6 +209,10 @@ describe('configBundleApplyService', () => {
       action: 'authz.config_bundle.apply',
       resourceType: 'config_bundle_apply_run',
       details: expect.stringContaining('"redaction":"Config payload and secret values omitted"'),
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.apply',
+      details: expect.stringContaining('"repository":"EnterpriseGlue/enterpriseglue-the-bridge-oss"'),
     }));
     expect(auditInsert).not.toHaveBeenCalledWith(expect.objectContaining({
       details: expect.stringContaining('CENTRAL_PASSWORD'),

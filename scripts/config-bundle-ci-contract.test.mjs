@@ -10,6 +10,9 @@ test('the CI workflow validates, previews, applies a reviewed immutable revision
   assert.match(workflow, /git_ref:[\s\S]*?Immutable commit SHA/);
   assert.match(workflow, /git_ref to be a full immutable commit SHA/);
   assert.match(workflow, /confirm_apply=APPLY/);
+  assert.match(workflow, /ENTERPRISEGLUE_CONFIG_SOURCE_REPOSITORY: \$\{\{ github\.repository \}\}/);
+  assert.match(workflow, /ENTERPRISEGLUE_CONFIG_SOURCE_REVISION: \$\{\{ inputs\.git_ref \}\}/);
+  assert.match(workflow, /ENTERPRISEGLUE_CONFIG_SOURCE_WORKFLOW_RUN_ID: \$\{\{ github\.run_id \}\}/);
   assert.match(workflow, /pnpm authz:config validate "\$BUNDLE_PATH"/);
   assert.match(workflow, /pnpm authz:config preview "\$BUNDLE_PATH" \| tee config-bundle-preview\.json/);
   assert.match(workflow, /node scripts\/config-bundle\.mjs apply "\$BUNDLE_PATH" \| tee config-bundle-apply\.json/);
@@ -26,6 +29,8 @@ test('the CLI re-previews exact input, sends its canonical hash and idempotency 
   assert.match(cli, /\/api\/authz\/config-bundles\/preview/);
   assert.match(cli, /expectedPreviewHash: previewRequest\.result\.canonicalHash/);
   assert.match(cli, /idempotencyKey/);
+  assert.match(cli, /ENTERPRISEGLUE_CONFIG_SOURCE_REPOSITORY/);
+  assert.match(cli, /ciProvenance/);
   assert.match(cli, /reconciliationWaitState/);
   assert.match(cli, /toSanitizedJson/);
   assert.match(output, /\[REDACTED\]/);

@@ -284,7 +284,7 @@ The repository also includes a manually dispatched GitHub Actions workflow at `.
 
 When a bounded API `apply` replay is truncated, EnterpriseGlue records one durable continuation task per affected provider. Enable `CONFIG_BUNDLE_IDENTITY_REPLAY_INTERVAL_MS` on the backend to continue those pages. Startup bundle applies instead drain only the new apply run before readiness, within a 100-page/500-identity-per-page budget. The worker leases each task, cancels stale queued work when a newer bundle supersedes the same provider, and retries transient failures with capped exponential backoff. Inspect continuation state from the apply-run details in Platform Settings or `GET /api/authz/config-bundles/runs/{id}/identity-replay-tasks`.
 
-Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential.
+Dispatch `preview` first against an immutable reviewed commit SHA, inspect the uploaded JSON receipt, then dispatch `apply` for that same SHA. The workflow requires the literal `APPLY` confirmation and serializes runs per environment. It is intentionally not triggered by pull requests and never uses a repository-wide human credential. Each apply includes the GitHub repository, immutable revision, workflow name, and run id in the persisted audit event alongside the authenticated API-client identity; these are bounded provenance fields, never secrets.
 
 The corresponding authenticated routes are:
 

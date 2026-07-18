@@ -57,6 +57,10 @@ jobs:
       ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY: config-bundle-${{ github.run_id }}
       ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE: ${{ vars.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE }}
       ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE: ${{ inputs.identity_reconciliation_mode }}
+      ENTERPRISEGLUE_CONFIG_SOURCE_REPOSITORY: ${{ github.repository }}
+      ENTERPRISEGLUE_CONFIG_SOURCE_REVISION: ${{ inputs.git_ref }}
+      ENTERPRISEGLUE_CONFIG_SOURCE_WORKFLOW_RUN_ID: ${{ github.run_id }}
+      ENTERPRISEGLUE_CONFIG_SOURCE_WORKFLOW: ${{ github.workflow }}
       BUNDLE_PATH: ${{ inputs.bundle_path }}
       GIT_REF: ${{ inputs.git_ref }}
       OPERATION: ${{ inputs.operation }}

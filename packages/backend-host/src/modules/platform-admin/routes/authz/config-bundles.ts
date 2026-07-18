@@ -136,6 +136,7 @@ export function registerConfigBundleRoutes(
         reconciliation: result.reconciliation,
         actorType: req.apiClient ? 'api_client' : 'user',
         apiClientId: req.apiClient?.id || null,
+        ciProvenance: req.body.ciProvenance || null,
       },
     });
     const reconciliationQueued = result.reconciliation.identitySnapshot?.status === 'truncated'

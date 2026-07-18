@@ -9,6 +9,14 @@ const token = process.env.ENTERPRISEGLUE_API_TOKEN;
 const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
 const expectedTenantScope = process.env.ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE;
 const identityReconciliationMode = process.env.ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE;
+const ciProvenance = (() => {
+  const repository = process.env.ENTERPRISEGLUE_CONFIG_SOURCE_REPOSITORY;
+  const revision = process.env.ENTERPRISEGLUE_CONFIG_SOURCE_REVISION;
+  const workflowRunId = process.env.ENTERPRISEGLUE_CONFIG_SOURCE_WORKFLOW_RUN_ID;
+  const workflow = process.env.ENTERPRISEGLUE_CONFIG_SOURCE_WORKFLOW;
+  if (!repository && !revision && !workflowRunId && !workflow) return undefined;
+  return { repository, revision, workflowRunId, ...(workflow ? { workflow } : {}) };
+})();
 const reconciliationTimeoutMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIATION_TIMEOUT_MS || 300_000);
 const reconciliationPollMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIATION_POLL_MS || 1_000);
 const knownSecrets = [token];
@@ -72,6 +80,7 @@ if (!['validate', 'preview', 'apply', 'export', 'wait'].includes(command) || !ar
           ...(idempotencyKey ? { idempotencyKey } : {}),
           expectedTenantScope,
           ...(identityReconciliationMode ? { identityReconciliationMode } : {}),
+          ...(ciProvenance ? { ciProvenance } : {}),
         }) });
         if (!applyRequest.response.ok) { const error = new Error(applyRequest.result.message || applyRequest.result.error || `Apply failed: ${applyRequest.response.status}`); error.exitCode = classifyConfigBundleHttpFailure(applyRequest.response.status, 'apply'); throw error; }
         console.log(toSanitizedJson(applyRequest.result, knownSecrets));

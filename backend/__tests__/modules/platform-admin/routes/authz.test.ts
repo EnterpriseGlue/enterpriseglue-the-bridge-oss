@@ -50,6 +50,7 @@ const configBundleRemoteSourceMock = vi.hoisted(() => ({
 const platformSettingsServiceMock = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false }),
 }));
+const auditLogMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const apiClientAuthMock = vi.hoisted(() => ({
   requireApiClientAction: vi.fn(() => (req: any, _res: any, next: any) => {
     req.apiClient = { id: 'client-1', createdById: 'user-1', scopes: ['config:bundle:manage'] };
@@ -77,7 +78,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
-  logAudit: vi.fn().mockResolvedValue(undefined),
+  logAudit: auditLogMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
@@ -2593,6 +2594,12 @@ describe('platform-admin authz routes', () => {
         bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle' },
         files: {},
         expectedPreviewHash: 'preview-hash',
+        ciProvenance: {
+          repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss',
+          revision: 'a'.repeat(40),
+          workflowRunId: '123456',
+          workflow: 'Configuration Bundle',
+        },
       });
 
     expect(response.status).toBe(200);
@@ -2602,7 +2609,21 @@ describe('platform-admin authz routes', () => {
     );
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       actorId: 'user-1',
+      ciProvenance: {
+        repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss',
+        revision: 'a'.repeat(40),
+        workflowRunId: '123456',
+        workflow: 'Configuration Bundle',
+      },
     }), expect.objectContaining({ credentiallessCustomerSidecarsEnabled: false }));
+    expect(auditLogMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.apply',
+      details: expect.objectContaining({
+        actorType: 'api_client',
+        apiClientId: 'client-1',
+        ciProvenance: expect.objectContaining({ repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', revision: 'a'.repeat(40) }),
+      }),
+    }));
   });
 
   it('allows configuration-scoped API clients to preview bundles from CI', async () => {

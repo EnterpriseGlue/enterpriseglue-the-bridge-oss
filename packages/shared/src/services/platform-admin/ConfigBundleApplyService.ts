@@ -34,6 +34,7 @@ import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import type {
   ConfigBundleApplyReconciliation as SchemaConfigBundleApplyReconciliation,
+  ConfigBundleCiProvenance as SchemaConfigBundleCiProvenance,
   ConfigBundleIdentityReconciliationMode as SchemaConfigBundleIdentityReconciliationMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
@@ -47,6 +48,7 @@ export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
   idempotencyKey?: string | null;
   expectedTenantScope?: string | null;
   identityReconciliationMode?: ConfigBundleIdentityReconciliationMode;
+  ciProvenance?: SchemaConfigBundleCiProvenance;
   tenantId?: string | null;
   actorId: string;
 }
@@ -725,6 +727,7 @@ class ConfigBundleApplyService {
           changes: diff.changes.filter((change) => change.operation !== 'noop').map(auditApplyChangeSummary),
           secretReferences: secretPreflight.references.map(({ reference }) => reference),
           redaction: 'Config payload and secret values omitted',
+          ciProvenance: input.ciProvenance || null,
         },
       });
     });

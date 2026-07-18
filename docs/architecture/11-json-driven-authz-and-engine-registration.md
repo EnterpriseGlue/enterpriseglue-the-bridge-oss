@@ -2045,7 +2045,7 @@ CI/CD security:
 - [ ] ⬜ Apply only after merge to protected branch.
 - [ ] ⬜ Require signed commits or pipeline identity for high-risk environments where appropriate.
 - [x] ✅ Keep secret values in the CI secret store, not in JSON. The dispatch workflow reads its non-human API token from a protected GitHub Environment secret; bundle schemas and preflight accept only bounded secret references, and the maintained `test:secret-boundaries`/`test:config-bundle-cicd` lanes prove values are rejected or redacted from bundle, API, audit, and CI artifacts.
-- [ ] ⬜ Audit actor as the API client plus source repository metadata.
+- [x] ✅ Audit actor as the API client plus source repository metadata. The dispatch workflow supplies bounded repository, immutable revision, workflow, and run-id provenance; the backend persists it in the configuration-apply audit event beside the authenticated API-client identity, and the CI contract and route/service tests guard that boundary.
 
 ## Identity Adapter Mock Testing Architecture
 
