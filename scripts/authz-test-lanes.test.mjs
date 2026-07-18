@@ -20,6 +20,7 @@ const frontendInvitationFlow = readFileSync(new URL('../packages/frontend-host/s
 const engineMembersModal = readFileSync(new URL('../packages/frontend-host/src/features/mission-control/engines/components/EngineMembersModal.tsx', import.meta.url), 'utf8');
 const projectDetailPage = readFileSync(new URL('../packages/frontend-host/src/features/starbase/pages/ProjectDetail.tsx', import.meta.url), 'utf8');
 const projectDeploymentTargetsModal = readFileSync(new URL('../packages/frontend-host/src/features/starbase/components/project-detail/ProjectDeploymentTargetsModal.tsx', import.meta.url), 'utf8');
+const configurationBundleSettingsTab = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/components/ConfigurationBundleSettingsTab.tsx', import.meta.url), 'utf8');
 const openApiSource = readFileSync(new URL('../packages/shared/src/schemas/openapi.ts', import.meta.url), 'utf8');
 const sharedAuthContractSource = readFileSync(new URL('../packages/shared/src/contracts/auth.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
@@ -176,6 +177,12 @@ test('project deployment target mutations and project-scoped OpenAPI responses r
   assert.match(openApiSource, /path: '\/starbase-api\/projects\/\{projectId\}\/deployment-targets\/sync-legacy'.*ProjectEngineTargetSyncLegacyResponseSchema/);
   assert.match(openApiSource, /path: '\/starbase-api\/projects\/\{projectId\}\/deployment-targets'.*AuthzCreatedIdResponseSchema/);
   assert.match(openApiSource, /path: '\/starbase-api\/projects\/\{projectId\}\/deployment-targets\/\{targetId\}'.*AuthzMutationSuccessResponseSchema/);
+});
+
+test('configuration remote import reuses the canonical bundle envelope', () => {
+  assert.match(configurationBundleSettingsTab, /ConfigBundleRequest/);
+  assert.match(configurationBundleSettingsTab, /apiClient\.post<ConfigBundleRequest>\('\/api\/authz\/config-bundles\/import-url'/);
+  assert.doesNotMatch(configurationBundleSettingsTab, /apiClient\.post<\{\s*bundle:\s*unknown;\s*files:\s*Record<string, unknown>\s*\}>\('\/api\/authz\/config-bundles\/import-url'/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {

@@ -19,6 +19,7 @@ import type {
   ConfigBundlePreviewResponse,
   ConfigBundleSecretPreflightResponse,
 } from '../hooks/useAuthzApi';
+import type { ConfigBundleRequest } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import {
   filterConfigBundleChanges,
   formatConfigBundleObjectType,
@@ -93,8 +94,8 @@ export default function ConfigurationBundleSettingsTab() {
   const runtimeReconciliationTasks = runtimeReconciliationTasksQuery.data || [];
   const runDetailBusy = selectedRunId && (selectedRunQuery.isFetching || identityReplayTasksQuery.isFetching || runtimeReconciliationTasksQuery.isFetching) ? selectedRunId : null;
   const queryError = runsQuery.error || selectedRunQuery.error || identityReplayTasksQuery.error || runtimeReconciliationTasksQuery.error;
-  const parse = (): { bundle: unknown; files: Record<string, unknown> } => {
-    const value = JSON.parse(source) as { bundle: unknown; files: Record<string, unknown> };
+  const parse = (): ConfigBundleRequest => {
+    const value = JSON.parse(source) as ConfigBundleRequest;
     if (!value || !value.bundle || !value.files || typeof value.files !== 'object') throw new Error('Configuration must contain bundle and files objects.');
     return value;
   };
@@ -154,7 +155,7 @@ export default function ConfigurationBundleSettingsTab() {
     if (!remoteUrl.trim()) return;
     setBusy('import'); setError(null);
     try {
-      const input = await apiClient.post<{ bundle: unknown; files: Record<string, unknown> }>('/api/authz/config-bundles/import-url', { url: remoteUrl.trim() });
+      const input = await apiClient.post<ConfigBundleRequest>('/api/authz/config-bundles/import-url', { url: remoteUrl.trim() });
       setSource(JSON.stringify(input, null, 2)); setPreview(null); setDiff(null); setSecretPreflight(null); setApplyResult(null); setAcknowledgements([]); setApplyIdempotencyKey(null); setCiCommandCopied(false); setRemoteUrl('');
     } catch (value) { setError(parseApiError(value, 'Configuration Git import failed').message); }
     finally { setBusy(null); }
