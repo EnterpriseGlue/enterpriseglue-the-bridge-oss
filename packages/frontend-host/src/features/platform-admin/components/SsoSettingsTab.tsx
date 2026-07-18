@@ -38,6 +38,7 @@ import type {
   LegacySsoProviderCreateRequest,
   LegacySsoProviderDefaultRoleMigrationRequest,
   LegacySsoProviderToggleRequest,
+  LegacySsoProviderToggleResponse,
   LegacySsoProviderUpdateRequest,
   LegacySsoPlatformMappingCreateRequest,
   LegacySsoPlatformMappingUpdateRequest,
@@ -273,7 +274,7 @@ export default function SsoSettingsTab() {
 
   const toggleProvider = useMutation({
     mutationFn: ({ id, ...data }: { id: string } & LegacySsoProviderToggleRequest) =>
-      apiClient.post<{ success: true }>(`/api/sso/providers/${id}/toggle`, data),
+      apiClient.post<LegacySsoProviderToggleResponse>(`/api/sso/providers/${id}/toggle`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sso-providers'] });
       setToggleProviderConfirm(null);

@@ -2026,7 +2026,7 @@ registry.registerPath({
   path: '/api/sso/providers',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/sso/providers'),
   request: { body: { content: { 'application/json': { schema: SsoProviderCreateRequestSchema } } } },
-  responses: { 201: { description: 'SSO provider created', content: { 'application/json': { schema: z.object({ id: z.string() }) } } } },
+  responses: { 201: { description: 'SSO provider created', content: { 'application/json': { schema: legacySsoProviderSchemas.LegacySsoProviderResponseSchema } } } },
 });
 
 registry.registerPath({
@@ -2050,7 +2050,7 @@ registry.registerPath({
   path: '/api/sso/providers/{id}/toggle',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/sso/providers/{id}/toggle'),
   request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SsoProviderToggleRequestSchema } } } },
-  responses: { 200: { description: 'SSO provider enabled state toggled', content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } }, 404: { description: 'Provider not found' } },
+  responses: { 200: { description: 'SSO provider enabled state toggled', content: { 'application/json': { schema: legacySsoProviderSchemas.LegacySsoProviderToggleResponseSchema } } }, 404: { description: 'Provider not found' } },
 });
 
 registry.registerPath({

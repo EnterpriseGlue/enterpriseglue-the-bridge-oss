@@ -353,6 +353,7 @@ export const LegacySsoProviderCreateRequestSchema = z.object({
 }).strict();
 export const LegacySsoProviderUpdateRequestSchema = LegacySsoProviderCreateRequestSchema.partial();
 export const LegacySsoProviderToggleRequestSchema = z.object({ riskAcknowledged: z.boolean().optional() }).default({});
+export const LegacySsoProviderToggleResponseSchema = z.object({ enabled: z.boolean() });
 export const LegacySsoProviderDefaultRoleMigrationRequestSchema = z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() });
 
 /** Public SAML readiness indicators; this contract never exposes provider secrets or configuration. */
@@ -1904,6 +1905,7 @@ export type LegacySsoProviderResponse = z.infer<typeof LegacySsoProviderResponse
 export type LegacySsoProviderCreateRequest = z.input<typeof LegacySsoProviderCreateRequestSchema>;
 export type LegacySsoProviderUpdateRequest = z.input<typeof LegacySsoProviderUpdateRequestSchema>;
 export type LegacySsoProviderToggleRequest = z.input<typeof LegacySsoProviderToggleRequestSchema>;
+export type LegacySsoProviderToggleResponse = z.infer<typeof LegacySsoProviderToggleResponseSchema>;
 export type LegacySsoProviderDefaultRoleMigrationRequest = z.input<typeof LegacySsoProviderDefaultRoleMigrationRequestSchema>;
 export type SamlAuthenticationStatus = z.infer<typeof SamlAuthenticationStatusSchema>;
 export type SsoClaimOperator = z.infer<typeof SsoClaimOperatorSchema>;
