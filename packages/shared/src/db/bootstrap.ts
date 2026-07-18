@@ -21,6 +21,27 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
     const userCount = await userRepo.count();
 
     if (userCount > 0) {
+      // Existing installations can retain the configured bootstrap account from
+      // before canonical authorization groups were introduced. Reconcile only
+      // that active local account: it remains the documented break-glass
+      // administrator and must not be locked out when SSO enforcement begins.
+      const existingBootstrapAdmin = await userRepo.findOne({
+        where: {
+          email: config.adminEmail,
+          authProvider: 'local',
+          isActive: true,
+        },
+      });
+      if (existingBootstrapAdmin) {
+        await dataSource.transaction(async (manager) => {
+          await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, existingBootstrapAdmin.id);
+          if (allowPlatformAdmin) {
+            await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, existingBootstrapAdmin.id);
+          }
+        });
+        console.log('✅ Reconciled configured bootstrap administrator memberships');
+        return;
+      }
       console.log('ℹ️  Users already exist, skipping admin bootstrap');
       return;
     }

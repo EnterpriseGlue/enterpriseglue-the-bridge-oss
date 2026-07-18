@@ -38,12 +38,14 @@ describe('bootstrapAdmin authorization boundary', () => {
   };
   const userRepo = {
     count: vi.fn(),
+    findOne: vi.fn(),
     create: vi.fn((value) => value),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
     userRepo.count.mockResolvedValue(0);
+    userRepo.findOne.mockResolvedValue(null);
     save.mockResolvedValue(undefined);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === User ? userRepo : undefined,
@@ -72,5 +74,24 @@ describe('bootstrapAdmin authorization boundary', () => {
 
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'admin-1');
     expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+  });
+
+  it('reconciles canonical memberships for an existing configured local bootstrap administrator', async () => {
+    userRepo.count.mockResolvedValue(1);
+    userRepo.findOne.mockResolvedValue({ id: 'existing-admin-1' });
+
+    await bootstrapAdmin();
+
+    expect(userRepo.create).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(userRepo.findOne).toHaveBeenCalledWith({
+      where: {
+        email: 'admin@example.com',
+        authProvider: 'local',
+        isActive: true,
+      },
+    });
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'existing-admin-1');
+    expect(authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'existing-admin-1');
   });
 });
