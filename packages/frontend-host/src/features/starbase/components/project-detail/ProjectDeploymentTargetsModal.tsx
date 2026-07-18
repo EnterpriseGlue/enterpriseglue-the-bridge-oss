@@ -28,10 +28,15 @@ import { WhyUnavailableLink } from '../../../../shared/auth/guards'
 import type { ProjectEngineTargetPolicyMode } from '../../../../api/platform-admin'
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 import type {
+  AuthzCreatedIdResponse,
+  AuthzMutationSuccessResponse,
   ProjectEngineTarget,
   ProjectEngineTargetApprovalStatus,
+  ProjectEngineTargetCreate,
   ProjectEngineTargetSource,
   ProjectEngineTargetStatus,
+  ProjectEngineTargetSyncLegacyResponse,
+  ProjectEngineTargetUpdate,
 } from '../../../platform-admin/hooks/useAuthzApi'
 
 type EngineOption = {
@@ -174,17 +179,23 @@ export function ProjectDeploymentTargetsModal({
   }, [projectId, queryClient])
 
   const createTargetM = useMutation({
-    mutationFn: (payload: { engineId: string } & TargetModeFlags) =>
-      apiClient.post<{ id: string }>(createTargetPath, {
-        ...(isProjectScopedApi ? {} : { projectId }),
+    mutationFn: (payload: { engineId: string } & TargetModeFlags) => {
+      const target: ProjectEngineTargetCreate = {
+        projectId,
         engineId: payload.engineId,
         status: 'active',
-        ...(isProjectScopedApi ? {} : { source: 'manual' }),
+        source: 'manual',
         allowManualDeploy: payload.allowManualDeploy,
         allowCiDeploy: payload.allowCiDeploy,
         allowApiDeploy: payload.allowApiDeploy,
         allowImport: payload.allowImport,
-      }),
+      }
+      if (isProjectScopedApi) {
+        const { projectId: _projectId, source: _source, ...projectTarget } = target
+        return apiClient.post<AuthzCreatedIdResponse>(createTargetPath, projectTarget)
+      }
+      return apiClient.post<AuthzCreatedIdResponse>(createTargetPath, target)
+    },
     onSuccess: async () => {
       setSelectedEngineId('')
       setCreateFlags(DEFAULT_CREATE_FLAGS)
@@ -195,8 +206,10 @@ export function ProjectDeploymentTargetsModal({
   })
 
   const updateTargetM = useMutation({
-    mutationFn: ({ id, ...payload }: { id: string } & Partial<TargetModeFlags> & { status?: ProjectEngineTargetStatus }) =>
-      apiClient.put<{ success: boolean }>(targetPath(id), payload),
+    mutationFn: ({ id, ...payload }: { id: string } & Partial<TargetModeFlags> & { status?: ProjectEngineTargetStatus }) => {
+      const target: Omit<ProjectEngineTargetUpdate, 'id'> = payload
+      return apiClient.put<AuthzMutationSuccessResponse>(targetPath(id), target)
+    },
     onSuccess: async () => {
       setError(null)
       await invalidateTargets()
@@ -214,7 +227,7 @@ export function ProjectDeploymentTargetsModal({
   })
 
   const syncLegacyM = useMutation({
-    mutationFn: () => apiClient.post<{ createdOrUpdated: number }>(syncLegacyPath, isProjectScopedApi ? {} : { projectId }),
+    mutationFn: () => apiClient.post<ProjectEngineTargetSyncLegacyResponse>(syncLegacyPath, isProjectScopedApi ? {} : { projectId }),
     onSuccess: async () => {
       setError(null)
       await invalidateTargets()

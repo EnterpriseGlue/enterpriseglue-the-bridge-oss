@@ -19,6 +19,8 @@ const frontendSharedApiTypes = readFileSync(new URL('../packages/frontend-host/s
 const frontendInvitationFlow = readFileSync(new URL('../packages/frontend-host/src/shared/utils/invitationFlow.ts', import.meta.url), 'utf8');
 const engineMembersModal = readFileSync(new URL('../packages/frontend-host/src/features/mission-control/engines/components/EngineMembersModal.tsx', import.meta.url), 'utf8');
 const projectDetailPage = readFileSync(new URL('../packages/frontend-host/src/features/starbase/pages/ProjectDetail.tsx', import.meta.url), 'utf8');
+const projectDeploymentTargetsModal = readFileSync(new URL('../packages/frontend-host/src/features/starbase/components/project-detail/ProjectDeploymentTargetsModal.tsx', import.meta.url), 'utf8');
+const openApiSource = readFileSync(new URL('../packages/shared/src/schemas/openapi.ts', import.meta.url), 'utf8');
 const sharedAuthContractSource = readFileSync(new URL('../packages/shared/src/contracts/auth.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
@@ -164,6 +166,16 @@ test('scoped engine and project assignment mutations use shared transport contra
     assert.match(source, /RoleAssignmentCreateResponse,/);
     assert.doesNotMatch(source, /apiClient\.post<\{\s*id:\s*string\s*\}>\('\/api\/authz\/role-assignments'/);
   }
+});
+
+test('project deployment target mutations and project-scoped OpenAPI responses reuse shared contracts', () => {
+  assert.match(projectDeploymentTargetsModal, /AuthzCreatedIdResponse,/);
+  assert.match(projectDeploymentTargetsModal, /AuthzMutationSuccessResponse,/);
+  assert.match(projectDeploymentTargetsModal, /ProjectEngineTarget(Create|Update|SyncLegacyResponse),/);
+  assert.doesNotMatch(projectDeploymentTargetsModal, /apiClient\.(?:post|put)<\{\s*(?:id:\s*string|success:\s*boolean|createdOrUpdated:\s*number)\s*\}>/);
+  assert.match(openApiSource, /path: '\/starbase-api\/projects\/\{projectId\}\/deployment-targets\/sync-legacy'.*ProjectEngineTargetSyncLegacyResponseSchema/);
+  assert.match(openApiSource, /path: '\/starbase-api\/projects\/\{projectId\}\/deployment-targets'.*AuthzCreatedIdResponseSchema/);
+  assert.match(openApiSource, /path: '\/starbase-api\/projects\/\{projectId\}\/deployment-targets\/\{targetId\}'.*AuthzMutationSuccessResponseSchema/);
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {
