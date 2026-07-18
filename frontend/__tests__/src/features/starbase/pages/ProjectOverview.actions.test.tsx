@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '@test/mocks/server';
 import { apiClient } from '@src/shared/api/client';
 import ProjectOverview, { getBulkPermissionDenial } from '@src/features/starbase/pages/ProjectOverview';
+import type { ProjectMemberAccessView } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
 
 const authMocks = vi.hoisted(() => ({
   hasPlatformPermission: vi.fn(),
@@ -183,12 +184,14 @@ describe('ProjectOverview actions', () => {
 
   it('does not treat legacy membership roles as bulk permission grants', () => {
     const project = { id: 'project-1', name: 'Alpha Project' } as any;
-    const memberships = new Map([['project-1', {
+    const memberships: Map<string, ProjectMemberAccessView | null | undefined> = new Map([['project-1', {
+      id: 'membership-1',
+      projectId: 'project-1',
       userId: 'user-1',
-      firstName: 'Legacy',
-      lastName: 'Owner',
+      joinedAt: 1,
       role: 'owner',
       roles: ['owner'],
+      user: { id: 'user-1', email: 'legacy.owner@example.com', firstName: 'Legacy', lastName: 'Owner' },
     }]]);
 
     expect(getBulkPermissionDenial(
