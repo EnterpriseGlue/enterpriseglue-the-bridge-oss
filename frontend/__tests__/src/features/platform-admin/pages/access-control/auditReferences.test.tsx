@@ -14,6 +14,7 @@ import type {
 
 const auditEntry = (overrides: Partial<AuthzAuditEntry>): AuthzAuditEntry => ({
   id: 'audit-1',
+  tenantId: null,
   userId: 'admin-1',
   action: 'role_assignment.create',
   resourceType: 'role_assignment',

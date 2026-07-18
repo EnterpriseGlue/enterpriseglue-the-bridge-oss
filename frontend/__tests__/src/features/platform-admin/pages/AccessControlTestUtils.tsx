@@ -44,6 +44,7 @@ const evaluateAccessState = vi.hoisted(() => ({
 const authState = vi.hoisted(() => ({
   permissions: {
     userId: 'admin-1',
+    tenantId: null,
     platform: [
       'platform:authz:roles:view',
       'platform:authz:roles:manage',
@@ -60,6 +61,7 @@ const authState = vi.hoisted(() => ({
     ],
     projects: [],
     engines: [],
+    authorizationVersion: 'test-authz-v1',
     generatedAt: 1,
   } as CurrentUserPermissions,
 }));
@@ -1568,6 +1570,7 @@ export function resetAccessControlMocks() {
     });
     authState.permissions = {
       userId: 'admin-1',
+      tenantId: null,
       platform: [
         'platform:authz:roles:view',
         'platform:authz:roles:manage',
@@ -1584,6 +1587,7 @@ export function resetAccessControlMocks() {
       ],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 1,
     };
 }
