@@ -13,9 +13,11 @@ vi.mock('@src/services/auth', () => ({
     getMe: vi.fn().mockRejectedValue(new Error('Not authenticated')),
     getMyPermissions: vi.fn().mockResolvedValue({
       userId: 'user-1',
+      tenantId: null,
       platform: [],
       projects: [],
       engines: [],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 123,
     }),
     refreshToken: vi.fn(),
@@ -54,9 +56,11 @@ describe('AuthProvider', () => {
     (authService.getMe as any).mockResolvedValue({ id: 'user-1', email: 'test@example.com' });
     (authService.getMyPermissions as any).mockResolvedValue({
       userId: 'user-1',
+      tenantId: null,
       platform: ['platform:user:manage'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:create'] }],
       engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      authorizationVersion: 'test-authz-v1',
       generatedAt: 123,
     });
 
