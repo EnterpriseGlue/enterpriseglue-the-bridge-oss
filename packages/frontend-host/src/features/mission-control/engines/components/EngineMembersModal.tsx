@@ -60,6 +60,8 @@ import type {
   PendingEngineInvite as SharedPendingEngineInvite,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import type {
+  RoleAssignmentCreate,
+  RoleAssignmentCreateResponse,
   RoleAssignment as SharedRoleAssignment,
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
@@ -561,13 +563,16 @@ export default function EngineMembersModal({
   })
 
   const assignCustomRoleM = useMutation({
-    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) => apiClient.post<{ id: string }>('/api/authz/role-assignments', {
-      principalType: 'user',
-      principalId: userId,
-      roleId,
-      resourceType: 'engine',
-      resourceId: engine!.id,
-    }, { credentials: 'include' }),
+    mutationFn: ({ userId, roleId }: { userId: string; roleId: string }) => {
+      const payload: RoleAssignmentCreate = {
+        principalType: 'user',
+        principalId: userId,
+        roleId,
+        resourceType: 'engine',
+        resourceId: engine!.id,
+      }
+      return apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', payload, { credentials: 'include' })
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id, 'role-assignments'] })
       await qc.invalidateQueries({ queryKey: ['engines'] })
@@ -575,13 +580,16 @@ export default function EngineMembersModal({
   })
 
   const assignScopedRoleM = useMutation({
-    mutationFn: ({ principalType, principalId, roleId }: { principalType: AuthzPrincipalType; principalId: string; roleId: string }) => apiClient.post<{ id: string }>('/api/authz/role-assignments', {
-      principalType,
-      principalId,
-      roleId,
-      resourceType: 'engine',
-      resourceId: engine!.id,
-    }, { credentials: 'include' }),
+    mutationFn: ({ principalType, principalId, roleId }: { principalType: AuthzPrincipalType; principalId: string; roleId: string }) => {
+      const payload: RoleAssignmentCreate = {
+        principalType,
+        principalId,
+        roleId,
+        resourceType: 'engine',
+        resourceId: engine!.id,
+      }
+      return apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', payload, { credentials: 'include' })
+    },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ['engine-members', engine?.id, 'role-assignments'] })
       await qc.invalidateQueries({ queryKey: ['engines'] })

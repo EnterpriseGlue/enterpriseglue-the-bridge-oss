@@ -17,6 +17,8 @@ const frontendAuthService = readFileSync(new URL('../packages/frontend-host/src/
 const frontendAuthzApi = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts', import.meta.url), 'utf8');
 const frontendSharedApiTypes = readFileSync(new URL('../packages/frontend-host/src/shared/api/types.ts', import.meta.url), 'utf8');
 const frontendInvitationFlow = readFileSync(new URL('../packages/frontend-host/src/shared/utils/invitationFlow.ts', import.meta.url), 'utf8');
+const engineMembersModal = readFileSync(new URL('../packages/frontend-host/src/features/mission-control/engines/components/EngineMembersModal.tsx', import.meta.url), 'utf8');
+const projectDetailPage = readFileSync(new URL('../packages/frontend-host/src/features/starbase/pages/ProjectDetail.tsx', import.meta.url), 'utf8');
 const sharedAuthContractSource = readFileSync(new URL('../packages/shared/src/contracts/auth.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
@@ -154,6 +156,14 @@ test('the invitation delivery helper uses the shared capabilities contract', () 
   assert.match(frontendInvitationFlow, /InvitationCapabilitiesResponse/);
   assert.match(frontendInvitationFlow, /InvitationDeliveryMethod as SharedInvitationDeliveryMethod/);
   assert.doesNotMatch(frontendInvitationFlow, /export interface InvitationCapabilities/);
+});
+
+test('scoped engine and project assignment mutations use shared transport contracts', () => {
+  for (const source of [engineMembersModal, projectDetailPage]) {
+    assert.match(source, /RoleAssignmentCreate,/);
+    assert.match(source, /RoleAssignmentCreateResponse,/);
+    assert.doesNotMatch(source, /apiClient\.post<\{\s*id:\s*string\s*\}>\('\/api\/authz\/role-assignments'/);
+  }
 });
 
 test('the live local OIDC rehearsal is opt-in and guarded to local browser targets', () => {

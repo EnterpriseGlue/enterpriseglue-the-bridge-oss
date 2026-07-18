@@ -60,6 +60,8 @@ import type {
   AuthzGroup as SharedAuthzGroup,
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzPrincipalType as SharedAuthzPrincipalType,
+  RoleAssignmentCreate,
+  RoleAssignmentCreateResponse,
   RoleAssignment as SharedRoleAssignment,
   RoleSummary as SharedRoleSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
@@ -1042,13 +1044,16 @@ export default function ProjectDetail() {
     : assignmentPrincipalIdInput.trim()
 
   const assignScopedProjectRoleM = useMutation({
-    mutationFn: ({ principalType, principalId, roleId }: { principalType: ProjectAssignmentPrincipalType; principalId: string; roleId: string }) => apiClient.post<{ id: string }>('/api/authz/role-assignments', {
-      principalType,
-      principalId,
-      roleId,
-      resourceType: 'project',
-      resourceId: projectId,
-    }),
+    mutationFn: ({ principalType, principalId, roleId }: { principalType: ProjectAssignmentPrincipalType; principalId: string; roleId: string }) => {
+      const payload: RoleAssignmentCreate = {
+        principalType,
+        principalId,
+        roleId,
+        resourceType: 'project',
+        resourceId: projectId,
+      }
+      return apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', payload)
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'custom-role-assignments'] })
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
@@ -1121,13 +1126,16 @@ export default function ProjectDetail() {
     await Promise.all([
       ...nextRoleIds
         .filter((roleId) => !currentRoleIds.has(roleId))
-        .map((roleId) => apiClient.post<{ id: string }>('/api/authz/role-assignments', {
-          principalType: 'user',
-          principalId: userId,
-          roleId,
-          resourceType: 'project',
-          resourceId: projectId,
-        })),
+        .map((roleId) => {
+          const payload: RoleAssignmentCreate = {
+            principalType: 'user',
+            principalId: userId,
+            roleId,
+            resourceType: 'project',
+            resourceId: projectId,
+          }
+          return apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', payload)
+        }),
       ...current
         .filter((assignment) => !next.has(assignment.roleId) && assignment.source === 'manual')
         .map((assignment) => apiClient.delete(`/api/authz/role-assignments/${encodeURIComponent(assignment.id)}`)),
