@@ -69,7 +69,7 @@ describe('git credentials routes', () => {
   it('validates the OAuth callback and never returns exchanged token material', async () => {
     vi.mocked(oauthService.exchangeCode).mockResolvedValue({
       userId: 'user-1', providerId: 'provider-1',
-      tokens: { accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 3600, scope: 'repo' },
+      tokens: { accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 3600, tokenType: 'Bearer', scope: 'repo' },
     });
     vi.mocked(credentialService.saveCredential).mockResolvedValue({
       id: 'cred-1', userId: 'user-1', providerId: 'provider-1', providerName: 'GitHub', providerType: 'github',

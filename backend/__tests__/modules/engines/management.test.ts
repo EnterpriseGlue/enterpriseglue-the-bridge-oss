@@ -170,7 +170,6 @@ describe('engines management routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     permissionServiceMock.hasPermission.mockResolvedValue(true);
-    (engineService.hasEngineAccess as any).mockResolvedValue(true);
     (engineService.getEngineRole as any).mockResolvedValue(null);
     (engineService.addEngineMember as any).mockResolvedValue({ id: 'em1', userId: 'target-1', role: 'operator' });
     (engineService.updateEngineMemberRole as any).mockResolvedValue(undefined);
@@ -200,7 +199,6 @@ describe('engines management routes', () => {
   });
 
   it('gets engine members list through scoped members-view permission without legacy view role', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:view');
 
     const response = await request(app).get('/engines-api/engines/e1/members');
@@ -282,7 +280,6 @@ describe('engines management routes', () => {
   });
 
   it('adds an engine member through scoped members-add permission without legacy manage role', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:add');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -312,7 +309,6 @@ describe('engines management routes', () => {
   });
 
   it('looks up engine member candidates through scoped members-lookup permission without legacy manage role', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:lookup');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -351,7 +347,6 @@ describe('engines management routes', () => {
   });
 
   it('adds an existing engine member through scoped members-add permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:add');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -382,7 +377,6 @@ describe('engines management routes', () => {
   });
 
   it('invites an engine member through scoped members-invite permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:invite');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -413,7 +407,6 @@ describe('engines management routes', () => {
   });
 
   it('updates engine member role through scoped members-update-role permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     (engineService.getEngineRole as any).mockResolvedValue('operator');
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:update-role');
 
@@ -431,7 +424,6 @@ describe('engines management routes', () => {
   });
 
   it('removes engine member through scoped members-remove permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     (engineService.getEngineRole as any).mockResolvedValue('operator');
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:members:remove');
 
@@ -448,7 +440,6 @@ describe('engines management routes', () => {
   });
 
   it('sets engine environment through scoped environment-set permission without broad engine-edit permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:environment:set');
 
     const response = await request(app)
@@ -465,7 +456,6 @@ describe('engines management routes', () => {
   });
 
   it('locks engine environment through scoped environment-lock permission without broad engine-edit permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:environment:lock');
 
     const response = await request(app)
@@ -482,7 +472,6 @@ describe('engines management routes', () => {
   });
 
   it('views engine access requests through scoped project-access-view permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:project-access:view');
 
     const response = await request(app).get('/engines-api/engines/e1/access-requests');
@@ -497,7 +486,6 @@ describe('engines management routes', () => {
   });
 
   it('approves engine access requests through scoped project-access-approve permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:project-access:approve');
 
     const response = await request(app).post('/engines-api/engines/e1/access-requests/request-1/approve');
@@ -512,7 +500,6 @@ describe('engines management routes', () => {
   });
 
   it('denies engine access requests through scoped project-access-deny permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:project-access:deny');
 
     const response = await request(app).post('/engines-api/engines/e1/access-requests/request-1/deny');
@@ -527,7 +514,6 @@ describe('engines management routes', () => {
   });
 
   it('revokes project engine access through scoped project-access-revoke permission without broad members-manage permission', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:project-access:revoke');
 
     const response = await request(app).delete('/engines-api/engines/e1/projects/project-1');
@@ -564,7 +550,6 @@ describe('engines management routes', () => {
   });
 
   it('assigns delegate through scoped delegate-management permission without legacy owner role', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delegate:manage');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -594,7 +579,6 @@ describe('engines management routes', () => {
   });
 
   it('transfers ownership through scoped ownership-transfer permission without legacy owner role', async () => {
-    (engineService.hasEngineAccess as any).mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:ownership:transfer');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({

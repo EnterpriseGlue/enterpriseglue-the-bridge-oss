@@ -229,7 +229,7 @@ describe('auth middleware', () => {
 
   describe('requireAdmin', () => {
     it('allows users with the canonical platform-administration permission', async () => {
-      req.user = { userId: 'admin-1', type: 'access', platformRole: 'user', email: 'admin@example.com' };
+      req.user = { userId: 'admin-1', principalType: 'user', principalId: 'admin-1', type: 'access', platformRole: 'user', email: 'admin@example.com' };
       (permissionService.hasPermission as any).mockResolvedValue(true);
 
       await requireAdmin(req as Request, res as Response, next);
@@ -243,7 +243,7 @@ describe('auth middleware', () => {
     });
 
     it('does not grant admin access from a legacy platform role claim', async () => {
-      req.user = { userId: 'user-1', type: 'access', platformRole: 'admin', email: 'user@example.com' };
+      req.user = { userId: 'user-1', principalType: 'user', principalId: 'user-1', type: 'access', platformRole: 'admin', email: 'user@example.com' };
 
       await requireAdmin(req as Request, res as Response, next);
 
@@ -345,7 +345,7 @@ describe('auth middleware', () => {
 
     it('runs the enterprise tenant resolver before attaching an optional identity', async () => {
       const resolver = vi.fn(async (request: Request) => {
-        request.tenantRole = 'tenant_member';
+        request.tenantRole = 'member';
       });
       req = {
         ...req,
@@ -363,7 +363,7 @@ describe('auth middleware', () => {
 
       expect(resolver).toHaveBeenCalledWith(req, { tokenPayload: { ...tokenPayload, userId: 'user-1' }, user });
       expect(req.user).toMatchObject({ userId: 'user-1', principalType: 'user', principalId: 'user-1' });
-      expect(req.tenantRole).toBe('tenant_member');
+      expect(req.tenantRole).toBe('member');
       expect(bpmnRequestContext.updateBpmnEngineRequestContext).toHaveBeenCalledWith({ userId: 'user-1' });
       expect(next).toHaveBeenCalledWith();
     });

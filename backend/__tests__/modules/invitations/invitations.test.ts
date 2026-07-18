@@ -190,7 +190,6 @@ describe('invitation and onboarding routes', () => {
     });
 
     (projectMemberService.getMembership as unknown as Mock).mockResolvedValue({ role: 'owner', roles: ['owner'] });
-    (engineService.hasEngineAccess as unknown as Mock).mockResolvedValue(true);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
     (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'user-1', email: 'invitee@example.com' });
@@ -353,7 +352,6 @@ describe('invitation and onboarding routes', () => {
   });
 
   it('creates an engine invitation through scoped engine member-management permission', async () => {
-    (engineService.hasEngineAccess as unknown as Mock).mockResolvedValue(false);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
       permission === 'engine:members:manage'
     );
@@ -374,7 +372,6 @@ describe('invitation and onboarding routes', () => {
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
-    expect(engineService.hasEngineAccess).not.toHaveBeenCalled();
     expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',

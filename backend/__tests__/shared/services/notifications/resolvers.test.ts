@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { DefaultTenantResolver } from '@enterpriseglue/shared/services/notifications/resolvers.js';
-import type { JwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+import type { UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 
 describe('DefaultTenantResolver', () => {
   const resolver = new DefaultTenantResolver();
-  const mockUser: JwtPayload = {
+  const mockUser: UserJwtPayload = {
     userId: 'user-1',
+    principalType: 'user',
+    principalId: 'user-1',
     email: 'test@example.com',
     platformRole: 'user',
     type: 'access',
