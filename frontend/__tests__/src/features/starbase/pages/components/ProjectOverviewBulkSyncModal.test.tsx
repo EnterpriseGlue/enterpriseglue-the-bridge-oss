@@ -54,9 +54,11 @@ vi.mock('@carbon/react', () => ({
 
 const basePermissions: CurrentUserPermissions = {
   userId: 'user-1',
+  tenantId: null,
   platform: [PlatformPermission.AUTHZ_ROLES_VIEW],
   projects: [],
   engines: [],
+  authorizationVersion: 'test-authz-v1',
   generatedAt: 1,
 };
 

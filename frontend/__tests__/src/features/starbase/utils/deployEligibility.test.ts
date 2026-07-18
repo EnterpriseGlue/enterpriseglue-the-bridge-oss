@@ -2,8 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { hasConnectedEngine } from '@src/features/starbase/utils/deployEligibility'
 
 describe('deployEligibility', () => {
+  const engine = {
+    engineId: 'engine-1',
+    engineName: 'Dev Engine',
+    baseUrl: 'https://engine.example.test',
+    environment: null,
+    health: null,
+    grantedAt: 1,
+  }
+
   const connectedEngineAccess = {
-    accessedEngines: [{ engineId: 'engine-1', engineName: 'Dev Engine' }],
+    accessedEngines: [engine],
     pendingRequests: [],
     availableEngines: [],
   }
@@ -19,8 +28,8 @@ describe('deployEligibility', () => {
   it('excludes synthetic environment entries and denied deployment targets', () => {
     expect(hasConnectedEngine({
       accessedEngines: [
-        { engineId: '__env__', engineName: 'Environment' },
-        { engineId: 'engine-1', engineName: 'Dev Engine', manualDeployAllowed: false, ciDeployAllowed: false },
+        { ...engine, engineId: '__env__', engineName: 'Environment' },
+        { ...engine, manualDeployAllowed: false, ciDeployAllowed: false },
       ],
       pendingRequests: [],
       availableEngines: [],
