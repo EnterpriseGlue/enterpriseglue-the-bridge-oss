@@ -108,9 +108,9 @@ describe('useOnlineProjectWizard', () => {
     const deployViewPermission = (_engineId: string | null | undefined, permission: string) =>
       permission === EnginePermission.DEPLOY_VIEW;
 
-    expect(canImportFromEngineRow({ id: 'engine-1' }, noScopedPermission)).toBe(false);
-    expect(canImportFromEngineRow({ id: 'engine-1' }, deployViewPermission)).toBe(true);
-    expect(canImportFromEngineRow({ id: 'engine-1' }, noScopedPermission)).toBe(false);
+    expect(canImportFromEngineRow({ id: 'engine-1', name: 'Engine One' }, noScopedPermission)).toBe(false);
+    expect(canImportFromEngineRow({ id: 'engine-1', name: 'Engine One' }, deployViewPermission)).toBe(true);
+    expect(canImportFromEngineRow({ id: 'engine-1', name: 'Engine One' }, noScopedPermission)).toBe(false);
   });
 
   it('formats import preview summaries for selected source engines', () => {
