@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { getCanonicalProjectOwnerMemberIds, ProjectMembersModal } from '@src/features/starbase/pages/components/ProjectMembersModal';
+import type { RoleAssignment } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 vi.mock('@carbon/react', async () => {
   const actual = await vi.importActual<any>('@carbon/react');
@@ -22,6 +23,36 @@ vi.mock('@carbon/react', async () => {
 });
 
 describe('ProjectMembersModal', () => {
+  function scopedAssignment(overrides: Partial<RoleAssignment> = {}): RoleAssignment {
+    return {
+      id: 'assignment-1',
+      userId: '',
+      principalType: 'group',
+      principalId: 'group-1',
+      roleId: 'custom.project.reviewer',
+      roleKey: 'custom.project.reviewer',
+      roleName: null,
+      roleScope: 'project',
+      resourceType: 'project',
+      resourceId: 'project-1',
+      scopeType: 'project',
+      scopeId: 'project-1',
+      source: 'manual',
+      sourceMappingId: null,
+      sourceRef: null,
+      ownershipMode: 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
+      expiresAt: null,
+      lastSeenAt: null,
+      createdById: null,
+      createdAt: 1,
+      updatedAt: 1,
+      ...overrides,
+    };
+  }
+
   it('exports ProjectMembersModal component', () => {
     expect(ProjectMembersModal).toBeDefined();
     expect(typeof ProjectMembersModal).toBe('function');
@@ -120,15 +151,9 @@ describe('ProjectMembersModal', () => {
       scopedAssignmentsVisible: true,
       scopedRoleNamesById: new Map([['custom.project.reviewer', 'Project Reviewer']]),
       scopedRoleAssignments: [
-        {
-          id: 'assignment-1',
-          principalType: 'group',
-          principalId: 'group-1',
-          roleId: 'custom.project.reviewer',
-          roleName: null,
-          source: 'manual',
+        scopedAssignment({
           sourceRef: 'manual-entry',
-        },
+        }),
       ],
       onRemoveScopedAssignment,
     });
@@ -148,15 +173,14 @@ describe('ProjectMembersModal', () => {
       projectAccessAuthority: 'sso_managed',
       scopedAssignmentsVisible: true,
       scopedRoleAssignments: [
-        {
+        scopedAssignment({
           id: 'assignment-sso-1',
-          principalType: 'group',
-          principalId: 'group-1',
           roleId: 'system.project.editor',
+          roleKey: 'system.project.editor',
           roleName: null,
           source: 'sso',
           sourceMappingId: 'mapping-1',
-        },
+        }),
       ],
       onRemoveScopedAssignment: vi.fn(),
     });
