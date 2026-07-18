@@ -78,9 +78,11 @@ describe('ExtensionSlot permission-aware gates', () => {
     const auth = makeAuth({
       permissions: {
         userId: 'user-1',
+        tenantId: null,
         platform: ['platform:audit:view'],
         projects: [],
         engines: [],
+        authorizationVersion: 'test-authz-v1',
         generatedAt: 1,
       },
     });
@@ -113,9 +115,11 @@ describe('ExtensionSlot permission-aware gates', () => {
       makeAuth({
         permissions: {
           userId: 'user-1',
+          tenantId: null,
           platform: [],
           projects: [],
           engines: [],
+          authorizationVersion: 'test-authz-v1',
           generatedAt: 1,
         },
       })
@@ -176,9 +180,11 @@ describe('ExtensionSlot permission-aware gates', () => {
     const auth = makeAuth({
       permissions: {
         userId: 'user-1',
+        tenantId: null,
         platform: ['platform:audit:view'],
         projects: [],
         engines: [],
+        authorizationVersion: 'test-authz-v1',
         generatedAt: 1,
       },
     });
