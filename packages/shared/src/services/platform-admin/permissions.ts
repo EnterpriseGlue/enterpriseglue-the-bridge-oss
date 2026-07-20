@@ -18,7 +18,6 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
-import { SsoAssignmentMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoAssignmentMapping.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { ApiClient } from '@enterpriseglue/shared/infrastructure/persistence/entities/ApiClient.js';
@@ -26,7 +25,6 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
 import { ServiceAccount } from '@enterpriseglue/shared/infrastructure/persistence/entities/ServiceAccount.js';
-import { SsoGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoGroupMapping.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
 import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
@@ -3186,12 +3184,6 @@ class PermissionServiceClass {
           qb.where('1 = 0');
         }
       }),
-      this.maxEntityTimestamp(dataSource, SsoAssignmentMapping, 'ssoAssignment', ['createdAt', 'updatedAt'], (qb) => {
-        addTenantScopeFilter(qb, 'ssoAssignment', input.tenantId);
-      }),
-      this.maxEntityTimestamp(dataSource, SsoGroupMapping, 'ssoGroupMapping', ['createdAt', 'updatedAt'], (qb) => {
-        addTenantScopeFilter(qb, 'ssoGroupMapping', input.tenantId);
-      }),
       this.maxEntityTimestamp(dataSource, AuthzPolicy, 'policy', ['createdAt', 'updatedAt'], (qb) => {
         addTenantScopeFilter(qb, 'policy', input.tenantId);
       }),
@@ -3366,14 +3358,12 @@ class PermissionServiceClass {
       }));
       const shadowingSources = annotateRuntimeGrantShadowing([...directSources, ...inheritedSources]);
       const groupLineageSources = await this.attachGroupLineage(dataSource, shadowingSources, principal, tenantId);
-      const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
-      return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
+      return this.attachConfigBundleLineage(dataSource, groupLineageSources, tenantId);
     }
 
     if (resourceType !== 'engine' || !resourceId) {
       const groupLineageSources = await this.attachGroupLineage(dataSource, directSources, principal, tenantId);
-      const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
-      return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
+      return this.attachConfigBundleLineage(dataSource, groupLineageSources, tenantId);
     }
 
     const engineSetQb = assignmentRepo.createQueryBuilder('assignment')
@@ -3456,8 +3446,7 @@ class PermissionServiceClass {
     });
 
     const groupLineageSources = await this.attachGroupLineage(dataSource, [...directSources, ...engineSetSources], principal, tenantId);
-    const ssoLineageSources = await this.attachSsoMappingLineage(dataSource, groupLineageSources, tenantId);
-    return this.attachConfigBundleLineage(dataSource, ssoLineageSources, tenantId);
+    return this.attachConfigBundleLineage(dataSource, groupLineageSources, tenantId);
   }
 
   private async attachGroupLineage(
@@ -3492,34 +3481,20 @@ class PermissionServiceClass {
         membershipsByGroupId.set(membership.groupId, membership);
       }
     });
-    const ssoGroupMappingIds = Array.from(new Set(
-      activeMemberships
-        .filter((membership) => membership.source === 'sso' && membership.sourceRef)
-        .map((membership) => membership.sourceRef as string)
-    ));
     const identityEntitlementMappingIds = Array.from(new Set(
       activeMemberships
         .filter((membership) => membership.source === 'identity_provider' && membership.sourceRef?.startsWith('identity_mapping:'))
         .map((membership) => membership.sourceRef!.slice('identity_mapping:'.length))
     ));
-    const [ssoGroupMappings, identityEntitlementMappings] = await Promise.all([
-      ssoGroupMappingIds.length > 0
-        ? dataSource.getRepository(SsoGroupMapping).find({ where: tenantScopedWhere({ id: In(ssoGroupMappingIds) }, tenantId) })
-        : Promise.resolve([]),
-      identityEntitlementMappingIds.length > 0
+    const identityEntitlementMappings = await (identityEntitlementMappingIds.length > 0
         ? dataSource.getRepository(IdentityEntitlementMapping).find({ where: tenantScopedWhere({ id: In(identityEntitlementMappingIds) }, tenantId) })
-        : Promise.resolve([]),
-    ]);
-    const ssoGroupMappingById = new Map(ssoGroupMappings.map((mapping) => [mapping.id, mapping]));
+        : Promise.resolve([]));
     const identityEntitlementMappingById = new Map(identityEntitlementMappings.map((mapping) => [mapping.id, mapping]));
 
     return sources.map((source) => {
       if (source.principalType !== 'group' || !source.principalId) return source;
       const group = groupById.get(source.principalId);
       const membership = membershipsByGroupId.get(source.principalId);
-      const mapping = membership?.source === 'sso' && membership.sourceRef
-        ? ssoGroupMappingById.get(membership.sourceRef)
-        : null;
       const identityMappingId = membership?.source === 'identity_provider' && membership.sourceRef?.startsWith('identity_mapping:')
         ? membership.sourceRef.slice('identity_mapping:'.length)
         : null;
@@ -3537,18 +3512,6 @@ class PermissionServiceClass {
             expiresAt: membership.expiresAt,
           }
           : null,
-        ssoGroupMapping: mapping
-          ? {
-            id: mapping.id,
-            providerId: mapping.providerId,
-            claimType: mapping.claimType,
-            claimKey: mapping.claimKey,
-            claimValue: mapping.claimValue,
-            claimOperator: mapping.claimOperator,
-            targetGroupId: mapping.targetGroupId,
-            syncMode: mapping.syncMode,
-          }
-          : null,
         identityEntitlementMapping: identityMapping
           ? {
             id: identityMapping.id,
@@ -3560,71 +3523,6 @@ class PermissionServiceClass {
             syncMode: identityMapping.syncMode,
           }
           : null,
-      };
-    });
-  }
-
-  private async attachSsoMappingLineage(
-    dataSource: DataSource,
-    sources: PermissionEvaluationSource[],
-    tenantId?: string | null
-  ): Promise<PermissionEvaluationSource[]> {
-    const sourceMappingReference = (source: PermissionEvaluationSource): string | null =>
-      source.source === 'sso' ? source.sourceMappingId || source.sourceRef || null : null;
-    const mappingIds = Array.from(new Set(
-      sources
-        .map(sourceMappingReference)
-        .filter((reference): reference is string => typeof reference === 'string' && !reference.startsWith('identity_entitlement_mapping:'))
-    ));
-    const identityMappingIds = Array.from(new Set(
-      sources
-        .map(sourceMappingReference)
-        .filter((reference): reference is string => typeof reference === 'string' && reference.startsWith('identity_entitlement_mapping:'))
-        .map((reference) => reference.slice('identity_entitlement_mapping:'.length))
-        .filter((id): id is string => Boolean(id))
-    ));
-    if (mappingIds.length === 0 && identityMappingIds.length === 0) return sources;
-
-    const [mappings, identityMappings] = await Promise.all([
-      mappingIds.length > 0
-        ? dataSource.getRepository(SsoAssignmentMapping).find({ where: tenantScopedWhere({ id: In(mappingIds) }, tenantId) })
-        : Promise.resolve([]),
-      identityMappingIds.length > 0
-        ? dataSource.getRepository(IdentityEntitlementMapping).find({ where: tenantScopedWhere({ id: In(identityMappingIds) }, tenantId) })
-        : Promise.resolve([]),
-    ]);
-    const mappingById = new Map(mappings.map((mapping) => [mapping.id, mapping]));
-    const identityMappingById = new Map(identityMappings.map((mapping) => [mapping.id, mapping]));
-
-    return sources.map((source) => {
-      const reference = sourceMappingReference(source);
-      const mappingId = reference && !reference.startsWith('identity_entitlement_mapping:') ? reference : null;
-      const identityMappingId = reference?.startsWith('identity_entitlement_mapping:')
-        ? reference.slice('identity_entitlement_mapping:'.length)
-        : null;
-      const mapping = mappingId ? mappingById.get(mappingId) : null;
-      const identityMapping = identityMappingId ? identityMappingById.get(identityMappingId) : null;
-      if (!mapping && !identityMapping) return source;
-      return {
-        ...source,
-        ssoMapping: mapping ? {
-          id: mapping.id,
-          providerId: mapping.providerId,
-          claimType: mapping.claimType,
-          claimKey: mapping.claimKey,
-          claimValue: mapping.claimValue,
-          claimOperator: mapping.claimOperator,
-          targetSelectorType: mapping.targetSelectorType,
-        } : source.ssoMapping,
-        identityEntitlementMapping: identityMapping ? {
-          id: identityMapping.id,
-          providerId: identityMapping.providerId,
-          entitlementType: identityMapping.entitlementType,
-          externalId: identityMapping.externalId,
-          matchOperator: identityMapping.matchOperator,
-          targetGroupId: identityMapping.targetGroupId,
-          syncMode: identityMapping.syncMode,
-        } : source.identityEntitlementMapping,
       };
     });
   }

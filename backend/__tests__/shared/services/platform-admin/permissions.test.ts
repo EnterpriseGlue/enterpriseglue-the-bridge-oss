@@ -40,8 +40,6 @@ import {
   RuntimeResource,
   RuntimeResourceSet,
   ServiceAccount,
-  SsoAssignmentMapping,
-  SsoGroupMapping,
   User,
 } from '@enterpriseglue/shared/db/entities/index.js';
 
@@ -756,7 +754,7 @@ describe('permissionService', () => {
     );
   });
 
-  it('explains SSO group membership lineage for inherited group role assignments', async () => {
+  it('does not resolve retired mapping lineage for inherited group role assignments', async () => {
     const assignmentQb = {
       innerJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
@@ -803,7 +801,6 @@ describe('permissionService', () => {
       getRepository: (entity: unknown) => {
         if (entity === AuthzGroupMembership) return groupMembership.repo;
         if (entity === AuthzGroup) return authzGroupRepo;
-        if (entity === SsoGroupMapping) return ssoGroupMappingRepo;
         if (entity === RbacRoleAssignment) return assignmentRepo;
         if (entity === RbacRolePermission) return {};
         if (entity === RbacRole) return {};
@@ -832,15 +829,6 @@ describe('permissionService', () => {
         sourceRef: 'sso-group-mapping-operators',
         expiresAt: null,
       },
-      ssoGroupMapping: {
-        id: 'sso-group-mapping-operators',
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Operators',
-        claimOperator: 'contains',
-        targetGroupId: 'group-operators',
-        syncMode: 'authoritative',
-      },
     });
   });
 
@@ -854,7 +842,6 @@ describe('permissionService', () => {
       if (entity === AuthzGroupMembership) return groupMembership.repo;
       if (entity === AuthzGroup) return authzGroupRepo;
       if (entity === IdentityEntitlementMapping) return identityMappingRepo;
-      if (entity === SsoGroupMapping) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
       if (entity === RbacRolePermission || entity === RbacRole) return {};
       throw new Error('Unexpected repository');
@@ -869,7 +856,7 @@ describe('permissionService', () => {
     });
   });
 
-  it('explains provider-neutral identity mapping lineage from a converted group assignment', async () => {
+  it('does not infer provider-neutral lineage from retired assignment records', async () => {
     const assignmentQb = { innerJoin: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), andWhere: vi.fn().mockReturnThis(), getMany: vi.fn().mockResolvedValue([{ id: 'assignment-converted-identity-group-engine-deployer', roleId: 'group-engine-role', principalType: 'group', principalId: 'group-operators', source: 'sso', sourceMappingId: null, sourceRef: 'identity_entitlement_mapping:mapping-operators' }]) };
     const groupMembership = createGroupMembershipRepo(['group-operators']);
     groupMembership.repo.find.mockResolvedValue([{ id: 'membership-manual-operators', groupId: 'group-operators', userId: 'user-1', source: 'manual', sourceRef: 'manual:add', expiresAt: null }]);
@@ -879,7 +866,6 @@ describe('permissionService', () => {
       if (entity === AuthzGroupMembership) return groupMembership.repo;
       if (entity === AuthzGroup) return authzGroupRepo;
       if (entity === IdentityEntitlementMapping) return identityMappingRepo;
-      if (entity === SsoGroupMapping || entity === SsoAssignmentMapping) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
       if (entity === RbacRolePermission || entity === RbacRole) return {};
       throw new Error('Unexpected repository');
@@ -892,7 +878,7 @@ describe('permissionService', () => {
       source: 'sso',
       sourceRef: 'identity_entitlement_mapping:mapping-operators',
       groupMembership: { id: 'membership-manual-operators', source: 'manual', sourceRef: 'manual:add' },
-      identityEntitlementMapping: { id: 'mapping-operators', providerId: 'identity.oidc.main', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', targetGroupId: 'group-operators', syncMode: 'authoritative' },
+      identityEntitlementMapping: null,
     });
   });
 
@@ -971,7 +957,7 @@ describe('permissionService', () => {
     }));
   });
 
-  it('explains SSO Engine Set role assignment lineage', async () => {
+  it('explains engine-set role assignment lineage without a legacy mapping lookup', async () => {
     const directAssignmentQb = {
       innerJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
@@ -988,9 +974,9 @@ describe('permissionService', () => {
         principalType: 'user',
         principalId: 'user-1',
         userId: 'user-1',
-        source: 'sso',
-        sourceMappingId: 'mapping-prod-operators',
-        sourceRef: 'mapping-prod-operators',
+        source: 'manual',
+        sourceMappingId: null,
+        sourceRef: null,
         scopeType: 'engine_set',
         scopeId: 'engine-set-prod',
       }]),
@@ -1007,7 +993,7 @@ describe('permissionService', () => {
         engineId: 'engine-1',
         selectorFingerprint: 'selector-fingerprint-1',
         matchedByJson: '{"mode":"labels","labels":{"environment":"prod"}}',
-        lineageJson: '{"source":"sso","sourceRef":"mapping-prod-operators"}',
+        lineageJson: '{"source":"config","sourceRef":"config_bundle:engine-set-prod-operators"}',
       }]),
     };
     const engineSetRepo = {
@@ -1067,7 +1053,6 @@ describe('permissionService', () => {
         if (entity === EngineSetMaterialization) return materializationRepo;
         if (entity === EngineSet) return engineSetRepo;
         if (entity === ExternalEngineRegistration) return externalRegistrationRepo;
-        if (entity === SsoAssignmentMapping) return ssoMappingRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -1084,8 +1069,8 @@ describe('permissionService', () => {
       type: 'role-assignment',
       assignmentId: 'assignment-sso-engine-set-operator',
       roleId: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
-      source: 'sso',
-      sourceMappingId: 'mapping-prod-operators',
+      source: 'manual',
+      sourceMappingId: null,
       scopeType: 'engine_set',
       scopeId: 'engine-set-prod',
       engineSetId: 'engine-set-prod',
@@ -1107,17 +1092,9 @@ describe('permissionService', () => {
         lastRegisteredAt: 1250,
         externalUpdatedAt: 1200,
       },
-      ssoMapping: {
-        id: 'mapping-prod-operators',
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Prod Operators',
-        claimOperator: 'equals',
-        targetSelectorType: 'engine_label',
-      },
     });
     expect(result.sources[0].matchedBy).toEqual({ mode: 'labels', labels: { environment: 'prod' } });
-    expect(result.sources[0].lineage).toEqual({ source: 'sso', sourceRef: 'mapping-prod-operators' });
+    expect(result.sources[0].lineage).toEqual({ source: 'config', sourceRef: 'config_bundle:engine-set-prod-operators' });
     expect(materializationRepo.find).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ engineId: 'engine-1' }),
     }));
