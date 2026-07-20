@@ -656,16 +656,17 @@ function deploymentDeniedPayload(result: DeploymentEligibilityResult) {
 }
 
 async function canViewEngineForDeploy(userId: string, engineId: string, tenantId?: string | null): Promise<boolean> {
-  return permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
+  const canViewDeployments = await permissionService.hasPermission(EnginePermissions.DEPLOY_VIEW, {
     userId,
     tenantId,
     resourceType: 'engine',
     resourceId: engineId,
-  }) ||
-    permissionService.hasPermission(EnginePermissions.INSTANCE_VIEW, {
-      userId,
-      tenantId,
-      resourceType: 'engine',
+  });
+  if (canViewDeployments) return true;
+  return permissionService.hasPermission(EnginePermissions.INSTANCE_VIEW, {
+    userId,
+    tenantId,
+    resourceType: 'engine',
       resourceId: engineId,
     });
 }

@@ -1088,6 +1088,18 @@ describe('requireAction project resource resolvers', () => {
     });
   });
 
+  it('returns a safe default deployment denial when no reason or remediation is supplied', async () => {
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: false, decision: 'deny', mode: 'manual', projectId, engineId, checks: [], reasons: [],
+    });
+
+    const response = await request(app).post('/deploy').send({ projectId, engineId });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({ error: 'Deployment is not allowed', reasons: [], checks: [] });
+    expect(response.body.hint).toBeUndefined();
+  });
+
   it('requires both project and engine identifiers for composite deployments', async () => {
     expect((await request(app).post('/deploy').send({ projectId })).status).toBe(400);
     expect(deploymentEligibilityService.evaluate).not.toHaveBeenCalled();
@@ -1142,6 +1154,10 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce({
         allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
         checks: [{ id: 'engine.permission.deploy', allowed: false, reason: 'No deploy access' }], reasons: ['No deploy access'],
+      })
+      .mockResolvedValueOnce({
+        allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
+        checks: [{ id: 'engine.permission.deploy', allowed: false, reason: 'No deploy access' }], reasons: ['No deploy access'],
       });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
@@ -1149,6 +1165,11 @@ describe('requireAction project resource resolvers', () => {
 
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'engine:deploy:view'
+    );
+    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
+
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'engine:instance:view'
     );
     expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
   });
@@ -1190,6 +1211,18 @@ describe('requireAction project resource resolvers', () => {
     }));
     expect(engineAccessService.grantAccess).toHaveBeenCalledWith(projectId, engineId, 'user-1', true);
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not auto-grant a missing deployment target without explicit approval permission', async () => {
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
+      checks: [{ id: 'project_engine_target.active', allowed: false, reason: 'No active target' }], reasons: ['No active target'],
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
+    expect(engineAccessService.grantAccess).not.toHaveBeenCalled();
+    expect(deploymentEligibilityService.evaluate).toHaveBeenCalledTimes(1);
   });
 
   it('resolves a project-scoped action from a file id', async () => {
