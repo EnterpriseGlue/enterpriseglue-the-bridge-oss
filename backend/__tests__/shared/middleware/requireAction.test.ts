@@ -889,6 +889,11 @@ describe('requireAction project resource resolvers', () => {
     });
   });
 
+  it('requires both project and engine identifiers for composite deployments', async () => {
+    expect((await request(app).post('/deploy').send({ projectId })).status).toBe(400);
+    expect(deploymentEligibilityService.evaluate).not.toHaveBeenCalled();
+  });
+
   it('keeps deployment auto-grant when only the project-engine target is missing and approval permission exists', async () => {
     (deploymentEligibilityService.evaluate as unknown as Mock)
       .mockResolvedValueOnce({
