@@ -540,6 +540,13 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 
+  it('denies engine-wide runtime deployments without a broad grant', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    expect((await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`)).status).toBe(403);
+  });
+
   it('rejects inventoried runtime deployments without resource-specific permission', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     runtimeResourceFind.mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
@@ -1068,6 +1075,8 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('resolves an engine-scoped action from a saved filter id', async () => {
+    savedFilterFindOne.mockReset().mockResolvedValue({ id: savedFilterId, engineId });
+    engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null });
     const response = await request(app).get(`/saved-filters/${savedFilterId}`);
 
     expect(response.status).toBe(200);
