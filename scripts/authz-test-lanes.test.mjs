@@ -165,6 +165,19 @@ test('the authorization mutation guard proves denial tests kill bypassed user an
   assert.match(authzMutationRunner, /Authorization mutant survived/);
 });
 
+test('the fine-grained authorization lane combines scope, machine-principal, policy, runtime, and mutation evidence', () => {
+  const command = scripts['test:authz:fine-grained'];
+  assert.match(command, /services\/platform-admin\/permissions\.test\.ts/);
+  assert.match(command, /test:authz:machine-principal-coverage/);
+  assert.match(command, /test:authz:policy-coverage/);
+  assert.match(command, /test:authz:require-action-coverage/);
+  assert.match(command, /test:authz:mutation/);
+
+  const localCommand = scripts['test:authz:fine-grained:local'];
+  assert.match(localCommand, /test:authz:fine-grained/);
+  assert.match(localCommand, /test:authz:local-smoke:seeded/);
+});
+
 test('the disposable local administrator has canonical break-glass memberships', () => {
   assert.match(e2eGlobalSetup, /system\.group\.authenticated_users/);
   assert.match(e2eGlobalSetup, /system\.group\.platform_administrators/);
