@@ -16,12 +16,11 @@ import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/plat
 
 const DEFAULT_TENANT_SLUG = 'default';
 
-// SSO Provider type from backend
+// Public provider-neutral login option.
 interface SsoProviderButton {
   id: string;
   name: string;
-  type: 'microsoft' | 'google' | 'saml' | 'oidc';
-  source: 'legacy' | 'identity';
+  type: 'saml' | 'oidc';
   loginMethod: 'redirect' | 'password';
   buttonLabel?: string;
   buttonColor?: string;
@@ -159,28 +158,20 @@ export default function Login() {
   const logoObjectUrlRef = useRef<string | null>(logoObjectUrl);
   const hasTriggeredAutoSsoRedirect = useRef(false);
   
-  // Prefer the canonical provider-neutral registry. Legacy rows remain only as
-  // a fallback while installations finish moving their provider definitions.
+  // Login is provider-neutral: legacy provider rows are not a login fallback.
   useEffect(() => {
     setSsoLoading(true);
-    Promise.all([
-      apiClient.get<Array<Omit<SsoProviderButton, 'source' | 'loginMethod'>>>('/api/sso/providers/enabled').catch(() => []),
-      apiClient.get<IdentityProviderLoginOption[]>('/api/auth/providers/enabled').catch(() => []),
-    ])
-      .then(([legacyProviders, identityProviders]) => {
-        const legacy = Array.isArray(legacyProviders)
-          ? legacyProviders.map((provider) => ({ ...provider, source: 'legacy' as const, loginMethod: 'redirect' as const }))
-          : [];
+    apiClient.get<IdentityProviderLoginOption[]>('/api/auth/providers/enabled')
+      .then((identityProviders) => {
         const identity = Array.isArray(identityProviders)
           ? identityProviders.map((provider) => ({
             id: provider.id,
             name: provider.key,
             type: provider.protocol === 'ldap' ? 'oidc' as const : provider.protocol,
-            source: 'identity' as const,
             loginMethod: provider.loginMethod,
           }))
           : [];
-        setSsoProviders(identity.length > 0 ? identity : legacy);
+        setSsoProviders(identity);
       })
       .catch(() => setSsoProviders([]))
       .finally(() => setSsoLoading(false));
@@ -381,13 +372,11 @@ export default function Login() {
 
   const providerLoginPath = (provider: SsoProviderButton, slug: string | null): string => {
     const tenantQuery = slug ? `?tenantSlug=${encodeURIComponent(slug)}` : '';
-    return provider.source === 'identity'
-      ? `/api/auth/providers/${encodeURIComponent(provider.id)}/start${tenantQuery}`
-      : `/api/auth/${provider.type}${tenantQuery}`;
+    return `/api/auth/providers/${encodeURIComponent(provider.id)}/start${tenantQuery}`;
   };
 
   const handleSsoLogin = (provider: SsoProviderButton) => {
-    if (provider.source === 'identity' && provider.loginMethod === 'password') {
+    if (provider.loginMethod === 'password') {
       setDirectLdapProvider(provider);
       return;
     }
@@ -603,7 +592,7 @@ export default function Login() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
-              {ssoProviders.filter((provider) => provider.id !== directLdapProvider?.id || provider.source !== directLdapProvider.source).map(provider => (
+              {ssoProviders.filter((provider) => provider.id !== directLdapProvider?.id).map(provider => (
                 <Button
                   key={provider.id}
                   kind="tertiary"
