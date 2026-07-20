@@ -6,7 +6,6 @@ import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { externalIdentityService } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
-import { legacyIdentityProviderMigrationService } from '@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js';
 import { ldapReconciliationService } from '@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js';
 import { ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from '@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js';
@@ -19,69 +18,27 @@ import { identityAdminLimiter, reconciliationLimiter } from '@enterpriseglue/sha
 import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import {
   IdentityProviderMembershipReplayRequestSchema,
-  IdentityProviderMigrationReadinessQuerySchema,
   IdentityProviderRequestSchema,
   IdentityProviderSyncEventsQuerySchema,
   IdentityProviderSyncRunsQuerySchema,
   IdentityProviderUpdateSchema,
-  LegacyIdentityProviderCutoverRequestSchema,
   IdentityProviderExternalIdentityUnlinkRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const router = Router();
 const providerKeySchema = z.string().min(1).max(128);
-const legacyProviderIdSchema = z.string().min(1).max(128);
 
 router.get('/api/identity/providers', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.read'), asyncHandler(async (req, res) => {
   res.json(await identityProviderService.list(req.tenant?.tenantId || null));
 }));
-router.get('/api/identity/providers/environment-migration-drafts', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
-  const drafts = legacyIdentityProviderMigrationService.listEnvironmentDrafts();
-  await logAudit({
-    action: 'identity.provider.environment_migration_drafts.read',
-    userId: req.user!.userId,
-    resourceType: 'platform',
-    resourceId: req.tenant?.tenantId || 'platform',
-    details: { providerTypes: drafts.map((draft) => draft.legacyProvider.type) },
-  });
-  res.json(drafts);
-}));
-router.get('/api/identity/providers/legacy-migration-draft/:legacyProviderId', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), asyncHandler(async (req, res) => {
-  const draft = await legacyIdentityProviderMigrationService.createDraft(legacyProviderIdSchema.parse(req.params.legacyProviderId));
-  await logAudit({
-    action: 'identity.provider.legacy_migration_draft',
-    userId: req.user!.userId,
-    resourceType: 'sso_provider',
-    resourceId: draft.legacyProvider.id,
-    details: {
-      legacyProviderType: draft.legacyProvider.type,
-      generatedProviderKey: draft.provider.key,
-      clientSecretConfigured: draft.legacyProvider.clientSecretConfigured,
-    },
-  });
-  res.json(draft);
-}));
-router.get('/api/identity/providers/migration-readiness', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), validateQuery(IdentityProviderMigrationReadinessQuerySchema), asyncHandler(async (req, res) => {
-  const readiness = await legacyIdentityProviderMigrationService.getReadiness({ targetProviderKey: String(req.query.targetProviderKey), legacyProviderId: req.query.legacyProviderId ? String(req.query.legacyProviderId) : null, tenantId: req.tenant?.tenantId || null });
-  await logAudit({ action: 'identity.provider.migration_readiness.read', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: readiness.targetProviderKey, details: { legacyProviderId: readiness.legacyProviderId, ready: readiness.ready, activeMappingCount: readiness.activeMappingCount, blockers: readiness.blockers } });
-  res.json(readiness);
-}));
-router.post('/api/identity/providers/legacy-cutover', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(LegacyIdentityProviderCutoverRequestSchema), asyncHandler(async (req, res) => {
-  const result = await legacyIdentityProviderMigrationService.cutover({ ...req.body, tenantId: req.tenant?.tenantId || null });
-  await logAudit({
-    action: 'identity.provider.legacy_cutover',
-    userId: req.user!.userId,
-    resourceType: 'sso_provider',
-    resourceId: result.legacyProvider.id,
-    details: {
-      legacyProviderType: result.legacyProvider.type,
-      targetProviderKey: result.targetProviderKey,
-      legacyProviderDisabled: result.legacyProviderDisabled,
-      alreadyDisabled: result.alreadyDisabled,
-    },
-  });
-  res.json(result);
-}));
+// Keep retired legacy migration paths from being interpreted as provider keys
+// by the generic route below.
+router.all([
+  '/api/identity/providers/environment-migration-drafts',
+  '/api/identity/providers/migration-readiness',
+  '/api/identity/providers/legacy-migration-draft/:legacyProviderId',
+  '/api/identity/providers/legacy-cutover',
+], (_req, res) => res.status(404).end());
 router.post('/api/identity/providers/:key/external-identities/unlink', requireAuth, identityAdminLimiter, requireAction('platform.sso.providers.manage'), identityAdminJsonPayloadLimit, validateBody(IdentityProviderExternalIdentityUnlinkRequestSchema), asyncHandler(async (req, res) => {
   const provider = await identityProviderService.getByKey(providerKeySchema.parse(req.params.key), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');

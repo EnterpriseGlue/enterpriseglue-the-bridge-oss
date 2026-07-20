@@ -1518,81 +1518,6 @@ export const IdentityProviderMembershipReplayResponseSchema = z.object({
   nextCursor: z.string().nullable(),
 });
 
-export const IdentityProviderMigrationReadinessQuerySchema = z.object({
-  targetProviderKey: z.string().min(1).max(128),
-  legacyProviderId: z.string().min(1).max(128).optional(),
-});
-
-/**
- * A non-persistent, non-secret migration plan for a legacy SSO provider.
- * The configuration deliberately contains references only; never copy or
- * resolve legacy ciphertext into this API contract.
- */
-export const LegacyIdentityProviderMigrationDraftSchema = z.object({
-  legacyProvider: z.object({
-    id: z.string(),
-    name: z.string(),
-    type: z.enum(['microsoft', 'google', 'oidc', 'saml']),
-    enabled: z.boolean(),
-    clientSecretConfigured: z.boolean().optional(),
-    signingCertificateConfigured: z.boolean().optional(),
-  }),
-  provider: z.discriminatedUnion('protocol', [
-    z.object({
-      key: z.string(),
-      protocol: z.literal('oidc'),
-      isEnabled: z.literal(false),
-      authenticationMode: z.literal('direct'),
-      directoryTenantId: z.string().nullable(),
-      configuration: z.object({
-        issuerUrl: z.string().url(),
-        clientId: z.string(),
-        callbackUrl: z.string().url(),
-        scopes: z.array(z.string()),
-        clientSecretRef: z.string().optional(),
-      }).strict(),
-    }),
-    z.object({
-      key: z.string(),
-      protocol: z.literal('saml'),
-      isEnabled: z.literal(false),
-      authenticationMode: z.literal('direct'),
-      directoryTenantId: z.null(),
-      configuration: z.object({
-        entityId: z.string(),
-        callbackUrl: z.string().url(),
-        ssoUrl: z.string().url(),
-        signingCertificateRef: z.string(),
-        signatureAlgorithm: z.enum(['sha256', 'sha512']),
-      }).strict(),
-    }),
-  ]),
-  requirements: z.array(z.enum([
-    'client_secret_reference',
-    'signing_certificate_reference',
-    'identity_provider_redirect_uri',
-    'identity_mappings',
-    'legacy_provider_cutover',
-  ])),
-  warnings: z.array(z.string()),
-});
-
-export const LegacyIdentityProviderCutoverRequestSchema = z.object({
-  legacyProviderId: z.string().min(1).max(128),
-  targetProviderKey: z.string().min(1).max(128),
-});
-
-export const LegacyIdentityProviderCutoverResponseSchema = z.object({
-  legacyProvider: z.object({
-    id: z.string(),
-    name: z.string(),
-    type: z.enum(['microsoft', 'google', 'oidc', 'saml']),
-  }),
-  targetProviderKey: z.string(),
-  legacyProviderDisabled: z.boolean(),
-  alreadyDisabled: z.boolean(),
-});
-
 /**
  * A conflicting provider subject is never reassigned by this request. It only
  * revokes the current account link and leaves a tombstone until a fresh,
@@ -1610,35 +1535,6 @@ export const IdentityProviderExternalIdentityUnlinkResponseSchema = z.object({
   normalizedIdentitiesMarked: z.number().int().nonnegative(),
   providerRefreshSessionsRevoked: z.number().int().nonnegative(),
   recovery: z.literal('verified_sign_in_required'),
-});
-
-export const IdentityProviderMigrationReadinessResponseSchema = z.object({
-  ready: z.boolean(),
-  targetProviderKey: z.string(),
-  legacyProviderId: z.string().nullable(),
-  requiredDefaultGroupId: z.string().nullable(),
-  activeMappingCount: z.number().int().nonnegative(),
-  checks: z.object({
-    targetExists: z.boolean(),
-    directOidc: z.boolean(),
-    directLoginProtocol: z.boolean(),
-    enabled: z.boolean(),
-    secretReferenceConfigured: z.boolean(),
-    secretReferenceAvailable: z.boolean(),
-    activeMappingsConfigured: z.boolean(),
-    defaultRoleMappingConfigured: z.boolean().nullable(),
-  }),
-  blockers: z.array(z.enum([
-    'target_not_found',
-    'target_not_direct_oidc',
-    'target_protocol_mismatch',
-    'target_disabled',
-    'secret_reference_missing',
-    'secret_reference_unavailable',
-    'identity_mappings_missing',
-    'legacy_provider_not_found',
-    'default_role_mapping_missing',
-  ])),
 });
 
 export const IdentityProviderConfigurationSchema = z.record(z.string(), z.unknown());
@@ -2005,9 +1901,6 @@ export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityPr
 export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof IdentityProviderExternalIdentityUnlinkResponseSchema>;
 export type IdentityProviderReconciliationPreview = z.infer<typeof IdentityProviderReconciliationPreviewSchema>;
 export type IdentityProviderConnectionTestResponse = z.infer<typeof IdentityProviderConnectionTestResponseSchema>;
-export type IdentityProviderMigrationReadinessResponse = z.infer<typeof IdentityProviderMigrationReadinessResponseSchema>;
-export type LegacyIdentityProviderMigrationDraft = z.infer<typeof LegacyIdentityProviderMigrationDraftSchema>;
-export type LegacyIdentityProviderCutoverResponse = z.infer<typeof LegacyIdentityProviderCutoverResponseSchema>;
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type RuntimeResourceSetMaterializationResult = z.infer<typeof RuntimeResourceSetMaterializationResultSchema>;

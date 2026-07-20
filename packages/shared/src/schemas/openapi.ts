@@ -2071,39 +2071,6 @@ registry.registerPath({
   ...authzExtension('platform.sso.providers.read', 'GET', '/api/identity/providers'),
   responses: { 200: { description: 'List identity providers', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.IdentityProviderResponseSchema) } } } },
 });
-registry.register('LegacyIdentityProviderMigrationDraft', identityProviderMigrationSchemas.LegacyIdentityProviderMigrationDraftSchema);
-registry.registerPath({
-  method: 'get',
-  path: '/api/identity/providers/environment-migration-drafts',
-  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/environment-migration-drafts'),
-  responses: { 200: { description: 'Non-secret disabled provider-neutral drafts for configured legacy environment providers', content: { 'application/json': { schema: z.array(identityProviderMigrationSchemas.LegacyIdentityProviderMigrationDraftSchema) } } } },
-});
-registry.registerPath({
-  method: 'get',
-  path: '/api/identity/providers/legacy-migration-draft/{legacyProviderId}',
-  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/legacy-migration-draft/{legacyProviderId}'),
-  request: { params: z.object({ legacyProviderId: z.string().min(1).max(128) }) },
-  responses: { 200: { description: 'Non-secret disabled provider-neutral draft for a legacy OIDC or SAML provider migration', content: { 'application/json': { schema: identityProviderMigrationSchemas.LegacyIdentityProviderMigrationDraftSchema } } }, 400: { description: 'Legacy provider cannot be represented as provider-neutral sign-in' }, 404: { description: 'Legacy provider not found' } },
-});
-registry.registerPath({
-  method: 'get',
-  path: '/api/identity/providers/migration-readiness',
-  ...authzExtension('platform.sso.providers.manage', 'GET', '/api/identity/providers/migration-readiness'),
-  request: { query: identityProviderMigrationSchemas.IdentityProviderMigrationReadinessQuerySchema },
-  responses: {
-    200: {
-      description: 'Non-mutating provider-neutral migration readiness and blockers, optionally including the selected legacy provider default-role mapping',
-      content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderMigrationReadinessResponseSchema } },
-    },
-  },
-});
-registry.registerPath({
-  method: 'post',
-  path: '/api/identity/providers/legacy-cutover',
-  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/legacy-cutover'),
-  request: { body: { content: { 'application/json': { schema: identityProviderMigrationSchemas.LegacyIdentityProviderCutoverRequestSchema } } } },
-  responses: { 200: { description: 'Disable a persisted legacy provider after its provider-neutral replacement passes readiness checks', content: { 'application/json': { schema: identityProviderMigrationSchemas.LegacyIdentityProviderCutoverResponseSchema } } }, 400: { description: 'Target provider is not ready or legacy provider is environment-managed' }, 404: { description: 'Legacy provider not found' } },
-});
 registry.registerPath({
   method: 'post',
   path: '/api/identity/providers/{key}/external-identities/unlink',

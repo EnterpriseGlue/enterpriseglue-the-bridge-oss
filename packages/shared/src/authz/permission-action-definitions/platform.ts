@@ -789,10 +789,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       routes: [
         { method: 'POST', route: '/api/sso/providers', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers', resourceResolver: 'platform.self' },
-        { method: 'GET', route: '/api/identity/providers/environment-migration-drafts', resourceResolver: 'platform.self' },
-        { method: 'GET', route: '/api/identity/providers/legacy-migration-draft/{legacyProviderId}', resourceResolver: 'platform.self' },
-        { method: 'GET', route: '/api/identity/providers/migration-readiness', resourceResolver: 'platform.self' },
-        { method: 'POST', route: '/api/identity/providers/legacy-cutover', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers/{key}/external-identities/unlink', resourceResolver: 'platform.self' },
         { method: 'PUT', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
         { method: 'DELETE', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },

@@ -59,7 +59,6 @@ export const handlers = [
     });
   }),
   http.get('/api/sso/providers', () => HttpResponse.json([])),
-  http.get('/api/identity/providers/environment-migration-drafts', () => HttpResponse.json([])),
   http.get('/api/identity/providers', () => HttpResponse.json([identityProviderFixture])),
   http.get('/api/identity/providers/:key/sync-runs', () => HttpResponse.json([])),
   http.post('/api/identity/providers/:key/test-connection', () => HttpResponse.json({ status: 'connected', protocol: 'oidc', issuer: 'https://identity.example.test' })),

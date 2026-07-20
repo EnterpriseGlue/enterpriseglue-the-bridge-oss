@@ -19,10 +19,6 @@ const service = vi.hoisted(() => ({
   listEvents: vi.fn(),
   testConnection: vi.fn(),
   testSamlMetadata: vi.fn(),
-  createLegacyMigrationDraft: vi.fn(),
-  listEnvironmentMigrationDrafts: vi.fn(),
-  getMigrationReadiness: vi.fn(),
-  cutoverLegacyProvider: vi.fn(),
   unlinkExternalIdentity: vi.fn(),
 }));
 
@@ -38,7 +34,6 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js', () => ({ identityProviderService: service }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js', () => ({ externalIdentityService: { unlink: service.unlinkExternalIdentity } }));
-vi.mock('@enterpriseglue/shared/services/platform-admin/LegacyIdentityProviderMigrationService.js', () => ({ legacyIdentityProviderMigrationService: { createDraft: service.createLegacyMigrationDraft, listEnvironmentDrafts: service.listEnvironmentMigrationDrafts, getReadiness: service.getMigrationReadiness, cutover: service.cutoverLegacyProvider } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationService.js', () => ({ ldapReconciliationService: { reconcileProvider: service.reconcile } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({ ssoNormalizedIdentityService: { previewMemberships: service.previewMemberships, replayMemberships: service.replayMemberships } }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoSyncDiagnosticsService.js', () => ({ ssoSyncDiagnosticsService: { startRun: service.startRun, completeRun: service.completeRun, failRun: service.failRun, listRuns: service.listRuns, listEvents: service.listEvents } }));
@@ -72,17 +67,6 @@ describe('identity provider routes', () => {
     service.listEvents.mockResolvedValue([{ id: 'event-1', providerId: 'provider-1', runId: 'sync-run-1', severity: 'info', type: 'membership_replayed', message: 'Membership replayed', details: '{}', createdAt: 11 }]);
     service.testConnection.mockResolvedValue({ issuer: 'https://login.example.test', authorizationEndpoint: 'https://login.example.test/auth', tokenEndpoint: 'https://login.example.test/token', jwksUri: 'https://login.example.test/jwks' });
     service.testSamlMetadata.mockResolvedValue({ metadataUrl: 'https://idp.example.test/metadata.xml', entityDescriptorCount: 2 });
-    service.createLegacyMigrationDraft.mockResolvedValue({
-      legacyProvider: { id: 'legacy-google-1', name: 'Google', type: 'google', enabled: true, clientSecretConfigured: true },
-      provider: { key: 'legacy-google-legacy-google-1', protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: null, configuration: { issuerUrl: 'https://accounts.google.com', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid', 'email'] } },
-      requirements: ['client_secret_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
-      warnings: ['The legacy client secret is not copied.'],
-    });
-    service.listEnvironmentMigrationDrafts.mockReturnValue([
-      { legacyProvider: { id: 'environment:microsoft', name: 'Microsoft Entra ID environment configuration', type: 'microsoft', enabled: true, clientSecretConfigured: true }, provider: { key: 'legacy-environment-microsoft', protocol: 'oidc', isEnabled: false, authenticationMode: 'direct', directoryTenantId: 'directory-tenant', configuration: { issuerUrl: 'https://login.microsoftonline.com/directory-tenant/v2.0', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'], clientSecretRef: 'env://MICROSOFT_CLIENT_SECRET' } }, requirements: ['identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'], warnings: ['Environment-backed secret reference.'] },
-    ]);
-    service.getMigrationReadiness.mockResolvedValue({ ready: false, targetProviderKey: 'migrated-entra', activeMappingCount: 0, checks: { targetExists: true, directOidc: true, enabled: true, secretReferenceConfigured: true, secretReferenceAvailable: true, activeMappingsConfigured: false }, blockers: ['identity_mappings_missing'] });
-    service.cutoverLegacyProvider.mockResolvedValue({ legacyProvider: { id: 'legacy-google-1', name: 'Google', type: 'google' }, targetProviderKey: 'migrated-google', legacyProviderDisabled: true, alreadyDisabled: false });
     service.unlinkExternalIdentity.mockResolvedValue({ identityId: 'external-identity-1', providerManagedMembershipsRemoved: 2, normalizedIdentitiesMarked: 1, providerRefreshSessionsRevoked: 1 });
     app = express();
     app.use(express.json());
@@ -96,58 +80,14 @@ describe('identity provider routes', () => {
     expect(service.list).toHaveBeenCalledWith('tenant-1');
   });
 
-  it('returns a non-secret provider-neutral draft for a legacy provider migration', async () => {
-    const response = await request(app).get('/api/identity/providers/legacy-migration-draft/legacy-google-1');
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual(expect.objectContaining({
-      legacyProvider: expect.objectContaining({ id: 'legacy-google-1', clientSecretConfigured: true }),
-      provider: expect.objectContaining({ protocol: 'oidc', isEnabled: false }),
-    }));
-    expect(service.createLegacyMigrationDraft).toHaveBeenCalledWith('legacy-google-1');
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
-      action: 'identity.provider.legacy_migration_draft',
-      resourceId: 'legacy-google-1',
-      details: expect.objectContaining({ clientSecretConfigured: true }),
-    }));
-    expect(JSON.stringify(response.body)).not.toContain('clientSecretEnc');
-  });
-
-  it('lists non-secret environment-backed legacy migration drafts', async () => {
-    const response = await request(app).get('/api/identity/providers/environment-migration-drafts');
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual([expect.objectContaining({
-      legacyProvider: expect.objectContaining({ id: 'environment:microsoft' }),
-      provider: expect.objectContaining({ configuration: expect.objectContaining({ clientSecretRef: 'env://MICROSOFT_CLIENT_SECRET' }) }),
-    })]);
-    expect(service.listEnvironmentMigrationDrafts).toHaveBeenCalledOnce();
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.environment_migration_drafts.read', details: { providerTypes: ['microsoft'] } }));
-  });
-
-  it('reports non-mutating migration readiness blockers for a provider-neutral target', async () => {
-    const response = await request(app).get('/api/identity/providers/migration-readiness?targetProviderKey=migrated-entra');
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual(expect.objectContaining({ ready: false, blockers: ['identity_mappings_missing'] }));
-    expect(service.getMigrationReadiness).toHaveBeenCalledWith({ targetProviderKey: 'migrated-entra', legacyProviderId: null, tenantId: 'tenant-1' });
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.migration_readiness.read', details: expect.objectContaining({ blockers: ['identity_mappings_missing'] }) }));
-  });
-
-  it('includes the selected legacy provider in migration readiness preflight', async () => {
-    const response = await request(app).get('/api/identity/providers/migration-readiness?targetProviderKey=migrated-entra&legacyProviderId=legacy-entra-1');
-
-    expect(response.status).toBe(200);
-    expect(service.getMigrationReadiness).toHaveBeenCalledWith({ targetProviderKey: 'migrated-entra', legacyProviderId: 'legacy-entra-1', tenantId: 'tenant-1' });
-  });
-
-  it('cuts over a persisted legacy provider only through the guarded migration service', async () => {
-    const response = await request(app).post('/api/identity/providers/legacy-cutover').send({ legacyProviderId: 'legacy-google-1', targetProviderKey: 'migrated-google' });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual(expect.objectContaining({ targetProviderKey: 'migrated-google', legacyProviderDisabled: true }));
-    expect(service.cutoverLegacyProvider).toHaveBeenCalledWith({ legacyProviderId: 'legacy-google-1', targetProviderKey: 'migrated-google', tenantId: 'tenant-1' });
-    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.legacy_cutover', resourceId: 'legacy-google-1', details: expect.objectContaining({ targetProviderKey: 'migrated-google' }) }));
+  it('does not expose legacy provider migration or cutover endpoints', async () => {
+    const results = await Promise.all([
+      request(app).get('/api/identity/providers/legacy-migration-draft/legacy-google-1'),
+      request(app).get('/api/identity/providers/environment-migration-drafts'),
+      request(app).get('/api/identity/providers/migration-readiness?targetProviderKey=migrated-entra'),
+      request(app).post('/api/identity/providers/legacy-cutover').send({ legacyProviderId: 'legacy-google-1', targetProviderKey: 'migrated-google' }),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([404, 404, 404, 404]);
   });
 
   it('explicitly unlinks a conflicting external subject without reassigning it and records the recovery gate', async () => {

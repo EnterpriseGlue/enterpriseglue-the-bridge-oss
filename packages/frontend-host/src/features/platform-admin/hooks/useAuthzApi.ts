@@ -65,11 +65,8 @@ import type {
   IdentityProviderConnectionTestResponse,
   IdentityProviderExternalIdentityUnlinkResponse,
   IdentityProviderMembershipReplayResponse,
-  IdentityProviderMigrationReadinessResponse,
   IdentityProviderReconciliationPreview,
   IdentityProviderResponse,
-  LegacyIdentityProviderCutoverResponse,
-  LegacyIdentityProviderMigrationDraft as SharedLegacyIdentityProviderMigrationDraft,
   LegacySsoAssignmentMappingMigrationResponse as SharedLegacySsoAssignmentMappingMigrationResponse,
   LegacySsoGroupMappingMigrationRequest as SharedLegacySsoGroupMappingMigrationRequest,
   LegacySsoGroupMappingMigrationResponse as SharedLegacySsoGroupMappingMigrationResponse,
@@ -277,9 +274,6 @@ export type IdentityProviderExternalIdentityUnlinkResult = IdentityProviderExter
 export type IdentityProviderMembershipReplayResult = IdentityProviderMembershipReplayResponse;
 export type IdentityProviderMembershipPreviewResult = IdentityProviderReconciliationPreview;
 export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTestResponse;
-export type IdentityProviderMigrationReadiness = IdentityProviderMigrationReadinessResponse;
-export type LegacyIdentityProviderCutoverResult = LegacyIdentityProviderCutoverResponse;
-export type LegacyIdentityProviderMigrationDraft = SharedLegacyIdentityProviderMigrationDraft;
 export type LegacySsoMappingMigrationRequest = SharedLegacySsoMappingMigrationRequest;
 export type LegacySsoPlatformMappingCreateRequest = SharedLegacySsoPlatformMappingCreateRequest;
 export type LegacySsoPlatformMappingUpdateRequest = SharedLegacySsoPlatformMappingUpdateRequest;
