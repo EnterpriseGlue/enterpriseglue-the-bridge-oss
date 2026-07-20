@@ -1407,6 +1407,23 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('resolves platform actions without database lookup and fails closed for a missing direct project', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(true);
+    const platformReq: any = { user: { userId: 'user-1' }, params: {} };
+    const platformNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'platform.self' })(platformReq, {} as any, platformNext);
+    expect(platformNext).toHaveBeenCalledWith();
+    expect(platformReq.authzResource).toEqual({ type: 'platform', id: null });
+    expect(getDataSource).not.toHaveBeenCalled();
+
+    projectFindOne.mockReset().mockResolvedValue(null);
+    const projectNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' })(
+      { user: { userId: 'user-1' }, params: { projectId } } as any, {} as any, projectNext,
+    );
+    expect(projectNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
+  });
+
   it('resolves an engine-scoped action from a saved filter id', async () => {
     savedFilterFindOne.mockReset().mockResolvedValue({ id: savedFilterId, engineId });
     engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null });
@@ -1652,6 +1669,11 @@ describe('requireAction project resource resolvers', () => {
     expect((await request(app).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(404);
   });
 
+  it('denies engine invitations without engine member-management permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    expect((await request(app).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(403);
+  });
+
   it('rejects unauthenticated invitation creation before resolving its target', async () => {
     const next = vi.fn();
     await requireInvitationCreateAction()({ body: { resourceType: 'tenant' } } as any, {} as any, next);
@@ -1670,6 +1692,20 @@ describe('requireAction project resource resolvers', () => {
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({
       statusCode: 500, message: 'Invitation authorization check failed',
+    }));
+  });
+
+  it('rejects invalid and unexpected composite authorization setup', async () => {
+    expect(() => requireCompositeAction('project.deploy.create', { kind: 'unsupported' as any })).toThrow('Unsupported composite authorization kind');
+
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockRejectedValueOnce('eligibility unavailable');
+    const next = vi.fn();
+    await requireCompositeAction('project.deploy.create')({
+      user: { userId: 'user-1' }, body: { projectId, engineId },
+    } as any, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 500, message: 'Composite authorization action check failed',
     }));
   });
 });
