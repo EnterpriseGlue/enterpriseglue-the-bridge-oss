@@ -530,6 +530,7 @@ export default async function globalSetup() {
       crossTenantEngineId,
       runtimeScopedEmail,
       runtimeScopedPassword,
+      runtimeScopedUserId,
       runtimeScopedEngineId,
       runtimeCustomRoleId,
       runtimeAllowedDefinitionId,

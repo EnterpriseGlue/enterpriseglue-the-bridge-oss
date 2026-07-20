@@ -45,7 +45,7 @@ test.describe('Smoke: local Access Control authorization', () => {
   });
 
   test('Effective Access displays the same engine decisions and source details as its evaluation API', async ({ page }) => {
-    test.skip(!fineGrained.scopedUserId || !fineGrained.scopedEngineId || !fineGrained.expiredUserId || !fineGrained.expiredEngineId, 'Fine-grained fixture is unavailable');
+    test.skip(!fineGrained.scopedUserId || !fineGrained.scopedEngineId || !fineGrained.groupScopedUserId || !fineGrained.groupScopedEngineId || !fineGrained.expiredUserId || !fineGrained.expiredEngineId, 'Fine-grained fixture is unavailable');
     const { email, password } = getE2ECredentials();
     if (!email || !password) throw new Error('Missing E2E credentials');
 
@@ -82,6 +82,14 @@ test.describe('Smoke: local Access Control authorization', () => {
     ]));
     await expect(panel.getByText('Access allowed')).toBeVisible();
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText('engine');
+
+    const group = await evaluate(fineGrained.groupScopedUserId!, fineGrained.groupScopedEngineId!);
+    expect(group.allowed).toBe(true);
+    expect(group.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ principalType: 'group', scopeType: 'engine', scopeId: fineGrained.groupScopedEngineId }),
+    ]));
+    await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText('group:');
 
     const expired = await evaluate(fineGrained.expiredUserId!, fineGrained.expiredEngineId!);
     expect(expired.allowed).toBe(false);
