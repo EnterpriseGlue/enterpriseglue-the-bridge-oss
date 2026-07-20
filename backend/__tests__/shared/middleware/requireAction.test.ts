@@ -480,6 +480,16 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 
+  it('rejects inventoried runtime deployments without resource-specific permission', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFind.mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+
+    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(403);
+  });
+
   it('resolves a key-based definition before authorizing it', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
