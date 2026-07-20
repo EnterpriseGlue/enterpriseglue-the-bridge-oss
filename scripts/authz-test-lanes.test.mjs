@@ -10,6 +10,7 @@ const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsa
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
+const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
@@ -76,6 +77,30 @@ test('the authorization structure gate requires exhaustive registry action cover
   assert.match(scripts['test:authz:structure'], /test:authz:api-client-middleware-coverage/);
   assert.match(scripts['test:authz:structure'], /test:authz:require-action-coverage/);
   assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
+});
+
+test('the pull-request authorization gate keeps decision coverage and focused failure modes explicit', () => {
+  assert.match(scripts['test:authz:pr'], /authorization-model-randomized\.test\.ts/);
+  assert.match(scripts['test:authz:pr'], /custom-role-scope-matrix\.test\.ts/);
+  assert.match(scripts['test:authz:pr'], /bpmn-engine-client\.test\.ts/);
+
+  const coverage = scripts['test:authz:decision-coverage'];
+  assert.match(coverage, /permissions\.test\.ts/);
+  assert.match(coverage, /services\/platform-admin\/permissions\.ts/);
+  assert.match(coverage, /coverage\.reportsDirectory coverage\/authz-decisions/);
+  assert.match(coverage, /coverage\.thresholds\.branches 60/);
+  assert.match(coverage, /coverage\.thresholds\.lines 70/);
+});
+
+test('the pull-request workflow retains browser and database evidence when authorization fails', () => {
+  assert.match(authzPrWorkflow, /name: Authorization PR Gate/);
+  assert.match(authzPrWorkflow, /pnpm run test:authz:pr/);
+  assert.match(authzPrWorkflow, /pnpm run test:authz:decision-coverage/);
+  assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=chromium/);
+  assert.match(authzPrWorkflow, /fine-grained-access-local\.spec\.ts/);
+  assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);
+  assert.match(authzPrWorkflow, /test\/results/);
+  assert.match(authzPrWorkflow, /backend\/coverage\/authz-decisions/);
 });
 
 test('machine-principal services retain literal 100 percent source coverage', () => {

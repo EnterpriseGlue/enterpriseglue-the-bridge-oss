@@ -1,0 +1,186 @@
+name: Authorization PR Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authorization-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  authorization:
+    name: Authorization decisions and Chromium smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: postgres
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: false
+      POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      JWT_SECRET: test-secret-please-change-00000000000000
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CAMUNDA_BASE_URL: http://localhost:9080/engine-rest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build shared package and backend
+        run: |
+          pnpm --filter shared run build
+          pnpm --filter webmodeler-backend run build:skip-generate
+
+      - name: Create PostgreSQL schema
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+
+      - name: Sync database schema
+        run: pnpm --filter webmodeler-backend run db:schema:sync
+
+      - name: Run focused authorization decisions
+        run: pnpm run test:authz:pr
+
+      - name: Enforce authorization decision coverage
+        run: pnpm run test:authz:decision-coverage
+
+      - name: Start Camunda mock server
+        run: |
+          mkdir -p .artifacts/authz-pr
+          npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 > .artifacts/authz-pr/camunda-mock.log 2>&1 &
+
+      - name: Start backend
+        run: pnpm --filter webmodeler-backend run start:compiled > .artifacts/authz-pr/backend.log 2>&1 &
+
+      - name: Start frontend
+        run: pnpm --filter webmodeler-frontend run dev -- --host 0.0.0.0 --port 5173 > .artifacts/authz-pr/frontend.log 2>&1 &
+
+      - name: Wait for services
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..45}; do
+            if curl -sf http://localhost:8787/health >/dev/null && curl -sf http://localhost:5173/login >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8787/health >/dev/null
+          curl -sf http://localhost:5173/login >/dev/null
+
+      - name: Run Chromium fine-grained authorization smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI=true \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BROWSERS=chromium \
+            -e PLAYWRIGHT_WORKERS=1 \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_API_BASE_URL=http://localhost:8787 \
+            -e E2E_SEED_USER=true \
+            -e E2E_DIRECT_DB_CLEANUP=true \
+            -e CAMUNDA_BASE_URL \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts --config test/e2e/playwright.config.ts"
+
+      - name: Capture database diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p .artifacts/authz-pr
+          docker ps --format '{{.Names}} {{.Image}} {{.Status}}' > .artifacts/authz-pr/docker-ps.txt
+          database_container="$(docker ps --filter 'ancestor=postgres:17' --format '{{.ID}}' | head -n 1)"
+          if [[ -n "$database_container" ]]; then
+            docker logs --tail=500 "$database_container" > .artifacts/authz-pr/postgres.log 2>&1 || true
+          fi
+
+      - name: Clean up test data
+        if: always()
+        continue-on-error: true
+        run: pnpm --filter webmodeler-backend run db:cleanup-test-data
+
+      - name: Upload authorization failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: authorization-pr-failure-${{ github.run_id }}
+          path: |
+            test/results
+            .artifacts/authz-pr
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload authorization decision coverage
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: authorization-decision-coverage-${{ github.run_id }}
+          path: backend/coverage/authz-decisions
+          if-no-files-found: warn
+          retention-days: 14
