@@ -14,6 +14,7 @@ export { ApiClient } from './ApiClient.js';
 export { AuthzAuditLog } from './AuthzAuditLog.js';
 export { AuthzGroup } from './AuthzGroup.js';
 export { AuthzGroupMembership } from './AuthzGroupMembership.js';
+export { AuthzMigrationState } from './AuthzMigrationState.js';
 export { AuthzPolicy } from './AuthzPolicy.js';
 export { AppBaseEntity as BaseEntity } from './BaseEntity.js';
 export { Batch } from './Batch.js';

@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { runMigrations } from '@enterpriseglue/shared/db/run-migrations.js';
+import {
+  LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
+  projectLegacyLocalRoleAssignmentsOnce,
+  runMigrations,
+} from '@enterpriseglue/shared/db/run-migrations.js';
 import { getDataSource, adapter } from '@enterpriseglue/shared/db/data-source.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -393,5 +398,37 @@ describe('runMigrations bootstrap behavior', () => {
     expect(integrityRunner.__repos.fileSnapshotRepo.update).toHaveBeenCalledWith({ id: 'fs-1' }, { mainFileId: 'file-1' });
     expect(bootstrapRunner.release).toHaveBeenCalledTimes(1);
     expect(integrityRunner.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('projectLegacyLocalRoleAssignmentsOnce', () => {
+  it('projects retained local rows once and records a durable marker in the same transaction', async () => {
+    const stateRepo = {
+      findOneBy: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY }),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    };
+    const manager = { getRepository: vi.fn().mockReturnValue(stateRepo) };
+    const dataSource = {
+      transaction: vi.fn(async (callback: (transactionManager: typeof manager) => unknown) => callback(manager)),
+    };
+    const syncLegacyRoleAssignments = vi.spyOn(permissionService, 'syncLegacyRoleAssignments')
+      .mockResolvedValue({ upserted: 4, removed: 1 });
+
+    try {
+      await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 123)).resolves.toEqual({ upserted: 4, removed: 1 });
+      await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 124)).resolves.toBeNull();
+
+      expect(syncLegacyRoleAssignments).toHaveBeenCalledTimes(1);
+      expect(syncLegacyRoleAssignments).toHaveBeenCalledWith({ now: 123 }, manager);
+      expect(stateRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
+        completedAt: 123,
+        details: JSON.stringify({ upserted: 4, removed: 1 }),
+      }), { conflictPaths: ['key'], skipUpdateIfNoValuesChanged: true });
+    } finally {
+      syncLegacyRoleAssignments.mockRestore();
+    }
   });
 });

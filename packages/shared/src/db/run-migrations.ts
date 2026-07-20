@@ -1,4 +1,5 @@
 import { In, IsNull, QueryRunner, TableColumn, TableIndex } from 'typeorm';
+import type { DataSource } from 'typeorm';
 import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from '../infrastructure/persistence/entities/EnvironmentTag.js';
 import { PlatformSettings } from '../infrastructure/persistence/entities/PlatformSettings.js';
@@ -14,6 +15,8 @@ import { File } from '../infrastructure/persistence/entities/File.js';
 import { WorkingFile } from '../infrastructure/persistence/entities/WorkingFile.js';
 import { FileSnapshot } from '../infrastructure/persistence/entities/FileSnapshot.js';
 import { Invitation } from '../infrastructure/persistence/entities/Invitation.js';
+import { AuthzMigrationState } from '../infrastructure/persistence/entities/AuthzMigrationState.js';
+import { generateId } from '../utils/id.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -58,6 +61,38 @@ function normalizeNullableText(value: string | null | undefined): string | null 
 
   const normalized = String(value);
   return normalized.length > 0 ? normalized : null;
+}
+
+export const LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY = 'legacy-local-role-assignment-projection-v1';
+
+/**
+ * Projects retained local collaboration rows into canonical assignments once.
+ *
+ * This runs after migrations and RBAC foundation seeding because migration
+ * query runners intentionally do not register the application entity metadata
+ * required by the permission service. The marker and assignments share one
+ * transaction so a failed projection is retried on the next startup.
+ */
+export async function projectLegacyLocalRoleAssignmentsOnce(
+  dataSource: DataSource,
+  now: number = Date.now()
+) {
+  return dataSource.transaction(async (manager) => {
+    const projectionStateRepo = manager.getRepository(AuthzMigrationState);
+    const completed = await projectionStateRepo.findOneBy({ key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY });
+    if (completed) {
+      return null;
+    }
+
+    const result = await permissionService.syncLegacyRoleAssignments({ now }, manager);
+    await projectionStateRepo.upsert({
+      id: generateId(),
+      key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
+      completedAt: now,
+      details: JSON.stringify(result),
+    }, { conflictPaths: ['key'], skipUpdateIfNoValuesChanged: true });
+    return result;
+  });
 }
 
 function buildVersioningIdentityKey(projectId: string, folderId: string | null | undefined, name: string, type: string): string {
@@ -563,12 +598,11 @@ export async function seedInitialData() {
     console.log('  Note: legacy platform-admin membership backfill:', error.message);
   }
 
-  try {
-    const result = await permissionService.syncLegacyRoleAssignments({ now }, dataSource);
-    console.log(`  ✅ legacy role assignments synced (${result.upserted} upserted, ${result.removed} removed)`);
-  } catch (error: any) {
-    console.log('  Note: legacy role assignment sync:', error.message);
+  const projectionResult = await projectLegacyLocalRoleAssignmentsOnce(dataSource, now);
+  if (projectionResult) {
+    console.log(`  ✅ legacy local role assignments projected once (${projectionResult.upserted} upserted, ${projectionResult.removed} removed)`);
   }
+
   
   console.log('✅ Initial data seeding complete');
 }

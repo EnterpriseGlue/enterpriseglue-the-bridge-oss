@@ -1600,7 +1600,7 @@ class PermissionServiceClass {
 
   async syncLegacyRoleAssignments(
     options: SyncLegacyRoleAssignmentsOptions = {},
-    providedDataSource?: DataSource
+    providedDataSource?: DataSource | EntityManager
   ): Promise<SyncLegacyRoleAssignmentsResult> {
     const dataSource = providedDataSource || await getDataSource();
     const now = options.now ?? Date.now();
