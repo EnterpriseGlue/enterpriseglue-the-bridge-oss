@@ -160,6 +160,8 @@ test('the authorization mutation guard proves denial tests kill bypassed user an
   assert.match(authzMutationRunner, /apiClientAuth\.test\.ts/);
   assert.match(authzMutationRunner, /user action deny bypass/);
   assert.match(authzMutationRunner, /API client deny bypass/);
+  assert.match(authzMutationRunner, /runtime deployment inventory bypass/);
+  assert.match(authzMutationRunner, /runtime batch partial-permission bypass/);
   assert.match(authzMutationRunner, /Authorization mutant survived/);
 });
 

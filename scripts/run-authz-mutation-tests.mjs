@@ -43,6 +43,18 @@ const mutants = [
     before: "if (!allowed) {\n        throw Errors.forbidden(`API client is not authorized for action: ${actionId}`);\n      }",
     after: "if (false) {\n        throw Errors.forbidden(`API client is not authorized for action: ${actionId}`);\n      }",
   },
+  {
+    name: 'runtime deployment inventory bypass',
+    file: 'packages/shared/src/middleware/requireAction.ts',
+    before: "if (!resources.length || resources.some((candidate) => !isTenantVisible(candidate.tenantId, tenantId))) {\n          throw Errors.forbidden('Runtime deployment is not present in the authorization inventory');\n        }",
+    after: "if (false) {\n          throw Errors.forbidden('Runtime deployment is not present in the authorization inventory');\n        }",
+  },
+  {
+    name: 'runtime batch partial-permission bypass',
+    file: 'packages/shared/src/middleware/requireAction.ts',
+    before: "const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {\n          ...context,\n          resourceType: 'engine_runtime_resource',\n          resourceId: candidate!.id,\n        })));\n        if (allowed.some((candidate) => !candidate)) throw Errors.forbidden(`Access denied for action ${action.actionId}`);",
+    after: "const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {\n          ...context,\n          resourceType: 'engine_runtime_resource',\n          resourceId: candidate!.id,\n        })));\n        if (false) throw Errors.forbidden(`Access denied for action ${action.actionId}`);",
+  },
 ];
 
 if (runFocusedTests('baseline') !== 0) {
