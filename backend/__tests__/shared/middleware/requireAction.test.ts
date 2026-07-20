@@ -1593,6 +1593,22 @@ describe('requireAction project resource resolvers', () => {
     expect(req.authzResource).toEqual({ type: 'project', id: projectId });
   });
 
+  it('rejects non-string array identifiers and supports parameter-sourced collection ids', async () => {
+    const invalidNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' })(
+      { user: { userId: 'user-1' }, params: { projectId: [42] } } as any, {} as any, invalidNext,
+    );
+    expect(invalidNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400 }));
+
+    const collectionReq: any = { user: { userId: 'user-1' }, params: { projectIds: [projectId] } };
+    const collectionNext = vi.fn();
+    await requireAction('project.projects.read', {
+      resourceResolver: 'project.visibleCollection', collectionIdsFrom: 'params', collectionIdsKey: 'projectIds',
+    })(collectionReq, {} as any, collectionNext);
+    expect(collectionNext).toHaveBeenCalledWith();
+    expect(collectionReq.authorizedProjectIds).toEqual([projectId]);
+  });
+
   it('fails closed for route-less actions and registered resolvers without middleware support', async () => {
     const routeLessNext = vi.fn();
     await requireAction('platform.users.manage')({ user: { userId: 'user-1' } } as any, {} as any, routeLessNext);
