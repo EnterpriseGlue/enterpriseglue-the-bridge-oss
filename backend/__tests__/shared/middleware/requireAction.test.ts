@@ -117,6 +117,17 @@ describe('getRuntimeResourceActionDecision', () => {
     })).resolves.toEqual({ allowed: true });
     vi.clearAllMocks();
   });
+
+  it('fails closed when a resolved runtime resource is absent from inventory', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(null) }) });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    await expect(getRuntimeResourceActionDecision({
+      actionId: 'engine.runtime.process-definitions.read', userId: 'user-1', tenantId: null,
+      engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: ['payments'],
+    })).resolves.toEqual({ allowed: false, reason: 'Action decision unavailable for this runtime resource' });
+    vi.clearAllMocks();
+  });
 });
 
 describe('requireRuntimeCollectionAction', () => {
