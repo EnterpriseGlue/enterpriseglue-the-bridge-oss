@@ -903,6 +903,15 @@ describe('requireAction project resource resolvers', () => {
     expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
   });
 
+  it('conceals missing engines reported by deployment eligibility', async () => {
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
+      checks: [{ id: 'engine.exists', allowed: false, reason: 'Engine missing' }], reasons: ['Engine missing'],
+    });
+
+    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+  });
+
   it('keeps deployment auto-grant when only the project-engine target is missing and approval permission exists', async () => {
     (deploymentEligibilityService.evaluate as unknown as Mock)
       .mockResolvedValueOnce({
