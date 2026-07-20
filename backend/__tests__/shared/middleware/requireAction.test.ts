@@ -1169,6 +1169,15 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('conceals missing locks and lock files before project permission evaluation', async () => {
+    gitLockFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).delete(`/git-locks/${gitLockId}`)).status).toBe(404);
+
+    gitLockFindOne.mockResolvedValueOnce({ id: gitLockId, fileId });
+    fileFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).delete(`/git-locks/${gitLockId}`)).status).toBe(404);
+  });
+
   it('allows a project action when any accepted permission matches', async () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'project:git:push'
