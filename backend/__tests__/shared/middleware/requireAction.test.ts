@@ -74,6 +74,17 @@ const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet }));
 
 describe('getRuntimeResourceActionDecision', () => {
+  it('allows a broad engine grant without resolving runtime inventory', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    await expect(getRuntimeResourceActionDecision({
+      actionId: 'engine.runtime.process-definitions.read', userId: 'user-1', tenantId: null,
+      engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: ['payments'],
+    })).resolves.toEqual({ allowed: true });
+    expect(getDataSource).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+  });
+
   it('fails closed when no resolved runtime resource key is supplied', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
