@@ -128,6 +128,17 @@ describe('getRuntimeResourceActionDecision', () => {
     })).resolves.toEqual({ allowed: false, reason: 'Action decision unavailable for this runtime resource' });
     vi.clearAllMocks();
   });
+
+  it('fails closed when runtime decision dependencies fail unexpectedly', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (getDataSource as unknown as Mock).mockRejectedValueOnce(new Error('inventory unavailable'));
+
+    await expect(getRuntimeResourceActionDecision({
+      actionId: 'engine.runtime.process-definitions.read', userId: 'user-1', tenantId: null,
+      engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: ['payments'],
+    })).resolves.toEqual({ allowed: false, reason: 'Action decision unavailable for this runtime resource' });
+    vi.clearAllMocks();
+  });
 });
 
 describe('requireRuntimeCollectionAction', () => {
@@ -932,6 +943,16 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.authorizedEngineIds).toEqual([engineId]);
   });
 
+  it('resolves a direct engine action and attaches the canonical engine identifier', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null });
+
+    const response = await request(app).get(`/engines/${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
+    expect(engineFindOne).toHaveBeenCalledWith({ where: { id: engineId }, select: ['id', 'tenantId'] });
+  });
+
   it('conceals missing and cross-tenant engines resolved by ID', async () => {
     engineFindOne.mockResolvedValueOnce(null);
     expect((await request(app).get('/engines/missing-engine')).status).toBe(404);
@@ -1297,6 +1318,20 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('omits missing projects from explicit project collections before checking permission', async () => {
+    projectFind.mockResolvedValue([{ id: projectId, tenantId: null }]);
+
+    const response = await request(app).get(`/projects?projectIds=${projectId},missing-project`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.collection).toEqual({
+      type: 'project', ids: [projectId], requestedIds: [projectId, 'missing-project'], deniedIds: [],
+    });
+    expect(permissionService.hasPermission).not.toHaveBeenCalledWith('project:files:view', expect.objectContaining({
+      resourceId: 'missing-project',
+    }));
+  });
+
   it('filters a project collection through the same per-resource policy boundary as project detail routes', async () => {
     projectFind.mockResolvedValue([
       { id: projectId, tenantId: null },
@@ -1509,6 +1544,14 @@ describe('requireAction project resource resolvers', () => {
       resourceType: 'engine',
       resourceId: engineId,
     }));
+  });
+
+  it('conceals a saved filter whose linked engine no longer exists', async () => {
+    savedFilterFindOne.mockReset().mockResolvedValue({ id: savedFilterId, engineId });
+    engineFindOne.mockReset().mockResolvedValue(null);
+
+    expect((await request(app).get(`/saved-filters/${savedFilterId}`)).status).toBe(404);
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
   });
 
   it('conceals missing and cross-tenant saved-filter engines', async () => {
