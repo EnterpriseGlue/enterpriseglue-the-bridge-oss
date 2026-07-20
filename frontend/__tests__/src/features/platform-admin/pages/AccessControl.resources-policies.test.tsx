@@ -8,7 +8,6 @@ import type {
   PermissionCatalogEntry,
   RoleAssignment,
   RoleSummary,
-  SsoAssignmentMapping,
 } from './AccessControlTestUtils';
 
 const {
@@ -18,18 +17,12 @@ const {
   buildEngineSetSelector,
   filterPermissions,
   filterRoles,
-  findStaleSsoAssignments,
   getAssignableRolesForPrincipal,
   getPermissionImplications,
   getPermissionRisk,
-  getSsoAssignmentDiagnostics,
-  getSsoAssignmentMappingWarning,
-  getSsoAssignmentTargetSummary,
-  getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 import {
   resetAccessControlMocks,
-  ssoAssignmentTestState,
   evaluateAccessState,
   authState,
   createRole,
@@ -68,15 +61,6 @@ import {
   decommissionExternalEngine,
   reactivateExternalEngine,
   reconcileExternalEngine,
-  createSsoPlatformMapping,
-  updateSsoPlatformMapping,
-  testSsoPlatformMapping,
-  createSsoGroupMapping,
-  testSsoGroupMapping,
-  updateSsoAssignment,
-  runSsoSyncDiagnostics,
-  previewEngineAccessTransitionCleanup,
-  applyEngineAccessTransitionCleanup,
 } from './AccessControlTestUtils';
 
 describe('AccessControl resources and policies', () => {

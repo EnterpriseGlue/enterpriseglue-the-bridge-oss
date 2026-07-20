@@ -7,10 +7,6 @@ import {
   useCreateApiClient,
   useCreateCustomPermission,
   useCreateCustomRole,
-  useSsoClaimsMappings,
-  useSsoAssignmentMappings,
-  useCreateSsoMapping,
-  useCreateSsoAssignmentMapping,
   useCurrentUserPermissions,
   useEvaluateAccess,
   useExternalEngineAudit,
@@ -30,8 +26,6 @@ import {
 
 describe('useAuthzApi', () => {
   it('exports authz query keys', () => {
-    expect(authzQueryKeys.ssoMappings).toEqual(['platform-admin', 'authz', 'sso-mappings']);
-    expect(authzQueryKeys.ssoAssignmentMappings).toEqual(['platform-admin', 'authz', 'sso-assignment-mappings']);
     expect(authzQueryKeys.myPermissions).toEqual(['platform-admin', 'authz', 'me', 'permissions']);
     expect(authzQueryKeys.permissions).toEqual(['platform-admin', 'authz', 'permissions']);
     expect(authzQueryKeys.roles).toEqual(['platform-admin', 'authz', 'roles']);
@@ -45,10 +39,6 @@ describe('useAuthzApi', () => {
   });
 
   it('exports authz hooks', () => {
-    expect(typeof useSsoClaimsMappings).toBe('function');
-    expect(typeof useSsoAssignmentMappings).toBe('function');
-    expect(typeof useCreateSsoMapping).toBe('function');
-    expect(typeof useCreateSsoAssignmentMapping).toBe('function');
     expect(typeof useCurrentUserPermissions).toBe('function');
     expect(typeof usePermissionCatalog).toBe('function');
     expect(typeof useRbacRoles).toBe('function');

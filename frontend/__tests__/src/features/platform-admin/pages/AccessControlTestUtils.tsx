@@ -12,9 +12,6 @@ import type {
   RoleAssignment,
   RoleDetail,
   RoleSummary,
-  SsoClaimsMapping,
-  SsoGroupMapping,
-  SsoAssignmentMapping,
   SsoSyncEvent,
   SsoSyncRun,
 } from '@src/features/platform-admin/hooks/useAuthzApi';
@@ -28,13 +25,6 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...await importOriginal<typeof import('react-router-dom')>(),
   useSearchParams: () => [new URLSearchParams(), vi.fn()] as const,
-}));
-
-const ssoAssignmentTestState = vi.hoisted(() => ({
-  data: null as null | {
-    matchedMappings: Array<SsoAssignmentMapping & { targetResourceId: string | null; targetResourceIds: Array<string | null> }>;
-    assignments: Array<{ roleId: string; resourceType: 'engine'; resourceId: string | null; mappingId: string }>;
-  },
 }));
 
 const evaluateAccessState = vi.hoisted(() => ({
@@ -103,21 +93,6 @@ const archiveExternalSystem = vi.fn();
 const decommissionExternalEngine = vi.fn();
 const reactivateExternalEngine = vi.fn();
 const reconcileExternalEngine = vi.fn();
-const createSsoPlatformMapping = vi.fn();
-const updateSsoPlatformMapping = vi.fn();
-const deleteSsoPlatformMapping = vi.fn();
-const testSsoPlatformMapping = vi.fn();
-const createSsoGroupMapping = vi.fn();
-const updateSsoGroupMapping = vi.fn();
-const deleteSsoGroupMapping = vi.fn();
-const testSsoGroupMapping = vi.fn();
-const createSsoAssignment = vi.fn();
-const updateSsoAssignment = vi.fn();
-const deleteSsoAssignment = vi.fn();
-const testSsoAssignment = vi.fn();
-const runSsoSyncDiagnostics = vi.fn();
-const previewEngineAccessTransitionCleanup = vi.fn();
-const applyEngineAccessTransitionCleanup = vi.fn();
 const evaluateAccess = vi.fn();
 const manualRoleOwnership = {
   source: 'manual' as const,
@@ -972,262 +947,6 @@ vi.mock('@src/features/platform-admin/hooks/useAuthzApi', () => ({
     isLoading: false,
     isError: false,
   }),
-  useSsoClaimsMappings: () => ({
-    data: [
-      {
-        id: 'platform-mapping-1',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Platform Admins',
-        targetRole: 'admin',
-        priority: 10,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ] as SsoClaimsMapping[],
-    isLoading: false,
-    isError: false,
-  }),
-  useSsoGroupMappings: () => ({
-    data: [
-      {
-        id: 'group-mapping-1',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Operators',
-        targetGroupId: 'group-1',
-        targetGroupKey: 'operations',
-        targetGroupName: 'Operations',
-        syncMode: 'authoritative',
-        priority: 5,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-1',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'SSO Operators',
-        targetGroupId: 'group-2',
-        targetGroupKey: 'sso-ops',
-        targetGroupName: 'SSO Operators',
-        syncMode: 'authoritative',
-        priority: 6,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ] as SsoGroupMapping[],
-    isLoading: false,
-    isError: false,
-  }),
-  useSsoAssignmentMappings: () => ({
-    data: [
-      {
-        id: 'mapping-1',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Ops',
-        targetScope: 'engine',
-        targetSelectorType: 'external_engine_id',
-        targetEngineId: null,
-        targetExternalEngineId: 'cluster-a/prod',
-        targetLabelKey: null,
-        targetLabelValue: null,
-        targetRoleId: 'system.engine.operator',
-        syncMode: 'authoritative',
-        priority: 0,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-2',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'All Engines',
-        targetScope: 'engine',
-        targetSelectorType: 'all_engines',
-        targetEngineId: null,
-        targetExternalEngineId: null,
-        targetLabelKey: null,
-        targetLabelValue: null,
-        targetRoleId: 'system.engine.deployer',
-        syncMode: 'additive',
-        priority: 1,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-3',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'QA',
-        targetScope: 'engine',
-        targetSelectorType: 'engine_label',
-        targetEngineId: null,
-        targetExternalEngineId: null,
-        targetLabelKey: 'environment',
-        targetLabelValue: 'qa',
-        targetRoleId: 'system.engine.operator',
-        syncMode: 'authoritative',
-        priority: 2,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-4',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: '^Regex Ops$',
-        claimOperator: 'matches_regex',
-        targetScope: 'engine',
-        targetSelectorType: 'engine_id',
-        targetEngineId: 'engine-1',
-        targetExternalEngineId: null,
-        targetLabelKey: null,
-        targetLabelValue: null,
-        targetRoleId: 'system.engine.operator',
-        syncMode: 'authoritative',
-        priority: 3,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-5',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Secret Readers',
-        targetScope: 'engine',
-        targetSelectorType: 'engine_id',
-        targetEngineId: 'engine-1',
-        targetExternalEngineId: null,
-        targetLabelKey: null,
-        targetLabelValue: null,
-        targetRoleId: 'custom.engine.secret-reader',
-        syncMode: 'authoritative',
-        priority: 4,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-6',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Audit Readers',
-        targetScope: 'engine',
-        targetSelectorType: 'engine_id',
-        targetEngineId: 'engine-1',
-        targetExternalEngineId: null,
-        targetLabelKey: null,
-        targetLabelValue: null,
-        targetRoleId: 'custom.engine.audit-reader',
-        syncMode: 'authoritative',
-        priority: 5,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'mapping-7',
-        providerId: null,
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Delete Operators',
-        targetScope: 'engine',
-        targetSelectorType: 'engine_id',
-        targetEngineId: 'engine-1',
-        targetExternalEngineId: null,
-        targetLabelKey: null,
-        targetLabelValue: null,
-        targetRoleId: 'custom.engine.permanent-delete',
-        syncMode: 'authoritative',
-        priority: 6,
-        isActive: true,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-  useSsoSyncRuns: () => ({
-    data: [
-      {
-        id: 'sync-run-1',
-        tenantId: null,
-        providerId: 'microsoft',
-        userId: '00000000-0000-4000-8000-000000000020',
-        trigger: 'login',
-        status: 'failed',
-        startedAt: 1200,
-        completedAt: 1500,
-        groupMembershipsCreated: 1,
-        groupMembershipsUpdated: 0,
-        groupMembershipsRemoved: 0,
-        assignmentsCreated: 1,
-        assignmentsUpdated: 0,
-        assignmentsRemoved: 0,
-        errorCode: 'sync_failed',
-        errorMessage: 'Engine materialization failed',
-        details: '{"providerType":"microsoft"}',
-      },
-    ] as SsoSyncRun[],
-    isLoading: false,
-    isError: false,
-  }),
-  useSsoSyncEvents: (runId?: string) => ({
-    data: runId === 'sync-run-1'
-      ? [
-        {
-          id: 'sync-event-1',
-          tenantId: null,
-          providerId: 'microsoft',
-          runId: 'sync-run-1',
-          severity: 'error',
-          type: 'engine_assignment.materialization_failed',
-          userId: '00000000-0000-4000-8000-000000000020',
-          mappingType: 'sso_assignment',
-          mappingId: 'mapping-1',
-          resourceType: 'engine',
-          resourceId: 'engine-1',
-          message: 'Engine materialization failed',
-          details: '{"engineId":"engine-1"}',
-          createdAt: 1400,
-        },
-      ] as SsoSyncEvent[]
-      : [],
-    isLoading: false,
-    isError: false,
-  }),
-  useRunSsoSyncDiagnostics: () => ({
-    mutateAsync: runSsoSyncDiagnostics,
-    isPending: false,
-    data: {
-      runId: 'sync-run-2',
-      scannedGroupMappings: 1,
-      scannedAssignmentMappings: 3,
-      scannedGroupMemberships: 2,
-      scannedAssignments: 2,
-      warnings: 1,
-      errors: 0,
-    },
-  }),
   useAuthzPolicies: () => ({
     data: [
       {
@@ -1318,101 +1037,6 @@ vi.mock('@src/features/platform-admin/hooks/useAuthzApi', () => ({
   useReconcileRuntimeResources: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useRuntimeResources: () => ({ data: [], isLoading: false, isError: false }),
   useRuntimeResourceSets: () => ({ data: [], isLoading: false, isError: false }),
-  useCreateSsoMapping: () => ({ mutateAsync: createSsoPlatformMapping, isPending: false }),
-  useUpdateSsoMapping: () => ({ mutateAsync: updateSsoPlatformMapping, isPending: false }),
-  useDeleteSsoMapping: () => ({ mutateAsync: deleteSsoPlatformMapping, isPending: false }),
-  useTestSsoMapping: () => ({
-    mutateAsync: testSsoPlatformMapping,
-    isPending: false,
-    data: { resolvedRole: 'admin', matchedMappings: [{ id: 'platform-mapping-1', name: 'Platform Admins', targetRole: 'admin' }] },
-  }),
-  useCreateSsoGroupMapping: () => ({ mutateAsync: createSsoGroupMapping, isPending: false }),
-  useUpdateSsoGroupMapping: () => ({ mutateAsync: updateSsoGroupMapping, isPending: false }),
-  useDeleteSsoGroupMapping: () => ({ mutateAsync: deleteSsoGroupMapping, isPending: false }),
-  useTestSsoGroupMapping: () => ({
-    mutateAsync: testSsoGroupMapping,
-    isPending: false,
-    data: {
-      matchedMappings: [
-        {
-          id: 'group-mapping-1',
-          providerId: null,
-          claimType: 'group',
-          claimKey: 'groups',
-          claimValue: 'Operators',
-          targetGroupId: 'group-1',
-          targetGroupKey: 'operations',
-          targetGroupName: 'Operations',
-          syncMode: 'authoritative',
-          priority: 5,
-          isActive: true,
-          createdAt: 1,
-          updatedAt: 1,
-        },
-      ],
-      memberships: [{ groupId: 'group-1', mappingId: 'group-mapping-1' }],
-    },
-  }),
-  useCreateSsoAssignmentMapping: () => ({ mutateAsync: createSsoAssignment, isPending: false }),
-  useUpdateSsoAssignmentMapping: () => ({ mutateAsync: updateSsoAssignment, isPending: false }),
-  useDeleteSsoAssignmentMapping: () => ({ mutate: deleteSsoAssignment, isPending: false }),
-  useTestSsoAssignmentMapping: () => ({ mutateAsync: testSsoAssignment, isPending: false, data: ssoAssignmentTestState.data }),
-  useSsoEngineAccessSnapshots: () => ({
-    data: [
-      {
-        id: 'snapshot-1',
-        tenantId: null,
-        providerId: 'microsoft',
-        mappingId: 'mapping-1',
-        principalType: 'user',
-        principalId: 'user-1',
-        engineId: 'engine-1',
-        providerSubjectIds: ['subject-1'],
-        providerGroupIds: ['group-1'],
-        providerAppRoleIds: [],
-        currentRoleIds: ['system.engine.operator'],
-        previousRoleIds: ['system.engine.deployer'],
-        status: 'active',
-        cleanupReason: null,
-        lastSeenAt: 1000,
-        lastSyncedAt: 1000,
-        removedAt: null,
-        details: { source: 'sso' },
-        createdAt: 900,
-        updatedAt: 1000,
-      },
-    ],
-    isLoading: false,
-    isError: false,
-  }),
-  usePreviewEngineAccessTransitionCleanup: () => ({
-    mutateAsync: previewEngineAccessTransitionCleanup,
-    isPending: false,
-    error: null,
-    data: {
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      candidates: [
-        {
-          manualAssignmentId: 'manual-1',
-          ssoAssignmentId: 'sso-1',
-          principalType: 'user',
-          principalId: 'user-1',
-          engineId: 'engine-1',
-          manualRoleId: 'system.engine.operator',
-          ssoRoleId: 'system.engine.operator',
-          sourceMappingId: 'mapping-1',
-          lastSnapshotStatus: 'active',
-          recommendedAction: 'remove_manual_duplicate',
-        },
-      ],
-    },
-  }),
-  useApplyEngineAccessTransitionCleanup: () => ({
-    mutateAsync: applyEngineAccessTransitionCleanup,
-    isPending: false,
-    error: null,
-  }),
   useIdentityEntitlementMappings: () => ({ data: [], isLoading: false, isError: false }),
   useEvaluateAccess: () => ({ mutateAsync: evaluateAccess, isPending: false, isError: false, data: evaluateAccessState.data }),
 }));
@@ -1445,17 +1069,7 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
 
 export function resetAccessControlMocks() {
     vi.clearAllMocks();
-    ssoAssignmentTestState.data = null;
     evaluateAccessState.data = null;
-    runSsoSyncDiagnostics.mockResolvedValue({
-      runId: 'sync-run-2',
-      scannedGroupMappings: 1,
-      scannedAssignmentMappings: 3,
-      scannedGroupMemberships: 2,
-      scannedAssignments: 2,
-      warnings: 1,
-      errors: 0,
-    });
     createGroup.mockResolvedValue({ id: 'group-new' });
     updateGroup.mockResolvedValue({ success: true });
     archiveGroup.mockResolvedValue(undefined);
@@ -1536,38 +1150,6 @@ export function resetAccessControlMocks() {
         summary: '1 Engine Set checked; 0 created, 1 updated, 0 removed',
       },
     });
-    createSsoPlatformMapping.mockResolvedValue({ id: 'platform-mapping-new' });
-    updateSsoPlatformMapping.mockResolvedValue(undefined);
-    deleteSsoPlatformMapping.mockResolvedValue(undefined);
-    testSsoPlatformMapping.mockResolvedValue({ resolvedRole: 'admin', matchedMappings: [{ id: 'platform-mapping-1', name: 'Platform Admins', targetRole: 'admin' }] });
-    createSsoGroupMapping.mockResolvedValue({ id: 'group-mapping-new' });
-    updateSsoGroupMapping.mockResolvedValue(undefined);
-    deleteSsoGroupMapping.mockResolvedValue(undefined);
-    testSsoGroupMapping.mockResolvedValue({ matchedMappings: [], memberships: [] });
-    previewEngineAccessTransitionCleanup.mockResolvedValue({
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      candidates: [
-        {
-          manualAssignmentId: 'manual-1',
-          ssoAssignmentId: 'sso-1',
-          principalType: 'user',
-          principalId: 'user-1',
-          engineId: 'engine-1',
-          manualRoleId: 'system.engine.operator',
-          ssoRoleId: 'system.engine.operator',
-          sourceMappingId: 'mapping-1',
-          lastSnapshotStatus: 'active',
-          recommendedAction: 'remove_manual_duplicate',
-        },
-      ],
-    });
-    applyEngineAccessTransitionCleanup.mockResolvedValue({
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      removedAssignmentIds: ['manual-1'],
-      removedCount: 1,
-    });
     authState.permissions = {
       userId: 'admin-1',
       tenantId: null,
@@ -1593,7 +1175,6 @@ export function resetAccessControlMocks() {
 }
 
 export {
-  ssoAssignmentTestState,
   evaluateAccessState,
   authState,
   createRole,
@@ -1633,21 +1214,6 @@ export {
   decommissionExternalEngine,
   reactivateExternalEngine,
   reconcileExternalEngine,
-  createSsoPlatformMapping,
-  updateSsoPlatformMapping,
-  deleteSsoPlatformMapping,
-  testSsoPlatformMapping,
-  createSsoGroupMapping,
-  updateSsoGroupMapping,
-  deleteSsoGroupMapping,
-  testSsoGroupMapping,
-  createSsoAssignment,
-  updateSsoAssignment,
-  deleteSsoAssignment,
-  testSsoAssignment,
-  runSsoSyncDiagnostics,
-  previewEngineAccessTransitionCleanup,
-  applyEngineAccessTransitionCleanup,
   evaluateAccess
 };
 
@@ -1663,9 +1229,6 @@ export type {
   ProjectEngineTarget,
   RoleAssignment,
   RoleSummary,
-  SsoClaimsMapping,
-  SsoGroupMapping,
-  SsoAssignmentMapping,
   SsoSyncEvent,
   SsoSyncRun,
 };

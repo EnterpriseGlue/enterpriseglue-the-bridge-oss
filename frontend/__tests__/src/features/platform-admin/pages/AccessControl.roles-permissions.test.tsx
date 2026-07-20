@@ -8,7 +8,6 @@ import type {
   PermissionCatalogEntry,
   RoleAssignment,
   RoleSummary,
-  SsoAssignmentMapping,
 } from './AccessControlTestUtils';
 
 const {
@@ -18,20 +17,14 @@ const {
   buildEngineSetSelector,
   filterPermissions,
   filterRoles,
-  findStaleSsoAssignments,
   getAssignableRolesForPrincipal,
   getPermissionImplications,
   getPermissionRisk,
-  getSsoAssignmentDiagnostics,
-  getSsoAssignmentMappingWarning,
-  getSsoAssignmentTargetSummary,
-  getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 const { RoleAssignmentsTable } = await import('@src/features/platform-admin/pages/access-control/RoleAssignmentsTable');
 const { canSubmitAssignment, withAssignmentPrincipalType, withAssignmentResourceType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
 import {
   resetAccessControlMocks,
-  ssoAssignmentTestState,
   evaluateAccessState,
   authState,
   createRole,
@@ -70,15 +63,6 @@ import {
   decommissionExternalEngine,
   reactivateExternalEngine,
   reconcileExternalEngine,
-  createSsoPlatformMapping,
-  updateSsoPlatformMapping,
-  testSsoPlatformMapping,
-  createSsoGroupMapping,
-  testSsoGroupMapping,
-  updateSsoAssignment,
-  runSsoSyncDiagnostics,
-  previewEngineAccessTransitionCleanup,
-  applyEngineAccessTransitionCleanup,
 } from './AccessControlTestUtils';
 
 function expectButtonAbsentOrDisabled(container: typeof screen | ReturnType<typeof within>, name: RegExp) {

@@ -21,7 +21,7 @@ import {
 } from '.';
 import { AuditReferenceLinks, findAssignmentAuditEntries, findMembershipAuditEntries, formatAuditReferences } from './auditReferences';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
-import { findIdentityEntitlementMappingForMembership, findSsoAssignmentMappingForAssignment, findSsoGroupMappingForMembership, joinLineageParts } from './inspectionLineage';
+import { findIdentityEntitlementMappingForMembership, joinLineageParts } from './inspectionLineage';
 import { buildPrincipalSummaries, buildResourceSummaries, type PrincipalSummary, type PrincipalSummaryStatus, type ResourceSummary } from './principalResourcePresentation';
 import { formatPrincipalStatus, formatResourceStatusTag, principalAssignmentHeaders, principalOverviewHeaders, principalRelationshipHeaders, resourceAssignmentHeaders, resourceOverviewHeaders, resourceRelationshipHeaders } from './principalResourceTablePresentation';
 import type { AssignmentPrincipalType } from './assignmentFormOptions';
@@ -40,14 +40,12 @@ import type {
   RoleAssignment,
   RoleSummary,
   ServiceAccount,
-  SsoAssignmentMapping,
-  SsoGroupMapping,
 } from '../../hooks/useAuthzApi';
 
 export interface PrincipalResourcePanelHelpers {
   formatAssignmentResource: (assignment: RoleAssignment, externalSystems: ExternalEngineSystem[]) => string;
-  formatAssignmentLineage: (assignment: RoleAssignment, roles?: RoleSummary[], mappings?: SsoAssignmentMapping[]) => string;
-  formatMembershipLineage: (membership: AuthzGroupMembership, mappings?: SsoGroupMapping[], identityMappings?: IdentityEntitlementMapping[]) => string;
+  formatAssignmentLineage: (assignment: RoleAssignment, roles?: RoleSummary[]) => string;
+  formatMembershipLineage: (membership: AuthzGroupMembership, identityMappings?: IdentityEntitlementMapping[]) => string;
   formatTimestamp: (value: number | null | undefined) => string;
   formatAssignmentPrincipal: (assignment: RoleAssignment, apiClients: ApiClient[], groups: AuthzGroup[], serviceAccounts: ServiceAccount[]) => string;
   getAssignmentPrincipalType: (assignment: RoleAssignment) => AssignmentPrincipalType;
@@ -72,9 +70,7 @@ export function ByPrincipalPanel({
   memberships,
   serviceAccounts,
   externalSystems,
-  ssoGroupMappings,
   identityEntitlementMappings,
-  ssoAssignmentMappings,
   auditEntries,
   onOpenAuditReference,
   helpers,
@@ -91,9 +87,7 @@ export function ByPrincipalPanel({
   memberships: AuthzGroupMembership[];
   serviceAccounts: ServiceAccount[];
   externalSystems: ExternalEngineSystem[];
-  ssoGroupMappings: SsoGroupMapping[];
   identityEntitlementMappings: IdentityEntitlementMapping[];
-  ssoAssignmentMappings: SsoAssignmentMapping[];
   auditEntries: AuthzAuditEntry[];
   onOpenAuditReference?: (entry: AuthzAuditEntry) => void;
   helpers: PrincipalResourcePanelHelpers;
@@ -152,27 +146,24 @@ export function ByPrincipalPanel({
     : null;
   const assignmentRows = [
     ...selectedDirectAssignments.map((assignment) => {
-      const mapping = findSsoAssignmentMappingForAssignment(assignment, ssoAssignmentMappings);
-      const auditReferenceEntries = findAssignmentAuditEntries(assignment, auditEntries, mapping);
+      const auditReferenceEntries = findAssignmentAuditEntries(assignment, auditEntries);
       return {
       id: `direct-${assignment.id}`,
       grantType: 'Direct',
       role: assignment.roleName || assignment.roleId,
       scope: helpers.formatAssignmentResource(assignment, externalSystems),
       source: assignment.source,
-      lineage: helpers.formatAssignmentLineage(assignment, roles, ssoAssignmentMappings),
+      lineage: helpers.formatAssignmentLineage(assignment, roles),
       audit: formatAuditReferences(auditReferenceEntries),
       auditEntries: auditReferenceEntries,
       expires: assignment.expiresAt ? helpers.formatTimestamp(assignment.expiresAt) : 'Never',
       };
     }),
     ...selectedInheritedAssignments.map(({ assignment, membership }) => {
-      const assignmentMapping = findSsoAssignmentMappingForAssignment(assignment, ssoAssignmentMappings);
-      const membershipMapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
       const identityMembershipMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
       const auditReferenceEntries = [
-        ...findMembershipAuditEntries(membership, auditEntries, membershipMapping || identityMembershipMapping),
-        ...findAssignmentAuditEntries(assignment, auditEntries, assignmentMapping),
+        ...findMembershipAuditEntries(membership, auditEntries, identityMembershipMapping),
+        ...findAssignmentAuditEntries(assignment, auditEntries),
       ];
       return {
       id: `inherited-${membership.id}-${assignment.id}`,
@@ -182,8 +173,8 @@ export function ByPrincipalPanel({
       source: `${assignment.source} via ${membership.source}`,
       lineage: joinLineageParts([
         `via group ${membership.groupName || groups.find((group) => group.id === membership.groupId)?.name || membership.groupId} (${membership.source} membership)`,
-        helpers.formatMembershipLineage(membership, ssoGroupMappings, identityEntitlementMappings),
-        helpers.formatAssignmentLineage(assignment, roles, ssoAssignmentMappings),
+        helpers.formatMembershipLineage(membership, identityEntitlementMappings),
+        helpers.formatAssignmentLineage(assignment, roles),
       ]),
       audit: formatAuditReferences(auditReferenceEntries),
       auditEntries: auditReferenceEntries,
@@ -200,15 +191,14 @@ export function ByPrincipalPanel({
   );
   const relationshipRows = selectedPrincipal?.type === 'user'
     ? selectedUserMemberships.map((membership) => {
-      const mapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
       const identityMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
-      const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, mapping || identityMapping);
+      const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, identityMapping);
       return {
       id: membership.id,
       name: membership.groupName || groups.find((group) => group.id === membership.groupId)?.name || membership.groupId,
       type: 'Group membership',
       source: membership.source,
-      lineage: helpers.formatMembershipLineage(membership, ssoGroupMappings, identityEntitlementMappings),
+      lineage: helpers.formatMembershipLineage(membership, identityEntitlementMappings),
       audit: formatAuditReferences(auditReferenceEntries),
       auditEntries: auditReferenceEntries,
       expires: membership.expiresAt ? helpers.formatTimestamp(membership.expiresAt) : 'Never',
@@ -216,15 +206,14 @@ export function ByPrincipalPanel({
     })
     : selectedPrincipal?.type === 'group'
       ? selectedGroupMembers.map((membership) => {
-        const mapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
         const identityMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
-        const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, mapping || identityMapping);
+        const auditReferenceEntries = findMembershipAuditEntries(membership, auditEntries, identityMapping);
         return {
         id: membership.id,
         name: membership.userId,
         type: 'User member',
         source: membership.source,
-        lineage: helpers.formatMembershipLineage(membership, ssoGroupMappings, identityEntitlementMappings),
+        lineage: helpers.formatMembershipLineage(membership, identityEntitlementMappings),
         audit: formatAuditReferences(auditReferenceEntries),
         auditEntries: auditReferenceEntries,
         expires: membership.expiresAt ? helpers.formatTimestamp(membership.expiresAt) : 'Never',
@@ -448,7 +437,6 @@ export function ByResourcePanel({
   engineSets,
   externalEngines,
   projectTargets,
-  ssoAssignmentMappings,
   auditEntries,
   onOpenAuditReference,
   helpers,
@@ -466,7 +454,6 @@ export function ByResourcePanel({
   engineSets: EngineSetSummary[];
   externalEngines: ExternalEngineRegistration[];
   projectTargets: ProjectEngineTarget[];
-  ssoAssignmentMappings: SsoAssignmentMapping[];
   auditEntries: AuthzAuditEntry[];
   onOpenAuditReference?: (entry: AuthzAuditEntry) => void;
   helpers: PrincipalResourcePanelHelpers;
@@ -500,15 +487,14 @@ export function ByResourcePanel({
     ? assignments.filter((assignment) => helpers.assignmentResourceMatches(assignment, selectedResource))
     : [];
   const assignmentRows = selectedAssignments.map((assignment) => {
-    const mapping = findSsoAssignmentMappingForAssignment(assignment, ssoAssignmentMappings);
-    const auditReferenceEntries = findAssignmentAuditEntries(assignment, auditEntries, mapping);
+    const auditReferenceEntries = findAssignmentAuditEntries(assignment, auditEntries);
     return {
     id: assignment.id,
     principal: helpers.formatAssignmentPrincipal(assignment, apiClients, groups, serviceAccounts),
     principalType: helpers.principalTypeLabel(helpers.getAssignmentPrincipalType(assignment)),
     role: assignment.roleName || assignment.roleId,
     source: assignment.source,
-    lineage: helpers.formatAssignmentLineage(assignment, roles, ssoAssignmentMappings),
+    lineage: helpers.formatAssignmentLineage(assignment, roles),
     audit: formatAuditReferences(auditReferenceEntries),
     auditEntries: auditReferenceEntries,
     expires: assignment.expiresAt ? helpers.formatTimestamp(assignment.expiresAt) : 'Never',

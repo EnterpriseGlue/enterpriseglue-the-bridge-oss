@@ -8,7 +8,6 @@ import type {
   PermissionCatalogEntry,
   RoleAssignment,
   RoleSummary,
-  SsoAssignmentMapping,
 } from './AccessControlTestUtils';
 
 const {
@@ -18,18 +17,12 @@ const {
   buildEngineSetSelector,
   filterPermissions,
   filterRoles,
-  findStaleSsoAssignments,
   getAssignableRolesForPrincipal,
   getPermissionImplications,
   getPermissionRisk,
-  getSsoAssignmentDiagnostics,
-  getSsoAssignmentMappingWarning,
-  getSsoAssignmentTargetSummary,
-  getSsoTargetRoleOptions,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 import {
   resetAccessControlMocks,
-  ssoAssignmentTestState,
   evaluateAccessState,
   authState,
   createRole,
@@ -68,15 +61,6 @@ import {
   decommissionExternalEngine,
   reactivateExternalEngine,
   reconcileExternalEngine,
-  createSsoPlatformMapping,
-  updateSsoPlatformMapping,
-  testSsoPlatformMapping,
-  createSsoGroupMapping,
-  testSsoGroupMapping,
-  updateSsoAssignment,
-  runSsoSyncDiagnostics,
-  previewEngineAccessTransitionCleanup,
-  applyEngineAccessTransitionCleanup,
 } from './AccessControlTestUtils';
 
 describe('AccessControl helpers', () => {
@@ -285,55 +269,6 @@ describe('AccessControl helpers', () => {
     expect(filterPermissions(permissions, 'deployment').map((permission) => permission.key)).toEqual(['engine:deploy']);
   });
 
-  it('detects SSO assignment target and stale-mapping warnings', () => {
-    const externalEngines = [
-      {
-        id: 'engine-1',
-        name: 'External Engine',
-        baseUrl: 'https://engine.example.com',
-        type: 'camunda8',
-        connectionMode: 'direct',
-        externalId: 'cluster-a/prod',
-        labels: { environment: 'prod' },
-        registrationSource: 'external_api',
-        lifecycleStatus: 'active',
-        driftStatus: 'in_sync',
-        lastExternalSyncAt: 1200,
-        capabilities: { operations: ['engine.read'] },
-        capabilityStatus: 'mismatch',
-        externalUpdatedAt: 1000,
-        createdAt: 900,
-        updatedAt: 1000,
-      },
-    ] as ExternalEngineRegistration[];
-    const missingExternalMapping = {
-      id: 'mapping-missing',
-      targetSelectorType: 'external_engine_id',
-      targetExternalEngineId: 'cluster-b/prod',
-      isActive: true,
-    } as SsoAssignmentMapping;
-    const staleAssignment = {
-      id: 'assignment-stale',
-      source: 'sso',
-      sourceMappingId: 'mapping-deleted',
-    } as RoleAssignment;
-
-    expect(getSsoAssignmentMappingWarning(missingExternalMapping, externalEngines)).toBe('Missing external engine');
-    expect(findStaleSsoAssignments([staleAssignment], [missingExternalMapping]).map((assignment) => assignment.id)).toEqual(['assignment-stale']);
-    expect(getSsoAssignmentTargetSummary(missingExternalMapping, externalEngines)).toBe('Missing external engine');
-    expect(getSsoAssignmentTargetSummary({
-      id: 'mapping-all',
-      targetSelectorType: 'all_engines',
-      isActive: true,
-    } as SsoAssignmentMapping, externalEngines)).toBe('1 registered target');
-    expect(getSsoAssignmentDiagnostics([missingExternalMapping], [staleAssignment], externalEngines)).toMatchObject({
-      activeMappings: 1,
-      inactiveMappings: 0,
-      allEngineSelectors: 0,
-      ssoAssignmentCount: 1,
-    });
-  });
-
   it('summarizes direct and group-inherited principal access', () => {
     const summaries = buildPrincipalSummaries(
       [
@@ -494,49 +429,4 @@ describe('AccessControl helpers', () => {
     })).toEqual({ mode: 'labels', labels: { environment: 'prod' }, labelMatch: 'all' });
   });
 
-  it('includes assignable custom engine roles as SSO targets', () => {
-    const roles = [
-      {
-        id: 'custom.engine.incident-responder',
-        key: 'custom.engine.incident-responder',
-        name: 'Incident Responder',
-        description: null,
-        scope: 'engine',
-        kind: 'custom',
-        isEditable: true,
-        isAssignable: true,
-        isArchived: false,
-        permissionCount: 2,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-      {
-        id: 'custom.project.editor',
-        key: 'custom.project.editor',
-        name: 'Project Editor',
-        description: null,
-        scope: 'project',
-        kind: 'custom',
-        isEditable: true,
-        isAssignable: true,
-        isArchived: false,
-        permissionCount: 2,
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ] as RoleSummary[];
-
-    expect(getSsoTargetRoleOptions(roles).map((role) => role.id)).toEqual([
-      'system.engine.operator',
-      'system.engine.deployer',
-      'custom.engine.incident-responder',
-    ]);
-    expect(getSsoTargetRoleOptions(roles, { includeEngineOwner: true, includeEngineDelegate: true }).map((role) => role.id)).toEqual([
-      'system.engine.operator',
-      'system.engine.deployer',
-      'system.engine.owner',
-      'system.engine.delegate',
-      'custom.engine.incident-responder',
-    ]);
-  });
 });

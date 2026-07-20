@@ -87,20 +87,6 @@ export function formatEffectiveAccessScope(source: EffectiveAccessSource) {
   return '-';
 }
 
-function formatSsoMappingLineage(source: EffectiveAccessSource) {
-  const mapping = source.ssoMapping;
-  if (!mapping) return null;
-  const operator = mapping.claimOperator || 'matches';
-  return `SSO mapping: ${mapping.claimType} ${mapping.claimKey} ${operator} ${mapping.claimValue}`;
-}
-
-function formatSsoGroupMappingLineage(source: EffectiveAccessSource) {
-  const mapping = source.ssoGroupMapping;
-  if (!mapping) return null;
-  const operator = mapping.claimOperator || 'matches';
-  return `SSO group: ${mapping.claimType} ${mapping.claimKey} ${operator} ${mapping.claimValue}`;
-}
-
 function formatIdentityEntitlementMappingLineage(source: EffectiveAccessSource) {
   const mapping = source.identityEntitlementMapping;
   if (!mapping) return null;
@@ -134,8 +120,6 @@ export function formatEffectiveAccessLineage(source: EffectiveAccessSource) {
     source.source ? `Assignment source: ${source.source}` : null,
     source.groupMembership ? `Group membership: ${source.groupMembership.source}` : null,
     formatIdentityEntitlementMappingLineage(source),
-    formatSsoGroupMappingLineage(source),
-    formatSsoMappingLineage(source),
     source.selectorFingerprint ? `Selector: ${source.selectorFingerprint}` : null,
     formatEngineRegistrationLineage(source),
     source.matchedBy ? `Matched by: ${formatEngineSetMatchedBy(source.matchedBy)}` : null,

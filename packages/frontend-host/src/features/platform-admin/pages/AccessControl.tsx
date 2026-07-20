@@ -35,7 +35,6 @@ import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/componen
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { apiClient } from '../../../shared/api/client';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
-import { usePlatformSyncSettings } from '../hooks/usePlatformSyncSettings';
 import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import {
   formatCapabilityDiagnostics,
@@ -58,7 +57,7 @@ import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from '.
 import { accessControlTabFromSearchParams, type AccessControlTabId } from './access-control/accessControlTabPresentation';
 import { getAssignableRolesForPrincipal, type AssignmentPrincipalType } from './access-control/assignmentFormOptions';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './access-control/dataTablePrimitives';
-import { findIdentityEntitlementMappingForMembership, findSsoAssignmentMappingForAssignment, findSsoGroupMappingForMembership, joinLineageParts } from './access-control/inspectionLineage';
+import { findIdentityEntitlementMappingForMembership, joinLineageParts } from './access-control/inspectionLineage';
 import {
   AuditReferenceLinks,
   findAssignmentAuditEntries,
@@ -86,21 +85,6 @@ import type { RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 export { filterPermissions, getPermissionImplications, getPermissionRisk } from './access-control/rolePermissionPresentation';
 export { buildPrincipalSummaries, buildResourceSummaries } from './access-control/principalResourcePresentation';
-type SsoAssignmentDiagnostics = any;
-import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
-import {
-  formatSsoSyncCounts as presentSsoSyncCounts,
-  formatSsoSyncDetails as presentSsoSyncDetails,
-  formatSsoSyncDuration as presentSsoSyncDuration,
-  formatSsoSyncMapping as presentSsoSyncMapping,
-  formatSsoSyncResource as presentSsoSyncResource,
-  getSsoSyncSeverityTagType as presentSsoSyncSeverityTagType,
-  getSsoSyncStatusTagType as presentSsoSyncStatusTagType,
-  DEFAULT_SSO_DIAGNOSTICS_OPTIONS,
-  ssoSyncEventHeaders as presentedSsoSyncEventHeaders,
-  ssoSyncRunHeaders as presentedSsoSyncRunHeaders,
-  type SsoSyncDiagnosticsOptions,
-} from './access-control/ssoSyncPresentation';
 import {
   useArchiveCustomRole,
   useArchiveExternalEngineSystem,
@@ -121,14 +105,8 @@ import {
   useCreatePolicy,
   useCreateProjectEngineTarget,
   useCreateServiceAccount,
-  useCreateSsoGroupMapping,
-  useCreateSsoMapping,
-  useCreateSsoAssignmentMapping,
-  useDeleteSsoGroupMapping,
-  useDeleteSsoMapping,
   useDeletePolicy,
   useDecommissionExternalEngine,
-  useDeleteSsoAssignmentMapping,
   useDeleteAuthzGroup,
   useEngineSet,
   useEngineSets,
@@ -150,32 +128,17 @@ import {
   useRevokeServiceAccount,
   useRotateApiClient,
   useRotateServiceAccount,
-  useRunSsoSyncDiagnostics,
-  useApplyEngineAccessTransitionCleanup,
-  usePreviewEngineAccessTransitionCleanup,
-  useSsoEngineAccessSnapshots,
   useRemoveAuthzGroupMembership,
   useRemoveRoleAssignment,
   useRoleAssignments,
   useRoleDetail,
   useServiceAccounts,
-  useSsoAssignmentMappings,
-  useSsoClaimsMappings,
-  useSsoGroupMappings,
-  useSsoSyncEvents,
-  useSsoSyncRuns,
-  useTestSsoGroupMapping,
-  useTestSsoMapping,
-  useTestSsoAssignmentMapping,
   useUpdateCustomRole,
   useUpdateAuthzGroup,
   useUpdateEngineSet,
   useUpdateExternalEngineSystem,
   useUpdatePolicy,
   useUpdateProjectEngineTarget,
-  useUpdateSsoGroupMapping,
-  useUpdateSsoMapping,
-  useUpdateSsoAssignmentMapping,
   useSyncLegacyProjectEngineTargets,
   type PermissionCatalogEntry,
   type ApiClient,
@@ -196,10 +159,6 @@ import {
   type EngineFieldOwnership,
   type EngineManagementMode,
   type IdentityEntitlementMapping,
-  type LegacySsoAssignmentMappingMigrationResponse,
-  type LegacySsoGroupMappingMigrationRequest,
-  type LegacySsoGroupMappingMigrationResponse,
-  type LegacySsoMappingMigrationRequest,
   type ProjectEngineTarget,
   type ProjectEngineTargetMode,
   type ProjectEngineTargetStatus,
@@ -208,80 +167,13 @@ import {
   type RoleSummary,
   type RuntimeResource,
   type ServiceAccount,
-  type SsoClaimsMapping,
-  type SsoGroupMapping,
-  type SsoAssignmentMapping,
-  type SsoClaimOperator,
-  type SsoEngineAccessSnapshot,
-  type SsoSyncDiagnosticsScanResult,
-  type SsoSyncEvent,
-  type SsoSyncRun,
   type AuthzResourceType,
 } from '../hooks/useAuthzApi';
-
-const CLAIM_TYPES = [
-  { id: 'group', label: 'Group' },
-  { id: 'role', label: 'Role' },
-  { id: 'email_domain', label: 'Email Domain' },
-  { id: 'custom', label: 'Custom Claim' },
-];
-
-const CLAIM_OPERATORS: Array<{ id: SsoClaimOperator | ''; label: string }> = [
-  { id: '', label: 'Wildcard compatibility' },
-  { id: 'equals', label: 'Equals' },
-  { id: 'not_equals', label: 'Does not equal' },
-  { id: 'contains', label: 'Contains' },
-  { id: 'not_contains', label: 'Does not contain' },
-  { id: 'contains_any', label: 'Contains any' },
-  { id: 'not_contains_any', label: 'Does not contain any' },
-  { id: 'contains_all', label: 'Contains all' },
-  { id: 'not_contains_all', label: 'Does not contain all' },
-  { id: 'matches_regex', label: 'Matches regex' },
-  { id: 'not_matches_regex', label: 'Does not match regex' },
-  { id: 'exists', label: 'Exists' },
-  { id: 'not_exists', label: 'Does not exist' },
-];
-
-const TARGET_SELECTORS = [
-  { id: 'engine_id', label: 'Engine ID' },
-  { id: 'all_engines', label: 'All engines' },
-  { id: 'external_engine_id', label: 'External engine ID' },
-  { id: 'engine_label', label: 'Engine label' },
-];
-
-const SYSTEM_SSO_TARGET_ROLES = [
-  { id: 'system.engine.operator', label: 'Engine Operator' },
-  { id: 'system.engine.deployer', label: 'Engine Deployer' },
-];
-
-const SYSTEM_SSO_GOVERNANCE_TARGET_ROLES = [
-  { id: 'system.engine.owner', label: 'Engine Owner' },
-  { id: 'system.engine.delegate', label: 'Engine Delegate' },
-];
-
-const SSO_PLATFORM_TARGET_ROLES = [
-  { id: 'admin', label: 'Platform Admin' },
-  { id: 'user', label: 'Standard User' },
-];
-
-const SYNC_MODES = [
-  { id: 'authoritative', label: 'Authoritative' },
-  { id: 'additive', label: 'Additive' },
-];
 
 function unavailableReason(decision: UiAuthzDecision, fallback: string): string | undefined {
   return decision.allowed ? undefined : decision.reason || fallback;
 }
 
-const ssoEngineAccessSnapshotHeaders = [
-  { key: 'principal', header: 'Principal' },
-  { key: 'engine', header: 'Engine' },
-  { key: 'roles', header: 'Current roles' },
-  { key: 'status', header: 'Status' },
-  { key: 'mapping', header: 'Mapping' },
-  { key: 'lastSync', header: 'Last sync' },
-  { key: 'lineage', header: 'Lineage' },
-];
 
 const roleAssignmentHeaders = [
   { key: 'principal', header: 'Principal' },
@@ -430,101 +322,11 @@ const DEFAULT_AUTHZ_GROUP_FORM: AuthzGroupFormState = {
   description: '',
 };
 
-interface SsoPlatformMappingFormState {
-  providerId: string;
-  claimType: SsoClaimsMapping['claimType'];
-  claimKey: string;
-  claimValue: string;
-  claimOperator: SsoClaimOperator | '';
-  targetRole: SsoClaimsMapping['targetRole'];
-  priority: number;
-  isActive: boolean;
-}
-
-const DEFAULT_SSO_PLATFORM_MAPPING_FORM: SsoPlatformMappingFormState = {
-  providerId: '',
-  claimType: 'group',
-  claimKey: 'groups',
-  claimValue: '',
-  claimOperator: '',
-  targetRole: 'user',
-  priority: 0,
-  isActive: true,
-};
-
-interface SsoGroupMappingFormState {
-  providerId: string;
-  claimType: SsoGroupMapping['claimType'];
-  claimKey: string;
-  claimValue: string;
-  claimOperator: SsoClaimOperator | '';
-  targetGroupId: string;
-  syncMode: SsoGroupMapping['syncMode'];
-  priority: number;
-  isActive: boolean;
-}
-
-const DEFAULT_SSO_GROUP_MAPPING_FORM: SsoGroupMappingFormState = {
-  providerId: '',
-  claimType: 'group',
-  claimKey: 'groups',
-  claimValue: '',
-  claimOperator: '',
-  targetGroupId: '',
-  syncMode: 'authoritative',
-  priority: 0,
-  isActive: true,
-};
-
 function scopeTag(scope: string) {
   if (scope === 'platform') return <Tag type="purple">Platform</Tag>;
   if (scope === 'project') return <Tag type="blue">Project</Tag>;
   if (scope === 'external_engine_system') return <Tag type="cyan">External system</Tag>;
   return <Tag type="teal">Engine</Tag>;
-}
-
-function roleLabel(roleId: string, roles: RoleSummary[] = []) {
-  return roles.find((role) => role.id === roleId)?.name || SYSTEM_SSO_TARGET_ROLES.find((role) => role.id === roleId)?.label || roleId;
-}
-
-function selectorLabel(mapping: SsoAssignmentMapping) {
-  if (mapping.targetSelectorType === 'all_engines') return 'All engines';
-  if (mapping.targetSelectorType === 'external_engine_id') return mapping.targetExternalEngineId || '';
-  if (mapping.targetSelectorType === 'engine_label') return `${mapping.targetLabelKey || ''}=${mapping.targetLabelValue || ''}`;
-  return mapping.targetEngineId || '';
-}
-
-function ssoClaimDefaultKey(claimType: SsoClaimsMapping['claimType']) {
-  if (claimType === 'group') return 'groups';
-  if (claimType === 'role') return 'roles';
-  if (claimType === 'email_domain') return 'email';
-  return '';
-}
-
-function ssoClaimOperatorRequiresValue(operator?: SsoClaimOperator | null) {
-  return operator !== 'exists' && operator !== 'not_exists';
-}
-
-function ssoClaimOperatorIsRegex(operator?: SsoClaimOperator | null) {
-  return operator === 'matches_regex' || operator === 'not_matches_regex';
-}
-
-function ssoClaimOperatorLabel(operator?: string | null) {
-  return CLAIM_OPERATORS.find((item) => item.id === (operator || ''))?.label || operator || 'Wildcard compatibility';
-}
-
-function ssoClaimLabel(mapping: { claimType: string; claimKey: string; claimValue: string; claimOperator?: string | null }) {
-  const operator = ssoClaimOperatorLabel(mapping.claimOperator);
-  const value = mapping.claimValue || '(no value)';
-  return `${mapping.claimType}:${mapping.claimKey} ${operator} ${value}`;
-}
-
-function providerLabel(providerId: string | null | undefined) {
-  return providerId || 'Any provider';
-}
-
-function platformRoleLabel(role: SsoClaimsMapping['targetRole'] | string) {
-  return SSO_PLATFORM_TARGET_ROLES.find((item) => item.id === role)?.label || role;
 }
 
 
@@ -719,14 +521,6 @@ function formatAssignmentPrincipal(
 }
 
 
-function getSsoEngineSnapshotStatusTagType(status: SsoEngineAccessSnapshot['status']) {
-  if (status === 'active') return 'green';
-  if (status === 'stale') return 'magenta';
-  if (status === 'provider_identity_missing' || status === 'provider_group_missing' || status === 'engine_no_longer_matches_selector') return 'red';
-  if (status === 'removed_by_sso' || status === 'removed_by_admin' || status === 'mapping_disabled') return 'purple';
-  return 'gray';
-}
-
 
 function formatAssignmentResource(assignment: RoleAssignment, externalSystems: ExternalEngineSystem[]) {
   if (assignment.resourceType === 'platform') return 'Platform';
@@ -780,14 +574,6 @@ function assignmentResourceMatches(assignment: RoleAssignment, resource: Resourc
   return getAssignmentResourceType(assignment) === resource.type && getAssignmentResourceId(assignment) === resource.id;
 }
 
-function formatSsoAssignmentMappingForInspection(mapping: SsoAssignmentMapping, roles: RoleSummary[]) {
-  return `SSO engine mapping: ${ssoClaimLabel(mapping)} -> ${selectorLabel(mapping) || 'target'} as ${roleLabel(mapping.targetRoleId, roles)} (${mapping.syncMode})`;
-}
-
-function formatSsoGroupMappingForInspection(mapping: SsoGroupMapping) {
-  return `SSO group mapping: ${ssoClaimLabel(mapping)} -> ${mapping.targetGroupName || mapping.targetGroupKey || mapping.targetGroupId} (${mapping.syncMode})`;
-}
-
 function formatIdentityEntitlementMappingForInspection(mapping: IdentityEntitlementMapping) {
   const value = mapping.matchOperator === 'exists' ? 'any value' : mapping.externalId || '-';
   return `Identity mapping: ${mapping.providerKey} ${mapping.entitlementType} ${mapping.matchOperator} ${value} -> ${mapping.targetGroupKey} (${mapping.syncMode})`;
@@ -797,11 +583,8 @@ function formatIdentityEntitlementMappingForInspection(mapping: IdentityEntitlem
 function formatAssignmentLineage(
   assignment: RoleAssignment,
   roles: RoleSummary[] = [],
-  ssoAssignmentMappings: SsoAssignmentMapping[] = [],
 ) {
-  const mapping = findSsoAssignmentMappingForAssignment(assignment, ssoAssignmentMappings);
   const parts = [
-    mapping ? formatSsoAssignmentMappingForInspection(mapping, roles) : '',
     assignment.sourceMappingId ? `mapping=${assignment.sourceMappingId}` : '',
     assignment.sourceRef ? `ref=${assignment.sourceRef}` : '',
     assignment.createdById ? `createdBy=${assignment.createdById}` : '',
@@ -810,11 +593,9 @@ function formatAssignmentLineage(
   return parts.length ? parts.join('; ') : '-';
 }
 
-function formatMembershipLineage(membership: AuthzGroupMembership, ssoGroupMappings: SsoGroupMapping[] = [], identityEntitlementMappings: IdentityEntitlementMapping[] = []) {
-  const mapping = findSsoGroupMappingForMembership(membership, ssoGroupMappings);
+function formatMembershipLineage(membership: AuthzGroupMembership, identityEntitlementMappings: IdentityEntitlementMapping[] = []) {
   const identityMapping = findIdentityEntitlementMappingForMembership(membership, identityEntitlementMappings);
   const parts = [
-    mapping ? formatSsoGroupMappingForInspection(mapping) : '',
     identityMapping ? formatIdentityEntitlementMappingForInspection(identityMapping) : '',
     membership.sourceRef ? `ref=${membership.sourceRef}` : '',
     membership.createdById ? `createdBy=${membership.createdById}` : '',
@@ -856,100 +637,6 @@ export function filterRoles(roles: RoleSummary[], searchQuery: string, scopeFilt
   });
 }
 
-export function getSsoAssignmentMappingWarning(mapping: SsoAssignmentMapping, externalEngines: ExternalEngineRegistration[]) {
-  if (!mapping.isActive) return null;
-
-  if (mapping.targetSelectorType === 'external_engine_id') {
-    const target = mapping.targetExternalEngineId;
-    if (target && !externalEngines.some((engine) => engine.externalId === target)) {
-      return 'Missing external engine';
-    }
-  }
-
-  if (mapping.targetSelectorType === 'engine_label') {
-    const labelKey = mapping.targetLabelKey;
-    const labelValue = mapping.targetLabelValue;
-    if (labelKey && labelValue && !externalEngines.some((engine) => engine.labels[labelKey] === labelValue)) {
-      return 'Missing label match';
-    }
-  }
-
-  return null;
-}
-
-export function findStaleSsoAssignments(assignments: RoleAssignment[], mappings: SsoAssignmentMapping[]) {
-  const mappingIds = new Set(mappings.map((mapping) => mapping.id));
-  return assignments.filter((assignment) =>
-    assignment.source === 'sso' && assignment.sourceMappingId && !mappingIds.has(assignment.sourceMappingId)
-  );
-}
-
-function formatTargetCount(count: number) {
-  return `${count} registered target${count === 1 ? '' : 's'}`;
-}
-
-export function getSsoAssignmentTargetSummary(mapping: SsoAssignmentMapping, externalEngines: ExternalEngineRegistration[]) {
-  const warning = getSsoAssignmentMappingWarning(mapping, externalEngines);
-  if (warning) return warning;
-
-  if (mapping.targetSelectorType === 'all_engines') {
-    return formatTargetCount(externalEngines.filter((engine) => engine.lifecycleStatus !== 'decommissioned').length);
-  }
-  if (mapping.targetSelectorType === 'external_engine_id') {
-    const count = externalEngines.filter((engine) => engine.externalId === mapping.targetExternalEngineId).length;
-    return formatTargetCount(count);
-  }
-  if (mapping.targetSelectorType === 'engine_label') {
-    const count = externalEngines.filter((engine) => {
-      const key = mapping.targetLabelKey || '';
-      return Boolean(key) && engine.labels[key] === mapping.targetLabelValue;
-    }).length;
-    return formatTargetCount(count);
-  }
-  if (externalEngines.some((engine) => engine.id === mapping.targetEngineId)) return formatTargetCount(1);
-  return 'Exact engine id; backend validates target';
-}
-
-export function getSsoAssignmentDiagnostics(
-  mappings: SsoAssignmentMapping[],
-  assignments: RoleAssignment[],
-  externalEngines: ExternalEngineRegistration[],
-): SsoAssignmentDiagnostics {
-  const targetWarnings = mappings
-    .map((mapping) => ({ mapping, warning: getSsoAssignmentMappingWarning(mapping, externalEngines) }))
-    .filter((item): item is { mapping: SsoAssignmentMapping; warning: string } => Boolean(item.warning));
-
-  return {
-    activeMappings: mappings.filter((mapping) => mapping.isActive).length,
-    inactiveMappings: mappings.filter((mapping) => !mapping.isActive).length,
-    authoritativeMappings: mappings.filter((mapping) => mapping.syncMode === 'authoritative').length,
-    additiveMappings: mappings.filter((mapping) => mapping.syncMode === 'additive').length,
-    allEngineSelectors: mappings.filter((mapping) => mapping.isActive && mapping.targetSelectorType === 'all_engines').length,
-    targetWarnings,
-    staleAssignments: findStaleSsoAssignments(assignments, mappings),
-    ssoAssignmentCount: assignments.filter((assignment) => assignment.source === 'sso').length,
-    targetSummaries: mappings.map((mapping) => ({
-      mapping,
-      summary: getSsoAssignmentTargetSummary(mapping, externalEngines),
-      warning: getSsoAssignmentMappingWarning(mapping, externalEngines),
-    })),
-  };
-}
-
-export function getSsoTargetRoleOptions(
-  roles: RoleSummary[],
-  options: { includeEngineOwner?: boolean; includeEngineDelegate?: boolean } = {},
-) {
-  const customEngineRoles = roles
-    .filter((role) => role.kind === 'custom' && role.scope === 'engine' && role.isAssignable && !role.isArchived)
-    .map((role) => ({ id: role.id, label: role.name }));
-  const governanceRoles = SYSTEM_SSO_GOVERNANCE_TARGET_ROLES.filter((role) =>
-    (role.id === 'system.engine.owner' && options.includeEngineOwner) ||
-    (role.id === 'system.engine.delegate' && options.includeEngineDelegate)
-  );
-  return [...SYSTEM_SSO_TARGET_ROLES, ...governanceRoles, ...customEngineRoles];
-}
-
 
 export default function AccessControl() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -965,10 +652,7 @@ export default function AccessControl() {
   const engineSetsQ = useEngineSets();
   const projectEngineTargetsQ = useProjectEngineTargets({ status: 'all' });
   const policiesQ = useAuthzPolicies();
-  const ssoPlatformMappingsQ = useSsoClaimsMappings({ enabled: false });
-  const ssoGroupMappingsQ = useSsoGroupMappings({ enabled: false });
   const identityEntitlementMappingsQ = useIdentityEntitlementMappings();
-  const mappingsQ = useSsoAssignmentMappings({ enabled: false });
   const createRoleM = useCreateCustomRole();
   const updateRoleM = useUpdateCustomRole();
   const archiveRoleM = useArchiveCustomRole();
@@ -1005,50 +689,6 @@ export default function AccessControl() {
   const decommissionExternalEngineM = useDecommissionExternalEngine();
   const reactivateExternalEngineM = useReactivateExternalEngine();
   const reconcileExternalEngineM = useReconcileExternalEngine();
-  const createSsoPlatformMappingM = useCreateSsoMapping();
-  const updateSsoPlatformMappingM = useUpdateSsoMapping();
-  const deleteSsoPlatformMappingM = useDeleteSsoMapping();
-  const testSsoPlatformMappingM = useTestSsoMapping();
-  const createSsoGroupMappingM = useCreateSsoGroupMapping();
-  const updateSsoGroupMappingM = useUpdateSsoGroupMapping();
-  const deleteSsoGroupMappingM = useDeleteSsoGroupMapping();
-  const testSsoGroupMappingM = useTestSsoGroupMapping();
-  const migrateSsoGroupM = useMutation({
-    mutationFn: (input: { id: string; providerKey: string }) => apiClient.post<LegacySsoGroupMappingMigrationResponse>(
-      `/api/authz/sso-group-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`,
-      { providerKey: input.providerKey.trim() } satisfies LegacySsoGroupMappingMigrationRequest,
-    ),
-    onSuccess: () => {
-      void ssoGroupMappingsQ.refetch();
-      void identityEntitlementMappingsQ.refetch();
-      setSsoGroupMigrationTarget(null);
-      setSsoGroupMigrationProviderKey('');
-      setSsoGroupMigrationError(null);
-    },
-    onError: (value: unknown) => setSsoGroupMigrationError(parseApiError(value, 'Unable to create the provider-neutral replacement').message),
-  });
-  const createM = useCreateSsoAssignmentMapping();
-  const updateM = useUpdateSsoAssignmentMapping();
-  const deleteM = useDeleteSsoAssignmentMapping();
-  const testM = useTestSsoAssignmentMapping();
-  const migrateSsoAssignmentM = useMutation({
-    mutationFn: (input: { id: string; providerKey: string; targetGroupKey: string }) => apiClient.post<LegacySsoAssignmentMappingMigrationResponse>(
-      `/api/authz/sso-assignment-mappings/${encodeURIComponent(input.id)}/migrate-provider-neutral`,
-      { providerKey: input.providerKey.trim(), targetGroupKey: input.targetGroupKey.trim() } satisfies LegacySsoMappingMigrationRequest,
-    ),
-    onSuccess: () => {
-      void mappingsQ.refetch();
-      void identityEntitlementMappingsQ.refetch();
-      void groupsQ.refetch();
-      setSsoAssignmentMigrationTarget(null);
-      setSsoAssignmentMigrationProviderKey('');
-      setSsoAssignmentMigrationGroupKey('');
-      setSsoAssignmentMigrationError(null);
-    },
-    onError: (value: unknown) => setSsoAssignmentMigrationError(parseApiError(value, 'Unable to create the provider-neutral replacement').message),
-  });
-  const runSsoSyncDiagnosticsM = useRunSsoSyncDiagnostics();
-  const platformSettingsQ = usePlatformSyncSettings();
 
   const [error, setError] = React.useState<string | null>(null);
   const [assignmentWarnings, setAssignmentWarnings] = React.useState<string[]>([]);
@@ -1077,33 +717,12 @@ export default function AccessControl() {
   const [editingPolicy, setEditingPolicy] = React.useState<AuthzPolicy | null>(null);
   const [policyForm, setPolicyForm] = React.useState<AuthzPolicyFormState>(DEFAULT_AUTHZ_POLICY_FORM);
   const [policyConditionsJson, setPolicyConditionsJson] = React.useState('{}');
-  const [ssoPlatformModalOpen, setSsoPlatformModalOpen] = React.useState(false);
-  const [editingSsoPlatformMapping, setEditingSsoPlatformMapping] = React.useState<SsoClaimsMapping | null>(null);
-  const [ssoPlatformForm, setSsoPlatformForm] = React.useState<SsoPlatformMappingFormState>(DEFAULT_SSO_PLATFORM_MAPPING_FORM);
-  const [ssoPlatformRiskAcknowledged, setSsoPlatformRiskAcknowledged] = React.useState(false);
-  const [ssoGroupModalOpen, setSsoGroupModalOpen] = React.useState(false);
-  const [editingSsoGroupMapping, setEditingSsoGroupMapping] = React.useState<SsoGroupMapping | null>(null);
-  const [ssoGroupForm, setSsoGroupForm] = React.useState<SsoGroupMappingFormState>(DEFAULT_SSO_GROUP_MAPPING_FORM);
-  const [ssoGroupRiskAcknowledged, setSsoGroupRiskAcknowledged] = React.useState(false);
-  const [ssoGroupMigrationTarget, setSsoGroupMigrationTarget] = React.useState<SsoGroupMapping | null>(null);
-  const [ssoGroupMigrationProviderKey, setSsoGroupMigrationProviderKey] = React.useState('');
-  const [ssoGroupMigrationError, setSsoGroupMigrationError] = React.useState<string | null>(null);
-  const [modalOpen, setModalOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<SsoAssignmentMapping | null>(null);
-  const [ssoAssignmentMigrationTarget, setSsoAssignmentMigrationTarget] = React.useState<SsoAssignmentMapping | null>(null);
-  const [ssoAssignmentMigrationProviderKey, setSsoAssignmentMigrationProviderKey] = React.useState('');
-  const [ssoAssignmentMigrationGroupKey, setSsoAssignmentMigrationGroupKey] = React.useState('');
-  const [ssoAssignmentMigrationError, setSsoAssignmentMigrationError] = React.useState<string | null>(null);
-  const [ssoHighRiskAcknowledged, setSsoHighRiskAcknowledged] = React.useState(false);
   const [apiClientToken, setApiClientToken] = React.useState<string | null>(null);
   const [serviceAccountToken, setServiceAccountToken] = React.useState<string | null>(null);
   const [selectedExternalEngineId, setSelectedExternalEngineId] = React.useState('');
   const [externalEngineAuditFilter, setExternalEngineAuditFilter] = React.useState<ExternalEngineAuditAction>('all');
   const [authzAuditFilter, setAuthzAuditFilter] = React.useState<AuthzAuditFilterState>(DEFAULT_AUTHZ_AUDIT_FILTER);
   const [externalEngineReconcileSummary, setExternalEngineReconcileSummary] = React.useState<string | null>(null);
-  const [selectedSsoSyncRunId, setSelectedSsoSyncRunId] = React.useState<string | null>(null);
-  const [ssoDiagnosticsOptions, setSsoDiagnosticsOptions] = React.useState<SsoSyncDiagnosticsOptions>(DEFAULT_SSO_DIAGNOSTICS_OPTIONS);
-  const [testClaims, setTestClaims] = React.useState('{\n  "email": "user@example.com",\n  "groups": ["Camunda Operators"]\n}');
   const roleDetailRoleId = roleModalOpen ? (editingRole?.id || duplicatingRole?.id) : undefined;
   const roleDetailQ = useRoleDetail(roleDetailRoleId);
   const selectedEngineSetQ = useEngineSet(selectedEngineSetId || undefined);
@@ -1118,12 +737,6 @@ export default function AccessControl() {
   const groupsReadDecision = useActionDecision('platform.authz.groups.read', platformAuthzResource);
   const groupsManageDecision = useActionDecision('platform.authz.groups.manage', platformAuthzResource);
   const effectiveAccessDecision = useActionDecision('platform.authz.evaluate', platformAuthzResource);
-  const ssoPlatformMappingsReadDecision = useActionDecision('platform.sso.platform-role-mappings.read', platformAuthzResource);
-  const ssoPlatformMappingsManageDecision = useActionDecision('platform.sso.platform-role-mappings.manage', platformAuthzResource);
-  const ssoGroupMappingsReadDecision = useActionDecision('platform.sso.group-mappings.read', platformAuthzResource);
-  const ssoGroupMappingsManageDecision = useActionDecision('platform.sso.group-mappings.manage', platformAuthzResource);
-  const ssoAssignmentsReadDecision = useActionDecision('platform.sso.engine-assignments.read', platformAuthzResource);
-  const ssoAssignmentsManageDecision = useActionDecision('platform.sso.engine-assignments.manage', platformAuthzResource);
   const engineSetsReadDecision = useActionDecision('platform.engine-sets.read', platformAuthzResource);
   const engineSetsManageDecision = useActionDecision('platform.engine-sets.manage', platformAuthzResource);
   const projectTargetsReadDecision = useActionDecision('platform.project-engine-targets.read', platformAuthzResource);
@@ -1158,7 +771,6 @@ export default function AccessControl() {
   });
   const reconcileRuntimeResourcesM = useReconcileRuntimeResources();
   const assignmentsReadUnavailableReason = unavailableReason(assignmentsReadDecision, 'Missing permission platform:authz:roles:view');
-  const ssoAssignmentsManageUnavailableReason = unavailableReason(ssoAssignmentsManageDecision, 'Missing permission platform:sso-assignments:manage');
   const engineSetsManageUnavailableReason = unavailableReason(engineSetsManageDecision, 'Missing permission platform:engine-sets:manage');
   const projectTargetsManageUnavailableReason = unavailableReason(projectTargetsManageDecision, 'Missing permission platform:project-engine-targets:manage');
   const deploymentEligibilityUnavailableReason = unavailableReason(deploymentEligibilityDecision, 'Missing permission platform:project-engine-targets:view');
@@ -1170,11 +782,6 @@ export default function AccessControl() {
   const externalEngineAuditReadUnavailableReason = unavailableReason(externalEngineAuditReadDecision, 'Missing permission platform:engine-registration:manage');
   const externalEngineReconcileUnavailableReason = unavailableReason(externalEngineReconcileDecision, 'Missing permission platform:engine-registration:manage');
   const externalEngineLifecycleUnavailableReason = unavailableReason(externalEngineLifecycleDecision, 'Missing permission platform:engine-registration:manage');
-  const ssoSyncRunsQ = useSsoSyncRuns({ limit: 10 }, { enabled: ssoAssignmentsReadDecision.allowed });
-  const ssoSyncEventsQ = useSsoSyncEvents(selectedSsoSyncRunId || undefined, { limit: 50 }, {
-    enabled: ssoAssignmentsReadDecision.allowed && Boolean(selectedSsoSyncRunId),
-  });
-  const ssoEngineAccessSnapshotsQ = useSsoEngineAccessSnapshots({ limit: 25 }, { enabled: ssoAssignmentsReadDecision.allowed });
   const authzAuditQ = useAuthzAuditLog({
     userId: authzAuditFilter.userId.trim() || undefined,
     resourceType: authzAuditFilter.resourceType.trim() || undefined,
@@ -1198,7 +805,6 @@ export default function AccessControl() {
     enabled: auditReadDecision.allowed && engineSetsReadDecision.allowed && Boolean(selectedEngineSetId),
   });
   const canManageRoles = rolesManageDecision.allowed;
-  const canManageSsoAssignments = ssoAssignmentsManageDecision.allowed;
   const showExternalRegistrationTab = apiClientsReadDecision.allowed || serviceAccountsReadDecision.allowed || externalSystemsReadDecision.allowed || externalEnginesReadDecision.allowed;
   const hasVisibleTabs = rolesReadDecision.allowed ||
     permissionsReadDecision.allowed ||
@@ -1271,27 +877,6 @@ export default function AccessControl() {
 
   const [engineSetForm, setEngineSetForm] = React.useState<EngineSetFormState>(DEFAULT_ENGINE_SET_FORM);
 
-  const [form, setForm] = React.useState({
-    providerId: '',
-    claimType: 'group' as SsoAssignmentMapping['claimType'],
-    claimKey: 'groups',
-    claimValue: '',
-    claimOperator: '' as SsoClaimOperator | '',
-    targetSelectorType: 'engine_id' as SsoAssignmentMapping['targetSelectorType'],
-    targetEngineId: '',
-    targetExternalEngineId: '',
-    targetLabelKey: '',
-    targetLabelValue: '',
-    targetRoleId: 'system.engine.operator' as SsoAssignmentMapping['targetRoleId'],
-    syncMode: 'authoritative' as SsoAssignmentMapping['syncMode'],
-    priority: 0,
-    isActive: true,
-  });
-  const ssoSelectedTargetRoleId = modalOpen && form.targetRoleId && !form.targetRoleId.startsWith('system.')
-    ? form.targetRoleId
-    : undefined;
-  const ssoSelectedTargetRoleDetailQ = useRoleDetail(ssoSelectedTargetRoleId);
-
   const permissions = permissionsQ.data || [];
   const roles = rolesQ.data || [];
   const assignments = assignmentsQ.data || [];
@@ -1307,55 +892,7 @@ export default function AccessControl() {
   const authzAuditEntries = authzAuditQ.data || [];
   const inspectionAuditEntries = inspectionAuditQ.data || [];
   const externalEngineAudit = externalEngineAuditQ.data || [];
-  const ssoPlatformMappings = ssoPlatformMappingsQ.data || [];
-  const ssoGroupMappings = ssoGroupMappingsQ.data || [];
   const identityEntitlementMappings = identityEntitlementMappingsQ.data || [];
-  const mappings = mappingsQ.data || [];
-  const ssoSyncRuns = ssoSyncRunsQ.data || [];
-  const ssoSyncEvents = ssoSyncEventsQ.data || [];
-  const ssoEngineAccessSnapshots = ssoEngineAccessSnapshotsQ.data || [];
-  const staleSsoAssignments = React.useMemo(
-    () => findStaleSsoAssignments(assignments, mappings),
-    [assignments, mappings],
-  );
-  const ssoDiagnostics = React.useMemo(
-    () => getSsoAssignmentDiagnostics(mappings, assignments, externalEngines),
-    [assignments, externalEngines, mappings],
-  );
-  const ssoAllEnginesAssignmentMappingsEnabled = platformSettingsQ.data?.ssoAllEnginesAssignmentMappingsEnabled ?? true;
-  const ssoEngineOwnerAssignmentMappingsEnabled = platformSettingsQ.data?.ssoEngineOwnerAssignmentMappingsEnabled ?? false;
-  const ssoEngineDelegateAssignmentMappingsEnabled = platformSettingsQ.data?.ssoEngineDelegateAssignmentMappingsEnabled ?? false;
-  const ssoRegexClaimMappingsEnabled = platformSettingsQ.data?.ssoRegexClaimMappingsEnabled ?? false;
-  const ssoSecretViewMappingsEnabled = platformSettingsQ.data?.ssoSecretViewMappingsEnabled ?? false;
-  const ssoUnredactedAuditMappingsEnabled = platformSettingsQ.data?.ssoUnredactedAuditMappingsEnabled ?? false;
-  const ssoPermanentDeleteMappingsEnabled = platformSettingsQ.data?.ssoPermanentDeleteMappingsEnabled ?? false;
-  const ssoTargetRoleOptions = React.useMemo(
-    () => getSsoTargetRoleOptions(roles, {
-      includeEngineOwner: ssoEngineOwnerAssignmentMappingsEnabled || form.targetRoleId === 'system.engine.owner',
-      includeEngineDelegate: ssoEngineDelegateAssignmentMappingsEnabled || form.targetRoleId === 'system.engine.delegate',
-    }),
-    [form.targetRoleId, roles, ssoEngineDelegateAssignmentMappingsEnabled, ssoEngineOwnerAssignmentMappingsEnabled],
-  );
-  const ssoTargetSelectors = React.useMemo(() => {
-    if (ssoAllEnginesAssignmentMappingsEnabled || form.targetSelectorType === 'all_engines') {
-      return TARGET_SELECTORS;
-    }
-    return TARGET_SELECTORS.filter((selector) => selector.id !== 'all_engines');
-  }, [form.targetSelectorType, ssoAllEnginesAssignmentMappingsEnabled]);
-
-  React.useEffect(() => {
-    if (!ssoAssignmentsReadDecision.allowed) {
-      if (selectedSsoSyncRunId) setSelectedSsoSyncRunId(null);
-      return;
-    }
-    if (ssoSyncRuns.length === 0) {
-      if (selectedSsoSyncRunId) setSelectedSsoSyncRunId(null);
-      return;
-    }
-    if (!selectedSsoSyncRunId || !ssoSyncRuns.some((run) => run.id === selectedSsoSyncRunId)) {
-      setSelectedSsoSyncRunId(ssoSyncRuns[0].id);
-    }
-  }, [selectedSsoSyncRunId, ssoAssignmentsReadDecision.allowed, ssoSyncRuns]);
 
   React.useEffect(() => {
     const engines = runtimeResourceEnginesQ.data || [];
@@ -1367,67 +904,6 @@ export default function AccessControl() {
       setSelectedRuntimeEngineId(engines[0].id);
     }
   }, [engineSetsReadDecision.allowed, runtimeResourceEnginesQ.data, selectedRuntimeEngineId]);
-  const ssoAllEnginesBlockedBySettings =
-    form.targetSelectorType === 'all_engines' &&
-    form.isActive &&
-    !ssoAllEnginesAssignmentMappingsEnabled;
-  const ssoGovernanceRoleSelected = form.targetRoleId === 'system.engine.owner' || form.targetRoleId === 'system.engine.delegate';
-  const ssoGovernanceRoleBlockedBySettings =
-    form.isActive &&
-    (
-      (form.targetRoleId === 'system.engine.owner' && !ssoEngineOwnerAssignmentMappingsEnabled) ||
-      (form.targetRoleId === 'system.engine.delegate' && !ssoEngineDelegateAssignmentMappingsEnabled)
-    );
-  const ssoPlatformRegexOperatorSelected = ssoClaimOperatorIsRegex(ssoPlatformForm.claimOperator || null);
-  const ssoGroupRegexOperatorSelected = ssoClaimOperatorIsRegex(ssoGroupForm.claimOperator || null);
-  const ssoRegexOperatorSelected = ssoClaimOperatorIsRegex(form.claimOperator || null);
-  const ssoPlatformRegexBlockedBySettings = ssoPlatformForm.isActive && ssoPlatformRegexOperatorSelected && !ssoRegexClaimMappingsEnabled;
-  const ssoGroupRegexBlockedBySettings = ssoGroupForm.isActive && ssoGroupRegexOperatorSelected && !ssoRegexClaimMappingsEnabled;
-  const ssoRegexOperatorBlockedBySettings = form.isActive && ssoRegexOperatorSelected && !ssoRegexClaimMappingsEnabled;
-  const ssoSelectedTargetPermissionIds = ssoSelectedTargetRoleDetailQ.data?.permissions || [];
-  const ssoCustomSecretRoleSelected =
-    form.isActive &&
-    ssoSelectedTargetPermissionIds.some((permissionId) =>
-      permissionId === 'engine:secrets:view' || permissionId === 'engine:secrets:manage'
-    );
-  const ssoCustomUnredactedAuditRoleSelected =
-    form.isActive &&
-    ssoSelectedTargetPermissionIds.some((permissionId) => permissionId === 'platform:audit:unredacted-view');
-  const ssoCustomPermanentDeleteRoleSelected =
-    form.isActive &&
-    ssoSelectedTargetPermissionIds.some((permissionId) => permissionId === 'platform:users:permanent-delete' || permissionId.endsWith(':permanent-delete'));
-  const ssoCustomSecretRoleBlockedBySettings = ssoCustomSecretRoleSelected && !ssoSecretViewMappingsEnabled;
-  const ssoCustomUnredactedAuditRoleBlockedBySettings = ssoCustomUnredactedAuditRoleSelected && !ssoUnredactedAuditMappingsEnabled;
-  const ssoCustomPermanentDeleteRoleBlockedBySettings = ssoCustomPermanentDeleteRoleSelected && !ssoPermanentDeleteMappingsEnabled;
-  const ssoSensitivePermissionRiskLabels = [
-    ...(ssoCustomSecretRoleSelected ? ['engine secret access'] : []),
-    ...(ssoCustomUnredactedAuditRoleSelected ? ['unredacted audit access'] : []),
-    ...(ssoCustomPermanentDeleteRoleSelected ? ['permanent-delete authority'] : []),
-  ];
-  const ssoSensitivePermissionRoleSelected =
-    ssoCustomSecretRoleSelected ||
-    ssoCustomUnredactedAuditRoleSelected ||
-    ssoCustomPermanentDeleteRoleSelected;
-  const ssoSensitivePermissionRoleBlockedBySettings =
-    ssoCustomSecretRoleBlockedBySettings ||
-    ssoCustomUnredactedAuditRoleBlockedBySettings ||
-    ssoCustomPermanentDeleteRoleBlockedBySettings;
-  const ssoPlatformRegexRequiresAcknowledgement =
-    ssoPlatformForm.isActive && ssoPlatformRegexOperatorSelected && !ssoPlatformRegexBlockedBySettings;
-  const ssoGroupRegexRequiresAcknowledgement =
-    ssoGroupForm.isActive && ssoGroupRegexOperatorSelected && !ssoGroupRegexBlockedBySettings;
-  const ssoHighRiskMappingSelected = form.targetSelectorType === 'all_engines' || ssoGovernanceRoleSelected || ssoRegexOperatorSelected || ssoSensitivePermissionRoleSelected;
-  const ssoHighRiskMappingAcknowledgementSelected =
-    form.targetSelectorType === 'all_engines' ||
-    ssoRegexOperatorSelected ||
-    ssoSensitivePermissionRoleSelected;
-  const ssoHighRiskMappingRequiresAcknowledgement =
-    form.isActive &&
-    ssoHighRiskMappingAcknowledgementSelected &&
-    !ssoAllEnginesBlockedBySettings &&
-    !ssoRegexOperatorBlockedBySettings &&
-    !ssoSensitivePermissionRoleBlockedBySettings;
-
   React.useEffect(() => {
     if (!roleDetailQ.data) return;
     if (editingRole) {
@@ -2050,239 +1526,6 @@ export default function AccessControl() {
     }));
   };
 
-  const openCreateSsoPlatformMapping = () => {
-    setEditingSsoPlatformMapping(null);
-    setSsoPlatformRiskAcknowledged(false);
-    setSsoPlatformForm(DEFAULT_SSO_PLATFORM_MAPPING_FORM);
-    setSsoPlatformModalOpen(true);
-  };
-
-  const openEditSsoPlatformMapping = (mapping: SsoClaimsMapping) => {
-    setEditingSsoPlatformMapping(mapping);
-    setSsoPlatformRiskAcknowledged(false);
-    setSsoPlatformForm({
-      providerId: mapping.providerId || '',
-      claimType: mapping.claimType,
-      claimKey: mapping.claimKey,
-      claimValue: mapping.claimValue,
-      claimOperator: mapping.claimOperator || '',
-      targetRole: mapping.targetRole,
-      priority: mapping.priority,
-      isActive: mapping.isActive,
-    });
-    setSsoPlatformModalOpen(true);
-  };
-
-  const submitSsoPlatformMapping = async () => {
-    try {
-      const payload = {
-        ...ssoPlatformForm,
-        providerId: ssoPlatformForm.providerId.trim() || undefined,
-        claimKey: ssoPlatformForm.claimKey.trim(),
-        claimValue: ssoPlatformForm.claimValue.trim(),
-        claimOperator: ssoPlatformForm.claimOperator || null,
-        ...(ssoPlatformRegexOperatorSelected
-          ? { riskAcknowledged: ssoPlatformRiskAcknowledged }
-          : {}),
-      };
-      if (editingSsoPlatformMapping) {
-        await updateSsoPlatformMappingM.mutateAsync({ id: editingSsoPlatformMapping.id, ...payload });
-      } else {
-        await createSsoPlatformMappingM.mutateAsync(payload);
-      }
-      setSsoPlatformModalOpen(false);
-      setEditingSsoPlatformMapping(null);
-      setSsoPlatformRiskAcknowledged(false);
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to save platform role SSO mapping').message);
-    }
-  };
-
-  const deleteSsoPlatformMapping = async (id: string) => {
-    try {
-      await deleteSsoPlatformMappingM.mutateAsync(id);
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to delete platform role SSO mapping').message);
-    }
-  };
-
-  const testSsoPlatformMappings = async () => {
-    try {
-      await testSsoPlatformMappingM.mutateAsync({ claims: JSON.parse(testClaims) });
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to test platform role SSO mappings').message);
-    }
-  };
-
-  const openCreateSsoGroupMapping = () => {
-    setEditingSsoGroupMapping(null);
-    setSsoGroupRiskAcknowledged(false);
-    setSsoGroupForm({
-      ...DEFAULT_SSO_GROUP_MAPPING_FORM,
-      targetGroupId: groups.find((group) => !group.isArchived)?.id || '',
-    });
-    setSsoGroupModalOpen(true);
-  };
-
-  const openEditSsoGroupMapping = (mapping: SsoGroupMapping) => {
-    setEditingSsoGroupMapping(mapping);
-    setSsoGroupRiskAcknowledged(false);
-    setSsoGroupForm({
-      providerId: mapping.providerId || '',
-      claimType: mapping.claimType,
-      claimKey: mapping.claimKey,
-      claimValue: mapping.claimValue,
-      claimOperator: mapping.claimOperator || '',
-      targetGroupId: mapping.targetGroupId,
-      syncMode: mapping.syncMode,
-      priority: mapping.priority,
-      isActive: mapping.isActive,
-    });
-    setSsoGroupModalOpen(true);
-  };
-
-  const submitSsoGroupMapping = async () => {
-    try {
-      const payload = {
-        ...ssoGroupForm,
-        providerId: ssoGroupForm.providerId.trim() || null,
-        claimKey: ssoGroupForm.claimKey.trim(),
-        claimValue: ssoGroupForm.claimValue.trim(),
-        claimOperator: ssoGroupForm.claimOperator || null,
-        ...(ssoGroupRegexOperatorSelected
-          ? { riskAcknowledged: ssoGroupRiskAcknowledged }
-          : {}),
-      };
-      if (editingSsoGroupMapping) {
-        await updateSsoGroupMappingM.mutateAsync({ id: editingSsoGroupMapping.id, ...payload });
-      } else {
-        await createSsoGroupMappingM.mutateAsync(payload);
-      }
-      setSsoGroupModalOpen(false);
-      setEditingSsoGroupMapping(null);
-      setSsoGroupRiskAcknowledged(false);
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to save SSO group mapping').message);
-    }
-  };
-
-  const deleteSsoGroupMapping = async (id: string) => {
-    try {
-      await deleteSsoGroupMappingM.mutateAsync(id);
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to delete SSO group mapping').message);
-    }
-  };
-
-  const testSsoGroupMappings = async () => {
-    try {
-      await testSsoGroupMappingM.mutateAsync({ claims: JSON.parse(testClaims) });
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to test SSO group mappings').message);
-    }
-  };
-
-  const openCreate = () => {
-    setEditing(null);
-    setSsoHighRiskAcknowledged(false);
-    setForm({
-      providerId: '',
-      claimType: 'group',
-      claimKey: 'groups',
-      claimValue: '',
-      claimOperator: '',
-      targetSelectorType: 'engine_id',
-      targetEngineId: '',
-      targetExternalEngineId: '',
-      targetLabelKey: '',
-      targetLabelValue: '',
-      targetRoleId: 'system.engine.operator',
-      syncMode: 'authoritative',
-      priority: 0,
-      isActive: true,
-    });
-    setModalOpen(true);
-  };
-
-  const openEdit = (mapping: SsoAssignmentMapping) => {
-    setEditing(mapping);
-    setSsoHighRiskAcknowledged(false);
-    setForm({
-      providerId: mapping.providerId || '',
-      claimType: mapping.claimType,
-      claimKey: mapping.claimKey,
-      claimValue: mapping.claimValue,
-      claimOperator: mapping.claimOperator || '',
-      targetSelectorType: mapping.targetSelectorType,
-      targetEngineId: mapping.targetEngineId || '',
-      targetExternalEngineId: mapping.targetExternalEngineId || '',
-      targetLabelKey: mapping.targetLabelKey || '',
-      targetLabelValue: mapping.targetLabelValue || '',
-      targetRoleId: mapping.targetRoleId,
-      syncMode: mapping.syncMode,
-      priority: mapping.priority,
-      isActive: mapping.isActive,
-    });
-    setModalOpen(true);
-  };
-
-  const submit = async () => {
-    try {
-      const payload = {
-        ...form,
-        providerId: form.providerId || null,
-        claimOperator: form.claimOperator || null,
-        targetEngineId: form.targetSelectorType === 'engine_id' ? form.targetEngineId || null : null,
-        targetExternalEngineId: form.targetSelectorType === 'external_engine_id' ? form.targetExternalEngineId || null : null,
-        targetLabelKey: form.targetSelectorType === 'engine_label' ? form.targetLabelKey || null : null,
-        targetLabelValue: form.targetSelectorType === 'engine_label' ? form.targetLabelValue || null : null,
-        ...(ssoHighRiskMappingRequiresAcknowledgement
-          ? { riskAcknowledged: ssoHighRiskAcknowledged }
-          : {}),
-      };
-      if (editing) {
-        await updateM.mutateAsync({ id: editing.id, ...payload });
-      } else {
-        await createM.mutateAsync(payload);
-      }
-      setModalOpen(false);
-      setSsoHighRiskAcknowledged(false);
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to save SSO assignment mapping').message);
-    }
-  };
-
-  const testAssignments = async () => {
-    try {
-      await testM.mutateAsync({ claims: JSON.parse(testClaims) });
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to test claims').message);
-    }
-  };
-
-  const runSsoSyncDiagnostics = async () => {
-    try {
-      await runSsoSyncDiagnosticsM.mutateAsync({
-        trigger: 'manual',
-        includeProviderChecks: ssoDiagnosticsOptions.includeProviderChecks,
-        includeSnapshotReplay: ssoDiagnosticsOptions.includeSnapshotReplay,
-        refreshProviderClaims: ssoDiagnosticsOptions.includeSnapshotReplay && ssoDiagnosticsOptions.refreshProviderClaims,
-        includeCleanup: ssoDiagnosticsOptions.includeCleanup,
-      });
-      setError(null);
-    } catch (e) {
-      setError(parseApiError(e, 'Unable to run SSO sync diagnostics').message);
-    }
-  };
-
   const openAuthzAuditReference = React.useCallback((entry: AuthzAuditEntry) => {
     setAuthzAuditFilter((current) => ({
       ...current,
@@ -2392,9 +1635,7 @@ export default function AccessControl() {
                 memberships={groupsReadDecision.allowed ? groupMemberships : []}
                 serviceAccounts={serviceAccountsReadDecision.allowed ? serviceAccounts : []}
                 externalSystems={externalSystemsReadDecision.allowed ? externalSystems : []}
-                ssoGroupMappings={ssoGroupMappingsReadDecision.allowed ? ssoGroupMappings : []}
-                identityEntitlementMappings={ssoGroupMappingsReadDecision.allowed ? identityEntitlementMappings : []}
-                ssoAssignmentMappings={ssoAssignmentsReadDecision.allowed ? mappings : []}
+                identityEntitlementMappings={identityEntitlementMappings}
                 auditEntries={auditReadDecision.allowed ? inspectionAuditEntries : []}
                 onOpenAuditReference={auditReadDecision.allowed ? openAuthzAuditReference : undefined}
                 helpers={principalResourcePanelHelpers}
@@ -2404,9 +1645,7 @@ export default function AccessControl() {
                   (apiClientsReadDecision.allowed && apiClientsQ.isLoading) ||
                   (serviceAccountsReadDecision.allowed && serviceAccountsQ.isLoading) ||
                   (externalSystemsReadDecision.allowed && externalSystemsQ.isLoading) ||
-                  (ssoGroupMappingsReadDecision.allowed && ssoGroupMappingsQ.isLoading) ||
-                  (ssoGroupMappingsReadDecision.allowed && identityEntitlementMappingsQ.isLoading) ||
-                  (ssoAssignmentsReadDecision.allowed && mappingsQ.isLoading) ||
+                  identityEntitlementMappingsQ.isLoading ||
                   (policiesReadDecision.allowed && policiesQ.isLoading) ||
                   (auditReadDecision.allowed && inspectionAuditQ.isLoading)
                 }
@@ -2433,7 +1672,6 @@ export default function AccessControl() {
                 engineSets={engineSetsReadDecision.allowed ? engineSets : []}
                 externalEngines={externalEnginesReadDecision.allowed ? externalEngines : []}
                 projectTargets={projectTargetsReadDecision.allowed ? projectEngineTargets : []}
-                ssoAssignmentMappings={ssoAssignmentsReadDecision.allowed ? mappings : []}
                 auditEntries={auditReadDecision.allowed ? inspectionAuditEntries : []}
                 onOpenAuditReference={auditReadDecision.allowed ? openAuthzAuditReference : undefined}
                 helpers={principalResourcePanelHelpers}
@@ -2446,7 +1684,6 @@ export default function AccessControl() {
                   (engineSetsReadDecision.allowed && engineSetsQ.isLoading) ||
                   (externalEnginesReadDecision.allowed && externalEnginesQ.isLoading) ||
                   (projectTargetsReadDecision.allowed && projectEngineTargetsQ.isLoading) ||
-                  (ssoAssignmentsReadDecision.allowed && mappingsQ.isLoading) ||
                   (policiesReadDecision.allowed && policiesQ.isLoading) ||
                   (auditReadDecision.allowed && inspectionAuditQ.isLoading)
                 }
@@ -3176,506 +2413,6 @@ export default function AccessControl() {
             invalid={!policyConditionsJsonValid}
             invalidText="Conditions must be valid JSON."
             onChange={(event) => setPolicyConditionsJson(event.target.value)}
-          />
-        </div>
-      </Modal>
-
-      <Modal
-        open={ssoPlatformModalOpen}
-        onRequestClose={() => {
-          setSsoPlatformModalOpen(false);
-          setEditingSsoPlatformMapping(null);
-          setSsoPlatformRiskAcknowledged(false);
-        }}
-        onRequestSubmit={submitSsoPlatformMapping}
-        modalHeading={editingSsoPlatformMapping ? 'Edit Platform Role SSO Mapping' : 'Add Platform Role SSO Mapping'}
-        primaryButtonText={editingSsoPlatformMapping ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={
-          !ssoPlatformMappingsManageDecision.allowed ||
-          !ssoPlatformForm.claimKey.trim() ||
-          (ssoClaimOperatorRequiresValue(ssoPlatformForm.claimOperator || null) && !ssoPlatformForm.claimValue.trim()) ||
-          (ssoPlatformRegexRequiresAcknowledgement && !ssoPlatformRiskAcknowledged) ||
-          ssoPlatformRegexBlockedBySettings ||
-          createSsoPlatformMappingM.isPending ||
-          updateSsoPlatformMappingM.isPending
-        }
-      >
-        <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-          <TextInput
-            id="sso-platform-provider-id"
-            labelText="Provider ID"
-            helperText="Leave empty to match any SSO provider."
-            value={ssoPlatformForm.providerId}
-            onChange={(event) => setSsoPlatformForm((current) => ({ ...current, providerId: event.target.value }))}
-          />
-          <Dropdown
-            id="sso-platform-claim-type"
-            titleText="Claim type"
-            label="Select claim type"
-            items={CLAIM_TYPES}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={CLAIM_TYPES.find((item) => item.id === ssoPlatformForm.claimType)}
-            onChange={({ selectedItem }) => {
-              const claimType = (selectedItem?.id || 'group') as SsoClaimsMapping['claimType'];
-              setSsoPlatformForm((current) => ({
-                ...current,
-                claimType,
-                claimKey: ssoClaimDefaultKey(claimType) || current.claimKey,
-              }));
-            }}
-          />
-          <TextInput
-            id="sso-platform-claim-key"
-            labelText="Claim key"
-            value={ssoPlatformForm.claimKey}
-            onChange={(event) => setSsoPlatformForm((current) => ({ ...current, claimKey: event.target.value }))}
-          />
-          <Dropdown
-            id="sso-platform-claim-operator"
-            titleText="Claim operator"
-            label="Select operator"
-            items={CLAIM_OPERATORS}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={CLAIM_OPERATORS.find((item) => item.id === ssoPlatformForm.claimOperator) || CLAIM_OPERATORS[0]}
-            onChange={({ selectedItem }) => {
-              setSsoPlatformRiskAcknowledged(false);
-              setSsoPlatformForm((current) => ({
-                ...current,
-                claimOperator: selectedItem?.id || '',
-              }));
-            }}
-          />
-          <TextInput
-            id="sso-platform-claim-value"
-            labelText="Claim value"
-            disabled={!ssoClaimOperatorRequiresValue(ssoPlatformForm.claimOperator || null)}
-            value={ssoPlatformForm.claimValue}
-            onChange={(event) => setSsoPlatformForm((current) => ({ ...current, claimValue: event.target.value }))}
-          />
-          {ssoPlatformRegexOperatorSelected && (
-            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-              <InlineNotification
-                kind={ssoPlatformRegexBlockedBySettings ? 'error' : 'warning'}
-                title="Regex claim mapping"
-                subtitle={ssoPlatformRegexBlockedBySettings
-                  ? 'Platform settings currently block active regex SSO claim mappings. Disable this mapping or enable the platform setting before saving.'
-                  : 'Regex claim matching can grant platform roles broadly if the expression is too broad.'}
-                lowContrast
-              />
-              {ssoPlatformRegexRequiresAcknowledgement && (
-                <Checkbox
-                  id="sso-platform-regex-risk-acknowledged"
-                  labelText="I understand this mapping uses regex claim matching."
-                  checked={ssoPlatformRiskAcknowledged}
-                  onChange={(_event, { checked }) => setSsoPlatformRiskAcknowledged(Boolean(checked))}
-                />
-              )}
-            </div>
-          )}
-          <Dropdown
-            id="sso-platform-target-role"
-            titleText="Target platform role"
-            label="Select role"
-            items={SSO_PLATFORM_TARGET_ROLES}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={SSO_PLATFORM_TARGET_ROLES.find((item) => item.id === ssoPlatformForm.targetRole)}
-            onChange={({ selectedItem }) => setSsoPlatformForm((current) => ({ ...current, targetRole: (selectedItem?.id || 'user') as SsoClaimsMapping['targetRole'] }))}
-          />
-          <NumberInput
-            id="sso-platform-priority"
-            label="Priority"
-            value={ssoPlatformForm.priority}
-            min={0}
-            max={1000}
-            onChange={(_event, { value }) => setSsoPlatformForm((current) => ({ ...current, priority: Number(value) || 0 }))}
-          />
-          <Toggle
-            id="sso-platform-active"
-            labelText="Active"
-            labelA="Inactive"
-            labelB="Active"
-            toggled={ssoPlatformForm.isActive}
-            onToggle={(checked) => setSsoPlatformForm((current) => ({ ...current, isActive: checked }))}
-          />
-        </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(ssoGroupMigrationTarget)}
-        onRequestClose={() => {
-          setSsoGroupMigrationTarget(null);
-          setSsoGroupMigrationError(null);
-        }}
-        onRequestSubmit={() => ssoGroupMigrationTarget && migrateSsoGroupM.mutate({
-          id: ssoGroupMigrationTarget.id,
-          providerKey: ssoGroupMigrationProviderKey,
-        })}
-        modalHeading="Create provider-neutral group replacement"
-        primaryButtonText={migrateSsoGroupM.isPending ? 'Creating...' : 'Create replacement'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={!ssoGroupMappingsManageDecision.allowed || !ssoGroupMigrationProviderKey.trim() || migrateSsoGroupM.isPending}
-      >
-        <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
-          This retains the legacy mapping while creating an equivalent identity-to-group mapping for validation. Exact email domains and allowlisted exact custom claims are supported; broad, negated, and regex claims require redesign.
-        </p>
-        {ssoGroupMigrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={ssoGroupMigrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-        <TextInput id="sso-group-migration-provider-key" labelText="Provider-neutral provider key" helperText="For a custom claim, this provider must allowlist the claim key." value={ssoGroupMigrationProviderKey} onChange={(event) => setSsoGroupMigrationProviderKey(event.target.value)} />
-      </Modal>
-
-      <Modal
-        open={ssoGroupModalOpen}
-        onRequestClose={() => {
-          setSsoGroupModalOpen(false);
-          setEditingSsoGroupMapping(null);
-          setSsoGroupRiskAcknowledged(false);
-        }}
-        onRequestSubmit={submitSsoGroupMapping}
-        modalHeading={editingSsoGroupMapping ? 'Edit SSO Group Mapping' : 'Add SSO Group Mapping'}
-        primaryButtonText={editingSsoGroupMapping ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={
-          !ssoGroupMappingsManageDecision.allowed ||
-          !ssoGroupForm.claimKey.trim() ||
-          (ssoClaimOperatorRequiresValue(ssoGroupForm.claimOperator || null) && !ssoGroupForm.claimValue.trim()) ||
-          !ssoGroupForm.targetGroupId ||
-          (ssoGroupRegexRequiresAcknowledgement && !ssoGroupRiskAcknowledged) ||
-          ssoGroupRegexBlockedBySettings ||
-          createSsoGroupMappingM.isPending ||
-          updateSsoGroupMappingM.isPending
-        }
-      >
-        <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-          <TextInput
-            id="sso-group-provider-id"
-            labelText="Provider ID"
-            helperText="Leave empty to match any SSO provider."
-            value={ssoGroupForm.providerId}
-            onChange={(event) => setSsoGroupForm((current) => ({ ...current, providerId: event.target.value }))}
-          />
-          <Dropdown
-            id="sso-group-claim-type"
-            titleText="Claim type"
-            label="Select claim type"
-            items={CLAIM_TYPES}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={CLAIM_TYPES.find((item) => item.id === ssoGroupForm.claimType)}
-            onChange={({ selectedItem }) => {
-              const claimType = (selectedItem?.id || 'group') as SsoGroupMapping['claimType'];
-              setSsoGroupForm((current) => ({
-                ...current,
-                claimType,
-                claimKey: ssoClaimDefaultKey(claimType) || current.claimKey,
-              }));
-            }}
-          />
-          <TextInput
-            id="sso-group-claim-key"
-            labelText="Claim key"
-            value={ssoGroupForm.claimKey}
-            onChange={(event) => setSsoGroupForm((current) => ({ ...current, claimKey: event.target.value }))}
-          />
-          <Dropdown
-            id="sso-group-claim-operator"
-            titleText="Claim operator"
-            label="Select operator"
-            items={CLAIM_OPERATORS}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={CLAIM_OPERATORS.find((item) => item.id === ssoGroupForm.claimOperator) || CLAIM_OPERATORS[0]}
-            onChange={({ selectedItem }) => {
-              setSsoGroupRiskAcknowledged(false);
-              setSsoGroupForm((current) => ({
-                ...current,
-                claimOperator: selectedItem?.id || '',
-              }));
-            }}
-          />
-          <TextInput
-            id="sso-group-claim-value"
-            labelText="Claim value"
-            disabled={!ssoClaimOperatorRequiresValue(ssoGroupForm.claimOperator || null)}
-            value={ssoGroupForm.claimValue}
-            onChange={(event) => setSsoGroupForm((current) => ({ ...current, claimValue: event.target.value }))}
-          />
-          {ssoGroupRegexOperatorSelected && (
-            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-              <InlineNotification
-                kind={ssoGroupRegexBlockedBySettings ? 'error' : 'warning'}
-                title="Regex claim mapping"
-                subtitle={ssoGroupRegexBlockedBySettings
-                  ? 'Platform settings currently block active regex SSO claim mappings. Disable this mapping or enable the platform setting before saving.'
-                  : 'Regex claim matching can add users to groups broadly if the expression is too broad.'}
-                lowContrast
-              />
-              {ssoGroupRegexRequiresAcknowledgement && (
-                <Checkbox
-                  id="sso-group-regex-risk-acknowledged"
-                  labelText="I understand this mapping uses regex claim matching."
-                  checked={ssoGroupRiskAcknowledged}
-                  onChange={(_event, { checked }) => setSsoGroupRiskAcknowledged(Boolean(checked))}
-                />
-              )}
-            </div>
-          )}
-          <Dropdown
-            id="sso-group-target-group"
-            titleText="Target group"
-            label="Select group"
-            items={groups.filter((group) => !group.isArchived)}
-            itemToString={(item) => item?.name || ''}
-            selectedItem={groups.find((group) => group.id === ssoGroupForm.targetGroupId) || null}
-            onChange={({ selectedItem }) => setSsoGroupForm((current) => ({ ...current, targetGroupId: selectedItem?.id || '' }))}
-          />
-          <Dropdown
-            id="sso-group-sync-mode"
-            titleText="Sync mode"
-            label="Select sync mode"
-            items={SYNC_MODES}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={SYNC_MODES.find((item) => item.id === ssoGroupForm.syncMode)}
-            onChange={({ selectedItem }) => setSsoGroupForm((current) => ({ ...current, syncMode: (selectedItem?.id || 'authoritative') as SsoGroupMapping['syncMode'] }))}
-          />
-          <NumberInput
-            id="sso-group-priority"
-            label="Priority"
-            value={ssoGroupForm.priority}
-            min={0}
-            max={1000}
-            onChange={(_event, { value }) => setSsoGroupForm((current) => ({ ...current, priority: Number(value) || 0 }))}
-          />
-          <Toggle
-            id="sso-group-active"
-            labelText="Active"
-            labelA="Inactive"
-            labelB="Active"
-            toggled={ssoGroupForm.isActive}
-            onToggle={(checked) => setSsoGroupForm((current) => ({ ...current, isActive: checked }))}
-          />
-        </div>
-      </Modal>
-
-      <Modal
-        open={Boolean(ssoAssignmentMigrationTarget)}
-        onRequestClose={() => {
-          setSsoAssignmentMigrationTarget(null);
-          setSsoAssignmentMigrationError(null);
-        }}
-        onRequestSubmit={() => ssoAssignmentMigrationTarget && migrateSsoAssignmentM.mutate({
-          id: ssoAssignmentMigrationTarget.id,
-          providerKey: ssoAssignmentMigrationProviderKey,
-          targetGroupKey: ssoAssignmentMigrationGroupKey,
-        })}
-        modalHeading="Create group-first engine access replacement"
-        primaryButtonText={migrateSsoAssignmentM.isPending ? 'Creating...' : 'Create replacement'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={!canManageSsoAssignments || !ssoAssignmentMigrationProviderKey.trim() || !ssoAssignmentMigrationGroupKey.trim() || migrateSsoAssignmentM.isPending}
-      >
-        <p style={{ marginTop: 0, color: 'var(--cds-text-secondary)' }}>
-          This creates an identity mapping and an equivalent group engine-role assignment while leaving the SSO mapping active for validation. Exact email domains and allowlisted exact custom claims are supported; broad, negated, and regex claims require redesign. Verify access before disabling the legacy mapping.
-        </p>
-        {ssoAssignmentMigrationError && <InlineNotification kind="error" title="Replacement not created" subtitle={ssoAssignmentMigrationError} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
-        <TextInput id="sso-assignment-migration-provider-key" labelText="Provider-neutral provider key" helperText="Use the stable key configured in Identity Providers. For a custom claim, this provider must allowlist the claim key." value={ssoAssignmentMigrationProviderKey} onChange={(event) => setSsoAssignmentMigrationProviderKey(event.target.value)} />
-        <TextInput id="sso-assignment-migration-group-key" labelText="Existing EnterpriseGlue group key" helperText="Members of this group receive the exact-engine role. Create a group first in Access Control if needed." value={ssoAssignmentMigrationGroupKey} onChange={(event) => setSsoAssignmentMigrationGroupKey(event.target.value)} />
-      </Modal>
-
-      <Modal
-        open={modalOpen}
-        onRequestClose={() => {
-          setModalOpen(false);
-          setSsoHighRiskAcknowledged(false);
-        }}
-        onRequestSubmit={submit}
-        modalHeading={editing ? 'Edit SSO Engine Assignment' : 'Add SSO Engine Assignment'}
-        primaryButtonText={editing ? 'Save' : 'Create'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={
-          !canManageSsoAssignments ||
-          (ssoClaimOperatorRequiresValue(form.claimOperator || null) && !form.claimValue.trim()) ||
-          (form.targetSelectorType === 'engine_id' && !form.targetEngineId) ||
-          (form.targetSelectorType === 'external_engine_id' && !form.targetExternalEngineId) ||
-          (form.targetSelectorType === 'engine_label' && (!form.targetLabelKey || !form.targetLabelValue)) ||
-          (ssoHighRiskMappingRequiresAcknowledgement && !ssoHighRiskAcknowledged) ||
-          ssoAllEnginesBlockedBySettings ||
-          ssoGovernanceRoleBlockedBySettings ||
-          ssoRegexOperatorBlockedBySettings ||
-          ssoSensitivePermissionRoleBlockedBySettings ||
-          Boolean(ssoSelectedTargetRoleId && ssoSelectedTargetRoleDetailQ.isLoading) ||
-          createM.isPending ||
-          updateM.isPending
-        }
-      >
-        <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
-          <TextInput
-            id="provider-id"
-            labelText="Provider ID"
-            helperText="Leave empty to match provider-agnostic mappings."
-            value={form.providerId}
-            onChange={(event) => setForm((current) => ({ ...current, providerId: event.target.value }))}
-          />
-          <Dropdown
-            id="claim-type"
-            titleText="Claim type"
-            label="Select claim type"
-            items={CLAIM_TYPES}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={CLAIM_TYPES.find((item) => item.id === form.claimType)}
-            onChange={({ selectedItem }) => {
-              const claimType = (selectedItem?.id || 'group') as SsoAssignmentMapping['claimType'];
-              setForm((current) => ({
-                ...current,
-                claimType,
-                claimKey: claimType === 'group' ? 'groups' : claimType === 'role' ? 'roles' : claimType === 'email_domain' ? 'email' : current.claimKey,
-              }));
-            }}
-          />
-          <TextInput id="claim-key" labelText="Claim key" value={form.claimKey} onChange={(event) => setForm((current) => ({ ...current, claimKey: event.target.value }))} />
-          <Dropdown
-            id="claim-operator"
-            titleText="Claim operator"
-            label="Select operator"
-            items={CLAIM_OPERATORS}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={CLAIM_OPERATORS.find((item) => item.id === form.claimOperator) || CLAIM_OPERATORS[0]}
-            onChange={({ selectedItem }) => {
-              setSsoHighRiskAcknowledged(false);
-              setForm((current) => ({
-                ...current,
-                claimOperator: selectedItem?.id || '',
-              }));
-            }}
-          />
-          <TextInput id="claim-value" labelText="Claim value" disabled={!ssoClaimOperatorRequiresValue(form.claimOperator || null)} value={form.claimValue} onChange={(event) => setForm((current) => ({ ...current, claimValue: event.target.value }))} />
-          <Dropdown
-            id="target-selector"
-            titleText="Target selector"
-            label="Select target"
-            items={ssoTargetSelectors}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={ssoTargetSelectors.find((item) => item.id === form.targetSelectorType)}
-            onChange={({ selectedItem }) => {
-              const targetSelectorType = (selectedItem?.id || 'engine_id') as SsoAssignmentMapping['targetSelectorType'];
-              setSsoHighRiskAcknowledged(false);
-              setForm((current) => ({ ...current, targetSelectorType }));
-            }}
-          />
-          {ssoHighRiskMappingSelected && (
-            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-              {form.targetSelectorType === 'all_engines' && (
-                <InlineNotification
-                  kind={ssoAllEnginesBlockedBySettings ? 'error' : 'warning'}
-                  title="All-engine assignment mapping"
-                  subtitle={ssoAllEnginesBlockedBySettings
-                    ? 'Platform settings currently block active all-engine SSO mappings. Disable this mapping or enable the platform setting before saving.'
-                    : 'This mapping can grant the selected engine role on every active engine that SSO reconciliation sees.'}
-                  lowContrast
-                />
-              )}
-              {ssoGovernanceRoleSelected && (
-                <InlineNotification
-                  kind={ssoGovernanceRoleBlockedBySettings ? 'error' : 'warning'}
-                  title="Engine governance assignment mapping"
-                  subtitle={ssoGovernanceRoleBlockedBySettings
-                    ? 'Platform settings currently block active SSO mappings to this engine governance role. Disable this mapping or enable the platform setting before saving.'
-                    : 'This mapping creates effective engine owner or delegate grants from SSO claims. It does not change accountable owner metadata.'}
-                  lowContrast
-                />
-              )}
-              {ssoRegexOperatorSelected && (
-                <InlineNotification
-                  kind={ssoRegexOperatorBlockedBySettings ? 'error' : 'warning'}
-                  title="Regex claim mapping"
-                  subtitle={ssoRegexOperatorBlockedBySettings
-                    ? 'Platform settings currently block active regex SSO claim mappings. Disable this mapping or enable the platform setting before saving.'
-                    : 'Regex claim matching can grant engine roles broadly if the expression is too broad.'}
-                  lowContrast
-                />
-              )}
-              {ssoSensitivePermissionRoleSelected && (
-                <InlineNotification
-                  kind={ssoSensitivePermissionRoleBlockedBySettings ? 'error' : 'warning'}
-                  title="Sensitive permission assignment mapping"
-                  subtitle={ssoSensitivePermissionRoleBlockedBySettings
-                    ? `Platform settings currently block active SSO mappings to custom roles with ${ssoSensitivePermissionRiskLabels.join(', ')}. Disable this mapping or enable the matching platform setting before saving.`
-                    : `This mapping can grant ${ssoSensitivePermissionRiskLabels.join(', ')} from SSO claims through the selected custom role.`}
-                  lowContrast
-                />
-              )}
-              {ssoHighRiskMappingRequiresAcknowledgement && (
-                <Checkbox
-                  id="sso-high-risk-acknowledged"
-                  labelText={ssoSensitivePermissionRoleSelected
-                    ? `I understand this mapping can grant ${ssoSensitivePermissionRiskLabels.join(', ')} from SSO claims.`
-                    : ssoRegexOperatorSelected
-                    ? 'I understand this mapping uses regex claim matching.'
-                    : 'I understand this mapping can grant access to all active engines.'}
-                  checked={ssoHighRiskAcknowledged}
-                  onChange={(_event, { checked }) => setSsoHighRiskAcknowledged(Boolean(checked))}
-                />
-              )}
-            </div>
-          )}
-          <TextInput
-            id="target-engine-id"
-            labelText="Target engine ID"
-            disabled={form.targetSelectorType !== 'engine_id'}
-            value={form.targetEngineId}
-            onChange={(event) => setForm((current) => ({ ...current, targetEngineId: event.target.value }))}
-          />
-          <TextInput
-            id="target-external-engine-id"
-            labelText="External engine ID"
-            disabled={form.targetSelectorType !== 'external_engine_id'}
-            value={form.targetExternalEngineId}
-            onChange={(event) => setForm((current) => ({ ...current, targetExternalEngineId: event.target.value }))}
-          />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--spacing-4)' }}>
-            <TextInput
-              id="target-label-key"
-              labelText="Label key"
-              disabled={form.targetSelectorType !== 'engine_label'}
-              value={form.targetLabelKey}
-              onChange={(event) => setForm((current) => ({ ...current, targetLabelKey: event.target.value }))}
-            />
-            <TextInput
-              id="target-label-value"
-              labelText="Label value"
-              disabled={form.targetSelectorType !== 'engine_label'}
-              value={form.targetLabelValue}
-              onChange={(event) => setForm((current) => ({ ...current, targetLabelValue: event.target.value }))}
-            />
-          </div>
-          <Dropdown
-            id="target-role"
-            titleText="Target role"
-            label="Select role"
-            items={ssoTargetRoleOptions}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={ssoTargetRoleOptions.find((item) => item.id === form.targetRoleId)}
-            onChange={({ selectedItem }) => {
-              setSsoHighRiskAcknowledged(false);
-              setForm((current) => ({ ...current, targetRoleId: selectedItem?.id || 'system.engine.operator' }));
-            }}
-          />
-          <Dropdown
-            id="sync-mode"
-            titleText="Sync mode"
-            label="Select sync mode"
-            items={SYNC_MODES}
-            itemToString={(item) => item?.label || ''}
-            selectedItem={SYNC_MODES.find((item) => item.id === form.syncMode)}
-            onChange={({ selectedItem }) => setForm((current) => ({ ...current, syncMode: (selectedItem?.id || 'authoritative') as SsoAssignmentMapping['syncMode'] }))}
-          />
-          <NumberInput id="priority" label="Priority" value={form.priority} min={0} max={1000} onChange={(_event, { value }) => setForm((current) => ({ ...current, priority: Number(value) || 0 }))} />
-          <Toggle
-            id="mapping-active"
-            labelText="Active"
-            labelA="Inactive"
-            labelB="Active"
-            toggled={form.isActive}
-            onToggle={(checked) => {
-              setSsoHighRiskAcknowledged(false);
-              setForm((current) => ({ ...current, isActive: checked }));
-            }}
           />
         </div>
       </Modal>

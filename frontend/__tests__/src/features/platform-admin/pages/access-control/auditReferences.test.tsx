@@ -9,7 +9,6 @@ import type {
   AuthzGroupMembership,
   IdentityEntitlementMapping,
   RoleAssignment,
-  SsoAssignmentMapping,
 } from '@src/features/platform-admin/hooks/useAuthzApi';
 
 const auditEntry = (overrides: Partial<AuthzAuditEntry>): AuthzAuditEntry => ({
@@ -30,15 +29,13 @@ const auditEntry = (overrides: Partial<AuthzAuditEntry>): AuthzAuditEntry => ({
 });
 
 describe('audit references', () => {
-  it('correlates direct assignment entries by assignment and mapping lineage', () => {
+  it('correlates direct assignment entries by assignment lineage', () => {
     const assignment = { id: 'assignment-1', sourceMappingId: 'mapping-1', sourceRef: 'sso:mapping-1' } as RoleAssignment;
-    const mapping = { id: 'mapping-1' } as SsoAssignmentMapping;
 
     expect(findAssignmentAuditEntries(assignment, [
       auditEntry({ id: 'matching-assignment' }),
-      auditEntry({ id: 'matching-mapping', resourceType: 'sso_assignment_mapping', resourceId: 'mapping-1', action: 'sso_assignment_mapping.update' }),
       auditEntry({ id: 'read-only', action: 'role_assignment.read' }),
-    ], mapping).map((entry) => entry.id)).toEqual(['matching-assignment', 'matching-mapping']);
+    ]).map((entry) => entry.id)).toEqual(['matching-assignment']);
   });
 
   it('correlates provider-managed memberships without treating read events as audit mutations', () => {

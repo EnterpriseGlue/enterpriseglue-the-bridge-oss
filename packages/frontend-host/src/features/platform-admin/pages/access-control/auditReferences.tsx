@@ -6,8 +6,6 @@ import type {
   EffectiveAccessResult,
   IdentityEntitlementMapping,
   RoleAssignment,
-  SsoAssignmentMapping,
-  SsoGroupMapping,
 } from '../../hooks/useAuthzApi';
 
 type EffectiveAccessSource = EffectiveAccessResult['sources'][number];
@@ -27,13 +25,11 @@ function formatTimestamp(value: number | null | undefined) { return value ? new 
 export function findAssignmentAuditEntries(
   assignment: RoleAssignment,
   entries: AuthzAuditEntry[],
-  mapping?: SsoAssignmentMapping | null,
 ) {
-  const ids = [assignment.id, assignment.sourceMappingId, assignment.sourceRef, mapping?.id].filter(Boolean);
+  const ids = [assignment.id, assignment.sourceMappingId, assignment.sourceRef].filter(Boolean);
   return entries.filter((entry) => {
     if (!mutating(entry.action)) return false;
     if (entry.resourceType === 'role_assignment' && references(entry, [assignment.id])) return true;
-    if (mapping && entry.resourceType === 'sso_assignment_mapping' && references(entry, [mapping.id])) return true;
     return references(entry, ids);
   });
 }
@@ -41,13 +37,13 @@ export function findAssignmentAuditEntries(
 export function findMembershipAuditEntries(
   membership: AuthzGroupMembership,
   entries: AuthzAuditEntry[],
-  mapping?: SsoGroupMapping | IdentityEntitlementMapping | null,
+  mapping?: IdentityEntitlementMapping | null,
 ) {
   const ids = [membership.id, membership.sourceRef, mapping?.id, membership.groupId, membership.userId].filter(Boolean);
   return entries.filter((entry) => {
     if (!mutating(entry.action)) return false;
     if (entry.resourceType === 'authz_group_membership' && references(entry, [membership.id])) return true;
-    if (mapping && entry.resourceType === (membership.source === 'identity_provider' ? 'identity_entitlement_mapping' : 'sso_group_mapping') && references(entry, [mapping.id])) return true;
+    if (mapping && entry.resourceType === 'identity_entitlement_mapping' && references(entry, [mapping.id])) return true;
     return references(entry, ids);
   });
 }
@@ -66,13 +62,11 @@ export function findMachineIdentityAuditEntries(
 }
 
 export function findEffectiveAccessSourceAuditEntries(source: EffectiveAccessSource, entries: AuthzAuditEntry[]) {
-  const ids = [source.assignmentId, source.sourceMappingId, source.sourceRef, source.groupMembership?.id, source.groupMembership?.sourceRef, source.ssoMapping?.id, source.ssoGroupMapping?.id, source.identityEntitlementMapping?.id, source.engineSetId, source.materializationId, source.engineRegistration?.registrationId, source.engineRegistration?.engineId, source.matchedEngineId, source.principalId, source.roleId, source.scopeId];
+  const ids = [source.assignmentId, source.sourceMappingId, source.sourceRef, source.groupMembership?.id, source.groupMembership?.sourceRef, source.identityEntitlementMapping?.id, source.engineSetId, source.materializationId, source.engineRegistration?.registrationId, source.engineRegistration?.engineId, source.matchedEngineId, source.principalId, source.roleId, source.scopeId];
   return entries.filter((entry) => {
     if (!mutating(entry.action)) return false;
     if (source.assignmentId && entry.resourceType === 'role_assignment' && references(entry, [source.assignmentId])) return true;
     if (source.groupMembership?.id && entry.resourceType === 'authz_group_membership' && references(entry, [source.groupMembership.id])) return true;
-    if (source.ssoMapping?.id && entry.resourceType === 'sso_assignment_mapping' && references(entry, [source.ssoMapping.id])) return true;
-    if (source.ssoGroupMapping?.id && entry.resourceType === 'sso_group_mapping' && references(entry, [source.ssoGroupMapping.id])) return true;
     if (source.identityEntitlementMapping?.id && entry.resourceType === 'identity_entitlement_mapping' && references(entry, [source.identityEntitlementMapping.id])) return true;
     if (source.engineSetId && entry.resourceType === 'engine_set' && references(entry, [source.engineSetId])) return true;
     return references(entry, ids);

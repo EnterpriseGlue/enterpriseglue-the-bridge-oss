@@ -67,15 +67,6 @@ import type {
   IdentityProviderMembershipReplayResponse,
   IdentityProviderReconciliationPreview,
   IdentityProviderResponse,
-  LegacySsoAssignmentMappingMigrationResponse as SharedLegacySsoAssignmentMappingMigrationResponse,
-  LegacySsoGroupMappingMigrationRequest as SharedLegacySsoGroupMappingMigrationRequest,
-  LegacySsoGroupMappingMigrationResponse as SharedLegacySsoGroupMappingMigrationResponse,
-  LegacySsoMappingMigrationRequest as SharedLegacySsoMappingMigrationRequest,
-  LegacySsoPlatformMappingCreateRequest as SharedLegacySsoPlatformMappingCreateRequest,
-  LegacySsoPlatformMappingUpdateRequest as SharedLegacySsoPlatformMappingUpdateRequest,
-  LegacySsoPlatformMappingMigrationResponse as SharedLegacySsoPlatformMappingMigrationResponse,
-  LegacyMappingCoverageItem as SharedLegacyMappingCoverageItem,
-  LegacyMappingRetirementReadiness as SharedLegacyMappingRetirementReadiness,
   PermissionCatalogEntry as SharedPermissionCatalogEntry,
   ProjectEngineTarget as SharedProjectEngineTarget,
   ProjectEngineTargetMode as SharedProjectEngineTargetMode,
@@ -94,21 +85,9 @@ import type {
   RuntimeResourceSetMaterializationResult as SharedRuntimeResourceSetMaterializationResult,
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
-  SsoAssignmentMapping as SharedSsoAssignmentMapping,
-  SsoAssignmentMappingInsert as SharedSsoAssignmentMappingInsert,
-  SsoAssignmentMappingTestResponse as SharedSsoAssignmentMappingTestResponse,
-  SsoAssignmentMappingUpdate as SharedSsoAssignmentMappingUpdate,
-  SsoClaimOperator as SharedSsoClaimOperator,
-  SsoClaimsMapping as SharedSsoClaimsMapping,
   SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
   SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
   SsoEngineAccessSnapshotQuery as SharedSsoEngineAccessSnapshotQuery,
-  SsoGroupMapping as SharedSsoGroupMapping,
-  SsoGroupMappingInsert as SharedSsoGroupMappingInsert,
-  SsoGroupMappingTestResponse as SharedSsoGroupMappingTestResponse,
-  SsoGroupMappingUpdate as SharedSsoGroupMappingUpdate,
-  SsoMappingTestRequest as SharedSsoMappingTestRequest,
-  SsoPlatformMappingTestResponse as SharedSsoPlatformMappingTestResponse,
   SsoSyncDiagnosticsRunRequest as SharedSsoSyncDiagnosticsRunRequest,
   SsoSyncDiagnosticsScanResult as SharedSsoSyncDiagnosticsScanResult,
   SsoSyncEventsQuery as SharedSsoSyncEventsQuery,
@@ -159,12 +138,6 @@ export type {
 export type AuthzResourceType = SharedAuthzResourceType;
 export type AuthzPrincipalType = SharedAuthzPrincipalType;
 export type RoleAssignmentSource = SharedRoleAssignmentSource;
-export type SsoClaimOperator = SharedSsoClaimOperator;
-/** The legacy API emits `null` for an all-provider mapping; retain it only at this UI boundary. */
-export type SsoClaimsMapping = Omit<SharedSsoClaimsMapping, 'providerId'> & {
-  providerId: string | null;
-  riskAcknowledged?: boolean;
-};
 
 export type PermissionCatalogEntry = SharedPermissionCatalogEntry;
 
@@ -239,26 +212,8 @@ export type ProjectEngineTargetSyncLegacyResponse = SharedProjectEngineTargetSyn
 
 export type DeploymentEligibilityResult = SharedDeploymentEligibilityEvaluateResponse;
 
-/** UI-only acknowledgement retained while legacy mapping forms remain supported. */
-export type SsoAssignmentMapping = SharedSsoAssignmentMapping & { riskAcknowledged?: boolean };
-export type SsoAssignmentMappingInsert = SharedSsoAssignmentMappingInsert;
-export type SsoAssignmentMappingUpdate = SharedSsoAssignmentMappingUpdate;
-/** UI-only acknowledgement retained while legacy mapping forms remain supported. */
-export type SsoGroupMapping = SharedSsoGroupMapping & { riskAcknowledged?: boolean };
-export type SsoGroupMappingInsert = SharedSsoGroupMappingInsert;
-export type SsoGroupMappingUpdate = SharedSsoGroupMappingUpdate;
-export type SsoMappingTestRequest = SharedSsoMappingTestRequest;
-export type SsoPlatformMappingTestResponse = SharedSsoPlatformMappingTestResponse;
-export type SsoAssignmentMappingTestResponse = SharedSsoAssignmentMappingTestResponse;
-export type SsoGroupMappingTestResponse = SharedSsoGroupMappingTestResponse;
-
 export type HumanIdentityEntitlementType = IdentityMappingResponse['entitlementType'];
-/** `scope` is retained solely to render and retire pre-migration rows. */
-export type ListedIdentityEntitlementType = HumanIdentityEntitlementType | 'scope';
-
-export type IdentityEntitlementMapping = Omit<IdentityMappingResponse, 'entitlementType'> & {
-  entitlementType: ListedIdentityEntitlementType;
-};
+export type IdentityEntitlementMapping = IdentityMappingResponse;
 
 export type EffectiveAccessResult = EffectiveAccessEvaluateResponse;
 export type RuntimeResourceKind = SharedRuntimeResource['resourceKind'];
@@ -273,15 +228,6 @@ export type IdentityProviderExternalIdentityUnlinkResult = IdentityProviderExter
 export type IdentityProviderMembershipReplayResult = IdentityProviderMembershipReplayResponse;
 export type IdentityProviderMembershipPreviewResult = IdentityProviderReconciliationPreview;
 export type IdentityProviderConnectionTestResult = IdentityProviderConnectionTestResponse;
-export type LegacySsoMappingMigrationRequest = SharedLegacySsoMappingMigrationRequest;
-export type LegacySsoPlatformMappingCreateRequest = SharedLegacySsoPlatformMappingCreateRequest;
-export type LegacySsoPlatformMappingUpdateRequest = SharedLegacySsoPlatformMappingUpdateRequest;
-export type LegacySsoPlatformMappingMigrationResponse = SharedLegacySsoPlatformMappingMigrationResponse;
-export type LegacySsoAssignmentMappingMigrationResponse = SharedLegacySsoAssignmentMappingMigrationResponse;
-export type LegacySsoGroupMappingMigrationRequest = SharedLegacySsoGroupMappingMigrationRequest;
-export type LegacySsoGroupMappingMigrationResponse = SharedLegacySsoGroupMappingMigrationResponse;
-export type LegacyMappingCoverageItem = SharedLegacyMappingCoverageItem;
-export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementReadiness;
 
 export type PolicyCondition = SharedPolicyCondition;
 /** The policy list endpoint intentionally omits persistence-only metadata. */
@@ -316,15 +262,10 @@ export type BridgeDecisionResponse = SharedBridgeDecisionResponse;
 
 // Query keys
 export const authzQueryKeys = {
-  ssoMappings: ['platform-admin', 'authz', 'sso-mappings'] as const,
-  ssoAssignmentMappings: ['platform-admin', 'authz', 'sso-assignment-mappings'] as const,
   ssoEngineAccessSnapshots: (params?: SsoEngineAccessSnapshotParams) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', params] as const,
   ssoEngineAccessSnapshotsForEngine: (engineId?: string) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', 'engine', engineId] as const,
-  ssoGroupMappings: ['platform-admin', 'authz', 'sso-group-mappings'] as const,
   identityProviders: ['platform-admin', 'authz', 'identity-providers'] as const,
   identityEntitlementMappings: ['platform-admin', 'authz', 'identity-entitlement-mappings'] as const,
-  legacyMappingCoverage: ['platform-admin', 'authz', 'legacy-mapping-coverage'] as const,
-  legacyMappingRetirementReadiness: ['platform-admin', 'authz', 'legacy-mapping-retirement-readiness'] as const,
   ssoSyncRuns: (params?: SsoSyncRunParams) => ['platform-admin', 'authz', 'sso-sync-runs', params] as const,
   ssoSyncEvents: (runId?: string, params?: SsoSyncEventParams) => ['platform-admin', 'authz', 'sso-sync-runs', runId, 'events', params] as const,
   myPermissions: ['platform-admin', 'authz', 'me', 'permissions'] as const,
@@ -941,94 +882,6 @@ export function useSyncLegacyProjectEngineTargets() {
 }
 
 // ============================================================================
-// SSO Claims Mapping Hooks
-// ============================================================================
-
-export function useSsoClaimsMappings(options: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: authzQueryKeys.ssoMappings,
-    queryFn: () => apiClient.get<SsoClaimsMapping[]>('/api/authz/sso-mappings'),
-    enabled: options.enabled ?? true,
-  });
-}
-
-export function useCreateSsoMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: LegacySsoPlatformMappingCreateRequest) =>
-      apiClient.post<SsoClaimsMapping>('/api/authz/sso-mappings', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoMappings }),
-  });
-}
-
-export function useUpdateSsoMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & LegacySsoPlatformMappingUpdateRequest) =>
-      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/sso-mappings/${id}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoMappings }),
-  });
-}
-
-export function useDeleteSsoMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.delete<void>(`/api/authz/sso-mappings/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoMappings }),
-  });
-}
-
-export function useTestSsoMapping() {
-  return useMutation({
-    mutationFn: (data: SsoMappingTestRequest) =>
-      apiClient.post<SsoPlatformMappingTestResponse>(
-        '/api/authz/sso-mappings/test',
-        data
-      ),
-  });
-}
-
-export function useSsoAssignmentMappings(options: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: authzQueryKeys.ssoAssignmentMappings,
-    queryFn: () => apiClient.get<SsoAssignmentMapping[]>('/api/authz/sso-assignment-mappings'),
-    enabled: options.enabled ?? true,
-  });
-}
-
-export function useCreateSsoAssignmentMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: SsoAssignmentMappingInsert) =>
-      apiClient.post<AuthzCreatedIdResponse>('/api/authz/sso-assignment-mappings', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoAssignmentMappings }),
-  });
-}
-
-export function useUpdateSsoAssignmentMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...data }: SsoAssignmentMappingUpdate & { id: string }) =>
-      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/sso-assignment-mappings/${id}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoAssignmentMappings }),
-  });
-}
-
-export function useDeleteSsoAssignmentMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.delete<void>(`/api/authz/sso-assignment-mappings/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoAssignmentMappings }),
-  });
-}
-
-export function useTestSsoAssignmentMapping() {
-  return useMutation({
-    mutationFn: (data: SsoMappingTestRequest) =>
-      apiClient.post<SsoAssignmentMappingTestResponse>('/api/authz/sso-assignment-mappings/test', data),
-  });
-}
-
 export function useSsoEngineAccessSnapshots(
   params: SsoEngineAccessSnapshotParams = {},
   options: { enabled?: boolean } = {},
@@ -1119,14 +972,6 @@ export function useRunSsoSyncDiagnostics() {
   });
 }
 
-export function useSsoGroupMappings(options: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: authzQueryKeys.ssoGroupMappings,
-    queryFn: () => apiClient.get<SsoGroupMapping[]>('/api/authz/sso-group-mappings'),
-    enabled: options.enabled ?? true,
-  });
-}
-
 export function useIdentityProviders(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.identityProviders,
@@ -1143,56 +988,6 @@ export function useIdentityEntitlementMappings(options: { enabled?: boolean } = 
   });
 }
 
-export function useLegacyMappingCoverage(options: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: authzQueryKeys.legacyMappingCoverage,
-    queryFn: () => apiClient.get<LegacyMappingCoverageItem[]>('/api/authz/legacy-mapping-coverage'),
-    enabled: options.enabled ?? true,
-  });
-}
-
-export function useLegacyMappingRetirementReadiness(options: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: authzQueryKeys.legacyMappingRetirementReadiness,
-    queryFn: () => apiClient.get<LegacyMappingRetirementReadiness>('/api/authz/legacy-mapping-retirement-readiness'),
-    enabled: options.enabled ?? true,
-  });
-}
-
-export function useCreateSsoGroupMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: SsoGroupMappingInsert) =>
-      apiClient.post<AuthzCreatedIdResponse>('/api/authz/sso-group-mappings', data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoGroupMappings }),
-  });
-}
-
-export function useUpdateSsoGroupMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, ...data }: SsoGroupMappingUpdate & { id: string }) =>
-      apiClient.put<AuthzMutationSuccessResponse>(`/api/authz/sso-group-mappings/${id}`, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoGroupMappings }),
-  });
-}
-
-export function useDeleteSsoGroupMapping() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => apiClient.delete<void>(`/api/authz/sso-group-mappings/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: authzQueryKeys.ssoGroupMappings }),
-  });
-}
-
-export function useTestSsoGroupMapping() {
-  return useMutation({
-    mutationFn: (data: SsoMappingTestRequest) =>
-      apiClient.post<SsoGroupMappingTestResponse>('/api/authz/sso-group-mappings/test', data),
-  });
-}
-
-// ============================================================================
 // Authorization Policy Hooks
 // ============================================================================
 
