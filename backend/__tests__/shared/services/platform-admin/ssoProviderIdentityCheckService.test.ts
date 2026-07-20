@@ -3,14 +3,6 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { IdentityProvider } from '@enterpriseglue/shared/db/entities/index.js';
 import { ssoProviderIdentityCheckService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderIdentityCheckService.js';
 
-vi.mock('@enterpriseglue/shared/config/index.js', () => ({
-  config: {
-    microsoftClientId: undefined,
-    microsoftClientSecret: undefined,
-    microsoftTenantId: undefined,
-  },
-}));
-
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));

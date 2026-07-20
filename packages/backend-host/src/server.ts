@@ -121,19 +121,6 @@ export async function startServer() {
     console.log(`Voyager API listening on http://localhost:${config.port}`);
     console.log(`API docs: http://localhost:${config.port}/api/docs`);
 
-    // Debug: Check Microsoft Entra ID configuration
-    if (config.microsoftClientId && config.microsoftClientSecret && config.microsoftTenantId) {
-      console.log('✅ Microsoft Entra ID: Configured');
-      console.log(`   Client ID: ${config.microsoftClientId.substring(0, 8)}...`);
-      console.log(`   Tenant ID: ${config.microsoftTenantId.substring(0, 8)}...`);
-    } else {
-      console.log('⚠️  Microsoft Entra ID: Not configured');
-      console.log('   Missing:', [
-        !config.microsoftClientId && 'CLIENT_ID',
-        !config.microsoftClientSecret && 'CLIENT_SECRET',
-        !config.microsoftTenantId && 'TENANT_ID'
-      ].filter(Boolean).join(', '));
-    }
   });
 
   // Start background pollers

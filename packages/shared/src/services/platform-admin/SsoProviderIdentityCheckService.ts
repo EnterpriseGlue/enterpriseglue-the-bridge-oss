@@ -1,5 +1,4 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { config } from '@enterpriseglue/shared/config/index.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import type { IdentityClaims } from './IdentityClaims.js';
@@ -727,9 +726,9 @@ class SsoProviderIdentityCheckServiceClass {
       : normalizeProviderType(provider?.protocol, providerId);
 
     return {
-      clientId: configuredString(configuration, 'clientId') || config.microsoftClientId || null,
-      clientSecret: secretResolver.resolveStored(configuredString(configuration, 'clientSecretRef')) || config.microsoftClientSecret || null,
-      tenantId: provider?.directoryTenantId || providerTenantId || config.microsoftTenantId || null,
+      clientId: configuredString(configuration, 'clientId'),
+      clientSecret: secretResolver.resolveStored(configuredString(configuration, 'clientSecretRef')),
+      tenantId: provider?.directoryTenantId || providerTenantId || null,
       providerType,
     };
   }

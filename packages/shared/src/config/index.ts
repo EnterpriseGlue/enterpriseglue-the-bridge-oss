@@ -113,17 +113,6 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   camundaUsername: z.string().optional(),
   camundaPassword: z.string().optional(),
   
-  // Microsoft Entra ID (Azure AD) configuration
-  microsoftClientId: z.string().optional(),
-  microsoftClientSecret: z.string().optional(),
-  microsoftTenantId: z.string().optional(),
-  microsoftRedirectUri: z.string().url().optional(),
-  
-  // Google OAuth configuration
-  googleClientId: z.string().optional(),
-  googleClientSecret: z.string().optional(),
-  googleRedirectUri: z.string().url().optional(),
-  
   // Encryption
   encryptionKey: z.string().length(64).regex(/^[0-9a-fA-F]+$/, 'Must be a 64-character hex string'),
 
@@ -228,13 +217,6 @@ function loadConfig(): Config {
     camundaBaseUrl: process.env.CAMUNDA_BASE_URL,
     camundaUsername: process.env.CAMUNDA_USERNAME,
     camundaPassword: process.env.CAMUNDA_PASSWORD,
-    microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
-    microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-    microsoftTenantId: process.env.MICROSOFT_TENANT_ID,
-    microsoftRedirectUri: process.env.MICROSOFT_REDIRECT_URI,
-    googleClientId: process.env.GOOGLE_CLIENT_ID,
-    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
     encryptionKey: process.env.ENCRYPTION_KEY,
     trustProxy: process.env.TRUST_PROXY,
     configBundlePath: envOrUndefined(process.env.EG_CONFIG_BUNDLE_PATH),

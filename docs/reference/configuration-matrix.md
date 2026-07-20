@@ -92,13 +92,7 @@ This matrix lists current executable settings; see [Deploy Authorization Configu
 | EG_ALLOW_INSECURE_ENGINE_HTTP | No | false | Explicit temporary migration override for HTTP endpoints when endpoint policy is enforced |
 | CAMUNDA_USERNAME | No | Camunda auth |
 | CAMUNDA_PASSWORD | No | Camunda auth |
-| MICROSOFT_CLIENT_ID | No | Microsoft Entra ID |
-| MICROSOFT_CLIENT_SECRET | No | Microsoft Entra ID |
-| MICROSOFT_TENANT_ID | No | Microsoft Entra ID |
-| MICROSOFT_REDIRECT_URI | No | Microsoft Entra ID |
-| GOOGLE_CLIENT_ID | No | Google OAuth |
-| GOOGLE_CLIENT_SECRET | No | Google OAuth |
-| GOOGLE_REDIRECT_URI | No | Google OAuth |
+| Identity provider credentials | Platform Settings | Configure OIDC, SAML, LDAP, or Graph-enabled Microsoft providers as `IdentityProvider` records with secret references; legacy `MICROSOFT_*` and `GOOGLE_*` environment variables are unsupported. |
 | RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS | No | disabled | Positive milliseconds for scheduled runtime inventory refresh of active resource-aware engines |
 | RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS | No | global | Comma-separated tenant ids; use `global`/`null` for the OSS/default tenant |
 | RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START | No | false | Run a reconciliation pass after backend startup |

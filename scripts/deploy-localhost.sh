@@ -178,22 +178,7 @@ check_env() {
     error "JWT_SECRET must be changed for production! Generate: openssl rand -base64 32"
   fi
   
-  # Warn about optional features
-  if [[ -z "${MICROSOFT_CLIENT_ID:-}" ]]; then
-    warn "Microsoft Entra ID not configured - SSO will not be available"
-  else
-    log "✅ Microsoft Entra ID configured"
-    # Validate Entra ID config is complete
-    if [[ -z "${MICROSOFT_CLIENT_SECRET:-}" ]] || [[ -z "${MICROSOFT_TENANT_ID:-}" ]]; then
-      error "Incomplete Microsoft Entra ID configuration. Need CLIENT_ID, CLIENT_SECRET, and TENANT_ID"
-    fi
-    
-    # Check production redirect URI
-    if [[ "$NODE_ENV" == "production" ]] && [[ "${MICROSOFT_REDIRECT_URI:-}" == *"localhost"* ]]; then
-      error "MICROSOFT_REDIRECT_URI must use production domain (not localhost)"
-    fi
-  fi
-  
+
   log "✅ Environment configuration valid"
 }
 
@@ -469,12 +454,8 @@ print_summary() {
   log "  Password:  (from .env ADMIN_PASSWORD)"
   log ""
   
-  if [[ -n "${MICROSOFT_CLIENT_ID:-}" ]]; then
-    log "✅ Microsoft Entra ID: Enabled"
-  else
-    log "⚠️  Microsoft Entra ID: Not configured"
-  fi
-  
+  log "ℹ️  External identity providers: configured in Platform Settings"
+
   if [[ -n "${EMAIL_PROVIDER:-}" && -n "${EMAIL_API_KEY:-}" && -n "${EMAIL_FROM_NAME:-}" && -n "${EMAIL_FROM_EMAIL:-}" ]]; then
     log "ℹ️  Email bootstrap: seeded from EMAIL_* env vars on startup"
   else
