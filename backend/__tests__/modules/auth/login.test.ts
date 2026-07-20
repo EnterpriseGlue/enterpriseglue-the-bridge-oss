@@ -4,7 +4,6 @@ import express from 'express';
 import loginRoute from '../../../../packages/backend-host/src/modules/auth/routes/login.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
 import { IdentityProvider } from '@enterpriseglue/shared/db/entities/IdentityProvider.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
@@ -79,9 +78,6 @@ describe('auth login module', () => {
   });
 
   it('returns 401 for non-existent user', async () => {
-    const ssoProviderRepo = {
-      count: vi.fn().mockResolvedValue(0),
-    };
     const identityProviderRepo = { count: vi.fn().mockResolvedValue(0) };
     const userRepo = {
       createQueryBuilder: vi.fn(() => ({
@@ -93,7 +89,6 @@ describe('auth login module', () => {
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity === User) return userRepo;
-        if (entity === SsoProvider) return ssoProviderRepo;
         if (entity === IdentityProvider) return identityProviderRepo;
         return { insert: vi.fn() };
       },

@@ -1,6 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import type { IdentityClaims } from './IdentityClaims.js';
 import { secretResolver } from './SecretResolver.js';
@@ -55,6 +55,20 @@ interface MicrosoftProviderConfig {
   clientSecret: string | null;
   tenantId: string | null;
   providerType: string;
+}
+
+function parseConfiguration(value: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function configuredString(configuration: Record<string, unknown>, key: string): string | null {
+  const value = configuration[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function normalizeProviderType(providerType: string | null | undefined, providerId: string): string {
@@ -692,25 +706,30 @@ class SsoProviderIdentityCheckServiceClass {
 
   private async resolveMicrosoftProviderConfig(providerId: string, providerTenantId?: string | null): Promise<MicrosoftProviderConfig> {
     const dataSource = await getDataSource();
-    const providerRepo = dataSource.getRepository(SsoProvider);
+    const providerRepo = dataSource.getRepository(IdentityProvider);
     const providerById = providerId
       ? await providerRepo.findOne({
         where: { id: providerId },
-        select: ['id', 'type', 'clientId', 'clientSecretEnc', 'tenantId'],
+        select: ['id', 'key', 'protocol', 'directoryTenantId', 'configurationJson', 'syncJson'],
       })
       : null;
     const provider = providerById || (providerId === 'microsoft'
       ? await providerRepo.findOne({
-        where: { type: 'microsoft' },
-        select: ['id', 'type', 'clientId', 'clientSecretEnc', 'tenantId'],
+        where: { key: 'microsoft' },
+        select: ['id', 'key', 'protocol', 'directoryTenantId', 'configurationJson', 'syncJson'],
       })
       : null);
-    const providerType = normalizeProviderType(provider?.type, providerId);
+    const configuration = parseConfiguration(provider?.configurationJson);
+    const sync = parseConfiguration(provider?.syncJson);
+    const graphConnector = sync.connectorCapability === 'graph';
+    const providerType = graphConnector || provider?.key === 'microsoft' || provider?.key === 'entra'
+      ? 'microsoft'
+      : normalizeProviderType(provider?.protocol, providerId);
 
     return {
-      clientId: provider?.clientId || config.microsoftClientId || null,
-      clientSecret: secretResolver.resolveStored(provider?.clientSecretEnc) || config.microsoftClientSecret || null,
-      tenantId: provider?.tenantId || providerTenantId || config.microsoftTenantId || null,
+      clientId: configuredString(configuration, 'clientId') || config.microsoftClientId || null,
+      clientSecret: secretResolver.resolveStored(configuredString(configuration, 'clientSecretRef')) || config.microsoftClientSecret || null,
+      tenantId: provider?.directoryTenantId || providerTenantId || config.microsoftTenantId || null,
       providerType,
     };
   }

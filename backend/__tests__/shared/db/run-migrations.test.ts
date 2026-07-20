@@ -101,7 +101,7 @@ describe('runMigrations bootstrap behavior', () => {
 
   it('runs synchronize when any core bootstrap table is missing', async () => {
     const bootstrapRunner = createBootstrapRunner(
-      vi.fn(async (tablePath: string) => tablePath !== 'main.sso_providers')
+      vi.fn(async (tablePath: string) => tablePath !== 'main.refresh_tokens')
     );
     const integrityRunner = createIntegrityRunner();
 
@@ -112,7 +112,6 @@ describe('runMigrations bootstrap behavior', () => {
       getMetadata: vi.fn((entity: any) => {
         const byName: Record<string, string> = {
           User: 'main.users',
-          SsoProvider: 'main.sso_providers',
           RefreshToken: 'main.refresh_tokens',
           EnvironmentTag: 'main.environment_tags',
           PlatformSettings: 'main.platform_settings',

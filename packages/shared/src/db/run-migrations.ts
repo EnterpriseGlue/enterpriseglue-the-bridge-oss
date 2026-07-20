@@ -5,7 +5,6 @@ import { PlatformSettings } from '../infrastructure/persistence/entities/Platfor
 import { User } from '../infrastructure/persistence/entities/User.js';
 // Tenant entities removed - multi-tenancy is EE-only
 import { EmailTemplate } from '../infrastructure/persistence/entities/EmailTemplate.js';
-import { SsoProvider } from '../infrastructure/persistence/entities/SsoProvider.js';
 import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 import { permissionService } from '../services/platform-admin/permissions.js';
 import { RefreshToken } from '../infrastructure/persistence/entities/RefreshToken.js';
@@ -388,7 +387,6 @@ export async function runMigrations() {
 
       const coreBootstrapEntities = [
         User,
-        SsoProvider,
         RefreshToken,
         EnvironmentTag,
         PlatformSettings,

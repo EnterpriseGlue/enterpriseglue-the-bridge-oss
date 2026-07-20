@@ -250,112 +250,6 @@ export const AuthzAuditLogResponseSchema = z.object({
   timestamp: z.number(),
 }).strict();
 
-// Raw schema - matches TypeORM SsoProvider entity
-export const SsoProviderSchemaRaw = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.string(),
-  enabled: z.boolean(),
-  clientId: z.string().nullable(),
-  tenantId: z.string().nullable(),
-  issuerUrl: z.string().nullable(),
-  scopes: z.string().nullable(),
-  callbackUrl: z.string().nullable(),
-  iconUrl: z.string().nullable(),
-  buttonLabel: z.string().nullable(),
-  buttonColor: z.string().nullable(),
-  displayOrder: z.number(),
-  autoProvision: z.boolean(),
-  defaultRole: z.string(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
-
-// SSO Provider - Select schema (API response)
-export const SsoProviderSchema = SsoProviderSchemaRaw.transform((p) => ({
-  id: p.id,
-  name: p.name,
-  type: p.type as 'microsoft' | 'google' | 'saml' | 'oidc',
-  enabled: p.enabled,
-  clientId: p.clientId ?? undefined,
-  tenantId: p.tenantId ?? undefined,
-  issuerUrl: p.issuerUrl ?? undefined,
-  scopes: p.scopes ?? undefined,
-  callbackUrl: p.callbackUrl ?? undefined,
-  iconUrl: p.iconUrl ?? undefined,
-  buttonLabel: p.buttonLabel ?? undefined,
-  buttonColor: p.buttonColor ?? undefined,
-  displayOrder: p.displayOrder,
-  autoProvision: p.autoProvision,
-  defaultRole: normalizeRoleValue(p.defaultRole),
-  createdAt: Number(p.createdAt),
-  updatedAt: Number(p.updatedAt),
-}));
-
-/**
- * Response for the legacy SSO provider compatibility API. Secret material is
- * never present; the two booleans only communicate whether a redacted value
- * is already configured so an edit form can preserve it.
- */
-export const LegacySsoProviderResponseSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
-  enabled: z.boolean(),
-  clientId: z.string().nullable(),
-  tenantId: z.string().nullable(),
-  issuerUrl: z.string().nullable(),
-  authorizationUrl: z.string().nullable(),
-  tokenUrl: z.string().nullable(),
-  userInfoUrl: z.string().nullable(),
-  scopes: z.array(z.string()),
-  entityId: z.string().nullable(),
-  ssoUrl: z.string().nullable(),
-  sloUrl: z.string().nullable(),
-  /** Legacy rows can expose a historical algorithm label; validation occurs at write/enable boundaries. */
-  signatureAlgorithm: z.string().nullable(),
-  callbackUrl: z.string().nullable(),
-  iconUrl: z.string().nullable(),
-  buttonLabel: z.string().nullable(),
-  buttonColor: z.string().nullable(),
-  displayOrder: z.number().int(),
-  autoProvision: z.boolean(),
-  defaultRole: z.enum(['admin', 'user']),
-  createdAt: z.number().int(),
-  updatedAt: z.number().int(),
-  hasClientSecret: z.boolean(),
-  hasCertificate: z.boolean(),
-}).strict();
-
-export const LegacySsoProviderCreateRequestSchema = z.object({
-  name: z.string().min(1).max(100),
-  type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
-  enabled: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-  clientId: z.string().optional(),
-  clientSecret: z.string().optional(),
-  tenantId: z.string().optional(),
-  issuerUrl: z.string().url().optional().or(z.literal('')),
-  authorizationUrl: z.string().url().optional().or(z.literal('')),
-  tokenUrl: z.string().url().optional().or(z.literal('')),
-  userInfoUrl: z.string().url().optional().or(z.literal('')),
-  scopes: z.array(z.string()).optional(),
-  entityId: z.string().optional(),
-  ssoUrl: z.string().url().optional().or(z.literal('')),
-  sloUrl: z.string().url().optional().or(z.literal('')),
-  certificate: z.string().optional(),
-  signatureAlgorithm: z.enum(['sha256', 'sha512']).optional(),
-  iconUrl: z.string().url().optional().or(z.literal('')),
-  buttonLabel: z.string().optional(),
-  buttonColor: z.string().optional(),
-  displayOrder: z.number().int().optional(),
-  autoProvision: z.boolean().optional(),
-}).strict();
-export const LegacySsoProviderUpdateRequestSchema = LegacySsoProviderCreateRequestSchema.partial();
-export const LegacySsoProviderToggleRequestSchema = z.object({ riskAcknowledged: z.boolean().optional() }).default({});
-export const LegacySsoProviderToggleResponseSchema = z.object({ enabled: z.boolean() });
-export const LegacySsoProviderDefaultRoleMigrationRequestSchema = z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() });
-
 /** Public SAML readiness indicators; this contract never exposes provider secrets or configuration. */
 export const SamlAuthenticationStatusSchema = z.object({
   enabled: z.boolean(),
@@ -364,13 +258,6 @@ export const SamlAuthenticationStatusSchema = z.object({
   providerEnabled: z.boolean(),
   missingFields: z.array(z.enum(['entityId', 'ssoUrl', 'certificate'])),
 }).strict();
-
-// SSO Provider - Insert schema
-export const SsoProviderInsertSchema = z.object({
-  id: z.string().uuid().optional(),
-  name: z.string().min(1),
-  type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
-});
 
 export const PermissionCatalogEntrySchema = z.object({
   key: z.string(),
@@ -1454,13 +1341,6 @@ export type PolicyCondition = z.infer<typeof PolicyConditionSchema>;
 export type AuthzAuditLogEntry = z.infer<typeof AuthzAuditLogSchema>;
 export type AuthzAuditQuery = z.input<typeof AuthzAuditQuerySchema>;
 export type AuthzAuditLogResponse = z.infer<typeof AuthzAuditLogResponseSchema>;
-export type SsoProvider = z.infer<typeof SsoProviderSchema>;
-export type LegacySsoProviderResponse = z.infer<typeof LegacySsoProviderResponseSchema>;
-export type LegacySsoProviderCreateRequest = z.input<typeof LegacySsoProviderCreateRequestSchema>;
-export type LegacySsoProviderUpdateRequest = z.input<typeof LegacySsoProviderUpdateRequestSchema>;
-export type LegacySsoProviderToggleRequest = z.input<typeof LegacySsoProviderToggleRequestSchema>;
-export type LegacySsoProviderToggleResponse = z.infer<typeof LegacySsoProviderToggleResponseSchema>;
-export type LegacySsoProviderDefaultRoleMigrationRequest = z.input<typeof LegacySsoProviderDefaultRoleMigrationRequestSchema>;
 export type SamlAuthenticationStatus = z.infer<typeof SamlAuthenticationStatusSchema>;
 export type PermissionCatalogEntry = z.infer<typeof PermissionCatalogEntrySchema>;
 export type CustomPermissionCreate = z.infer<typeof CustomPermissionCreateSchema>;

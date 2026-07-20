@@ -77,7 +77,6 @@ export { RemoteSyncState } from './RemoteSyncState.js';
 export { SavedFilter } from './SavedFilter.js';
 export { SamlAssertionReplay } from './SamlAssertionReplay.js';
 export { SsoNormalizedIdentity } from './SsoNormalizedIdentity.js';
-export { SsoProvider } from './SsoProvider.js';
 export { SsoSyncEvent } from './SsoSyncEvent.js';
 export { SsoSyncRun } from './SsoSyncRun.js';
 export { ServiceAccount } from './ServiceAccount.js';

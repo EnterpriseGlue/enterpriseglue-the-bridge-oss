@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { SsoProvider } from '@enterpriseglue/shared/db/entities/index.js';
+import { IdentityProvider } from '@enterpriseglue/shared/db/entities/index.js';
 import { ssoProviderIdentityCheckService } from '@enterpriseglue/shared/services/platform-admin/SsoProviderIdentityCheckService.js';
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
@@ -40,6 +40,17 @@ function response(overrides: Record<string, unknown>) {
     json: vi.fn().mockResolvedValue({}),
     ...overrides,
   } as any;
+}
+
+function microsoftGraphProvider() {
+  return {
+    id: 'microsoft',
+    key: 'microsoft',
+    protocol: 'oidc',
+    directoryTenantId: 'tenant-1',
+    configurationJson: JSON.stringify({ clientId: 'client-1', clientSecretRef: 'secret-1' }),
+    syncJson: JSON.stringify({ connectorCapability: 'graph' }),
+  };
 }
 
 describe('ssoProviderIdentityCheckService', () => {
@@ -112,7 +123,7 @@ describe('ssoProviderIdentityCheckService', () => {
     const findOne = vi.fn().mockResolvedValue(null);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -133,16 +144,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('returns active Microsoft profile details when Graph finds an enabled user', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: `enc:${Buffer.from('secret-1').toString('base64')}`,
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -187,16 +192,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('returns deleted when Microsoft Graph user lookup returns 404', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -218,16 +217,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('resolves Microsoft group checks by exact display name when claim value is not an object id', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -270,16 +263,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('returns deleted when Microsoft display-name group lookup has no exact matches', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -308,16 +295,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('returns unknown when Microsoft display-name group lookup is ambiguous', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -351,16 +332,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('returns deleted when Microsoft Graph group lookup returns 404', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -392,16 +367,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('refreshes Microsoft group and app-role claims through Graph', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });
@@ -498,16 +467,10 @@ describe('ssoProviderIdentityCheckService', () => {
   });
 
   it('preserves Microsoft roles when app-role lookup is unavailable', async () => {
-    const findOne = vi.fn().mockResolvedValue({
-      id: 'microsoft',
-      type: 'microsoft',
-      clientId: 'client-1',
-      clientSecretEnc: 'secret-1',
-      tenantId: 'tenant-1',
-    });
+    const findOne = vi.fn().mockResolvedValue(microsoftGraphProvider());
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === SsoProvider) return { findOne };
+        if (entity === IdentityProvider) return { findOne };
         throw new Error('Unexpected repository');
       },
     });

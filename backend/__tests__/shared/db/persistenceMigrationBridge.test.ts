@@ -5,11 +5,14 @@ import { AddIdentityProviders1700000000056 as PersistenceIdentityProvidersMigrat
 import { AddIdentityReconciliationAndDeploymentReceipts1700000000057 as PersistenceReconciliationMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000057-add-identity-reconciliation-and-deployment-receipts.js';
 import { DropLegacySsoMappingTables1700000000089 as DbDropLegacyMappingsMigration } from '@enterpriseglue/shared/db/migrations/1700000000089-drop-legacy-sso-mapping-tables.js';
 import { DropLegacySsoMappingTables1700000000089 as PersistenceDropLegacyMappingsMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000089-drop-legacy-sso-mapping-tables.js';
+import { DropLegacySsoProviders1700000000090 as DbDropLegacyProvidersMigration } from '@enterpriseglue/shared/db/migrations/1700000000090-drop-legacy-sso-providers.js';
+import { DropLegacySsoProviders1700000000090 as PersistenceDropLegacyProvidersMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000090-drop-legacy-sso-providers.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
     expect(PersistenceIdentityProvidersMigration).toBe(DbIdentityProvidersMigration);
     expect(PersistenceReconciliationMigration).toBe(DbReconciliationMigration);
     expect(PersistenceDropLegacyMappingsMigration).toBe(DbDropLegacyMappingsMigration);
+    expect(PersistenceDropLegacyProvidersMigration).toBe(DbDropLegacyProvidersMigration);
   });
 });
