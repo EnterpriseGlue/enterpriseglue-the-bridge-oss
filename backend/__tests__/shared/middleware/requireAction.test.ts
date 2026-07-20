@@ -567,6 +567,17 @@ describe('requireAction project resource resolvers', () => {
     expect(camundaGet).not.toHaveBeenCalled();
   });
 
+  it('rejects selected instances that are absent from the runtime inventory', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
+    runtimeResourceFindOne.mockResolvedValue(null);
+
+    const response = await request(app).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] });
+
+    expect(response.status).toBe(403);
+  });
+
   it('requires both migration definitions to be authorized on resource-aware engines', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock)
