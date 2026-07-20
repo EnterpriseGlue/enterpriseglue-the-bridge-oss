@@ -1272,4 +1272,8 @@ describe('requireAction project resource resolvers', () => {
   it('rejects invitation targets outside the supported authorization scopes', async () => {
     expect((await request(app).post('/invitations').send({ resourceType: 'engine_set', resourceId: 'set-1' })).status).toBe(400);
   });
+
+  it('requires an identifier for project and engine invitation targets', async () => {
+    expect((await request(app).post('/invitations').send({ resourceType: 'project' })).status).toBe(400);
+  });
 });
