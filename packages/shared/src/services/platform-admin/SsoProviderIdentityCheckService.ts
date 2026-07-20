@@ -2,7 +2,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
-import type { SsoClaims } from './SsoClaimsMappingService.js';
+import type { IdentityClaims } from './IdentityClaims.js';
 import { secretResolver } from './SecretResolver.js';
 
 export type SsoProviderIdentityStatus = 'active' | 'inactive' | 'deleted' | 'unsupported' | 'unknown';
@@ -46,7 +46,7 @@ export interface SsoProviderClaimsRefreshResult {
   status: SsoProviderClaimsRefreshStatus;
   reason: string;
   checkedAt: number;
-  claims?: SsoClaims;
+  claims?: IdentityClaims;
   details?: Record<string, unknown>;
 }
 
@@ -167,7 +167,7 @@ class SsoProviderIdentityCheckServiceClass {
     };
   }
 
-  async refreshClaims(identity: SsoNormalizedIdentity, currentClaims: SsoClaims): Promise<SsoProviderClaimsRefreshResult> {
+  async refreshClaims(identity: SsoNormalizedIdentity, currentClaims: IdentityClaims): Promise<SsoProviderClaimsRefreshResult> {
     const providerType = normalizeProviderType(identity.providerType, identity.providerId);
     if (isMicrosoftProvider(providerType, identity.providerId)) {
       return this.refreshMicrosoftClaims(identity, currentClaims);
@@ -189,12 +189,12 @@ class SsoProviderIdentityCheckServiceClass {
 
   private async refreshSnapshotClaims(
     identity: SsoNormalizedIdentity,
-    currentClaims: SsoClaims,
+    currentClaims: IdentityClaims,
     providerType: string
   ): Promise<SsoProviderClaimsRefreshResult> {
     const groups = normalizeStringArray(currentClaims.groups);
     const roles = normalizeStringArray(currentClaims.roles);
-    const claims: SsoClaims = {
+    const claims: IdentityClaims = {
       ...currentClaims,
       groups,
       roles,
@@ -482,7 +482,7 @@ class SsoProviderIdentityCheckServiceClass {
 
   private async refreshMicrosoftClaims(
     identity: SsoNormalizedIdentity,
-    currentClaims: SsoClaims
+    currentClaims: IdentityClaims
   ): Promise<SsoProviderClaimsRefreshResult> {
     const { clientId, clientSecret, tenantId } = await this.resolveMicrosoftProviderConfig(
       identity.providerId,

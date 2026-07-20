@@ -7,7 +7,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { externalIdentityService } from './ExternalIdentityService.js';
 import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
 import { identityEntitlementMappingService, isHumanIdentityEntitlementType, matchesIdentityEntitlement, type IdentityEntitlementMatchOperator } from './IdentityEntitlementMappingService.js';
-import type { SsoClaims } from './SsoClaimsMappingService.js';
+import type { IdentityClaims } from './IdentityClaims.js';
 
 type SsoNormalizedIdentityStore = DataSource | EntityManager;
 
@@ -23,7 +23,7 @@ export interface UpsertSsoNormalizedIdentityInput {
   displayName?: string | null;
   firstName?: string | null;
   lastName?: string | null;
-  claims: SsoClaims;
+  claims: IdentityClaims;
   authorizationAttributeKeys?: string[];
   now?: number;
 }
@@ -109,10 +109,10 @@ function stringifyJson(value: unknown, fallback: string): string {
   }
 }
 
-function parseStoredClaims(value: string): SsoClaims {
+function parseStoredClaims(value: string): IdentityClaims {
   try {
     const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as SsoClaims : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as IdentityClaims : {};
   } catch {
     return {};
   }
@@ -136,7 +136,7 @@ function encodeReplayCursor(identity: SsoNormalizedIdentity): string {
  * raw protocol payload: it can contain JWT assertions, SAML attributes, LDAP
  * directory data, or unrelated PII.
  */
-export function allowlistedIdentityClaims(claims: SsoClaims, authorizationAttributeKeys: string[] = []): SsoClaims {
+export function allowlistedIdentityClaims(claims: IdentityClaims, authorizationAttributeKeys: string[] = []): IdentityClaims {
   const source = claims as Record<string, unknown>;
   const groups = normalizeStringArray(source.groups ?? source.group ?? source.memberOf).sort();
   const roles = normalizeStringArray(source.roles ?? source.role ?? source.appRoles).sort();
@@ -154,7 +154,7 @@ export function allowlistedIdentityClaims(claims: SsoClaims, authorizationAttrib
     ...(roles.length > 0 ? { roles } : {}),
     ...(scopes.length > 0 ? { scp: Array.from(new Set(scopes)) } : {}),
     ...(Object.keys(attributes).length > 0 ? { __enterpriseglue_authz_attributes: attributes } : {}),
-  } as SsoClaims;
+  } as IdentityClaims;
 }
 
 function adapterType(providerType: string): IdentityProviderType {

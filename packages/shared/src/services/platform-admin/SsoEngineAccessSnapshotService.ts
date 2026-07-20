@@ -13,7 +13,7 @@ import type {
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
-import type { SsoClaims } from './SsoClaimsMappingService.js';
+import type { IdentityClaims } from './IdentityClaims.js';
 
 type SnapshotStore = DataSource | EntityManager;
 
@@ -42,7 +42,7 @@ export interface SsoSnapshotActiveGrantInput {
   resourceId?: string | null;
   scopeType?: string | null;
   scopeId?: string | null;
-  claims?: SsoClaims | null;
+  claims?: IdentityClaims | null;
   details?: Record<string, unknown>;
 }
 
@@ -119,7 +119,7 @@ function addTenantScopeFilter(qb: { andWhere: (...args: any[]) => any }, alias: 
   qb.andWhere(`(${alias}.tenantId = :tenantId OR ${alias}.tenantId IS NULL)`, { tenantId: normalizedTenantId });
 }
 
-function extractClaimValues(claims: SsoClaims | null | undefined, keys: string[]): string[] {
+function extractClaimValues(claims: IdentityClaims | null | undefined, keys: string[]): string[] {
   if (!claims) return [];
   const values: string[] = [];
   for (const key of keys) {
@@ -133,15 +133,15 @@ function extractClaimValues(claims: SsoClaims | null | undefined, keys: string[]
   return Array.from(new Set(values.filter(Boolean))).sort();
 }
 
-function extractProviderSubjectIds(claims: SsoClaims | null | undefined): string[] {
+function extractProviderSubjectIds(claims: IdentityClaims | null | undefined): string[] {
   return extractClaimValues(claims, ['oid', 'sub', 'nameId', 'name_id', 'email', 'preferred_username', 'upn']);
 }
 
-function extractProviderGroupIds(claims: SsoClaims | null | undefined): string[] {
+function extractProviderGroupIds(claims: IdentityClaims | null | undefined): string[] {
   return extractClaimValues(claims, ['groups', 'group', 'groupIds']);
 }
 
-function extractProviderAppRoleIds(claims: SsoClaims | null | undefined): string[] {
+function extractProviderAppRoleIds(claims: IdentityClaims | null | undefined): string[] {
   return extractClaimValues(claims, ['roles', 'role', 'appRoles', 'appRoleIds']);
 }
 

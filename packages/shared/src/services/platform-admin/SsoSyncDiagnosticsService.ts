@@ -19,7 +19,7 @@ import { ssoEngineAccessSnapshotService, type SsoEngineAccessSnapshotStatus } fr
 import { ssoGroupMappingService } from './SsoGroupMappingService.js';
 import { ssoProviderIdentityCheckService } from './SsoProviderIdentityCheckService.js';
 import { IdentityProviderFailure } from './IdentityProviderFailure.js';
-import type { SsoClaims } from './SsoClaimsMappingService.js';
+import type { IdentityClaims } from './IdentityClaims.js';
 
 export type SsoSyncRunStatus = 'running' | 'success' | 'failed';
 export type SsoSyncTrigger = 'login' | 'scheduled' | 'manual' | 'mapping_change' | 'engine_change';
@@ -285,12 +285,12 @@ function assignmentScope(assignment: Pick<RbacRoleAssignment, 'scopeType' | 'sco
   };
 }
 
-function parseClaimsSnapshot(claimsJson: string | null | undefined): SsoClaims | null {
+function parseClaimsSnapshot(claimsJson: string | null | undefined): IdentityClaims | null {
   if (!claimsJson) return null;
   try {
     const parsed = JSON.parse(claimsJson);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return parsed as SsoClaims;
+    return parsed as IdentityClaims;
   } catch {
     return null;
   }
@@ -301,7 +301,7 @@ function parseClaimsSnapshot(claimsJson: string | null | undefined): SsoClaims |
  * attributes that were already sanitized at login, without treating the
  * snapshot as an unrestricted claims document.
  */
-function persistedAuthorizationAttributes(claims: SsoClaims): Record<string, unknown> {
+function persistedAuthorizationAttributes(claims: IdentityClaims): Record<string, unknown> {
   const value = (claims as Record<string, unknown>).__enterpriseglue_authz_attributes;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value)
