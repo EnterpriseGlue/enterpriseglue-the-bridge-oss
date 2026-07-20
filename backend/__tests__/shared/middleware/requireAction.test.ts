@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { getRuntimeResourceActionDecision, requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -72,6 +72,19 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => 
 
 const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet }));
+
+describe('getRuntimeResourceActionDecision', () => {
+  it('fails closed when no resolved runtime resource key is supplied', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    await expect(getRuntimeResourceActionDecision({
+      actionId: 'engine.runtime.process-definitions.read', userId: 'user-1', tenantId: null,
+      engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: [],
+    })).resolves.toEqual({ allowed: false, reason: 'Action decision unavailable for this runtime resource' });
+    expect(getDataSource).not.toHaveBeenCalled();
+    vi.clearAllMocks();
+  });
+});
 
 describe('requireRuntimeCollectionAction', () => {
   it('rejects an unauthenticated runtime collection request before resolving any resource', async () => {
