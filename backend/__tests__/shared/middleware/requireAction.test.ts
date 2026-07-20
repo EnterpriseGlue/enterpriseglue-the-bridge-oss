@@ -106,6 +106,17 @@ describe('getRuntimeResourceActionDecision', () => {
     })).resolves.toEqual({ allowed: false, reason: 'Action unavailable for this runtime resource' });
     vi.clearAllMocks();
   });
+
+  it('allows when every resolved runtime resource grants the action', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'resource-1', tenantId: null }) }) });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    await expect(getRuntimeResourceActionDecision({
+      actionId: 'engine.runtime.process-definitions.read', userId: 'user-1', tenantId: null,
+      engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: ['payments'],
+    })).resolves.toEqual({ allowed: true });
+    vi.clearAllMocks();
+  });
 });
 
 describe('requireRuntimeCollectionAction', () => {
