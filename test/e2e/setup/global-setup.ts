@@ -329,12 +329,15 @@ export default async function globalSetup() {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [groupScopedGroupId, 'tenant-default', groupScopedGroupKey, authzGroupKeyIdentity('tenant-default', groupScopedGroupKey), 'E2E bounded operators', 'Disposable local E2E group', 'system', scopedSourceRef, false, false, now, now]
   );
+  let groupScopedMembershipId = '';
   for (const groupId of [E2E_PLATFORM_GROUP_IDS.authenticatedUsers, groupScopedGroupId]) {
+    const membershipId = randomUUID();
+    if (groupId === groupScopedGroupId) groupScopedMembershipId = membershipId;
     await pool.query(
       `INSERT INTO ${schema}.authz_group_memberships
         (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [randomUUID(), null, groupId, groupScopedUserId, 'system', scopedSourceRef, null, null, now, now]
+      [membershipId, null, groupId, groupScopedUserId, 'system', scopedSourceRef, null, null, now, now]
     );
   }
   await pool.query(
@@ -444,6 +447,7 @@ export default async function globalSetup() {
       groupScopedPassword,
       groupScopedEngineId,
       groupScopedEngineName,
+      groupScopedMembershipId,
       expiredEmail,
       expiredPassword,
       expiredEngineId,

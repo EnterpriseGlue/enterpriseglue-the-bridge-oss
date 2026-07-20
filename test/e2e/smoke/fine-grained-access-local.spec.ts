@@ -27,6 +27,25 @@ async function removeScopedAssignment(): Promise<void> {
   }
 }
 
+async function removeScopedGroupMembership(): Promise<void> {
+  if (!fixture.groupScopedMembershipId) throw new Error('Missing scoped group-membership fixture id');
+  const pool = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  });
+  try {
+    const schema = process.env.POSTGRES_SCHEMA || 'main';
+    const result = await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE id = $1`, [fixture.groupScopedMembershipId]);
+    expect(result.rowCount).toBe(1);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function login(page: Page) {
   if (!fixture.email || !fixture.password) throw new Error('Missing fine-grained E2E fixture credentials');
   await page.goto('/login?local=1');
@@ -144,6 +163,32 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(inventory.body).toEqual([]);
 
     const deniedRead = await request(page, `/engines-api/engines/${fixture.expiredEngineId}`);
+    expect([403, 404]).toContain(deniedRead.status);
+  });
+
+  test('invalidates group-derived access immediately when the membership is removed', async ({ page }) => {
+    expect(fixture.groupEmail).toBeTruthy();
+    expect(fixture.groupPassword).toBeTruthy();
+    expect(fixture.groupScopedEngineId).toBeTruthy();
+
+    await page.goto('/login?local=1');
+    await page.getByLabel(/email/i).fill(fixture.groupEmail!);
+    await page.getByLabel(/password/i).fill(fixture.groupPassword!);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+
+    const before = await request(page, '/api/authz/me/permissions');
+    expect(before.status, JSON.stringify(before.body)).toBe(200);
+    expect(before.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).toContain(fixture.groupScopedEngineId);
+
+    await removeScopedGroupMembership();
+
+    const after = await request(page, '/api/authz/me/permissions');
+    expect(after.status, JSON.stringify(after.body)).toBe(200);
+    expect(after.body.authorizationVersion).not.toBe(before.body.authorizationVersion);
+    expect(after.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.groupScopedEngineId);
+
+    const deniedRead = await request(page, `/engines-api/engines/${fixture.groupScopedEngineId}`);
     expect([403, 404]).toContain(deniedRead.status);
   });
 
