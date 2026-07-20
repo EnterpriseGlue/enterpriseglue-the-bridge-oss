@@ -602,6 +602,17 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('uses the latest runtime definition version when none is requested', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue([{ id: 'definition-latest', key: 'payments', tenantId: null }]);
+
+    const response = await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledWith(engineId, '/process-definition', { key: 'payments', latestVersion: true });
+  });
+
   it('rejects non-positive runtime definition versions on the resource-aware path', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
