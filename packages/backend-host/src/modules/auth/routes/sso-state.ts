@@ -2,8 +2,6 @@ import type { Request } from 'express';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { signSamlRelayState, verifySamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 
-export type SsoProviderType = 'microsoft' | 'google' | 'saml' | 'oidc' | 'ldap';
-
 export interface SsoState {
   timestamp: number;
   nonce: string;
@@ -12,15 +10,6 @@ export interface SsoState {
   identityProviderTenantId?: string;
   tenantSlug?: string;
   returnTo?: string;
-}
-
-export interface SsoProvisionedContext {
-  provider: SsoProviderType;
-  providerId?: string;
-  tenantSlug: string | null;
-  returnTo: string;
-  user: any;
-  userInfo: any;
 }
 
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -84,29 +73,6 @@ export function buildSignedSamlState(req: Request, providerId: string, identityP
   return signSamlRelayState(state);
 }
 
-export function appendSsoStartQuery(req: Request, startPath: string): string {
-  const params = new URLSearchParams();
-  const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
-  const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
-  const providerId = getSsoProviderId(req);
-
-  if (tenantSlug) params.set('tenantSlug', tenantSlug);
-  if (returnTo) params.set('returnTo', returnTo);
-  if (providerId) params.set('providerId', providerId);
-
-  const query = params.toString();
-  return query ? `${startPath}?${query}` : startPath;
-}
-
-/**
- * Returns a provider selection only when it is safe to carry through the
- * start route and bind into callback state. Callers without a valid selected
- * provider retain the legacy compatibility flow.
- */
-export function getSsoProviderId(req: Request): string | undefined {
-  return sanitizeProviderId(req.query.providerId);
-}
-
 export function parseSsoState(rawState: unknown): SsoState | null {
   if (typeof rawState !== 'string' || !rawState) return null;
 
@@ -148,14 +114,4 @@ export function getSsoReturnPath(state: SsoState | null): string {
 export function getSsoRedirectUrl(state: SsoState | null): string {
   const baseUrl = config.frontendUrl.replace(/\/$/, '');
   return `${baseUrl}${getSsoReturnPath(state)}`;
-}
-
-export async function notifySsoUserProvisioned(
-  req: Request,
-  context: SsoProvisionedContext
-): Promise<void> {
-  const hook = req.app.locals?.onSsoUserProvisioned;
-  if (typeof hook === 'function') {
-    await hook(context);
-  }
 }
