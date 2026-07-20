@@ -53,7 +53,6 @@ import {
   EffectiveAccessPanel,
   PolicyInspectionTable,
   type AuthzAuditFilterState,
-  type SsoAssignmentDiagnostics,
 } from './access-control';
 import { effectiveAccessSourceHeaders, type CoreAssignmentResourceType } from './access-control/effectiveAccessPresentation';
 import { accessControlTabFromSearchParams, type AccessControlTabId } from './access-control/accessControlTabPresentation';
@@ -70,7 +69,6 @@ import {
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
-import { SsoAssignmentsPanel } from './access-control/SsoAssignmentsPanel';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { GroupsPanel } from './access-control/GroupsPanel';
 import { EngineSetsPanel } from './access-control/EngineSetsPanel';
@@ -88,6 +86,7 @@ import type { RoleScopeFilter } from './access-control/roleScopePresentation';
 export { getAssignableRolesForPrincipal } from './access-control/assignmentFormOptions';
 export { filterPermissions, getPermissionImplications, getPermissionRisk } from './access-control/rolePermissionPresentation';
 export { buildPrincipalSummaries, buildResourceSummaries } from './access-control/principalResourcePresentation';
+type SsoAssignmentDiagnostics = any;
 import { getSsoEngineSnapshotStatusTagType as presentSsoEngineSnapshotStatusTagType, ssoEngineAccessSnapshotHeaders as presentedSsoEngineAccessSnapshotHeaders } from './access-control/ssoSnapshotPresentation';
 import {
   formatSsoSyncCounts as presentSsoSyncCounts,
