@@ -56,6 +56,23 @@ test('the local bootstrap rehearsal uses an isolated project for validate and ap
   assert.match(overlay, /EG_CONFIG_BOOTSTRAP_MODE: \$\{LOCAL_CONFIG_BOOTSTRAP_MODE:-validate\}/);
   assert.match(overlay, /EG_CONFIG_FAIL_CLOSED: "true"/);
   assert.match(overlay, /EG_CONFIG_EXPECTED_TENANT_SCOPE: \$\{LOCAL_CONFIG_BOOTSTRAP_EXPECTED_TENANT_SCOPE:-platform\}/);
+  assert.match(overlay, /EG_CONFIG_EXPECTED_SHA256: \$\{LOCAL_CONFIG_BOOTSTRAP_EXPECTED_SHA256:-\}/);
+  assert.match(overlay, /EG_CONFIG_REQUIRE_SECRET_PREFLIGHT: \$\{LOCAL_CONFIG_BOOTSTRAP_REQUIRE_SECRET_PREFLIGHT:-false\}/);
+});
+
+test('the local fail-closed rehearsal exercises only sanitized bootstrap failure cases', () => {
+  const rehearsal = read('scripts/run-local-config-bootstrap-fail-closed-rehearsal.sh');
+  const packageJson = JSON.parse(read('package.json'));
+
+  assert.equal(packageJson.scripts['test:config-bootstrap:local:fail-closed'], 'bash ./scripts/run-local-config-bootstrap-fail-closed-rehearsal.sh');
+  assert.match(rehearsal, /invalid_json/);
+  assert.match(rehearsal, /hash_mismatch/);
+  assert.match(rehearsal, /unresolved_secret/);
+  assert.match(rehearsal, /Configuration bundle could not be read/);
+  assert.match(rehearsal, /Configuration bundle hash verification failed/);
+  assert.match(rehearsal, /Configuration bundle secret preflight failed/);
+  assert.match(rehearsal, /down --volumes --remove-orphans/);
+  assert.match(rehearsal, /docker logs "\$container_id" 2>&1 \| grep -Fq "\$expected_message"/);
 });
 
 test('the Compose harness preserves bundle paths with spaces and rejects a missing bundle before startup', () => {

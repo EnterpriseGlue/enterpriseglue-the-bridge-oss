@@ -54,6 +54,7 @@
     "test:docker-config-bundles": "node --test scripts/config-bundle-docker-contract.test.mjs && pnpm --dir backend exec vitest run __tests__/shared/services/configBundleBootstrap.test.ts __tests__/app.test.ts --config vitest.config.ts --reporter=dot",
     "test:config-bootstrap:local": "./scripts/run-local-config-bootstrap-rehearsal.sh",
     "test:config-bootstrap:local:apply": "LOCAL_CONFIG_BOOTSTRAP_MODE=apply ./scripts/run-local-config-bootstrap-rehearsal.sh",
+    "test:config-bootstrap:local:fail-closed": "bash ./scripts/run-local-config-bootstrap-fail-closed-rehearsal.sh",
     "test:openshift-config-bundles": "node --test scripts/openshift-config-bundle-contract.test.mjs && pnpm run guard:config-deployment-contract",
     "test:config-bundle-cicd": "node --test scripts/config-bundle-ci-contract.test.mjs scripts/config-bundle-output.test.mjs scripts/config-bundle-exit.test.mjs && pnpm --dir backend exec vitest run __tests__/shared/services/platform-admin/configBundleApplyService.test.ts --config vitest.config.ts --reporter=dot",
     "test:documentation-contracts": "pnpm run guard:config-deployment-contract && pnpm --dir backend exec vitest run __tests__/shared/schemas/platform-admin/configBundleDocumentation.test.ts --config vitest.config.ts --reporter=dot",

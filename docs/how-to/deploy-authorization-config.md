@@ -493,7 +493,7 @@ Normal rollback never deletes manual, API, identity-provider, or system-owned re
 
 - [ ] ⬜ Docker dev, production build, and published-image deployment with no bundle.
 - [x] ✅ Docker deployment with a valid mounted bundle and restart idempotency. The isolated `test:config-bootstrap:local:apply` rehearsal mounts an additive bundle into a disposable Docker stack, verifies the sanitized readiness status, recreates the backend, and verifies the same startup state before removing the stack.
-- [ ] ⬜ Docker fail-closed behavior for invalid bundle, hash mismatch, and unresolved secret.
+- [x] ✅ Docker fail-closed behavior for invalid bundle, hash mismatch, and unresolved secret. The isolated `test:config-bootstrap:local:fail-closed` rehearsal starts each malformed, hash-mismatched, and unavailable-secret case separately and requires the backend to remain unready while emitting only its stable sanitized diagnostic.
 - [ ] ⬜ OpenShift deployment with ConfigMap bundle and Secret refs.
 - [ ] ⬜ OpenShift failed rollout leaves prior healthy ReplicaSet available.
 - [ ] ⬜ CI preview/apply/reapply/rollback with idempotency and sanitized receipts.
