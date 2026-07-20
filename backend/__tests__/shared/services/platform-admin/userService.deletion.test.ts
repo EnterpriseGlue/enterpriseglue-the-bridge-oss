@@ -51,7 +51,6 @@ describe('UserService permanent deletion', () => {
     await userService.deleteUserPermanently('user-1');
 
     expect(deletes.get(RbacRoleAssignment)).toHaveBeenCalledWith({ principalType: 'user', principalId: 'user-1' });
-    expect(deletes.get(RbacRoleAssignment)).toHaveBeenCalledWith({ userId: 'user-1' });
     expect(deletes.get(AuthzGroupMembership)).toHaveBeenCalledWith({ userId: 'user-1' });
     expect(deletes.get(ExternalIdentity)).toHaveBeenCalledWith({ userId: 'user-1' });
     expect(deletes.get(ProjectMemberRole)).toHaveBeenCalledWith({ userId: 'user-1' });

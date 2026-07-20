@@ -2687,12 +2687,12 @@ describe('permissionService', () => {
     expect(assignmentRepo.delete).toHaveBeenCalledWith(['assignment-1', 'assignment-2']);
   });
 
-  it('lists canonical user assignments while preserving the legacy user-id fallback', async () => {
+  it('lists user assignments through canonical principals', async () => {
     const assignmentQb = {
       orderBy: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
       getMany: vi.fn().mockResolvedValue([{
-        id: 'assignment-sso-1', tenantId: 'tenant-a', userId: null, principalType: 'user', principalId: 'user-1',
+        id: 'assignment-sso-1', tenantId: 'tenant-a', principalType: 'user', principalId: 'user-1',
         roleId: 'system.engine.operator', scopeType: 'engine', scopeId: 'engine-1', source: 'sso',
         sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
         ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
@@ -2711,7 +2711,7 @@ describe('permissionService', () => {
     const assignments = await permissionService.listRoleAssignments({ userId: 'user-1', tenantId: 'tenant-a' });
 
     expect(assignmentQb.andWhere).toHaveBeenCalledWith(
-      expect.stringContaining('assignment.principalId = :userId'),
+      '(assignment.principalType = :userPrincipalType AND assignment.principalId = :userId)',
       { userPrincipalType: 'user', userId: 'user-1' }
     );
     expect(assignments).toEqual([expect.objectContaining({

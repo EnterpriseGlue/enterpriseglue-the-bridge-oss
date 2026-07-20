@@ -4,7 +4,6 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Entity({ name: 'role_assignments', schema: 'main' })
 @Unique('uq_role_assignments_canonical_identity', ['assignmentKey'])
 @Index('idx_role_assignments_tenant', ['tenantId'])
-@Index('idx_role_assignments_user', ['userId'])
 @Index('idx_role_assignments_principal', ['principalType', 'principalId'])
 @Index('idx_role_assignments_scope', ['scopeType', 'scopeId'])
 @Index('idx_role_assignments_source', ['source', 'sourceRef'])
@@ -12,10 +11,6 @@ import { AppBaseEntity } from './BaseEntity.js';
 export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
   tenantId!: string | null;
-
-  /** Deprecated compatibility alias. Canonical assignments leave this null. */
-  @Column({ name: 'user_id', type: 'text', nullable: true })
-  userId!: string | null;
 
   @Column({ name: 'principal_type', type: 'text' })
   principalType!: string;

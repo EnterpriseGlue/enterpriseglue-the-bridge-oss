@@ -376,11 +376,10 @@ export class UserService {
       await manager.getRepository(ProjectMember).delete({ userId: id });
       await manager.getRepository(EngineMember).delete({ userId: id });
       // Principal-scoped assignments and group memberships have no database
-      // foreign key to User. Revoke both canonical and pre-refactor alias
-      // rows before deleting the account so a later id reuse cannot inherit
-      // access or leave a dangling external-account link.
+      // foreign key to User. Revoke canonical rows before deleting the account
+      // so a later id reuse cannot inherit access or leave a dangling
+      // external-account link.
       await manager.getRepository(RbacRoleAssignment).delete({ principalType: 'user', principalId: id });
-      await manager.getRepository(RbacRoleAssignment).delete({ userId: id });
       await manager.getRepository(AuthzGroupMembership).delete({ userId: id });
       await manager.getRepository(ExternalIdentity).delete({ userId: id });
       await manager.getRepository(User).delete({ id });

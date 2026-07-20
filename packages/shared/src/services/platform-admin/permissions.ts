@@ -2127,7 +2127,7 @@ class PermissionServiceClass {
     addTenantScopeFilter(qb, 'assignment', filters.tenantId);
     if (filters.userId) {
       qb.andWhere(
-        '((assignment.principalType = :userPrincipalType AND assignment.principalId = :userId) OR (assignment.principalType IS NULL AND assignment.userId = :userId))',
+        '(assignment.principalType = :userPrincipalType AND assignment.principalId = :userId)',
         { userPrincipalType: 'user', userId: filters.userId }
       );
     }
@@ -2513,7 +2513,7 @@ class PermissionServiceClass {
     userId?: string;
     principalType?: PrincipalType;
     principalId?: string;
-  }): { principalType: PrincipalType; principalId: string; legacyUserId: string } {
+  }): { principalType: PrincipalType; principalId: string } {
     const principalType = input.principalType ?? 'user';
     const principalId = input.principalId ?? input.userId;
     if (!principalId) {
@@ -2523,11 +2523,7 @@ class PermissionServiceClass {
       throw new Error('userId must match principalId for user role assignments');
     }
 
-    return {
-      principalType,
-      principalId,
-      legacyUserId: principalType === 'user' ? principalId : principalId,
-    };
+    return { principalType, principalId };
   }
 
   private async assertAssignablePrincipalExists(
