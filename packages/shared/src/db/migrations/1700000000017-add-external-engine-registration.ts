@@ -27,7 +27,10 @@ export class AddExternalEngineRegistration1700000000017 implements MigrationInte
       }
     }
 
-    const ssoAssignmentTablePath = queryRunner.connection.getMetadata('SsoAssignmentMapping').tablePath;
+    const ssoAssignmentTablePath = (() => {
+      try { return queryRunner.connection.getMetadata('SsoAssignmentMapping').tablePath; }
+      catch { return 'sso_assignment_mappings'; }
+    })();
     if (await queryRunner.hasTable(ssoAssignmentTablePath)) {
       await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, new TableColumn({ name: 'target_external_engine_id', type: 'text', isNullable: true }));
       await addColumnIfMissing(queryRunner, ssoAssignmentTablePath, new TableColumn({ name: 'target_label_key', type: 'text', isNullable: true }));

@@ -117,7 +117,6 @@ describe('runMigrations bootstrap behavior', () => {
           EnvironmentTag: 'main.environment_tags',
           PlatformSettings: 'main.platform_settings',
           EmailTemplate: 'main.email_templates',
-          SsoClaimsMapping: 'main.sso_claims_mappings',
           GitProvider: 'main.git_providers',
         };
         return { tablePath: byName[entity.name] ?? `main.${String(entity.name).toLowerCase()}` };

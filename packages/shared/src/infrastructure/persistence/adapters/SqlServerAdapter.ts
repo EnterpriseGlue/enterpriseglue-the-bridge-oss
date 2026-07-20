@@ -11,8 +11,8 @@ import {
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SsoAssignmentMapping, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
-  GitProvider, SsoProvider, SsoClaimsMapping, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
   Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
@@ -26,8 +26,8 @@ const entities = [
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SsoAssignmentMapping, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoGroupMapping, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
-  GitProvider, SsoProvider, SsoClaimsMapping, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoEngineAccessSnapshot, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, SsoProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
   Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,

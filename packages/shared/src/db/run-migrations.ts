@@ -5,7 +5,6 @@ import { PlatformSettings } from '../infrastructure/persistence/entities/Platfor
 import { User } from '../infrastructure/persistence/entities/User.js';
 // Tenant entities removed - multi-tenancy is EE-only
 import { EmailTemplate } from '../infrastructure/persistence/entities/EmailTemplate.js';
-import { SsoClaimsMapping } from '../infrastructure/persistence/entities/SsoClaimsMapping.js';
 import { SsoProvider } from '../infrastructure/persistence/entities/SsoProvider.js';
 import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 import { permissionService } from '../services/platform-admin/permissions.js';
@@ -394,7 +393,6 @@ export async function runMigrations() {
         EnvironmentTag,
         PlatformSettings,
         EmailTemplate,
-        SsoClaimsMapping,
         GitProvider,
         GitCredential,
         Invitation,
@@ -539,19 +537,6 @@ export async function seedInitialData() {
     console.log('  Note: email_templates:', error.message);
   }
   
-  // Seed default SSO claims mappings
-  try {
-    const ssoMappingRepo = dataSource.getRepository(SsoClaimsMapping);
-    await ssoMappingRepo.upsert([
-      { id: 'default-admin-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Platform Admins', targetRole: 'admin', priority: 100, isActive: true, createdAt: now, updatedAt: now },
-      { id: 'default-developer-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Developers', targetRole: 'user', priority: 50, isActive: true, createdAt: now, updatedAt: now },
-      { id: 'default-all-users', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: '*', targetRole: 'user', priority: 0, isActive: true, createdAt: now, updatedAt: now },
-    ], { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true });
-    console.log('  ✅ sso_claims_mappings seeded');
-  } catch (error: any) {
-    console.log('  Note: sso_claims_mappings:', error.message);
-  }
-
   try {
     await permissionService.seedRbacFoundation(dataSource, now);
     console.log('  ✅ RBAC permission catalog and system roles seeded');

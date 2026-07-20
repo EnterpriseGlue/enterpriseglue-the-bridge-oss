@@ -75,11 +75,8 @@ export { RuntimeResourceSetMaterialization } from './RuntimeResourceSetMateriali
 export { RefreshToken } from './RefreshToken.js';
 export { RemoteSyncState } from './RemoteSyncState.js';
 export { SavedFilter } from './SavedFilter.js';
-export { SsoAssignmentMapping } from './SsoAssignmentMapping.js';
 export { SamlAssertionReplay } from './SamlAssertionReplay.js';
-export { SsoClaimsMapping } from './SsoClaimsMapping.js';
 export { SsoEngineAccessSnapshot } from './SsoEngineAccessSnapshot.js';
-export { SsoGroupMapping } from './SsoGroupMapping.js';
 export { SsoNormalizedIdentity } from './SsoNormalizedIdentity.js';
 export { SsoProvider } from './SsoProvider.js';
 export { SsoSyncEvent } from './SsoSyncEvent.js';
