@@ -50,6 +50,12 @@ const mutants = [
     after: "if (false) {\n          throw Errors.forbidden('Runtime deployment is not present in the authorization inventory');\n        }",
   },
   {
+    name: 'tenant visibility bypass',
+    file: 'packages/shared/src/middleware/requireAction.ts',
+    before: 'return isTenantVisibleForAuthz(rowTenantId, tenantId);',
+    after: 'return true;',
+  },
+  {
     name: 'runtime batch partial-permission bypass',
     file: 'packages/shared/src/middleware/requireAction.ts',
     before: "const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {\n          ...context,\n          resourceType: 'engine_runtime_resource',\n          resourceId: candidate!.id,\n        })));\n        if (allowed.some((candidate) => !candidate)) throw Errors.forbidden(`Access denied for action ${action.actionId}`);",
