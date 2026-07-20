@@ -543,6 +543,7 @@ export default async function globalSetup() {
       groupScopedMembershipId,
       expiredEmail,
       expiredPassword,
+      expiredUserId,
       expiredEngineId,
       disabledDirectProviderIds,
       cleanupAdmin: Boolean(adminUserId),

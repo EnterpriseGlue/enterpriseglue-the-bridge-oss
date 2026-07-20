@@ -38,6 +38,7 @@ export function getE2EFineGrainedFixture() {
   return {
     email: data.scopedEmail,
     password: data.scopedPassword,
+    scopedUserId: data.scopedUserId,
     scopedEngineId: data.scopedEngineId,
     scopedEngineName: data.scopedEngineName,
     scopedEngineAssignmentId: data.scopedEngineAssignmentId,
@@ -56,6 +57,7 @@ export function getE2EFineGrainedFixture() {
     groupScopedMembershipId: data.groupScopedMembershipId,
     expiredEmail: data.expiredEmail,
     expiredPassword: data.expiredPassword,
+    expiredUserId: data.expiredUserId,
     expiredEngineId: data.expiredEngineId,
   };
 }
