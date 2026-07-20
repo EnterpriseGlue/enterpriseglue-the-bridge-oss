@@ -1502,6 +1502,35 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('authorizes workspace invitations only with a platform user-management permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'platform:users:create'
+    );
+
+    const allowed = await request(app).post('/invitations').send({ resourceType: 'tenant' });
+
+    expect(allowed.status).toBe(200);
+    expect(allowed.body).toMatchObject({
+      resource: { type: 'platform', id: null },
+      target: {
+        resourceType: 'tenant',
+        resourceId: null,
+        requiredPermissions: ['platform:user:manage', 'platform:users:create'],
+      },
+    });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:user:manage', expect.objectContaining({
+      resourceType: 'platform', tenantId: null,
+    }));
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:users:create', expect.objectContaining({
+      resourceType: 'platform', tenantId: null,
+    }));
+
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    const denied = await request(app).post('/invitations').send({ resourceType: 'tenant' });
+    expect(denied.status).toBe(403);
+    expect(denied.body.error).toContain('Only platform admins');
+  });
+
   it('rejects invitation targets outside the supported authorization scopes', async () => {
     expect((await request(app).post('/invitations').send({ resourceType: 'engine_set', resourceId: 'set-1' })).status).toBe(400);
   });
@@ -1553,5 +1582,18 @@ describe('requireAction project resource resolvers', () => {
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, message: 'Authentication required' }));
     expect(getDataSource).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a non-error invitation permission failure to an internal authorization error', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockRejectedValueOnce('permission service unavailable');
+    const next = vi.fn();
+
+    await requireInvitationCreateAction()({
+      user: { userId: 'user-1' }, body: { resourceType: 'tenant' },
+    } as any, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 500, message: 'Invitation authorization check failed',
+    }));
   });
 });
