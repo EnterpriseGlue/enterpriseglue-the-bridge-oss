@@ -1136,6 +1136,11 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('conceals missing Git deployments before project permission evaluation', async () => {
+    gitDeploymentFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/git-deployments/${gitDeploymentId}`)).status).toBe(404);
+  });
+
   it('resolves a project-scoped action from a Git lock id', async () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'project:settings:manage'
