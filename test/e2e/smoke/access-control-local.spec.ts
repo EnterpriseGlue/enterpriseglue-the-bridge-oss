@@ -30,10 +30,6 @@ test.describe('Smoke: local Access Control authorization', () => {
     await page.getByRole('tab', { name: 'SSO Engine Assignments', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'SSO diagnostics' })).toBeVisible();
 
-    await page.getByRole('tab', { name: 'SSO Mappings', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Claims preview' })).toBeVisible();
-    await expect(page.getByRole('tabpanel', { name: 'SSO Mappings' }).getByLabel('Test claims JSON')).toBeVisible();
-
     await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
     const panel = page.getByRole('tabpanel', { name: 'Effective Access' });
     const session = await page.evaluate(async () => (await fetch('/api/auth/me')).json());

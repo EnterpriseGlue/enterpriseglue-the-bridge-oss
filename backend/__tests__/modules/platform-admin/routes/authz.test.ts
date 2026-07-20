@@ -495,10 +495,11 @@ describe('platform-admin authz routes', () => {
             find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue({
               id: '00000000-0000-4000-8000-000000000020',
-              userId: '00000000-0000-4000-8000-000000000001',
+              principalType: 'user',
+              principalId: '00000000-0000-4000-8000-000000000001',
               roleId: 'custom.engine.operator-lite',
-              resourceType: 'engine',
-              resourceId: 'engine-1',
+              scopeType: 'engine',
+              scopeId: 'engine-1',
               source: 'manual',
             }),
           };
@@ -927,8 +928,8 @@ describe('platform-admin authz routes', () => {
           findOne: vi.fn().mockResolvedValue({
             id: '00000000-0000-4000-8000-000000000020',
             roleId: 'system.engine.operator',
-            resourceType: 'engine',
-            resourceId: 'engine-1',
+            scopeType: 'engine',
+            scopeId: 'engine-1',
             source: 'manual',
           }),
         };
