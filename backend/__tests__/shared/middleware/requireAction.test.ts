@@ -597,6 +597,28 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(400);
   });
 
+  it('fails closed for missing, unresolvable, uninventoried, and ungranted runtime definitions', async () => {
+    engineFindOne.mockReset().mockResolvedValue(null);
+    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(404);
+
+    engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
+    camundaGet.mockReset().mockResolvedValue({ id: 'definition-1', tenantId: null });
+    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+
+    camundaGet.mockReset().mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
+    runtimeResourceFindOne.mockReset().mockResolvedValue(null);
+    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+
+    runtimeResourceFindOne.mockReset().mockResolvedValue({ id: 'runtime-resource-1', tenantId: null });
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
+    camundaGet.mockReset().mockResolvedValue([]);
+    expect((await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`)).status).toBe(404);
+  });
+
   it('resolves decision definitions by their live key and runtime tenant', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
