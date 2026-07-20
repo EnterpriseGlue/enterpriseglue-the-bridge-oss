@@ -1785,8 +1785,6 @@ const {
   LegacyMappingRetirementReadinessSchema,
   LegacyMappingRetirementRequestSchema,
   LegacyMappingRetirementResultSchema,
-  LegacySsoPlatformMappingCreateRequestSchema,
-  LegacySsoPlatformMappingUpdateRequestSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   ProjectMembersResponseSchema,
@@ -3156,10 +3154,6 @@ const {
   ServiceAccountCreateSchema,
   ServiceAccountSchema,
   ServiceAccountWithTokenSchema,
-  SsoAssignmentMappingTestResponseSchema,
-  SsoAssignmentMappingInsertSchema,
-  SsoAssignmentMappingSchema,
-  SsoAssignmentMappingUpdateSchema,
   SsoEngineAccessSnapshotQuerySchema,
   SsoEngineAccessSnapshotSchema,
   SsoSyncDiagnosticsRunRequestSchema,
@@ -3173,12 +3167,6 @@ const {
   EngineAccessTransitionCleanupPreviewSchema,
   BridgeDecisionRequestSchema,
   BridgeDecisionResponseSchema,
-  SsoGroupMappingInsertSchema,
-  SsoGroupMappingSchema,
-  SsoGroupMappingUpdateSchema,
-  SsoGroupMappingTestResponseSchema,
-  SsoMappingTestRequestSchema,
-  SsoPlatformMappingTestResponseSchema,
 } = await import('./platform-admin/authz.js');
 
 registry.registerPath({
@@ -3188,33 +3176,6 @@ registry.registerPath({
   request: { params: z.object({ id: z.string() }) },
   responses: { 200: { description: 'Project-engine deployment targets for an engine', content: { 'application/json': { schema: z.array(ProjectEngineTargetSchema) } } } },
 });
-const SsoClaimsMappingSchemaOpenApi = z.object({
-  id: z.string(),
-  providerId: z.string().optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string(),
-  claimValue: z.string(),
-  claimOperator: z.enum([
-    'equals',
-    'not_equals',
-    'contains',
-    'not_contains',
-    'contains_any',
-    'not_contains_any',
-    'contains_all',
-    'not_contains_all',
-    'matches_regex',
-    'not_matches_regex',
-    'exists',
-    'not_exists',
-  ]).nullable().optional(),
-  targetRole: z.enum(['admin', 'user']),
-  priority: z.number(),
-  isActive: z.boolean(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
-
 const ConfigBundleFilesOpenApiSchema = z.object({
   './roles.json': ConfigRolesFileSchema.optional(),
   './groups.json': ConfigGroupsFileSchema.optional(),

@@ -15,8 +15,6 @@ import {
   RoleAssignmentSchema,
   RoleDetailSchema,
   RuntimeResourceSetMaterializationResultSchema,
-  SsoAssignmentMappingSchema,
-  SsoGroupMappingSchema,
   ServiceAccountWithTokenSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { EngineMetadataReconciliationResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js';
@@ -214,20 +212,6 @@ describe('authorization response contracts', () => {
         engineSetCount: 1, matched: 1, created: 0, updated: 1, removed: 0, errors: [], status: 'ok', summary: 'One Engine Set refreshed',
       },
     }).capabilityStatus).toBe('in_sync');
-  });
-
-  it('keeps legacy mapping response fields canonical during provider-neutral migration', () => {
-    expect(SsoAssignmentMappingSchema.parse({
-      id: 'assignment-mapping-a', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators',
-      targetScope: 'engine', targetSelectorType: 'engine_id', targetEngineId: 'engine-a', targetExternalEngineId: null,
-      targetLabelKey: null, targetLabelValue: null, targetRoleId: 'role-operator', syncMode: 'authoritative', priority: 10,
-      isActive: true, createdAt: 1, updatedAt: 1,
-    }).targetSelectorType).toBe('engine_id');
-    expect(SsoGroupMappingSchema.parse({
-      id: 'group-mapping-a', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators',
-      targetGroupId: 'group-operators', targetGroupKey: 'operators', targetGroupName: 'Operators', syncMode: 'additive',
-      priority: 20, isActive: true, createdAt: 1, updatedAt: 1,
-    }).targetGroupKey).toBe('operators');
   });
 
   it('shares runtime resource materialization and reconciliation responses', () => {

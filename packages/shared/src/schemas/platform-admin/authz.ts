@@ -372,78 +372,6 @@ export const SsoProviderInsertSchema = z.object({
   type: z.enum(['microsoft', 'google', 'saml', 'oidc']),
 });
 
-// Raw schema - matches TypeORM SsoClaimsMapping entity
-export const SsoClaimOperatorSchema = z.enum([
-  'equals',
-  'not_equals',
-  'contains',
-  'not_contains',
-  'contains_any',
-  'not_contains_any',
-  'contains_all',
-  'not_contains_all',
-  'matches_regex',
-  'not_matches_regex',
-  'exists',
-  'not_exists',
-]);
-
-export const SsoClaimsMappingSchemaRaw = z.object({
-  id: z.string(),
-  providerId: z.string().nullable(),
-  claimType: z.string(),
-  claimKey: z.string(),
-  claimValue: z.string(),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetRole: z.string(),
-  priority: z.number(),
-  isActive: z.boolean(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
-
-// SSO Claims Mapping - Select schema (API response)
-export const SsoClaimsMappingSchema = SsoClaimsMappingSchemaRaw.transform((m) => ({
-  id: m.id,
-  providerId: m.providerId ?? undefined,
-  claimType: m.claimType as 'group' | 'role' | 'email_domain' | 'custom',
-  claimKey: m.claimKey,
-  claimValue: m.claimValue,
-  claimOperator: m.claimOperator ?? null,
-  targetRole: normalizeRoleValue(m.targetRole),
-  priority: m.priority,
-  isActive: m.isActive,
-  createdAt: Number(m.createdAt),
-  updatedAt: Number(m.updatedAt),
-}));
-
-// SSO Claims Mapping - Insert schema
-export const SsoClaimsMappingInsertSchema = z.object({
-  id: z.string().uuid().optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional().default(''),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetRole: z.enum(['admin', 'user']),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-
-/** Compatibility write contract for the retained legacy platform-role mapping API. */
-export const LegacySsoPlatformMappingCreateRequestSchema = z.object({
-  providerId: z.string().min(1).optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional().default(''),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetRole: z.enum(['admin', 'user']),
-  priority: z.number().int().optional(),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-
-export const LegacySsoPlatformMappingUpdateRequestSchema = LegacySsoPlatformMappingCreateRequestSchema.partial();
-
 export const PermissionCatalogEntrySchema = z.object({
   key: z.string(),
   scope: AuthzResourceTypeSchema,
@@ -1571,47 +1499,6 @@ export const IdentityProviderConnectionTestResponseSchema = z.discriminatedUnion
   z.object({ status: z.literal('connected'), protocol: z.literal('ldap'), sampledIdentities: z.number().int().nonnegative() }),
 ]);
 
-export const SsoAssignmentMappingSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable().optional(),
-  providerId: z.string().nullable(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string(),
-  claimValue: z.string(),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetScope: z.literal('engine'),
-  targetSelectorType: z.enum(['engine_id', 'all_engines', 'external_engine_id', 'engine_label']),
-  targetEngineId: z.string().nullable(),
-  targetExternalEngineId: z.string().nullable(),
-  targetLabelKey: z.string().nullable(),
-  targetLabelValue: z.string().nullable(),
-  targetRoleId: z.string().min(1),
-  syncMode: z.enum(['authoritative', 'additive']),
-  priority: z.number(),
-  isActive: z.boolean(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
-
-export const SsoAssignmentMappingInsertSchema = z.object({
-  providerId: z.string().min(1).nullable().optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional().default(''),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetSelectorType: z.enum(['engine_id', 'all_engines', 'external_engine_id', 'engine_label']),
-  targetEngineId: z.string().nullable().optional(),
-  targetExternalEngineId: z.string().nullable().optional(),
-  targetLabelKey: z.string().nullable().optional(),
-  targetLabelValue: z.string().nullable().optional(),
-  targetRoleId: z.string().min(1),
-  syncMode: z.enum(['authoritative', 'additive']).optional(),
-  priority: z.number().int().optional(),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-export const SsoAssignmentMappingUpdateSchema = SsoAssignmentMappingInsertSchema.partial();
-
 export const SsoEngineAccessSnapshotStatusSchema = z.enum([
   'active',
   'stale',
@@ -1715,74 +1602,6 @@ export const BridgeDecisionResponseSchema = z.object({
   }).optional(),
 });
 
-export const SsoGroupMappingSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable().optional(),
-  providerId: z.string().nullable(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string(),
-  claimValue: z.string(),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetGroupId: z.string(),
-  targetGroupKey: z.string().nullable(),
-  targetGroupName: z.string().nullable(),
-  syncMode: z.enum(['authoritative', 'additive']),
-  priority: z.number(),
-  isActive: z.boolean(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
-
-export const SsoGroupMappingInsertSchema = z.object({
-  providerId: z.string().min(1).nullable().optional(),
-  claimType: z.enum(['group', 'role', 'email_domain', 'custom']),
-  claimKey: z.string().min(1),
-  claimValue: z.string().optional().default(''),
-  claimOperator: SsoClaimOperatorSchema.nullable().optional(),
-  targetGroupId: z.string().min(1),
-  syncMode: z.enum(['authoritative', 'additive']).optional(),
-  priority: z.number().int().optional(),
-  isActive: z.boolean().optional(),
-  riskAcknowledged: z.boolean().optional(),
-});
-export const SsoGroupMappingUpdateSchema = SsoGroupMappingInsertSchema.partial();
-
-/** Shared legacy SSO mapping preview input retained while migration remains evidence-gated. */
-export const SsoMappingTestRequestSchema = z.object({
-  claims: z.record(z.string(), z.unknown()),
-  providerId: z.string().min(1).optional(),
-});
-
-export const SsoPlatformMappingTestResponseSchema = z.object({
-  resolvedRole: z.enum(['admin', 'user']),
-  matchedMappings: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    targetRole: z.string(),
-  })),
-});
-
-export const SsoAssignmentMappingTestResponseSchema = z.object({
-  matchedMappings: z.array(SsoAssignmentMappingSchema.extend({
-    targetResourceId: z.string().nullable(),
-    targetResourceIds: z.array(z.string().nullable()),
-  })),
-  assignments: z.array(z.object({
-    roleId: z.string(),
-    resourceType: z.literal('engine'),
-    resourceId: z.string().nullable(),
-    mappingId: z.string(),
-  })),
-});
-
-export const SsoGroupMappingTestResponseSchema = z.object({
-  matchedMappings: z.array(SsoGroupMappingSchema),
-  memberships: z.array(z.object({
-    groupId: z.string(),
-    mappingId: z.string(),
-  })),
-});
-
 // Types
 export type AuthzPolicy = z.infer<typeof AuthzPolicySchema>;
 export type AuthzPolicyResponse = z.infer<typeof AuthzPolicyResponseSchema>;
@@ -1804,10 +1623,6 @@ export type LegacySsoProviderToggleRequest = z.input<typeof LegacySsoProviderTog
 export type LegacySsoProviderToggleResponse = z.infer<typeof LegacySsoProviderToggleResponseSchema>;
 export type LegacySsoProviderDefaultRoleMigrationRequest = z.input<typeof LegacySsoProviderDefaultRoleMigrationRequestSchema>;
 export type SamlAuthenticationStatus = z.infer<typeof SamlAuthenticationStatusSchema>;
-export type SsoClaimOperator = z.infer<typeof SsoClaimOperatorSchema>;
-export type SsoClaimsMapping = z.infer<typeof SsoClaimsMappingSchema>;
-export type LegacySsoPlatformMappingCreateRequest = z.input<typeof LegacySsoPlatformMappingCreateRequestSchema>;
-export type LegacySsoPlatformMappingUpdateRequest = z.input<typeof LegacySsoPlatformMappingUpdateRequestSchema>;
 export type PermissionCatalogEntry = z.infer<typeof PermissionCatalogEntrySchema>;
 export type CustomPermissionCreate = z.infer<typeof CustomPermissionCreateSchema>;
 export type EffectiveResourcePermissions = z.infer<typeof EffectiveResourcePermissionsSchema>;
@@ -1885,14 +1700,6 @@ export type IdentityMappingStoredSnapshotPreviewResponse = z.infer<typeof Identi
 export type IdentityMappingProvisionAccessRequest = z.input<typeof IdentityMappingProvisionAccessRequestSchema>;
 export type IdentityMappingProvisionAccessResponse = z.infer<typeof IdentityMappingProvisionAccessResponseSchema>;
 export type LegacySsoMappingMigrationRequest = z.input<typeof LegacySsoMappingMigrationRequestSchema>;
-export type LegacySsoPlatformMappingMigrationResponse = z.infer<typeof LegacySsoPlatformMappingMigrationResponseSchema>;
-export type LegacySsoAssignmentMappingMigrationResponse = z.infer<typeof LegacySsoAssignmentMappingMigrationResponseSchema>;
-export type LegacySsoGroupMappingMigrationRequest = z.input<typeof LegacySsoGroupMappingMigrationRequestSchema>;
-export type LegacySsoGroupMappingMigrationResponse = z.infer<typeof LegacySsoGroupMappingMigrationResponseSchema>;
-export type LegacyMappingCoverageFamily = z.infer<typeof LegacyMappingCoverageFamilySchema>;
-export type LegacyMappingCoverageStatus = z.infer<typeof LegacyMappingCoverageStatusSchema>;
-export type LegacyMappingCoverageVerification = z.infer<typeof LegacyMappingCoverageVerificationSchema>;
-export type LegacyMappingCoverageItem = z.infer<typeof LegacyMappingCoverageItemSchema>;
 export type LegacyMappingRetirementBlocker = z.infer<typeof LegacyMappingRetirementBlockerSchema>;
 export type LegacyMappingRetirementReadiness = z.infer<typeof LegacyMappingRetirementReadinessSchema>;
 export type LegacyMappingRetirementResult = z.infer<typeof LegacyMappingRetirementResultSchema>;
@@ -1904,12 +1711,6 @@ export type IdentityProviderConnectionTestResponse = z.infer<typeof IdentityProv
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type RuntimeResourceSetMaterializationResult = z.infer<typeof RuntimeResourceSetMaterializationResultSchema>;
-export type SsoAssignmentMapping = z.infer<typeof SsoAssignmentMappingSchema>;
-export type SsoAssignmentMappingInsert = z.input<typeof SsoAssignmentMappingInsertSchema>;
-export type SsoAssignmentMappingUpdate = z.input<typeof SsoAssignmentMappingUpdateSchema>;
-export type SsoMappingTestRequest = z.input<typeof SsoMappingTestRequestSchema>;
-export type SsoPlatformMappingTestResponse = z.infer<typeof SsoPlatformMappingTestResponseSchema>;
-export type SsoAssignmentMappingTestResponse = z.infer<typeof SsoAssignmentMappingTestResponseSchema>;
 export type SsoEngineAccessSnapshot = z.infer<typeof SsoEngineAccessSnapshotSchema>;
 export type SsoEngineAccessSnapshotStatus = z.infer<typeof SsoEngineAccessSnapshotStatusSchema>;
 export type SsoEngineAccessSnapshotQuery = z.input<typeof SsoEngineAccessSnapshotQuerySchema>;
@@ -1923,10 +1724,6 @@ export type EngineAccessTransitionCleanupApplyRequest = z.infer<typeof EngineAcc
 export type EngineAccessTransitionCleanupApplyResponse = z.infer<typeof EngineAccessTransitionCleanupApplyResponseSchema>;
 export type BridgeDecisionRequest = z.infer<typeof BridgeDecisionRequestSchema>;
 export type BridgeDecisionResponse = z.infer<typeof BridgeDecisionResponseSchema>;
-export type SsoGroupMapping = z.infer<typeof SsoGroupMappingSchema>;
-export type SsoGroupMappingInsert = z.input<typeof SsoGroupMappingInsertSchema>;
-export type SsoGroupMappingUpdate = z.input<typeof SsoGroupMappingUpdateSchema>;
-export type SsoGroupMappingTestResponse = z.infer<typeof SsoGroupMappingTestResponseSchema>;
 export type AuthzResourceType = z.infer<typeof AuthzResourceTypeSchema>;
 export type AuthzPrincipalType = z.infer<typeof AuthzPrincipalTypeSchema>;
 export type AuthzActionRisk = z.infer<typeof AuthzActionRiskSchema>;

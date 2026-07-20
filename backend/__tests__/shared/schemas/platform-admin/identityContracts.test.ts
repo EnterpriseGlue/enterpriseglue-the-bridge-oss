@@ -24,8 +24,6 @@ import {
   LegacySsoGroupMappingMigrationRequestSchema,
   LegacySsoGroupMappingMigrationResponseSchema,
   LegacySsoMappingMigrationRequestSchema,
-  LegacySsoPlatformMappingCreateRequestSchema,
-  LegacySsoPlatformMappingUpdateRequestSchema,
   LegacySsoPlatformMappingMigrationResponseSchema,
   AuthzCheckBatchRequestSchema,
   AuthzCheckBatchResponseSchema,
@@ -47,29 +45,11 @@ import {
   ProjectEngineTargetSyncLegacyRequestSchema,
   RoleAssignmentCreateResponseSchema,
   ServiceAccountCreateSchema,
-  SsoAssignmentMappingTestResponseSchema,
-  SsoAssignmentMappingInsertSchema,
-  SsoAssignmentMappingUpdateSchema,
-  SsoGroupMappingTestResponseSchema,
-  SsoGroupMappingInsertSchema,
-  SsoGroupMappingUpdateSchema,
-  SsoMappingTestRequestSchema,
-  SsoPlatformMappingTestResponseSchema,
   SsoSyncEventSchema,
   SsoSyncRunSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('provider-neutral identity shared contracts', () => {
-  it('shares the retained legacy platform-mapping write contracts', () => {
-    expect(LegacySsoPlatformMappingCreateRequestSchema.parse({
-      claimType: 'group', claimKey: 'groups', targetRole: 'user', priority: 0,
-    })).toMatchObject({ claimValue: '', claimType: 'group' });
-    expect(LegacySsoPlatformMappingUpdateRequestSchema.parse({ priority: 10 })).toMatchObject({ priority: 10, claimValue: '' });
-    expect(() => LegacySsoPlatformMappingCreateRequestSchema.parse({
-      claimType: 'group', claimKey: 'groups', targetRole: 'operator',
-    })).toThrow();
-  });
-
   it('accepts normalized identity and adapter input without protocol payload fields', () => {
     expect(ProviderIdentityInputSchema.parse({
       providerKey: 'identity.oidc.example', subjectId: 'subject-1', claims: { groups: ['operators'] },
@@ -154,43 +134,6 @@ describe('provider-neutral identity shared contracts', () => {
     expect(LegacyMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_LEGACY_MAPPINGS');
     expect(LegacyGlobalMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_GLOBAL_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_GLOBAL_LEGACY_MAPPINGS');
     expect(() => LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'scope', candidateIdentityMappingId: 'mapping-1', note: 'no' })).toThrow();
-  });
-
-  it('shares retained legacy SSO mapping preview contracts across route, API, and UI boundaries', () => {
-    expect(SsoMappingTestRequestSchema.parse({ claims: { groups: ['operators'] }, providerId: 'provider-1' }).providerId).toBe('provider-1');
-    expect(SsoPlatformMappingTestResponseSchema.parse({
-      resolvedRole: 'user',
-      matchedMappings: [{ id: 'mapping-1', name: 'group:operators', targetRole: 'user' }],
-    }).matchedMappings).toHaveLength(1);
-    expect(SsoAssignmentMappingTestResponseSchema.parse({
-      matchedMappings: [{
-        id: 'mapping-1', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators', claimOperator: 'equals',
-        targetScope: 'engine', targetSelectorType: 'engine_id', targetEngineId: 'engine-1', targetExternalEngineId: null,
-        targetLabelKey: null, targetLabelValue: null, targetRoleId: 'system.engine.operator', syncMode: 'authoritative', priority: 0,
-        isActive: true, createdAt: 1, updatedAt: 2, targetResourceId: 'engine-1', targetResourceIds: ['engine-1'],
-      }],
-      assignments: [{ roleId: 'system.engine.operator', resourceType: 'engine', resourceId: 'engine-1', mappingId: 'mapping-1' }],
-    }).assignments[0]?.resourceType).toBe('engine');
-    expect(SsoGroupMappingTestResponseSchema.parse({
-      matchedMappings: [{
-        id: 'mapping-1', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'operators', claimOperator: 'equals',
-        targetGroupId: 'group-1', targetGroupKey: 'operators', targetGroupName: 'Operators', syncMode: 'authoritative', priority: 0,
-        isActive: true, createdAt: 1, updatedAt: 2,
-      }],
-      memberships: [{ groupId: 'group-1', mappingId: 'mapping-1' }],
-    }).memberships[0]?.groupId).toBe('group-1');
-  });
-
-  it('keeps retained assignment and group mapping writes strict and provider-compatible', () => {
-    expect(SsoAssignmentMappingInsertSchema.parse({
-      providerId: null, claimType: 'group', claimKey: 'groups', targetSelectorType: 'all_engines', targetRoleId: 'system.engine.operator',
-    }).claimValue).toBe('');
-    expect(SsoAssignmentMappingUpdateSchema.parse({ targetSelectorType: 'engine_label', targetLabelKey: 'environment', targetLabelValue: 'prod' }).targetSelectorType).toBe('engine_label');
-    expect(SsoGroupMappingInsertSchema.parse({
-      providerId: null, claimType: 'group', claimKey: 'groups', targetGroupId: 'group-1',
-    }).targetGroupId).toBe('group-1');
-    expect(SsoGroupMappingUpdateSchema.parse({ priority: 10 }).priority).toBe(10);
-    expect(() => SsoGroupMappingInsertSchema.parse({ providerId: '', claimType: 'group', claimKey: 'groups', targetGroupId: 'group-1' })).toThrow();
   });
 
   it('shares authorization check contracts without trusting caller identity or tenancy', () => {
