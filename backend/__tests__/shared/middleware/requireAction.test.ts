@@ -1112,6 +1112,11 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('conceals missing Git repositories before project permission evaluation', async () => {
+    gitRepositoryFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/git-repositories/${gitRepositoryId}`)).status).toBe(404);
+  });
+
   it('resolves a project-scoped action from a Git deployment id', async () => {
     const response = await request(app).get(`/git-deployments/${gitDeploymentId}`);
 
