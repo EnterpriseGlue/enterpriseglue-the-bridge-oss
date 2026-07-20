@@ -46,6 +46,7 @@ export function getE2EFineGrainedFixture() {
     runtimeScopedEmail: data.runtimeScopedEmail,
     runtimeScopedPassword: data.runtimeScopedPassword,
     runtimeScopedEngineId: data.runtimeScopedEngineId,
+    runtimeCustomRoleId: data.runtimeCustomRoleId,
     runtimeAllowedDefinitionId: data.runtimeAllowedDefinitionId,
     runtimeSiblingDefinitionId: data.runtimeSiblingDefinitionId,
     groupEmail: data.groupScopedEmail,

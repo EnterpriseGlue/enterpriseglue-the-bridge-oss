@@ -157,10 +157,11 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(unchangedEngine.body.name).toBe(groupFixture.engineName);
   });
 
-  test('allows only the assigned runtime resource on a resource-aware engine', async ({ page }) => {
+  test('allows only the assigned runtime resource through a custom engine role', async ({ page }) => {
     expect(fixture.runtimeScopedEmail).toBeTruthy();
     expect(fixture.runtimeScopedPassword).toBeTruthy();
     expect(fixture.runtimeScopedEngineId).toBeTruthy();
+    expect(fixture.runtimeCustomRoleId).toMatch(/^custom\.e2e\.runtime-reader\./);
     expect(fixture.runtimeAllowedDefinitionId).toBeTruthy();
     expect(fixture.runtimeSiblingDefinitionId).toBeTruthy();
 

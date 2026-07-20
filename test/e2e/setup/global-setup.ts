@@ -305,6 +305,7 @@ export default async function globalSetup() {
   const runtimeScopedEngineId = randomUUID();
   const runtimeAllowedResourceId = randomUUID();
   const runtimeSiblingResourceId = randomUUID();
+  const runtimeCustomRoleId = `custom.e2e.runtime-reader.${suffix}`;
   const runtimeAllowedDefinitionId = 'invoice-process:3:mock-process-definition';
   const runtimeSiblingDefinitionId = 'invoice-sequential-review:1:mock-process-definition';
   const runtimeEngineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL || 'http://camunda-mock:9080/engine-rest';
@@ -349,9 +350,27 @@ export default async function globalSetup() {
       [id, 'tenant-default', runtimeScopedEngineId, 'process_definition', resourceKey, '', null, deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', scopedSourceRef, now, true, now, now]
     );
   }
+  await pool.query(
+    `INSERT INTO ${schema}.roles
+      (id, tenant_id, key, role_key_identity, name, description, scope, kind,
+       is_editable, is_assignable, is_archived, source, source_ref, ownership_mode,
+       source_hash, last_applied_at, drift_status, created_by_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+    [
+      runtimeCustomRoleId, 'tenant-default', runtimeCustomRoleId, `tenant-default:${runtimeCustomRoleId}`,
+      'E2E Runtime Reader', 'Disposable custom role used to prove resource-aware access.',
+      'engine', 'custom', true, true, false, 'manual', scopedSourceRef, 'manual',
+      null, null, null, adminUserId, now, now,
+    ]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.role_permissions (id, role_id, permission_id, created_at)
+     VALUES ($1,$2,$3,$4)`,
+    [randomUUID(), runtimeCustomRoleId, 'engine:instance:view', now]
+  );
   const runtimeAssignmentKey = canonicalRoleAssignmentKey({
     tenantId: 'tenant-default', principalType: 'user', principalId: runtimeScopedUserId,
-    roleId: operatorRoleId, scopeType: 'engine_runtime_resource', scopeId: runtimeAllowedResourceId,
+    roleId: runtimeCustomRoleId, scopeType: 'engine_runtime_resource', scopeId: runtimeAllowedResourceId,
     source: 'system', sourceRef: scopedSourceRef,
   });
   await pool.query(
@@ -359,7 +378,7 @@ export default async function globalSetup() {
       (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
        source, source_ref, assignment_key, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-    [randomUUID(), 'tenant-default', 'user', runtimeScopedUserId, operatorRoleId, 'engine_runtime_resource', runtimeAllowedResourceId, 'system', scopedSourceRef, runtimeAssignmentKey, now, now]
+    [randomUUID(), 'tenant-default', 'user', runtimeScopedUserId, runtimeCustomRoleId, 'engine_runtime_resource', runtimeAllowedResourceId, 'system', scopedSourceRef, runtimeAssignmentKey, now, now]
   );
 
   // A separate operator proves that the same bounded decision is available
@@ -512,6 +531,7 @@ export default async function globalSetup() {
       runtimeScopedEmail,
       runtimeScopedPassword,
       runtimeScopedEngineId,
+      runtimeCustomRoleId,
       runtimeAllowedDefinitionId,
       runtimeSiblingDefinitionId,
       scopedSourceRef,

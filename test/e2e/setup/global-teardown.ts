@@ -118,6 +118,12 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = $1`, [membershipSourceRef]);
     await pool.query(`DELETE FROM ${schema}.role_assignments WHERE source_ref = $1`, [membershipSourceRef]);
     await pool.query(`DELETE FROM ${schema}.authz_groups WHERE source_ref = $1`, [membershipSourceRef]);
+    const customRoleIds = await pool.query(`SELECT id FROM ${schema}.roles WHERE source_ref = $1`, [membershipSourceRef]);
+    const roleIds = customRoleIds.rows.map((row: { id: string }) => row.id);
+    if (roleIds.length > 0) {
+      await pool.query(`DELETE FROM ${schema}.role_permissions WHERE role_id = ANY($1::text[])`, [roleIds]);
+      await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [roleIds]);
+    }
   }
   await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [userId]);
 
