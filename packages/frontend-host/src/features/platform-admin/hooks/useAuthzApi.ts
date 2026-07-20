@@ -944,10 +944,11 @@ export function useSyncLegacyProjectEngineTargets() {
 // SSO Claims Mapping Hooks
 // ============================================================================
 
-export function useSsoClaimsMappings() {
+export function useSsoClaimsMappings(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.ssoMappings,
     queryFn: () => apiClient.get<SsoClaimsMapping[]>('/api/authz/sso-mappings'),
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -987,10 +988,11 @@ export function useTestSsoMapping() {
   });
 }
 
-export function useSsoAssignmentMappings() {
+export function useSsoAssignmentMappings(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.ssoAssignmentMappings,
     queryFn: () => apiClient.get<SsoAssignmentMapping[]>('/api/authz/sso-assignment-mappings'),
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -1117,10 +1119,11 @@ export function useRunSsoSyncDiagnostics() {
   });
 }
 
-export function useSsoGroupMappings() {
+export function useSsoGroupMappings(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: authzQueryKeys.ssoGroupMappings,
     queryFn: () => apiClient.get<SsoGroupMapping[]>('/api/authz/sso-group-mappings'),
+    enabled: options.enabled ?? true,
   });
 }
 

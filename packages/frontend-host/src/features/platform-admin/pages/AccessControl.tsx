@@ -312,7 +312,6 @@ const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   by_resource: 'By Resource',
   groups: 'Groups',
   effective_access: 'Effective Access',
-  sso_engine_assignments: 'SSO Engine Assignments',
   engine_sets: 'Engine Sets',
   runtime_resources: 'Runtime Resources',
   project_targets: 'Project Targets',
@@ -967,10 +966,10 @@ export default function AccessControl() {
   const engineSetsQ = useEngineSets();
   const projectEngineTargetsQ = useProjectEngineTargets({ status: 'all' });
   const policiesQ = useAuthzPolicies();
-  const ssoPlatformMappingsQ = useSsoClaimsMappings();
-  const ssoGroupMappingsQ = useSsoGroupMappings();
+  const ssoPlatformMappingsQ = useSsoClaimsMappings({ enabled: false });
+  const ssoGroupMappingsQ = useSsoGroupMappings({ enabled: false });
   const identityEntitlementMappingsQ = useIdentityEntitlementMappings();
-  const mappingsQ = useSsoAssignmentMappings();
+  const mappingsQ = useSsoAssignmentMappings({ enabled: false });
   const createRoleM = useCreateCustomRole();
   const updateRoleM = useUpdateCustomRole();
   const archiveRoleM = useArchiveCustomRole();
@@ -1207,7 +1206,6 @@ export default function AccessControl() {
     assignmentsReadDecision.allowed ||
     groupsReadDecision.allowed ||
     effectiveAccessDecision.allowed ||
-    ssoAssignmentsReadDecision.allowed ||
     engineSetsReadDecision.allowed ||
     projectTargetsReadDecision.allowed ||
     policiesReadDecision.allowed ||
@@ -1222,7 +1220,6 @@ export default function AccessControl() {
     }
     if (groupsReadDecision.allowed) tabIds.push('groups');
     if (effectiveAccessDecision.allowed) tabIds.push('effective_access');
-    if (ssoAssignmentsReadDecision.allowed) tabIds.push('sso_engine_assignments');
     if (engineSetsReadDecision.allowed) tabIds.push('engine_sets', 'runtime_resources');
     if (projectTargetsReadDecision.allowed) tabIds.push('project_targets');
     if (policiesReadDecision.allowed) tabIds.push('policies');
@@ -1235,7 +1232,6 @@ export default function AccessControl() {
     assignmentsReadDecision.allowed,
     groupsReadDecision.allowed,
     effectiveAccessDecision.allowed,
-    ssoAssignmentsReadDecision.allowed,
     engineSetsReadDecision.allowed,
     projectTargetsReadDecision.allowed,
     policiesReadDecision.allowed,
@@ -2488,53 +2484,6 @@ export default function AccessControl() {
               permissions={permissions}
               auditEntries={auditReadDecision.allowed ? inspectionAuditEntries : []}
               onOpenAuditReference={auditReadDecision.allowed ? openAuthzAuditReference : undefined}
-            />
-          </TabPanel>
-          )}
-          {ssoAssignmentsReadDecision.allowed && (
-          <TabPanel>
-            <SsoAssignmentsPanel
-              loading={mappingsQ.isLoading}
-              mappings={mappings}
-              roles={roles}
-              diagnostics={ssoDiagnostics}
-              staleAssignmentCount={staleSsoAssignments.length}
-              syncRuns={ssoSyncRuns}
-              syncEvents={ssoSyncEvents}
-              syncRunsLoading={ssoSyncRunsQ.isLoading}
-              syncEventsLoading={ssoSyncEventsQ.isLoading}
-              syncRunsError={ssoSyncRunsQ.isError}
-              syncEventsError={ssoSyncEventsQ.isError}
-              selectedSyncRunId={selectedSsoSyncRunId}
-              canManage={canManageSsoAssignments}
-              manageUnavailableReason={ssoAssignmentsManageUnavailableReason}
-              diagnosticsRunning={runSsoSyncDiagnosticsM.isPending}
-              diagnosticsResult={runSsoSyncDiagnosticsM.data || null}
-              diagnosticsOptions={ssoDiagnosticsOptions}
-              snapshots={ssoEngineAccessSnapshots}
-              snapshotsLoading={ssoEngineAccessSnapshotsQ.isLoading}
-              snapshotsError={ssoEngineAccessSnapshotsQ.isError}
-              testPending={testM.isPending}
-              testResult={testM.data}
-              testClaims={testClaims}
-              claimLabel={ssoClaimLabel}
-              targetLabel={selectorLabel}
-              roleLabel={roleLabel}
-              warningFor={(mapping) => getSsoAssignmentMappingWarning(mapping, externalEngines)}
-              onSelectSyncRun={setSelectedSsoSyncRunId}
-              onRunDiagnostics={runSsoSyncDiagnostics}
-              onDiagnosticsOptionsChange={setSsoDiagnosticsOptions}
-              onTestClaimsChange={setTestClaims}
-              onTest={testAssignments}
-              onCreate={openCreate}
-              onEdit={openEdit}
-              onMigrate={(mapping) => {
-                setSsoAssignmentMigrationTarget(mapping);
-                setSsoAssignmentMigrationProviderKey('');
-                setSsoAssignmentMigrationGroupKey('');
-                setSsoAssignmentMigrationError(null);
-              }}
-              onDelete={(mappingId) => deleteM.mutate(mappingId)}
             />
           </TabPanel>
           )}
