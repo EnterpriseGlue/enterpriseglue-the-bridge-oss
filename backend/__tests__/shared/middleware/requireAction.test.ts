@@ -98,6 +98,22 @@ describe('requireRuntimeCollectionAction', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
     expect(getDataSource).not.toHaveBeenCalled();
   });
+
+  it('hides missing runtime-collection engines before permission evaluation', async () => {
+    const next = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ findOne: vi.fn().mockResolvedValue(null) }),
+    });
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
+      { user: { userId: 'user-1' }, query: { engineId: 'missing-engine' } } as any,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404, message: expect.stringContaining('Engine not found') }));
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
+  });
 });
 
 describe('requireAction project resource resolvers', () => {
