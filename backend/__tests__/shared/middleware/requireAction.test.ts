@@ -866,6 +866,32 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('does not let a grant on one runtime resource authorize a sibling process instance on the same engine', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFindOne
+      .mockResolvedValueOnce({ id: 'runtime-resource-payments', tenantId: null })
+      .mockResolvedValueOnce({ id: 'runtime-resource-risk', tenantId: null });
+    (permissionService.hasPermission as unknown as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    camundaGet.mockImplementation(async (_engineId: string, path: string) => (
+      path.endsWith('instance-payments')
+        ? { id: 'instance-payments', definitionKey: 'payments' }
+        : { id: 'instance-risk', definitionKey: 'payments-risk' }
+    ));
+
+    const response = await request(app)
+      .post('/runtime-instance-selection')
+      .send({ engineId, processInstanceIds: ['instance-payments', 'instance-risk'] });
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenLastCalledWith(
+      'engine:instance:delete',
+      expect.objectContaining({ resourceType: 'engine_runtime_resource', resourceId: 'runtime-resource-risk' }),
+    );
+  });
+
   it('uses Camunda processDefinitionKey compatibility while ignoring non-string batch identifiers', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
