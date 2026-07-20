@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'crypto';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation, type InvitationDeliveryMethod, type InvitationResourceType } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
@@ -182,16 +182,16 @@ export class InvitationService {
 
   async isLocalLoginDisabled(): Promise<boolean> {
     const dataSource = await getDataSource();
-    const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-    const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
+    const identityProviderRepo = dataSource.getRepository(IdentityProvider);
+    const enabledCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
     return enabledCount > 0;
   }
 
   async createInvitation(input: CreateInvitationInput): Promise<CreateInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-    const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
+    const identityProviderRepo = dataSource.getRepository(IdentityProvider);
+    const enabledCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
     const deliveryMethod = input.deliveryMethod === 'email' ? 'email' : 'manual';
 
     if (enabledCount > 0 && deliveryMethod !== 'email') {
@@ -283,8 +283,8 @@ export class InvitationService {
   async verifyOneTimePassword(token: string, oneTimePassword: string): Promise<VerifiedInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-    const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
+    const identityProviderRepo = dataSource.getRepository(IdentityProvider);
+    const enabledCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
     assertLocalLoginAllowed(enabledCount);
 
     const invitation = await getInvitationByTokenValue(token);

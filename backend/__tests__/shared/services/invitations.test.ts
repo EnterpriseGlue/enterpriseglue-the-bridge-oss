@@ -5,7 +5,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
-import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/db/entities/IdentityProvider.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
@@ -67,7 +67,7 @@ describe('InvitationService', () => {
     findOneByOrFail: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
-  let ssoProviderRepo: {
+  let identityProviderRepo: {
     count: ReturnType<typeof vi.fn>;
   };
   let managerUserRepo: {
@@ -105,7 +105,7 @@ describe('InvitationService', () => {
       update: vi.fn().mockResolvedValue(undefined),
     };
 
-    ssoProviderRepo = {
+    identityProviderRepo = {
       count: vi.fn().mockResolvedValue(0),
     };
 
@@ -129,7 +129,7 @@ describe('InvitationService', () => {
       getRepository: (entity: unknown) => {
         if (entity === Invitation) return invitationRepo;
         if (entity === User) return userRepo;
-        if (entity === SsoProvider) return ssoProviderRepo;
+        if (entity === IdentityProvider) return identityProviderRepo;
         if (entity === AuthzGroupMembership) return membershipRepo;
         throw new Error('Unexpected repository');
       },

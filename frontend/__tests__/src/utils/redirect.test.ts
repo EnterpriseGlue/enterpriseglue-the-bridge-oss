@@ -32,9 +32,9 @@ describe('redirect utils', () => {
   });
 
   it('allows same-origin internal redirects', () => {
-    redirectTo('/api/auth/google?tenantSlug=acme');
+    redirectTo('/api/auth/providers/provider-1/start?tenantSlug=acme');
 
-    expect(assign).toHaveBeenCalledWith('/api/auth/google?tenantSlug=acme');
+    expect(assign).toHaveBeenCalledWith('/api/auth/providers/provider-1/start?tenantSlug=acme');
   });
 
   it('falls back for external redirect targets', () => {

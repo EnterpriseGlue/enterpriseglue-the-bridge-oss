@@ -48,7 +48,6 @@ import {
 import {
   platformAdminRoute,
   authzRoute,
-  ssoProvidersRoute,
   identityProvidersRoute,
   identityMappingsRoute,
 } from '@modules/platform-admin/index.js';
@@ -60,15 +59,9 @@ import {
   passwordRoute,
   meRoute,
   verifyEmailRoute,
-  microsoftRoute,
-  samlRoute,
   ssoConfigRoute,
   forgotPasswordRoute,
   onboardingRoute,
-  googleRoute,
-  googleStartRoute,
-  microsoftStartRoute,
-  samlStartRoute,
   identityOidcRoute,
 } from '@modules/auth/index.js';
 
@@ -189,12 +182,6 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   app.use(meRoute);
   app.use(verifyEmailRoute);
   app.use(onboardingRoute);
-  app.use(microsoftRoute);
-  app.use(samlRoute);
-  app.use(googleRoute);
-  app.use(microsoftStartRoute);
-  app.use(googleStartRoute);
-  app.use(samlStartRoute);
   app.use(identityOidcRoute);
   app.use(ssoConfigRoute);
   app.use(invitationsRoute);
@@ -213,7 +200,6 @@ export function registerRoutes(app: Express, options: RegisterRoutesOptions = {}
   app.use('/api/admin', platformAdminRoute);
 
   // SSO Provider Management API (platform-level)
-  app.use(ssoProvidersRoute);
   app.use(identityProvidersRoute);
   app.use(identityMappingsRoute);
 

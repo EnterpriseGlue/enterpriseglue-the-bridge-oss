@@ -7,7 +7,6 @@ import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js
 import { authLimiter , apiLimiter} from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -27,9 +26,6 @@ const loginSchema = z.object({
 });
 
 async function isSsoRequiredForLogin(dataSource: Awaited<ReturnType<typeof getDataSource>>): Promise<boolean> {
-  const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-  const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
-  if (enabledCount > 0) return true;
   const identityProviderRepo = dataSource.getRepository(IdentityProvider);
   const directProviderCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
   return directProviderCount > 0;

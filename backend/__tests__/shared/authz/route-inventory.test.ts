@@ -536,7 +536,6 @@ describe('authorization route inventory validation', () => {
         risk: 'critical',
         surfaceId: 'admin.sso.providers.actions',
         routes: [
-          ['POST', '/api/sso/providers', 'platform.self'],
           ['POST', '/api/identity/providers', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/external-identities/unlink', 'platform.self'],
           ['PUT', '/api/identity/providers/{key}', 'platform.self'],
@@ -545,10 +544,6 @@ describe('authorization route inventory validation', () => {
           ['POST', '/api/identity/providers/{key}/reconciliation-preview', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/replay-memberships', 'platform.self'],
           ['POST', '/api/identity/providers/{key}/test-connection', 'platform.self'],
-          ['PUT', '/api/sso/providers/{id}', 'platform.self'],
-          ['DELETE', '/api/sso/providers/{id}', 'platform.self'],
-          ['POST', '/api/sso/providers/{id}/toggle', 'platform.self'],
-          ['POST', '/api/sso/providers/{id}/migrate-default-role', 'platform.self'],
         ],
       },
     ];

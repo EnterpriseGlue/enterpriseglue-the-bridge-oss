@@ -17,7 +17,6 @@ import {
   IdentityMappingTestRequestSchema,
   IdentityMappingTestResponseSchema,
   LegacyGlobalMappingRetirementRequestSchema,
-  LegacySsoProviderResponseSchema,
   LegacyMappingCoverageItemSchema,
   LegacyMappingCoverageVerifyRequestSchema,
   LegacyMappingRetirementReadinessSchema,
@@ -54,7 +53,6 @@ import {
   SsoGroupMappingTestResponseSchema,
   SsoGroupMappingInsertSchema,
   SsoGroupMappingUpdateSchema,
-  SamlAuthenticationStatusSchema,
   SsoMappingTestRequestSchema,
   SsoPlatformMappingTestResponseSchema,
   SsoSyncEventSchema,
@@ -62,24 +60,6 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 describe('provider-neutral identity shared contracts', () => {
-  it('limits public SAML status to safe readiness indicators', () => {
-    expect(SamlAuthenticationStatusSchema.parse({
-      enabled: false,
-      message: 'SAML provider is not configured',
-      providerConfigured: false,
-      providerEnabled: false,
-      missingFields: ['entityId', 'ssoUrl', 'certificate'],
-    }).missingFields).toEqual(['entityId', 'ssoUrl', 'certificate']);
-    expect(() => SamlAuthenticationStatusSchema.parse({
-      enabled: true,
-      message: 'configured',
-      providerConfigured: true,
-      providerEnabled: true,
-      missingFields: [],
-      certificate: 'must-not-be-exposed',
-    })).toThrow();
-  });
-
   it('shares the retained legacy platform-mapping write contracts', () => {
     expect(LegacySsoPlatformMappingCreateRequestSchema.parse({
       claimType: 'group', claimKey: 'groups', targetRole: 'user', priority: 0,
@@ -174,19 +154,6 @@ describe('provider-neutral identity shared contracts', () => {
     expect(LegacyMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_LEGACY_MAPPINGS');
     expect(LegacyGlobalMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_GLOBAL_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_GLOBAL_LEGACY_MAPPINGS');
     expect(() => LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'scope', candidateIdentityMappingId: 'mapping-1', note: 'no' })).toThrow();
-  });
-
-  it('keeps legacy SSO provider responses redacted while preserving configured-value indicators', () => {
-    const provider = LegacySsoProviderResponseSchema.parse({
-      id: 'provider-1', name: 'Legacy SAML', type: 'saml', enabled: false,
-      clientId: null, tenantId: null, issuerUrl: null, authorizationUrl: null, tokenUrl: null, userInfoUrl: null, scopes: [],
-      entityId: 'enterpriseglue', ssoUrl: 'https://idp.example.test/sso', sloUrl: null, signatureAlgorithm: 'sha256', callbackUrl: 'https://app.example.test/api/auth/saml/callback',
-      iconUrl: null, buttonLabel: null, buttonColor: null, displayOrder: 0, autoProvision: true, defaultRole: 'user', createdAt: 1, updatedAt: 2,
-      hasClientSecret: true, hasCertificate: true,
-    });
-    expect(provider.hasCertificate).toBe(true);
-    expect(Object.keys(provider)).not.toContain('certificate');
-    expect(() => LegacySsoProviderResponseSchema.parse({ ...provider, clientSecret: 'raw-secret' })).toThrow();
   });
 
   it('shares retained legacy SSO mapping preview contracts across route, API, and UI boundaries', () => {

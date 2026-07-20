@@ -1,6 +1,6 @@
 /**
  * Authentication routes
- * Handles login, logout, token refresh, password management, email verification, Microsoft OAuth
+ * Handles login, logout, token refresh, password management, email verification, and provider-neutral identity login.
  */
 
 import loginRoute from './login.js';
@@ -9,10 +9,8 @@ import refreshRoute from './refresh.js';
 import passwordRoute from './password.js';
 import meRoute from './me.js';
 import verifyEmailRoute from './verify-email.js';
-import microsoftRoute from './microsoft.js';
 import forgotPasswordRoute from './forgot-password.js';
 import ssoConfigRoute from './sso-config.js';
-import samlRoute from './saml.js';
 import onboardingRoute from './onboarding.js';
 import identityOidcRoute from './identity-oidc.js';
 
@@ -23,8 +21,6 @@ export {
   passwordRoute,
   meRoute,
   verifyEmailRoute,
-  microsoftRoute,
-  samlRoute,
   forgotPasswordRoute,
   ssoConfigRoute,
   onboardingRoute,

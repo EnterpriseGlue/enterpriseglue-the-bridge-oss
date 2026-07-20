@@ -54,7 +54,6 @@ describe('Login', () => {
     authState.isAuthenticated = false;
     authState.isLoading = false;
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
       return Promise.resolve({});
@@ -96,7 +95,6 @@ describe('Login', () => {
 
   it('uses the branded header title text for the browser page title', async () => {
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ logoTitle: 'OneJOP', ssoAutoRedirectSingleProvider: false });
       return Promise.resolve({});
@@ -145,7 +143,6 @@ describe('Login', () => {
   it('uses the provider-id LDAP login endpoint after selecting a directory provider', async () => {
     const user = userEvent.setup();
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/providers/enabled') return Promise.resolve([{ id: 'ldap-1', key: 'corp-directory', protocol: 'ldap', loginMethod: 'password' }]);
       if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
       return Promise.resolve({});

@@ -38,11 +38,6 @@ export function identityApiFailureHandlers(message = 'Identity provider unavaila
 }
 
 export const handlers = [
-  http.get('/api/sso/providers/enabled', () => {
-    return HttpResponse.json([
-      { id: 'sso-1', name: 'Google', type: 'google' },
-    ]);
-  }),
   http.get('/api/auth/providers/enabled', () => HttpResponse.json([])),
   http.get('/api/auth/branding', () => {
     return HttpResponse.json({});
@@ -58,7 +53,6 @@ export const handlers = [
       engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
     });
   }),
-  http.get('/api/sso/providers', () => HttpResponse.json([])),
   http.get('/api/identity/providers', () => HttpResponse.json([identityProviderFixture])),
   http.get('/api/identity/providers/:key/sync-runs', () => HttpResponse.json([])),
   http.post('/api/identity/providers/:key/test-connection', () => HttpResponse.json({ status: 'connected', protocol: 'oidc', issuer: 'https://identity.example.test' })),

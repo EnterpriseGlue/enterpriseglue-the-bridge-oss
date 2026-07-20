@@ -1787,7 +1787,6 @@ const {
   LegacyMappingRetirementResultSchema,
   LegacySsoPlatformMappingCreateRequestSchema,
   LegacySsoPlatformMappingUpdateRequestSchema,
-  SamlAuthenticationStatusSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   ProjectMembersResponseSchema,
@@ -1984,81 +1983,6 @@ registry.registerPath({
   ...authzExtension('platform.governance.read', 'GET', '/api/admin/users/search'),
   request: { query: z.object({ q: z.string() }) },
   responses: { 200: { description: 'Search results', content: { 'application/json': { schema: z.array(UserSearchResultSchema) } } } },
-});
-
-// SSO Providers
-const legacySsoProviderSchemas = await import('./platform-admin/authz.js');
-const SsoProviderCreateRequestSchema = legacySsoProviderSchemas.LegacySsoProviderCreateRequestSchema;
-const SsoProviderUpdateRequestSchema = legacySsoProviderSchemas.LegacySsoProviderUpdateRequestSchema;
-const SsoProviderToggleRequestSchema = legacySsoProviderSchemas.LegacySsoProviderToggleRequestSchema;
-const SsoProviderPublicSchema = legacySsoProviderSchemas.LegacySsoProviderResponseSchema.pick({
-  id: true,
-  name: true,
-  type: true,
-  buttonLabel: true,
-  buttonColor: true,
-  iconUrl: true,
-});
-registry.registerPath({
-  method: 'get',
-  path: '/api/sso/providers',
-  ...authzExtension('platform.sso.providers.read', 'GET', '/api/sso/providers'),
-  responses: { 200: { description: 'List SSO providers', content: { 'application/json': { schema: z.array(legacySsoProviderSchemas.LegacySsoProviderResponseSchema) } } } },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/api/sso/providers/enabled',
-  ...authzExemption('GET', '/api/sso/providers/enabled'),
-  responses: { 200: { description: 'List enabled public SSO providers', content: { 'application/json': { schema: z.array(SsoProviderPublicSchema) } } } },
-});
-
-registry.registerPath({
-  method: 'get',
-  path: '/api/sso/providers/{id}',
-  ...authzExtension('platform.sso.providers.read', 'GET', '/api/sso/providers/{id}'),
-  request: { params: z.object({ id: z.string() }) },
-  responses: { 200: { description: 'SSO provider', content: { 'application/json': { schema: legacySsoProviderSchemas.LegacySsoProviderResponseSchema } } }, 404: { description: 'Provider not found' } },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/api/sso/providers',
-  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/sso/providers'),
-  request: { body: { content: { 'application/json': { schema: SsoProviderCreateRequestSchema } } } },
-  responses: { 201: { description: 'SSO provider created', content: { 'application/json': { schema: legacySsoProviderSchemas.LegacySsoProviderResponseSchema } } } },
-});
-
-registry.registerPath({
-  method: 'put',
-  path: '/api/sso/providers/{id}',
-  ...authzExtension('platform.sso.providers.manage', 'PUT', '/api/sso/providers/{id}'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SsoProviderUpdateRequestSchema } } } },
-  responses: { 200: { description: 'SSO provider updated', content: { 'application/json': { schema: SuccessResponseSchema } } }, 404: { description: 'Provider not found' } },
-});
-
-registry.registerPath({
-  method: 'delete',
-  path: '/api/sso/providers/{id}',
-  ...authzExtension('platform.sso.providers.manage', 'DELETE', '/api/sso/providers/{id}'),
-  request: { params: z.object({ id: z.string() }) },
-  responses: { 204: { description: 'SSO provider deleted' }, 404: { description: 'Provider not found' } },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/api/sso/providers/{id}/toggle',
-  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/sso/providers/{id}/toggle'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: SsoProviderToggleRequestSchema } } } },
-  responses: { 200: { description: 'SSO provider enabled state toggled', content: { 'application/json': { schema: legacySsoProviderSchemas.LegacySsoProviderToggleResponseSchema } } }, 404: { description: 'Provider not found' } },
-});
-
-registry.registerPath({
-  method: 'post',
-  path: '/api/sso/providers/{id}/migrate-default-role',
-  ...authzExtension('platform.sso.providers.manage', 'POST', '/api/sso/providers/{id}/migrate-default-role'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({ providerKey: z.string().min(1).max(160), riskAcknowledged: z.boolean().optional() }) } } } },
-  responses: { 201: { description: 'Legacy provider default role converted to an explicit identity mapping' }, 400: { description: 'Conversion validation failed' }, 404: { description: 'Provider not found' } },
 });
 
 // Provider-neutral identity providers. Configuration holds only references to
@@ -2967,24 +2891,6 @@ registry.registerPath({
   responses: { 200: { description: 'Public platform settings', content: { 'application/json': { schema: PublicPlatformSettingsSchema } } } },
 });
 
-// SSO - Google
-registry.registerPath({ method: 'get', path: '/api/auth/google/start', ...authzExemption('GET', '/api/auth/google/start'), responses: { 302: { description: 'Redirect to Google OAuth' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/google', ...authzExemption('GET', '/api/auth/google'), responses: { 302: { description: 'Redirect to Google OAuth' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/google/callback', ...authzExemption('GET', '/api/auth/google/callback'), responses: { 302: { description: 'Google OAuth callback redirect' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/google/status', ...authzExemption('GET', '/api/auth/google/status'), responses: { 200: { description: 'Google SSO config status', content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } } } });
-
-// SSO - Microsoft
-registry.registerPath({ method: 'get', path: '/api/auth/microsoft/start', ...authzExemption('GET', '/api/auth/microsoft/start'), responses: { 302: { description: 'Redirect to Microsoft OAuth' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/microsoft', ...authzExemption('GET', '/api/auth/microsoft'), responses: { 302: { description: 'Redirect to Microsoft OAuth' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/microsoft/callback', ...authzExemption('GET', '/api/auth/microsoft/callback'), responses: { 302: { description: 'Microsoft OAuth callback redirect' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/microsoft/status', ...authzExemption('GET', '/api/auth/microsoft/status'), responses: { 200: { description: 'Microsoft SSO config status', content: { 'application/json': { schema: z.object({ enabled: z.boolean() }) } } } } });
-
-// SSO - SAML
-registry.registerPath({ method: 'get', path: '/api/auth/saml/start', ...authzExemption('GET', '/api/auth/saml/start'), responses: { 302: { description: 'Redirect to SAML IdP' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/saml', ...authzExemption('GET', '/api/auth/saml'), responses: { 302: { description: 'Redirect to SAML IdP' } } });
-registry.registerPath({ method: 'post', path: '/api/auth/saml/callback', ...authzExemption('POST', '/api/auth/saml/callback'), responses: { 302: { description: 'SAML assertion callback redirect' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/saml/metadata', ...authzExemption('GET', '/api/auth/saml/metadata'), responses: { 200: { description: 'SAML SP metadata XML', content: { 'application/xml': { schema: z.string() } } } } });
-registry.registerPath({ method: 'get', path: '/api/auth/saml/status', ...authzExemption('GET', '/api/auth/saml/status'), responses: { 200: { description: 'SAML config status', content: { 'application/json': { schema: SamlAuthenticationStatusSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/auth/identity/{key}/start', ...authzExemption('GET', '/api/auth/identity/{key}/start'), request: { params: z.object({ key: z.string() }) }, responses: { 302: { description: 'Redirect to the selected OIDC identity provider' } } });
 registry.registerPath({ method: 'get', path: '/api/auth/identity/callback', ...authzExemption('GET', '/api/auth/identity/callback'), responses: { 302: { description: 'Provider-neutral OIDC callback redirect' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/identity/{key}/ldap/login', ...authzExemption('POST', '/api/auth/identity/{key}/ldap/login'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });

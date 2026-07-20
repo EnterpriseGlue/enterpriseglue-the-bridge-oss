@@ -4,7 +4,6 @@ import express from 'express';
 import loginRouter from '../../../../../packages/backend-host/src/modules/auth/routes/login.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
 import { IdentityProvider } from '@enterpriseglue/shared/db/entities/IdentityProvider.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { verifyPassword } from '@enterpriseglue/shared/utils/password.js';
@@ -65,9 +64,6 @@ describe('auth login routes', () => {
     update: Mock;
     insert: Mock;
   };
-  let ssoProviderRepo: {
-    count: Mock;
-  };
   let identityProviderRepo: { count: Mock };
 
   beforeEach(() => {
@@ -90,14 +86,10 @@ describe('auth login routes', () => {
       insert: vi.fn(),
     };
 
-    ssoProviderRepo = {
-      count: vi.fn().mockResolvedValue(0),
-    };
     identityProviderRepo = { count: vi.fn().mockResolvedValue(0) };
 
     const getRepository = (entity: unknown) => {
       if (entity === User) return userRepo;
-      if (entity === SsoProvider) return ssoProviderRepo;
       if (entity === IdentityProvider) return identityProviderRepo;
       return {};
     };
@@ -109,7 +101,7 @@ describe('auth login routes', () => {
   });
 
   it('blocks local login when SSO policy is active', async () => {
-    ssoProviderRepo.count.mockResolvedValue(1);
+    identityProviderRepo.count.mockResolvedValue(1);
 
     const response = await request(app)
       .post('/api/auth/login')
@@ -121,7 +113,7 @@ describe('auth login routes', () => {
   });
 
   it('allows a canonical local platform administrator to use break-glass login while SSO is active', async () => {
-    ssoProviderRepo.count.mockResolvedValue(1);
+    identityProviderRepo.count.mockResolvedValue(1);
     getActivePlatformAdministratorUserIds.mockResolvedValue(new Set(['break-glass-1']));
     (verifyPassword as unknown as Mock).mockResolvedValue(true);
     userRepo.createQueryBuilder.mockReturnValue({
@@ -153,7 +145,7 @@ describe('auth login routes', () => {
   });
 
   it('keeps local non-administrator accounts blocked while SSO is active', async () => {
-    ssoProviderRepo.count.mockResolvedValue(1);
+    identityProviderRepo.count.mockResolvedValue(1);
     getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());
     userRepo.createQueryBuilder.mockReturnValue({
       where: vi.fn().mockReturnThis(),
@@ -186,7 +178,7 @@ describe('auth login routes', () => {
   });
 
   it('blocks local login for non-local accounts', async () => {
-    ssoProviderRepo.count.mockResolvedValue(0);
+    identityProviderRepo.count.mockResolvedValue(0);
     const getOne = vi.fn().mockResolvedValue({
       id: 'user-1',
       email: 'user@example.com',
@@ -214,7 +206,7 @@ describe('auth login routes', () => {
   });
 
   it('logs in local account and sets auth cookies', async () => {
-    ssoProviderRepo.count.mockResolvedValue(0);
+    identityProviderRepo.count.mockResolvedValue(0);
     (getDatabaseType as unknown as Mock).mockReturnValue('postgres');
     (verifyPassword as unknown as Mock).mockResolvedValue(true);
 
@@ -271,7 +263,7 @@ describe('auth login routes', () => {
   });
 
   it('tracks failed password attempts for local account', async () => {
-    ssoProviderRepo.count.mockResolvedValue(0);
+    identityProviderRepo.count.mockResolvedValue(0);
     (getDatabaseType as unknown as Mock).mockReturnValue('postgres');
     (verifyPassword as unknown as Mock).mockResolvedValue(false);
 
@@ -303,7 +295,7 @@ describe('auth login routes', () => {
   });
 
   it('locks account after 5th failed attempt', async () => {
-    ssoProviderRepo.count.mockResolvedValue(0);
+    identityProviderRepo.count.mockResolvedValue(0);
     (getDatabaseType as unknown as Mock).mockReturnValue('postgres');
     (verifyPassword as unknown as Mock).mockResolvedValue(false);
 
@@ -339,7 +331,7 @@ describe('auth login routes', () => {
   });
 
   it('rejects login when account is already locked', async () => {
-    ssoProviderRepo.count.mockResolvedValue(0);
+    identityProviderRepo.count.mockResolvedValue(0);
     (getDatabaseType as unknown as Mock).mockReturnValue('postgres');
 
     userRepo.createQueryBuilder.mockReturnValue({
@@ -368,7 +360,7 @@ describe('auth login routes', () => {
   });
 
   it('uses numeric active filter when database type is oracle', async () => {
-    ssoProviderRepo.count.mockResolvedValue(0);
+    identityProviderRepo.count.mockResolvedValue(0);
     (getDatabaseType as unknown as Mock).mockReturnValue('oracle');
 
     const where = vi.fn().mockReturnThis();

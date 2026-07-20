@@ -74,7 +74,6 @@ import type {
   LegacySsoPlatformMappingCreateRequest as SharedLegacySsoPlatformMappingCreateRequest,
   LegacySsoPlatformMappingUpdateRequest as SharedLegacySsoPlatformMappingUpdateRequest,
   LegacySsoPlatformMappingMigrationResponse as SharedLegacySsoPlatformMappingMigrationResponse,
-  LegacySsoProviderResponse as SharedLegacySsoProvider,
   LegacyMappingCoverageItem as SharedLegacyMappingCoverageItem,
   LegacyMappingRetirementReadiness as SharedLegacyMappingRetirementReadiness,
   PermissionCatalogEntry as SharedPermissionCatalogEntry,
@@ -281,7 +280,6 @@ export type LegacySsoPlatformMappingMigrationResponse = SharedLegacySsoPlatformM
 export type LegacySsoAssignmentMappingMigrationResponse = SharedLegacySsoAssignmentMappingMigrationResponse;
 export type LegacySsoGroupMappingMigrationRequest = SharedLegacySsoGroupMappingMigrationRequest;
 export type LegacySsoGroupMappingMigrationResponse = SharedLegacySsoGroupMappingMigrationResponse;
-export type LegacySsoProvider = SharedLegacySsoProvider;
 export type LegacyMappingCoverageItem = SharedLegacyMappingCoverageItem;
 export type LegacyMappingRetirementReadiness = SharedLegacyMappingRetirementReadiness;
 

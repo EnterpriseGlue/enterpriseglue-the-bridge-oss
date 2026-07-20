@@ -35,7 +35,7 @@ describe('Login error state', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
+      if (url === '/api/auth/providers/enabled') return Promise.resolve([]);
       if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
       return Promise.resolve({});
     });

@@ -31,14 +31,10 @@ describe('Login SSO auto-redirect behavior', () => {
   });
 
   function setupApiResponses(options: {
-    providers: Array<{ id: string; name: string; type: 'microsoft' | 'google' | 'saml' | 'oidc' }>;
-    identityProviders?: Array<{ id: string; key: string; protocol: 'oidc' | 'ldap'; loginMethod: 'redirect' | 'password' }>;
+    identityProviders?: Array<{ id: string; key: string; protocol: 'oidc' | 'saml' | 'ldap'; loginMethod: 'redirect' | 'password' }>;
     autoRedirect: boolean;
   }) {
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') {
-        return Promise.resolve(options.providers);
-      }
       if (url === '/api/auth/providers/enabled') {
         return Promise.resolve(options.identityProviders || []);
       }
@@ -63,35 +59,8 @@ describe('Login SSO auto-redirect behavior', () => {
     );
   }
 
-  it('auto-redirects when exactly one SSO provider is enabled and setting is on', async () => {
-    setupApiResponses({
-      providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],
-      autoRedirect: true,
-    });
-
-    renderLogin('/login');
-
-    await waitFor(() => {
-      expect(redirectTo).toHaveBeenCalledWith('/api/auth/saml');
-    });
-  });
-
-  it('adds tenant slug to SSO auto-redirects from tenant login routes', async () => {
-    setupApiResponses({
-      providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],
-      autoRedirect: true,
-    });
-
-    renderLogin('/t/default/login');
-
-    await waitFor(() => {
-      expect(redirectTo).toHaveBeenCalledWith('/api/auth/saml?tenantSlug=default');
-    });
-  });
-
   it('auto-redirects provider-neutral OIDC through its exact provider id', async () => {
     setupApiResponses({
-      providers: [],
       identityProviders: [{ id: 'oidc-1', key: 'corp-oidc', protocol: 'oidc', loginMethod: 'redirect' }],
       autoRedirect: true,
     });
@@ -105,7 +74,7 @@ describe('Login SSO auto-redirect behavior', () => {
 
   it('does not auto-redirect when local bypass query param is present', async () => {
     setupApiResponses({
-      providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],
+      identityProviders: [{ id: 'oidc-1', key: 'corp-oidc', protocol: 'oidc', loginMethod: 'redirect' }],
       autoRedirect: true,
     });
 
@@ -120,9 +89,9 @@ describe('Login SSO auto-redirect behavior', () => {
 
   it('does not auto-redirect when more than one SSO provider is enabled', async () => {
     setupApiResponses({
-      providers: [
-        { id: 'p1', name: 'Entra SAML', type: 'saml' },
-        { id: 'p2', name: 'Google', type: 'google' },
+      identityProviders: [
+        { id: 'p1', key: 'corp-oidc', protocol: 'oidc', loginMethod: 'redirect' },
+        { id: 'p2', key: 'corp-saml', protocol: 'saml', loginMethod: 'redirect' },
       ],
       autoRedirect: true,
     });
@@ -138,7 +107,7 @@ describe('Login SSO auto-redirect behavior', () => {
 
   it('keeps local login available for the backend-enforced break-glass policy', async () => {
     setupApiResponses({
-      providers: [{ id: 'p1', name: 'Entra SAML', type: 'saml' }],
+      identityProviders: [{ id: 'p1', key: 'corp-oidc', protocol: 'oidc', loginMethod: 'redirect' }],
       autoRedirect: false,
     });
 

@@ -265,16 +265,6 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         )
       },
       {
-        path: `${pathPrefix}admin/settings/sso`,
-        element: (
-          <ProtectedRoute requireAdmin requiredPlatformPermissions={[PlatformPermission.SSO_ASSIGNMENTS_MANAGE, PlatformPermission.SETTINGS_MANAGE]}>
-            <LazyRoute message="Loading SSO settings...">
-              <PlatformSettingsPage section="sso" />
-            </LazyRoute>
-          </ProtectedRoute>
-        )
-      },
-      {
         path: `${pathPrefix}admin/settings/access-control`,
         element: (
           <ProtectedRoute requireAdmin requiredPlatformPermissions={ACCESS_CONTROL_PLATFORM_PERMISSIONS}>

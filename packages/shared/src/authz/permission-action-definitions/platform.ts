@@ -768,8 +768,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       description: 'Read configured SSO identity providers.',
       ui: [{ surfaceId: 'admin.sso.providers', behavior: 'hide' }],
       routes: [
-        { method: 'GET', route: '/api/sso/providers', resourceResolver: 'platform.self' },
-        { method: 'GET', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/identity/providers/{key}/sync-runs', resourceResolver: 'platform.self' },
@@ -787,7 +785,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       description: 'Create, update, delete, enable, or disable SSO identity providers.',
       ui: [{ surfaceId: 'admin.sso.providers.actions', behavior: 'disable' }],
       routes: [
-        { method: 'POST', route: '/api/sso/providers', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers/{key}/external-identities/unlink', resourceResolver: 'platform.self' },
         { method: 'PUT', route: '/api/identity/providers/{key}', resourceResolver: 'platform.self' },
@@ -796,10 +793,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/identity/providers/{key}/reconciliation-preview', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers/{key}/replay-memberships', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/providers/{key}/test-connection', resourceResolver: 'platform.self' },
-        { method: 'PUT', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
-        { method: 'DELETE', route: '/api/sso/providers/{id}', resourceResolver: 'platform.self' },
-        { method: 'POST', route: '/api/sso/providers/{id}/toggle', resourceResolver: 'platform.self' },
-        { method: 'POST', route: '/api/sso/providers/{id}/migrate-default-role', resourceResolver: 'platform.self' },
       ],
     },
   {

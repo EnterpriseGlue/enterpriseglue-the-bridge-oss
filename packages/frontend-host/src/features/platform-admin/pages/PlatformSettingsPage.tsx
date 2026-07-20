@@ -41,7 +41,6 @@ import type {
   ProjectEngineTargetPolicyMode,
   UserListItem,
 } from '../../../api/platform-admin';
-import SsoSettingsTab from '../components/SsoSettingsTab';
 import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
 import IdentityMappingsSettingsTab from '../components/IdentityMappingsSettingsTab';
 import ConfigurationBundleSettingsTab from '../components/ConfigurationBundleSettingsTab';
@@ -98,7 +97,6 @@ const PLATFORM_SETTINGS_SECTION_REGISTRY = [
   { id: 'invite-domains', label: 'Invite Domains', visibility: 'settings' },
   { id: 'pii-redaction', label: 'PII Redaction', visibility: 'settings' },
   { id: 'engines', label: 'Engines', visibility: 'settings-or-governance-read' },
-  { id: 'sso', label: 'SSO', visibility: 'settings' },
   { id: 'identity-providers', label: 'Identity Providers', visibility: 'identity-providers' },
   { id: 'identity-mappings', label: 'Identity Mappings', visibility: 'identity-mappings' },
   { id: 'configuration', label: 'Configuration', visibility: 'configuration' },
@@ -495,7 +493,6 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     />
   );
 
-  const renderSso = () => <SsoSettingsTab />;
   const renderIdentityProviders = () => <IdentityProvidersSettingsTab />;
   const renderIdentityMappings = () => <IdentityMappingsSettingsTab />;
   const renderConfiguration = () => <ConfigurationBundleSettingsTab />;
@@ -546,7 +543,6 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     'invite-domains': renderInviteDomains,
     'pii-redaction': renderPiiRedaction,
     engines: renderEngines,
-    sso: renderSso,
     'identity-providers': renderIdentityProviders,
     'identity-mappings': renderIdentityMappings,
     configuration: renderConfiguration,
