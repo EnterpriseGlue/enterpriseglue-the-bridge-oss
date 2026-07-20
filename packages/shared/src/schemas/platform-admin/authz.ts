@@ -1276,93 +1276,6 @@ export const IdentityMappingProvisionAccessResponseSchema = z.object({
   createdGroup: z.object({ id: z.string() }).nullable(),
 });
 
-/** Retained legacy mapping conversion inputs; conversion creates a replacement and never disables the legacy evaluator. */
-export const LegacyMappingMigrationNewGroupSchema = z.object({
-  key: z.string().min(1).max(255),
-  name: z.string().min(1).max(255),
-  description: z.string().max(2000).nullable().optional(),
-});
-
-export const LegacySsoMappingMigrationRequestSchema = z.object({
-  providerKey: z.string().min(1).max(128),
-  targetGroupKey: z.string().min(1).max(160).optional(),
-  newGroup: LegacyMappingMigrationNewGroupSchema.optional(),
-}).refine((value) => Boolean(value.targetGroupKey) !== Boolean(value.newGroup), {
-  message: 'Provide exactly one of targetGroupKey or newGroup',
-});
-
-const LegacyMappingMigrationGroupResponseSchema = z.object({ id: z.string(), key: z.string() }).nullable();
-const LegacyMappingMigrationAssignmentResponseSchema = z.object({ id: z.string(), warnings: z.array(z.string()) });
-
-export const LegacySsoPlatformMappingMigrationResponseSchema = z.object({
-  legacyMappingId: z.string(),
-  created: z.boolean(),
-  mapping: IdentityMappingResponseSchema,
-  assignment: LegacyMappingMigrationAssignmentResponseSchema,
-  createdGroup: LegacyMappingMigrationGroupResponseSchema,
-});
-
-export const LegacySsoAssignmentMappingMigrationResponseSchema = z.object({
-  legacyMappingId: z.string(),
-  providerKey: z.string(),
-  identityMapping: IdentityMappingResponseSchema,
-  assignment: LegacyMappingMigrationAssignmentResponseSchema,
-  created: z.boolean(),
-  createdGroup: LegacyMappingMigrationGroupResponseSchema,
-});
-
-export const LegacySsoGroupMappingMigrationRequestSchema = z.object({
-  providerKey: z.string().min(1).max(128),
-});
-
-export const LegacySsoGroupMappingMigrationResponseSchema = z.object({
-  legacyMappingId: z.string(),
-  providerKey: z.string(),
-  created: z.boolean(),
-  identityMapping: IdentityMappingResponseSchema,
-});
-
-/** Diagnostics and retirement gate for compatibility mapping evaluators. */
-export const LegacyMappingCoverageFamilySchema = z.enum(['platform_role', 'group', 'engine_assignment']);
-export const LegacyMappingCoverageStatusSchema = z.enum(['replacement_candidate', 'manual_redesign_required', 'no_replacement_candidate']);
-export const LegacyMappingCoverageVerificationSchema = z.object({
-  candidateIdentityMappingId: z.string(),
-  verifiedById: z.string().nullable(),
-  verifiedAt: z.number(),
-  note: z.string(),
-});
-export const LegacyMappingCoverageItemSchema = z.object({
-  id: z.string(),
-  family: LegacyMappingCoverageFamilySchema,
-  status: LegacyMappingCoverageStatusSchema,
-  reason: z.string(),
-  candidateIdentityMappingIds: z.array(z.string()),
-  verification: LegacyMappingCoverageVerificationSchema.nullable(),
-});
-export const LegacyMappingRetirementBlockerSchema = z.object({
-  id: z.string(),
-  family: LegacyMappingCoverageFamilySchema,
-  reason: z.string(),
-});
-export const LegacyMappingRetirementReadinessSchema = z.object({
-  ready: z.boolean(),
-  activeLegacyMappingCount: z.number().int().nonnegative(),
-  verifiedReplacementCount: z.number().int().nonnegative(),
-  blockers: z.array(LegacyMappingRetirementBlockerSchema),
-});
-export const LegacyMappingCoverageVerifyRequestSchema = z.object({
-  family: LegacyMappingCoverageFamilySchema,
-  candidateIdentityMappingId: z.string().min(1),
-  note: z.string().min(3).max(2000),
-});
-export const LegacyMappingRetirementRequestSchema = z.object({ confirmation: z.literal('RETIRE_LEGACY_MAPPINGS') });
-export const LegacyGlobalMappingRetirementRequestSchema = z.object({ confirmation: z.literal('RETIRE_GLOBAL_LEGACY_MAPPINGS') });
-export const LegacyMappingRetirementResultSchema = z.object({
-  platformRoleMappingsDisabled: z.number().int().nonnegative(),
-  groupMappingsDisabled: z.number().int().nonnegative(),
-  engineAssignmentMappingsDisabled: z.number().int().nonnegative(),
-});
-
 /** Backward-compatible names for the shared provider-neutral sync contracts. */
 export const SsoSyncRunSchema = IdentitySyncRunSchema;
 export const SsoSyncEventSchema = IdentitySyncEventSchema;
@@ -1699,10 +1612,6 @@ export type IdentityMappingStoredSnapshotPreviewRequest = z.input<typeof Identit
 export type IdentityMappingStoredSnapshotPreviewResponse = z.infer<typeof IdentityMappingStoredSnapshotPreviewResponseSchema>;
 export type IdentityMappingProvisionAccessRequest = z.input<typeof IdentityMappingProvisionAccessRequestSchema>;
 export type IdentityMappingProvisionAccessResponse = z.infer<typeof IdentityMappingProvisionAccessResponseSchema>;
-export type LegacySsoMappingMigrationRequest = z.input<typeof LegacySsoMappingMigrationRequestSchema>;
-export type LegacyMappingRetirementBlocker = z.infer<typeof LegacyMappingRetirementBlockerSchema>;
-export type LegacyMappingRetirementReadiness = z.infer<typeof LegacyMappingRetirementReadinessSchema>;
-export type LegacyMappingRetirementResult = z.infer<typeof LegacyMappingRetirementResultSchema>;
 export type IdentityProviderResponse = z.infer<typeof IdentityProviderResponseSchema>;
 export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityProviderMembershipReplayResponseSchema>;
 export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof IdentityProviderExternalIdentityUnlinkResponseSchema>;

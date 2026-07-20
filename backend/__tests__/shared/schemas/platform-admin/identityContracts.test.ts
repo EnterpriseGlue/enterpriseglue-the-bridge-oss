@@ -16,15 +16,6 @@ import {
   IdentityMappingStoredSnapshotPreviewResponseSchema,
   IdentityMappingTestRequestSchema,
   IdentityMappingTestResponseSchema,
-  LegacyGlobalMappingRetirementRequestSchema,
-  LegacyMappingCoverageItemSchema,
-  LegacyMappingCoverageVerifyRequestSchema,
-  LegacyMappingRetirementReadinessSchema,
-  LegacyMappingRetirementRequestSchema,
-  LegacySsoGroupMappingMigrationRequestSchema,
-  LegacySsoGroupMappingMigrationResponseSchema,
-  LegacySsoMappingMigrationRequestSchema,
-  LegacySsoPlatformMappingMigrationResponseSchema,
   AuthzCheckBatchRequestSchema,
   AuthzCheckBatchResponseSchema,
   AuthzCheckRequestSchema,
@@ -118,22 +109,6 @@ describe('provider-neutral identity shared contracts', () => {
     expect(IdentityMappingStoredSnapshotPreviewResponseSchema.parse({
       scanned: 10, matches: 4, nonMatches: 6, failed: 0, truncated: false, latestSnapshotAt: null, warnings: [],
     }).scanned).toBe(10);
-  });
-
-  it('shares the legacy mapping replacement and retirement gate contracts', () => {
-    expect(LegacyMappingCoverageItemSchema.parse({
-      id: 'legacy-1', family: 'engine_assignment', status: 'replacement_candidate', reason: 'Ready to verify',
-      candidateIdentityMappingIds: ['mapping-1'],
-      verification: { candidateIdentityMappingId: 'mapping-1', verifiedById: null, verifiedAt: 1, note: 'Representative sign-in verified.' },
-    }).family).toBe('engine_assignment');
-    expect(LegacyMappingRetirementReadinessSchema.parse({
-      ready: false, activeLegacyMappingCount: 1, verifiedReplacementCount: 0,
-      blockers: [{ id: 'legacy-1', family: 'group', reason: 'Verification required.' }],
-    }).blockers).toHaveLength(1);
-    expect(LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'platform_role', candidateIdentityMappingId: 'mapping-1', note: 'Verified.' }).note).toBe('Verified.');
-    expect(LegacyMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_LEGACY_MAPPINGS');
-    expect(LegacyGlobalMappingRetirementRequestSchema.parse({ confirmation: 'RETIRE_GLOBAL_LEGACY_MAPPINGS' }).confirmation).toBe('RETIRE_GLOBAL_LEGACY_MAPPINGS');
-    expect(() => LegacyMappingCoverageVerifyRequestSchema.parse({ family: 'scope', candidateIdentityMappingId: 'mapping-1', note: 'no' })).toThrow();
   });
 
   it('shares authorization check contracts without trusting caller identity or tenancy', () => {
@@ -234,26 +209,5 @@ describe('provider-neutral identity shared contracts', () => {
     expect(() => AuthzPolicyResponseSchema.parse({
       id: 'policy-1', tenantId: null, name: 'Deny', effect: 'deny', priority: 10, conditions: {}, isActive: true, createdAt: 1,
     })).toThrow();
-  });
-
-  it('keeps legacy mapping conversion additive and validates shared provider-neutral contracts', () => {
-    expect(LegacySsoMappingMigrationRequestSchema.parse({
-      providerKey: 'identity.oidc.example', targetGroupKey: 'operators',
-    }).targetGroupKey).toBe('operators');
-    expect(() => LegacySsoMappingMigrationRequestSchema.parse({
-      providerKey: 'identity.oidc.example', targetGroupKey: 'operators', newGroup: { key: 'operators', name: 'Operators' },
-    })).toThrow();
-    expect(LegacySsoGroupMappingMigrationRequestSchema.parse({ providerKey: 'identity.oidc.example' }).providerKey).toBe('identity.oidc.example');
-    const identityMapping = {
-      id: 'mapping-1', providerId: 'provider-1', providerKey: 'identity.oidc.example', targetGroupId: 'group-1', targetGroupKey: 'operators',
-      entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null,
-    } as const;
-    expect(LegacySsoPlatformMappingMigrationResponseSchema.parse({
-      legacyMappingId: 'legacy-1', created: true, mapping: identityMapping,
-      assignment: { id: 'assignment-1', warnings: [] }, createdGroup: { id: 'group-1', key: 'operators' },
-    }).created).toBe(true);
-    expect(LegacySsoGroupMappingMigrationResponseSchema.parse({
-      legacyMappingId: 'legacy-1', providerKey: 'identity.oidc.example', created: false, identityMapping,
-    }).created).toBe(false);
   });
 });
