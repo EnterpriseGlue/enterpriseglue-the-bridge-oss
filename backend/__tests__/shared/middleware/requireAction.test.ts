@@ -620,6 +620,14 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('rejects runtime jobs without a process-definition reference on resource-aware engines', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    camundaGet.mockResolvedValue({ id: 'job-1' });
+
+    expect((await request(app).get(`/runtime-jobs/job-1?engineId=${engineId}`)).status).toBe(403);
+  });
+
   it('requires explicit and fully authorized instances for resource-aware batch actions', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
