@@ -3,7 +3,7 @@ import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
@@ -72,6 +72,20 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-request-context.js', () => 
 
 const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet }));
+
+describe('requireRuntimeCollectionAction', () => {
+  it('rejects an unauthenticated runtime collection request before resolving any resource', async () => {
+    const next = vi.fn();
+
+    await requireRuntimeCollectionAction('mission-control.process-definitions.read', { resourceKind: 'process_definition' })(
+      { query: {} } as any,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, message: 'Authentication required' }));
+  });
+});
 
 describe('requireAction project resource resolvers', () => {
   const projectId = '11111111-1111-4111-8111-111111111111';
