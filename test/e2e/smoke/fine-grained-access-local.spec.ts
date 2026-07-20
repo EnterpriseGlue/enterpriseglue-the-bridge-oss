@@ -220,6 +220,18 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(after.body.authorizationVersion).not.toBe(before.body.authorizationVersion);
     expect(after.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.groupScopedEngineId);
 
+    // Snapshot reads may be served concurrently by separate HTTP workers. Every
+    // post-revocation read must observe the same authorization version and no
+    // stale group-derived engine, rather than relying on a warm local cache.
+    const concurrentSnapshots = await Promise.all(
+      Array.from({ length: 4 }, () => request(page, '/api/authz/me/permissions')),
+    );
+    for (const snapshot of concurrentSnapshots) {
+      expect(snapshot.status, JSON.stringify(snapshot.body)).toBe(200);
+      expect(snapshot.body.authorizationVersion).toBe(after.body.authorizationVersion);
+      expect(snapshot.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.groupScopedEngineId);
+    }
+
     const deniedRead = await request(page, `/engines-api/engines/${fixture.groupScopedEngineId}`);
     expect([403, 404]).toContain(deniedRead.status);
   });
