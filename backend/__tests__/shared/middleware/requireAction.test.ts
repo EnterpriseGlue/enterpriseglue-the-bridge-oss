@@ -497,6 +497,13 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 
+  it('denies engine-wide runtime definitions without a broad grant', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    expect((await request(app).get(`/runtime-definitions/definition-1?engineId=${engineId}`)).status).toBe(403);
+  });
+
   it('resolves a deployment only through active inventoried runtime resources', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     runtimeResourceFind.mockResolvedValue([
