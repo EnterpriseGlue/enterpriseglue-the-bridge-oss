@@ -1304,4 +1304,9 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     expect((await request(app).post('/invitations').send({ resourceType: 'project', resourceId: projectId })).status).toBe(403);
   });
+
+  it('conceals missing engine invitation targets', async () => {
+    engineFindOne.mockResolvedValue(null);
+    expect((await request(app).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(404);
+  });
 });
