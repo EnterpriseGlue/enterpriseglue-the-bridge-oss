@@ -419,7 +419,6 @@ export interface RoleAssignmentView {
   scopeType: ResourceType | null;
   scopeId: string | null;
   source: RoleAssignmentSource;
-  sourceMappingId: string | null;
   sourceRef: string | null;
   ownershipMode: ConfigOwnershipMode;
   sourceHash: string | null;
@@ -460,7 +459,6 @@ export interface CreateRoleAssignmentInput {
   scopeType?: ResourceType;
   scopeId?: string | null;
   source?: RoleAssignmentSource;
-  sourceMappingId?: string | null;
   sourceRef?: string | null;
   ownershipMode?: ConfigOwnershipMode;
   sourceHash?: string | null;
@@ -491,7 +489,6 @@ export interface PermissionEvaluationSource {
   principalType?: PrincipalType;
   principalId?: string;
   source?: string;
-  sourceMappingId?: string | null;
   sourceRef?: string | null;
   scopeType?: ResourceType | null;
   scopeId?: string | null;
@@ -2207,7 +2204,6 @@ class PermissionServiceClass {
         scopeType: assignment.scopeType as ResourceType | null,
         scopeId: assignment.scopeId,
         source: assignment.source as RoleAssignmentSource,
-        sourceMappingId: assignment.sourceMappingId || assignment.sourceRef || null,
         sourceRef: assignment.sourceRef,
         ownershipMode: (assignment.ownershipMode || (assignment.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
         sourceHash: assignment.sourceHash || null,
@@ -2256,7 +2252,7 @@ class PermissionServiceClass {
     await this.assertResourceExists(dataSource, scopeType, scopeId, normalizedTenantId);
     await this.assertRuntimeScopeEnabled(dataSource, scopeType, scopeId, normalizedTenantId);
     const source = input.source ?? 'manual';
-    const sourceRef = input.sourceRef ?? input.sourceMappingId ?? null;
+    const sourceRef = input.sourceRef ?? null;
     const assignmentKey = canonicalRoleAssignmentKey({
       tenantId: input.tenantId ?? null,
       principalType: principal.principalType,
@@ -3304,7 +3300,6 @@ class PermissionServiceClass {
       principalType: assignment.principalType as PrincipalType,
       principalId: assignment.principalId!,
       source: assignment.source,
-      sourceMappingId: assignment.sourceMappingId,
       sourceRef: assignment.sourceRef,
       scopeType: assignment.scopeType as ResourceType | null,
       scopeId: assignment.scopeId,
@@ -3343,7 +3338,7 @@ class PermissionServiceClass {
       const inheritedSources: PermissionEvaluationSource[] = [...runtimeSetAssignments, ...engineSetAssignments].map((assignment) => ({
         type: 'role-assignment' as const, assignmentId: assignment.id, roleId: assignment.roleId,
         principalType: assignment.principalType as PrincipalType, principalId: assignment.principalId!, source: assignment.source,
-        sourceMappingId: assignment.sourceMappingId, sourceRef: assignment.sourceRef,
+        sourceRef: assignment.sourceRef,
         scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
         configBundle: configBundleLineageForAssignment(assignment),
       }));
@@ -3419,7 +3414,6 @@ class PermissionServiceClass {
         principalType: assignment.principalType as PrincipalType,
         principalId: assignment.principalId || undefined,
         source: assignment.source,
-        sourceMappingId: assignment.sourceMappingId,
         sourceRef: assignment.sourceRef,
         scopeType: 'engine_set' as ResourceType,
         scopeId: assignment.scopeId,

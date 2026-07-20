@@ -1832,6 +1832,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.
 - [x] ✅ Extend `EngineDeployment` and `EngineDeploymentArtifact` for direct discovery, nullable project lineage, pipeline receipt provenance, and explicit lineage quality. Entity/migration contracts and discovery/receipt service tests cover the portable history model.
 - [ ] ⬜ Replace legacy role-assignment uniqueness with principal/scope/source uniqueness and make legacy `userId`, `resourceType`, `resourceId`, and `sourceMappingId` aliases removable.
+- [x] ✅ Retire the `sourceMappingId` role-assignment alias. `sourceRef` is now the sole persisted/API/effective-access/UI lineage field, migration `0093` drops the obsolete column and its index, and no runtime authorization source reads it.
 - [ ] ⬜ Make role keys tenant-scoped where roles are tenant-owned and add deterministic config keys/source metadata to roles, groups, providers, mappings, engines, Engine Sets, and targets.
 - [x] ✅ Keep one `ProjectEngineTarget` per project/engine pair and add explicit config ownership transfer/conflict metadata rather than source-duplicate target rows. The pair constraint, ownership/drift fields, and configuration apply/diff contracts are covered by the maintained target-ownership test lane.
 - [ ] ⬜ Add config bundle source, object ownership/hash, preview/apply run, and run-event entities.

@@ -81,7 +81,7 @@ type AuthzPrincipalType = 'user' | 'group' | 'api_client' | 'service_account'
 type ScopedAssignableRole = SharedRoleSummary
 type ScopedRoleAssignment = SharedRoleAssignment
 type ScopedRoleAssignmentDisplay = Pick<SharedRoleAssignment, 'id' | 'roleId' | 'source'> & Partial<Pick<SharedRoleAssignment,
-  'userId' | 'principalType' | 'principalId' | 'sourceMappingId' | 'sourceRef'
+  'userId' | 'principalType' | 'principalId' | 'sourceRef'
 >>
 
 const ASSIGNMENT_PRINCIPAL_TYPE_LABELS: Record<AuthzPrincipalType, string> = {
@@ -244,9 +244,6 @@ export function formatScopedAssignmentSourceLineage(assignment: ScopedRoleAssign
             : `${assignment.source} assignment`
   const parts = [sourceLabel]
   if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
-  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
-    parts.push(`${assignment.source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
-  }
   return parts.join('; ')
 }
 

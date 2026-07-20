@@ -292,7 +292,7 @@ describe('AccessControl roles and permissions', () => {
     const assignment: RoleAssignment = {
       id: 'provider-assignment', tenantId: null, userId: 'provider-user', principalType: 'user', principalId: 'provider-user',
       roleId: 'system.engine.operator', roleKey: 'system.engine.operator', roleName: 'Engine Operator', roleScope: 'engine', resourceType: 'engine', resourceId: 'engine-1',
-      scopeType: 'engine', scopeId: 'engine-1', source: 'sso', sourceMappingId: 'identity-mapping-1', sourceRef: 'identity_mapping:identity-mapping-1',
+      scopeType: 'engine', scopeId: 'engine-1', source: 'sso', sourceRef: 'identity_mapping:identity-mapping-1',
       ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
       expiresAt: null, lastSeenAt: 1, createdById: null, createdAt: 1, updatedAt: 1,
     };

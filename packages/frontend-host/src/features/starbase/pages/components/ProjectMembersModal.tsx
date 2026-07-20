@@ -95,9 +95,6 @@ function formatProjectScopedAssignmentSourceLineage(assignment: ProjectScopedRol
             : `${assignment.source} assignment`
   const parts = [sourceLabel]
   if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
-  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
-    parts.push(`${assignment.source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
-  }
   return parts.join('; ')
 }
 

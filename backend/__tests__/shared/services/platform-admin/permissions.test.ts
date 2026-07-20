@@ -1070,7 +1070,6 @@ describe('permissionService', () => {
       assignmentId: 'assignment-sso-engine-set-operator',
       roleId: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
       source: 'manual',
-      sourceMappingId: null,
       scopeType: 'engine_set',
       scopeId: 'engine-set-prod',
       engineSetId: 'engine-set-prod',
@@ -2695,7 +2694,7 @@ describe('permissionService', () => {
       getMany: vi.fn().mockResolvedValue([{
         id: 'assignment-sso-1', tenantId: 'tenant-a', userId: null, principalType: 'user', principalId: 'user-1',
         roleId: 'system.engine.operator', scopeType: 'engine', scopeId: 'engine-1', source: 'sso',
-        sourceMappingId: 'mapping-1', sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
+        sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
         ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
         expiresAt: null, lastSeenAt: null, createdById: null, createdAt: 10, updatedAt: 11,
       }]),
@@ -2717,7 +2716,6 @@ describe('permissionService', () => {
     );
     expect(assignments).toEqual([expect.objectContaining({
       userId: 'user-1',
-      sourceMappingId: 'mapping-1',
       sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     })]);
   });

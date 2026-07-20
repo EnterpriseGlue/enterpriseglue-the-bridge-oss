@@ -412,7 +412,7 @@ type EngineMembersResponse = SharedEngineMembersResponse
 
 type EngineRoleAssignment = SharedRoleAssignment
 type EngineRoleAssignmentDisplay = Pick<SharedRoleAssignment, 'id' | 'roleId' | 'source'> & Partial<Pick<SharedRoleAssignment,
-  'userId' | 'principalType' | 'principalId' | 'sourceMappingId' | 'sourceRef'
+  'userId' | 'principalType' | 'principalId' | 'sourceRef'
 >>
 
 type RuntimeResourceAccessInventory = {
@@ -503,9 +503,6 @@ export function formatEngineAccessSourceLineage(assignment: EngineRoleAssignment
             : `${formatEngineRegistrationStatus(source || 'unknown')} assignment`
   const parts = [sourceLabel]
   if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
-  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
-    parts.push(`${source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
-  }
   return parts.join('; ')
 }
 

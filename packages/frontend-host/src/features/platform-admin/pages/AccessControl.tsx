@@ -585,7 +585,6 @@ function formatAssignmentLineage(
   roles: RoleSummary[] = [],
 ) {
   const parts = [
-    assignment.sourceMappingId ? `mapping=${assignment.sourceMappingId}` : '',
     assignment.sourceRef ? `ref=${assignment.sourceRef}` : '',
     assignment.createdById ? `createdBy=${assignment.createdById}` : '',
     assignment.lastSeenAt ? `lastSeen=${formatTimestamp(assignment.lastSeenAt)}` : '',

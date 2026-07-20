@@ -30,7 +30,7 @@ const auditEntry = (overrides: Partial<AuthzAuditEntry>): AuthzAuditEntry => ({
 
 describe('audit references', () => {
   it('correlates direct assignment entries by assignment lineage', () => {
-    const assignment = { id: 'assignment-1', sourceMappingId: 'mapping-1', sourceRef: 'sso:mapping-1' } as RoleAssignment;
+    const assignment = { id: 'assignment-1', sourceRef: 'sso:mapping-1' } as unknown as RoleAssignment;
 
     expect(findAssignmentAuditEntries(assignment, [
       auditEntry({ id: 'matching-assignment' }),

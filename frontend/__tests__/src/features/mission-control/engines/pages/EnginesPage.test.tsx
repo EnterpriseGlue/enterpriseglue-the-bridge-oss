@@ -770,7 +770,7 @@ describe('EnginesPage', () => {
     })).toBe('Scoped user access');
     expect(formatEngineAccessPrincipal({ id: 'assignment-1', principalType: 'api_client', principalId: 'client-1', roleId: 'system.api.engine_registrar', source: 'manual' })).toBe('API client: client-1');
     expect(formatEngineAccessRole('system.engine.deployer')).toBe('Deployer');
-    expect(formatEngineAccessSourceLineage({ id: 'assignment-1', roleId: 'system.engine.operator', source: 'sso', sourceRef: 'sso-group:payments-ops', sourceMappingId: 'mapping-1' })).toBe('SSO-managed assignment; Source ref sso-group:payments-ops; SSO mapping mapping-1');
+    expect(formatEngineAccessSourceLineage({ id: 'assignment-1', roleId: 'system.engine.operator', source: 'sso', sourceRef: 'sso-group:payments-ops' })).toBe('SSO-managed assignment; Source ref sso-group:payments-ops');
     expect(isEngineGovernanceRoleAssignment({ id: 'assignment-2', roleId: 'system.engine.owner', source: 'system' })).toBe(true);
     expect(isEngineGovernanceRoleAssignment({ id: 'assignment-3', roleId: 'system.engine.operator', source: 'manual' })).toBe(false);
     expect(formatProjectEngineTargetProject({ id: 'target-1', projectId: 'project-1', projectName: 'Payments App' })).toBe('Payments App');

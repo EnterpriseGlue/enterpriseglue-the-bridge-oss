@@ -26,7 +26,7 @@ export function findAssignmentAuditEntries(
   assignment: RoleAssignment,
   entries: AuthzAuditEntry[],
 ) {
-  const ids = [assignment.id, assignment.sourceMappingId, assignment.sourceRef].filter(Boolean);
+  const ids = [assignment.id, assignment.sourceRef].filter(Boolean);
   return entries.filter((entry) => {
     if (!mutating(entry.action)) return false;
     if (entry.resourceType === 'role_assignment' && references(entry, [assignment.id])) return true;
@@ -62,7 +62,7 @@ export function findMachineIdentityAuditEntries(
 }
 
 export function findEffectiveAccessSourceAuditEntries(source: EffectiveAccessSource, entries: AuthzAuditEntry[]) {
-  const ids = [source.assignmentId, source.sourceMappingId, source.sourceRef, source.groupMembership?.id, source.groupMembership?.sourceRef, source.identityEntitlementMapping?.id, source.engineSetId, source.materializationId, source.engineRegistration?.registrationId, source.engineRegistration?.engineId, source.matchedEngineId, source.principalId, source.roleId, source.scopeId];
+  const ids = [source.assignmentId, source.sourceRef, source.groupMembership?.id, source.groupMembership?.sourceRef, source.identityEntitlementMapping?.id, source.engineSetId, source.materializationId, source.engineRegistration?.registrationId, source.engineRegistration?.engineId, source.matchedEngineId, source.principalId, source.roleId, source.scopeId];
   return entries.filter((entry) => {
     if (!mutating(entry.action)) return false;
     if (source.assignmentId && entry.resourceType === 'role_assignment' && references(entry, [source.assignmentId])) return true;

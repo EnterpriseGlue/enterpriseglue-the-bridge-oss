@@ -60,7 +60,7 @@ export interface UserManagementActionPermissions {
 
 export type UserRoleAssignmentLineageInput = Pick<
   RoleAssignment,
-  'principalType' | 'principalId' | 'userId' | 'roleId' | 'roleKey' | 'roleName' | 'resourceType' | 'resourceId' | 'scopeType' | 'scopeId' | 'source' | 'sourceRef' | 'sourceMappingId'
+  'principalType' | 'principalId' | 'userId' | 'roleId' | 'roleKey' | 'roleName' | 'resourceType' | 'resourceId' | 'scopeType' | 'scopeId' | 'source' | 'sourceRef'
 >
 
 type UserInviteForm = {
@@ -179,7 +179,7 @@ export function getUserRowActions(
   }
 }
 
-export function formatUserRoleAssignmentSourceLineage(assignment: Pick<UserRoleAssignmentLineageInput, 'source' | 'sourceRef' | 'sourceMappingId'> | null | undefined): string {
+export function formatUserRoleAssignmentSourceLineage(assignment: Pick<UserRoleAssignmentLineageInput, 'source' | 'sourceRef'> | null | undefined): string {
   if (!assignment) return '-'
   const sourceLabel = assignment.source === 'sso'
     ? 'SSO-managed assignment'
@@ -198,9 +198,6 @@ export function formatUserRoleAssignmentSourceLineage(assignment: Pick<UserRoleA
                 : `${assignment.source} assignment`
   const parts = [sourceLabel]
   if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
-  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
-    parts.push(`${assignment.source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
-  }
   return parts.join('; ')
 }
 

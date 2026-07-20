@@ -182,7 +182,7 @@ type ProjectAssignmentPrincipalType = SharedAuthzPrincipalType
 type ProjectAuthzGroupSummary = SharedAuthzGroup
 type ProjectAuthzGroupMembershipSummary = SharedAuthzGroupMembership
 
-export function formatProjectRoleAssignmentSourceLineage(assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef' | 'sourceMappingId'> | null | undefined): string {
+export function formatProjectRoleAssignmentSourceLineage(assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef'> | null | undefined): string {
   if (!assignment) return '-'
   const sourceLabel = assignment.source === 'sso'
     ? 'SSO-managed assignment'
@@ -197,9 +197,6 @@ export function formatProjectRoleAssignmentSourceLineage(assignment: Pick<Scoped
             : `${assignment.source} assignment`
   const parts = [sourceLabel]
   if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
-  if (assignment.sourceMappingId && assignment.sourceMappingId !== assignment.sourceRef) {
-    parts.push(`${assignment.source === 'sso' ? 'SSO mapping' : 'Mapping'} ${assignment.sourceMappingId}`)
-  }
   return parts.join('; ')
 }
 
@@ -224,7 +221,7 @@ function formatProjectGroupMembershipSourceLineage(membership: Pick<ProjectAuthz
 }
 
 export function formatProjectInheritedRoleAssignmentSourceLineage(
-  assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef' | 'sourceMappingId' | 'principalId' | 'userId'> | null | undefined,
+  assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef' | 'principalId' | 'userId'> | null | undefined,
   membership: Pick<ProjectAuthzGroupMembershipSummary, 'source' | 'sourceRef'> | null | undefined,
   group?: Pick<ProjectAuthzGroupSummary, 'id' | 'key' | 'name'> | null
 ): string {

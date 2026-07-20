@@ -42,7 +42,6 @@ function makeAssignment(overrides: Partial<UserRoleAssignmentLineageInput> = {})
     scopeId: 'engine-1',
     source: 'manual',
     sourceRef: null,
-    sourceMappingId: null,
     ...overrides,
   }
 }
@@ -178,8 +177,7 @@ describe('UserManagement', () => {
     expect(formatUserRoleAssignmentSourceLineage(makeAssignment({
       source: 'sso',
       sourceRef: 'group:payments-ops',
-      sourceMappingId: 'mapping-1',
-    }))).toBe('SSO-managed assignment; Source ref group:payments-ops; SSO mapping mapping-1')
+    }))).toBe('SSO-managed assignment; Source ref group:payments-ops')
 
     expect(formatUserRoleAssignmentSourceLineage(makeAssignment({ source: 'manual' }))).toBe('Manual assignment')
   })

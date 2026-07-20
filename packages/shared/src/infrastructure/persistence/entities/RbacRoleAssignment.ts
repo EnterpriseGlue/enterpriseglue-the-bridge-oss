@@ -8,7 +8,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_role_assignments_principal', ['principalType', 'principalId'])
 @Index('idx_role_assignments_resource', ['resourceType', 'resourceId'])
 @Index('idx_role_assignments_scope', ['scopeType', 'scopeId'])
-@Index('idx_role_assignments_source', ['source', 'sourceMappingId'])
+@Index('idx_role_assignments_source', ['source', 'sourceRef'])
 @Index('idx_role_assignments_source_ref', ['source', 'sourceRef'])
 export class RbacRoleAssignment extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true })
@@ -47,10 +47,6 @@ export class RbacRoleAssignment extends AppBaseEntity {
 
   @Column({ type: 'text' })
   source!: string;
-
-  /** Deprecated compatibility alias. Canonical assignments use sourceRef. */
-  @Column({ name: 'source_mapping_id', type: 'text', nullable: true })
-  sourceMappingId!: string | null;
 
   @Column({ name: 'source_ref', type: 'text', nullable: true })
   sourceRef!: string | null;
