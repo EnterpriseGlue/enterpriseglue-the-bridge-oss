@@ -9,6 +9,7 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
@@ -201,5 +202,26 @@ describe('custom role scope matrix (database)', () => {
       expect.objectContaining({ principalType: 'group', principalId: groupId, scopeType: 'engine_runtime_resource_set', scopeId: runtimeResourceSetId }),
     ]));
     await expect(check(EnginePermissions.INSTANCE_VIEW, groupUserId, 'engine_runtime_resource', siblingRuntimeResourceId)).resolves.toBe(false);
+  });
+
+  it('records scoped assignment lifecycle audit entries without secret or cross-tenant leakage', async () => {
+    if (skip) return;
+    const entries = await (await getDataSource()).getRepository(AuditLog).find({
+      where: { userId: adminUserId, action: 'authz.role_assignment.create' },
+      order: { createdAt: 'ASC' },
+    });
+    const details = entries.map((entry) => JSON.parse(entry.details || '{}'));
+    expect(details).toEqual(expect.arrayContaining([
+      expect.objectContaining({ tenantId, scopeType: 'platform', principalId: directUserId }),
+      expect.objectContaining({ tenantId, scopeType: 'project', scopeId: projectId, principalId: directUserId }),
+      expect.objectContaining({ tenantId, scopeType: 'engine', scopeId: directEngineId, principalId: directUserId }),
+      expect.objectContaining({ tenantId, scopeType: 'engine_set', scopeId: engineSetId, principalType: 'group', principalId: groupId }),
+      expect.objectContaining({ tenantId, scopeType: 'engine_runtime_resource', scopeId: runtimeResourceId, principalId: groupUserId }),
+      expect.objectContaining({ tenantId, scopeType: 'engine_runtime_resource_set', scopeId: runtimeResourceSetId, principalType: 'group', principalId: groupId }),
+    ]));
+    for (const entry of entries) {
+      expect(entry.tenantId).toBe(tenantId);
+      expect(entry.details || '').not.toMatch(/token|secret|password|tenant-(?!custom_role_scope)/i);
+    }
   });
 });
