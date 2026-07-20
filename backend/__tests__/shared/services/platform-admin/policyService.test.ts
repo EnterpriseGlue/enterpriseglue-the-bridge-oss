@@ -331,6 +331,40 @@ describe('policyService', () => {
       .resolves.toEqual({ decision: 'allow', reason: 'no-policy-deny' });
   });
 
+  it('restores a base grant when a deny policy is disabled or its time window has expired', async () => {
+    const policyRepo = queryRepo([]);
+    const policies = [policyRow({
+      id: 'temporary-freeze', name: 'temporary freeze', effect: 'deny', priority: 100,
+      resourceType: 'project', action: 'project:deploy', isActive: true,
+    })];
+    policyRepo.qb.getMany.mockImplementation(async () => policies.filter((policy: any) => policy.isActive));
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: () => policyRepo });
+    vi.spyOn(permissionService, 'hasPermission').mockResolvedValue(true);
+    vi.spyOn(permissionService, 'evaluatePermission').mockResolvedValue({
+      allowed: true, reason: 'role-assignment:custom-project-deployer', sources: [],
+    } as any);
+    const context = { userId: 'user-1', resourceType: 'project' as const, resourceId: 'project-1' };
+
+    await expect(policyService.evaluate('project:deploy', context)).resolves.toMatchObject({
+      decision: 'deny', policyId: 'temporary-freeze',
+    });
+
+    policies[0] = { ...policies[0], isActive: false };
+    await expect(policyService.evaluate('project:deploy', context)).resolves.toEqual({
+      decision: 'allow', reason: 'role-assignment:custom-project-deployer',
+    });
+
+    policies[0] = policyRow({
+      id: 'expired-freeze', name: 'expired freeze', effect: 'deny', priority: 100,
+      resourceType: 'project', action: 'project:deploy', isActive: true,
+      conditions: JSON.stringify({ timeWindow: { daysOfWeek: [0] } }),
+    });
+    await expect(policyService.evaluate('project:deploy', {
+      ...context,
+      timestamp: Date.UTC(2024, 0, 1, 12, 0, 0), // Monday: outside the Sunday-only freeze.
+    })).resolves.toEqual({ decision: 'allow', reason: 'role-assignment:custom-project-deployer' });
+  });
+
   it('evaluates every policy condition branch fail-closed', () => {
     const service = policyService as any;
     const context = {
