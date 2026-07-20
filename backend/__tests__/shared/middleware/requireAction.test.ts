@@ -619,6 +619,60 @@ describe('requireAction project resource resolvers', () => {
     expect((await request(app).get(`/runtime-definitions-by-key/payments?engineId=${engineId}`)).status).toBe(404);
   });
 
+  it('requires authenticated, identified, and existing engines for runtime operation guards', async () => {
+    const collection = requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' });
+    const selection = requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' });
+    const deployment = requireRuntimeDeploymentAction('engine.runtime.process-definitions.read');
+    const migration = requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', { resourceKind: 'process_definition' });
+
+    const anonymousNext = vi.fn();
+    await selection({ body: {} } as any, {} as any, anonymousNext);
+    expect(anonymousNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    const collectionMissingIdNext = vi.fn();
+    await collection({ user: { userId: 'user-1' }, query: {} } as any, {} as any, collectionMissingIdNext);
+    expect(collectionMissingIdNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
+
+    const selectionMissingIdNext = vi.fn();
+    await selection({ user: { userId: 'user-1' }, body: {} } as any, {} as any, selectionMissingIdNext);
+    expect(selectionMissingIdNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
+
+    const deploymentMissingEngineNext = vi.fn();
+    await deployment({ user: { userId: 'user-1' }, params: {}, query: {} } as any, {} as any, deploymentMissingEngineNext);
+    expect(deploymentMissingEngineNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
+
+    const deploymentMissingIdNext = vi.fn();
+    await deployment({ user: { userId: 'user-1' }, params: {}, query: { engineId } } as any, {} as any, deploymentMissingIdNext);
+    expect(deploymentMissingIdNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'deploymentId is required' }));
+
+    const migrationMissingIdNext = vi.fn();
+    await migration({ user: { userId: 'user-1' }, body: {} } as any, {} as any, migrationMissingIdNext);
+    expect(migrationMissingIdNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
+
+    engineFindOne.mockReset().mockResolvedValue(null);
+    const missingEngineNext = vi.fn();
+    await migration({ user: { userId: 'user-1' }, body: { engineId } } as any, {} as any, missingEngineNext);
+    expect(missingEngineNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
+  });
+
+  it('denies an ungranted engine-wide collection and preserves empty runtime tenant identifiers', async () => {
+    engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
+    const deniedNext = vi.fn();
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
+      { user: { userId: 'user-1' }, query: {}, engineId } as any, {} as any, deniedNext,
+    );
+    expect(deniedNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+
+    engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockReset().mockResolvedValue([{ resourceKey: 'payments' }]);
+    const allowedNext = vi.fn();
+    const req: any = { user: { userId: 'user-1' }, query: { engineId } };
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(req, {} as any, allowedNext);
+    expect(allowedNext).toHaveBeenCalledWith();
+    expect(req.authorizedRuntimeResourceScopes).toEqual([{ resourceKey: 'payments', runtimeTenantId: '' }]);
+  });
+
   it('resolves decision definitions by their live key and runtime tenant', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
