@@ -1840,6 +1840,17 @@ describe('requireAction project resource resolvers', () => {
     expect(anySourceReq.authorizedProjectIds).toEqual([projectId]);
   });
 
+  it('fails closed for a fuzzed set of absent, empty, and non-string resource identifiers', async () => {
+    const malformedIdentifiers: unknown[] = [undefined, null, '', ' ', '\t', 0, false, {}, [], [null], [42], ['']];
+    const middleware = requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' });
+    for (const projectId of malformedIdentifiers) {
+      const next = vi.fn();
+      await middleware({ user: { userId: 'user-1' }, params: { projectId } } as any, {} as any, next);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'projectId is required' }));
+    }
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
+  });
+
   it('fails closed for route-less actions and registered resolvers without middleware support', async () => {
     const routeLessNext = vi.fn();
     await requireAction('platform.users.manage')({ user: { userId: 'user-1' } } as any, {} as any, routeLessNext);
