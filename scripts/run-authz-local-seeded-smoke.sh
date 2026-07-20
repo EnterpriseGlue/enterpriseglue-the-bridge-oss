@@ -63,8 +63,9 @@ if [[ -n "$local_ca_file" ]]; then
   curl_args+=(--cacert "$local_ca_file")
 fi
 
-if ! curl --fail --silent --show-error --max-time 5 "$api_base_url/ready" >/dev/null; then
-  echo "[authz-local-seeded-smoke] Backend is not ready at $api_base_url/ready." >&2
+if ! curl --fail --silent --show-error --max-time 5 "$api_base_url/ready" >/dev/null \
+  && ! curl --fail --silent --show-error --max-time 5 "$api_base_url/health" >/dev/null; then
+  echo "[authz-local-seeded-smoke] Backend is not ready at $api_base_url/ready or $api_base_url/health." >&2
   exit 2
 fi
 if ! curl "${curl_args[@]}" "$base_url/login" >/dev/null; then
