@@ -166,36 +166,12 @@ Do not require a sidecar principal, heartbeat, inventory, JWKS, nonce store, or 
 - [x] ✅ Migrate Starbase import-from-engine eligibility to scoped `engine:deploy:view` permission fallback while preserving legacy engine member-role behavior.
 - [x] ✅ Add permission-service fallback support to the shared generic authorization middleware for platform, project, and engine permission checks while preserving legacy role behavior.
 - [x] ✅ Migrate Dashboard context visibility to effective platform, project, and engine permission snapshots while preserving legacy project and engine visibility fallbacks.
-- [x] ✅ Migrate Platform Admin authz read/manage routes from direct platform-admin checks to route-specific platform permissions for roles, custom permissions, policies, SSO mappings, SSO engine assignments, external engine registration, effective-access evaluation, and authz audit reads while preserving platform-admin behavior.
+- [x] ✅ Migrate Platform Admin authz read/manage routes from direct platform-admin checks to route-specific platform permissions for roles, custom permissions, policies, identity mappings, identity-provider diagnostics, external engine registration, effective-access evaluation, and authz audit reads while preserving platform-admin behavior.
 
-### SSO Engine Assignments
-- [x] ✅ Keep existing `/api/authz/sso-mappings` behavior unchanged for platform-role provisioning.
-- [x] ✅ Add separate `/api/authz/sso-assignment-mappings` APIs for engine-scoped SSO assignments.
-- [x] ✅ Create SSO-managed `role_assignments` with `source = "sso"`.
-- [x] ✅ Avoid writing SSO engine assignments into `engine_members`.
-- [x] ✅ Ensure SSO sync never deletes manual assignments or legacy memberships.
-- [x] ✅ Support authoritative sync mode that removes stale SSO-managed assignments for mappings that no longer match.
-- [x] ✅ Support additive sync mode that only adds matching assignments.
-- [x] ✅ Remove assignments created by a mapping when that mapping is deleted or disabled.
-- [x] ✅ Restrict SSO-assignable system engine roles to `system.engine.operator` and `system.engine.deployer`.
-- [x] ✅ Allow SSO assignment mappings to target active, assignable custom engine roles.
-- [x] ✅ Reject SSO mappings that attempt to assign engine owner or delegate roles unless the corresponding platform setting allows the role.
-- [x] ✅ Sync Microsoft and SAML provisioning after user creation/update.
-- [x] ✅ Fail login if SSO engine assignment sync fails, avoiding stale or incomplete authorization state.
-- [x] ✅ Record SSO engine access snapshots for diagnostics and access history; snapshots are never used as authorization grants.
-- [x] ✅ Track current and previous SSO-derived engine role IDs, provider subject/group/app-role IDs, snapshot status, cleanup reason, last-seen, and last-sync metadata.
-- [x] ✅ Support engine and project access-authority settings: `manual`, `transition_to_sso`, and `sso_managed`, with `manual` as the default.
-- [x] ✅ Add explicit transition cleanup preview/apply for duplicate manual engine access when replacing manual assignments with SSO-managed assignments.
-- [x] ✅ Keep normal SSO cleanup limited to `source = "sso"` assignments; manual, API, system, and legacy rows are untouched unless selected through transition cleanup.
-- [x] ✅ Allow SSO assignment of engine owner/delegate roles only when platform settings permit those roles; no separate owner/delegate acknowledgement is required.
-
-### Engine Assignment Selectors
-- [x] ✅ Support exact existing engine ID selectors.
-- [x] ✅ Support explicit all-engines selectors.
-- [x] ✅ Support external engine ID selectors.
-- [x] ✅ Support engine label key/value selectors.
-- [x] ✅ Reject exact engine ID mappings when the target engine does not exist.
-- [x] ✅ Resolve external engine ID and label selectors during SSO sync.
+### Identity Mapping Access
+- [x] ✅ Provider-neutral identity entitlement mappings reconcile users into internal groups; normal scoped role assignments grant project, engine, Engine Set, runtime-resource, and Runtime Resource Set access from those groups.
+- [x] ✅ `POST /api/identity/mappings/provision-access` creates a mapping, an optional internal group, and an optional scoped assignment atomically.
+- [x] ✅ Legacy direct SSO role/engine assignment mappings, their selector system, access snapshots, and transition-cleanup controls are retired. There are no customer SSO rows to convert; manual, API, system, and canonical identity-mapping assignments remain independent.
 
 ### External Engine Registration
 - [x] ✅ Add engine metadata for `externalId`, labels, registration source, and external update timestamp.
@@ -209,8 +185,7 @@ Do not require a sidecar principal, heartbeat, inventory, JWKS, nonce store, or 
 - [x] ✅ Record audit log entries for external engine registration create/update.
 - [x] ✅ Preserve existing user-created engine registration at `POST /engines-api/engines`.
 - [x] ✅ Include labels and external metadata in engine create/update/read schemas.
-- [x] ✅ Use external engine IDs and labels as SSO assignment targets.
-- [x] ✅ Resolve SSO external engine ID and label selectors from `external_engine_registrations`, with legacy engine-column fallback.
+- [x] ✅ Expose external engine IDs and labels as read-only registration metadata; scoped access is granted through normal engine or Engine Set assignments.
 - [x] ✅ Warn before manually editing externally registered engines because future external registrations may overwrite those fields.
 - [x] ✅ Expose a platform-admin registered-engine inventory for externally registered engines from `external_engine_registrations`, with legacy engine-column fallback.
 - [x] ✅ Expose per-engine external registration audit history.
@@ -228,13 +203,11 @@ Do not require a sidecar principal, heartbeat, inventory, JWKS, nonce store, or 
 - [x] ✅ Add `GET /api/authz/external-engines`.
 - [x] ✅ Add `GET /api/authz/external-engines/:id/audit`.
 - [x] ✅ Add `POST /api/authz/evaluate`.
-- [x] ✅ Add CRUD/test APIs for `/api/authz/sso-assignment-mappings`.
-- [x] ✅ Add SSO engine access snapshot read APIs: `GET /api/authz/sso-engine-access-snapshots` and `GET /api/authz/sso-engine-access-snapshots/:engineId`.
-- [x] ✅ Add transition cleanup APIs: `POST /api/engines/:engineId/access/transition-cleanup-preview` and `POST /api/engines/:engineId/access/transition-cleanup`.
+- [x] ✅ Add identity-entitlement mapping CRUD, evaluation, and atomic provision-access APIs.
 - [x] ✅ Add bridge decision APIs: `POST /api/mission-control/bridge/starbase-edit/evaluate` and `POST /api/starbase/bridge/mission-control/evaluate`.
-- [x] ✅ Update Zod schemas for new authz, RBAC, SSO assignment, and engine registration payloads.
-- [x] ✅ Update OpenAPI registration for the new authz and external engine endpoints.
-- [x] ✅ Update OpenAPI authz schemas to expose tenant-aware role, assignment, policy, audit, and SSO assignment payloads.
+- [x] ✅ Update Zod schemas for new authz, RBAC, identity-mapping, and engine-registration payloads.
+- [x] ✅ Update OpenAPI registration for identity-mapping, authz, and external-engine endpoints.
+- [x] ✅ Update OpenAPI authz schemas to expose tenant-aware role, assignment, policy, audit, and identity-mapping payloads.
 - [x] ✅ Update OpenAPI registration for audit redaction controls and the elevated unredacted audit permission behavior.
 - [x] ✅ Add OpenAPI and route-inventory authz metadata for SSO snapshot, transition cleanup, and Mission Control-Starbase bridge routes.
 
@@ -252,13 +225,11 @@ Do not require a sidecar principal, heartbeat, inventory, JWKS, nonce store, or 
 - [x] ✅ Classify operation-specific member/project-access permissions as access-control risks and engine environment permissions as sensitive operations in the Access Control Permissions tab.
 - [x] ✅ Add Assignments tab for manual scoped role assignment and removal.
 - [x] ✅ Add Effective Access tab for user/resource/permission evaluation.
-- [x] ✅ Add SSO Engine Assignments tab with editable mappings.
-- [x] ✅ Add SSO assignment diagnostics for stale SSO-managed assignments and missing external engine or label targets.
-- [x] ✅ Add SSO engine access snapshot diagnostics and transition cleanup controls to the Access Control SSO Engine Assignments surface.
-- [x] ✅ Add platform settings controls and authenticated settings exposure for engine/project access-authority modes.
+- [x] ✅ Add Identity Mappings controls for provider entitlement, internal group, and optional scoped access provisioning.
+- [x] ✅ Add identity-provider synchronization diagnostics without treating diagnostics as authorization grants.
 - [x] ✅ Add External Registration tab for API client creation, rotation, and revocation.
 - [x] ✅ Add registered external-engine inventory and registration audit drilldown to the External Registration tab.
-- [x] ✅ Support SSO mapping selectors for engine ID, all engines, external engine ID, and engine labels in the UI.
+- [x] ✅ Support normal role-assignment scopes for engines, Engine Sets, runtime resources, and Runtime Resource Sets in the UI.
 - [x] ✅ Gate admin navigation from current-user platform permission snapshots while preserving legacy capability fallback.
 - [x] ✅ Gate EE extension navigation and menu capability requirements from current-user permission snapshots while preserving legacy `UserCapabilities` and deprecated admin role fallback behavior.
 - [x] ✅ Tighten remaining frontend admin capability cleanup for route guards, setup checks, admin header affordances, and profile role display by using current-user permission snapshots with legacy capability fallback.
@@ -609,24 +580,10 @@ This means:
 - Mission Control is fundamentally engine-access-driven
 - engine-scoped RBAC assignments are considered alongside legacy engine owner/delegate/member records
 
-## SSO Engine Assignment Model
-SSO platform role mapping remains separate from SSO engine assignment mapping:
-- `/api/authz/sso-mappings` maps SSO claims to platform roles
-- `/api/authz/sso-assignment-mappings` maps SSO claims to engine-scoped RBAC assignments
+## Identity Mapping Access Model
+External identity entitlements are mapped to internal groups through `IdentityEntitlementMapping`. Normal scoped role assignments then grant engine access to those groups; the mapping never writes legacy engine-member rows or replaces manual, API, system, or configuration-managed assignments.
 
-SSO engine assignments write only to `role_assignments` with `source = "sso"`. They do not write to `engine_members`, and they never delete manual assignments or legacy memberships.
-
-The current selectors are:
-- exact existing engine ID
-- all engines
-- external engine ID
-- engine label key/value
-
-The first supported SSO target roles are:
-- `system.engine.operator`
-- `system.engine.deployer`
-
-SSO cannot assign engine owner or engine delegate. Authoritative sync removes stale SSO-managed assignments for mappings that no longer match; additive sync only adds matching assignments.
+Supported assignment scopes are the normal authorization scopes: an exact engine, Engine Set, exact runtime resource, or Runtime Resource Set. High-risk owner/delegate and sensitive-permission guardrails apply to the normal role-assignment workflow.
 
 ## External Engine Registration
 External systems can register or update engines through `POST /engines-api/external/engines` using a scoped API client bearer token. The API client must have the `engine:register` scope. The endpoint is idempotent by `externalId`:
@@ -696,7 +653,7 @@ As of May 31, 2026:
 - No dedicated OpenAPI generation/check script is exposed in package scripts; OpenAPI/Zod coverage is currently validated through TypeScript build and route/schema tests.
 - `corepack pnpm run test:integration` passes against an isolated temporary PostgreSQL database on the already-running local `eg-ee-e2e-pg` container: 23 files / 79 tests passed, 1 file / 1 test skipped.
 - Browser-based E2E smoke was run against this worktree's local backend/frontend on `8788`/`5174` after installing the missing Playwright Chromium cache. `corepack pnpm run test:e2e:smoke` passes: 22 tests passed.
-- Authenticated browser validation for `/t/default/admin/access-control` passes on the `8788`/`5174` worktree stack with a DB-backed platform-admin user. The Access Control page loads and the Roles, Permissions, Effective Access, SSO Engine Assignments, and External Registration tabs render.
+- Authenticated browser validation for `/t/default/admin/access-control` passes on the `8788`/`5174` worktree stack with a DB-backed platform-admin user. The Access Control page loads and the Roles, Permissions, Identity Mappings, Effective Access, and External Registration tabs render.
 - Focused follow-up verification for permission-service-first middleware and synchronized legacy assignment backfill passes: `corepack pnpm --filter webmodeler-backend exec vitest --run __tests__/shared/middleware/projectAuth.test.ts __tests__/shared/middleware/engineAuth.test.ts __tests__/shared/middleware/authorize.test.ts __tests__/shared/services/platform-admin/permissions.test.ts __tests__/shared/services/platform-admin/engineService.test.ts __tests__/shared/services/platform-admin/projectMemberService.test.ts --config vitest.config.ts`.
 - Focused route verification for legacy assignment sync call sites passes: `corepack pnpm --filter webmodeler-backend exec vitest --run __tests__/modules/starbase/routes/projects.test.ts __tests__/modules/mission-control/engines/routes.test.ts __tests__/modules/git/routes/clone.test.ts --config vitest.config.ts`.
 - Follow-up package builds pass: `corepack pnpm --filter ./packages/shared run build` and `corepack pnpm --filter @enterpriseglue/backend-host run build`.
