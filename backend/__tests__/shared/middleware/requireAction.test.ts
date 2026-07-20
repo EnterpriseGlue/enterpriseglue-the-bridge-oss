@@ -371,12 +371,31 @@ describe('requireAction project resource resolvers', () => {
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
+    app.get('/runtime-jobs-default-reference/:id', requireRuntimeDefinitionAction('engine.runtime.jobs.read', {
+      resourceKind: 'process_definition',
+      definitionPath: 'job',
+      definitionReferenceField: 'processDefinitionId',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
+    app.get('/runtime-definitions-custom/:definitionId', requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition',
+      definitionPath: 'process-definition',
+      definitionIdKey: 'definitionId',
+    }), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId });
+    });
     app.post('/runtime-instance-selection', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', {
       resourceKind: 'process_definition',
     }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId });
     });
     app.get('/runtime-deployments/:deploymentId', requireRuntimeDeploymentAction('engine.runtime.process-definitions.read'), (req: any, res) => {
+      res.json({ resource: req.authzResource, engineId: req.engineId, resourceKeys: req.authorizedRuntimeResourceKeys });
+    });
+    app.get('/runtime-process-deployments/:deploymentId', requireRuntimeDeploymentAction('engine.runtime.process-definitions.read', {
+      resourceKinds: ['process_definition'],
+    }), (req: any, res) => {
       res.json({ resource: req.authzResource, engineId: req.engineId, resourceKeys: req.authorizedRuntimeResourceKeys });
     });
     app.post('/runtime-migration', requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', {
@@ -549,6 +568,19 @@ describe('requireAction project resource resolvers', () => {
     }));
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-payments' });
     expect(response.body.resourceKeys).toEqual(['payments', 'payments-risk']);
+  });
+
+  it('narrows deployment inventory queries when the action has one resource kind', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFind.mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+    const response = await request(app).get(`/runtime-process-deployments/deployment-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(200);
+    expect(runtimeResourceFind).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceKind: 'process_definition' }),
+    }));
   });
 
   it('fails closed when a resource-aware deployment is absent from inventory', async () => {
@@ -771,6 +803,40 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('supports custom definition identifiers and the default linked-definition path', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const custom = await request(app).get(`/runtime-definitions-custom/definition-1?engineId=${engineId}`);
+    expect(custom.status).toBe(200);
+
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet
+      .mockReset()
+      .mockResolvedValueOnce({ id: 'job-1', processDefinitionId: 'definition-1' })
+      .mockResolvedValueOnce({ id: 'definition-1', key: 'payments', tenantId: null });
+    const linked = await request(app).get(`/runtime-jobs-default-reference/job-1?engineId=${engineId}`);
+    expect(linked.status).toBe(200);
+    expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/definition-1');
+  });
+
+  it('reports the custom definition identifier when it is missing', async () => {
+    const middleware = requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition', definitionPath: 'process-definition', definitionIdKey: 'definitionId',
+    });
+    const next = vi.fn();
+
+    await middleware({ user: { userId: 'user-1' }, query: { engineId }, params: {} } as any, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'definitionId is required' }));
+
+    const keyLookup = requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition', definitionPath: 'process-definition', definitionLookup: 'key',
+    });
+    const keyNext = vi.fn();
+    await keyLookup({ user: { userId: 'user-1' }, query: { engineId }, params: {} } as any, {} as any, keyNext);
+    expect(keyNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'key is required' }));
+  });
+
   it('rejects runtime jobs without a process-definition reference on resource-aware engines', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -866,6 +932,42 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(403);
   });
 
+  it('retains engine-wide fast paths for batch selections and migrations', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const selection = await request(app).post('/runtime-instance-selection').send({ engineId });
+    expect(selection.status).toBe(200);
+    expect(selection.body.resource).toEqual({ type: 'engine', id: engineId });
+
+    const migration = await request(app).post('/runtime-migration').send({ engineId });
+    expect(migration.status).toBe(200);
+    expect(migration.body.resource).toEqual({ type: 'engine', id: engineId });
+  });
+
+  it('normalizes non-Error runtime authorization failures to safe internal errors', async () => {
+    const collection = requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' });
+    const definition = requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition', definitionPath: 'process-definition',
+    });
+    const selection = requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' });
+    const deployment = requireRuntimeDeploymentAction('engine.runtime.process-definitions.read');
+    const migration = requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', { resourceKind: 'process_definition' });
+
+    for (const [middleware, req, message] of [
+      [collection, { user: { userId: 'user-1' }, query: { engineId } }, 'Runtime collection authorization failed'],
+      [definition, { user: { userId: 'user-1' }, query: { engineId }, params: { id: 'definition-1' } }, 'Runtime definition authorization failed'],
+      [selection, { user: { userId: 'user-1' }, body: { engineId } }, 'Runtime batch authorization failed'],
+      [deployment, { user: { userId: 'user-1' }, query: { engineId }, params: { deploymentId: 'deployment-1' } }, 'Runtime deployment authorization failed'],
+      [migration, { user: { userId: 'user-1' }, body: { engineId } }, 'Runtime migration authorization failed'],
+    ] as const) {
+      (getDataSource as unknown as Mock).mockRejectedValueOnce('database unavailable');
+      const next = vi.fn();
+      await middleware(req as any, {} as any, next);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 500, message }));
+    }
+  });
+
   it('requires both migration definitions to be authorized on resource-aware engines', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock)
@@ -885,6 +987,26 @@ describe('requireAction project resource resolvers', () => {
     expect(camundaGet).toHaveBeenNthCalledWith(1, engineId, '/process-definition/source-v1');
     expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/target-v2');
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('allows selected instances that belong to the authorized migration source', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true);
+    camundaGet
+      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' })
+      .mockResolvedValueOnce({ id: 'instance-1', definitionKey: 'payments-v1' });
+
+    const response = await request(app).post('/runtime-migration').send({
+      engineId,
+      plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
+      processInstanceIds: ['instance-1'],
+    });
+
+    expect(response.status).toBe(200);
   });
 
   it('supports legacy top-level migration definition identifiers after authorization', async () => {
@@ -983,6 +1105,27 @@ describe('requireAction project resource resolvers', () => {
     expect(runtimeResourceFindOne).not.toHaveBeenCalled();
   });
 
+  it('rejects non-string invitation and migration identifiers without treating them as valid input', async () => {
+    expect((await request(app).post('/invitations').send({ resourceType: 42 })).status).toBe(400);
+
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    const invalidPlan = await request(app).post('/runtime-migration').send({
+      engineId,
+      plan: 'not-an-object',
+      sourceDefinitionId: 'source-v1',
+      targetDefinitionId: 'target-v2',
+    });
+    expect(invalidPlan.status).toBe(200);
+
+    camundaGet.mockReset().mockResolvedValueOnce({ id: 'source-v1', key: 42 }).mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
+    const invalidKey = await request(app).post('/runtime-migration').send({
+      engineId,
+      plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
+    });
+    expect(invalidKey.status).toBe(403);
+  });
+
   it('discovers resource-aware engines when a runtime resource is visible', async () => {
     engineFind.mockResolvedValue([{ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' }]);
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
@@ -1076,6 +1219,14 @@ describe('requireAction project resource resolvers', () => {
     expect(tagged.status).toBe(200);
     expect(tagged.body.deployContext).toMatchObject({ engineName: 'Tagged Engine', environmentTag: 'production' });
     expect(environmentTagFindOne).toHaveBeenCalledWith({ id: 'environment-tag-1' });
+
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
+    });
+    environmentTagFindOne.mockResolvedValue({ id: 'environment-tag-1' });
+    const unnamedTag = await request(app).post('/deploy').send({ projectId, engineId });
+    expect(unnamedTag.status).toBe(200);
+    expect(unnamedTag.body.deployContext).toMatchObject({ environmentTag: null });
 
     (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
       allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
@@ -1633,6 +1784,14 @@ describe('requireAction project resource resolvers', () => {
     })(collectionReq, {} as any, collectionNext);
     expect(collectionNext).toHaveBeenCalledWith();
     expect(collectionReq.authorizedProjectIds).toEqual([projectId]);
+
+    const anySourceReq: any = { user: { userId: 'user-1' }, body: { projectIds: [projectId] } };
+    const anySourceNext = vi.fn();
+    await requireAction('project.projects.read', {
+      resourceResolver: 'project.visibleCollection', collectionIdsFrom: 'any', collectionIdsKey: 'projectIds',
+    })(anySourceReq, {} as any, anySourceNext);
+    expect(anySourceNext).toHaveBeenCalledWith();
+    expect(anySourceReq.authorizedProjectIds).toEqual([projectId]);
   });
 
   it('fails closed for route-less actions and registered resolvers without middleware support', async () => {

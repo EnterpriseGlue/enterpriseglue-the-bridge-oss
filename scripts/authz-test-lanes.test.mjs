@@ -73,6 +73,7 @@ test('the authorization structure gate requires exhaustive registry action cover
   assert.match(scripts['test:authz:structure'], /test:authz:machine-principal-coverage/);
   assert.match(scripts['test:authz:structure'], /test:authz:policy-coverage/);
   assert.match(scripts['test:authz:structure'], /test:authz:api-client-middleware-coverage/);
+  assert.match(scripts['test:authz:structure'], /test:authz:require-action-coverage/);
   assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
 });
 
@@ -98,6 +99,15 @@ test('the API-client authorization middleware retains literal 100 percent source
   const command = scripts['test:authz:api-client-middleware-coverage'];
   assert.match(command, /apiClientAuth\.test\.ts/);
   assert.match(command, /apiClientAuth\.ts/);
+  assert.match(command, /coverage\.allowExternal true/);
+  assert.match(command, /coverage\.thresholds\.100 true/);
+  assert.match(command, /coverage\.thresholds\.perFile true/);
+});
+
+test('the shared authorization middleware retains literal 100 percent source coverage', () => {
+  const command = scripts['test:authz:require-action-coverage'];
+  assert.match(command, /requireAction\.test\.ts/);
+  assert.match(command, /middleware\/requireAction\.ts/);
   assert.match(command, /coverage\.allowExternal true/);
   assert.match(command, /coverage\.thresholds\.100 true/);
   assert.match(command, /coverage\.thresholds\.perFile true/);
