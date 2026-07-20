@@ -236,7 +236,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect([403, 404]).toContain(deniedRead.status);
   });
 
-  test('revokes a removed assignment immediately and changes the permission snapshot version', async ({ page }) => {
+  test('revokes an active browser session without serving a stale post-revocation snapshot', async ({ page }) => {
     await login(page);
 
     const before = await request(page, '/api/authz/me/permissions');
@@ -244,12 +244,28 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(before.body.authorizationVersion).toEqual(expect.any(String));
     expect(before.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).toContain(fixture.scopedEngineId);
 
+    // These reads are launched with the already-authenticated browser session
+    // immediately before revocation. A request may complete on either side of
+    // the commit, but it must never combine the new authorization version with
+    // the removed grant.
+    const activeSnapshots = Array.from({ length: 16 }, () => request(page, '/api/authz/me/permissions'));
     await removeScopedAssignment();
 
     const after = await request(page, '/api/authz/me/permissions');
     expect(after.status, JSON.stringify(after.body)).toBe(200);
     expect(after.body.authorizationVersion).not.toBe(before.body.authorizationVersion);
     expect(after.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.scopedEngineId);
+
+    for (const snapshot of await Promise.all(activeSnapshots)) {
+      expect(snapshot.status, JSON.stringify(snapshot.body)).toBe(200);
+      const engineIds = snapshot.body.engines.map((engine: { resourceId: string }) => engine.resourceId);
+      if (snapshot.body.authorizationVersion === after.body.authorizationVersion) {
+        expect(engineIds).not.toContain(fixture.scopedEngineId);
+      } else {
+        expect(snapshot.body.authorizationVersion).toBe(before.body.authorizationVersion);
+        expect(engineIds).toContain(fixture.scopedEngineId);
+      }
+    }
 
     const inventory = await request(page, '/engines-api/engines');
     expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);

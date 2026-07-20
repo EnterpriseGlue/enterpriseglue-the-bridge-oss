@@ -239,6 +239,41 @@ describe('bpmn-engine-client', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['outage', new Error('connect ECONNREFUSED https://secret-engine.example.com/downstream-secret-must-not-leak')],
+    ['timeout', new DOMException('The operation timed out at https://secret-engine.example.com/downstream-secret-must-not-leak', 'TimeoutError')],
+  ])('fails closed for every runtime read path when the external engine has a %s', async (_kind, transportFailure) => {
+    const paths = [
+      '/process-definition/definition-1',
+      '/process-instance/instance-1',
+      '/deployment/deployment-1',
+      '/decision-definition/decision-1',
+    ];
+    for (const path of paths) {
+      vi.clearAllMocks();
+      (fetch as unknown as Mock).mockRejectedValueOnce(transportFailure).mockRejectedValueOnce(transportFailure);
+      let error: { code?: string; statusCode?: number; details?: unknown; toJSON?: () => unknown } | undefined;
+      try {
+        await fetchBpmnEngineEndpoint({
+          id: 'engine-sidecar',
+          baseUrl: 'https://secret-engine.example.com/engine-rest',
+          connectionMode: 'customer_sidecar',
+          authType: 'none',
+        }, { engineId: 'engine-sidecar', method: 'GET', path, timeoutMs: 125 });
+      } catch (caught) {
+        error = caught as typeof error;
+      }
+      expect(error).toMatchObject({
+        code: 'ENGINE_TRANSPORT_UNAVAILABLE',
+        statusCode: 502,
+        details: { operationClass: 'engine.read', attempts: 2, timeoutMs: 125, connectionMode: 'customer_sidecar' },
+      });
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(error?.toJSON?.())).not.toContain('secret-engine.example.com');
+      expect(JSON.stringify(error?.toJSON?.())).not.toContain('downstream-secret-must-not-leak');
+    }
+  });
+
   it('fails closed and records a sanitized TLS transport outcome for a sidecar', async () => {
     const engineRepo = { findOneBy: vi.fn().mockResolvedValue({
       id: 'engine-sidecar', baseUrl: 'https://sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', authType: 'none',
