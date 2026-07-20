@@ -93,10 +93,13 @@ test('the pull-request authorization gate keeps decision coverage and focused fa
 });
 
 test('the pull-request workflow retains browser and database evidence when authorization fails', () => {
-  assert.match(authzPrWorkflow, /name: Authorization PR Gate/);
+  assert.match(authzPrWorkflow, /name: Authorization Browser Gate/);
   assert.match(authzPrWorkflow, /pnpm run test:authz:pr/);
   assert.match(authzPrWorkflow, /pnpm run test:authz:decision-coverage/);
-  assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=chromium/);
+  assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
+  assert.match(authzPrWorkflow, /\["chromium"\]/);
+  assert.match(authzPrWorkflow, /\["firefox", "webkit"\]/);
+  assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=\$\{\{ matrix\.browser \}\}/);
   assert.match(authzPrWorkflow, /fine-grained-access-local\.spec\.ts/);
   assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);
   assert.match(authzPrWorkflow, /test\/results/);

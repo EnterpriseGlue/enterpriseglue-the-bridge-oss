@@ -1,8 +1,10 @@
-name: Authorization PR Gate
+name: Authorization Browser Gate
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  schedule:
+    - cron: "15 3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,8 +16,12 @@ concurrency:
 
 jobs:
   authorization:
-    name: Authorization decisions and Chromium smoke
+    name: Authorization decisions and ${{ matrix.browser }} smoke
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ${{ fromJSON(github.event_name == 'pull_request' && '["chromium"]' || '["firefox", "webkit"]') }}
     services:
       postgres:
         image: postgres:17
@@ -44,6 +50,7 @@ jobs:
       JWT_SECRET: test-secret-please-change-00000000000000
       ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       CAMUNDA_BASE_URL: http://localhost:9080/engine-rest
+      FRONTEND_URL: http://localhost:5173
 
     steps:
       - name: Checkout
@@ -118,7 +125,7 @@ jobs:
           curl -sf http://localhost:8787/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
 
-      - name: Run Chromium fine-grained authorization smoke
+      - name: Run ${{ matrix.browser }} fine-grained authorization smoke
         shell: bash
         run: |
           set -euo pipefail
@@ -130,7 +137,7 @@ jobs:
             -e CI=true \
             -e HOME=/tmp \
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            -e PLAYWRIGHT_BROWSERS=chromium \
+            -e PLAYWRIGHT_BROWSERS=${{ matrix.browser }} \
             -e PLAYWRIGHT_WORKERS=1 \
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_API_BASE_URL=http://localhost:8787 \
@@ -169,7 +176,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: authorization-pr-failure-${{ github.run_id }}
+          name: authorization-gate-failure-${{ matrix.browser }}-${{ github.run_id }}
           path: |
             test/results
             .artifacts/authz-pr
@@ -180,7 +187,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
-          name: authorization-decision-coverage-${{ github.run_id }}
+          name: authorization-decision-coverage-${{ matrix.browser }}-${{ github.run_id }}
           path: backend/coverage/authz-decisions
           if-no-files-found: warn
           retention-days: 14
