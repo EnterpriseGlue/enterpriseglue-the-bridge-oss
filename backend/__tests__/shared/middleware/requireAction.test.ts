@@ -637,6 +637,13 @@ describe('requireAction project resource resolvers', () => {
     expect(camundaGet).not.toHaveBeenCalled();
   });
 
+  it('denies batch selections on engine-wide engines without a broad grant', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    expect((await request(app).post('/runtime-instance-selection').send({ engineId, processInstanceIds: ['instance-1'] })).status).toBe(403);
+  });
+
   it('rejects selected instances that are absent from the runtime inventory', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
