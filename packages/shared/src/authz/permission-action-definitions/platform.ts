@@ -228,8 +228,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       description: 'Read identity-provider synchronization diagnostics and access snapshots.',
       ui: [{ surfaceId: 'admin.identity-providers.diagnostics', behavior: 'hide' }],
       routes: [
-        { method: 'GET', route: '/api/authz/sso-engine-access-snapshots', resourceResolver: 'platform.self' },
-        { method: 'GET', route: '/api/authz/sso-engine-access-snapshots/:engineId', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/authz/sso-sync-runs', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/authz/sso-sync-runs/:id/events', resourceResolver: 'platform.self' },
       ],
@@ -246,8 +244,6 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       ui: [{ surfaceId: 'admin.identity-providers.diagnostics.actions', behavior: 'disable' }],
       routes: [
         { method: 'POST', route: '/api/authz/sso-sync-runs/reconcile', resourceResolver: 'platform.self' },
-        { method: 'POST', route: '/api/engines/:engineId/access/transition-cleanup-preview', resourceResolver: 'platform.self' },
-        { method: 'POST', route: '/api/engines/:engineId/access/transition-cleanup', resourceResolver: 'platform.self' },
       ],
     },
   {

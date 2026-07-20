@@ -3143,17 +3143,12 @@ const {
   ServiceAccountCreateSchema,
   ServiceAccountSchema,
   ServiceAccountWithTokenSchema,
-  SsoEngineAccessSnapshotQuerySchema,
-  SsoEngineAccessSnapshotSchema,
   SsoSyncDiagnosticsRunRequestSchema,
   SsoSyncDiagnosticsScanResultSchema,
   SsoSyncEventSchema,
   SsoSyncEventsQuerySchema,
   SsoSyncRunSchema,
   SsoSyncRunsQuerySchema,
-  EngineAccessTransitionCleanupApplyRequestSchema,
-  EngineAccessTransitionCleanupApplyResponseSchema,
-  EngineAccessTransitionCleanupPreviewSchema,
   BridgeDecisionRequestSchema,
   BridgeDecisionResponseSchema,
 } = await import('./platform-admin/authz.js');
@@ -3307,10 +3302,6 @@ registry.registerPath({ method: 'delete', path: '/api/authz/policies/{id}', ...a
 // Authz audit
 registry.registerPath({ method: 'get', path: '/api/authz/audit', ...authzExtension('platform.audit.read', 'GET', '/api/authz/audit'), request: { query: AuthzAuditQuerySchema }, responses: { 200: { description: 'Authorization audit log', content: { 'application/json': { schema: z.array(AuthzAuditLogResponseSchema) } } } } });
 
-registry.registerPath({ method: 'get', path: '/api/authz/sso-engine-access-snapshots', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-engine-access-snapshots'), request: { query: SsoEngineAccessSnapshotQuerySchema }, responses: { 200: { description: 'List SSO engine access diagnostic snapshots', content: { 'application/json': { schema: z.array(SsoEngineAccessSnapshotSchema) } } } } });
-registry.registerPath({ method: 'get', path: '/api/authz/sso-engine-access-snapshots/{engineId}', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-engine-access-snapshots/:engineId'), request: { params: z.object({ engineId: z.string() }) }, responses: { 200: { description: 'List SSO engine access diagnostic snapshots for one engine', content: { 'application/json': { schema: z.array(SsoEngineAccessSnapshotSchema) } } } } });
-registry.registerPath({ method: 'post', path: '/api/engines/{engineId}/access/transition-cleanup-preview', ...authzExtension('platform.sso.engine-assignments.manage', 'POST', '/api/engines/:engineId/access/transition-cleanup-preview'), request: { params: z.object({ engineId: z.string() }) }, responses: { 200: { description: 'Preview duplicate manual engine access that can transition to SSO-managed access', content: { 'application/json': { schema: EngineAccessTransitionCleanupPreviewSchema } } } } });
-registry.registerPath({ method: 'post', path: '/api/engines/{engineId}/access/transition-cleanup', ...authzExtension('platform.sso.engine-assignments.manage', 'POST', '/api/engines/:engineId/access/transition-cleanup'), request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: EngineAccessTransitionCleanupApplyRequestSchema } } } }, responses: { 200: { description: 'Remove selected duplicate manual engine access assignments after transition preview', content: { 'application/json': { schema: EngineAccessTransitionCleanupApplyResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/mission-control/bridge/starbase-edit/evaluate', ...authzExtension('mission-control.bridge.starbase-edit.evaluate', 'POST', '/api/mission-control/bridge/starbase-edit/evaluate'), request: { body: { content: { 'application/json': { schema: BridgeDecisionRequestSchema } } } }, responses: { 200: { description: 'Evaluate Mission Control to Starbase edit bridge access', content: { 'application/json': { schema: BridgeDecisionResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/starbase/bridge/mission-control/evaluate', ...authzExtension('starbase.bridge.mission-control.evaluate', 'POST', '/api/starbase/bridge/mission-control/evaluate'), request: { body: { content: { 'application/json': { schema: BridgeDecisionRequestSchema } } } }, responses: { 200: { description: 'Evaluate Starbase to Mission Control runtime bridge access', content: { 'application/json': { schema: BridgeDecisionResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/authz/sso-sync-runs', ...authzExtension('platform.sso.engine-assignments.read', 'GET', '/api/authz/sso-sync-runs'), request: { query: SsoSyncRunsQuerySchema }, responses: { 200: { description: 'List SSO authorization sync runs', content: { 'application/json': { schema: z.array(SsoSyncRunSchema) } } } } });

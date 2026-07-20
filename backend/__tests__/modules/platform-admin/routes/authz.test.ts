@@ -10,7 +10,6 @@ import {
   policyService,
   projectEngineTargetService,
   serviceAccountService,
-  ssoEngineAccessSnapshotService,
   ssoSyncDiagnosticsService,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 
@@ -169,80 +168,6 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     DEPLOYMENT_EXECUTE: 'deployment:execute',
   },
   API_CLIENT_TOKEN_PREFIX: 'egac',
-  ssoEngineAccessSnapshotService: {
-    listSnapshots: vi.fn().mockResolvedValue([
-      {
-        id: 'snapshot-1',
-        tenantId: null,
-        providerId: 'microsoft',
-        mappingId: 'mapping-1',
-        principalType: 'user',
-        principalId: 'user-1',
-        engineId: 'engine-1',
-        providerSubjectIds: ['subject-1'],
-        providerGroupIds: ['group-1'],
-        providerAppRoleIds: [],
-        currentRoleIds: ['system.engine.operator'],
-        previousRoleIds: [],
-        status: 'active',
-        cleanupReason: null,
-        lastSeenAt: 1000,
-        lastSyncedAt: 1000,
-        removedAt: null,
-        details: { source: 'sso' },
-        createdAt: 900,
-        updatedAt: 1000,
-      },
-    ]),
-    listSnapshotsForEngine: vi.fn().mockResolvedValue([
-      {
-        id: 'snapshot-1',
-        tenantId: null,
-        providerId: 'microsoft',
-        mappingId: 'mapping-1',
-        principalType: 'user',
-        principalId: 'user-1',
-        engineId: 'engine-1',
-        providerSubjectIds: ['subject-1'],
-        providerGroupIds: ['group-1'],
-        providerAppRoleIds: [],
-        currentRoleIds: ['system.engine.operator'],
-        previousRoleIds: [],
-        status: 'active',
-        cleanupReason: null,
-        lastSeenAt: 1000,
-        lastSyncedAt: 1000,
-        removedAt: null,
-        details: { source: 'sso' },
-        createdAt: 900,
-        updatedAt: 1000,
-      },
-    ]),
-    previewTransitionCleanup: vi.fn().mockResolvedValue({
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      candidates: [
-        {
-          manualAssignmentId: 'manual-1',
-          ssoAssignmentId: 'sso-1',
-          principalType: 'user',
-          principalId: 'user-1',
-          engineId: 'engine-1',
-          manualRoleId: 'system.engine.operator',
-          ssoRoleId: 'system.engine.operator',
-          sourceMappingId: 'mapping-1',
-          lastSnapshotStatus: 'active',
-          recommendedAction: 'remove_manual_duplicate',
-        },
-      ],
-    }),
-    applyTransitionCleanup: vi.fn().mockResolvedValue({
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      removedAssignmentIds: ['manual-1'],
-      removedCount: 1,
-    }),
-  },
   ssoSyncDiagnosticsService: {
     listRuns: vi.fn().mockResolvedValue([
       {
@@ -1220,67 +1145,6 @@ describe('platform-admin authz routes', () => {
     }));
   });
 
-  it('lists SSO engine access snapshots with SSO assignment read permission', async () => {
-    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
-      permission === 'platform:sso-assignments:view'
-    );
-
-    const listResponse = await request(app)
-      .get('/api/authz/sso-engine-access-snapshots')
-      .query({ providerId: 'microsoft', status: 'active', limit: 25 });
-
-    expect(listResponse.status).toBe(200);
-    expect(listResponse.body[0]).toMatchObject({
-      id: 'snapshot-1',
-      mappingId: 'mapping-1',
-      engineId: 'engine-1',
-      status: 'active',
-    });
-    expect(ssoEngineAccessSnapshotService.listSnapshots).toHaveBeenCalledWith(expect.objectContaining({
-      providerId: 'microsoft',
-      status: 'active',
-      limit: 25,
-    }));
-
-    const detailResponse = await request(app).get('/api/authz/sso-engine-access-snapshots/engine-1');
-
-    expect(detailResponse.status).toBe(200);
-    expect(ssoEngineAccessSnapshotService.listSnapshotsForEngine).toHaveBeenCalledWith('engine-1', null);
-  });
-
-  it('previews and applies explicit engine access transition cleanup with SSO assignment manage permission', async () => {
-    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
-      permission === 'platform:sso-assignments:manage'
-    );
-
-    const previewResponse = await request(app).post('/api/engines/engine-1/access/transition-cleanup-preview');
-    expect(previewResponse.status).toBe(200);
-    expect(previewResponse.body).toMatchObject({
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      candidates: [expect.objectContaining({ manualAssignmentId: 'manual-1', ssoAssignmentId: 'sso-1' })],
-    });
-    expect(ssoEngineAccessSnapshotService.previewTransitionCleanup).toHaveBeenCalledWith('engine-1', null);
-
-    const applyResponse = await request(app)
-      .post('/api/engines/engine-1/access/transition-cleanup')
-      .send({ assignmentIds: ['manual-1'], previewCorrelationId: 'preview-1' });
-
-    expect(applyResponse.status).toBe(200);
-    expect(applyResponse.body).toMatchObject({
-      previewCorrelationId: 'preview-1',
-      engineId: 'engine-1',
-      removedAssignmentIds: ['manual-1'],
-      removedCount: 1,
-    });
-    expect(ssoEngineAccessSnapshotService.applyTransitionCleanup).toHaveBeenCalledWith(
-      'engine-1',
-      ['manual-1'],
-      'user-1',
-      null,
-      'preview-1',
-    );
-  });
 
   it('evaluates Mission Control to Starbase bridge access', async () => {
     vi.mocked(permissionService.hasPermission).mockResolvedValue(true);

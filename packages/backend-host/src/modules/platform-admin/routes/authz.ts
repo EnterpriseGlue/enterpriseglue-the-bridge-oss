@@ -41,7 +41,6 @@ import { registerAuditRoutes } from './authz/audit.js';
 import { registerExternalEngineRoutes } from './authz/external-engines.js';
 import { registerExternalEngineSystemRoutes } from './authz/external-engine-systems.js';
 import { registerSsoSyncDiagnosticsRoutes } from './authz/sso-sync-diagnostics.js';
-import { registerSsoEngineAssignmentRoutes } from './authz/sso-engine-assignments.js';
 
 // Validation schemas
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -288,7 +287,6 @@ registerProjectEngineTargetRoutes(router, { requirePlatformAction });
 
 registerPolicyRoutes(router, { requirePlatformAction });
 
-registerSsoEngineAssignmentRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // SSO Sync Diagnostics (Admin Only)

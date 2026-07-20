@@ -1412,80 +1412,6 @@ export const IdentityProviderConnectionTestResponseSchema = z.discriminatedUnion
   z.object({ status: z.literal('connected'), protocol: z.literal('ldap'), sampledIdentities: z.number().int().nonnegative() }),
 ]);
 
-export const SsoEngineAccessSnapshotStatusSchema = z.enum([
-  'active',
-  'stale',
-  'removed_by_sso',
-  'removed_by_admin',
-  'mapping_disabled',
-  'provider_identity_missing',
-  'provider_group_missing',
-  'engine_no_longer_matches_selector',
-]);
-
-export const SsoEngineAccessSnapshotSchema = z.object({
-  id: z.string(),
-  tenantId: z.string().nullable(),
-  providerId: z.string().nullable(),
-  mappingId: z.string(),
-  principalType: z.string(),
-  principalId: z.string(),
-  engineId: z.string(),
-  providerSubjectIds: z.array(z.string()),
-  providerGroupIds: z.array(z.string()),
-  providerAppRoleIds: z.array(z.string()),
-  currentRoleIds: z.array(z.string()),
-  previousRoleIds: z.array(z.string()),
-  status: SsoEngineAccessSnapshotStatusSchema,
-  cleanupReason: z.string().nullable(),
-  lastSeenAt: z.number(),
-  lastSyncedAt: z.number(),
-  removedAt: z.number().nullable(),
-  details: z.record(z.string(), z.unknown()),
-  createdAt: z.number(),
-  updatedAt: z.number(),
-});
-
-export const SsoEngineAccessSnapshotQuerySchema = z.object({
-  providerId: z.string().optional(),
-  mappingId: z.string().optional(),
-  principalType: z.string().optional(),
-  principalId: z.string().optional(),
-  engineId: z.string().optional(),
-  status: SsoEngineAccessSnapshotStatusSchema.optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
-});
-
-export const EngineAccessTransitionCleanupCandidateSchema = z.object({
-  manualAssignmentId: z.string(),
-  ssoAssignmentId: z.string(),
-  principalType: z.string(),
-  principalId: z.string(),
-  engineId: z.string(),
-  manualRoleId: z.string(),
-  ssoRoleId: z.string(),
-  sourceMappingId: z.string().nullable(),
-  lastSnapshotStatus: SsoEngineAccessSnapshotStatusSchema.nullable(),
-  recommendedAction: z.enum(['remove_manual_duplicate', 'review_manual_conflict']),
-});
-
-export const EngineAccessTransitionCleanupPreviewSchema = z.object({
-  previewCorrelationId: z.string(),
-  engineId: z.string(),
-  candidates: z.array(EngineAccessTransitionCleanupCandidateSchema),
-});
-
-export const EngineAccessTransitionCleanupApplyRequestSchema = z.object({
-  previewCorrelationId: z.string().optional(),
-  assignmentIds: z.array(z.string().min(1)).min(1),
-});
-
-export const EngineAccessTransitionCleanupApplyResponseSchema = z.object({
-  previewCorrelationId: z.string(),
-  engineId: z.string(),
-  removedAssignmentIds: z.array(z.string()),
-  removedCount: z.number(),
-});
 
 export const BridgeDecisionRequestSchema = z.object({
   engineId: z.string().optional(),
@@ -1620,17 +1546,10 @@ export type IdentityProviderConnectionTestResponse = z.infer<typeof IdentityProv
 export type RuntimeResource = z.infer<typeof RuntimeResourceSchema>;
 export type RuntimeResourceSet = z.infer<typeof RuntimeResourceSetSchema>;
 export type RuntimeResourceSetMaterializationResult = z.infer<typeof RuntimeResourceSetMaterializationResultSchema>;
-export type SsoEngineAccessSnapshot = z.infer<typeof SsoEngineAccessSnapshotSchema>;
-export type SsoEngineAccessSnapshotStatus = z.infer<typeof SsoEngineAccessSnapshotStatusSchema>;
-export type SsoEngineAccessSnapshotQuery = z.input<typeof SsoEngineAccessSnapshotQuerySchema>;
 export type SsoSyncRunsQuery = z.input<typeof SsoSyncRunsQuerySchema>;
 export type SsoSyncEventsQuery = z.input<typeof SsoSyncEventsQuerySchema>;
 export type SsoSyncDiagnosticsRunRequest = z.infer<typeof SsoSyncDiagnosticsRunRequestSchema>;
 export type SsoSyncDiagnosticsScanResult = z.infer<typeof SsoSyncDiagnosticsScanResultSchema>;
-export type EngineAccessTransitionCleanupCandidate = z.infer<typeof EngineAccessTransitionCleanupCandidateSchema>;
-export type EngineAccessTransitionCleanupPreview = z.infer<typeof EngineAccessTransitionCleanupPreviewSchema>;
-export type EngineAccessTransitionCleanupApplyRequest = z.infer<typeof EngineAccessTransitionCleanupApplyRequestSchema>;
-export type EngineAccessTransitionCleanupApplyResponse = z.infer<typeof EngineAccessTransitionCleanupApplyResponseSchema>;
 export type BridgeDecisionRequest = z.infer<typeof BridgeDecisionRequestSchema>;
 export type BridgeDecisionResponse = z.infer<typeof BridgeDecisionResponseSchema>;
 export type AuthzResourceType = z.infer<typeof AuthzResourceTypeSchema>;

@@ -27,7 +27,6 @@ export * from './permissions.js';
 export * from './ApiClientService.js';
 export * from './ServiceAccountService.js';
 export * from './LegacyMappingConversionAudit.js';
-export * from './SsoEngineAccessSnapshotService.js';
 export * from './SsoNormalizedIdentityService.js';
 export * from './ExternalIdentityService.js';
 export * from './IdentityProviderAdapter.js';

@@ -479,8 +479,6 @@ describe('authorization route inventory validation', () => {
         surfaceId: 'admin.identity-providers.diagnostics.actions',
         routes: [
           ['POST', '/api/authz/sso-sync-runs/reconcile', 'platform.self'],
-          ['POST', '/api/engines/:engineId/access/transition-cleanup-preview', 'platform.self'],
-          ['POST', '/api/engines/:engineId/access/transition-cleanup', 'platform.self'],
         ],
       },
       {

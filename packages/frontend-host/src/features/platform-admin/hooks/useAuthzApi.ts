@@ -12,9 +12,6 @@ import type {
   AuthzPrincipalType as SharedAuthzPrincipalType,
   BridgeDecisionRequest as SharedBridgeDecisionRequest,
   BridgeDecisionResponse as SharedBridgeDecisionResponse,
-  EngineAccessTransitionCleanupApplyResponse as SharedEngineAccessTransitionCleanupApplyResponse,
-  EngineAccessTransitionCleanupCandidate as SharedEngineAccessTransitionCleanupCandidate,
-  EngineAccessTransitionCleanupPreview as SharedEngineAccessTransitionCleanupPreview,
   AuthzGroup as SharedAuthzGroup,
   AuthzGroupMembership as SharedAuthzGroupMembership,
   AuthzGroupSource as SharedAuthzGroupSource,
@@ -85,9 +82,6 @@ import type {
   RuntimeResourceSetMaterializationResult as SharedRuntimeResourceSetMaterializationResult,
   ServiceAccount as SharedServiceAccount,
   ServiceAccountWithToken as SharedServiceAccountWithToken,
-  SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
-  SsoEngineAccessSnapshotStatus as SharedSsoEngineAccessSnapshotStatus,
-  SsoEngineAccessSnapshotQuery as SharedSsoEngineAccessSnapshotQuery,
   SsoSyncDiagnosticsRunRequest as SharedSsoSyncDiagnosticsRunRequest,
   SsoSyncDiagnosticsScanResult as SharedSsoSyncDiagnosticsScanResult,
   SsoSyncEventsQuery as SharedSsoSyncEventsQuery,
@@ -247,23 +241,11 @@ export type SsoSyncEventParams = SharedSsoSyncEventsQuery;
 export type SsoSyncDiagnosticsRunPayload = SharedSsoSyncDiagnosticsRunRequest;
 export type SsoSyncDiagnosticsScanResult = SharedSsoSyncDiagnosticsScanResult;
 
-export type SsoEngineAccessSnapshotStatus = SharedSsoEngineAccessSnapshotStatus;
-export type SsoEngineAccessSnapshot = SharedSsoEngineAccessSnapshot;
-
-export type SsoEngineAccessSnapshotParams = SharedSsoEngineAccessSnapshotQuery;
-
-export type EngineAccessTransitionCleanupCandidate = SharedEngineAccessTransitionCleanupCandidate;
-
-export type EngineAccessTransitionCleanupPreview = SharedEngineAccessTransitionCleanupPreview;
-export type EngineAccessTransitionCleanupApplyResult = SharedEngineAccessTransitionCleanupApplyResponse;
-
 export type BridgeDecisionPayload = SharedBridgeDecisionRequest;
 export type BridgeDecisionResponse = SharedBridgeDecisionResponse;
 
 // Query keys
 export const authzQueryKeys = {
-  ssoEngineAccessSnapshots: (params?: SsoEngineAccessSnapshotParams) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', params] as const,
-  ssoEngineAccessSnapshotsForEngine: (engineId?: string) => ['platform-admin', 'authz', 'sso-engine-access-snapshots', 'engine', engineId] as const,
   identityProviders: ['platform-admin', 'authz', 'identity-providers'] as const,
   identityEntitlementMappings: ['platform-admin', 'authz', 'identity-entitlement-mappings'] as const,
   ssoSyncRuns: (params?: SsoSyncRunParams) => ['platform-admin', 'authz', 'sso-sync-runs', params] as const,
@@ -882,51 +864,6 @@ export function useSyncLegacyProjectEngineTargets() {
 }
 
 // ============================================================================
-export function useSsoEngineAccessSnapshots(
-  params: SsoEngineAccessSnapshotParams = {},
-  options: { enabled?: boolean } = {},
-) {
-  return useQuery({
-    queryKey: authzQueryKeys.ssoEngineAccessSnapshots(params),
-    queryFn: () => apiClient.get<SsoEngineAccessSnapshot[]>('/api/authz/sso-engine-access-snapshots', params),
-    enabled: options.enabled ?? true,
-  });
-}
-
-export function useSsoEngineAccessSnapshotsForEngine(engineId?: string, options: { enabled?: boolean } = {}) {
-  return useQuery({
-    queryKey: authzQueryKeys.ssoEngineAccessSnapshotsForEngine(engineId),
-    queryFn: () => apiClient.get<SsoEngineAccessSnapshot[]>(`/api/authz/sso-engine-access-snapshots/${engineId}`),
-    enabled: Boolean(engineId) && (options.enabled ?? true),
-  });
-}
-
-export function usePreviewEngineAccessTransitionCleanup() {
-  return useMutation({
-    mutationFn: (engineId: string) =>
-      apiClient.post<EngineAccessTransitionCleanupPreview>(`/api/engines/${engineId}/access/transition-cleanup-preview`, {}),
-  });
-}
-
-export function useApplyEngineAccessTransitionCleanup() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { engineId: string; assignmentIds: string[]; previewCorrelationId?: string }) =>
-      apiClient.post<EngineAccessTransitionCleanupApplyResult>(
-        `/api/engines/${data.engineId}/access/transition-cleanup`,
-        {
-          assignmentIds: data.assignmentIds,
-          previewCorrelationId: data.previewCorrelationId,
-        },
-      ),
-    onSuccess: (_result, variables) => {
-      qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] });
-      qc.invalidateQueries({ queryKey: authzQueryKeys.ssoEngineAccessSnapshotsForEngine(variables.engineId) });
-      qc.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'sso-engine-access-snapshots'] });
-    },
-  });
-}
-
 export function useEvaluateMissionControlStarbaseBridge() {
   return useMutation({
     mutationFn: (data: BridgeDecisionPayload) =>

@@ -55,7 +55,6 @@ import type {
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
 import type {
   RoleAssignment as SharedRoleAssignment,
-  SsoEngineAccessSnapshot as SharedSsoEngineAccessSnapshot,
   ProjectEngineTarget as SharedProjectEngineTarget,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
@@ -440,8 +439,6 @@ type RuntimeResourceSetAccessInventory = {
   lastAppliedAt?: number | null
   isArchived?: boolean
 }
-
-type SsoEngineAccessSnapshot = SharedSsoEngineAccessSnapshot
 
 type ProjectEngineTargetPresentation = Partial<ProjectEngineTargetView>
 
@@ -973,9 +970,6 @@ function EngineAccessSection({
   membersError,
   membersLoading,
   membersResponse,
-  snapshots,
-  snapshotsError,
-  snapshotsLoading,
   canViewRuntimeResources,
   runtimeResources,
   runtimeResourcesError,
@@ -995,9 +989,6 @@ function EngineAccessSection({
   membersError: unknown
   membersLoading: boolean
   membersResponse: EngineMembersResponse | undefined
-  snapshots: SsoEngineAccessSnapshot[]
-  snapshotsError: unknown
-  snapshotsLoading: boolean
   canViewRuntimeResources: boolean
   runtimeResources: RuntimeResourceAccessInventory[]
   runtimeResourcesError: unknown
@@ -1036,7 +1027,6 @@ function EngineAccessSection({
             <Tag type="blue" size="sm">{members.length} people</Tag>
             <Tag type="magenta" size="sm">{governanceAssignments.length} governance</Tag>
             <Tag type="cyan" size="sm">{scopedAccessAssignments.length} assignments</Tag>
-            {snapshots.length > 0 && <Tag type="purple" size="sm">{snapshots.length} SSO snapshots</Tag>}
           </div>
         )}
       </div>
@@ -1059,7 +1049,7 @@ function EngineAccessSection({
           subtitle={getUiErrorMessage(membersError || assignmentsError, 'Failed to load access details')}
           hideCloseButton
         />
-      ) : members.length === 0 && governanceAssignments.length === 0 && scopedAccessAssignments.length === 0 && pendingInvites.length === 0 && snapshots.length === 0 ? (
+      ) : members.length === 0 && governanceAssignments.length === 0 && scopedAccessAssignments.length === 0 && pendingInvites.length === 0 ? (
         <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
           No engine access entries are configured.
         </div>
@@ -1148,48 +1138,6 @@ function EngineAccessSection({
             </div>
           )}
 
-          {snapshotsLoading && (
-            <InlineLoading description="Loading SSO snapshot diagnostics" />
-          )}
-
-          {Boolean(snapshotsError) && (
-            <InlineNotification
-              lowContrast
-              kind="warning"
-              title="SSO snapshot diagnostics unavailable"
-              subtitle={getUiErrorMessage(snapshotsError, 'Unable to load SSO engine access snapshots')}
-              hideCloseButton
-            />
-          )}
-
-          {!snapshotsError && snapshots.length > 0 && (
-            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text-primary)' }}>SSO engine access snapshots</div>
-              <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-                {snapshots.slice(0, 6).map((snapshot) => (
-                  <div key={snapshot.id} style={{ display: 'grid', gap: 'var(--spacing-2)', borderTop: '1px solid var(--color-border-subtle)', paddingTop: 'var(--spacing-2)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', overflowWrap: 'anywhere' }}>
-                        {snapshot.principalType}: {snapshot.principalId}
-                      </div>
-                      <Tag type={getSnapshotStatusTagType(snapshot.status)} size="sm">{formatEngineRegistrationStatus(snapshot.status)}</Tag>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'var(--spacing-3)' }}>
-                      <EngineRegistrationDetail label="Current roles" value={snapshot.currentRoleIds.map(formatEngineAccessRole).join(', ') || '-'} />
-                      <EngineRegistrationDetail label="Previous roles" value={snapshot.previousRoleIds.map(formatEngineAccessRole).join(', ') || '-'} />
-                      <EngineRegistrationDetail label="Mapping" value={snapshot.mappingId} />
-                      <EngineRegistrationDetail label="Last sync" value={formatEngineTimestamp(snapshot.lastSyncedAt)} />
-                      <EngineRegistrationDetail label="Provider groups" value={snapshot.providerGroupIds.length > 0 ? `${snapshot.providerGroupIds.length} recorded` : '-'} />
-                      <EngineRegistrationDetail label="Cleanup reason" value={snapshot.cleanupReason ? formatEngineRegistrationStatus(snapshot.cleanupReason) : '-'} />
-                    </div>
-                  </div>
-                ))}
-                {snapshots.length > 6 && (
-                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>+{snapshots.length - 6} more SSO snapshots</div>
-                )}
-              </div>
-            </div>
-          )}
 
           {pendingInvites.length > 0 && (
             <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
@@ -1566,16 +1514,6 @@ export default function Engines() {
     enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
     queryFn: () => apiClient.get<EngineRoleAssignment[]>(
       `/api/authz/role-assignments?resourceType=engine&resourceId=${encodeURIComponent(String(editing?.id))}`,
-      undefined,
-      { credentials: 'include' }
-    ),
-  })
-  const accessSnapshotsQ = useQuery({
-    queryKey: ['engines', editing?.id, 'sso-access-snapshots'],
-    enabled: Boolean(engineModal.isOpen && editing?.id && editingActions?.canViewMembers),
-    retry: false,
-    queryFn: () => apiClient.get<SsoEngineAccessSnapshot[]>(
-      `/api/authz/sso-engine-access-snapshots/${encodeURIComponent(String(editing?.id))}`,
       undefined,
       { credentials: 'include' }
     ),
@@ -2073,9 +2011,6 @@ export default function Engines() {
             membersError={accessMembersQ.error}
             membersLoading={accessMembersQ.isLoading}
             membersResponse={accessMembersQ.data}
-            snapshots={accessSnapshotsQ.data || []}
-            snapshotsError={accessSnapshotsQ.error}
-            snapshotsLoading={accessSnapshotsQ.isLoading}
             canViewRuntimeResources={Boolean(editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed)}
             runtimeResources={runtimeResourcesQ.data || []}
             runtimeResourcesError={runtimeResourcesQ.error}
