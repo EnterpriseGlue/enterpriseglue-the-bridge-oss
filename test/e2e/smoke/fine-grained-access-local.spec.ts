@@ -80,6 +80,12 @@ test.describe('Smoke: fine-grained local engine access', () => {
     await expect(page).toHaveURL(/\/t\/default\/?$/);
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
+    // The restricted persona must still be able to use its permitted UI
+    // surface, not merely receive a successful API response.
+    await page.goto('/t/default/engines');
+    await expect(page.getByRole('heading', { name: /^engines$/i })).toBeVisible();
+    await expect(page.getByText(fixture.scopedEngineName!, { exact: true })).toBeVisible();
+
     const inventory = await request(page, '/engines-api/engines');
     expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
     expect(inventory.body.map((engine: { id: string }) => engine.id)).toEqual([fixture.scopedEngineId]);
