@@ -47,7 +47,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () =>
   },
 }));
 
-import { requireApiClientAction, requireApiDeploymentEligibility } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
+import { requireApiClientAction, requireApiClientScope, requireApiDeploymentEligibility } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
 
 describe('apiClientAuth middleware', () => {
   beforeEach(() => {
@@ -401,5 +401,109 @@ describe('apiClientAuth middleware', () => {
         reasons: ['No active project-engine target allows api mode'],
       }),
     }));
+  });
+
+  it('enforces bearer syntax and normalizes scope authentication failures', async () => {
+    const next = vi.fn();
+    await requireApiClientScope('engine:register')({ headers: {} } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    await requireApiClientScope('engine:register')({ headers: { authorization: 'Bearer ' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    mocks.authenticateToken.mockRejectedValueOnce(new Error('upstream authentication error'));
+    await requireApiClientScope('engine:register')({ headers: { authorization: 'Bearer token-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401, message: 'upstream authentication error' }));
+
+    mocks.authenticateToken.mockRejectedValueOnce(null);
+    await requireApiClientScope('engine:register')({ headers: { authorization: 'Bearer token-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401, message: 'API client authentication failed' }));
+
+    const req: any = { headers: { authorization: 'Bearer token-1' } };
+    await requireApiClientScope('engine:register')(req, {} as any, next);
+    expect(req.apiClient).toMatchObject({ id: 'api-client-1' });
+  });
+
+  it('honors action resource options and normalizes unexpected authorization failures', async () => {
+    const next = vi.fn();
+    const action = requireApiClientAction('engine:register', 'engine.external-registration.upsert', {
+      permissionId: 'external-engine-system:engine-registration:manage',
+      resourceType: 'external_engine_system',
+      resourceId: 'configured-system',
+      allowActionPermissionFallback: false,
+    });
+    await action({ headers: { authorization: 'Bearer token-1' } } as any, {} as any, next);
+    expect(mocks.hasPermission).toHaveBeenCalledWith('external-engine-system:engine-registration:manage', expect.objectContaining({ resourceId: 'configured-system' }));
+
+    await requireApiClientAction('engine:register', 'engine.external-registration.upsert', {
+      resourceType: 'external_engine_system', resourceId: 'action-permission-resource',
+    })({ headers: { authorization: 'Bearer token-1' } } as any, {} as any, next);
+    expect(mocks.hasPermission).toHaveBeenLastCalledWith('platform:engine-registration:manage', expect.objectContaining({ resourceId: 'action-permission-resource' }));
+
+    mocks.hasPermission.mockResolvedValueOnce(false);
+    await requireApiClientAction('engine:register', 'engine.external-registration.upsert', {
+      resourceType: 'external_engine_system', resourceIdKey: 'externalSystemId', allowActionPermissionFallback: false,
+    })({ headers: { authorization: 'Bearer token-1' }, body: { externalSystemId: ['  '] } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 403 }));
+
+    await requireApiClientAction('engine:register', 'engine.external-registration.upsert', {
+      resourceType: 'external_engine_system', resourceIdKey: 'externalSystemId', allowActionPermissionFallback: false,
+    })({ headers: { authorization: 'Bearer token-1' }, body: {} } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 403 }));
+
+    mocks.authenticateToken.mockRejectedValueOnce(new Error('authorization transport error'));
+    await requireApiClientAction('engine:register', 'engine.external-registration.upsert')({ headers: { authorization: 'Bearer token-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401, message: 'authorization transport error' }));
+
+    mocks.authenticateToken.mockRejectedValueOnce(undefined);
+    await requireApiClientAction('engine:register', 'engine.external-registration.upsert')({ headers: { authorization: 'Bearer token-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401, message: 'API client authorization failed' }));
+  });
+
+  it('uses cached deployment principals, validates scopes, and reads configured request locations', async () => {
+    const next = vi.fn();
+    await requireApiDeploymentEligibility({ projectIdFrom: 'query', engineIdFrom: 'params' })({
+      headers: {}, query: { projectId: [' project-query '] }, params: { engineId: ' engine-param ' },
+      tenant: { tenantId: 'tenant-1' }, apiClient: { id: 'cached-client', scopes: ['deployment:execute'] },
+    } as any, {} as any, next);
+    expect(mocks.evaluateDeploymentEligibility).toHaveBeenLastCalledWith(expect.objectContaining({
+      principalType: 'api_client', principalId: 'cached-client', projectId: 'project-query', engineId: 'engine-param',
+    }));
+
+    await requireApiDeploymentEligibility()({
+      headers: {}, body: { projectId: 'project-1', engineId: 'engine-1' },
+      serviceAccount: { id: 'cached-service', scopes: ['deployment:execute'] },
+    } as any, {} as any, next);
+    expect(mocks.evaluateDeploymentEligibility).toHaveBeenLastCalledWith(expect.objectContaining({ principalType: 'service_account', principalId: 'cached-service' }));
+
+    await requireApiDeploymentEligibility()({
+      headers: {}, body: { projectId: 'project-1', engineId: 'engine-1' }, apiClient: { id: 'missing-scope', scopes: [] },
+    } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 403, message: expect.stringContaining('missing required scope') }));
+
+    await requireApiDeploymentEligibility()({
+      headers: {}, body: { projectId: 'project-1', engineId: 'engine-1' }, serviceAccount: { id: 'missing-scope', scopes: [] },
+    } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 403, message: expect.stringContaining('missing required scope') }));
+  });
+
+  it('normalizes invalid deployment requests and unexpected deployment failures', async () => {
+    const next = vi.fn();
+    await requireApiDeploymentEligibility({ projectId: 'project-1' })({ headers: { authorization: 'Bearer token-1' }, body: {} } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 400, message: 'API deployment requires projectId and engineId' }));
+
+    mocks.evaluateDeploymentEligibility.mockResolvedValueOnce({
+      allowed: false, decision: 'deny', mode: 'api', projectId: 'project-1', engineId: 'engine-1', checks: [], reasons: [],
+    });
+    await requireApiDeploymentEligibility()({ headers: { authorization: 'Bearer token-1' }, body: { projectId: 'project-1', engineId: 'engine-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 403, message: 'API deployment is not allowed' }));
+
+    mocks.authenticateToken.mockRejectedValueOnce(new Error('deployment transport error'));
+    await requireApiDeploymentEligibility()({ headers: { authorization: 'Bearer token-1' }, body: { projectId: 'project-1', engineId: 'engine-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401, message: 'deployment transport error' }));
+
+    mocks.authenticateToken.mockRejectedValueOnce(null);
+    await requireApiDeploymentEligibility()({ headers: { authorization: 'Bearer token-1' }, body: { projectId: 'project-1', engineId: 'engine-1' } } as any, {} as any, next);
+    expect(next).toHaveBeenLastCalledWith(expect.objectContaining({ statusCode: 401, message: 'API deployment authorization failed' }));
   });
 });
