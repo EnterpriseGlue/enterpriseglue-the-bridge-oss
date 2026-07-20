@@ -645,6 +645,21 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(403);
   });
 
+  it('rejects resource-aware migrations whose definitions have no authorization key', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    camundaGet
+      .mockResolvedValueOnce({ id: 'source-v1', key: '' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
+
+    const response = await request(app).post('/runtime-migration').send({
+      engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
+    });
+
+    expect(response.status).toBe(403);
+    expect(runtimeResourceFindOne).not.toHaveBeenCalled();
+  });
+
   it('discovers resource-aware engines when a runtime resource is visible', async () => {
     engineFind.mockResolvedValue([{ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' }]);
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
