@@ -693,6 +693,15 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('denies engine-wide migrations without a broad grant', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    expect((await request(app).post('/runtime-migration').send({
+      engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' },
+    })).status).toBe(403);
+  });
+
   it('rejects resource-aware migrations without both definition identifiers', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
