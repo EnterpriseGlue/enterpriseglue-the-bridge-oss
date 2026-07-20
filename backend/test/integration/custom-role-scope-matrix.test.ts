@@ -192,6 +192,13 @@ describe('custom role scope matrix (database)', () => {
     expect(engineSetDecision.sources).toEqual(expect.arrayContaining([
       expect.objectContaining({ principalType: 'group', principalId: groupId, scopeType: 'engine_set', scopeId: engineSetId }),
     ]));
+    const dataSource = await getDataSource();
+    const materialization = await dataSource.getRepository(EngineSetMaterialization).findOneBy({ engineSetId, engineId: engineSetEngineId });
+    expect(materialization).not.toBeNull();
+    await dataSource.getRepository(EngineSetMaterialization).delete({ id: materialization!.id });
+    await expect(check(EnginePermissions.INSTANCE_VIEW, groupUserId, 'engine', engineSetEngineId)).resolves.toBe(false);
+    await dataSource.getRepository(EngineSetMaterialization).insert(materialization!);
+    await expect(check(EnginePermissions.INSTANCE_VIEW, groupUserId, 'engine', engineSetEngineId)).resolves.toBe(true);
 
     await expect(check(EnginePermissions.INSTANCE_VIEW, groupUserId, 'engine_runtime_resource', runtimeResourceId)).resolves.toBe(true);
     const runtimeSetDecision = await permissionService.evaluatePermission(EnginePermissions.INSTANCE_VIEW, {
