@@ -3148,12 +3148,6 @@ class PermissionServiceClass {
       }),
       this.maxEntityTimestamp(dataSource, RbacRolePermission, 'rolePermission', ['createdAt']),
       this.maxEntityTimestamp(dataSource, RbacPermission, 'permission', ['createdAt', 'updatedAt']),
-      this.maxEntityTimestamp(dataSource, ProjectMember, 'projectMember', ['createdAt', 'updatedAt'], (qb) => {
-        qb.where('projectMember.userId = :userId', { userId: input.userId });
-      }),
-      this.maxEntityTimestamp(dataSource, ProjectMemberRole, 'projectMemberRole', ['createdAt'], (qb) => {
-        qb.where('projectMemberRole.userId = :userId', { userId: input.userId });
-      }),
       this.maxEntityTimestamp(dataSource, Project, 'project', ['createdAt', 'updatedAt'], (qb) => {
         if (projectIds.length > 0) {
           qb.where('project.id IN (:...projectIds)', { projectIds });
@@ -3161,9 +3155,6 @@ class PermissionServiceClass {
         } else {
           qb.where('1 = 0');
         }
-      }),
-      this.maxEntityTimestamp(dataSource, EngineMember, 'engineMember', ['createdAt'], (qb) => {
-        qb.where('engineMember.userId = :userId', { userId: input.userId });
       }),
       this.maxEntityTimestamp(dataSource, Engine, 'engine', ['createdAt', 'updatedAt', 'lastExternalSyncAt', 'externalUpdatedAt'], (qb) => {
         if (engineIds.length > 0) {
