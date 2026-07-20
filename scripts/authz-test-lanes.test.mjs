@@ -146,6 +146,9 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /E2E_SEED_FILE=/);
   assert.match(localSeededAuthzSmokeRunner, /POSTGRES_HOST=127\.0\.0\.1/);
   assert.match(localSeededAuthzSmokeRunner, /docker compose.*port db 5432/);
+  assert.match(localSeededAuthzSmokeRunner, /docker-compose\.e2e-mission-control\.yml/);
+  assert.match(localSeededAuthzSmokeRunner, /up -d --wait camunda-mock/);
+  assert.match(localSeededAuthzSmokeRunner, /E2E_CAMUNDA_BASE_URL/);
   assert.match(localSeededAuthzSmokeRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
   assert.match(localSeededAuthzSmokeRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localSeededAuthzSmokeRunner, /localhost, loopback, or a \.local host/);

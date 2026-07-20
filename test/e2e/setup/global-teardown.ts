@@ -195,7 +195,8 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     );
     await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
   }
-  await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_type = 'engine' AND scope_id IN (SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%')`);
+  await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id IN (SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%')`);
+  await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id IN (SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%')`);
   await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
   await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
 

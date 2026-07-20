@@ -294,6 +294,74 @@ export default async function globalSetup() {
     );
   }
 
+  // A second browser persona is bounded one level further: it can inspect one
+  // process definition on a resource-aware engine, but not a sibling runtime
+  // resource on that same engine. The mock Camunda server supplies both live
+  // definitions; these rows are the owned authorization inventory.
+  const runtimeScopedUserId = randomUUID();
+  const runtimeScopedEmail = `e2e-runtime-scope-${Date.now()}-${suffix}@example.com`;
+  const runtimeScopedPassword = `E2eRuntimeScope-${suffix}-Pass1!`;
+  const runtimeScopedPasswordHash = await hashPassword(runtimeScopedPassword);
+  const runtimeScopedEngineId = randomUUID();
+  const runtimeAllowedResourceId = randomUUID();
+  const runtimeSiblingResourceId = randomUUID();
+  const runtimeAllowedDefinitionId = 'invoice-process:3:mock-process-definition';
+  const runtimeSiblingDefinitionId = 'invoice-sequential-review:1:mock-process-definition';
+  const runtimeEngineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL || 'http://camunda-mock:9080/engine-rest';
+  await pool.query(
+    `INSERT INTO ${schema}.users
+      (id, email, auth_provider, password_hash, first_name, last_name,
+       is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
+       email_verification_token, email_verification_token_expiry, created_at, updated_at,
+       last_login_at, created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [runtimeScopedUserId, runtimeScopedEmail, 'local', runtimeScopedPasswordHash, 'E2E', 'Runtime Scoped', true, false, 0, null, true, null, null, now, now, null, adminUserId]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [randomUUID(), 'tenant-default', runtimeScopedUserId, 'member', now]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.authz_group_memberships
+      (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [randomUUID(), null, E2E_PLATFORM_GROUP_IDS.authenticatedUsers, runtimeScopedUserId, 'system', scopedSourceRef, null, null, now, now]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.engines
+      (id, name, base_url, type, auth_type, username, password_enc, version,
+       owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
+       runtime_access_scope, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+    [runtimeScopedEngineId, `${prefix}-runtime-scoped-engine`, runtimeEngineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, 'tenant-default', 'resource_aware', now, now]
+  );
+  for (const [id, resourceKey, deploymentId] of [
+    [runtimeAllowedResourceId, 'invoice-process', 'mock-deployment-primary'],
+    [runtimeSiblingResourceId, 'invoice-sequential-review', 'mock-deployment-sequential'],
+  ]) {
+    await pool.query(
+      `INSERT INTO ${schema}.runtime_resources
+        (id, tenant_id, engine_id, resource_kind, resource_key, runtime_tenant_id,
+         engine_resource_id, deployment_id, project_id, file_id, version, labels_json,
+         lineage_json, source, source_ref, observed_at, is_active, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+      [id, 'tenant-default', runtimeScopedEngineId, 'process_definition', resourceKey, '', null, deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', scopedSourceRef, now, true, now, now]
+    );
+  }
+  const runtimeAssignmentKey = canonicalRoleAssignmentKey({
+    tenantId: 'tenant-default', principalType: 'user', principalId: runtimeScopedUserId,
+    roleId: operatorRoleId, scopeType: 'engine_runtime_resource', scopeId: runtimeAllowedResourceId,
+    source: 'system', sourceRef: scopedSourceRef,
+  });
+  await pool.query(
+    `INSERT INTO ${schema}.role_assignments
+      (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+       source, source_ref, assignment_key, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [randomUUID(), 'tenant-default', 'user', runtimeScopedUserId, operatorRoleId, 'engine_runtime_resource', runtimeAllowedResourceId, 'system', scopedSourceRef, runtimeAssignmentKey, now, now]
+  );
+
   // A separate operator proves that the same bounded decision is available
   // through an internal group, without depending on the direct user
   // assignment above.
@@ -441,6 +509,11 @@ export default async function globalSetup() {
       scopedEngineAssignmentId,
       siblingEngineId,
       crossTenantEngineId,
+      runtimeScopedEmail,
+      runtimeScopedPassword,
+      runtimeScopedEngineId,
+      runtimeAllowedDefinitionId,
+      runtimeSiblingDefinitionId,
       scopedSourceRef,
       groupScopedUserId,
       groupScopedEmail,

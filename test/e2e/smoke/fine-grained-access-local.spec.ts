@@ -6,7 +6,7 @@ const fixture = getE2EFineGrainedFixture();
 const shouldSkip = !fixture.email || !fixture.password || !fixture.scopedEngineId || !fixture.siblingEngineId || !fixture.crossTenantEngineId;
 // Coverage guard: these registered action ids are exercised against the live
 // guarded routes below, including explicit denial paths.
-const coveredActions = ['engine.inventory.read', 'engine.inventory.update', 'platform.authz.roles.read'];
+const coveredActions = ['engine.inventory.read', 'engine.inventory.update', 'platform.authz.roles.read', 'engine.runtime.process-definitions.read'];
 
 async function removeScopedAssignment(): Promise<void> {
   if (!fixture.scopedEngineAssignmentId) throw new Error('Missing scoped role-assignment fixture id');
@@ -48,9 +48,13 @@ async function removeScopedGroupMembership(): Promise<void> {
 
 async function login(page: Page) {
   if (!fixture.email || !fixture.password) throw new Error('Missing fine-grained E2E fixture credentials');
+  await loginAs(page, fixture.email, fixture.password);
+}
+
+async function loginAs(page: Page, email: string, password: string) {
   await page.goto('/login?local=1');
-  await page.getByLabel(/email/i).fill(fixture.email);
-  await page.getByLabel(/password/i).fill(fixture.password);
+  await page.getByLabel(/email/i).fill(email);
+  await page.getByLabel(/password/i).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -67,7 +71,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
   test.skip(shouldSkip, 'Fine-grained E2E fixture is unavailable');
 
   test.beforeAll(() => {
-    expect(coveredActions).toHaveLength(3);
+    expect(coveredActions).toHaveLength(4);
   });
 
   test('limits an operator to its assigned engine and rejects direct escalation attempts', async ({ page }) => {
@@ -151,6 +155,27 @@ test.describe('Smoke: fine-grained local engine access', () => {
     const unchangedEngine = await request(page, `/engines-api/engines/${groupFixture.engineId}`);
     expect(unchangedEngine.status).toBe(200);
     expect(unchangedEngine.body.name).toBe(groupFixture.engineName);
+  });
+
+  test('allows only the assigned runtime resource on a resource-aware engine', async ({ page }) => {
+    expect(fixture.runtimeScopedEmail).toBeTruthy();
+    expect(fixture.runtimeScopedPassword).toBeTruthy();
+    expect(fixture.runtimeScopedEngineId).toBeTruthy();
+    expect(fixture.runtimeAllowedDefinitionId).toBeTruthy();
+    expect(fixture.runtimeSiblingDefinitionId).toBeTruthy();
+
+    await loginAs(page, fixture.runtimeScopedEmail!, fixture.runtimeScopedPassword!);
+
+    const definitions = await request(page, `/mission-control-api/process-definitions?engineId=${fixture.runtimeScopedEngineId}`);
+    expect(definitions.status, JSON.stringify(definitions.body)).toBe(200);
+    expect(definitions.body.map((definition: { key: string }) => definition.key)).toEqual(['invoice-process']);
+
+    const allowed = await request(page, `/mission-control-api/process-definitions/${encodeURIComponent(fixture.runtimeAllowedDefinitionId!)}?engineId=${fixture.runtimeScopedEngineId}`);
+    expect(allowed.status, JSON.stringify(allowed.body)).toBe(200);
+    expect(allowed.body.key).toBe('invoice-process');
+
+    const denied = await request(page, `/mission-control-api/process-definitions/${encodeURIComponent(fixture.runtimeSiblingDefinitionId!)}?engineId=${fixture.runtimeScopedEngineId}`);
+    expect([403, 404]).toContain(denied.status);
   });
 
   test('does not honor an expired scoped assignment', async ({ page }) => {
