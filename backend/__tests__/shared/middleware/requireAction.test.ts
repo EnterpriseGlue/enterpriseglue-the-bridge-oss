@@ -876,6 +876,21 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('supports legacy top-level migration definition identifiers after authorization', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    camundaGet
+      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
+
+    const response = await request(app).post('/runtime-migration').send({
+      engineId, sourceDefinitionId: 'source-v1', targetDefinitionId: 'target-v2',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
   it('denies engine-wide migrations without a broad grant', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'engine_wide' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
