@@ -570,6 +570,26 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resourceKeys).toEqual(['payments', 'payments-risk']);
   });
 
+  it('does not let one runtime-resource grant authorize a sibling in the same deployment', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    runtimeResourceFind.mockResolvedValue([
+      { id: 'runtime-resource-payments', tenantId: null, resourceKey: 'payments' },
+      { id: 'runtime-resource-risk', tenantId: null, resourceKey: 'payments-risk' },
+    ]);
+    (permissionService.hasPermission as unknown as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
+    const response = await request(app).get(`/runtime-deployments/deployment-1?engineId=${engineId}`);
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenLastCalledWith(
+      'engine:instance:view',
+      expect.objectContaining({ resourceType: 'engine_runtime_resource', resourceId: 'runtime-resource-risk' }),
+    );
+  });
+
   it('narrows deployment inventory queries when the action has one resource kind', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     runtimeResourceFind.mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
