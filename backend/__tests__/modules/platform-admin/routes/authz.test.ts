@@ -1532,7 +1532,7 @@ describe('platform-admin authz routes', () => {
     });
   });
 
-  it('runs non-destructive SSO reconciliation diagnostics with SSO assignment manage permission', async () => {
+  it('does not invoke retired legacy mapping evaluators from diagnostics', async () => {
     vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
       permission === 'platform:sso-assignments:manage'
     );
@@ -1543,20 +1543,10 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      runId: '00000000-0000-4000-8000-000000000072',
-      scannedAssignmentMappings: 2,
-      warnings: 1,
-      errors: 0,
+      legacyMappingEvaluationRetired: true,
+      providerIdentityCheck: null,
     });
-    expect(ssoSyncDiagnosticsService.runReconciliationDiagnostics).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: null,
-      providerId: 'microsoft',
-      trigger: 'manual',
-      details: expect.objectContaining({
-        actorUserId: 'user-1',
-        source: 'admin_access_control',
-      }),
-    }));
+    expect(ssoSyncDiagnosticsService.runReconciliationDiagnostics).not.toHaveBeenCalled();
   });
 
   it('runs optional SSO provider, snapshot replay, and cleanup diagnostics when requested', async () => {
@@ -1577,19 +1567,10 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      runId: '00000000-0000-4000-8000-000000000072',
+      legacyMappingEvaluationRetired: true,
       providerIdentityCheck: {
         runId: '00000000-0000-4000-8000-000000000073',
         checkedIdentities: 1,
-      },
-      snapshotReconciliation: {
-        runId: '00000000-0000-4000-8000-000000000074',
-        replayedIdentities: 1,
-        refreshedIdentities: 1,
-      },
-      cleanup: {
-        runId: '00000000-0000-4000-8000-000000000075',
-        assignmentsRemoved: 2,
       },
     });
     const expectedInput = expect.objectContaining({
@@ -1602,13 +1583,8 @@ describe('platform-admin authz routes', () => {
       }),
     });
     expect(ssoSyncDiagnosticsService.runProviderIdentityCheck).toHaveBeenCalledWith(expectedInput);
-    expect(ssoSyncDiagnosticsService.runSnapshotReconciliation).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: null,
-      providerId: 'microsoft',
-      trigger: 'manual',
-      refreshProviderClaims: true,
-    }));
-    expect(ssoSyncDiagnosticsService.runReconciliationCleanup).toHaveBeenCalledWith(expectedInput);
+    expect(ssoSyncDiagnosticsService.runSnapshotReconciliation).not.toHaveBeenCalled();
+    expect(ssoSyncDiagnosticsService.runReconciliationCleanup).not.toHaveBeenCalled();
   });
 
   it('evaluates effective access', async () => {

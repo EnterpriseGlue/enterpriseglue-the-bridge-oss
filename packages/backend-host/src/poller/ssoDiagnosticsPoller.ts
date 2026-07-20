@@ -47,45 +47,15 @@ function readOptionsFromEnv(): Required<SsoDiagnosticsPollerOptions> {
 }
 
 export async function runScheduledSsoDiagnosticsOnce(options: Pick<SsoDiagnosticsPollerOptions, 'tenantIds' | 'providerIds'> = {}) {
-  const tenantIds = options.tenantIds && options.tenantIds.length > 0 ? options.tenantIds : [null];
-  const providerIds = options.providerIds && options.providerIds.length > 0 ? options.providerIds : [null];
-  const results = [];
-
-  for (const tenantId of tenantIds) {
-    for (const providerId of providerIds) {
-      results.push(await ssoSyncDiagnosticsService.runReconciliationDiagnostics({
-        tenantId,
-        providerId,
-        trigger: 'scheduled',
-        details: {
-          source: 'sso_diagnostics_poller',
-        },
-      }));
-    }
-  }
-
-  return results;
+  void options;
+  // Legacy mapping diagnostics are deliberately retired. Provider-neutral
+  // identity replay is owned by the identity-provider reconciliation flows.
+  return [];
 }
 
 export async function runScheduledSsoCleanupOnce(options: Pick<SsoDiagnosticsPollerOptions, 'tenantIds' | 'providerIds'> = {}) {
-  const tenantIds = options.tenantIds && options.tenantIds.length > 0 ? options.tenantIds : [null];
-  const providerIds = options.providerIds && options.providerIds.length > 0 ? options.providerIds : [null];
-  const results = [];
-
-  for (const tenantId of tenantIds) {
-    for (const providerId of providerIds) {
-      results.push(await ssoSyncDiagnosticsService.runReconciliationCleanup({
-        tenantId,
-        providerId,
-        trigger: 'scheduled',
-        details: {
-          source: 'sso_diagnostics_poller',
-        },
-      }));
-    }
-  }
-
-  return results;
+  void options;
+  return [];
 }
 
 export async function runScheduledSsoProviderIdentityCheckOnce(options: Pick<SsoDiagnosticsPollerOptions, 'tenantIds' | 'providerIds'> = {}) {
@@ -112,25 +82,8 @@ export async function runScheduledSsoProviderIdentityCheckOnce(options: Pick<Sso
 export async function runScheduledSsoSnapshotReplayOnce(
   options: Pick<SsoDiagnosticsPollerOptions, 'tenantIds' | 'providerIds' | 'refreshClaimsEnabled'> = {}
 ) {
-  const tenantIds = options.tenantIds && options.tenantIds.length > 0 ? options.tenantIds : [null];
-  const providerIds = options.providerIds && options.providerIds.length > 0 ? options.providerIds : [null];
-  const results = [];
-
-  for (const tenantId of tenantIds) {
-    for (const providerId of providerIds) {
-      results.push(await ssoSyncDiagnosticsService.runSnapshotReconciliation({
-        tenantId,
-        providerId,
-        refreshProviderClaims: options.refreshClaimsEnabled === true,
-        trigger: 'scheduled',
-        details: {
-          source: 'sso_diagnostics_poller',
-        },
-      }));
-    }
-  }
-
-  return results;
+  void options;
+  return [];
 }
 
 export async function runScheduledLdapReconciliationOnce(options: Pick<SsoDiagnosticsPollerOptions, 'tenantIds'> = {}) {
@@ -164,17 +117,13 @@ export async function startSsoDiagnosticsPollerIfEnabled(options: SsoDiagnostics
     if (running) return;
     running = true;
     try {
-      await runScheduledSsoDiagnosticsOnce({ tenantIds, providerIds });
       if (providerCheckEnabled) {
         await runScheduledSsoProviderIdentityCheckOnce({ tenantIds, providerIds });
       }
-      if (snapshotReplayEnabled) {
-        await runScheduledSsoSnapshotReplayOnce({ tenantIds, providerIds, refreshClaimsEnabled });
-      }
       await runScheduledLdapReconciliationOnce({ tenantIds });
-      if (cleanupEnabled) {
-        await runScheduledSsoCleanupOnce({ tenantIds, providerIds });
-      }
+      void cleanupEnabled;
+      void refreshClaimsEnabled;
+      void snapshotReplayEnabled;
     } catch (error) {
       logger.warn('Scheduled SSO diagnostics scan failed:', error);
     } finally {

@@ -42,11 +42,14 @@ export function registerSsoSyncDiagnosticsRoutes(router: Router, { requirePlatfo
         tenantId: req.tenant?.tenantId || null, providerId: req.body.providerId || null, trigger: req.body.trigger || 'manual',
         details: { actorUserId: req.user!.userId, source: 'admin_access_control' },
       };
-      const result: any = await ssoSyncDiagnosticsService.runReconciliationDiagnostics(baseInput);
-      if (req.body.includeProviderChecks) result.providerIdentityCheck = await ssoSyncDiagnosticsService.runProviderIdentityCheck(baseInput);
-      if (req.body.includeSnapshotReplay) result.snapshotReconciliation = await ssoSyncDiagnosticsService.runSnapshotReconciliation({ ...baseInput, refreshProviderClaims: req.body.refreshProviderClaims === true });
-      if (req.body.includeCleanup) result.cleanup = await ssoSyncDiagnosticsService.runReconciliationCleanup(baseInput);
-      res.json(result);
+      const providerIdentityCheck = req.body.includeProviderChecks
+        ? await ssoSyncDiagnosticsService.runProviderIdentityCheck(baseInput)
+        : null;
+      res.json({
+        providerIdentityCheck,
+        legacyMappingEvaluationRetired: true,
+        snapshotReplay: 'Use the provider-neutral identity-provider replay endpoint.',
+      });
     } catch (error: any) {
       if (error.statusCode) throw error;
       logger.error('Run SSO sync diagnostics error:', error);
