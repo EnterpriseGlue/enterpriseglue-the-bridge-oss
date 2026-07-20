@@ -116,6 +116,8 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
 
   if (membershipSourceRef) {
     await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = $1`, [membershipSourceRef]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE source_ref = $1`, [membershipSourceRef]);
+    await pool.query(`DELETE FROM ${schema}.authz_groups WHERE source_ref = $1`, [membershipSourceRef]);
   }
   await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [userId]);
 
@@ -182,6 +184,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   );
   const staleUserIds = staleUserIdsResult.rows.map((r: any) => r.id);
   if (staleUserIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE principal_type = 'user' AND principal_id = ANY($1::text[])`, [staleUserIds]);
     await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE user_id = ANY($1::text[])`, [staleUserIds]);
     await pool.query(`DELETE FROM ${schema}.project_member_roles WHERE user_id = ANY($1::text[])`, [staleUserIds]);
     await pool.query(`DELETE FROM ${schema}.project_members WHERE user_id = ANY($1::text[])`, [staleUserIds]);
@@ -192,10 +195,35 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     );
     await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
   }
+  await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_type = 'engine' AND scope_id IN (SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%')`);
   await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
   await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
 
   await pool.end();
+}
+
+async function restoreDirectProviders(ids: string[] | undefined) {
+  if (!ids || ids.length === 0) return;
+  const pgModule = await import('pg');
+  const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
+  const schema = process.env.POSTGRES_SCHEMA || 'main';
+  const pool = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    options: `-c search_path=${schema}`,
+  });
+  try {
+    await pool.query(
+      `UPDATE ${schema}.identity_providers SET is_enabled = true, updated_at = $2 WHERE id = ANY($1::text[])`,
+      [ids, Date.now()]
+    );
+  } finally {
+    await pool.end();
+  }
 }
 
 export default async function globalTeardown() {
@@ -218,6 +246,7 @@ export default async function globalTeardown() {
     adminPassword?: string;
     engineId?: string;
     membershipSourceRef?: string;
+    disabledDirectProviderIds?: string[];
   };
 
   if (!data.userId) {
@@ -276,8 +305,12 @@ export default async function globalTeardown() {
     }
   } catch (error) {
     console.warn('E2E direct local fixture cleanup failed.', error);
-    return;
+  } finally {
+    try {
+      await restoreDirectProviders(data.disabledDirectProviderIds);
+    } catch (error) {
+      console.warn('E2E direct-provider state restoration failed.', error);
+    }
+    await rm(SEED_FILE, { force: true });
   }
-
-  await rm(SEED_FILE, { force: true });
 }

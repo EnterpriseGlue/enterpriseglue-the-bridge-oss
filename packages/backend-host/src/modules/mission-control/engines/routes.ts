@@ -649,8 +649,14 @@ function serializeEngine<T extends { labelsJson?: string | null; fieldOwnershipJ
 } {
   const { labelsJson, fieldOwnershipJson, capabilitiesJson, passwordEnc, ...rest } = engine
   const reportedCapabilities = parseExternalEngineCapabilities(capabilitiesJson)
+  // PostgreSQL represents bigint columns as strings. Normalize API timestamps
+  // before the authorization-filtered response is validated against its
+  // numeric contract; otherwise a permitted inventory read becomes a 400.
+  const timestamps = rest as Record<string, unknown>
   return {
     ...rest,
+    ...('createdAt' in timestamps && timestamps.createdAt != null ? { createdAt: Number(timestamps.createdAt) } : {}),
+    ...('updatedAt' in timestamps && timestamps.updatedAt != null ? { updatedAt: Number(timestamps.updatedAt) } : {}),
     // Credentials are write-only. A caller can manage a replacement without
     // receiving ciphertext, legacy data, or an external secret reference.
     passwordEnc: null,

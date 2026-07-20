@@ -96,4 +96,5 @@ fi
 env "${playwright_env[@]}" pnpm exec playwright test \
   test/e2e/smoke/login.spec.ts \
   test/e2e/smoke/access-control-local.spec.ts \
+  test/e2e/smoke/fine-grained-access-local.spec.ts \
   --config test/e2e/playwright.config.ts

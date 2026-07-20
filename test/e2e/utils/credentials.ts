@@ -33,6 +33,22 @@ export function getE2EEngineId() {
   return process.env.E2E_ENGINE_ID || getE2ESeedData().engineId;
 }
 
+export function getE2EFineGrainedFixture() {
+  const data = getE2ESeedData();
+  return {
+    email: data.scopedEmail,
+    password: data.scopedPassword,
+    scopedEngineId: data.scopedEngineId,
+    scopedEngineName: data.scopedEngineName,
+    siblingEngineId: data.siblingEngineId,
+    crossTenantEngineId: data.crossTenantEngineId,
+    groupEmail: data.groupScopedEmail,
+    groupPassword: data.groupScopedPassword,
+    groupScopedEngineId: data.groupScopedEngineId,
+    groupScopedEngineName: data.groupScopedEngineName,
+  };
+}
+
 export function hasE2ECredentials() {
   const { email, password } = getE2ECredentials();
   return Boolean(email && password);

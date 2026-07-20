@@ -18,6 +18,7 @@ const testRoots = [
   'backend/__tests__',
   'backend/test',
   'frontend/__tests__',
+  'test/e2e',
 ];
 
 const explicitActionPatterns = [

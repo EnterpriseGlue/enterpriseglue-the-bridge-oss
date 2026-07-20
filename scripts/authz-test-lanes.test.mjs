@@ -103,6 +103,7 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /localhost, loopback, or a \.local host/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/login\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
+  assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
 });
 
 test('the disposable local administrator has canonical break-glass memberships', () => {
@@ -111,6 +112,8 @@ test('the disposable local administrator has canonical break-glass memberships',
   assert.match(e2eGlobalSetup, /INSERT INTO \$\{schema\}\.authz_group_memberships/);
   assert.match(e2eGlobalSetup, /INSERT INTO \$\{schema\}\.tenant_memberships/);
   assert.match(e2eGlobalSetup, /e2e-smoke-fixture:\$\{userId\}/);
+  assert.match(e2eGlobalSetup, /e2e-group-scope-/);
+  assert.match(e2eGlobalSetup, /principalType: 'group'/);
   assert.doesNotMatch(e2eGlobalSetup, /platform_role/);
 });
 

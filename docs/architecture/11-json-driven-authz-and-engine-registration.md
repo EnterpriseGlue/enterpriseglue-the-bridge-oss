@@ -2474,6 +2474,22 @@ Mission Control's authorization-filtered engine inventory now also has a shared 
 
 Local browser validation is exercised by the maintained Playwright smoke/rehearsal lanes and an independent authenticated check against the non-TLS local frontend. On 2026-07-20, the guarded seeded-local smoke signed in at `http://localhost:5173`, opened Access Control, rendered the Roles, Runtime Resources, and SSO diagnostics tabs, and used Effective Access to confirm a canonical platform-administrator permission was allowed. The smoke no longer asserts the retired legacy Claims Preview surface: no customer SSO deployment needs a legacy-provider cutover or compatibility UI. The embedded browser still rejects the local development CA at the TLS endpoint, so this check does not replace the protocol-faithful provider-neutral OIDC/SAML/LDAP rehearsals.
 
+### Fine-Grained Access Coverage Plan
+
+The authorization suite must prove backend enforcement, not only that privileged flows succeed. Every action remains inventory-registered and OpenAPI-classified; the following coverage layers make fine-grained access regression-visible:
+
+- [x] ✅ Seeded local end-to-end scope isolation: disposable direct-user and internal-group engine operators can each discover and read only their assigned engine; same-tenant siblings and cross-tenant engines remain absent from collections and deny direct detail reads. Each principal receives a direct mutation denial on its assigned engine, and a follow-up read proves no partial write occurred.
+- [x] ✅ Direct API escalation denial: the scoped operator cannot read the platform role catalog even when calling its route directly rather than relying on hidden UI controls.
+- [ ] ⬜ Generate allow/deny contract cases for every registered action route, using its action definition, resource resolver, accepted permissions, and documented status semantics. Cover at least an allowed principal, a same-tenant unassigned principal, and a cross-tenant principal/resource combination for each route family.
+- [ ] ⬜ Extend principal coverage across direct users, internal groups, API clients, and service accounts for representative platform, project, engine, and runtime-resource actions.
+- [ ] ⬜ Add policy/assignment lifecycle tests for expiry, archival, grant removal, deny-overrides, broad-versus-bounded scope shadowing, and permission-snapshot invalidation after each mutation.
+- [ ] ⬜ Add property-based evaluator tests that generate principal/scope/role combinations and compare evaluated decisions with protected endpoint behavior where a safe fixture exists.
+- [ ] ⬜ Run mutation testing for authorization guards in CI so a removed or inverted route guard demonstrably fails its corresponding denial test.
+
+The local seeded smoke owns only temporary Compose-database rows and removes them during global teardown. External customer IdP and sidecar environments are deliberately excluded from this matrix; OIDC, SAML, and LDAP retain their provider-neutral protocol suites.
+
+The action-coverage guard scans the browser smoke sources as well as backend and frontend unit suites, so the explicit guarded routes exercised by the local scope tests remain visible in the registry coverage matrix.
+
 The local-safe legacy protocol lane executes the Microsoft, Google, and SAML mocked flows in isolated Vitest processes. Their route fixtures intentionally mock the same service-module paths with different provider behavior, so process isolation prevents module-state leakage while keeping every provider flow mandatory in the aggregate gate.
 
 Phase 0 exit criteria:

@@ -264,6 +264,24 @@ describe('mission-control engines routes', () => {
     ]);
   });
 
+  it('normalizes PostgreSQL bigint timestamps in an authorization-filtered inventory response', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([{ id: 'e1', name: 'Engine 1', createdAt: '1700000000000', updatedAt: '1700000000001' }]),
+      }),
+    });
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      id: 'e1',
+      createdAt: 1700000000000,
+      updatedAt: 1700000000001,
+    });
+  });
+
   it('keeps Mission Control list authorization identical for direct and customer-sidecar engines', async () => {
     permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['engine-direct', 'engine-sidecar']);
     (engineService as any).getEngineRole.mockResolvedValue(null);

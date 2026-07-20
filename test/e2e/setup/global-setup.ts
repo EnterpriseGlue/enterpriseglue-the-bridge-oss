@@ -14,6 +14,19 @@ const E2E_PLATFORM_GROUP_IDS = {
   platformAdministrators: 'system.group.platform_administrators',
 } as const;
 
+// Keep the Playwright setup independent of TypeORM-decorated service modules.
+// This is the same canonical identity used by AuthzGroupService.
+function authzGroupKeyIdentity(tenantId: string | null | undefined, key: string): string {
+  return `${tenantId || 'platform'}:${key.trim()}`;
+}
+
+function assertLocalUrl(url: string): void {
+  const parsed = new URL(url);
+  const host = parsed.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) return;
+  throw new Error(`E2E seeded fixtures refuse to change identity-provider state for a non-local URL: ${url}`);
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${url}`, {
     ...options,
@@ -200,7 +213,157 @@ export default async function globalSetup() {
     ]
   );
 
-  await pool.end();
+  // Fine-grained access fixture: this user receives an engine-operator role
+  // for exactly one tenant-visible engine. A second engine in the same tenant
+  // and a deliberately cross-tenant engine prove that collection and detail
+  // routes cannot widen access from the assignment alone.
+  const scopedUserId = randomUUID();
+  const scopedEmail = `e2e-scope-${Date.now()}-${suffix}@example.com`;
+  const scopedPassword = `E2eScope-${suffix}-Pass1!`;
+  const scopedPasswordHash = await hashPassword(scopedPassword);
+  const scopedSourceRef = `e2e-fine-grained-fixture:${scopedUserId}`;
+  const scopedEngineId = randomUUID();
+  const siblingEngineId = randomUUID();
+  const crossTenantEngineId = randomUUID();
+  const scopedEngineName = `${prefix}-scoped-engine`;
+  const siblingEngineName = `${prefix}-sibling-engine`;
+
+  await pool.query(
+    `INSERT INTO ${schema}.users
+      (id, email, auth_provider, password_hash, first_name, last_name,
+       is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
+       email_verification_token, email_verification_token_expiry, created_at, updated_at,
+       last_login_at, created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [
+      scopedUserId, scopedEmail, 'local', scopedPasswordHash, 'E2E', 'Scoped',
+      true, false, 0, null, true, null, null, now, now, null, adminUserId,
+    ]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [randomUUID(), 'tenant-default', scopedUserId, 'member', now]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.authz_group_memberships
+      (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [randomUUID(), null, E2E_PLATFORM_GROUP_IDS.authenticatedUsers, scopedUserId, 'system', scopedSourceRef, null, null, now, now]
+  );
+
+  for (const [id, name, tenantId] of [
+    [scopedEngineId, scopedEngineName, 'tenant-default'],
+    [siblingEngineId, siblingEngineName, 'tenant-default'],
+    [crossTenantEngineId, `${prefix}-cross-tenant-engine`, 'tenant-e2e-isolated'],
+  ]) {
+    await pool.query(
+      `INSERT INTO ${schema}.engines
+        (id, name, base_url, type, auth_type, username, password_enc, version,
+         owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
+         created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      [id, name, engineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, tenantId, now, now]
+    );
+  }
+
+  const { canonicalRoleAssignmentKey } = await import('../../../packages/shared/src/authz/role-assignment-identity.ts');
+  const operatorRoleId = 'system.engine.operator';
+  for (const scopedEngineAssignmentId of [scopedEngineId, crossTenantEngineId]) {
+    const assignmentKey = canonicalRoleAssignmentKey({
+      tenantId: 'tenant-default',
+      principalType: 'user',
+      principalId: scopedUserId,
+      roleId: operatorRoleId,
+      scopeType: 'engine',
+      scopeId: scopedEngineAssignmentId,
+      source: 'system',
+      sourceRef: scopedSourceRef,
+    });
+    await pool.query(
+      `INSERT INTO ${schema}.role_assignments
+        (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+         source, source_ref, assignment_key, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [randomUUID(), 'tenant-default', 'user', scopedUserId, operatorRoleId, 'engine', scopedEngineAssignmentId, 'system', scopedSourceRef, assignmentKey, now, now]
+    );
+  }
+
+  // A separate operator proves that the same bounded decision is available
+  // through an internal group, without depending on the direct user
+  // assignment above.
+  const groupScopedUserId = randomUUID();
+  const groupScopedEmail = `e2e-group-scope-${Date.now()}-${suffix}@example.com`;
+  const groupScopedPassword = `E2eGroupScope-${suffix}-Pass1!`;
+  const groupScopedEngineId = randomUUID();
+  const groupScopedEngineName = `${prefix}-group-scoped-engine`;
+  const groupScopedGroupId = randomUUID();
+  const groupScopedGroupKey = `${prefix}-operators`;
+  const groupScopedPasswordHash = await hashPassword(groupScopedPassword);
+  await pool.query(
+    `INSERT INTO ${schema}.users
+      (id, email, auth_provider, password_hash, first_name, last_name,
+       is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
+       email_verification_token, email_verification_token_expiry, created_at, updated_at,
+       last_login_at, created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [
+      groupScopedUserId, groupScopedEmail, 'local', groupScopedPasswordHash, 'E2E', 'Group Scoped',
+      true, false, 0, null, true, null, null, now, now, null, adminUserId,
+    ]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [randomUUID(), 'tenant-default', groupScopedUserId, 'member', now]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.authz_groups
+      (id, tenant_id, key, group_key_identity, name, description, source, source_ref,
+       is_system, is_archived, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [groupScopedGroupId, 'tenant-default', groupScopedGroupKey, authzGroupKeyIdentity('tenant-default', groupScopedGroupKey), 'E2E bounded operators', 'Disposable local E2E group', 'system', scopedSourceRef, false, false, now, now]
+  );
+  for (const groupId of [E2E_PLATFORM_GROUP_IDS.authenticatedUsers, groupScopedGroupId]) {
+    await pool.query(
+      `INSERT INTO ${schema}.authz_group_memberships
+        (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [randomUUID(), null, groupId, groupScopedUserId, 'system', scopedSourceRef, null, null, now, now]
+    );
+  }
+  await pool.query(
+    `INSERT INTO ${schema}.engines
+      (id, name, base_url, type, auth_type, username, password_enc, version,
+       owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
+       created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+    [groupScopedEngineId, groupScopedEngineName, engineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, 'tenant-default', now, now]
+  );
+  const groupAssignmentKey = canonicalRoleAssignmentKey({
+    tenantId: 'tenant-default', principalType: 'group', principalId: groupScopedGroupId,
+    roleId: operatorRoleId, scopeType: 'engine', scopeId: groupScopedEngineId,
+    source: 'system', sourceRef: scopedSourceRef,
+  });
+  await pool.query(
+    `INSERT INTO ${schema}.role_assignments
+      (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+       source, source_ref, assignment_key, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [randomUUID(), 'tenant-default', 'group', groupScopedGroupId, operatorRoleId, 'engine', groupScopedEngineId, 'system', scopedSourceRef, groupAssignmentKey, now, now]
+  );
+
+  // The local Docker stack can enable a direct IdP, which intentionally
+  // restricts local-password login to platform administrators. This test must
+  // log in as a non-admin to prove the assignment boundary, so disable only
+  // the currently enabled direct providers for this localhost run. Teardown
+  // restores every captured value before deleting the fixture.
+  assertLocalUrl(API_BASE_URL);
+  const directProviders = await pool.query(
+    `SELECT id, is_enabled FROM ${schema}.identity_providers
+     WHERE authentication_mode = 'direct' AND is_enabled = true`
+  );
+  const disabledDirectProviderIds = directProviders.rows.map((provider) => provider.id as string);
 
   await mkdir(SEED_DIR, { recursive: true });
   await writeFile(
@@ -213,10 +376,34 @@ export default async function globalSetup() {
       adminEmail,
       adminPassword,
       engineId,
+      scopedUserId,
+      scopedEmail,
+      scopedPassword,
+      scopedEngineId,
+      scopedEngineName,
+      siblingEngineId,
+      crossTenantEngineId,
+      scopedSourceRef,
+      groupScopedUserId,
+      groupScopedEmail,
+      groupScopedPassword,
+      groupScopedEngineId,
+      groupScopedEngineName,
+      disabledDirectProviderIds,
       cleanupAdmin: Boolean(adminUserId),
       membershipSourceRef,
     })
   );
+
+  // Persist the restoration record before changing the local policy. If a
+  // subsequent test fails, global teardown can still restore every provider.
+  if (disabledDirectProviderIds.length > 0) {
+    await pool.query(
+      `UPDATE ${schema}.identity_providers SET is_enabled = false, updated_at = $2 WHERE id = ANY($1::text[])`,
+      [disabledDirectProviderIds, now]
+    );
+  }
+  await pool.end();
 
   process.env.E2E_USER = email;
   process.env.E2E_PASSWORD = password;
