@@ -405,7 +405,6 @@ build_frontend() {
     log "Frontend dependencies already installed (offline mode)"
   fi
 
-  build_shared
   build_frontend_host
 
   log "Building frontend (vite build)"
@@ -517,6 +516,7 @@ main() {
 
   # Build applications
   log "Building apps"
+  build_shared
   build_backend
   build_frontend
   
