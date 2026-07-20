@@ -10,8 +10,10 @@ import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence
 import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { SYSTEM_ROLE_IDS } from './permissions.js';
 import {
   removeLegacyProjectMemberRoleAssignments,
 } from './legacy-project-role-assignments.js';
@@ -271,22 +273,24 @@ export class ProjectMemberService {
   }
 
   /**
-   * Get project owners (for notifications, etc.)
+   * Get canonical project owners for governance workflows. The persisted
+   * project owner is accountable metadata only, used as a recovery fallback
+   * for rows that predate the one-time canonical projection.
    */
   async getProjectOwners(projectId: string): Promise<string[]> {
     const dataSource = await getDataSource();
-    const memberRepo = dataSource.getRepository(ProjectMember);
-    const roleRepo = dataSource.getRepository(ProjectMemberRole);
     const projectRepo = dataSource.getRepository(Project);
-
-    const roleOwners = await roleRepo.find({ where: { projectId, role: 'owner' }, select: ['userId'] });
-    if (roleOwners.length > 0) {
-      return Array.from(new Set(roleOwners.map((r) => String(r.userId))));
-    }
-
-    const legacyOwners = await memberRepo.find({ where: { projectId, role: 'owner' }, select: ['userId'] });
-    if (legacyOwners.length > 0) {
-      return Array.from(new Set(legacyOwners.map((r) => String(r.userId))));
+    const owners = await dataSource.getRepository(RbacRoleAssignment).find({
+      where: {
+        principalType: 'user',
+        roleId: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+        scopeType: 'project',
+        scopeId: projectId,
+      },
+      select: ['principalId'],
+    });
+    if (owners.length > 0) {
+      return Array.from(new Set(owners.map((assignment) => String(assignment.principalId)).filter(Boolean)));
     }
 
     const project = await projectRepo.findOne({ where: { id: projectId }, select: ['ownerId'] });

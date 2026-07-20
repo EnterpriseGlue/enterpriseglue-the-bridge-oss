@@ -72,6 +72,32 @@ describe('ProjectMemberService', () => {
     expect(membership).toBeNull();
   });
 
+  it('uses canonical owner assignments for ownership transfer discovery', async () => {
+    const assignmentRepo = {
+      find: vi.fn().mockResolvedValue([{ principalId: 'canonical-owner-1' }]),
+    };
+    const projectRepo = { findOne: vi.fn() };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRoleAssignment) return assignmentRepo;
+        if (entity === Project) return projectRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.getProjectOwners('project-1')).resolves.toEqual(['canonical-owner-1']);
+    expect(assignmentRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        principalType: 'user',
+        roleId: 'system.project.owner',
+        scopeType: 'project',
+        scopeId: 'project-1',
+      }),
+    }));
+    expect(projectRepo.findOne).not.toHaveBeenCalled();
+  });
+
   it('writes direct canonical manual assignments when project member roles change', async () => {
     const legacySyncSpy = vi.spyOn(permissionService, 'syncLegacyRoleAssignments');
     const memberRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }) };
