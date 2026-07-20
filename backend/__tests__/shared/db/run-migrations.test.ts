@@ -414,10 +414,15 @@ describe('projectLegacyLocalRoleAssignmentsOnce', () => {
       transaction: vi.fn(async (callback: (transactionManager: typeof manager) => unknown) => callback(manager)),
     };
     const syncLegacyRoleAssignments = vi.spyOn(permissionService, 'syncLegacyRoleAssignments')
-      .mockResolvedValue({ upserted: 4, removed: 1 });
+      .mockResolvedValue({ scannedProjects: 2, scannedEngines: 3, upserted: 4, removed: 1 });
 
     try {
-      await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 123)).resolves.toEqual({ upserted: 4, removed: 1 });
+      await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 123)).resolves.toEqual({
+        scannedProjects: 2,
+        scannedEngines: 3,
+        upserted: 4,
+        removed: 1,
+      });
       await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 124)).resolves.toBeNull();
 
       expect(syncLegacyRoleAssignments).toHaveBeenCalledTimes(1);
@@ -425,7 +430,7 @@ describe('projectLegacyLocalRoleAssignmentsOnce', () => {
       expect(stateRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
         key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
         completedAt: 123,
-        details: JSON.stringify({ upserted: 4, removed: 1 }),
+        details: JSON.stringify({ scannedProjects: 2, scannedEngines: 3, upserted: 4, removed: 1 }),
       }), { conflictPaths: ['key'], skipUpdateIfNoValuesChanged: true });
     } finally {
       syncLegacyRoleAssignments.mockRestore();

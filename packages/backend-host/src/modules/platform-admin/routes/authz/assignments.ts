@@ -146,8 +146,8 @@ async function assertCanRemoveScopedAssignment(req: Request, id: string): Promis
   if (!assignment) throw Errors.notFound('Role assignment');
 
   const resource = toScopedAssignmentResource(
-    assignment.scopeType || assignment.resourceType,
-    assignment.scopeId ?? assignment.resourceId
+    assignment.scopeType,
+    assignment.scopeId
   );
   if (!resource || !await canManageScopedAssignments(req, resource)) throw Errors.adminRequired();
   const role = await permissionService.getRole(assignment.roleId, req.tenant?.tenantId || null);

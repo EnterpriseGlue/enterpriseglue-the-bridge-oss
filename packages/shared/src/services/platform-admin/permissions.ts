@@ -2139,18 +2139,18 @@ class PermissionServiceClass {
     }
     if (filters.resourceType) {
       qb.andWhere(
-        '(assignment.scopeType = :resourceType OR (assignment.scopeType IS NULL AND assignment.resourceType = :resourceType))',
+        'assignment.scopeType = :resourceType',
         { resourceType: filters.resourceType }
       );
     }
     if (filters.resourceId !== undefined) {
       if (filters.resourceId) {
         qb.andWhere(
-          '(assignment.scopeId = :resourceId OR (assignment.scopeId IS NULL AND assignment.resourceId = :resourceId))',
+          'assignment.scopeId = :resourceId',
           { resourceId: filters.resourceId }
         );
       } else {
-        qb.andWhere('(assignment.scopeId IS NULL AND assignment.resourceId IS NULL)');
+        qb.andWhere('assignment.scopeId IS NULL');
       }
     }
     if (filters.scopeType) {
@@ -2168,12 +2168,12 @@ class PermissionServiceClass {
         .leftJoin(
           RuntimeResource,
           'runtimeResource',
-          "runtimeResource.id = COALESCE(assignment.scopeId, assignment.resourceId) AND (assignment.scopeType = 'engine_runtime_resource' OR (assignment.scopeType IS NULL AND assignment.resourceType = 'engine_runtime_resource'))"
+          "runtimeResource.id = assignment.scopeId AND assignment.scopeType = 'engine_runtime_resource'"
         )
         .leftJoin(
           RuntimeResourceSet,
           'runtimeResourceSet',
-          "runtimeResourceSet.id = COALESCE(assignment.scopeId, assignment.resourceId) AND (assignment.scopeType = 'engine_runtime_resource_set' OR (assignment.scopeType IS NULL AND assignment.resourceType = 'engine_runtime_resource_set'))"
+          "runtimeResourceSet.id = assignment.scopeId AND assignment.scopeType = 'engine_runtime_resource_set'"
         )
         .andWhere('(runtimeResource.engineId = :runtimeEngineId OR runtimeResourceSet.engineId = :runtimeEngineId)', {
           runtimeEngineId: filters.runtimeEngineId,
@@ -2916,7 +2916,7 @@ class PermissionServiceClass {
     const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
-      .select(['assignment.resourceId', 'assignment.scopeId'])
+      .select(['assignment.scopeId'])
       .where('1 = 1')
       .andWhere('assignment.scopeType = :resourceType', { resourceType: 'project' })
       .andWhere('assignment.scopeId IS NOT NULL')
@@ -2971,7 +2971,7 @@ class PermissionServiceClass {
     const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
-      .select(['assignment.resourceId', 'assignment.scopeId'])
+      .select(['assignment.scopeId'])
       .where('1 = 1')
       .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
@@ -3556,8 +3556,8 @@ class PermissionServiceClass {
       .createQueryBuilder('assignment')
       .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
       .where('1 = 1')
-      .andWhere('(assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType)', { resourceType: 'engine' })
-      .andWhere('(assignment.scopeId = :engineId OR assignment.resourceId = :engineId OR (assignment.scopeId IS NULL AND assignment.resourceId IS NULL))', { engineId })
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
+      .andWhere('(assignment.scopeId = :engineId OR assignment.scopeId IS NULL)', { engineId })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
     this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
@@ -3584,7 +3584,7 @@ class PermissionServiceClass {
       .createQueryBuilder('assignment')
       .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
       .where('1 = 1')
-      .andWhere('(assignment.scopeType = :resourceType OR assignment.resourceType = :resourceType)', { resourceType: 'engine' })
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
       .andWhere('role.isArchived = :isArchived', { isArchived: false })
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
     this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
@@ -3594,7 +3594,7 @@ class PermissionServiceClass {
 
     return assignments
       .map((assignment) => ({
-        engineId: assignment.scopeId ?? assignment.resourceId,
+        engineId: assignment.scopeId,
         role: ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE[assignment.roleId],
       }))
       .filter((assignment): assignment is { engineId: string | null; role: 'owner' | 'delegate' | 'operator' | 'deployer' } => Boolean(assignment.role));

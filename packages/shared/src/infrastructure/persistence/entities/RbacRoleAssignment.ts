@@ -6,7 +6,6 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_role_assignments_tenant', ['tenantId'])
 @Index('idx_role_assignments_user', ['userId'])
 @Index('idx_role_assignments_principal', ['principalType', 'principalId'])
-@Index('idx_role_assignments_resource', ['resourceType', 'resourceId'])
 @Index('idx_role_assignments_scope', ['scopeType', 'scopeId'])
 @Index('idx_role_assignments_source', ['source', 'sourceRef'])
 @Index('idx_role_assignments_source_ref', ['source', 'sourceRef'])
@@ -30,14 +29,6 @@ export class RbacRoleAssignment extends AppBaseEntity {
 
   @Column({ name: 'role_id', type: 'text' })
   roleId!: string;
-
-  /** Deprecated compatibility alias. Canonical assignments leave this null. */
-  @Column({ name: 'resource_type', type: 'text', nullable: true })
-  resourceType!: string | null;
-
-  /** Deprecated compatibility alias. Canonical assignments leave this null. */
-  @Column({ name: 'resource_id', type: 'text', nullable: true })
-  resourceId!: string | null;
 
   @Column({ name: 'scope_type', type: 'text' })
   scopeType!: string;
