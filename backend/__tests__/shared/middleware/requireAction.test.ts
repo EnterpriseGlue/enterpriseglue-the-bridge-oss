@@ -146,6 +146,20 @@ describe('requireRuntimeCollectionAction', () => {
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403, message: 'No authorized runtime resources are available for this engine' }));
   });
+
+  it('attaches only visible resource-aware runtime scopes', async () => {
+    const next = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }) });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments', runtimeTenantId: 'tenant-a' }]);
+    const req: any = { user: { userId: 'user-1' }, query: { engineId: 'engine-1' } };
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.authorizedRuntimeResourceKeys).toEqual(['payments']);
+    expect(req.authorizedRuntimeResourceScopes).toEqual([{ resourceKey: 'payments', runtimeTenantId: 'tenant-a' }]);
+  });
 });
 
 describe('requireAction project resource resolvers', () => {
