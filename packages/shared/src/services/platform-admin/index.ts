@@ -9,7 +9,7 @@
  * - EngineAccessService: Project-engine access requests and grants
  * - EnvironmentTagService: Environment tag CRUD
  * - PlatformSettingsService: Platform-wide configuration
- * - SsoClaimsMappingService: SSO claims mapping management
+ * - IdentityEntitlementMappingService: direct identity-provider entitlement mapping
  * - PolicyService: Policy management
  */
 
@@ -26,12 +26,8 @@ export * from './EngineSetService.js';
 export * from './permissions.js';
 export * from './ApiClientService.js';
 export * from './ServiceAccountService.js';
-export * from './SsoClaimsMappingService.js';
-export * from './SsoAssignmentMappingService.js';
-export * from './LegacyMappingCoverageService.js';
 export * from './LegacyMappingConversionAudit.js';
 export * from './SsoEngineAccessSnapshotService.js';
-export * from './SsoGroupMappingService.js';
 export * from './SsoNormalizedIdentityService.js';
 export * from './ExternalIdentityService.js';
 export * from './IdentityProviderAdapter.js';

@@ -10,7 +10,6 @@ import {
   policyService,
   projectEngineTargetService,
   serviceAccountService,
-  ssoAssignmentMappingService,
   ssoEngineAccessSnapshotService,
   ssoSyncDiagnosticsService,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
@@ -170,20 +169,6 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     DEPLOYMENT_EXECUTE: 'deployment:execute',
   },
   API_CLIENT_TOKEN_PREFIX: 'egac',
-  ssoClaimsMappingService: {
-    getAllMappings: vi.fn().mockResolvedValue([]),
-    createMapping: vi.fn().mockResolvedValue({ id: 'sso-mapping-1' }),
-    updateMapping: vi.fn().mockResolvedValue(undefined),
-    deleteMapping: vi.fn().mockResolvedValue(undefined),
-    testClaims: vi.fn().mockResolvedValue({ matchedMapping: null, role: 'user' }),
-  },
-  ssoAssignmentMappingService: {
-    getAllMappings: vi.fn().mockResolvedValue([]),
-    createMapping: vi.fn().mockResolvedValue({ id: 'mapping-1' }),
-    updateMapping: vi.fn().mockResolvedValue(undefined),
-    deleteMapping: vi.fn().mockResolvedValue(undefined),
-    testClaims: vi.fn().mockResolvedValue({ matchedMappings: [], assignments: [] }),
-  },
   ssoEngineAccessSnapshotService: {
     listSnapshots: vi.fn().mockResolvedValue([
       {
@@ -298,15 +283,6 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
         createdAt: 1400,
       },
     ]),
-    runReconciliationDiagnostics: vi.fn().mockResolvedValue({
-      runId: '00000000-0000-4000-8000-000000000072',
-      scannedGroupMappings: 1,
-      scannedAssignmentMappings: 2,
-      scannedGroupMemberships: 3,
-      scannedAssignments: 4,
-      warnings: 1,
-      errors: 0,
-    }),
     runProviderIdentityCheck: vi.fn().mockResolvedValue({
       runId: '00000000-0000-4000-8000-000000000073',
       scannedIdentities: 2,
@@ -317,29 +293,6 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
       deletedIdentities: 0,
       unknownIdentities: 0,
       failedIdentities: 0,
-    }),
-    runSnapshotReconciliation: vi.fn().mockResolvedValue({
-      runId: '00000000-0000-4000-8000-000000000074',
-      scannedIdentities: 2,
-      replayedIdentities: 1,
-      skippedIdentities: 1,
-      failedIdentities: 0,
-      refreshedIdentities: 1,
-      refreshUnsupportedIdentities: 0,
-      refreshFailedIdentities: 0,
-      groupMembershipsCreated: 1,
-      groupMembershipsUpdated: 0,
-      groupMembershipsRemoved: 0,
-      assignmentsCreated: 1,
-      assignmentsUpdated: 0,
-      assignmentsRemoved: 0,
-    }),
-    runReconciliationCleanup: vi.fn().mockResolvedValue({
-      runId: '00000000-0000-4000-8000-000000000075',
-      scannedGroupMemberships: 3,
-      scannedAssignments: 4,
-      groupMembershipsRemoved: 1,
-      assignmentsRemoved: 2,
     }),
   },
   projectEngineTargetService: {
@@ -700,10 +653,6 @@ describe('platform-admin authz routes', () => {
       checks: [{ id: 'project_engine_target.active', allowed: true, reason: 'Project-engine target allows manual mode' }],
       reasons: [],
     });
-    vi.mocked(ssoAssignmentMappingService.createMapping).mockResolvedValue({ id: 'mapping-1' });
-    vi.mocked(ssoAssignmentMappingService.updateMapping).mockResolvedValue(undefined);
-    vi.mocked(ssoAssignmentMappingService.deleteMapping).mockResolvedValue(undefined);
-    vi.mocked(ssoAssignmentMappingService.testClaims).mockResolvedValue({ matchedMappings: [], assignments: [] });
   });
 
   it('checks authorization', async () => {
@@ -1546,10 +1495,9 @@ describe('platform-admin authz routes', () => {
       legacyMappingEvaluationRetired: true,
       providerIdentityCheck: null,
     });
-    expect(ssoSyncDiagnosticsService.runReconciliationDiagnostics).not.toHaveBeenCalled();
   });
 
-  it('runs optional SSO provider, snapshot replay, and cleanup diagnostics when requested', async () => {
+  it('runs an optional provider identity health check when requested', async () => {
     vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
       permission === 'platform:sso-assignments:manage'
     );
@@ -1560,9 +1508,6 @@ describe('platform-admin authz routes', () => {
         providerId: 'microsoft',
         trigger: 'manual',
         includeProviderChecks: true,
-        includeSnapshotReplay: true,
-        refreshProviderClaims: true,
-        includeCleanup: true,
       });
 
     expect(response.status).toBe(200);
@@ -1583,8 +1528,6 @@ describe('platform-admin authz routes', () => {
       }),
     });
     expect(ssoSyncDiagnosticsService.runProviderIdentityCheck).toHaveBeenCalledWith(expectedInput);
-    expect(ssoSyncDiagnosticsService.runSnapshotReconciliation).not.toHaveBeenCalled();
-    expect(ssoSyncDiagnosticsService.runReconciliationCleanup).not.toHaveBeenCalled();
   });
 
   it('evaluates effective access', async () => {

@@ -20,9 +20,6 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   policyService: {
     listPolicies: vi.fn().mockResolvedValue([]),
   },
-  ssoClaimsMappingService: {
-    listMappings: vi.fn().mockResolvedValue([]),
-  },
 }));
 
 describe('platform-admin governance routes', () => {
