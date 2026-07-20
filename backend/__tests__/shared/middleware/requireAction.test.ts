@@ -1138,6 +1138,102 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('returns empty visible collections when the user has neither broad nor known access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([]);
+    (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockResolvedValue([]);
+
+    const projects = await request(app).get('/projects');
+    const engines = await request(app).get('/engines');
+
+    expect(projects.status).toBe(200);
+    expect(projects.body.collection).toEqual({ type: 'project', ids: [], requestedIds: [], deniedIds: [] });
+    expect(engines.status).toBe(200);
+    expect(engines.body.collection).toEqual({ type: 'engine', ids: [], requestedIds: [], deniedIds: [] });
+  });
+
+  it('discovers all tenant-visible projects from a collection-wide grant', async () => {
+    projectFind.mockResolvedValue([
+      { id: projectId, tenantId: 'tenant-a' },
+      { id: secondProjectId, tenantId: null },
+    ]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'project:files:view'
+    );
+
+    const response = await request(app).get('/projects?tenantId=tenant-a');
+
+    expect(response.status).toBe(200);
+    expect(response.body.collection).toEqual({
+      type: 'project',
+      ids: [projectId, secondProjectId].sort(),
+      requestedIds: [projectId, secondProjectId].sort(),
+      deniedIds: [],
+    });
+    expect(projectFind).toHaveBeenNthCalledWith(1, expect.objectContaining({ select: ['id'] }));
+  });
+
+  it('discovers all tenant-visible engines from a collection-wide grant', async () => {
+    engineFind.mockResolvedValue([
+      { id: engineId, tenantId: 'tenant-a', runtimeAccessScope: 'engine_wide' },
+      { id: secondEngineId, tenantId: null, runtimeAccessScope: 'engine_wide' },
+    ]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'engine:instance:view'
+    );
+
+    const response = await request(app).get('/engines?tenantId=tenant-a');
+
+    expect(response.status).toBe(200);
+    expect(response.body.collection).toEqual({
+      type: 'engine',
+      ids: [engineId, secondEngineId].sort(),
+      requestedIds: [engineId, secondEngineId].sort(),
+      deniedIds: [],
+    });
+    expect(engineFind).toHaveBeenNthCalledWith(1, expect.objectContaining({ select: ['id'] }));
+  });
+
+  it('parses explicit engine collections and conceals missing or foreign-tenant engines', async () => {
+    engineFind.mockResolvedValue([
+      { id: engineId, tenantId: 'tenant-a', runtimeAccessScope: 'engine_wide' },
+      { id: secondEngineId, tenantId: 'tenant-b', runtimeAccessScope: 'engine_wide' },
+    ]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string, context: { resourceId?: string }) =>
+        permission === 'engine:instance:view' && context.resourceId === engineId
+    );
+
+    const response = await request(app)
+      .get('/engines?tenantId=tenant-a')
+      .query({ engineIds: [engineId, `${secondEngineId},missing-engine`] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.collection).toEqual({
+      type: 'engine',
+      ids: [engineId],
+      requestedIds: [engineId, secondEngineId, 'missing-engine'],
+      deniedIds: [secondEngineId],
+    });
+    expect(permissionService.hasPermission).not.toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceId: secondEngineId,
+    }));
+  });
+
+  it('fails closed when runtime-resource discovery fails for a resource-aware engine', async () => {
+    engineFind.mockResolvedValue([{ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockResolvedValue([engineId]);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockRejectedValue(new Error('inventory unavailable'));
+
+    const response = await request(app).get('/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body.collection).toEqual({
+      type: 'engine', ids: [], requestedIds: [engineId], deniedIds: [engineId],
+    });
+  });
+
   it('resolves an engine-scoped action from a saved filter id', async () => {
     savedFilterFindOne.mockReset().mockResolvedValue({ id: savedFilterId, engineId });
     engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null });
