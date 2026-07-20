@@ -143,23 +143,13 @@ Required sequence:
 
 An `exists` mapping to a normal internal group represents default access for every authenticated user. Do not configure a provider-level default role.
 
-### Legacy Provider Transition
+### Clean-Slate Identity Providers
 
-The Identity Providers UI can prepare a disabled direct-OIDC draft from a
-legacy persisted Microsoft, Google, or OIDC provider, or from the legacy
-Microsoft/Google environment settings. The draft preserves non-secret metadata
-only and requires an external secret reference, identity mappings, callback
-registration, a controlled sign-in test, and a manual legacy-provider cutover.
-
-Before disabling a compatibility provider, use its **Check migration readiness**
-row action. Readiness is non-mutating and fails until the provider exists, uses
-the expected direct protocol (OIDC for legacy Microsoft/Google/OIDC or SAML for
-legacy SAML), is enabled, has an available external secret/certificate reference,
-and has at least one active identity mapping. Automatic archival is deliberately
-unavailable because the legacy provider may be platform-global while the
-replacement is tenant scoped. See [Auth and SSO Setup](./auth-sso.md#migrate-a-legacy-microsoft-google-oidc-or-saml-provider)
-and the [deployed cutover runbook](./legacy-identity-provider-cutover-runbook.md)
-for the executable evidence and rollback sequence.
+No customer SSO configuration or mapping exists to migrate. Configure new OIDC,
+SAML, or LDAP providers directly in **Identity Providers**, then use **Identity
+Mappings** to map validated entitlements to internal groups and normal scoped
+role assignments. Do not create legacy provider-to-role or provider-to-engine
+mapping rows.
 
 ### LDAP
 

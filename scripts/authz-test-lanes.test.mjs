@@ -27,7 +27,6 @@ const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runt
 const expectedLeafChecks = [
   'test:identity-contract',
   'test:identity-integration',
-  'test:legacy-auth-integration',
   'test:identity-persistence',
   'test:identity-provider-key-identity',
   'test:identity-mapping-config-key',
@@ -70,17 +69,6 @@ test('the local-safe lanes preserve every focused authorization check once', () 
   const leafChecks = localLanes.flatMap((lane) => invokedScripts(scripts[lane]));
   assert.deepEqual(leafChecks, expectedLeafChecks);
   assert.equal(new Set(leafChecks).size, leafChecks.length, 'each focused check belongs to one lane');
-});
-
-test('legacy protocol fixtures run in isolated Vitest processes', () => {
-  const command = scripts['test:legacy-auth-integration'];
-  const commands = [...command.matchAll(/vitest run ([^&]+)/g)].map((match) => match[1]);
-
-  assert.deepEqual(commands, [
-    '__tests__/modules/auth/routes/microsoft-flow.e2e.test.ts --config vitest.config.ts --reporter=dot ',
-    '__tests__/modules/auth/routes/google-flow.e2e.test.ts --config vitest.config.ts --reporter=dot ',
-    '__tests__/modules/auth/routes/saml-flow.e2e.test.ts --config vitest.config.ts --reporter=dot',
-  ]);
 });
 
 test('browser, credentialed local authorization, and LDAP-container boundaries stay opt-in', () => {
