@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AUTHZ_RESOURCE_RESOLVERS } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getRuntimeResourceActionDecision, requireAction, requireCompositeAction, requireInvitationCreateAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction, requireRuntimeDeploymentAction, requireRuntimeMigrationAction, requireRuntimeProcessInstanceSelectionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
@@ -82,7 +83,7 @@ describe('getRuntimeResourceActionDecision', () => {
       engineId: 'engine-1', resourceKind: 'process_definition', resourceKeys: ['payments'],
     })).resolves.toEqual({ allowed: true });
     expect(getDataSource).not.toHaveBeenCalled();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   it('fails closed when no resolved runtime resource key is supplied', async () => {
@@ -786,6 +787,34 @@ describe('requireAction project resource resolvers', () => {
       }),
     }));
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
+  });
+
+  it('uses Camunda processDefinitionKey compatibility while ignoring non-string batch identifiers', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: null, processDefinitionKey: 'payments' });
+
+    const compatible = await request(app)
+      .post('/runtime-instance-selection')
+      .send({ engineId, processInstanceIds: ['instance-1'] });
+    expect(compatible.status).toBe(200);
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceKey: 'payments' }),
+    }));
+
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
+    const malformed = await request(app)
+      .post('/runtime-instance-selection')
+      .send({ engineId, processInstanceIds: [42] });
+    expect(malformed.status).toBe(403);
+    expect(camundaGet).toHaveBeenCalledTimes(1);
+
+    camundaGet.mockReset().mockResolvedValue({ id: 'instance-invalid', definitionKey: 42 });
+    const unresolved = await request(app)
+      .post('/runtime-instance-selection')
+      .send({ engineId, processInstanceIds: ['instance-invalid'] });
+    expect(unresolved.status).toBe(403);
+    expect(runtimeResourceFindOne).toHaveBeenCalledTimes(1);
   });
 
   it('rejects unbounded batch selections on resource-aware engines', async () => {
@@ -1520,6 +1549,42 @@ describe('requireAction project resource resolvers', () => {
     expect(projectNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
   });
 
+  it('uses the first non-empty array value for route resource identifiers', async () => {
+    const req: any = { user: { userId: 'user-1' }, params: { projectId: [` ${projectId} `] } };
+    const next = vi.fn();
+
+    await requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' })(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.projectId).toBe(projectId);
+    expect(req.authzResource).toEqual({ type: 'project', id: projectId });
+  });
+
+  it('fails closed for route-less actions and registered resolvers without middleware support', async () => {
+    const routeLessNext = vi.fn();
+    await requireAction('platform.users.manage')({ user: { userId: 'user-1' } } as any, {} as any, routeLessNext);
+    expect(routeLessNext).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 500, message: expect.stringContaining('Authorization action has no resource resolver'),
+    }));
+
+    const unsupportedResolver = {
+      id: 'test.unimplemented-resolver', resourceType: 'extension' as const, requiredParams: [],
+      description: 'Test-only defensive resolver coverage.', failureMode: 'deny' as const,
+    };
+    AUTHZ_RESOURCE_RESOLVERS.push(unsupportedResolver);
+    try {
+      const unsupportedNext = vi.fn();
+      await requireAction('project.files.read', { resourceResolver: unsupportedResolver.id })(
+        { user: { userId: 'user-1' } } as any, {} as any, unsupportedNext,
+      );
+      expect(unsupportedNext).toHaveBeenCalledWith(expect.objectContaining({
+        statusCode: 500, message: expect.stringContaining('Authorization resolver is not implemented for middleware'),
+      }));
+    } finally {
+      AUTHZ_RESOURCE_RESOLVERS.pop();
+    }
+  });
+
   it('resolves an engine-scoped action from a saved filter id', async () => {
     savedFilterFindOne.mockReset().mockResolvedValue({ id: savedFilterId, engineId });
     engineFindOne.mockReset().mockResolvedValue({ id: engineId, tenantId: null });
@@ -1811,5 +1876,9 @@ describe('requireAction project resource resolvers', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({
       statusCode: 500, message: 'Composite authorization action check failed',
     }));
+
+    const anonymousNext = vi.fn();
+    await requireCompositeAction('project.deploy.create')({ body: { projectId, engineId } } as any, {} as any, anonymousNext);
+    expect(anonymousNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
   });
 });

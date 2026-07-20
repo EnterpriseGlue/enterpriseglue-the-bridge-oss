@@ -906,17 +906,14 @@ export function requireCompositeAction(actionId: string, options: RequireComposi
   };
 }
 
-function invitationTargetError(resourceType: string): Error {
+function invitationTargetError(resourceType: ResolvedInvitationTarget['resourceType']): Error {
   if (resourceType === 'tenant') {
     return Errors.forbidden('Only platform admins can invite workspace users');
   }
   if (resourceType === 'project') {
     return Errors.forbidden('Only project member managers can invite project members');
   }
-  if (resourceType === 'engine') {
-    return Errors.forbidden('Only engine member managers can invite engine members');
-  }
-  return Errors.forbidden('Invitation creation is not allowed');
+  return Errors.forbidden('Only engine member managers can invite engine members');
 }
 
 async function resolveInvitationTarget(req: Request): Promise<{
@@ -1198,7 +1195,10 @@ export function requireRuntimeProcessInstanceSelectionAction(
           engineId, `/process-instance/${encodeURIComponent(id)}`
         )));
         resourceKeys = Array.from(new Set(instances.map((instance) => {
-          const key = instance.definitionKey ?? instance.processDefinitionKey;
+          const definitionKey = instance.definitionKey;
+          const key = definitionKey === null || typeof definitionKey === 'undefined'
+            ? instance.processDefinitionKey
+            : definitionKey;
           return typeof key === 'string' ? key.trim() : '';
         }).filter(Boolean)));
         if (!resourceKeys.length) throw Errors.forbidden('Selected process instances cannot be resolved for authorization');
