@@ -11,7 +11,7 @@
   "type": "module",
   "types": "./dist/contracts/index.d.ts",
   "scripts": {
-    "build": "tsc && npm run build:copy",
+    "build": "tsc && pnpm run build:copy",
     "build:copy": "cp -r src/db/adapters/sql dist/db/adapters/ && cp src/contracts/members.d.ts src/contracts/members.js src/contracts/roles.d.ts src/contracts/roles.js dist/contracts/",
     "clean": "rm -rf dist"
   },

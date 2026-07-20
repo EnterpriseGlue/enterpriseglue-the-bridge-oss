@@ -9,6 +9,7 @@ import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persis
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
+import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
@@ -115,6 +116,7 @@ function setupDataSource() {
   const roleRepo = { find: vi.fn().mockResolvedValue([]), insert: roleInsert, update: vi.fn() };
   const groupRepo: any = { find: vi.fn().mockResolvedValue([]), findOneBy: vi.fn().mockResolvedValue(null), insert: groupInsert, update: vi.fn() };
   groupRepo.findOne = vi.fn(async ({ where }: any) => (await groupRepo.find()).find((group: any) => group.key === where.key && (where.isArchived === undefined || group.isArchived === where.isArchived)) || null);
+  const catalogPermissionRepo = { find: vi.fn().mockResolvedValue([]) };
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
   const engineRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a' }), insert: engineInsert, update: vi.fn() };
@@ -137,6 +139,7 @@ function setupDataSource() {
   const auditRepo = { insert: auditInsert };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
+    if (entity === RbacPermission) return catalogPermissionRepo;
     if (entity === AuthzGroup) return groupRepo;
     if (entity === Engine) return engineRepo;
     if (entity === EngineSet) return engineSetRepo;
