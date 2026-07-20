@@ -147,70 +147,14 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
   });
 
-  it('prepares a legacy SAML draft with a certificate reference placeholder', async () => {
-    server.use(
-      http.get('/api/sso/providers', () => HttpResponse.json([{
-        id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml', enabled: true,
-      }])),
-      http.get('/api/identity/providers/legacy-migration-draft/:id', ({ params }) => {
-        expect(params.id).toBe('legacy-saml-1');
-        return HttpResponse.json({
-          legacyProvider: { id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml', enabled: true, signingCertificateConfigured: true },
-          provider: {
-            key: 'legacy-saml-legacy-saml-1', protocol: 'saml', isEnabled: false, authenticationMode: 'direct', directoryTenantId: null,
-            configuration: { entityId: 'https://sp.example.test/metadata', callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE', signatureAlgorithm: 'sha256' },
-          },
-          requirements: ['signing_certificate_reference', 'identity_provider_redirect_uri', 'identity_mappings', 'legacy_provider_cutover'],
-          warnings: ['The generated provider is disabled.'],
-        });
-      }),
-    );
+  it('does not expose legacy-provider migration or cutover controls', async () => {
     renderTab();
-    await screen.findByText('Migrate legacy provider');
-    fireEvent.change(screen.getByLabelText('Legacy provider'), { target: { value: 'legacy-saml-1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Prepare migration' }));
+    await screen.findByText('demo-oidc');
 
-    expect(await screen.findByText('Migration draft for Legacy SAML')).toBeInTheDocument();
-    expect(screen.getByLabelText('Protocol')).toHaveValue('saml');
-    expect(screen.getByLabelText('Identity provider signing certificate reference')).toHaveValue('env://REPLACE_WITH_SAML_SIGNING_CERTIFICATE');
-    expect(screen.getByLabelText('Identity provider SSO URL')).toHaveValue('https://idp.example.test/sso');
-  });
-
-  it('checks migration readiness for a direct SAML replacement', async () => {
-    const cutover = vi.fn();
-    server.use(
-      http.get('/api/identity/providers', () => HttpResponse.json([{
-        id: 'migrated-saml-1', key: 'migrated-saml', protocol: 'saml', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null,
-        configurationJson: '{}', syncJson: '{}', ownershipMode: 'manual', sourceRef: null,
-      }])),
-      http.get('/api/sso/providers', () => HttpResponse.json([{
-        id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml', enabled: true,
-      }])),
-      http.get('/api/identity/providers/migration-readiness', () => HttpResponse.json({
-        ready: true, targetProviderKey: 'migrated-saml', legacyProviderId: 'legacy-saml-1', requiredDefaultGroupId: 'system.group.authenticated_users', activeMappingCount: 1,
-        checks: { targetExists: true, directOidc: false, directLoginProtocol: true, enabled: true, secretReferenceConfigured: true, secretReferenceAvailable: true, activeMappingsConfigured: true, defaultRoleMappingConfigured: true }, blockers: [],
-      })),
-      http.post('/api/identity/providers/legacy-cutover', async ({ request }) => {
-        cutover(await request.json());
-        return HttpResponse.json({ legacyProvider: { id: 'legacy-saml-1', name: 'Legacy SAML', type: 'saml' }, targetProviderKey: 'migrated-saml', legacyProviderDisabled: true, alreadyDisabled: false });
-      }),
-    );
-    renderTab();
-    await screen.findByText('migrated-saml');
-    fireEvent.change(screen.getByLabelText('Legacy provider'), { target: { value: 'legacy-saml-1' } });
+    expect(screen.queryByText('Migrate legacy provider')).not.toBeInTheDocument();
+    expect(screen.queryByText('Migrate environment configuration')).not.toBeInTheDocument();
     await openProviderActions();
-    fireEvent.click(providerMenuItem('Check migration readiness'));
-
-    expect(await screen.findByText('Migration readiness: migrated-saml')).toBeInTheDocument();
-    expect(screen.getByText(/Ready for an operator-managed legacy cutover/)).toBeInTheDocument();
-    const cutoverButton = screen.getAllByRole('button', { name: /Disable legacy provider/ })
-      .find((button) => button.className.includes('cds--btn--sm'));
-    if (!cutoverButton) throw new Error('Legacy cutover action not found');
-    fireEvent.click(cutoverButton);
-    const modal = await screen.findByRole('dialog', { name: 'Disable legacy identity provider' });
-    fireEvent.click(within(modal).getByRole('button', { name: /Disable legacy provider/ }));
-    expect(await screen.findByText('Legacy provider cut over')).toBeInTheDocument();
-    expect(cutover).toHaveBeenCalledWith({ legacyProviderId: 'legacy-saml-1', targetProviderKey: 'migrated-saml' });
+    expect(screen.queryByText('Check migration readiness')).not.toBeInTheDocument();
   });
 
   it('distinguishes config-locked and config-warning provider ownership', () => {
