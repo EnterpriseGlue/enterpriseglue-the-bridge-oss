@@ -384,6 +384,18 @@ describe('requireAction project resource resolvers', () => {
         deployContext: req.deployContext,
       });
     });
+    app.post('/deploy-optional', requireCompositeAction('project.deploy.create', {
+      kind: 'deployment',
+      projectIdFrom: 'body',
+      engineIdFrom: 'body',
+      optionalWhenMissingEngineId: true,
+    }), (_req, res) => res.json({ optional: true }));
+    app.post('/deploy-no-context', requireCompositeAction('project.deploy.create', {
+      kind: 'deployment',
+      projectIdFrom: 'body',
+      engineIdFrom: 'body',
+      attachDeployContext: false,
+    }), (req: any, res) => res.json({ composite: req.authzComposite, deployContext: req.deployContext }));
     app.post('/invitations', requireInvitationCreateAction(), (req: any, res) => {
       res.json({
         actionId: req.authzAction?.actionId,
@@ -894,6 +906,28 @@ describe('requireAction project resource resolvers', () => {
     expect(deploymentEligibilityService.evaluate).not.toHaveBeenCalled();
   });
 
+  it('allows an optional composite route to proceed without an engine target', async () => {
+    const response = await request(app).post('/deploy-optional').send({ projectId });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ optional: true });
+    expect(deploymentEligibilityService.evaluate).not.toHaveBeenCalled();
+  });
+
+  it('can omit the deployment display context when the caller does not need it', async () => {
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
+    });
+
+    const response = await request(app).post('/deploy-no-context').send({ projectId, engineId });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      composite: { kind: 'deployment', actionId: 'project.deploy.create', projectId, engineId, mode: 'manual' },
+    });
+    expect(engineFindOne).not.toHaveBeenCalled();
+  });
+
   it('conceals missing projects reported by deployment eligibility', async () => {
     (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
       allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
@@ -910,6 +944,26 @@ describe('requireAction project resource resolvers', () => {
     });
 
     expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+  });
+
+  it('conceals a deployment engine when its access denial cannot be viewed', async () => {
+    (deploymentEligibilityService.evaluate as unknown as Mock)
+      .mockResolvedValueOnce({
+        allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
+        checks: [{ id: 'engine.permission.deploy', allowed: false, reason: 'No deploy access' }], reasons: ['No deploy access'],
+      })
+      .mockResolvedValueOnce({
+        allowed: false, decision: 'deny', mode: 'manual', projectId, engineId,
+        checks: [{ id: 'engine.permission.deploy', allowed: false, reason: 'No deploy access' }], reasons: ['No deploy access'],
+      });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
+
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'engine:deploy:view'
+    );
+    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(403);
   });
 
   it('keeps deployment auto-grant when only the project-engine target is missing and approval permission exists', async () => {
@@ -1232,6 +1286,49 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.collection).toEqual({
       type: 'engine', ids: [], requestedIds: [engineId], deniedIds: [engineId],
     });
+  });
+
+  it('applies collection policy denials after resolving project and engine visibility', async () => {
+    (policyService.evaluateGate as unknown as Mock)
+      .mockResolvedValueOnce({ decision: 'deny', reason: 'project-freeze' })
+      .mockResolvedValueOnce({ decision: 'deny', reason: 'engine-freeze' });
+
+    const projects = await request(app).get('/projects');
+    const engines = await request(app).get('/engines');
+
+    expect(projects.status).toBe(403);
+    expect(projects.body.error).toContain('project-freeze');
+    expect(engines.status).toBe(403);
+    expect(engines.body.error).toContain('engine-freeze');
+  });
+
+  it('fails closed for anonymous, malformed, and unexpected action resolution errors', async () => {
+    const anonymousNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' })(
+      { params: { projectId } } as any, {} as any, anonymousNext,
+    );
+    expect(anonymousNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    const missingIdNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' })(
+      { user: { userId: 'user-1' }, params: {} } as any, {} as any, missingIdNext,
+    );
+    expect(missingIdNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'projectId is required' }));
+
+    const unknownResolverNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'unknown.resolver' })(
+      { user: { userId: 'user-1' }, params: {} } as any, {} as any, unknownResolverNext,
+    );
+    expect(unknownResolverNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 500 }));
+
+    (getDataSource as unknown as Mock).mockRejectedValueOnce('dependency failed');
+    const unexpectedNext = vi.fn();
+    await requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' })(
+      { user: { userId: 'user-1' }, params: { projectId } } as any, {} as any, unexpectedNext,
+    );
+    expect(unexpectedNext).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 500, message: 'Authorization action check failed',
+    }));
   });
 
   it('resolves an engine-scoped action from a saved filter id', async () => {
