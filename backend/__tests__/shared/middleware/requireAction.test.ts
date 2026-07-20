@@ -1019,6 +1019,23 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('conceals missing file, folder, and version resolver targets before permission evaluation', async () => {
+    fileFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/files/${fileId}`)).status).toBe(404);
+
+    folderFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/folders/${folderId}`)).status).toBe(404);
+
+    versionFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/versions/${versionId}`)).status).toBe(404);
+
+    versionFindOne.mockResolvedValueOnce({ id: versionId, fileId });
+    fileFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/versions/${versionId}`)).status).toBe(404);
+
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
+  });
+
   it('denies after resolving the project when the permission is missing', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
@@ -1305,8 +1322,43 @@ describe('requireAction project resource resolvers', () => {
     expect((await request(app).post('/invitations').send({ resourceType: 'project', resourceId: projectId })).status).toBe(403);
   });
 
+  it('resolves engine invitations only within the active tenant', async () => {
+    engineFindOne
+      .mockResolvedValueOnce({ id: engineId, tenantId: 'tenant-a' })
+      .mockResolvedValueOnce({ id: engineId, tenantId: 'tenant-b' });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'engine:members:manage'
+    );
+
+    const allowed = await request(app)
+      .post('/invitations?tenantId=tenant-a')
+      .send({ resourceType: 'engine', resourceId: engineId });
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.target).toEqual({
+      resourceType: 'engine',
+      resourceId: engineId,
+      requiredPermissions: ['engine:members:manage'],
+    });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:members:manage', expect.objectContaining({
+      resourceType: 'engine', resourceId: engineId, tenantId: 'tenant-a',
+    }));
+
+    const crossTenant = await request(app)
+      .post('/invitations?tenantId=tenant-a')
+      .send({ resourceType: 'engine', resourceId: engineId });
+    expect(crossTenant.status).toBe(403);
+  });
+
   it('conceals missing engine invitation targets', async () => {
     engineFindOne.mockResolvedValue(null);
     expect((await request(app).post('/invitations').send({ resourceType: 'engine', resourceId: engineId })).status).toBe(404);
+  });
+
+  it('rejects unauthenticated invitation creation before resolving its target', async () => {
+    const next = vi.fn();
+    await requireInvitationCreateAction()({ body: { resourceType: 'tenant' } } as any, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, message: 'Authentication required' }));
+    expect(getDataSource).not.toHaveBeenCalled();
   });
 });
