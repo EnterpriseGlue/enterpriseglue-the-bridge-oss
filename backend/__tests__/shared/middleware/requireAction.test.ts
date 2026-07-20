@@ -285,6 +285,9 @@ describe('requireAction project resource resolvers', () => {
         authorizedEngineIds: req.authorizedEngineIds,
       });
     });
+    app.get('/engines/:engineId', requireAction('engine.inventory.read', {
+      resourceResolver: 'engine.byId', resourceIdFrom: 'params',
+    }), (req: any, res) => res.json({ resource: req.authzResource }));
     app.get('/projects', requireAction('project.projects.read', {
       resourceResolver: 'project.visibleCollection',
     }), (req: any, res) => {
@@ -761,6 +764,14 @@ describe('requireAction project resource resolvers', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.authorizedEngineIds).toEqual([engineId]);
+  });
+
+  it('conceals missing and cross-tenant engines resolved by ID', async () => {
+    engineFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get('/engines/missing-engine')).status).toBe(404);
+
+    engineFindOne.mockResolvedValueOnce({ id: engineId, tenantId: 'tenant-b' });
+    expect((await request(app).get(`/engines/${engineId}?tenantId=tenant-a`)).status).toBe(403);
   });
 
   it('authorizes deployment composite actions through deployment eligibility', async () => {
