@@ -102,4 +102,23 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(unchangedEngine.status).toBe(200);
     expect(unchangedEngine.body.name).toBe(groupFixture.engineName);
   });
+
+  test('does not honor an expired scoped assignment', async ({ page }) => {
+    expect(fixture.expiredEmail).toBeTruthy();
+    expect(fixture.expiredPassword).toBeTruthy();
+    expect(fixture.expiredEngineId).toBeTruthy();
+
+    await page.goto('/login?local=1');
+    await page.getByLabel(/email/i).fill(fixture.expiredEmail!);
+    await page.getByLabel(/password/i).fill(fixture.expiredPassword!);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+
+    const inventory = await request(page, '/engines-api/engines');
+    expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
+    expect(inventory.body).toEqual([]);
+
+    const deniedRead = await request(page, `/engines-api/engines/${fixture.expiredEngineId}`);
+    expect([403, 404]).toContain(deniedRead.status);
+  });
 });

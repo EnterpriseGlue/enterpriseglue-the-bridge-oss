@@ -2480,9 +2480,10 @@ The authorization suite must prove backend enforcement, not only that privileged
 
 - [x] ✅ Seeded local end-to-end scope isolation: disposable direct-user and internal-group engine operators can each discover and read only their assigned engine; same-tenant siblings and cross-tenant engines remain absent from collections and deny direct detail reads. Each principal receives a direct mutation denial on its assigned engine, and a follow-up read proves no partial write occurred.
 - [x] ✅ Direct API escalation denial: the scoped operator cannot read the platform role catalog even when calling its route directly rather than relying on hidden UI controls.
+- [x] ✅ Expiry lifecycle enforcement: a scoped operator with an already expired canonical role assignment sees no engine in the collection and cannot read that engine directly.
 - [ ] ⬜ Generate allow/deny contract cases for every registered action route, using its action definition, resource resolver, accepted permissions, and documented status semantics. Cover at least an allowed principal, a same-tenant unassigned principal, and a cross-tenant principal/resource combination for each route family.
 - [ ] ⬜ Extend principal coverage across direct users, internal groups, API clients, and service accounts for representative platform, project, engine, and runtime-resource actions.
-- [ ] ⬜ Add policy/assignment lifecycle tests for expiry, archival, grant removal, deny-overrides, broad-versus-bounded scope shadowing, and permission-snapshot invalidation after each mutation.
+- [ ] ⬜ Add the remaining policy/assignment lifecycle cases for archival, grant removal, deny-overrides, broad-versus-bounded scope shadowing, and permission-snapshot invalidation after each mutation.
 - [ ] ⬜ Add property-based evaluator tests that generate principal/scope/role combinations and compare evaluated decisions with protected endpoint behavior where a safe fixture exists.
 - [ ] ⬜ Run mutation testing for authorization guards in CI so a removed or inverted route guard demonstrably fails its corresponding denial test.
 

@@ -353,6 +353,55 @@ export default async function globalSetup() {
     [randomUUID(), 'tenant-default', 'group', groupScopedGroupId, operatorRoleId, 'engine', groupScopedEngineId, 'system', scopedSourceRef, groupAssignmentKey, now, now]
   );
 
+  // An expired assignment must be ignored by both the collection resolver and
+  // the direct detail guard. This gives the local browser lane a full-path
+  // lifecycle assertion rather than relying solely on evaluator query tests.
+  const expiredUserId = randomUUID();
+  const expiredEmail = `e2e-expired-scope-${Date.now()}-${suffix}@example.com`;
+  const expiredPassword = `E2eExpiredScope-${suffix}-Pass1!`;
+  const expiredEngineId = randomUUID();
+  const expiredPasswordHash = await hashPassword(expiredPassword);
+  await pool.query(
+    `INSERT INTO ${schema}.users
+      (id, email, auth_provider, password_hash, first_name, last_name,
+       is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
+       email_verification_token, email_verification_token_expiry, created_at, updated_at,
+       last_login_at, created_by_user_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [expiredUserId, expiredEmail, 'local', expiredPasswordHash, 'E2E', 'Expired', true, false, 0, null, true, null, null, now, now, null, adminUserId]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [randomUUID(), 'tenant-default', expiredUserId, 'member', now]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.authz_group_memberships
+      (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [randomUUID(), null, E2E_PLATFORM_GROUP_IDS.authenticatedUsers, expiredUserId, 'system', scopedSourceRef, null, null, now, now]
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.engines
+      (id, name, base_url, type, auth_type, username, password_enc, version,
+       owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
+       created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+    [expiredEngineId, `${prefix}-expired-engine`, engineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, 'tenant-default', now, now]
+  );
+  const expiredAssignmentKey = canonicalRoleAssignmentKey({
+    tenantId: 'tenant-default', principalType: 'user', principalId: expiredUserId,
+    roleId: operatorRoleId, scopeType: 'engine', scopeId: expiredEngineId,
+    source: 'system', sourceRef: scopedSourceRef,
+  });
+  await pool.query(
+    `INSERT INTO ${schema}.role_assignments
+      (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+       source, source_ref, assignment_key, expires_at, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [randomUUID(), 'tenant-default', 'user', expiredUserId, operatorRoleId, 'engine', expiredEngineId, 'system', scopedSourceRef, expiredAssignmentKey, now - 1_000, now, now]
+  );
+
   // The local Docker stack can enable a direct IdP, which intentionally
   // restricts local-password login to platform administrators. This test must
   // log in as a non-admin to prove the assignment boundary, so disable only
@@ -389,6 +438,9 @@ export default async function globalSetup() {
       groupScopedPassword,
       groupScopedEngineId,
       groupScopedEngineName,
+      expiredEmail,
+      expiredPassword,
+      expiredEngineId,
       disabledDirectProviderIds,
       cleanupAdmin: Boolean(adminUserId),
       membershipSourceRef,
