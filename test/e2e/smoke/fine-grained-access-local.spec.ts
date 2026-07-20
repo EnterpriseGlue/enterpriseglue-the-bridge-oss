@@ -57,6 +57,10 @@ test.describe('Smoke: fine-grained local engine access', () => {
     const platformCatalog = await request(page, '/api/authz/roles');
     expect(platformCatalog.status).toBe(403);
 
+    await page.goto('/t/default/admin/access-control');
+    await expect(page).toHaveURL(/\/t\/default\/?$/);
+    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+
     const inventory = await request(page, '/engines-api/engines');
     expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
     expect(inventory.body.map((engine: { id: string }) => engine.id)).toEqual([fixture.scopedEngineId]);
