@@ -237,6 +237,7 @@ describe('requireAction project resource resolvers', () => {
   let projectFind: ReturnType<typeof vi.fn>;
   let engineFind: ReturnType<typeof vi.fn>;
   let engineFindOne: ReturnType<typeof vi.fn>;
+  let environmentTagFindOne: ReturnType<typeof vi.fn>;
   let fileFindOne: ReturnType<typeof vi.fn>;
   let folderFindOne: ReturnType<typeof vi.fn>;
   let gitRepositoryFindOne: ReturnType<typeof vi.fn>;
@@ -411,6 +412,7 @@ describe('requireAction project resource resolvers', () => {
     projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: null }]);
     engineFind = vi.fn().mockResolvedValue([{ id: engineId, tenantId: null }]);
     engineFindOne = vi.fn().mockResolvedValue({ id: engineId, tenantId: null, name: 'Engine One', environmentTagId: null });
+    environmentTagFindOne = vi.fn().mockResolvedValue(null);
     fileFindOne = vi.fn().mockResolvedValue({ id: fileId, projectId });
     folderFindOne = vi.fn().mockResolvedValue({ id: folderId, projectId });
     gitRepositoryFindOne = vi.fn().mockResolvedValue({ id: gitRepositoryId, projectId });
@@ -433,7 +435,7 @@ describe('requireAction project resource resolvers', () => {
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: projectFindOne, find: projectFind };
         if (entity === Engine) return { find: engineFind, findOne: engineFindOne, findOneBy: engineFindOne };
-        if (entity === EnvironmentTag) return { findOneBy: vi.fn().mockResolvedValue(null) };
+        if (entity === EnvironmentTag) return { findOneBy: environmentTagFindOne };
         if (entity === File) return { findOne: fileFindOne };
         if (entity === Folder) return { findOne: folderFindOne };
         if (entity === GitRepository) return { findOne: gitRepositoryFindOne };
@@ -671,6 +673,44 @@ describe('requireAction project resource resolvers', () => {
     await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(req, {} as any, allowedNext);
     expect(allowedNext).toHaveBeenCalledWith();
     expect(req.authorizedRuntimeResourceScopes).toEqual([{ resourceKey: 'payments', runtimeTenantId: '' }]);
+  });
+
+  it('guards every runtime middleware against anonymous, incomplete, and missing-engine requests', async () => {
+    const definition = requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
+      resourceKind: 'process_definition', definitionPath: 'process-definition',
+    });
+    const selection = requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' });
+    const deployment = requireRuntimeDeploymentAction('engine.runtime.process-definitions.read');
+    const migration = requireRuntimeMigrationAction('engine.runtime.migrations.execute-async', { resourceKind: 'process_definition' });
+
+    const anonymousDefinitionNext = vi.fn();
+    await definition({ query: {}, params: {} } as any, {} as any, anonymousDefinitionNext);
+    expect(anonymousDefinitionNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    const missingDefinitionEngineNext = vi.fn();
+    await definition({ user: { userId: 'user-1' }, query: {}, params: { id: 'definition-1' } } as any, {} as any, missingDefinitionEngineNext);
+    expect(missingDefinitionEngineNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
+
+    const missingDefinitionIdNext = vi.fn();
+    await definition({ user: { userId: 'user-1' }, query: { engineId }, params: {} } as any, {} as any, missingDefinitionIdNext);
+    expect(missingDefinitionIdNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'id is required' }));
+
+    const anonymousDeploymentNext = vi.fn();
+    await deployment({ query: {}, params: {} } as any, {} as any, anonymousDeploymentNext);
+    expect(anonymousDeploymentNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    const anonymousMigrationNext = vi.fn();
+    await migration({ body: {} } as any, {} as any, anonymousMigrationNext);
+    expect(anonymousMigrationNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
+
+    engineFindOne.mockReset().mockResolvedValue(null);
+    const missingSelectionEngineNext = vi.fn();
+    await selection({ user: { userId: 'user-1' }, body: { engineId, processInstanceIds: ['instance-1'] } } as any, {} as any, missingSelectionEngineNext);
+    expect(missingSelectionEngineNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
+
+    const missingDeploymentEngineNext = vi.fn();
+    await deployment({ user: { userId: 'user-1' }, query: { engineId }, params: { deploymentId: 'deployment-1' } } as any, {} as any, missingDeploymentEngineNext);
+    expect(missingDeploymentEngineNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
   });
 
   it('resolves decision definitions by their live key and runtime tenant', async () => {
@@ -945,6 +985,27 @@ describe('requireAction project resource resolvers', () => {
       engineId,
       mode: 'manual',
     });
+  });
+
+  it('loads the deployment environment tag and fails closed if the eligible engine disappears', async () => {
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
+    });
+    engineFindOne.mockReset().mockResolvedValue({
+      id: engineId, tenantId: null, name: 'Tagged Engine', environmentTagId: 'environment-tag-1',
+    });
+    environmentTagFindOne.mockResolvedValue({ id: 'environment-tag-1', name: 'production' });
+
+    const tagged = await request(app).post('/deploy').send({ projectId, engineId });
+    expect(tagged.status).toBe(200);
+    expect(tagged.body.deployContext).toMatchObject({ engineName: 'Tagged Engine', environmentTag: 'production' });
+    expect(environmentTagFindOne).toHaveBeenCalledWith({ id: 'environment-tag-1' });
+
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockResolvedValueOnce({
+      allowed: true, decision: 'allow', mode: 'manual', projectId, engineId, checks: [], reasons: [],
+    });
+    engineFindOne.mockReset().mockResolvedValue(null);
+    expect((await request(app).post('/deploy').send({ projectId, engineId })).status).toBe(404);
   });
 
   it('returns deployment eligibility reasons when a composite deployment action is denied', async () => {
