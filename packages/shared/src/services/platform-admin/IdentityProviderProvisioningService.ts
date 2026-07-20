@@ -165,7 +165,7 @@ class IdentityProviderProvisioningService {
       }
       if (!user) {
         const id = generateId();
-        await userRepo.insert({ id, email, authProvider: input.providerType, passwordHash: null, entraId: null, entraEmail: null, googleId: null, firstName: input.firstName || null, lastName: input.lastName || null, isActive: true, mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null, isEmailVerified: emailVerified, emailVerificationToken: null, emailVerificationTokenExpiry: null, createdAt: now, updatedAt: now, lastLoginAt: now, createdByUserId: null });
+        await userRepo.insert({ id, email, authProvider: input.providerType, passwordHash: null, firstName: input.firstName || null, lastName: input.lastName || null, isActive: true, mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null, isEmailVerified: emailVerified, emailVerificationToken: null, emailVerificationTokenExpiry: null, createdAt: now, updatedAt: now, lastLoginAt: now, createdByUserId: null });
         user = { id, email, firstName: input.firstName || null, lastName: input.lastName || null, isActive: true } as User;
       } else {
         if (emailVerified && user.email !== email) {
