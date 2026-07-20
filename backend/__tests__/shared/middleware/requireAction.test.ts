@@ -940,6 +940,29 @@ describe('requireAction project resource resolvers', () => {
     expect(runtimeResourceFindOne).toHaveBeenCalledTimes(1);
   });
 
+  it('deduplicates repeated batch ids and rejects empty selections without trusting injected parameters', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
+
+    const duplicate = await request(app)
+      .post('/runtime-instance-selection?engineId=tenant-b-injected')
+      .send({ engineId, processInstanceIds: ['instance-1', 'instance-1', 'instance-1'], resourceId: 'injected-resource' });
+    expect(duplicate.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledTimes(1);
+    expect(permissionService.hasPermission).toHaveBeenLastCalledWith(
+      'engine:instance:delete', expect.objectContaining({ resourceType: 'engine_runtime_resource', resourceId: 'runtime-resource-1' }),
+    );
+
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValue(false);
+    camundaGet.mockClear();
+    const empty = await request(app)
+      .post('/runtime-instance-selection')
+      .send({ engineId, processInstanceIds: ['', ' ', null, 0] });
+    expect(empty.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+  });
+
   it('rejects unbounded batch selections on resource-aware engines', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -1849,6 +1872,30 @@ describe('requireAction project resource resolvers', () => {
       expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'projectId is required' }));
     }
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for a deterministic corpus of malformed and mixed-tenant resource identifiers', async () => {
+    const malformedIds = ['not-a-uuid', '../other-project', '%00', '\u0000', 'a'.repeat(2_048)];
+    const middleware = requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' });
+    projectFindOne.mockImplementation(async ({ where }: any) => where.id === projectId ? { id: projectId, tenantId: 'tenant-a' } : null);
+
+    for (const projectId of malformedIds) {
+      const next = vi.fn();
+      await middleware({ user: { userId: 'user-1' }, params: { projectId } } as any, {} as any, next);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404 }));
+    }
+
+    const mixedTenantNext = vi.fn();
+    await middleware({ user: { userId: 'user-1' }, tenant: { tenantId: 'tenant-b' }, params: { projectId } } as any, {} as any, mixedTenantNext);
+    expect(mixedTenantNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+
+    const unexpectedParamReq: any = {
+      user: { userId: 'user-1' }, params: { projectId }, query: { projectId: 'tenant-b-injected', tenantId: 'tenant-b' },
+    };
+    const unexpectedParamNext = vi.fn();
+    await middleware(unexpectedParamReq, {} as any, unexpectedParamNext);
+    expect(unexpectedParamNext).toHaveBeenCalledWith();
+    expect(unexpectedParamReq.authzResource).toEqual({ type: 'project', id: projectId });
   });
 
   it('fails closed for route-less actions and registered resolvers without middleware support', async () => {
