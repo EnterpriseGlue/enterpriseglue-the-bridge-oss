@@ -114,6 +114,21 @@ describe('requireRuntimeCollectionAction', () => {
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 404, message: expect.stringContaining('Engine not found') }));
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
   });
+
+  it('allows an engine-wide runtime collection grant and attaches its authorization context', async () => {
+    const next = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'engine_wide' }) }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    const req: any = { user: { userId: 'user-1' }, query: { engineId: 'engine-1' } };
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.authzResource).toEqual({ type: 'engine', id: 'engine-1' });
+    expect(req.runtimeAccessScope).toBe('engine_wide');
+  });
 });
 
 describe('requireAction project resource resolvers', () => {
