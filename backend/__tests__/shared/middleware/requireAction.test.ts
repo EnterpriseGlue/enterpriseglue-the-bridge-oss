@@ -588,6 +588,31 @@ describe('requireAction project resource resolvers', () => {
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
+  it('rejects resource-aware migrations without both definition identifiers', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app).post('/runtime-migration').send({ engineId, plan: { sourceProcessDefinitionId: 'source-v1' } });
+
+    expect(response.status).toBe(400);
+    expect(camundaGet).not.toHaveBeenCalled();
+  });
+
+  it('rejects selected instances outside the authorized migration source', async () => {
+    engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true).mockResolvedValueOnce(true);
+    camundaGet
+      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' })
+      .mockResolvedValueOnce({ id: 'instance-1', definitionKey: 'unrelated' });
+
+    const response = await request(app).post('/runtime-migration').send({
+      engineId, plan: { sourceProcessDefinitionId: 'source-v1', targetProcessDefinitionId: 'target-v2' }, processInstanceIds: ['instance-1'],
+    });
+
+    expect(response.status).toBe(403);
+  });
+
   it('discovers resource-aware engines when a runtime resource is visible', async () => {
     engineFind.mockResolvedValue([{ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' }]);
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
