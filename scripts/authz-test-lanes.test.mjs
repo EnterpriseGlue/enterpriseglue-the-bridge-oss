@@ -70,7 +70,17 @@ test('the authz refactor aggregate composes the three local-safe lanes', () => {
 test('the authorization structure gate requires exhaustive registry action coverage', () => {
   assert.match(scripts['test:authz:structure'], /guard:backend-authz/);
   assert.match(scripts['test:authz:structure'], /guard:authz-test-coverage/);
+  assert.match(scripts['test:authz:structure'], /test:authz:machine-principal-coverage/);
   assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
+});
+
+test('machine-principal services retain literal 100 percent source coverage', () => {
+  const command = scripts['test:authz:machine-principal-coverage'];
+  assert.match(command, /apiClientService\.test\.ts/);
+  assert.match(command, /serviceAccountService\.test\.ts/);
+  assert.match(command, /coverage\.allowExternal true/);
+  assert.match(command, /coverage\.thresholds\.100 true/);
+  assert.match(command, /coverage\.thresholds\.perFile true/);
 });
 
 test('the local-safe lanes preserve every focused authorization check once', () => {

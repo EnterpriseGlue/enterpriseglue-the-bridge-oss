@@ -60,6 +60,32 @@ describe('ServiceAccountService', () => {
     expect(listed[0]).not.toHaveProperty('token');
   });
 
+  it('normalizes default values and lists inactive accounts only when requested', async () => {
+    const created = await service.createServiceAccount({
+      name: '  Release service  ',
+      description: '   ',
+      scopes: [' ', ServiceAccountScopes.DEPLOYMENT_EXECUTE, ServiceAccountScopes.DEPLOYMENT_EXECUTE],
+    });
+    rows.push({ ...rows[0], id: 'inactive', isActive: false, createdAt: rows[0].createdAt + 1 });
+
+    expect(created.account).toMatchObject({
+      name: 'Release service',
+      description: null,
+      scopes: [ServiceAccountScopes.DEPLOYMENT_EXECUTE],
+      createdById: null,
+    });
+    await expect(service.createServiceAccount({ name: 'Empty scope list', scopes: [' '] }))
+      .resolves.toMatchObject({ account: { scopes: [ServiceAccountScopes.DEPLOYMENT_EXECUTE] } });
+    rows[0].scopesJson = '{not-json';
+    rows[1].scopesJson = null;
+    rows[2].scopesJson = '{}';
+    await expect(service.listServiceAccounts()).resolves.toHaveLength(2);
+    await expect(service.listServiceAccounts({ includeInactive: true })).resolves.toHaveLength(3);
+    await expect(service.createServiceAccount({ name: '   ' })).rejects.toThrow('Service account name is required');
+    await expect(service.createServiceAccount({ name: 'Invalid scope', scopes: ['engine:register'] }))
+      .rejects.toThrow('Unsupported service account scope: engine:register');
+  });
+
   it('authenticates scoped service-account tokens and records last use', async () => {
     const created = await service.createServiceAccount({ name: 'Release service' });
 
@@ -79,6 +105,26 @@ describe('ServiceAccountService', () => {
     await expect(service.authenticateToken(created.token, ServiceAccountScopes.DEPLOYMENT_EXECUTE))
       .rejects
       .toThrow('Service account missing required scope');
+  });
+
+  it('fails closed for malformed, unknown, missing-secret, invalid-secret, and malformed-scope tokens', async () => {
+    await expect(service.authenticateToken('wrong_prefix', ServiceAccountScopes.DEPLOYMENT_EXECUTE))
+      .rejects.toThrow('Invalid service account token');
+    await expect(service.authenticateToken('egsa_only-id', ServiceAccountScopes.DEPLOYMENT_EXECUTE))
+      .rejects.toThrow('Invalid service account token');
+    await expect(service.authenticateToken('egsa_unknown_secret', ServiceAccountScopes.DEPLOYMENT_EXECUTE))
+      .rejects.toThrow('Invalid service account token');
+
+    const created = await service.createServiceAccount({ name: 'Release service' });
+    rows[0].scopesJson = '{not-json';
+    await expect(service.authenticateToken(created.token, ServiceAccountScopes.DEPLOYMENT_EXECUTE))
+      .rejects.toThrow('Service account missing required scope');
+    rows[0].secretHash = null;
+    await expect(service.authenticateToken(created.token, ServiceAccountScopes.DEPLOYMENT_EXECUTE))
+      .rejects.toThrow('Invalid service account token');
+    rows[0].secretHash = '$2b$10$invalid';
+    await expect(service.authenticateToken(created.token, ServiceAccountScopes.DEPLOYMENT_EXECUTE))
+      .rejects.toThrow('Invalid service account token');
   });
 
   it('revokes and blocks service accounts', async () => {
@@ -105,5 +151,23 @@ describe('ServiceAccountService', () => {
     await expect(service.authenticateToken(rotated.token, ServiceAccountScopes.DEPLOYMENT_EXECUTE))
       .resolves
       .toMatchObject({ id: created.account.id });
+  });
+
+  it('repairs legacy nullable rotation fields and handles unknown or already-revoked accounts', async () => {
+    await expect(service.rotateServiceAccountToken('missing')).rejects.toThrow('Service account');
+    await expect(service.revokeServiceAccount('missing')).rejects.toThrow('Service account');
+
+    const created = await service.createServiceAccount({ name: 'Release service' });
+    rows[0].tokenPrefix = null;
+    rows[0].scopesJson = null;
+    const rotated = await service.rotateServiceAccountToken(created.account.id);
+    expect(rotated.account.tokenPrefix).toBe(`egsa_${created.account.id.slice(0, 8)}`);
+    expect(rotated.account.scopes).toEqual([ServiceAccountScopes.DEPLOYMENT_EXECUTE]);
+
+    await service.revokeServiceAccount(created.account.id);
+    await expect(service.rotateServiceAccountToken(created.account.id)).rejects.toThrow('Cannot rotate a revoked service account');
+    const updateCount = repo.update.mock.calls.length;
+    await service.revokeServiceAccount(created.account.id);
+    expect(repo.update).toHaveBeenCalledTimes(updateCount);
   });
 });
