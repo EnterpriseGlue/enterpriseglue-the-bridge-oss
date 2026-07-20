@@ -4,6 +4,11 @@ import { getE2ECredentials, getE2EFineGrainedFixture, hasE2ECredentials } from '
 const shouldSkip = !hasE2ECredentials();
 const fineGrained = getE2EFineGrainedFixture();
 
+async function enterLocalCredentials(page: import('@playwright/test').Page, email: string, password: string) {
+  await page.getByLabel(/email/i).pressSequentially(email);
+  await page.getByLabel(/password/i).pressSequentially(password);
+}
+
 test.describe('Smoke: local Access Control authorization', () => {
   test.skip(shouldSkip, 'E2E_USER/E2E_PASSWORD not set');
 
@@ -12,8 +17,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     if (!email || !password) throw new Error('Missing E2E credentials');
 
     await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
+    await enterLocalCredentials(page, email, password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
@@ -29,6 +33,19 @@ test.describe('Smoke: local Access Control authorization', () => {
 
     await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
     const panel = page.getByRole('tabpanel', { name: 'Effective Access' });
+    const unnamedVisibleControls = await panel.locator('input, button, [role="combobox"]').evaluateAll((elements) => elements
+      .filter((element) => (element as HTMLElement).offsetParent !== null)
+      .map((element) => {
+        const input = element as HTMLInputElement;
+        const hasLabel = input.labels?.length || element.getAttribute('aria-label') || element.getAttribute('aria-labelledby') || element.textContent?.trim();
+        return hasLabel ? null : element.outerHTML;
+      })
+      .filter(Boolean));
+    expect(unnamedVisibleControls).toEqual([]);
+    await panel.getByRole('textbox', { name: 'User ID' }).focus();
+    expect(await panel.locator('#effective-user-id').evaluate((element) => document.activeElement === element)).toBe(true);
+    await page.keyboard.press('Tab');
+    expect(await panel.evaluate((element) => element.contains(document.activeElement))).toBe(true);
     const session = await page.evaluate(async () => (await fetch('/api/auth/me')).json());
     const permissions = await page.evaluate(async () => (await fetch('/api/authz/permissions')).json());
     const userId = session.user?.id || session.id;
@@ -42,6 +59,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     await expect(panel.getByRole('button', { name: 'Evaluate' })).toBeEnabled();
     await panel.getByRole('button', { name: 'Evaluate' }).click();
     await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByRole('table', { name: /authorization sources/i })).toBeVisible();
   });
 
   test('Effective Access displays the same engine decisions and source details as its evaluation API', async ({ page }) => {
@@ -50,8 +68,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     if (!email || !password) throw new Error('Missing E2E credentials');
 
     await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
+    await enterLocalCredentials(page, email, password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
     await page.goto('/t/default/admin/access-control');

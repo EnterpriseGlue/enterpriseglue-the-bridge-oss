@@ -2,6 +2,11 @@
 import { defineConfig } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
+const requestedBrowsers = (process.env.PLAYWRIGHT_BROWSERS || 'chromium').split(',').map((name) => name.trim()).filter(Boolean);
+const supportedBrowsers = new Set(['chromium', 'firefox', 'webkit']);
+if (requestedBrowsers.some((name) => !supportedBrowsers.has(name))) {
+  throw new Error(`Unsupported PLAYWRIGHT_BROWSERS value: ${requestedBrowsers.join(', ')}`);
+}
 
 export default defineConfig({
   testDir: './',
@@ -19,7 +24,6 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
-  ],
+  ...(process.env.PLAYWRIGHT_WORKERS ? { workers: Number(process.env.PLAYWRIGHT_WORKERS) } : {}),
+  projects: requestedBrowsers.map((browserName) => ({ name: browserName, use: { browserName } })),
 });

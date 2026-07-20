@@ -91,6 +91,7 @@
     "test:authz:local-access-control": "./scripts/run-authz-local-login-test.sh test/e2e/smoke/access-control-local.spec.ts",
     "test:authz:local-smoke": "./scripts/run-authz-local-login-test.sh test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts",
     "test:authz:local-smoke:seeded": "./scripts/run-authz-local-seeded-smoke.sh",
+    "test:authz:local-smoke:cross-browser": "E2E_API_BASE_URL=${E2E_API_BASE_URL:-http://localhost:5173} ./scripts/run-authz-local-seeded-cross-browser.sh",
     "test:identity:local": "pnpm run test:identity:contract && pnpm run test:identity:routes && pnpm run test:identity:matrix && pnpm run test:identity:protocol && pnpm run test:identity:ui",
     "test:identity:verify": "pnpm run test:identity:local && pnpm run test:identity:browser && pnpm run test:identity:ldap",
     "test:authz:structure": "pnpm run guard:backend-authz && pnpm run guard:authz-test-coverage && pnpm run test:authz:machine-principal-coverage && pnpm run test:authz:policy-coverage && pnpm run test:authz:api-client-middleware-coverage && pnpm run test:authz:require-action-coverage && node --test scripts/authz-test-lanes.test.mjs",

@@ -11,8 +11,8 @@ test.describe('Smoke: login', () => {
     if (!email || !password) throw new Error('Missing E2E credentials');
     await page.goto('/login?local=1');
 
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
+    await page.getByLabel(/email/i).pressSequentially(email);
+    await page.getByLabel(/password/i).pressSequentially(password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();

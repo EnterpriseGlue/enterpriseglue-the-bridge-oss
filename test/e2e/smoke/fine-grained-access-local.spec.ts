@@ -53,8 +53,8 @@ async function login(page: Page) {
 
 async function loginAs(page: Page, email: string, password: string) {
   await page.goto('/login?local=1');
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel(/email/i).pressSequentially(email);
+  await page.getByLabel(/password/i).pressSequentially(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -127,8 +127,8 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(groupFixture.engineId).toBeTruthy();
 
     await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).fill(groupFixture.email!);
-    await page.getByLabel(/password/i).fill(groupFixture.password!);
+    await page.getByLabel(/email/i).pressSequentially(groupFixture.email!);
+    await page.getByLabel(/password/i).pressSequentially(groupFixture.password!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
@@ -185,8 +185,8 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(fixture.expiredEngineId).toBeTruthy();
 
     await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).fill(fixture.expiredEmail!);
-    await page.getByLabel(/password/i).fill(fixture.expiredPassword!);
+    await page.getByLabel(/email/i).pressSequentially(fixture.expiredEmail!);
+    await page.getByLabel(/password/i).pressSequentially(fixture.expiredPassword!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
@@ -204,8 +204,8 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(fixture.groupScopedEngineId).toBeTruthy();
 
     await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).fill(fixture.groupEmail!);
-    await page.getByLabel(/password/i).fill(fixture.groupPassword!);
+    await page.getByLabel(/email/i).pressSequentially(fixture.groupEmail!);
+    await page.getByLabel(/password/i).pressSequentially(fixture.groupPassword!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
