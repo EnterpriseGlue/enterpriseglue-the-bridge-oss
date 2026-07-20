@@ -1084,6 +1084,15 @@ describe('requireAction project resource resolvers', () => {
     }));
   });
 
+  it('conceals missing and cross-tenant saved-filter engines', async () => {
+    savedFilterFindOne.mockResolvedValueOnce(null);
+    expect((await request(app).get(`/saved-filters/${savedFilterId}`)).status).toBe(404);
+
+    savedFilterFindOne.mockResolvedValueOnce({ id: savedFilterId, engineId });
+    engineFindOne.mockResolvedValueOnce({ id: engineId, tenantId: 'tenant-b' });
+    expect((await request(app).get(`/saved-filters/${savedFilterId}?tenantId=tenant-a`)).status).toBe(403);
+  });
+
   it('resolves a project-scoped action from a Git repository id', async () => {
     const response = await request(app).get(`/git-repositories/${gitRepositoryId}`);
 
