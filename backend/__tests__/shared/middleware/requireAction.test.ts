@@ -1276,4 +1276,9 @@ describe('requireAction project resource resolvers', () => {
   it('requires an identifier for project and engine invitation targets', async () => {
     expect((await request(app).post('/invitations').send({ resourceType: 'project' })).status).toBe(400);
   });
+
+  it('denies project invitations without member-management permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    expect((await request(app).post('/invitations').send({ resourceType: 'project', resourceId: projectId })).status).toBe(403);
+  });
 });
