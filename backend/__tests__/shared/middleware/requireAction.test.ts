@@ -129,6 +129,23 @@ describe('requireRuntimeCollectionAction', () => {
     expect(req.authzResource).toEqual({ type: 'engine', id: 'engine-1' });
     expect(req.runtimeAccessScope).toBe('engine_wide');
   });
+
+  it('denies resource-aware runtime collections with no visible resources', async () => {
+    const next = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
+      { user: { userId: 'user-1' }, query: { engineId: 'engine-1' } } as any,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403, message: 'No authorized runtime resources are available for this engine' }));
+  });
 });
 
 describe('requireAction project resource resolvers', () => {
