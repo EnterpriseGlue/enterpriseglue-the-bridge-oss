@@ -12,6 +12,9 @@ import { permissionService } from '@enterpriseglue/shared/services/platform-admi
 const gitRouteMocks = vi.hoisted(() => ({
   evaluateDeploymentEligibility: vi.fn(),
 }));
+const policyServiceMock = vi.hoisted(() => ({
+  evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -88,6 +91,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentEligibilitySer
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: policyServiceMock,
+}));
+
 describe('git deployments routes', () => {
   let app: express.Application;
   let deploymentFind: ReturnType<typeof vi.fn>;
@@ -106,6 +113,7 @@ describe('git deployments routes', () => {
     (projectMemberService.hasAccess as unknown as Mock).mockResolvedValue(true);
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([]);
+    policyServiceMock.evaluateGate.mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
     gitRouteMocks.evaluateDeploymentEligibility.mockResolvedValue({
       allowed: true,
       decision: 'allow',

@@ -42,6 +42,7 @@ const expectedLeafChecks = [
   'test:target-ownership',
   'test:engine-import',
   'test:action-registry',
+  'test:authz:exhaustive-contracts',
   'test:assignment-targets',
   'test:authz-group-key-identity',
   'test:managed-resource-key-identities',
@@ -64,6 +65,12 @@ test('the authz refactor aggregate composes the three local-safe lanes', () => {
   assert.match(authzRefactorRunner, /EG_ENV_FILE/);
   assert.match(authzRefactorRunner, /POSTGRES_HOST/);
   assert.match(authzRefactorRunner, /POSTGRES_URL/);
+});
+
+test('the authorization structure gate requires exhaustive registry action coverage', () => {
+  assert.match(scripts['test:authz:structure'], /guard:backend-authz/);
+  assert.match(scripts['test:authz:structure'], /guard:authz-test-coverage/);
+  assert.match(scripts['test:authz:structure'], /authz-test-lanes\.test\.mjs/);
 });
 
 test('the local-safe lanes preserve every focused authorization check once', () => {

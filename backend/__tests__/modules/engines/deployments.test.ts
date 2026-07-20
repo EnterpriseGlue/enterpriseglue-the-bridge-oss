@@ -8,6 +8,10 @@ import { serviceAccountService } from '@enterpriseglue/shared/services/platform-
 import { deploymentEligibilityService } from '@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js';
 import { getAuthzActionDefinition } from '@enterpriseglue/shared/authz/permission-actions.js';
 
+const policyServiceMock = vi.hoisted(() => ({
+  evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
+}));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
@@ -80,6 +84,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentEligibilitySer
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: policyServiceMock,
+}));
+
 describe('engines deployments routes', () => {
   let app: express.Application;
   let engineDeploymentInserts: any[];
@@ -95,6 +103,7 @@ describe('engines deployments routes', () => {
     const { default: deploymentsRouter } = await import('../../../../packages/backend-host/src/modules/engines/routes/deployments.js');
     app.use(deploymentsRouter);
     vi.clearAllMocks();
+    policyServiceMock.evaluateGate.mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
     (apiClientService.authenticateToken as unknown as Mock).mockResolvedValue({
       id: 'api-client-1',

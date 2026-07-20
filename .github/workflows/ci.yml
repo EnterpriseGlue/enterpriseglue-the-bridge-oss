@@ -372,6 +372,10 @@ jobs:
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: pnpm run test:unit
 
+      - name: Enforce fine-grained authorization coverage contracts
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        run: pnpm run test:authz:structure
+
       - name: Run integration tests
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: pnpm run test:integration

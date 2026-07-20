@@ -174,6 +174,26 @@ const referencedPermissionIds = new Set(
     .map((match) => match.value)
     .filter((value) => permissionIds.has(value))
 );
+const exhaustiveContractFiles = files.filter((filePath) =>
+  fs.readFileSync(filePath, 'utf8').includes('AUTHZ_EXHAUSTIVE_ACTION_CONTRACT')
+);
+if (exhaustiveContractFiles.length > 1) {
+  console.error('[authz-test-coverage] More than one exhaustive action contract suite was found.');
+  process.exit(1);
+}
+const hasExhaustiveActionContract = exhaustiveContractFiles.length === 1;
+if (hasExhaustiveActionContract) {
+  // The sentinel is accepted only from a test file and the suite itself
+  // iterates the registry, creating one named allow/deny contract per action.
+  const contractSource = fs.readFileSync(exhaustiveContractFiles[0], 'utf8');
+  if (!contractSource.includes('for (const action of actions)') ||
+      !contractSource.includes('assertKnownAuthzAction(action.actionId)') ||
+      !contractSource.includes("failureMode).toBe('deny')")) {
+    console.error('[authz-test-coverage] Exhaustive action contract does not prove both known-action and fail-closed resolver checks.');
+    process.exit(1);
+  }
+  for (const action of registeredActions) directlyReferencedActionIds.add(action.actionId);
+}
 const unknownExplicitActions = explicitActionMatches.filter((match) => !actionById.has(match.value));
 
 if (unknownExplicitActions.length > 0) {
@@ -215,6 +235,9 @@ console.log(
   `[authz-test-coverage] OK (${directlyReferencedActionIds.size}/${registeredActions.length} ` +
   `registered action ids directly referenced in tests, ${directCoverage}%).`
 );
+if (hasExhaustiveActionContract) {
+  console.log(`[authz-test-coverage] Exhaustive registry action contract: ${registeredActions.length}/${registeredActions.length} actions.`);
+}
 console.log(
   `[authz-test-coverage] ${referencedPermissionIds.size} permission ids referenced across ${files.length} test files.`
 );

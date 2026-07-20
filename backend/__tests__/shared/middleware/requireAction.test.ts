@@ -75,6 +75,7 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camund
 
 describe('requireAction project resource resolvers', () => {
   const projectId = '11111111-1111-4111-8111-111111111111';
+  const secondProjectId = '12121212-1212-4121-8121-121212121212';
   const fileId = '22222222-2222-4222-8222-222222222222';
   const folderId = '33333333-3333-4333-8333-333333333333';
   const versionId = '44444444-4444-4444-8444-444444444444';
@@ -87,6 +88,7 @@ describe('requireAction project resource resolvers', () => {
 
   let app: express.Application;
   let projectFindOne: ReturnType<typeof vi.fn>;
+  let projectFind: ReturnType<typeof vi.fn>;
   let engineFind: ReturnType<typeof vi.fn>;
   let engineFindOne: ReturnType<typeof vi.fn>;
   let fileFindOne: ReturnType<typeof vi.fn>;
@@ -135,6 +137,15 @@ describe('requireAction project resource resolvers', () => {
         resource: req.authzResource,
         collection: req.authzCollection,
         authorizedEngineIds: req.authorizedEngineIds,
+      });
+    });
+    app.get('/projects', requireAction('project.projects.read', {
+      resourceResolver: 'project.visibleCollection',
+    }), (req: any, res) => {
+      res.json({
+        resource: req.authzResource,
+        collection: req.authzCollection,
+        authorizedProjectIds: req.authorizedProjectIds,
       });
     });
     app.get('/saved-filters/:id', requireAction('engine.saved-filters.read', {
@@ -236,6 +247,7 @@ describe('requireAction project resource resolvers', () => {
     (policyService.evaluateGate as unknown as Mock).mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
 
     projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
+    projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: null }]);
     engineFind = vi.fn().mockResolvedValue([{ id: engineId, tenantId: null }]);
     engineFindOne = vi.fn().mockResolvedValue({ id: engineId, tenantId: null, name: 'Engine One', environmentTagId: null });
     fileFindOne = vi.fn().mockResolvedValue({ id: fileId, projectId });
@@ -258,7 +270,7 @@ describe('requireAction project resource resolvers', () => {
     (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([projectId]);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Project) return { findOne: projectFindOne };
+        if (entity === Project) return { findOne: projectFindOne, find: projectFind };
         if (entity === Engine) return { find: engineFind, findOne: engineFindOne, findOneBy: engineFindOne };
         if (entity === EnvironmentTag) return { findOneBy: vi.fn().mockResolvedValue(null) };
         if (entity === File) return { findOne: fileFindOne };
@@ -744,6 +756,38 @@ describe('requireAction project resource resolvers', () => {
       userId: 'user-1',
       resourceType: 'engine',
       resourceId: engineId,
+    }));
+  });
+
+  it('filters a project collection through the same per-resource policy boundary as project detail routes', async () => {
+    projectFind.mockResolvedValue([
+      { id: projectId, tenantId: null },
+      { id: secondProjectId, tenantId: null },
+    ]);
+    (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([projectId, secondProjectId]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string, context: { resourceId?: string }) =>
+        permission === 'project:files:view' && context.resourceId === projectId
+    );
+
+    const response = await request(app).get('/projects');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      resource: { type: 'project', id: null },
+      authorizedProjectIds: [projectId],
+      collection: {
+        type: 'project',
+        ids: [projectId],
+        requestedIds: [projectId, secondProjectId],
+        deniedIds: [secondProjectId],
+      },
+    });
+    expect(permissionService.getKnownProjectIdsForUser).toHaveBeenCalledWith('user-1', null);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'project',
+      resourceId: projectId,
     }));
   });
 

@@ -22,6 +22,9 @@ const permissionServiceMock = vi.hoisted(() => ({
 const platformSettingsServiceMock = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({ engineOnboardingMode: 'manual_allowed' }),
 }));
+const policyServiceMock = vi.hoisted(() => ({
+  evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
+}));
 const fetchMock = vi.hoisted(() => vi.fn());
 const secretResolverMock = vi.hoisted(() => ({
   normalizeForStorage: vi.fn((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null),
@@ -78,6 +81,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
     getKnownEngineIdsForUser: permissionServiceMock.getKnownEngineIdsForUser,
     syncLegacyRoleAssignments: permissionServiceMock.syncLegacyRoleAssignments,
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: policyServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
@@ -171,6 +178,7 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.getKnownEngineIdsForUser.mockReset();
     permissionServiceMock.syncLegacyRoleAssignments.mockReset();
     platformSettingsServiceMock.get.mockReset();
+    policyServiceMock.evaluateGate.mockReset();
     secretResolverMock.normalizeForStorage.mockReset();
     secretResolverMock.resolveStored.mockReset();
     (engineService as any).listEngines.mockReset();
@@ -197,6 +205,7 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['e1']);
     permissionServiceMock.syncLegacyRoleAssignments.mockResolvedValue({ scannedProjects: 0, scannedEngines: 1, upserted: 1, removed: 0 });
     platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'manual_allowed' });
+    policyServiceMock.evaluateGate.mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
     secretResolverMock.normalizeForStorage.mockImplementation((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null);
     secretResolverMock.resolveStored.mockImplementation((value: string | null | undefined) => value?.startsWith('v2:test:') ? Buffer.from(value.slice('v2:test:'.length), 'base64').toString() : value || null);
     (engineService as any).listEngines.mockResolvedValue([]);
