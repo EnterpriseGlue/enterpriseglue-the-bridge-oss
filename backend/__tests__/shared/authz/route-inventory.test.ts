@@ -468,7 +468,7 @@ describe('authorization route inventory validation', () => {
     }
   });
 
-  it('registers high-risk SSO management actions as audited mapping and provider actions', () => {
+  it('registers high-risk provider-neutral identity management actions as audited actions', () => {
     const expectedActions = [
       {
         actionId: 'platform.sso.engine-assignments.manage',
@@ -476,56 +476,27 @@ describe('authorization route inventory validation', () => {
         resourceType: 'sso_mapping',
         operation: 'manage',
         risk: 'high',
-        surfaceId: 'admin.access-control.sso-engine-assignments.edit',
+        surfaceId: 'admin.identity-providers.diagnostics.actions',
         routes: [
-          ['POST', '/api/authz/sso-assignment-mappings', 'platform.self'],
-          ['POST', '/api/authz/sso-assignment-mappings/{id}/migrate-provider-neutral', 'ssoMapping.byId'],
-          ['PUT', '/api/authz/sso-assignment-mappings/:id', 'ssoMapping.byId'],
-	          ['DELETE', '/api/authz/sso-assignment-mappings/:id', 'ssoMapping.byId'],
-	          ['POST', '/api/authz/sso-assignment-mappings/test', 'platform.self'],
-	          ['POST', '/api/authz/sso-sync-runs/reconcile', 'platform.self'],
-	          ['POST', '/api/engines/:engineId/access/transition-cleanup-preview', 'platform.self'],
-	          ['POST', '/api/engines/:engineId/access/transition-cleanup', 'platform.self'],
-	        ],
-	      },
+          ['POST', '/api/authz/sso-sync-runs/reconcile', 'platform.self'],
+          ['POST', '/api/engines/:engineId/access/transition-cleanup-preview', 'platform.self'],
+          ['POST', '/api/engines/:engineId/access/transition-cleanup', 'platform.self'],
+        ],
+      },
       {
         actionId: 'platform.sso.group-mappings.manage',
         permissionId: 'platform:sso-assignments:manage',
         resourceType: 'sso_mapping',
         operation: 'manage',
         risk: 'high',
-        surfaceId: 'admin.access-control.sso-group-mappings.edit',
+        surfaceId: 'admin.identity-mappings.actions',
         routes: [
-          ['POST', '/api/authz/sso-group-mappings', 'platform.self'],
-          ['POST', '/api/authz/sso-group-mappings/{id}/migrate-provider-neutral', 'ssoMapping.byId'],
-          ['PUT', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
-          ['DELETE', '/api/authz/sso-group-mappings/:id', 'ssoMapping.byId'],
-          ['POST', '/api/authz/sso-group-mappings/test', 'platform.self'],
           ['POST', '/api/identity/mappings', 'platform.self'],
           ['POST', '/api/identity/mappings/provision-access', 'platform.self'],
           ['PUT', '/api/identity/mappings/{id}', 'platform.self'],
           ['DELETE', '/api/identity/mappings/{id}', 'platform.self'],
           ['POST', '/api/identity/mappings/test', 'platform.self'],
           ['POST', '/api/identity/mappings/stored-snapshot-preview', 'platform.self'],
-          ['POST', '/api/authz/legacy-mapping-coverage/{id}/verify', 'ssoMapping.byId'],
-          ['POST', '/api/authz/legacy-mapping-retirement/disable', 'platform.self'],
-          ['POST', '/api/authz/legacy-mapping-retirement/disable-global', 'platform.self'],
-        ],
-      },
-      {
-        actionId: 'platform.sso.platform-role-mappings.manage',
-        permissionId: 'platform:sso-platform-role-mappings:manage',
-        resourceType: 'sso_mapping',
-        operation: 'manage',
-        risk: 'high',
-        surfaceId: 'admin.sso.role-mappings.edit',
-        routes: [
-          ['POST', '/api/authz/sso-mappings', 'platform.self'],
-          ['POST', '/api/authz/sso-mappings/{id}/migrate-provider-neutral', 'ssoMapping.byId'],
-          ['PUT', '/api/authz/sso-mappings/{id}', 'ssoMapping.byId'],
-          ['DELETE', '/api/authz/sso-mappings/{id}', 'ssoMapping.byId'],
-          ['POST', '/api/authz/sso-mappings/test', 'platform.self'],
-          ['POST', '/api/authz/legacy-mapping-retirement/disable-global', 'platform.self'],
         ],
       },
       {

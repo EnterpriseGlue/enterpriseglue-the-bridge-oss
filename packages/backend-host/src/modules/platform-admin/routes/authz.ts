@@ -41,9 +41,7 @@ import { registerAuditRoutes } from './authz/audit.js';
 import { registerExternalEngineRoutes } from './authz/external-engines.js';
 import { registerExternalEngineSystemRoutes } from './authz/external-engine-systems.js';
 import { registerSsoSyncDiagnosticsRoutes } from './authz/sso-sync-diagnostics.js';
-import { registerSsoPlatformMappingRoutes } from './authz/sso-platform-mappings.js';
 import { registerSsoEngineAssignmentRoutes } from './authz/sso-engine-assignments.js';
-import { registerSsoGroupMappingRoutes } from './authz/sso-group-mappings.js';
 
 // Validation schemas
 const idParamSchema = z.object({ id: z.string().uuid() });
@@ -290,27 +288,7 @@ registerProjectEngineTargetRoutes(router, { requirePlatformAction });
 
 registerPolicyRoutes(router, { requirePlatformAction });
 
-// ============================================================================
-// SSO Claims Mapping Management (Admin Only)
-// ============================================================================
-
-/**
- * GET /api/platform-admin/authz/sso-mappings
- * List all SSO claims mappings.
- */
-registerSsoPlatformMappingRoutes(router, { requirePlatformAction });
-
-// ============================================================================
-// SSO Engine Assignment Mapping Management (Admin Only)
-// ============================================================================
-
 registerSsoEngineAssignmentRoutes(router, { requirePlatformAction });
-
-// ============================================================================
-// SSO Group Mapping Management (Admin Only)
-// ============================================================================
-
-registerSsoGroupMappingRoutes(router, { requirePlatformAction });
 
 // ============================================================================
 // SSO Sync Diagnostics (Admin Only)

@@ -71,7 +71,6 @@ import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleC
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
 import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
 import { SsoAssignmentsPanel } from './access-control/SsoAssignmentsPanel';
-import { SsoMappingsPanel } from './access-control/SsoMappingsPanel';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { GroupsPanel } from './access-control/GroupsPanel';
 import { EngineSetsPanel } from './access-control/EngineSetsPanel';
@@ -313,7 +312,6 @@ const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   by_resource: 'By Resource',
   groups: 'Groups',
   effective_access: 'Effective Access',
-  sso_mappings: 'SSO Mappings',
   sso_engine_assignments: 'SSO Engine Assignments',
   engine_sets: 'Engine Sets',
   runtime_resources: 'Runtime Resources',
@@ -1203,14 +1201,12 @@ export default function AccessControl() {
   });
   const canManageRoles = rolesManageDecision.allowed;
   const canManageSsoAssignments = ssoAssignmentsManageDecision.allowed;
-  const showSsoMappingsTab = ssoPlatformMappingsReadDecision.allowed || ssoGroupMappingsReadDecision.allowed;
   const showExternalRegistrationTab = apiClientsReadDecision.allowed || serviceAccountsReadDecision.allowed || externalSystemsReadDecision.allowed || externalEnginesReadDecision.allowed;
   const hasVisibleTabs = rolesReadDecision.allowed ||
     permissionsReadDecision.allowed ||
     assignmentsReadDecision.allowed ||
     groupsReadDecision.allowed ||
     effectiveAccessDecision.allowed ||
-    showSsoMappingsTab ||
     ssoAssignmentsReadDecision.allowed ||
     engineSetsReadDecision.allowed ||
     projectTargetsReadDecision.allowed ||
@@ -1226,7 +1222,6 @@ export default function AccessControl() {
     }
     if (groupsReadDecision.allowed) tabIds.push('groups');
     if (effectiveAccessDecision.allowed) tabIds.push('effective_access');
-    if (showSsoMappingsTab) tabIds.push('sso_mappings');
     if (ssoAssignmentsReadDecision.allowed) tabIds.push('sso_engine_assignments');
     if (engineSetsReadDecision.allowed) tabIds.push('engine_sets', 'runtime_resources');
     if (projectTargetsReadDecision.allowed) tabIds.push('project_targets');
@@ -1240,7 +1235,6 @@ export default function AccessControl() {
     assignmentsReadDecision.allowed,
     groupsReadDecision.allowed,
     effectiveAccessDecision.allowed,
-    showSsoMappingsTab,
     ssoAssignmentsReadDecision.allowed,
     engineSetsReadDecision.allowed,
     projectTargetsReadDecision.allowed,
@@ -2495,47 +2489,6 @@ export default function AccessControl() {
               auditEntries={auditReadDecision.allowed ? inspectionAuditEntries : []}
               onOpenAuditReference={auditReadDecision.allowed ? openAuthzAuditReference : undefined}
             />
-          </TabPanel>
-          )}
-          {showSsoMappingsTab && (
-          <TabPanel>
-            {ssoPlatformMappingsQ.isError || ssoGroupMappingsQ.isError ? (
-              <InlineNotification kind="error" title="Unable to load SSO mappings" lowContrast />
-            ) : (
-              <SsoMappingsPanel
-                platformMappings={ssoPlatformMappings}
-                groupMappings={ssoGroupMappings}
-                groups={groups}
-                platformLoading={ssoPlatformMappingsQ.isLoading}
-                groupLoading={ssoGroupMappingsQ.isLoading}
-                testClaims={testClaims}
-                platformTestResult={testSsoPlatformMappingM.data}
-                groupTestResult={testSsoGroupMappingM.data}
-                canReadPlatform={ssoPlatformMappingsReadDecision.allowed}
-                canManagePlatform={ssoPlatformMappingsManageDecision.allowed}
-                canReadGroups={ssoGroupMappingsReadDecision.allowed}
-                canManageGroups={ssoGroupMappingsManageDecision.allowed}
-                platformPending={createSsoPlatformMappingM.isPending || updateSsoPlatformMappingM.isPending || deleteSsoPlatformMappingM.isPending || testSsoPlatformMappingM.isPending}
-                groupPending={createSsoGroupMappingM.isPending || updateSsoGroupMappingM.isPending || deleteSsoGroupMappingM.isPending || testSsoGroupMappingM.isPending}
-                claimLabel={ssoClaimLabel}
-                providerLabel={providerLabel}
-                platformRoleLabel={platformRoleLabel}
-                onTestClaimsChange={setTestClaims}
-                onTestPlatform={testSsoPlatformMappings}
-                onTestGroups={testSsoGroupMappings}
-                onCreatePlatform={openCreateSsoPlatformMapping}
-                onEditPlatform={openEditSsoPlatformMapping}
-                onDeletePlatform={deleteSsoPlatformMapping}
-                onCreateGroup={openCreateSsoGroupMapping}
-                onEditGroup={openEditSsoGroupMapping}
-                onDeleteGroup={deleteSsoGroupMapping}
-                onMigrateGroup={(mapping) => {
-                  setSsoGroupMigrationTarget(mapping);
-                  setSsoGroupMigrationProviderKey('');
-                  setSsoGroupMigrationError(null);
-                }}
-              />
-            )}
           </TabPanel>
           )}
           {ssoAssignmentsReadDecision.allowed && (

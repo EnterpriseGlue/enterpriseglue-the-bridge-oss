@@ -63,7 +63,6 @@ import {
 } from '../../../shared/auth/permissions';
 
 const AccessControl = React.lazy(() => import('./AccessControl'));
-const SsoMappings = React.lazy(() => import('./SsoMappings'));
 const AuthzPolicies = React.lazy(() => import('./AuthzPolicies'));
 const AuthzAuditLog = React.lazy(() => import('./AuthzAuditLog'));
 const AuditLogViewer = React.lazy(() => import('../../../pages/AuditLogViewer'));
@@ -102,7 +101,6 @@ const PLATFORM_SETTINGS_SECTION_REGISTRY = [
   { id: 'configuration', label: 'Configuration', visibility: 'configuration' },
   { id: 'role-library', label: 'Role Library', visibility: 'access-control' },
   { id: 'access-control', label: 'Access Control', visibility: 'access-control' },
-  { id: 'sso-mappings', label: 'SSO Role Mappings', visibility: 'identity-mappings' },
   { id: 'authz-policies', label: 'Authorization Policies', visibility: 'authz-policies' },
   { id: 'authz-audit', label: 'Authorization Audit', visibility: 'audit' },
   { id: 'audit-logs', label: 'System Audit Logs', visibility: 'audit' },
@@ -506,7 +504,6 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   const renderAccessControl = () => renderAdminSurface(<AccessControl />);
 
-  const renderSsoMappings = () => renderAdminSurface(<SsoMappings />);
 
   const renderAuthzPolicies = () => renderAdminSurface(<AuthzPolicies />);
 
@@ -548,7 +545,6 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     configuration: renderConfiguration,
     'role-library': renderRoleLibrary,
     'access-control': renderAccessControl,
-    'sso-mappings': renderSsoMappings,
     'authz-policies': renderAuthzPolicies,
     'authz-audit': renderAuthzAudit,
     'audit-logs': renderAuditLogs,

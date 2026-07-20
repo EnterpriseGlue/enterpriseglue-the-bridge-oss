@@ -28,7 +28,6 @@ const MigrationWizardPage = React.lazy(() => import('../features/mission-control
 
 // Platform Admin pages
 const PlatformSettingsPage = React.lazy(() => import('../features/platform-admin/pages/PlatformSettingsPage'))
-const SsoMappings = React.lazy(() => import('../features/platform-admin/pages/SsoMappings'))
 const AccessControl = React.lazy(() => import('../features/platform-admin/pages/AccessControl'))
 const AuthzPolicies = React.lazy(() => import('../features/platform-admin/pages/AuthzPolicies'))
 const AuthzAuditLog = React.lazy(() => import('../features/platform-admin/pages/AuthzAuditLog'))
@@ -275,16 +274,6 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         )
       },
       {
-        path: `${pathPrefix}admin/settings/sso-mappings`,
-        element: (
-          <ProtectedRoute requireAdmin requiredPlatformPermissions={[PlatformPermission.SSO_ASSIGNMENTS_VIEW, PlatformPermission.SSO_ASSIGNMENTS_MANAGE]}>
-            <LazyRoute message="Loading SSO mappings...">
-              <PlatformSettingsPage section="sso-mappings" />
-            </LazyRoute>
-          </ProtectedRoute>
-        )
-      },
-      {
         path: `${pathPrefix}admin/settings/policies`,
         element: (
           <ProtectedRoute requireAdmin requiredPlatformPermissions={[PlatformPermission.AUTHZ_ROLES_MANAGE]}>
@@ -321,7 +310,6 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       { path: `${pathPrefix}admin/settings/engines`, element: <Navigate to="../admin/settings" replace /> },
       { path: `${pathPrefix}admin/settings/sso`, element: <Navigate to="../admin/settings" replace /> },
       { path: `${pathPrefix}admin/settings/access-control`, element: <Navigate to="../admin/settings" replace /> },
-      { path: `${pathPrefix}admin/settings/sso-mappings`, element: <Navigate to="../admin/settings" replace /> },
       { path: `${pathPrefix}admin/settings/policies`, element: <Navigate to="../admin/settings" replace /> },
       { path: `${pathPrefix}admin/settings/authz-audit`, element: <Navigate to="../admin/settings" replace /> },
       { path: `${pathPrefix}admin/settings/audit-logs`, element: <Navigate to="../admin/settings" replace /> },
@@ -332,16 +320,6 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
         <ProtectedRoute requireAdmin requiredPlatformPermissions={ACCESS_CONTROL_PLATFORM_PERMISSIONS}>
           <LazyRoute message="Loading access control...">
             <AccessControl />
-          </LazyRoute>
-        </ProtectedRoute>
-      )
-    },
-    { 
-      path: `${pathPrefix}admin/sso-mappings`, 
-      element: (
-        <ProtectedRoute requireAdmin requiredPlatformPermissions={[PlatformPermission.SSO_ASSIGNMENTS_VIEW, PlatformPermission.SSO_ASSIGNMENTS_MANAGE]}>
-          <LazyRoute message="Loading SSO mappings...">
-            <SsoMappings />
           </LazyRoute>
         </ProtectedRoute>
       )

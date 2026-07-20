@@ -6,7 +6,6 @@ export const ACCESS_CONTROL_TAB_IDS = [
   'by_resource',
   'groups',
   'effective_access',
-  'sso_mappings',
   'sso_engine_assignments',
   'engine_sets',
   'runtime_resources',

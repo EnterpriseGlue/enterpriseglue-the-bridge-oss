@@ -1219,31 +1219,6 @@ describe('platform-admin authz routes', () => {
     expect(enginesResponse.status).toBe(200);
   });
 
-  it('allows SSO assignment viewers and managers without platform admin role', async () => {
-    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
-      permission === 'platform:sso-assignments:view'
-    );
-
-    const listResponse = await request(app).get('/api/authz/sso-assignment-mappings');
-    expect(listResponse.status).toBe(200);
-
-    vi.mocked(permissionService.hasPermission).mockImplementation(async (permission) =>
-      permission === 'platform:sso-assignments:manage'
-    );
-    const createResponse = await request(app)
-      .post('/api/authz/sso-assignment-mappings')
-      .send({
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Camunda Operators',
-        targetSelectorType: 'all_engines',
-        targetRoleId: 'system.engine.operator',
-        riskAcknowledged: true,
-      });
-
-    expect(createResponse.status).toBe(201);
-  });
-
   it('accepts a policy activation update through the shared write contract', async () => {
     const response = await request(app)
       .put('/api/authz/policies/00000000-0000-4000-8000-000000000090')
@@ -2256,38 +2231,6 @@ describe('platform-admin authz routes', () => {
     expect(deleteResponse.status).toBe(204);
   });
 
-  it('creates SSO engine assignment mappings', async () => {
-    const response = await request(app)
-      .post('/api/authz/sso-assignment-mappings')
-      .send({
-        claimType: 'group',
-        claimKey: 'groups',
-        claimValue: 'Camunda Operators',
-        targetSelectorType: 'all_engines',
-        targetRoleId: 'system.engine.operator',
-        riskAcknowledged: true,
-      });
-
-    expect(response.status).toBe(201);
-    expect(response.body.id).toBe('mapping-1');
-  });
-
-  it('creates SSO engine assignment mappings for external engine selectors', async () => {
-    const response = await request(app)
-      .post('/api/authz/sso-assignment-mappings')
-      .send({
-        claimType: 'role',
-        claimKey: 'roles',
-        claimValue: 'operator',
-        targetSelectorType: 'external_engine_id',
-        targetExternalEngineId: 'cluster-a/prod',
-        targetRoleId: 'system.engine.operator',
-      });
-
-    expect(response.status).toBe(201);
-    expect(response.body.id).toBe('mapping-1');
-  });
-
   it('previews configuration bundles without mutating authorization state', async () => {
     const bundle = {
       apiVersion: 'enterpriseglue.ai/v1alpha1',
@@ -2645,28 +2588,4 @@ describe('platform-admin authz routes', () => {
     );
   });
 
-  it('updates, tests, and deletes SSO engine assignment mappings', async () => {
-    const updateResponse = await request(app)
-      .put('/api/authz/sso-assignment-mappings/00000000-0000-4000-8000-000000000030')
-      .send({
-        targetSelectorType: 'engine_label',
-        targetLabelKey: 'environment',
-        targetLabelValue: 'prod',
-      });
-
-    expect(updateResponse.status).toBe(200);
-    expect(updateResponse.body.success).toBe(true);
-
-    const testResponse = await request(app)
-      .post('/api/authz/sso-assignment-mappings/test')
-      .send({ claims: { groups: ['Camunda Operators'] } });
-
-    expect(testResponse.status).toBe(200);
-    expect(testResponse.body.assignments).toEqual([]);
-
-    const deleteResponse = await request(app)
-      .delete('/api/authz/sso-assignment-mappings/00000000-0000-4000-8000-000000000030');
-
-    expect(deleteResponse.status).toBe(204);
-  });
 });
