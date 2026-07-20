@@ -32,5 +32,5 @@ fi
 export POSTGRES_HOST=127.0.0.1
 export POSTGRES_PORT="${db_endpoint##*:}"
 
-pnpm --dir backend exec vitest run test/integration/machine-principal-authz.test.ts \
+pnpm --dir backend exec vitest run test/integration/machine-principal-authz.test.ts test/integration/custom-role-scope-matrix.test.ts \
   --config vitest.config.ts --maxWorkers=1 --no-file-parallelism --reporter=dot
