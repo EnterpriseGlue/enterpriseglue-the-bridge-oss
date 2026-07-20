@@ -45,7 +45,7 @@ test.describe('Smoke: local Access Control authorization', () => {
   });
 
   test('Effective Access displays the same engine decisions and source details as its evaluation API', async ({ page }) => {
-    test.skip(!fineGrained.scopedUserId || !fineGrained.scopedEngineId || !fineGrained.scopedEngineAssignmentExpiresAt || !fineGrained.groupScopedUserId || !fineGrained.groupScopedEngineId || !fineGrained.expiredUserId || !fineGrained.expiredEngineId, 'Fine-grained fixture is unavailable');
+    test.skip(!fineGrained.scopedUserId || !fineGrained.scopedEngineId || !fineGrained.scopedEngineAssignmentExpiresAt || !fineGrained.runtimeScopedUserId || !fineGrained.runtimeScopedEngineId || !fineGrained.runtimeAllowedResourceId || !fineGrained.groupScopedUserId || !fineGrained.groupScopedEngineId || !fineGrained.expiredUserId || !fineGrained.expiredEngineId, 'Fine-grained fixture is unavailable');
     const { email, password } = getE2ECredentials();
     if (!email || !password) throw new Error('Missing E2E credentials');
 
@@ -74,6 +74,18 @@ test.describe('Smoke: local Access Control authorization', () => {
       await panel.getByRole('button', { name: 'Evaluate' }).click();
       return (await response).json();
     };
+    const evaluateRuntimeResource = async () => {
+      await panel.getByRole('textbox', { name: 'User ID' }).fill(fineGrained.runtimeScopedUserId!);
+      await panel.getByRole('combobox', { name: 'Resource type' }).click();
+      await page.getByRole('option', { name: 'Runtime resource', exact: true }).click();
+      await panel.getByRole('textbox', { name: 'Engine ID' }).fill(fineGrained.runtimeScopedEngineId!);
+      await panel.getByRole('textbox', { name: 'Definition key' }).fill('invoice-process');
+      await panel.getByRole('combobox', { name: 'Permission' }).click();
+      await page.getByRole('option', { name: `${permission.label} (${permission.key})` }).click();
+      const response = page.waitForResponse((candidate) => candidate.url().includes('/api/authz/evaluate') && candidate.request().method() === 'POST');
+      await panel.getByRole('button', { name: 'Evaluate' }).click();
+      return (await response).json();
+    };
 
     const allowed = await evaluate(fineGrained.scopedUserId!, fineGrained.scopedEngineId!);
     expect(allowed.allowed).toBe(true);
@@ -95,6 +107,18 @@ test.describe('Smoke: local Access Control authorization', () => {
     ]));
     await expect(panel.getByText('Access allowed')).toBeVisible();
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText('group:');
+
+    const runtime = await evaluateRuntimeResource();
+    expect(runtime.allowed).toBe(true);
+    expect(runtime.resolvedRuntimeResource).toMatchObject({
+      engineId: fineGrained.runtimeScopedEngineId,
+      resourceKey: 'invoice-process',
+    });
+    expect(runtime.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ scopeType: 'engine_runtime_resource', scopeId: fineGrained.runtimeAllowedResourceId }),
+    ]));
+    await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByText(/resolved runtime resource/i)).toBeVisible();
 
     const expired = await evaluate(fineGrained.expiredUserId!, fineGrained.expiredEngineId!);
     expect(expired.allowed).toBe(false);

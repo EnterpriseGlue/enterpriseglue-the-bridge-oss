@@ -348,7 +348,7 @@ export default async function globalSetup() {
          engine_resource_id, deployment_id, project_id, file_id, version, labels_json,
          lineage_json, source, source_ref, observed_at, is_active, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-      [id, 'tenant-default', runtimeScopedEngineId, 'process_definition', resourceKey, '', null, deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', scopedSourceRef, now, true, now, now]
+      [id, null, runtimeScopedEngineId, 'process_definition', resourceKey, '', null, deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', scopedSourceRef, now, true, now, now]
     );
   }
   await pool.query(
@@ -535,6 +535,7 @@ export default async function globalSetup() {
       runtimeScopedUserId,
       runtimeScopedEngineId,
       runtimeCustomRoleId,
+      runtimeAllowedResourceId,
       runtimeAllowedDefinitionId,
       runtimeSiblingDefinitionId,
       scopedSourceRef,
