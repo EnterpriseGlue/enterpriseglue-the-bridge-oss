@@ -13,6 +13,7 @@ const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts',
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
+const customRoleMatrixRunner = readFileSync(new URL('./run-local-safe-custom-role-matrix.sh', import.meta.url), 'utf8');
 const frontendAuthTypes = readFileSync(new URL('../packages/frontend-host/src/shared/types/auth.ts', import.meta.url), 'utf8');
 const frontendAuthService = readFileSync(new URL('../packages/frontend-host/src/services/auth.ts', import.meta.url), 'utf8');
 const frontendAuthzApi = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts', import.meta.url), 'utf8');
@@ -179,7 +180,12 @@ test('the fine-grained authorization lane combines scope, machine-principal, pol
 
   const localCommand = scripts['test:authz:fine-grained:local'];
   assert.match(localCommand, /test:authz:fine-grained/);
+  assert.match(localCommand, /test:authz:custom-role-matrix:local/);
   assert.match(localCommand, /test:authz:local-smoke:seeded/);
+  assert.match(scripts['test:authz:custom-role-matrix:local'], /run-local-safe-custom-role-matrix\.sh/);
+  assert.match(customRoleMatrixRunner, /EG_ENV_FILE/);
+  assert.match(customRoleMatrixRunner, /local-safe-test\.env/);
+  assert.match(customRoleMatrixRunner, /machine-principal-authz\.test\.ts/);
 });
 
 test('the disposable local administrator has canonical break-glass memberships', () => {
