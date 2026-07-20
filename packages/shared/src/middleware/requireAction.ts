@@ -38,6 +38,7 @@ import {
   type Permission,
   type PermissionContext,
 } from '../services/platform-admin/permissions.js';
+import { policyService } from '../services/platform-admin/PolicyService.js';
 import { Errors } from './errorHandler.js';
 import { updateBpmnEngineRequestContext } from '../services/bpmn-engine-request-context.js';
 
@@ -748,6 +749,14 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       const resolverId = routeResolver(action, options);
       if (resolverId === 'project.visibleCollection') {
         const collection = await resolveProjectVisibleCollection(req, action, options);
+        const policy = await policyService.evaluateGate(action.permissionId, {
+          userId: req.user.userId,
+          tenantId: req.tenant?.tenantId || null,
+          resourceType: 'project',
+        });
+        if (policy.decision === 'deny') {
+          throw Errors.forbidden(`Access denied for action ${action.actionId}: ${policy.reason}`);
+        }
         req.authzAction = action;
         req.authzResource = { type: 'project', id: null };
         req.authzCollection = collection;
@@ -757,6 +766,14 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       }
       if (resolverId === 'engine.visibleCollection') {
         const collection = await resolveEngineVisibleCollection(req, action, options);
+        const policy = await policyService.evaluateGate(action.permissionId, {
+          userId: req.user.userId,
+          tenantId: req.tenant?.tenantId || null,
+          resourceType: 'engine',
+        });
+        if (policy.decision === 'deny') {
+          throw Errors.forbidden(`Access denied for action ${action.actionId}: ${policy.reason}`);
+        }
         req.authzAction = action;
         req.authzResource = { type: 'engine', id: null };
         req.authzCollection = collection;
@@ -781,6 +798,11 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       )).some(Boolean);
       if (!allowed) {
         throw Errors.forbidden(`Access denied for action ${action.actionId}`);
+      }
+
+      const policy = await policyService.evaluateGate(action.permissionId, context);
+      if (policy.decision === 'deny') {
+        throw Errors.forbidden(`Access denied for action ${action.actionId}: ${policy.reason}`);
       }
 
       req.authzAction = action;

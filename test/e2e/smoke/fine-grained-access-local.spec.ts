@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { Pool } from 'pg';
 import { getE2EFineGrainedFixture } from '../utils/credentials';
 
 const fixture = getE2EFineGrainedFixture();
@@ -6,6 +7,25 @@ const shouldSkip = !fixture.email || !fixture.password || !fixture.scopedEngineI
 // Coverage guard: these registered action ids are exercised against the live
 // guarded routes below, including explicit denial paths.
 const coveredActions = ['engine.inventory.read', 'engine.inventory.update', 'platform.authz.roles.read'];
+
+async function removeScopedAssignment(): Promise<void> {
+  if (!fixture.scopedEngineAssignmentId) throw new Error('Missing scoped role-assignment fixture id');
+  const pool = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  });
+  try {
+    const schema = process.env.POSTGRES_SCHEMA || 'main';
+    const result = await pool.query(`DELETE FROM ${schema}.role_assignments WHERE id = $1`, [fixture.scopedEngineAssignmentId]);
+    expect(result.rowCount).toBe(1);
+  } finally {
+    await pool.end();
+  }
+}
 
 async function login(page: Page) {
   if (!fixture.email || !fixture.password) throw new Error('Missing fine-grained E2E fixture credentials');
@@ -24,6 +44,7 @@ async function request(page: Page, path: string, init?: RequestInit) {
 }
 
 test.describe('Smoke: fine-grained local engine access', () => {
+  test.describe.configure({ mode: 'serial' });
   test.skip(shouldSkip, 'Fine-grained E2E fixture is unavailable');
 
   test.beforeAll(() => {
@@ -119,6 +140,29 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(inventory.body).toEqual([]);
 
     const deniedRead = await request(page, `/engines-api/engines/${fixture.expiredEngineId}`);
+    expect([403, 404]).toContain(deniedRead.status);
+  });
+
+  test('revokes a removed assignment immediately and changes the permission snapshot version', async ({ page }) => {
+    await login(page);
+
+    const before = await request(page, '/api/authz/me/permissions');
+    expect(before.status, JSON.stringify(before.body)).toBe(200);
+    expect(before.body.authorizationVersion).toEqual(expect.any(String));
+    expect(before.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).toContain(fixture.scopedEngineId);
+
+    await removeScopedAssignment();
+
+    const after = await request(page, '/api/authz/me/permissions');
+    expect(after.status, JSON.stringify(after.body)).toBe(200);
+    expect(after.body.authorizationVersion).not.toBe(before.body.authorizationVersion);
+    expect(after.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.scopedEngineId);
+
+    const inventory = await request(page, '/engines-api/engines');
+    expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
+    expect(inventory.body).toEqual([]);
+
+    const deniedRead = await request(page, `/engines-api/engines/${fixture.scopedEngineId}`);
     expect([403, 404]).toContain(deniedRead.status);
   });
 });

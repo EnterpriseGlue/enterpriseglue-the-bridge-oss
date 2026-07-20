@@ -12,6 +12,7 @@ const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seed
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
+const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
 const frontendAuthTypes = readFileSync(new URL('../packages/frontend-host/src/shared/types/auth.ts', import.meta.url), 'utf8');
 const frontendAuthService = readFileSync(new URL('../packages/frontend-host/src/services/auth.ts', import.meta.url), 'utf8');
 const frontendAuthzApi = readFileSync(new URL('../packages/frontend-host/src/features/platform-admin/hooks/useAuthzApi.ts', import.meta.url), 'utf8');
@@ -104,6 +105,15 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/login\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
+});
+
+test('the authorization mutation guard proves denial tests kill bypassed user and API-client guards', () => {
+  assert.match(scripts['test:authz:mutation'], /run-authz-mutation-tests\.mjs/);
+  assert.match(authzMutationRunner, /requireAction\.test\.ts/);
+  assert.match(authzMutationRunner, /apiClientAuth\.test\.ts/);
+  assert.match(authzMutationRunner, /user action deny bypass/);
+  assert.match(authzMutationRunner, /API client deny bypass/);
+  assert.match(authzMutationRunner, /Authorization mutant survived/);
 });
 
 test('the disposable local administrator has canonical break-glass memberships', () => {

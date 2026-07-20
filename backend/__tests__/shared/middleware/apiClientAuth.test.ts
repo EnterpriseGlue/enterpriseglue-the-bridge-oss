@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   authenticateServiceAccountToken: vi.fn(),
   evaluateDeploymentEligibility: vi.fn(),
   hasPermission: vi.fn(),
+  evaluatePolicyGate: vi.fn(),
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ApiClientService.js', () => ({
@@ -37,6 +38,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentEligibilitySer
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   permissionService: {
     hasPermission: mocks.hasPermission,
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: {
+    evaluateGate: mocks.evaluatePolicyGate,
   },
 }));
 
@@ -82,6 +89,7 @@ describe('apiClientAuth middleware', () => {
       reasons: [],
     });
     mocks.hasPermission.mockResolvedValue(true);
+    mocks.evaluatePolicyGate.mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
   });
 
   it('authenticates engine-registration API clients and authorizes the registered action', async () => {
@@ -131,6 +139,32 @@ describe('apiClientAuth middleware', () => {
       statusCode: 403,
       message: 'API client is not authorized for action: engine.external-registration.upsert',
     }));
+  });
+
+  it('denies an API client when an explicit policy deny overrides its scoped grant', async () => {
+    mocks.evaluatePolicyGate.mockResolvedValueOnce({
+      decision: 'deny',
+      reason: 'policy:registration-freeze',
+    });
+    const req: any = {
+      headers: { authorization: 'Bearer token-1' },
+      tenant: { tenantId: 'tenant-1' },
+    };
+    const next = vi.fn();
+
+    await requireApiClientAction('engine:register', 'engine.external-registration.upsert')(req, {} as any, next);
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 403,
+      message: 'API client is not authorized for action: engine.external-registration.upsert: policy:registration-freeze',
+    }));
+    expect(mocks.evaluatePolicyGate).toHaveBeenCalledWith('platform:engine-registration:manage', {
+      principalType: 'api_client',
+      principalId: 'api-client-1',
+      tenantId: 'tenant-1',
+      resourceType: 'platform',
+      resourceId: undefined,
+    });
   });
 
   it('authorizes configuration API clients only with the configuration scope and RBAC action', async () => {
@@ -318,6 +352,48 @@ describe('apiClientAuth middleware', () => {
 
     await requireApiDeploymentEligibility()(req, {} as any, next);
 
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 403,
+      message: 'No active project-engine target allows api mode',
+      details: expect.objectContaining({
+        reasons: ['No active project-engine target allows api mode'],
+      }),
+    }));
+  });
+
+  it('returns the same denied deployment contract for a service account', async () => {
+    mocks.evaluateDeploymentEligibility.mockResolvedValueOnce({
+      allowed: false,
+      decision: 'deny',
+      mode: 'api',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      checks: [
+        {
+          id: 'project_engine_target.active',
+          allowed: false,
+          reason: 'No active project-engine target allows api mode',
+        },
+      ],
+      reasons: ['No active project-engine target allows api mode'],
+    });
+    const req: any = {
+      headers: { authorization: 'Bearer egsa_service-account-1_secret' },
+      body: { projectId: 'project-1', engineId: 'engine-1' },
+      tenant: { tenantId: 'tenant-1' },
+    };
+    const next = vi.fn();
+
+    await requireApiDeploymentEligibility()(req, {} as any, next);
+
+    expect(mocks.evaluateDeploymentEligibility).toHaveBeenCalledWith(expect.objectContaining({
+      principalType: 'service_account',
+      principalId: 'service-account-1',
+      tenantId: 'tenant-1',
+      projectId: 'project-1',
+      engineId: 'engine-1',
+      mode: 'api',
+    }));
     expect(next).toHaveBeenCalledWith(expect.objectContaining({
       statusCode: 403,
       message: 'No active project-engine target allows api mode',

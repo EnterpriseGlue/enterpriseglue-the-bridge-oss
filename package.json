@@ -92,6 +92,7 @@
     "test:authz:identity": "pnpm run test:identity-contract && pnpm run test:identity-integration && pnpm run test:identity-persistence && pnpm run test:identity-provider-key-identity && pnpm run test:identity-mapping-config-key && pnpm run test:identity-mapping-matrix && pnpm run test:identity-protocol-mocks",
     "test:authz:config": "pnpm run test:config-bundles && pnpm run test:docker-config-bundles && pnpm run test:openshift-config-bundles && pnpm run test:config-bundle-cicd && pnpm run test:documentation-contracts && pnpm run test:secret-boundaries && pnpm run test:target-ownership && pnpm run test:engine-import",
     "test:authz:runtime": "pnpm run test:action-registry && pnpm run test:assignment-targets && pnpm run test:authz-group-key-identity && pnpm run test:managed-resource-key-identities && pnpm run test:runtime-resource-persistence && pnpm run test:deployment-lineage-persistence && pnpm run test:engine-connection-resolver && pnpm run test:deployment-eligibility-contract",
+    "test:authz:mutation": "node scripts/run-authz-mutation-tests.mjs",
     "test:authz-refactor": "./scripts/run-local-safe-authz-refactor.sh",
     "authz:config": "node scripts/config-bundle.mjs",
     "test:e2e:smoke:postgres:images": "bash ./scripts/e2e-smoke-postgres-images.sh",

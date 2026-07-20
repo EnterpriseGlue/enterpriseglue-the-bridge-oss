@@ -269,23 +269,28 @@ export default async function globalSetup() {
 
   const { canonicalRoleAssignmentKey } = await import('../../../packages/shared/src/authz/role-assignment-identity.ts');
   const operatorRoleId = 'system.engine.operator';
-  for (const scopedEngineAssignmentId of [scopedEngineId, crossTenantEngineId]) {
+  let scopedEngineAssignmentId = '';
+  for (const assignmentEngineId of [scopedEngineId, crossTenantEngineId]) {
     const assignmentKey = canonicalRoleAssignmentKey({
       tenantId: 'tenant-default',
       principalType: 'user',
       principalId: scopedUserId,
       roleId: operatorRoleId,
       scopeType: 'engine',
-      scopeId: scopedEngineAssignmentId,
+      scopeId: assignmentEngineId,
       source: 'system',
       sourceRef: scopedSourceRef,
     });
+    const assignmentId = randomUUID();
+    if (assignmentEngineId === scopedEngineId) {
+      scopedEngineAssignmentId = assignmentId;
+    }
     await pool.query(
       `INSERT INTO ${schema}.role_assignments
         (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
          source, source_ref, assignment_key, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [randomUUID(), 'tenant-default', 'user', scopedUserId, operatorRoleId, 'engine', scopedEngineAssignmentId, 'system', scopedSourceRef, assignmentKey, now, now]
+      [assignmentId, 'tenant-default', 'user', scopedUserId, operatorRoleId, 'engine', assignmentEngineId, 'system', scopedSourceRef, assignmentKey, now, now]
     );
   }
 
@@ -430,6 +435,7 @@ export default async function globalSetup() {
       scopedPassword,
       scopedEngineId,
       scopedEngineName,
+      scopedEngineAssignmentId,
       siblingEngineId,
       crossTenantEngineId,
       scopedSourceRef,

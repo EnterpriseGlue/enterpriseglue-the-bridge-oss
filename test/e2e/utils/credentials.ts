@@ -40,6 +40,7 @@ export function getE2EFineGrainedFixture() {
     password: data.scopedPassword,
     scopedEngineId: data.scopedEngineId,
     scopedEngineName: data.scopedEngineName,
+    scopedEngineAssignmentId: data.scopedEngineAssignmentId,
     siblingEngineId: data.siblingEngineId,
     crossTenantEngineId: data.crossTenantEngineId,
     groupEmail: data.groupScopedEmail,

@@ -16,6 +16,7 @@ import {
 } from '@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js';
 import { assertKnownAuthzAction, type AuthzResourceType } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
 import { Errors, AppError } from './errorHandler.js';
 
 declare global {
@@ -154,6 +155,17 @@ export function requireApiClientAction(scope: string, actionId: string, options:
       }
       if (!allowed) {
         throw Errors.forbidden(`API client is not authorized for action: ${actionId}`);
+      }
+
+      const policy = await policyService.evaluateGate(action.permissionId, {
+        principalType: 'api_client',
+        principalId: req.apiClient.id,
+        tenantId,
+        resourceType: options.resourceType || action.resourceType,
+        resourceId: optionResourceId || undefined,
+      });
+      if (policy.decision === 'deny') {
+        throw Errors.forbidden(`API client is not authorized for action: ${actionId}: ${policy.reason}`);
       }
 
       return next();

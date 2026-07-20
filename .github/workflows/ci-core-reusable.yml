@@ -269,6 +269,10 @@ jobs:
         if: matrix.database == 'postgres'
         run: pnpm run test:integration
 
+      - name: Run authorization mutation guard
+        if: matrix.database == 'postgres'
+        run: pnpm run test:authz:mutation
+
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
         run: |

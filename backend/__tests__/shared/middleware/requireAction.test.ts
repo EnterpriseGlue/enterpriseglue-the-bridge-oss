@@ -18,6 +18,7 @@ import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persisten
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { engineAccessService } from '@enterpriseglue/shared/services/platform-admin/EngineAccessService.js';
 import { deploymentEligibilityService } from '@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js';
+import { policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
 
 const { updateBpmnEngineRequestContext } = vi.hoisted(() => ({ updateBpmnEngineRequestContext: vi.fn() }));
 
@@ -56,6 +57,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineAccessService.js',
 vi.mock('@enterpriseglue/shared/services/platform-admin/DeploymentEligibilityService.js', () => ({
   deploymentEligibilityService: {
     evaluate: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: {
+    evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
   },
 }));
 
@@ -226,6 +233,7 @@ describe('requireAction project resource resolvers', () => {
     });
     app.use(errorHandler);
     vi.clearAllMocks();
+    (policyService.evaluateGate as unknown as Mock).mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
 
     projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
     engineFind = vi.fn().mockResolvedValue([{ id: engineId, tenantId: null }]);
@@ -678,6 +686,24 @@ describe('requireAction project resource resolvers', () => {
     expect(fileFindOne).toHaveBeenCalled();
     expect(projectFindOne).toHaveBeenCalled();
     expect(permissionService.hasPermission).toHaveBeenCalled();
+  });
+
+  it('honors an explicit deny policy after the scoped RBAC grant succeeds', async () => {
+    (policyService.evaluateGate as unknown as Mock).mockResolvedValueOnce({
+      decision: 'deny',
+      reason: 'policy:release-freeze',
+    });
+
+    const response = await request(app).get(`/files/${fileId}`);
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain('policy:release-freeze');
+    expect(policyService.evaluateGate).toHaveBeenCalledWith('project:files:view', {
+      userId: 'user-1',
+      tenantId: null,
+      resourceType: 'project',
+      resourceId: projectId,
+    });
   });
 
   it('fails closed before permission evaluation when the resolved project is outside the tenant', async () => {
