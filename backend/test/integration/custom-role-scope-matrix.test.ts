@@ -10,12 +10,14 @@ import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infras
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { AuthzAuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzAuditLog.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/EngineSetService.js';
 import { PlatformPermissions, ProjectPermissions, EnginePermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
 import { runtimeResourceSetService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceSetService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { cleanupEngines, cleanupSeededData, seedEngine, seedProject, seedUser } from '../utils/seed.js';
@@ -168,6 +170,7 @@ describe('custom role scope matrix (database)', () => {
     await dataSource.getRepository(EngineSet).delete({ id: engineSetId });
     await dataSource.getRepository(AuthzGroupMembership).delete({ groupId });
     await dataSource.getRepository(AuthzGroup).delete({ id: groupId });
+    await dataSource.getRepository(AuthzAuditLog).delete({ userId: [directUserId, groupUserId] as any });
     await dataSource.getRepository(RbacRolePermission).delete({ roleId: roleIds as any });
     await dataSource.getRepository(RbacRole).delete({ id: roleIds as any });
     await cleanupEngines([directEngineId, engineSetEngineId, runtimeEngineId]);
@@ -230,5 +233,54 @@ describe('custom role scope matrix (database)', () => {
       expect(entry.tenantId).toBe(tenantId);
       expect(entry.details || '').not.toMatch(/token|secret|password|tenant-(?!custom_role_scope)/i);
     }
+  });
+
+  it('audits assignment expiry, removal, and a denied decision without widening tenant visibility', async () => {
+    if (skip) return;
+    const now = Date.now();
+    const expiring = await permissionService.assignRole({
+      tenantId, userId: directUserId, roleId: roleIds[1], resourceType: 'project', resourceId: siblingProjectId,
+      expiresAt: now + 1_000, createdById: adminUserId,
+    });
+    await expect(permissionService.hasPermission(ProjectPermissions.DEPLOY, {
+      userId: directUserId, tenantId, resourceType: 'project', resourceId: siblingProjectId,
+    })).resolves.toBe(true);
+    await expect(permissionService.cleanupExpiredRoleAssignments({ now: now + 1_001, assignmentIds: [expiring.id] })).resolves.toBe(1);
+    await expect(permissionService.hasPermission(ProjectPermissions.DEPLOY, {
+      userId: directUserId, tenantId, resourceType: 'project', resourceId: siblingProjectId,
+    })).resolves.toBe(false);
+
+    const removable = await permissionService.assignRole({
+      tenantId, userId: directUserId, roleId: roleIds[1], resourceType: 'project', resourceId: siblingProjectId,
+      createdById: adminUserId,
+    });
+    await permissionService.removeRoleAssignment(removable.id, adminUserId);
+    const denied = await policyService.evaluateAndLog(ProjectPermissions.DEPLOY, {
+      userId: directUserId, tenantId, resourceType: 'project', resourceId: siblingProjectId,
+    });
+    expect(denied).toEqual({ decision: 'deny', reason: 'no-permission' });
+
+    const dataSource = await getDataSource();
+    const lifecycleEntries = (await dataSource.getRepository(AuditLog).find({
+      where: [
+        { action: 'authz.role_assignment.create' },
+        { action: 'authz.role_assignment.expire' },
+        { action: 'authz.role_assignment.delete' },
+      ],
+      order: { createdAt: 'ASC' },
+    })).filter((entry) => entry.resourceId === expiring.id || entry.resourceId === removable.id);
+    expect(lifecycleEntries.map((entry) => entry.action)).toEqual(expect.arrayContaining([
+      'authz.role_assignment.create', 'authz.role_assignment.expire', 'authz.role_assignment.delete',
+    ]));
+    for (const entry of lifecycleEntries) {
+      expect(entry.tenantId).toBe(tenantId);
+      expect(entry.details || '').not.toMatch(/token|secret|password|tenant-(?!custom_role_scope)/i);
+    }
+    const decisionAudit = await dataSource.getRepository(AuthzAuditLog).findOne({
+      where: { userId: directUserId, action: ProjectPermissions.DEPLOY, resourceId: siblingProjectId, decision: 'deny' },
+      order: { timestamp: 'DESC' },
+    });
+    expect(decisionAudit).toMatchObject({ tenantId, reason: 'no-permission' });
+    expect(decisionAudit?.context).not.toMatch(/token|secret|password|tenant-(?!custom_role_scope)/i);
   });
 });

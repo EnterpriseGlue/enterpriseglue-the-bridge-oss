@@ -3730,6 +3730,46 @@ class PermissionServiceClass {
   }
 
   /**
+   * Removes expired role assignments while retaining the lifecycle evidence
+   * needed to explain why a formerly valid principal lost access.
+   */
+  async cleanupExpiredRoleAssignments(options: { now?: number; assignmentIds?: string[] } = {}): Promise<number> {
+    const dataSource = await getDataSource();
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const now = options.now ?? Date.now();
+    const expired = await assignmentRepo.createQueryBuilder('assignment')
+      .where('assignment.expiresAt IS NOT NULL')
+      .andWhere('assignment.expiresAt <= :now', { now });
+    if (options.assignmentIds?.length) {
+      expired.andWhere('assignment.id IN (:...assignmentIds)', { assignmentIds: options.assignmentIds });
+    }
+    const rows = await expired.getMany();
+    if (rows.length === 0) return 0;
+
+    for (const assignment of rows) {
+      await recordAuthzAudit(dataSource, {
+        tenantId: assignment.tenantId,
+        userId: null,
+        action: 'authz.role_assignment.expire',
+        resourceType: 'role_assignment',
+        resourceId: assignment.id,
+        details: {
+          assignmentId: assignment.id,
+          tenantId: assignment.tenantId,
+          principalType: assignment.principalType,
+          principalId: assignment.principalId,
+          roleId: assignment.roleId,
+          scopeType: assignment.scopeType,
+          scopeId: assignment.scopeId,
+          expiresAt: assignment.expiresAt,
+        },
+      });
+    }
+    await assignmentRepo.delete({ id: In(rows.map((assignment) => assignment.id)) });
+    return rows.length;
+  }
+
+  /**
    * Clean up expired grants (call periodically)
    */
   async cleanupExpiredGrants(): Promise<number> {
