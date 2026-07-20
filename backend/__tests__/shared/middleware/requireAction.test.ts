@@ -77,13 +77,26 @@ describe('requireRuntimeCollectionAction', () => {
   it('rejects an unauthenticated runtime collection request before resolving any resource', async () => {
     const next = vi.fn();
 
-    await requireRuntimeCollectionAction('mission-control.process-definitions.read', { resourceKind: 'process_definition' })(
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
       { query: {} } as any,
       {} as any,
       next,
     );
 
     expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401, message: 'Authentication required' }));
+  });
+
+  it('requires an engine identifier before evaluating runtime collection access', async () => {
+    const next = vi.fn();
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
+      { user: { userId: 'user-1' }, query: {} } as any,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: 'engineId is required' }));
+    expect(getDataSource).not.toHaveBeenCalled();
   });
 });
 
