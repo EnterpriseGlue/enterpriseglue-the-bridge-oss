@@ -42,6 +42,7 @@ export function getE2EFineGrainedFixture() {
     scopedEngineId: data.scopedEngineId,
     scopedEngineName: data.scopedEngineName,
     scopedEngineAssignmentId: data.scopedEngineAssignmentId,
+    scopedEngineAssignmentExpiresAt: data.scopedEngineAssignmentExpiresAt,
     siblingEngineId: data.siblingEngineId,
     crossTenantEngineId: data.crossTenantEngineId,
     runtimeScopedEmail: data.runtimeScopedEmail,

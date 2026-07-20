@@ -187,6 +187,12 @@ describe('custom role scope matrix (database)', () => {
     await expect(check(ProjectPermissions.DEPLOY, directUserId, 'project', siblingProjectId)).resolves.toBe(false);
     await expect(check(EnginePermissions.INSTANCE_VIEW, directUserId, 'engine', directEngineId)).resolves.toBe(true);
     await expect(check(EnginePermissions.INSTANCE_VIEW, directUserId, 'engine', engineSetEngineId)).resolves.toBe(false);
+    const directDecision = await permissionService.evaluatePermission(EnginePermissions.INSTANCE_VIEW, {
+      userId: directUserId, tenantId, resourceType: 'engine', resourceId: directEngineId,
+    });
+    expect(directDecision.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ tenantId, expiresAt: null, scopeType: 'engine', scopeId: directEngineId }),
+    ]));
 
     const engineSetDecision = await permissionService.evaluatePermission(EnginePermissions.INSTANCE_VIEW, {
       userId: groupUserId, tenantId, resourceType: 'engine', resourceId: engineSetEngineId,

@@ -87,6 +87,12 @@ export function formatEffectiveAccessScope(source: EffectiveAccessSource) {
   return '-';
 }
 
+export function formatEffectiveAccessTenantExpiry(source: EffectiveAccessSource) {
+  const tenant = source.tenantId || 'platform';
+  const expiry = source.expiresAt ? new Date(source.expiresAt).toISOString() : 'Never';
+  return `${tenant} / ${expiry}`;
+}
+
 function formatIdentityEntitlementMappingLineage(source: EffectiveAccessSource) {
   const mapping = source.identityEntitlementMapping;
   if (!mapping) return null;

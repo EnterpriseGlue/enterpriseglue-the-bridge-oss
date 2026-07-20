@@ -13,6 +13,7 @@ export const effectiveAccessSourceHeaders = [
   { key: 'grant', header: 'Grant' },
   { key: 'principal', header: 'Principal' },
   { key: 'scope', header: 'Scope' },
+  { key: 'tenantExpiry', header: 'Tenant / expiry' },
   { key: 'lineage', header: 'Lineage' },
   { key: 'audit', header: 'Audit' },
 ];

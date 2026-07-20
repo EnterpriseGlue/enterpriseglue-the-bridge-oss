@@ -490,6 +490,8 @@ export interface PermissionEvaluationSource {
   principalId?: string;
   source?: string;
   sourceRef?: string | null;
+  tenantId?: string | null;
+  expiresAt?: number | null;
   scopeType?: ResourceType | null;
   scopeId?: string | null;
   groupId?: string | null;
@@ -3297,6 +3299,8 @@ class PermissionServiceClass {
       principalId: assignment.principalId!,
       source: assignment.source,
       sourceRef: assignment.sourceRef,
+      tenantId: assignment.tenantId,
+      expiresAt: assignment.expiresAt,
       scopeType: assignment.scopeType as ResourceType | null,
       scopeId: assignment.scopeId,
       configBundle: configBundleLineageForAssignment(assignment),
@@ -3335,6 +3339,8 @@ class PermissionServiceClass {
         type: 'role-assignment' as const, assignmentId: assignment.id, roleId: assignment.roleId,
         principalType: assignment.principalType as PrincipalType, principalId: assignment.principalId!, source: assignment.source,
         sourceRef: assignment.sourceRef,
+        tenantId: assignment.tenantId,
+        expiresAt: assignment.expiresAt,
         scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
         configBundle: configBundleLineageForAssignment(assignment),
       }));
@@ -3411,6 +3417,8 @@ class PermissionServiceClass {
         principalId: assignment.principalId || undefined,
         source: assignment.source,
         sourceRef: assignment.sourceRef,
+        tenantId: assignment.tenantId,
+        expiresAt: assignment.expiresAt,
         scopeType: 'engine_set' as ResourceType,
         scopeId: assignment.scopeId,
         engineSetId: assignment.scopeId,

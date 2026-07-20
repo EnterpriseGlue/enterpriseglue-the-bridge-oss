@@ -25,6 +25,7 @@ import {
   formatEffectiveAccessLineage,
   formatEffectiveAccessPrincipal,
   formatEffectiveAccessScope,
+  formatEffectiveAccessTenantExpiry,
 } from '../accessControlPresentation';
 import { AuditReferenceLinks, findEffectiveAccessSourceAuditEntries, formatAuditReferences } from './auditReferences';
 import { effectiveAccessDefaultsFromSearchParams, effectiveAccessSourceHeaders } from './effectiveAccessPresentation';
@@ -78,6 +79,7 @@ export function EffectiveAccessPanel({
       grant: formatEffectiveAccessGrant(source),
       principal: formatEffectiveAccessPrincipal(source),
       scope: formatEffectiveAccessScope(source),
+      tenantExpiry: formatEffectiveAccessTenantExpiry(source),
       lineage: formatEffectiveAccessLineage(source),
       audit: formatAuditReferences(auditReferenceEntries),
       auditEntries: auditReferenceEntries,

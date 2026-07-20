@@ -932,6 +932,8 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
     principalId: z.string().optional(),
     source: z.string().optional(),
     sourceRef: z.string().nullable().optional(),
+    tenantId: z.string().nullable().optional(),
+    expiresAt: z.number().nullable().optional(),
     scopeType: z.string().nullable().optional(),
     scopeId: z.string().nullable().optional(),
     groupId: z.string().nullable().optional(),
