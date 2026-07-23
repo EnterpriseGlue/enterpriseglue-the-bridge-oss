@@ -76,7 +76,7 @@ until the following evidence is retained:
 | Human principals and custom roles | PostgreSQL-backed direct-user, group-derived-user, scoped custom-role, and randomized model tests pass | Generated matrix contains zero missing or skipped supported cells |
 | Machine principals | PostgreSQL-backed API-client and service-account custom-role, expiry, rotation, and revocation tests pass | Same generated matrix and HTTP journeys pass for both machine-principal types |
 | Local running installation | Guarded PostgreSQL/Chromium enforcement proves owned legacy classification, dedicated defaulting, shared fail-closed mapping, reconciliation, metrics, and cleanup | Repeatable clean-install and supported upgrade-baseline artifacts pass |
-| Browser targets | The guarded local runner passes 27 executions across Chromium, Firefox, and WebKit for login, Effective Access, resource-scoped access, expiry, revocation, direct URL, stale tab, multi-tab, refresh, and history restoration | The same clean release commit retains that matrix plus the remaining contrast, zoom, reduced-motion, and error-announcement audit |
+| Browser targets | The guarded local runner passes 27 authorization executions plus 12 database-free accessibility executions across Chromium, Firefox, and WebKit, including error announcements, contrast, 200% reflow, and reduced motion | Both browser artifacts are retained from the same clean release commit |
 | Database targets | Portable migration/schema and adapter-registration contracts cover PostgreSQL, MySQL, SQL Server, Oracle, and Spanner; PostgreSQL has live evidence | Clean-install, upgrade, retry, schema-equivalence, service, and rollback evidence passes on all five adapters |
 | Documentation | Developer, user, operator, API, migration, compatibility, test, review, and release-evidence Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
 | Compatibility | Null-owned authorization fallback is removed; omitted new-provisioning tenancy remains warned and defaulted | Published deprecation window closes before omission warnings are removed |
@@ -109,7 +109,7 @@ fails the coverage gate.
 | `TEN-RESOLVE` | `TEN-RESOLVE-001`, `TEN-RESOLVE-002` |
 | `TEN-RUNTIME` | `TEN-RUNTIME-001`, `TEN-RUNTIME-002`, `TEN-RUNTIME-003`, `TEN-RUNTIME-004`, `TEN-RUNTIME-005`, `TEN-RUNTIME-006`, `TEN-RUNTIME-007` |
 | `TEN-SHARED` | `TEN-SHARED-001`, `TEN-SHARED-002` |
-| `TEN-UI` | `TEN-UI-001`, `TEN-UI-002`, `TEN-UI-003`, `TEN-UI-004`, `TEN-UI-005` |
+| `TEN-UI` | `TEN-UI-001`, `TEN-UI-002`, `TEN-UI-003`, `TEN-UI-004`, `TEN-UI-005`, `TEN-UI-006` |
 
 <!-- ENGINE_TENANCY_REQUIREMENTS_END -->
 
@@ -874,9 +874,9 @@ below.
 - [x] Retain passing Chromium, Firefox, and WebKit results for the same clean
   commit for direct URL, stale-tab, multi-tab, refresh, history restoration,
   keyboard/accessibility names, and active-session revocation cases.
-- [ ] Complete the remaining browser accessibility audit for error
-  announcements, contrast, 200% zoom/reflow, and reduced motion in every new
-  tenancy workflow.
+- [x] Complete the browser accessibility audit for error announcements,
+  contrast, 200% zoom/reflow, and reduced motion in Chromium, Firefox, and
+  WebKit with database-free retained evidence.
 - [ ] Execute all 14 provisioning-channel journeys below through the real local
   HTTP service and persistent database for every supported channel, recording
   documented stable errors for unsupported channel/action combinations.

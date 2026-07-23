@@ -56,8 +56,10 @@ assignment and group-membership revocation immediately in the active tab, a
 stale second tab, a direct URL, a refreshed session, and a page restored
 through browser history. The guarded local matrix runs nine tests in each of
 Chromium, Firefox, and WebKit and writes `browser-matrix.json` only after all
-27 executions pass. Contrast, 200% zoom/reflow, reduced motion, and
-error-announcement evidence are separate remaining accessibility gates.
+27 executions pass. The separate database-free accessibility runner executes
+error announcements, contrast, 200% zoom/reflow, and reduced motion in all
+three browsers and retains 12 passing executions in
+`browser-accessibility.json`.
 
 `TEN-DOCS-007` writes the validated manifest as sanitized, retained evidence.
 It records the commit, clean/dirty state, schema version, Node and pnpm
@@ -356,6 +358,21 @@ three targets, run:
 ```bash
 pnpm run test:authz:local-smoke:cross-browser
 ```
+
+`TEN-UI-006` runs the separate database-free accessibility matrix against the
+same local frontend with:
+
+```bash
+pnpm run test:authz:accessibility:cross-browser
+```
+
+It executes four Access Control workflows in Chromium, Firefox, and WebKit:
+assertive error announcements, WCAG AA contrast on primary controls, 200%
+zoom/reflow without page-level horizontal scrolling, and a complete permission
+workflow under `prefers-reduced-motion: reduce`. The runner sets
+`E2E_SEED_USER=false`, so global setup and teardown cannot open a database
+connection. It writes `browser-accessibility.json` only after all 12 executions
+pass.
 
 The executable local enforcement journey requires:
 

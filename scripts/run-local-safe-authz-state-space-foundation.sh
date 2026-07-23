@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+test_file="${1:-__tests__/shared/authz/authorizationStateSpaceContracts.test.ts}"
 
 # This contract imports application configuration but never needs a database.
 # Force loopback-only values so a developer shell or dotenv file cannot select
@@ -13,7 +14,7 @@ unset FRONTEND_URL
 export EG_ENV_FILE="$repo_root/scripts/local-safe-test.env"
 
 pnpm --dir backend exec vitest run \
-  __tests__/shared/authz/authorizationStateSpaceContracts.test.ts \
+  "$test_file" \
   --config vitest.config.ts \
   --maxWorkers=1 \
   --no-file-parallelism \

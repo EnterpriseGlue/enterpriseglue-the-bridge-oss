@@ -373,6 +373,10 @@ connecting production workloads:
 6. Review the audit entry and tenant-resolution diagnostics. They must explain
    the decision without exposing credentials or another tenant's resource
    details.
+7. Repeat the Access Control workflow at 200% browser zoom and with reduced
+   motion enabled. Loading failures must be announced by assistive technology,
+   primary text and controls must retain readable contrast, and the page shell
+   must not require horizontal scrolling.
 
 If any deny case still returns data, stop onboarding that engine and follow
 [Diagnose Engine Tenant Resolution](diagnose-engine-tenant-resolution.md).

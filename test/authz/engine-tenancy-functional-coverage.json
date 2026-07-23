@@ -3477,6 +3477,52 @@
       "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-005"
     },
     {
+      "id": "TEN-UI-006",
+      "requirement": "Access Control announces load failures, retains WCAG AA contrast and 200% page reflow, and remains usable with reduced motion in Chromium, Firefox, and WebKit.",
+      "source": "Engine Tenancy Plan / Browser Coverage",
+      "dimensions": [
+        "browser",
+        "accessibility",
+        "error_announcement",
+        "contrast",
+        "zoom_200_reflow",
+        "reduced_motion",
+        "chromium",
+        "firefox",
+        "webkit"
+      ],
+      "expected": "all four accessibility workflows pass independently in every browser",
+      "testFile": "test/e2e/access-control-accessibility.spec.ts",
+      "testName": "Access Control accessibility release checks",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:accessibility:cross-browser",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "not-applicable"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Local HTTP and Browser Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-006"
+    },
+    {
       "id": "TEN-AUTHZ-015",
       "requirement": "API clients and service accounts receive the same tenant-bounded custom-role decisions, expiry, credential rotation, and revocation behavior.",
       "source": "Engine Tenancy Plan / Exhaustive Authorization Matrix",

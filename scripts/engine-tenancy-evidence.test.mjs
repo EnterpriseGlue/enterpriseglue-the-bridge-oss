@@ -12,6 +12,8 @@ const browserWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs',
 const mutationWriter = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
 const authorizationMatrixRunner = readFileSync(new URL('./run-authz-state-space-evidence.mjs', import.meta.url), 'utf8');
 const authorizationFoundationRunner = readFileSync(new URL('./run-local-safe-authz-state-space-foundation.sh', import.meta.url), 'utf8');
+const accessibilityRunner = readFileSync(new URL('./run-authz-accessibility-matrix.sh', import.meta.url), 'utf8');
+const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-evidence.mjs', import.meta.url), 'utf8');
 const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
@@ -146,6 +148,27 @@ test('keeps authorization state-space evidence fail-closed until behavior genera
   assert.match(authorizationFoundationRunner, /scripts\/local-safe-test\.env/);
   assert.match(authorizationFoundationRunner, /unset DATABASE_TYPE DATABASE_URL POSTGRES_URL/);
   assert.doesNotMatch(authorizationMatrixRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
+});
+
+test('retains database-free cross-browser accessibility evidence', () => {
+  assert.match(packageJson.scripts['test:authz:accessibility:cross-browser'], /run-authz-accessibility-matrix\.sh/);
+  for (const browser of ['chromium', 'firefox', 'webkit']) {
+    assert.match(accessibilityRunner, new RegExp(browser));
+  }
+  assert.match(accessibilityRunner, /E2E_SEED_USER=false/);
+  assert.match(accessibilityRunner, /access-control-accessibility\.spec\.ts/);
+  for (const check of [
+    'error_announcement',
+    'contrast',
+    'zoom_200_reflow',
+    'reduced_motion',
+  ]) {
+    assert.match(accessibilityWriter, new RegExp(check));
+  }
+  assert.match(accessibilityWriter, /workflowCount/);
+  assert.match(accessibilityWriter, /passedWorkflowCount/);
+  assert.match(accessibilityWriter, /missingChecks: 0/);
+  assert.doesNotMatch(accessibilityWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 
 test('retains literal 100 percent source coverage for every security-critical module lane', () => {
