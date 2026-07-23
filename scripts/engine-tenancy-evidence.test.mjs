@@ -6,6 +6,7 @@ const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.me
 const writer = readFileSync(new URL('./write-engine-tenancy-manifest-evidence.mjs', import.meta.url), 'utf8');
 const localWriter = readFileSync(new URL('./write-engine-tenancy-local-evidence.mjs', import.meta.url), 'utf8');
 const releaseIndexWriter = readFileSync(new URL('./write-engine-tenancy-release-index.mjs', import.meta.url), 'utf8');
+const sourceCoverageRunner = readFileSync(new URL('./run-engine-tenancy-source-coverage.mjs', import.meta.url), 'utf8');
 const localRunner = readFileSync(new URL('./run-engine-tenancy-local-evidence.sh', import.meta.url), 'utf8');
 const browserWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const mutationWriter = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
@@ -85,4 +86,29 @@ test('qualifies mutation evidence only for an exact clean commit', () => {
   assert.match(mutationWriter, /releaseCommitQualified/);
   assert.match(mutationWriter, /containsCredentials: false/);
   assert.match(mutationWriter, /containsTokens: false/);
+});
+
+test('retains literal 100 percent source coverage for every security-critical module lane', () => {
+  assert.match(packageJson.scripts['test:engine-tenancy:source-coverage'], /run-engine-tenancy-source-coverage\.mjs/);
+  for (const script of [
+    'test:engine-tenancy:provisioning',
+    'test:engine-tenancy:mappings',
+    'test:engine-tenancy:authorization',
+    'test:engine-tenancy:runtime',
+    'test:engine-tenancy:transitions',
+    'test:engine-tenancy:operations',
+    'test:authz:machine-principal-coverage',
+    'test:authz:policy-coverage',
+    'test:authz:api-client-middleware-coverage',
+  ]) {
+    assert.match(sourceCoverageRunner, new RegExp(`script: '${script}'`));
+  }
+  assert.match(sourceCoverageRunner, /lines: 100/);
+  assert.match(sourceCoverageRunner, /statements: 100/);
+  assert.match(sourceCoverageRunner, /branches: 100/);
+  assert.match(sourceCoverageRunner, /functions: 100/);
+  assert.match(sourceCoverageRunner, /Source-coverage evidence must be run from a clean worktree/);
+  assert.match(sourceCoverageRunner, /Source changed while coverage evidence was running/);
+  assert.match(sourceCoverageRunner, /source-coverage\.json/);
+  assert.doesNotMatch(sourceCoverageRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });

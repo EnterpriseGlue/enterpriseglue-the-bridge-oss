@@ -213,6 +213,21 @@ pnpm --filter webmodeler-backend run typecheck
 pnpm --filter webmodeler-frontend run typecheck
 ```
 
+After the focused lanes are green, produce a same-clean-commit aggregate for
+the security-critical modules:
+
+```bash
+pnpm run test:engine-tenancy:source-coverage
+```
+
+The runner refuses a dirty worktree, executes every literal per-file 100%
+coverage lane, verifies the commit did not change, and writes
+`test/results/engine-tenancy-release/source-coverage.json`. It covers
+provisioning, mapping, tenant-role policy, request/runtime filtering,
+classification/transition policy, operational metrics, API-client and
+service-account services, the policy service, and API-client middleware. It
+does not claim 100% source coverage for unrelated monorepo files.
+
 ## Required Authorization Matrix
 
 The focused matrix proves:

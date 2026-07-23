@@ -836,6 +836,9 @@ below.
   declarations, and required mutation fault classes.
 - [x] Retain sanitized traceability and mutation evidence without credentials,
   private endpoints, raw identity claims, or customer identifiers.
+- [x] Retain a same-clean-commit source-coverage artifact after every
+  security-critical module meets literal per-file 100% statements, branches,
+  functions, and lines.
 - [x] Execute database-backed custom-role matrices for direct users,
   group-derived users, API clients, and service accounts on PostgreSQL.
 - [x] Execute Chromium local-stack provisioning, mapping, fail-closed runtime,

@@ -18,6 +18,7 @@ pnpm run test:engine-tenancy:authorization
 pnpm run test:engine-tenancy:runtime
 pnpm run test:engine-tenancy:transitions
 pnpm run test:engine-tenancy:operations
+pnpm run test:engine-tenancy:source-coverage
 ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
 pnpm run test:authz:local-smoke:cross-browser
 pnpm run test:engine-tenancy:evidence-index
