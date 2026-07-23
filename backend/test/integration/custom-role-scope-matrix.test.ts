@@ -80,9 +80,23 @@ describe('custom role scope matrix (database)', () => {
     engineSetEngineId = engineSetEngine.id;
     runtimeEngineId = runtimeEngine.id;
     await Promise.all([
-      dataSource.getRepository(Engine).update({ id: directEngineId }, { tenantId }),
-      dataSource.getRepository(Engine).update({ id: engineSetEngineId }, { tenantId }),
-      dataSource.getRepository(Engine).update({ id: runtimeEngineId }, { tenantId, runtimeAccessScope: 'resource_aware' }),
+      dataSource.getRepository(Engine).update(
+        { id: directEngineId },
+        { tenantId, tenancyMode: 'dedicated', tenantResolutionStatus: 'ready' },
+      ),
+      dataSource.getRepository(Engine).update(
+        { id: engineSetEngineId },
+        { tenantId, tenancyMode: 'dedicated', tenantResolutionStatus: 'ready' },
+      ),
+      dataSource.getRepository(Engine).update(
+        { id: runtimeEngineId },
+        {
+          tenantId,
+          tenancyMode: 'dedicated',
+          tenantResolutionStatus: 'ready',
+          runtimeAccessScope: 'resource_aware',
+        },
+      ),
       dataSource.getRepository(Project).update({ id: projectId }, { tenantId }),
       dataSource.getRepository(Project).update({ id: siblingProjectId }, { tenantId }),
     ]);

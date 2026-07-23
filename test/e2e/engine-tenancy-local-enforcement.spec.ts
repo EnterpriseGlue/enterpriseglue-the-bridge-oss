@@ -89,9 +89,12 @@ async function applyReadyClassificationRows(
   page: Page,
   report: ClassificationReport,
   token: string,
+  ownedEngineIds: ReadonlySet<string>,
 ): Promise<string[]> {
   const applied: string[] = [];
-  for (const row of report.rows.filter((candidate) => candidate.status === 'ready_for_apply')) {
+  for (const row of report.rows.filter(
+    (candidate) => candidate.status === 'ready_for_apply' && ownedEngineIds.has(candidate.engineId),
+  )) {
     if (!row.proposed) throw new Error(`Ready row ${row.engineId} has no proposed tenancy state`);
     const preview = await responseJson<{
       previewHash: string;
@@ -149,12 +152,21 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
         page,
         initialReport,
         token,
+        new Set([seededMigrationEngineId!]),
       );
-      expect(appliedEngineIds).toContain(seededMigrationEngineId);
+      expect(appliedEngineIds).toEqual([seededMigrationEngineId]);
     }
     const classifiedReport = await classificationReport(page);
     if (applyReadyRows) {
-      expect(classifiedReport.totals.readyForApply).toBe(0);
+      expect(classifiedReport.rows).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          engineId: seededMigrationEngineId,
+          status: 'classified',
+        }),
+      ]));
+      expect(classifiedReport.totals.readyForApply).toBe(
+        initialReport.totals.readyForApply - appliedEngineIds.length,
+      );
     }
     expect(classifiedReport.totals.requiresReview).toBe(0);
     expect(classifiedReport.totals.conflicts).toBe(0);
@@ -305,7 +317,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
 
       finalReport = await classificationReport(page);
       expect(finalReport.totals).toMatchObject({
-        readyForApply: applyReadyRows ? 0 : classifiedReport.totals.readyForApply,
+        readyForApply: classifiedReport.totals.readyForApply,
         requiresReview: 0,
         conflicts: 0,
       });

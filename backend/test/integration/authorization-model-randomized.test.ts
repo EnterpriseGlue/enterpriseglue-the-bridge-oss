@@ -147,7 +147,24 @@ describe('randomized authorization model (database)', () => {
     engineBId = engineB.id;
     await Promise.all([
       dataSource.getRepository(Project).update({ id: projectAId }, { tenantId }), dataSource.getRepository(Project).update({ id: projectBId }, { tenantId }),
-      dataSource.getRepository(Engine).update({ id: engineAId }, { tenantId, runtimeAccessScope: 'resource_aware' }), dataSource.getRepository(Engine).update({ id: engineBId }, { tenantId, runtimeAccessScope: 'resource_aware' }),
+      dataSource.getRepository(Engine).update(
+        { id: engineAId },
+        {
+          tenantId,
+          tenancyMode: 'dedicated',
+          tenantResolutionStatus: 'ready',
+          runtimeAccessScope: 'resource_aware',
+        },
+      ),
+      dataSource.getRepository(Engine).update(
+        { id: engineBId },
+        {
+          tenantId,
+          tenancyMode: 'dedicated',
+          tenantResolutionStatus: 'ready',
+          runtimeAccessScope: 'resource_aware',
+        },
+      ),
     ]);
     const group = await authzGroupService.createGroup({ tenantId, key: modelGroupKey, name: `${prefix} group`, createdById: adminUserId });
     groupId = group.id;
