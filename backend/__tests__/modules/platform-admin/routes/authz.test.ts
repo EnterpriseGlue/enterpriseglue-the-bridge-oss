@@ -65,7 +65,9 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
-    req.tenant ||= { tenantId: 'tenant-default' };
+    if (req.headers['x-test-omit-tenant-context'] !== 'true') {
+      req.tenant ||= { tenantId: 'tenant-default' };
+    }
     next();
   },
 }));
@@ -611,6 +613,16 @@ describe('platform-admin authz routes', () => {
       authorizationVersion: 'authz:123:test',
       generatedAt: 123,
     });
+  });
+
+  it('uses the default tenant for a current-user snapshot when middleware has no tenant context', async () => {
+    const response = await request(app)
+      .get('/api/authz/me/permissions')
+      .set('x-test-omit-tenant-context', 'true');
+
+    expect(response.status).toBe(200);
+    expect(response.body.tenantId).toBeNull();
+    expect(permissionService.getCurrentUserPermissions).toHaveBeenCalledWith('user-1', 'tenant-default');
   });
 
   it('serializes authorization audit records through the strict shared API view', async () => {
@@ -1516,7 +1528,11 @@ describe('platform-admin authz routes', () => {
     });
     expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
       'platform:authz:check',
-      expect.objectContaining({ resourceType: 'engine_runtime_resource', resourceId: 'runtime-resource-1' }),
+      expect.objectContaining({
+        tenantId: 'tenant-default',
+        resourceType: 'engine_runtime_resource',
+        resourceId: 'runtime-resource-1',
+      }),
     );
     expect(response.body.resolvedRuntimeResource).toMatchObject({
       id: 'runtime-resource-1',
@@ -1526,6 +1542,53 @@ describe('platform-admin authz routes', () => {
       tenantMappingId: 'mapping-1',
       tenantMappingVersion: 3,
     });
+  });
+
+  it('uses the default tenant for runtime-resource evaluation when middleware has no tenant context', async () => {
+    const findOne = vi.fn().mockResolvedValue({
+      id: 'runtime-resource-1',
+      tenantId: 'tenant-default',
+      engineId: 'engine-1',
+      resourceKind: 'process_definition',
+      resourceKey: 'invoice',
+      runtimeTenantId: '',
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: null,
+      tenantMappingVersion: 0,
+      isActive: true,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne }),
+    });
+
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .set('x-test-omit-tenant-context', 'true')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        permission: 'platform:authz:check',
+        resourceType: 'engine_runtime_resource',
+        runtimeResource: {
+          engineId: 'engine-1',
+          resourceKind: 'process_definition',
+          resourceKey: 'invoice',
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(findOne).toHaveBeenCalledWith({
+      where: expect.arrayContaining([
+        expect.objectContaining({ tenantId: 'tenant-default' }),
+      ]),
+    });
+    expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
+      'platform:authz:check',
+      expect.objectContaining({
+        tenantId: 'tenant-default',
+        resourceType: 'engine_runtime_resource',
+        resourceId: 'runtime-resource-1',
+      }),
+    );
   });
 
   it('manages external registration API clients', async () => {

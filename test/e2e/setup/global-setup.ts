@@ -5,8 +5,8 @@ import { randomUUID } from 'node:crypto';
 
 const API_BASE_URL = process.env.E2E_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:8787';
 
-const SEED_DIR = path.resolve(process.cwd(), 'test/e2e/.seed');
-const SEED_FILE = path.join(SEED_DIR, 'user.json');
+const SEED_FILE = process.env.E2E_SEED_FILE || path.resolve(process.cwd(), 'test/e2e/.seed/user.json');
+const SEED_DIR = path.dirname(SEED_FILE);
 // Persisted system group ids from AuthzGroupService. Keep this setup module
 // dependency-free so Playwright does not need to load TypeORM decorators.
 const E2E_PLATFORM_GROUP_IDS = {

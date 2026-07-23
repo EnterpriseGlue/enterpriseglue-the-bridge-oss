@@ -52,6 +52,10 @@ const idParamSchema = z.object({ id: z.string().uuid() });
 
 const router = Router();
 
+function effectiveTenantId(req: Request): string {
+  return normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
+}
+
 function requirePlatformAction(actionId: string) {
   return requireAction(actionId, { resourceResolver: 'platform.self' });
 }
@@ -111,10 +115,11 @@ function requireTargetTransferAccess(req: Request, res: Response, next: NextFunc
 router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(AuthzCheckRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { action, resourceType, resourceId, userAttributes, resourceAttributes } = req.body;
+    const tenantId = effectiveTenantId(req);
 
     const context: EvaluationContext = {
       userId: req.user!.userId,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId,
       resourceType,
       resourceId,
       userAttributes,
@@ -146,12 +151,13 @@ router.post('/api/authz/check', apiLimiter, requireAuth, validateBody(AuthzCheck
 router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(AuthzCheckBatchRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { checks } = req.body;
+    const tenantId = effectiveTenantId(req);
 
     const results = await Promise.all(
       checks.map(async (check: any) => {
         const context: EvaluationContext = {
           userId: req.user!.userId,
-          tenantId: req.tenant?.tenantId || null,
+          tenantId,
           resourceType: check.resourceType,
           resourceId: check.resourceId,
           ipAddress: req.ip,
@@ -184,12 +190,17 @@ router.post('/api/authz/check-batch', apiLimiter, requireAuth, validateBody(Auth
  */
 router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    const snapshot = await permissionService.getCurrentUserPermissions(req.user!.userId, req.tenant?.tenantId || null);
+    const tenantId = effectiveTenantId(req);
+    const snapshot = await permissionService.getCurrentUserPermissions(req.user!.userId, tenantId);
     // Runtime-resource visibility is resolved server-side per request. Keep
     // this client snapshot deliberately coarse so process/decision keys and
     // tenant lineage cannot become a second authorization authority.
     res.json(CurrentUserPermissionsSchema.parse({
       userId: snapshot.userId,
+      // Preserve the request-derived session context in the browser contract.
+      // OSS may evaluate an unscoped API request against its implicit default
+      // tenant, but that must not rewrite the session from null to an explicit
+      // tenant and invalidate the principal-bound frontend snapshot.
       tenantId: req.tenant?.tenantId || null,
       platform: snapshot.platform,
       projects: snapshot.projects.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
@@ -210,6 +221,7 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
 router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformAction('platform.authz.evaluate'), validateBody(EffectiveAccessEvaluateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   try {
     const { userId, permission, resourceType, resourceId, runtimeResource } = req.body;
+    const tenantId = effectiveTenantId(req);
     if (!new Set<string>(Object.values(AllPermissions)).has(permission)) {
       throw Errors.validation('Unknown permission');
     }
@@ -217,9 +229,8 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
     let resolvedResourceId = resourceId;
     let resolvedRuntimeResource: Record<string, unknown> | undefined;
     if (runtimeResource) {
-      const requestTenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
       const runtime = await (await getDataSource()).getRepository(RuntimeResource).findOne({
-        where: tenantIdsForAuthz(requestTenantId).map((visibleTenantId) => ({
+        where: tenantIdsForAuthz(tenantId).map((visibleTenantId) => ({
           engineId: runtimeResource.engineId,
           resourceKind: runtimeResource.resourceKind,
           resourceKey: runtimeResource.resourceKey,
@@ -248,7 +259,7 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 
     const context: EvaluationContext = {
       userId,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId,
       resourceType,
       resourceId: resolvedResourceId,
       ipAddress: req.ip,

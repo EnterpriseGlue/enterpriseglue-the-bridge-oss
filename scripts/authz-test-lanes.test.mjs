@@ -186,6 +186,7 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/login\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
+  assert.match(e2eGlobalSetup, /process\.env\.E2E_SEED_FILE/);
 });
 
 test('the authorization mutation guard kills every required tenancy fault class and retains evidence', () => {
