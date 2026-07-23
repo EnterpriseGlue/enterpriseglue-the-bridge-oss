@@ -122,7 +122,7 @@ disposable local PostgreSQL database, executes Chromium against the Docker
 frontend/backend, and then assembles the registry artifact. Journey 1 proves
 create, inspect, update, reconciliation, persisted state, and removal through
 the manual UI and authenticated HTTP service. Journey 2 proves the matching
-external API lifecycle described below. Journeys 3–14 and their remaining
+external API lifecycle described below. Journeys 4–14 and their remaining
 required channel observations stay explicitly missing until their matching
 real-service tests are implemented.
 
@@ -132,6 +132,18 @@ same-payload retry, update, persisted inspection, and decommission using an
 isolated bearer-token request context with no administrator cookies. The
 local teardown removes its revoked API-client row and decommissioned
 `e2e-*` engine inventory after the assertions complete.
+
+Journey 3 uses the authenticated configuration-bundle API against the same
+local backend and PostgreSQL database. It previews and diffs one authoritative
+dedicated-engine bundle, applies the exact canonical hash, exports the
+server-owned representation, previews and reapplies that export as a no-op,
+then previews and applies an acknowledged authoritative removal. The test
+requires the engine ID to remain stable across export/reapply and verifies that
+the removed engine disappears from the subsequent export. Teardown removes
+the disposable config-owned engine, apply runs, reconciliation tasks, and
+config-bundle audits. This human-administrator journey proves the
+configuration channel contract; it does not substitute for the separate
+least-privilege CI machine-client journey.
 
 The journey runner succeeds when every currently implemented journey passes,
 but keeps the assembled artifact visibly incomplete while any of the 14

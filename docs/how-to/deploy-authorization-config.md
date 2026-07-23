@@ -232,6 +232,39 @@ pnpm authz:config wait <apply-run-id>
 pnpm authz:config export acme-platform-authz
 ```
 
+### Verify A Dedicated Engine Round Trip Locally
+
+Before promoting a dedicated-engine bundle, exercise the same lifecycle against
+a disposable local Docker installation:
+
+1. Declare the engine with a stable `engine.*` key, `tenancy.mode` set to
+   `dedicated`, an explicit tenant reference, and an opaque credential
+   reference. Use `config_locked` when the bundle must remain authoritative.
+2. Preview and diff the bundle. Apply only the exact canonical preview hash and
+   include every acknowledgement returned by the diff.
+3. Export the same bundle key. Confirm that the exported engine retains the
+   stable engine key, dedicated tenant reference, and ownership mode without
+   exposing credential values.
+4. Preview and reapply the export with a new idempotency key. A stable
+   round trip reports zero creates, updates, and archives and retains the same
+   engine ID.
+5. To remove the config-owned engine, preview the same authoritative bundle
+   with an empty `engines` array, review the archive acknowledgement, and apply
+   that exact preview. A final export must contain no active engine from the
+   removed declaration.
+
+The repository automates this procedure with:
+
+```bash
+pnpm run test:engine-tenancy:provisioning-journeys:local
+```
+
+The guarded runner accepts localhost only, uses disposable seeded credentials,
+and removes the generated engine, apply history, reconciliation tasks, and
+audit fixtures. Its configuration journey is administrator-session evidence;
+the protected CI test remains separate and must use a least-privilege machine
+client as described above.
+
 The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. Set `ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY` for CI retries: a completed matching apply returns its original receipt, while reusing the key with different bundle input is rejected. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
 
 Before promoting a bundle workflow or backend image, run the focused contract
@@ -502,6 +535,7 @@ Normal rollback never deletes manual, API, identity-provider, or system-owned re
 - [ ] ⬜ Docker dev, production build, and published-image deployment with no bundle.
 - [x] ✅ Docker deployment with a valid mounted bundle and restart idempotency. The isolated `test:config-bootstrap:local:apply` rehearsal mounts an additive bundle into a disposable Docker stack, verifies the sanitized readiness status, recreates the backend, and verifies the same startup state before removing the stack.
 - [x] ✅ Docker fail-closed behavior for invalid bundle, hash mismatch, and unresolved secret. The isolated `test:config-bootstrap:local:fail-closed` rehearsal starts each malformed, hash-mismatched, and unavailable-secret case separately and requires the backend to remain unready while emitting only its stable sanitized diagnostic.
+- [x] ✅ Local dedicated-engine configuration round trip through preview, apply, export, no-op reapply, acknowledged authoritative removal, and sanitized cleanup.
 - [ ] ⬜ OpenShift deployment with ConfigMap bundle and Secret refs.
 - [ ] ⬜ OpenShift failed rollout leaves prior healthy ReplicaSet available.
 - [ ] ⬜ CI preview/apply/reapply/rollback with idempotency and sanitized receipts.

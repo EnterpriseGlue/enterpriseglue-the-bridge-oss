@@ -507,4 +507,372 @@ test.describe('Engine tenancy provisioning journeys', () => {
       }
     }
   });
+
+  test('journey 3 configuration bundle dedicated round trip', async ({ page }) => {
+    const commit = git(['rev-parse', 'HEAD']);
+    const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
+      ? 'dirty-development-run'
+      : 'clean';
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const bundleKey = `e2e.journey03.${suffix}`;
+    const engineKey = `engine.journey03.${suffix}`;
+    const engineName = `e2e-journey-03-dedicated-${suffix}`;
+    let engineId: string | null = null;
+    let removed = false;
+
+    await login(page);
+    const token = await csrfToken(page);
+    const envelope = {
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: {
+          key: bundleKey,
+          owner: 'e2e',
+        },
+        tenantKey: 'default',
+        mode: 'authoritative',
+        settings: {},
+        imports: ['./engines.json'],
+      },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: engineKey,
+            name: engineName,
+            type: 'camunda7',
+            baseUrl: 'http://camunda-mock:9080/engine-rest',
+            auth: {
+              type: 'basic',
+              username: 'e2e',
+              passwordRef: 'E2E_ENGINE_PASSWORD',
+            },
+            connectionMode: 'direct',
+            runtimeAccessScope: 'engine_wide',
+            tenancy: {
+              mode: 'dedicated',
+              tenantRef: { type: 'default' },
+            },
+            metadataDiscoveryEnabled: false,
+            deploymentDiscoveryEnabled: false,
+            pipelineReceiptEnabled: false,
+            ownershipMode: 'config_locked',
+          }],
+        },
+      },
+    };
+
+    try {
+      const preview = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+        errors: unknown[];
+        counts: Record<string, number>;
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/preview',
+          mutationOptions(token, envelope),
+        ),
+        'preview dedicated configuration bundle',
+      );
+      expect(preview).toMatchObject({
+        valid: true,
+        canonicalHash: expect.any(String),
+        errors: [],
+        counts: { './engines.json': 1 },
+      });
+
+      const initialDiff = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+        changes: Array<Record<string, unknown>>;
+        requiredAcknowledgements: string[];
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/diff',
+          mutationOptions(token, envelope),
+        ),
+        'diff dedicated configuration bundle',
+      );
+      expect(initialDiff).toMatchObject({
+        valid: true,
+        canonicalHash: preview.canonicalHash,
+        requiredAcknowledgements: [],
+      });
+      expect(initialDiff.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          objectType: 'engine',
+          key: engineKey,
+          operation: 'create',
+        }),
+      ]));
+
+      const applied = await responseJson<{
+        canonicalHash: string;
+        created: number;
+        updated: number;
+        archived: number;
+        changes: Array<Record<string, unknown>>;
+        applyRunId: string;
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/apply',
+          mutationOptions(token, {
+            ...envelope,
+            expectedPreviewHash: preview.canonicalHash,
+            idempotencyKey: `journey-03-create-${suffix}`,
+            identityReconciliationMode: 'none',
+          }),
+        ),
+        'apply dedicated configuration bundle',
+      );
+      expect(applied).toMatchObject({
+        canonicalHash: preview.canonicalHash,
+        created: 1,
+        updated: 0,
+        archived: 0,
+        applyRunId: expect.any(String),
+      });
+
+      const exported = await responseJson<{
+        bundle: Record<string, unknown>;
+        files: Record<string, {
+          engines?: Array<Record<string, unknown>>;
+        }>;
+      }>(
+        await page.request.get(
+          `/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(bundleKey)}&tenantKey=default`,
+        ),
+        'export applied dedicated configuration bundle',
+      );
+      expect(exported.bundle).toMatchObject({
+        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: bundleKey },
+        tenantKey: 'default',
+        mode: 'authoritative',
+        imports: ['./engines.json'],
+      });
+      expect(exported.files['./engines.json']?.engines).toEqual([
+        expect.objectContaining({
+          key: engineKey,
+          name: engineName,
+          tenancy: {
+            mode: 'dedicated',
+            tenantRef: { type: 'id', id: 'tenant-default' },
+          },
+          ownershipMode: 'config_locked',
+        }),
+      ]);
+
+      const exportedPreview = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+        errors: unknown[];
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/preview',
+          mutationOptions(token, exported),
+        ),
+        'preview exported dedicated configuration bundle',
+      );
+      expect(exportedPreview).toMatchObject({
+        valid: true,
+        canonicalHash: expect.any(String),
+        errors: [],
+      });
+
+      const reapplied = await responseJson<{
+        canonicalHash: string;
+        created: number;
+        updated: number;
+        archived: number;
+        changes: Array<Record<string, unknown>>;
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/apply',
+          mutationOptions(token, {
+            ...exported,
+            expectedPreviewHash: exportedPreview.canonicalHash,
+            idempotencyKey: `journey-03-reapply-${suffix}`,
+            identityReconciliationMode: 'none',
+          }),
+        ),
+        'reapply exported dedicated configuration bundle',
+      );
+      expect(reapplied).toMatchObject({
+        canonicalHash: exportedPreview.canonicalHash,
+        created: 0,
+        updated: 0,
+        archived: 0,
+      });
+      expect(reapplied.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          objectType: 'engine',
+          key: engineKey,
+          operation: 'noop',
+          currentId: expect.any(String),
+        }),
+      ]));
+      engineId = String(
+        reapplied.changes.find(
+          (change) => change.objectType === 'engine' && change.key === engineKey,
+        )!.currentId,
+      );
+
+      const removalEnvelope = {
+        bundle: envelope.bundle,
+        files: {
+          './engines.json': { engines: [] },
+        },
+      };
+      const removalPreview = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/preview',
+          mutationOptions(token, removalEnvelope),
+        ),
+        'preview authoritative dedicated engine removal',
+      );
+      expect(removalPreview).toMatchObject({
+        valid: true,
+        canonicalHash: expect.any(String),
+      });
+      const removalDiff = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+        changes: Array<Record<string, unknown>>;
+        requiredAcknowledgements: string[];
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/diff',
+          mutationOptions(token, removalEnvelope),
+        ),
+        'diff authoritative dedicated engine removal',
+      );
+      expect(removalDiff).toMatchObject({
+        valid: true,
+        canonicalHash: removalPreview.canonicalHash,
+      });
+      expect(removalDiff.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          objectType: 'engine',
+          key: engineKey,
+          operation: 'archive',
+          currentId: engineId,
+        }),
+      ]));
+      expect(removalDiff.requiredAcknowledgements).toContain(
+        `config.authoritative_archive:engine:${engineKey}`,
+      );
+
+      const removal = await responseJson<{
+        canonicalHash: string;
+        created: number;
+        updated: number;
+        archived: number;
+        changes: Array<Record<string, unknown>>;
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/apply',
+          mutationOptions(token, {
+            ...removalEnvelope,
+            expectedPreviewHash: removalPreview.canonicalHash,
+            acknowledgements: removalDiff.requiredAcknowledgements,
+            idempotencyKey: `journey-03-remove-${suffix}`,
+            identityReconciliationMode: 'none',
+          }),
+        ),
+        'apply authoritative dedicated engine removal',
+      );
+      expect(removal).toMatchObject({
+        canonicalHash: removalPreview.canonicalHash,
+        created: 0,
+        updated: 0,
+        archived: 1,
+      });
+      removed = true;
+
+      const afterRemoval = await responseJson<{
+        bundle: Record<string, unknown>;
+        files: Record<string, unknown>;
+      }>(
+        await page.request.get(
+          `/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(bundleKey)}&tenantKey=default`,
+        ),
+        'verify removed dedicated engine is absent from config export',
+      );
+      expect(afterRemoval.files['./engines.json']).toBeUndefined();
+      expect(afterRemoval.bundle).toMatchObject({
+        metadata: { key: bundleKey },
+        imports: [],
+      });
+
+      const observationDirectory = path.join(
+        process.cwd(),
+        'test/results/engine-tenancy-provisioning-observations',
+      );
+      await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-03-configuration-bundle.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 3,
+          channel: 'configuration-bundle',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: false,
+          assertions: ['preview', 'apply', 'export', 'reapply', 'remove'],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
+    } finally {
+      if (!removed) {
+        const removalEnvelope = {
+          bundle: envelope.bundle,
+          files: {
+            './engines.json': { engines: [] },
+          },
+        };
+        const cleanupPreview = await page.request.post(
+          '/api/authz/config-bundles/preview',
+          mutationOptions(token, removalEnvelope),
+        );
+        if (cleanupPreview.ok()) {
+          const previewBody = await cleanupPreview.json() as { canonicalHash?: string };
+          const cleanupDiff = await page.request.post(
+            '/api/authz/config-bundles/diff',
+            mutationOptions(token, removalEnvelope),
+          );
+          if (cleanupDiff.ok() && previewBody.canonicalHash) {
+            const diffBody = await cleanupDiff.json() as { requiredAcknowledgements?: string[] };
+            await page.request.post(
+              '/api/authz/config-bundles/apply',
+              mutationOptions(token, {
+                ...removalEnvelope,
+                expectedPreviewHash: previewBody.canonicalHash,
+                acknowledgements: diffBody.requiredAcknowledgements || [],
+                idempotencyKey: `journey-03-cleanup-${suffix}`,
+                identityReconciliationMode: 'none',
+              }),
+            );
+          }
+        }
+      }
+    }
+  });
 });

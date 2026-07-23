@@ -221,6 +221,22 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     await pool.query(`DELETE FROM ${schema}.role_assignments WHERE principal_type = 'api_client' AND principal_id = ANY($1::text[])`, [staleApiClientIds]);
     await pool.query(`DELETE FROM ${schema}.api_clients WHERE id = ANY($1::text[])`, [staleApiClientIds]);
   }
+  const staleConfigApplyRunIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.config_bundle_apply_runs WHERE bundle_key LIKE 'e2e.%' OR bundle_key LIKE 'e2e-%'`
+  );
+  const staleConfigApplyRunIds = staleConfigApplyRunIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleConfigApplyRunIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.config_bundle_identity_replay_tasks WHERE apply_run_id = ANY($1::text[])`, [staleConfigApplyRunIds]);
+    await pool.query(`DELETE FROM ${schema}.config_bundle_runtime_reconciliation_tasks WHERE apply_run_id = ANY($1::text[])`, [staleConfigApplyRunIds]);
+    await pool.query(
+      `DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle_apply_run' AND resource_id = ANY($1::text[])`,
+      [staleConfigApplyRunIds]
+    );
+    await pool.query(`DELETE FROM ${schema}.config_bundle_apply_runs WHERE id = ANY($1::text[])`, [staleConfigApplyRunIds]);
+  }
+  await pool.query(
+    `DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle' AND (resource_id LIKE 'e2e.%' OR resource_id LIKE 'e2e-%')`
+  );
   await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
 
   await pool.end();
