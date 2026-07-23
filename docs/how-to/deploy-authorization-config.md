@@ -288,10 +288,11 @@ Use this sequence before promoting a centralized shared-engine bundle:
    reconciliation.
 
 `pnpm run test:engine-tenancy:provisioning-journeys:local` automates this
-configuration sequence and the equivalent manual UI and external API
-sequences. The runner resolves a disposable `E2E_ENGINE_PASSWORD` only inside
-the local backend container and never writes its value to the bundle or
-evidence. A release candidate is complete only when the resulting
+Journey 6 configuration round trip and the equivalent manual UI and external
+API shared lifecycles. Journey 7 then repeats tenant resolution through all
+three channels. The runner resolves a disposable `E2E_ENGINE_PASSWORD` only
+inside the local backend container and never writes its value to the bundle
+or evidence. A release candidate is complete only when the resulting
 `provisioning-journeys.json` reports 14/14 journeys and 30/30 required channel
 executions on the same clean commit.
 

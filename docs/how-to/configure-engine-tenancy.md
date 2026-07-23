@@ -156,11 +156,12 @@ registered through the external API, or applied from a configuration bundle:
    created it and confirm its mappings and inventory no longer authorize
    access.
 
-The repository's localhost-only Journey 7 automation executes this sequence
-through all three provisioning channels against the real backend, PostgreSQL
-database, authorization evaluator, and a Docker-hosted Camunda-compatible
-endpoint. Passing that journey proves the channel behavior is aligned; it does
-not replace the full 14-journey, 30-channel release gate.
+The repository's localhost-only Journeys 4–7 automation executes this
+sequence through the manual, external, and configuration provisioning
+lifecycles against the real backend, PostgreSQL database, authorization
+evaluator, and a Docker-hosted Camunda-compatible endpoint. Passing these
+journeys proves the channel behavior is aligned; it does not replace the full
+14-journey, 30-channel release gate.
 
 ### Manage Topology and Mappings in the UI
 

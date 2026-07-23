@@ -123,11 +123,13 @@ frontend/backend, and then assembles the registry artifact. Journey 1 proves
 create, inspect, update, reconciliation, persisted state, and removal through
 the manual UI and authenticated HTTP service. Journey 2 proves the matching
 external API lifecycle described below. Journey 3 proves the dedicated
-configuration-bundle round trip. Journey 7 proves runtime-resource tenant
-resolution through all three required channels. The implemented denominator is
-therefore four of fourteen journeys and six of thirty required channel
-executions. Journeys 4–6 and 8–14 stay explicitly missing until their matching
-real-service tests are implemented and qualified on the same clean commit.
+configuration-bundle round trip. Journeys 4–6 prove the matching shared-engine
+lifecycle through the manual UI, external API, and configuration bundle.
+Journey 7 proves runtime-resource tenant resolution through all three required
+channels. The implemented denominator is therefore seven of fourteen journeys
+and nine of thirty required channel executions. Journeys 8–14 stay explicitly
+missing until their matching real-service tests are implemented and qualified
+on the same clean commit.
 
 Journey 2 creates a reveal-once disposable API client, first proves the
 machine principal is denied without its registrar role, then executes create,
@@ -147,6 +149,15 @@ the disposable config-owned engine, apply runs, reconciliation tasks, and
 config-bundle audits. This human-administrator journey proves the
 configuration channel contract; it does not substitute for the separate
 least-privilege CI machine-client journey.
+
+Journeys 4–6 reuse the same two-tenant runtime inventory as Journey 7 but add
+their channel-specific lifecycle requirements. Journey 4 applies two mappings
+and deletes the shared engine through the UI. Journey 5 previews and applies
+the mappings through the least-privilege external client and decommissions the
+engine through that same machine API. Journey 6 exports the config-owned
+shared engine and both mappings, previews and reapplies the exported bundle as
+a no-op with stable IDs, authoritatively archives the engines and mappings,
+and proves they disappear from the next export.
 
 Journey 7 begins by proving the shared-engine administration boundary that
 makes mapping possible without widening runtime access. The generic

@@ -1092,11 +1092,62 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      await editModal.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(editModal).not.toBeVisible();
+      const mappedSharedRow = page.getByRole('row').filter({ hasText: sharedName });
+      await expect(mappedSharedRow).toBeVisible();
+      await mappedSharedRow.getByRole('button', { name: 'Options' }).click();
+      const deleteResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'DELETE'
+          && new URL(response.url()).pathname.endsWith(
+            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}`,
+          ),
+      );
+      await page.getByRole('menuitem', { name: /^Delete/ }).click();
+      expect((await deleteResponsePromise).status()).toBe(204);
+      const sharedEngineCleanupIndex = createdEngineIds.indexOf(sharedEngineId);
+      expect(sharedEngineCleanupIndex).toBeGreaterThanOrEqual(0);
+      createdEngineIds.splice(sharedEngineCleanupIndex, 1);
+      await expect(page.getByText('Engine deleted', { exact: true })).toBeVisible();
+      await expect(page.getByRole('row').filter({ hasText: sharedName })).toHaveCount(0);
+
       const observationDirectory = path.join(
         process.cwd(),
         'test/results/engine-tenancy-provisioning-observations',
       );
       await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-04-manual-ui.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 4,
+          channel: 'manual-ui',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: true,
+          assertions: [
+            'create',
+            'map-two-tenants',
+            'reconcile',
+            'disjoint-inventory',
+            'remove',
+          ],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
       await writeFile(
         path.join(observationDirectory, 'journey-07-manual-ui.json'),
         `${JSON.stringify({
@@ -1376,11 +1427,64 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      const sharedDecommission = await responseJson<{
+        decommissioned: boolean;
+        engineId: string;
+        lifecycleStatus: string;
+      }>(
+        await externalApi.post('/engines-api/external/engines/decommission', {
+          data: {
+            externalId: sharedExternalId,
+            reason: 'Disposable journey 5 shared lifecycle completed',
+          },
+        }),
+        'decommission externally mapped shared engine',
+      );
+      expect(sharedDecommission).toEqual(expect.objectContaining({
+        decommissioned: true,
+        engineId: sharedEngineId,
+        lifecycleStatus: 'decommissioned',
+      }));
+      const sharedExternalCleanupIndex = externalIds.indexOf(sharedExternalId);
+      expect(sharedExternalCleanupIndex).toBeGreaterThanOrEqual(0);
+      externalIds.splice(sharedExternalCleanupIndex, 1);
+
       const observationDirectory = path.join(
         process.cwd(),
         'test/results/engine-tenancy-provisioning-observations',
       );
       await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-05-external-api.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 5,
+          channel: 'external-api',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: false,
+          assertions: [
+            'create',
+            'mapping-preview',
+            'mapping-apply',
+            'reconcile',
+            'decommission',
+          ],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
       await writeFile(
         path.join(observationDirectory, 'journey-07-external-api.json'),
         `${JSON.stringify({
@@ -1838,6 +1942,96 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      const exported = await responseJson<{
+        bundle: Record<string, unknown>;
+        files: Record<string, {
+          engines?: Array<Record<string, unknown>>;
+          engineTenantMappings?: Array<Record<string, unknown>>;
+        }>;
+      }>(
+        await page.request.get(
+          `/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(bundleKey)}&tenantKey=default`,
+        ),
+        'export configuration-mapped shared lifecycle',
+      );
+      expect(exported.bundle).toMatchObject({
+        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: bundleKey },
+        tenantKey: 'default',
+        mode: 'authoritative',
+        imports: expect.arrayContaining([
+          './engines.json',
+          './engine-tenant-mappings.json',
+        ]),
+      });
+      expect(exported.files['./engines.json']?.engines).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: dedicatedKey,
+          tenancy: {
+            mode: 'dedicated',
+            tenantRef: { type: 'id', id: 'tenant-default' },
+          },
+          ownershipMode: 'config_locked',
+        }),
+        expect.objectContaining({
+          key: sharedKey,
+          tenancy: {
+            mode: 'shared',
+            mappingStrategy: 'engine_tenant_id',
+            unmappedPolicy: 'deny',
+          },
+          ownershipMode: 'config_locked',
+        }),
+      ]));
+      expect(
+        exported.files['./engine-tenant-mappings.json']?.engineTenantMappings,
+      ).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: mappingKeys.blue,
+          engineRef: { engineKey: sharedKey },
+          externalTenantId: 'e2e-runtime-blue',
+          active: true,
+          ownershipMode: 'config_locked',
+        }),
+        expect.objectContaining({
+          key: mappingKeys.green,
+          engineRef: { engineKey: sharedKey },
+          externalTenantId: 'e2e-runtime-green',
+          active: true,
+          ownershipMode: 'config_locked',
+        }),
+      ]));
+
+      const exportedReapply = await applyBundle(
+        exported as unknown as Record<string, unknown>,
+        `journey-06-config-reapply-${suffix}`,
+        'journey 6 exported shared configuration',
+      );
+      expect(exportedReapply).toMatchObject({
+        created: 0,
+        updated: 0,
+        archived: 0,
+      });
+      expect(exportedReapply.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          objectType: 'engine',
+          key: sharedKey,
+          operation: 'noop',
+          currentId: sharedEngineId,
+        }),
+        expect.objectContaining({
+          objectType: 'engine_tenant_mapping',
+          key: mappingKeys.blue,
+          operation: 'noop',
+        }),
+        expect.objectContaining({
+          objectType: 'engine_tenant_mapping',
+          key: mappingKeys.green,
+          operation: 'noop',
+        }),
+      ]));
+
       const removalEnvelope = {
         bundle: mappedEnvelope.bundle,
         files: {
@@ -1857,11 +2051,52 @@ test.describe('Engine tenancy provisioning journeys', () => {
       });
       removed = true;
 
+      const afterRemoval = await responseJson<{
+        bundle: Record<string, unknown>;
+        files: Record<string, unknown>;
+      }>(
+        await page.request.get(
+          `/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(bundleKey)}&tenantKey=default`,
+        ),
+        'verify removed shared configuration is absent from export',
+      );
+      expect(afterRemoval.bundle).toMatchObject({
+        metadata: { key: bundleKey },
+        imports: [],
+      });
+      expect(afterRemoval.files['./engines.json']).toBeUndefined();
+      expect(afterRemoval.files['./engine-tenant-mappings.json']).toBeUndefined();
+
       const observationDirectory = path.join(
         process.cwd(),
         'test/results/engine-tenancy-provisioning-observations',
       );
       await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-06-configuration-bundle.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 6,
+          channel: 'configuration-bundle',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: false,
+          assertions: ['preview', 'apply', 'export', 'reapply', 'remove'],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
       await writeFile(
         path.join(observationDirectory, 'journey-07-configuration-bundle.json'),
         `${JSON.stringify({
