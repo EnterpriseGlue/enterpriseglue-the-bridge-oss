@@ -117,6 +117,10 @@ describe('custom role scope matrix (database)', () => {
     await dataSource.getRepository(RuntimeResource).insert(runtimeResources.map((resource) => ({
       ...resource,
       tenantId,
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: null,
+      tenantMappingVersion: 0,
+      tenantResolutionDetailsJson: '{"code":"dedicated_engine_tenant"}',
       engineId: runtimeEngineId,
       resourceKind: 'process_definition',
       runtimeTenantId: '',

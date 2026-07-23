@@ -161,7 +161,29 @@ describe('randomized authorization model (database)', () => {
       { id: generateId(), engineId: engineBId, resourceKey: `${prefix}-runtime-c` },
     ];
     [runtimeAId, runtimeBId, runtimeCId] = resources.map((resource) => resource.id);
-    await dataSource.getRepository(RuntimeResource).insert(resources.map((resource) => ({ ...resource, tenantId, resourceKind: 'process_definition', runtimeTenantId: '', engineResourceId: null, deploymentId: null, projectId: null, fileId: null, version: 1, labelsJson: '{}', lineageJson: '{}', source: 'test', sourceRef: prefix, observedAt: now, isActive: true, createdAt: now, updatedAt: now })));
+    await dataSource.getRepository(RuntimeResource).insert(resources.map((resource) => ({
+      ...resource,
+      tenantId,
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: null,
+      tenantMappingVersion: 0,
+      tenantResolutionDetailsJson: '{"code":"dedicated_engine_tenant"}',
+      resourceKind: 'process_definition',
+      runtimeTenantId: '',
+      engineResourceId: null,
+      deploymentId: null,
+      projectId: null,
+      fileId: null,
+      version: 1,
+      labelsJson: '{}',
+      lineageJson: '{}',
+      source: 'test',
+      sourceRef: prefix,
+      observedAt: now,
+      isActive: true,
+      createdAt: now,
+      updatedAt: now,
+    })));
     const runtimeSet = await runtimeResourceSetService.create({ tenantId, key: `${prefix}-runtime-set`, name: `${prefix} runtime set`, engineId: engineBId, resourceKind: 'process_definition', selector: { mode: 'keys', keys: [resources[1].resourceKey] }, createdById: adminUserId });
     runtimeSetId = runtimeSet.id;
     const existingRuntimeMaterialization = await dataSource.getRepository(RuntimeResourceSetMaterialization).findOneBy({ runtimeResourceSetId: runtimeSetId, runtimeResourceId: runtimeBId });

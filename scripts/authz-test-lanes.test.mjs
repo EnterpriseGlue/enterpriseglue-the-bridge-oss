@@ -186,15 +186,20 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
 });
 
-test('the authorization mutation guard proves denial tests kill bypassed user and API-client guards', () => {
+test('the authorization mutation guard kills every required tenancy fault class and retains evidence', () => {
   assert.match(scripts['test:authz:mutation'], /run-authz-mutation-tests\.mjs/);
   assert.match(authzMutationRunner, /requireAction\.test\.ts/);
   assert.match(authzMutationRunner, /apiClientAuth\.test\.ts/);
+  assert.match(authzMutationRunner, /engineTenantMappingService\.test\.ts/);
   assert.match(authzMutationRunner, /user action deny bypass/);
   assert.match(authzMutationRunner, /API client deny bypass/);
-  assert.match(authzMutationRunner, /runtime deployment inventory bypass/);
-  assert.match(authzMutationRunner, /tenant visibility bypass/);
+  assert.match(authzMutationRunner, /removed-tenant-filter/);
+  assert.match(authzMutationRunner, /inverted-ownership-check/);
+  assert.match(authzMutationRunner, /accepted-null-tenant-context/);
+  assert.match(authzMutationRunner, /skipped-mapping-version-check/);
+  assert.match(authzMutationRunner, /upstream-call-after-denial/);
   assert.match(authzMutationRunner, /runtime batch partial-permission bypass/);
+  assert.match(authzMutationRunner, /mutation-report\.json/);
   assert.match(authzMutationRunner, /Authorization mutant survived/);
 });
 
