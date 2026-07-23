@@ -84,6 +84,41 @@ describe('engineSetService', () => {
     ]);
   });
 
+  it('excludes null-owned dedicated engines from tenant and platform Engine Set selectors', async () => {
+    const engineFind = vi.fn().mockResolvedValue([]);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { find: engineFind };
+        if (entity === ExternalEngineRegistration) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await engineSetService.previewSelector({ mode: 'engine_ids', engineIds: ['engine-migration'] }, 'tenant-a');
+    await engineSetService.previewSelector({ mode: 'engine_ids', engineIds: ['engine-migration'] });
+
+    expect(engineFind).toHaveBeenNthCalledWith(1, {
+      where: [
+        { tenantId: 'tenant-a' },
+        {
+          tenantId: expect.objectContaining({ _type: 'isNull' }),
+          tenancyMode: 'shared',
+        },
+      ],
+      order: { name: 'ASC' },
+    });
+    expect(engineFind).toHaveBeenNthCalledWith(2, {
+      where: [
+        { tenantId: expect.objectContaining({ _type: 'not' }) },
+        {
+          tenantId: expect.objectContaining({ _type: 'isNull' }),
+          tenancyMode: 'shared',
+        },
+      ],
+      order: { name: 'ASC' },
+    });
+  });
+
   it('requires acknowledgement before updating broad Engine Set selectors', async () => {
     const update = vi.fn().mockResolvedValue(undefined);
     (getDataSource as unknown as Mock).mockResolvedValue({

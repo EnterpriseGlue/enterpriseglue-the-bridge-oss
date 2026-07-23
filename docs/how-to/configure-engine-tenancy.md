@@ -66,6 +66,21 @@ After creation, confirm that:
 The default tenant is a provisioning fallback, not an authorization wildcard.
 Once the engine exists, every request must match its persisted tenant.
 
+An upgraded, null-owned dedicated engine is quarantined as
+`migration_required`; it is not shown as a default-tenant engine and cannot be
+used for runtime work. A platform administrator with
+`platform:engine-registration:manage` can preview and apply its reviewed
+classification. That permission works only for this migration state, creates
+no engine assignment, and stops being the applicable route permission after
+the engine has an owner.
+
+`TEN-AUTHZ-011`: the project engine-access screen applies this boundary to all
+three lists: connected engines, pending requests, and engines available to
+request. Tenant users see their tenant's dedicated engines and shared
+connection candidates. Authorized platform views may span dedicated engines
+that already have a persisted owner. A quarantined null-owned dedicated engine
+is never offered, even if an older project-access row refers to it.
+
 ## Configure a Shared Engine
 
 In **Mission Control > Engines**, choose **Add engine**, select

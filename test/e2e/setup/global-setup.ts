@@ -215,6 +215,42 @@ export default async function globalSetup() {
     ]
   );
 
+  // The guarded engine-tenancy journey needs one reproducible legacy row to
+  // prove the quarantined migration path through the real API. It is created
+  // only for that local/CI evidence lane and is removed by the e2e-* teardown
+  // sweep after preview/apply has classified it.
+  const migrationEngineId = process.env.ENGINE_TENANCY_LOCAL_EVIDENCE === 'true'
+    ? randomUUID()
+    : null;
+  if (migrationEngineId) {
+    await pool.query(
+      `INSERT INTO ${schema}.engines
+        (id, name, base_url, type, auth_type, username, password_enc, version,
+         owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
+         tenancy_mode, tenant_resolution_status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      [
+        migrationEngineId,
+        `${prefix}-migration-required-engine`,
+        engineBaseUrl,
+        'camunda7',
+        null,
+        null,
+        null,
+        null,
+        userId,
+        null,
+        null,
+        false,
+        null,
+        'dedicated',
+        'migration_required',
+        now,
+        now,
+      ]
+    );
+  }
+
   // Fine-grained access fixture: this user receives an engine-operator role
   // for exactly one tenant-visible engine. A second engine in the same tenant
   // and a deliberately cross-tenant engine prove that collection and detail
@@ -543,6 +579,7 @@ export default async function globalSetup() {
       adminEmail,
       adminPassword,
       engineId,
+      migrationEngineId,
       scopedUserId,
       scopedEmail,
       scopedPassword,

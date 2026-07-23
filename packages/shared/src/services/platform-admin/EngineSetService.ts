@@ -12,6 +12,7 @@ import type {
   EngineSetSelector as SharedEngineSetSelector,
   EngineSetSummary as SharedEngineSetSummary,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { engineTenancyVisibilityWhere } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type EntityManager, type Repository } from 'typeorm';
 
@@ -553,9 +554,7 @@ class EngineSetServiceClass {
     const normalizedTenantId = normalizeTenantId(tenantId);
     const engineRepo = dataSource.getRepository(Engine);
     const engines = await engineRepo.find({
-      where: normalizedTenantId
-        ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }]
-        : undefined,
+      where: engineTenancyVisibilityWhere({}, normalizedTenantId),
       order: { name: 'ASC' },
     });
     const registrations = engines.length > 0

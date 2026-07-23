@@ -20,6 +20,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -69,7 +70,8 @@ describe('mission-control process-instances routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-1'),
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
             })),
           };
         }
@@ -216,7 +218,8 @@ describe('mission-control process-instances routes', () => {
           return {
             findOne: vi.fn().mockResolvedValue({
               id: 'engine-1',
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
               runtimeAccessScope: 'resource_aware',
             }),
           };
@@ -262,7 +265,7 @@ describe('mission-control process-instances routes', () => {
   it('adds sanitized action decisions only when requested for visible runtime rows', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -301,7 +304,7 @@ describe('mission-control process-instances routes', () => {
   it('drops process instances outside the authorized definition key even when the engine ignores the query filter', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -322,7 +325,7 @@ describe('mission-control process-instances routes', () => {
   it('rejects oversized process-instance collection requests for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -343,7 +346,8 @@ describe('mission-control process-instances routes', () => {
           return {
             findOne: vi.fn().mockResolvedValue({
               id: 'engine-1',
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
               runtimeAccessScope: 'resource_aware',
             }),
           };

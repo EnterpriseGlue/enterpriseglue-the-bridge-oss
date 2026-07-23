@@ -416,6 +416,17 @@ function tenantOwnedWhere<T extends Record<string, unknown>>(where: T, tenantId?
   return visibleTenantIds.map((visibleTenantId) => ({ ...where, tenantId: visibleTenantId })) as T[];
 }
 
+function engineResourceWhere<T extends Record<string, unknown>>(
+  where: T,
+  tenantId?: string | null,
+): T[] {
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  return [
+    ...visibleTenantIds.map((visibleTenantId) => ({ ...where, tenantId: visibleTenantId })),
+    { ...where, tenantId: IsNull(), tenancyMode: 'shared' },
+  ] as T[];
+}
+
 function resolvedRuntimeResourceWhere<T extends Record<string, unknown>>(where: T, tenantId?: string | null): T | T[] {
   return tenantOwnedWhere({ ...where, tenantResolutionStatus: 'resolved' }, tenantId) as T | T[];
 }
@@ -2504,7 +2515,7 @@ class PermissionServiceClass {
       return resource?.engineId || null;
     }
     if (scopeType === 'engine_runtime_resource_set') {
-      const set = await dataSource.getRepository(RuntimeResourceSet).findOne({ where: tenantScopedWhere({ id: scopeId || '', isArchived: false }, tenantId), select: ['engineId'] });
+      const set = await dataSource.getRepository(RuntimeResourceSet).findOne({ where: tenantOwnedWhere({ id: scopeId || '', isArchived: false }, tenantId), select: ['engineId'] });
       return set?.engineId || null;
     }
     return null;
@@ -2754,7 +2765,7 @@ class PermissionServiceClass {
 
     if (resourceType === 'engine') {
       const engine = await dataSource.getRepository(Engine).findOne({
-        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
+        where: engineResourceWhere({ id: resourceId || '' }, tenantId),
         select: ['id'],
       });
       if (!engine) {
@@ -2785,7 +2796,7 @@ class PermissionServiceClass {
 
     if (resourceType === 'engine_runtime_resource_set') {
       const runtimeResourceSet = await dataSource.getRepository(RuntimeResourceSet).findOne({
-        where: tenantScopedWhere({ id: resourceId || '', isArchived: false }, tenantId),
+        where: tenantOwnedWhere({ id: resourceId || '', isArchived: false }, tenantId),
         select: ['id'],
       });
       if (!runtimeResourceSet) throw new Error('Runtime Resource Set not found or archived');
@@ -2822,13 +2833,13 @@ class PermissionServiceClass {
         select: ['engineId'],
       })
       : await dataSource.getRepository(RuntimeResourceSet).findOne({
-        where: tenantScopedWhere({ id: scopeId || '', isArchived: false }, tenantId),
+        where: tenantOwnedWhere({ id: scopeId || '', isArchived: false }, tenantId),
         select: ['engineId'],
       });
     if (!runtimeScope) throw new Error('Runtime resource scope not found');
 
     const engine = await dataSource.getRepository(Engine).findOne({
-      where: tenantScopedWhere({ id: runtimeScope.engineId }, tenantId),
+      where: engineResourceWhere({ id: runtimeScope.engineId }, tenantId),
       select: ['id', 'runtimeAccessScope'],
     });
     if (!engine) throw new Error('Runtime resource engine not found');
@@ -3177,15 +3188,18 @@ class PermissionServiceClass {
 
     if (hasGlobalEngineAssignment || hasGlobalExplicitGrant) {
       const engines = await dataSource.getRepository(Engine).find({
-        where: normalizedTenantId
-          ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }]
-          : undefined,
+        where: engineResourceWhere({}, normalizedTenantId),
         select: ['id'],
       });
       engines.forEach((engine) => ids.add(engine.id));
     }
 
-    return Array.from(ids).sort();
+    if (ids.size === 0) return [];
+    const visibleEngines = await dataSource.getRepository(Engine).find({
+      where: engineResourceWhere({ id: In(Array.from(ids)) }, normalizedTenantId),
+      select: ['id'],
+    });
+    return visibleEngines.map((engine) => engine.id).sort();
   }
 
   private async getUserGroupIdsForEvaluation(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
@@ -3619,7 +3633,7 @@ class PermissionServiceClass {
           where: tenantScopedWhere({ id: In(engineSetIds), isArchived: false }, tenantId),
         }),
         dataSource.getRepository(Engine).find({
-          where: tenantScopedWhere({ id: resourceId }, tenantId),
+          where: engineResourceWhere({ id: resourceId }, tenantId),
         }),
         dataSource.getRepository(ExternalEngineRegistration).find({
           where: { engineId: resourceId },

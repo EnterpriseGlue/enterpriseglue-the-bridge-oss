@@ -19,6 +19,7 @@ import {
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -82,7 +83,7 @@ describe('mission-control tasks routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === Engine) {
           return {
-            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }),
+            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }),
           };
         }
         return {};
@@ -123,7 +124,7 @@ describe('mission-control tasks routes', () => {
   it('fails closed for task counts on resource-aware engines because count rows cannot be post-filtered', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : {},
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -143,7 +144,7 @@ describe('mission-control tasks routes', () => {
   it('queries only authorized process definition keys on resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : {},
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -160,7 +161,7 @@ describe('mission-control tasks routes', () => {
   it('drops task rows whose resolved definition lineage is outside the authorized key', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : {},
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -184,7 +185,7 @@ describe('mission-control tasks routes', () => {
   it('rejects oversized task collection requests for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : {},
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);

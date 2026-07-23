@@ -64,7 +64,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenancyTransitionS
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
-    req.tenant = { tenantId: null };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -80,6 +80,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ApiClientService.js', ()
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  PlatformPermissions: {
+    ENGINE_REGISTRATION_MANAGE: 'platform:engine-registration:manage',
+  },
   EnginePermissions: {
     ENGINE_EDIT: 'engine:edit',
     ENGINE_DELETE: 'engine:delete',
@@ -305,8 +308,15 @@ describe('mission-control engines routes', () => {
     (engineService as any).getEngineRole.mockResolvedValue('owner');
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
-        find: vi.fn().mockResolvedValue([{ id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }]),
-        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }),
+        find: vi.fn().mockResolvedValue([{
+          id: 'e1',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+          name: 'Engine 1',
+          username: 'engine-user',
+          passwordEnc: 'secret',
+        }]),
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }),
         findOneBy: vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }),
       }),
     });
@@ -339,7 +349,14 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
-        find: vi.fn().mockResolvedValue([{ id: 'e1', name: 'Engine 1', createdAt: '1700000000000', updatedAt: '1700000000001' }]),
+        find: vi.fn().mockResolvedValue([{
+          id: 'e1',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+          name: 'Engine 1',
+          createdAt: '1700000000000',
+          updatedAt: '1700000000001',
+        }]),
       }),
     });
 
@@ -361,10 +378,12 @@ describe('mission-control engines routes', () => {
         find: vi.fn().mockResolvedValue([
           {
             id: 'engine-direct', name: 'Direct engine', type: 'operaton',
+            tenantId: 'tenant-default', tenancyMode: 'dedicated',
             connectionMode: 'direct', runtimeAccessScope: 'engine_wide',
           },
           {
             id: 'engine-sidecar', name: 'Sidecar engine', type: 'operaton',
+            tenantId: 'tenant-default', tenancyMode: 'dedicated',
             connectionMode: 'customer_sidecar', runtimeAccessScope: 'engine_wide',
           },
         ]),
@@ -400,8 +419,14 @@ describe('mission-control engines routes', () => {
     (engineService as any).getEngineRole.mockResolvedValue(null);
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
-        find: vi.fn().mockResolvedValue([{ id: 'custom-engine', name: 'Custom role engine', runtimeAccessScope: 'engine_wide' }]),
-        findOne: vi.fn().mockResolvedValue({ id: 'custom-engine', tenantId: null, name: 'Custom role engine' }),
+        find: vi.fn().mockResolvedValue([{
+          id: 'custom-engine',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+          name: 'Custom role engine',
+          runtimeAccessScope: 'engine_wide',
+        }]),
+        findOne: vi.fn().mockResolvedValue({ id: 'custom-engine', tenantId: 'tenant-default', tenancyMode: 'dedicated', name: 'Custom role engine' }),
       }),
     });
 
@@ -411,8 +436,8 @@ describe('mission-control engines routes', () => {
     expect(response.body).toEqual([
       expect.objectContaining({ id: 'custom-engine', name: 'Custom role engine', myRole: null }),
     ]);
-    expect(permissionServiceMock.getKnownEngineIdsForUser).toHaveBeenCalledWith('user-1', null);
-    expect(engineService.getEngineRole).toHaveBeenCalledWith('user-1', 'custom-engine', null);
+    expect(permissionServiceMock.getKnownEngineIdsForUser).toHaveBeenCalledWith('user-1', 'tenant-default');
+    expect(engineService.getEngineRole).toHaveBeenCalledWith('user-1', 'custom-engine', 'tenant-default');
   });
 
   it('returns engine credential state but never the stored secret through scoped engine secret view permission', async () => {
@@ -475,7 +500,7 @@ describe('mission-control engines routes', () => {
     const resourceRepo = {
       find: vi.fn().mockResolvedValue([
         {
-          id: 'resource-payments', tenantId: null, engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '',
+          id: 'resource-payments', tenantId: 'tenant-default', tenantResolutionStatus: 'resolved', engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '',
           engineResourceId: null, deploymentId: null, projectId: null, fileId: null, version: 1, labelsJson: '{}', lineageJson: '{}', source: 'engine_discovery',
           sourceRef: null, observedAt: '1', isActive: true, createdAt: '2', updatedAt: '3',
         },
@@ -486,8 +511,8 @@ describe('mission-control engines routes', () => {
       getRepository: (entity: unknown) => entity === RuntimeResource
         ? resourceRepo
         : entity === Engine
-          ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) }
-          : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) },
+          ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) }
+          : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) },
     });
 
     const response = await request(app).get('/engines-api/engines/e1/runtime-resources?resourceKind=process_definition');
@@ -511,8 +536,8 @@ describe('mission-control engines routes', () => {
     );
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) }
-        : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }) },
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) }
+        : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) },
     });
     (engineMetadataReconciliationService as any).reconcileEngine.mockResolvedValue({
       created: 1, updated: 2, deactivated: 0, materializedSets: 1,
@@ -523,7 +548,7 @@ describe('mission-control engines routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ created: 1, deployments: { artifactsCreated: 2 } });
-    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('e1', null);
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('e1', 'tenant-default');
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
       resourceType: 'engine', resourceId: 'e1',
     }));
@@ -602,7 +627,7 @@ describe('mission-control engines routes', () => {
     expect(projectEngineTargetService.listTargets).toHaveBeenCalledWith({
       engineId: 'e1',
       status: 'all',
-      tenantId: null,
+      tenantId: 'tenant-default',
     });
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:project-access:view', expect.objectContaining({
       userId: 'user-1',
@@ -624,7 +649,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn()
       .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1' })
       .mockResolvedValueOnce({ id: 'e1', name: 'Updated Engine' });
@@ -653,7 +678,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1', tenantId: null });
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
@@ -676,7 +701,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:secrets:manage');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn()
       .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1', tenantId: null })
       .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1', passwordEnc: 'new-secret', tenantId: null });
@@ -703,7 +728,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({
       id: 'e1',
       name: 'External Engine',
@@ -732,7 +757,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'external_api', managementMode: 'external_managed', tenantId: null, fieldOwnershipJson: '{}' });
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
 
@@ -747,7 +772,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({
       id: 'e1',
       name: 'Config Engine',
@@ -772,7 +797,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'config', ownershipMode: 'config_locked', tenantId: null });
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
 
@@ -787,7 +812,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn()
       .mockResolvedValueOnce({
         id: 'e1',
@@ -823,7 +848,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn()
       .mockResolvedValueOnce({
         id: 'e1',
@@ -866,7 +891,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn()
       .mockResolvedValueOnce({
         id: 'e1',
@@ -926,7 +951,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({
       id: 'e1',
       name: 'Manual Engine',
@@ -955,7 +980,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
     const update = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn()
       .mockResolvedValueOnce({
         id: 'e1',
@@ -994,7 +1019,7 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
     const engineDelete = vi.fn().mockResolvedValue({});
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({
       id: 'e1',
       name: 'Manual Engine',
@@ -1027,7 +1052,7 @@ describe('mission-control engines routes', () => {
     const runtimeResourceDelete = vi.fn().mockResolvedValue(undefined);
     const runtimeResourceSetDelete = vi.fn().mockResolvedValue(undefined);
     const runtimeMaterializationDelete = vi.fn().mockResolvedValue(undefined);
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const findOneBy = vi.fn().mockResolvedValue({
       id: 'e1',
       name: 'Manual Engine',
@@ -1095,7 +1120,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       tenantId: null,
     });
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity?.name === 'ExternalEngineRegistration') return { delete: registrationDelete };
@@ -1128,7 +1153,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'decommissioned',
       tenantId: null,
     });
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
         findOne,
@@ -1155,7 +1180,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'decommissioned',
       tenantId: null,
     });
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity?.name === 'EngineHealth') return { insert: healthInsert };
@@ -1182,7 +1207,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'disabled',
       tenantId: null,
     });
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity?.name === 'EngineHealth') return { insert: healthInsert };
@@ -1217,7 +1242,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       tenantId: null,
     });
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity?.name === 'EngineHealth') return { insert: healthInsert };
@@ -1268,7 +1293,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       tenantId: null,
     });
-    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity?.name === 'EngineHealth') return { insert: healthInsert };
@@ -1297,8 +1322,8 @@ describe('mission-control engines routes', () => {
 
   it('lists saved filters only for engines authorized by the action resolver', async () => {
     const engineFind = vi.fn().mockResolvedValue([
-      { id: 'e1', tenantId: null },
-      { id: 'e2', tenantId: null },
+      { id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' },
+      { id: 'e2', tenantId: 'tenant-default', tenancyMode: 'dedicated' },
     ]);
     const filterFind = vi.fn().mockResolvedValue([
       {
@@ -1346,7 +1371,7 @@ describe('mission-control engines routes', () => {
   });
 
   it('creates saved filters only after resolving the target engine action', async () => {
-    const engineFindOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
+    const engineFindOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
     const filterInsert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => entity?.name === 'SavedFilter'
@@ -1374,7 +1399,7 @@ describe('mission-control engines routes', () => {
     });
     expect(engineFindOne).toHaveBeenCalledWith({
       where: { id: 'e1' },
-      select: ['id', 'tenantId'],
+      select: ['id', 'tenantId', 'tenancyMode', 'tenantResolutionStatus'],
     });
     expect(filterInsert).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'e1',
@@ -1625,7 +1650,7 @@ describe('mission-control engines routes', () => {
     const update = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
-        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null }),
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }),
         findOneBy: vi.fn().mockResolvedValue({
           id: 'e1',
           name: 'Central Engine',
@@ -2073,7 +2098,7 @@ describe('mission-control engines routes', () => {
       'e1',
       { tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id', unmappedPolicy: 'deny' } },
       expect.objectContaining({
-        requestTenantId: null,
+        requestTenantId: 'tenant-default',
         principalType: 'user',
         principalId: 'user-1',
       }),
@@ -2127,7 +2152,8 @@ describe('mission-control engines routes', () => {
           registrationSource: 'external_api',
           managementMode: 'external_managed',
           fieldOwnershipJson: '{}',
-          tenantId: null,
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
         }),
       }),
     });
@@ -2794,7 +2820,7 @@ describe('mission-control engines routes', () => {
           findOne: vi.fn().mockResolvedValue({ id: 'registration-1', engineId: 'e1', externalSystemId: 'system-1' }),
         };
         return {
-          findOneBy: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, externalSystemId: 'system-1', lifecycleStatus: 'active' }),
+          findOneBy: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', externalSystemId: 'system-1', lifecycleStatus: 'active' }),
           findOne: vi.fn().mockResolvedValue(null),
         };
       },
@@ -2851,7 +2877,7 @@ describe('mission-control engines routes', () => {
         };
         if (entity?.name === 'AuditLog') return { insert: auditInsert };
         return {
-          findOneBy: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, externalSystemId: 'system-1', lifecycleStatus: 'active' }),
+          findOneBy: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', externalSystemId: 'system-1', lifecycleStatus: 'active' }),
           findOne: vi.fn().mockResolvedValue(null),
         };
       },

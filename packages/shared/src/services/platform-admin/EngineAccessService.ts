@@ -8,6 +8,7 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { EngineProjectAccess } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineProjectAccess.js';
 import { EngineAccessRequest } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineAccessRequest.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { isEngineVisibleInTenancyContext } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { EnginePermissions, permissionService, ProjectPermissions } from './permissions.js';
@@ -67,6 +68,29 @@ export class EngineAccessService {
     const engineRepo = dataSource.getRepository(Engine);
     const projectRepo = dataSource.getRepository(Project);
 
+    // Validate the persisted topology before honoring compatibility access or
+    // pending rows so stale rows cannot resurrect a quarantined engine.
+    const engine = await engineRepo.findOne({
+      where: { id: engineId },
+      select: ['id', 'tenantId', 'tenancyMode']
+    });
+    if (!engine) {
+      throw new Error('Engine not found');
+    }
+    const project = await projectRepo.findOne({
+      where: { id: projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project) {
+      throw new Error('Project not found');
+    }
+    if (
+      !isEngineVisibleInTenancyContext(engine, project.tenantId)
+      || (engine.tenancyMode === 'dedicated' && !project.tenantId)
+    ) {
+      throw new Error('Project and engine must belong to the same tenant');
+    }
+
     // Check if access already exists
     const existingAccess = await this.hasProjectAccess(projectId, engineId);
     if (existingAccess) {
@@ -84,25 +108,6 @@ export class EngineAccessService {
 
     // Resolve tenant context for the canonical evaluator. Do not infer access
     // from the legacy accountable owner/delegate columns.
-    const engine = await engineRepo.findOne({
-      where: { id: engineId },
-      select: ['id', 'tenantId']
-    });
-
-    if (!engine) {
-      throw new Error('Engine not found');
-    }
-    const project = await projectRepo.findOne({
-      where: { id: projectId },
-      select: ['id', 'tenantId'],
-    });
-    if (!project) {
-      throw new Error('Project not found');
-    }
-    if (project.tenantId && engine.tenantId && project.tenantId !== engine.tenantId) {
-      throw new Error('Project and engine must belong to the same tenant');
-    }
-
     const tenantId = project.tenantId || engine.tenantId || null;
     const [canManageProject, canManageEngine] = await Promise.all([
       permissionService.hasPermission(ProjectPermissions.PROJECT_SETTINGS, {

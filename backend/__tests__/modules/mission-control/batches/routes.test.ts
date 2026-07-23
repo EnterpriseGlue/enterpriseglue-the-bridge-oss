@@ -44,6 +44,7 @@ const batchDetailRow = {
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -129,7 +130,8 @@ describe('mission-control batches routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-1'),
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
             })),
           };
         }
@@ -175,7 +177,7 @@ describe('mission-control batches routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) {
-          return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+          return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) };
         }
         if (entity === Batch) return batchRepo;
         throw new Error('Unexpected repository');
@@ -302,7 +304,7 @@ describe('mission-control batches routes', () => {
   it('hides a multi-resource batch unless every runtime resource is authorized', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) };
         if (entity === Batch) return batchRepo;
         throw new Error('Unexpected repository');
       },

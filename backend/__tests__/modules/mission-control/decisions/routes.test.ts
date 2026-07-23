@@ -119,7 +119,8 @@ describe('mission-control decisions routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-1'),
-              tenantId: null,
+              tenantId: 'tenant-a',
+              tenancyMode: 'dedicated',
             })),
           };
         }
@@ -236,7 +237,8 @@ describe('mission-control decisions routes', () => {
           return {
             findOne: vi.fn().mockResolvedValue({
               id: 'engine-1',
-              tenantId: null,
+              tenantId: 'tenant-a',
+              tenancyMode: 'dedicated',
               runtimeAccessScope: 'resource_aware',
             }),
           };
@@ -271,7 +273,7 @@ describe('mission-control decisions routes', () => {
   it('returns disjoint decision-definition subsets to users sharing a resource-aware central engine', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, tenancyMode: 'shared', runtimeAccessScope: 'resource_aware' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -308,7 +310,7 @@ describe('mission-control decisions routes', () => {
   it('rejects oversized decision-definition collection requests for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, tenancyMode: 'shared', runtimeAccessScope: 'resource_aware' }) }
         : { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);

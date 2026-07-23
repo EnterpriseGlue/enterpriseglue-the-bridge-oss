@@ -22,6 +22,26 @@ This compatibility path:
 - increments the bounded fallback metric only when request context genuinely
   falls through to the local default.
 
+## Null-Owner Authorization Boundary
+
+`TEN-AUTHZ-008`: a null-owned dedicated engine is never interpreted as the
+active tenant, the canonical default tenant, or a platform-wide engine. It is
+excluded from engine discovery, direct access, invitation targets, role
+assignment targets, Effective Access engine discovery, and every runtime guard.
+
+The sole repair path is a dedicated engine explicitly marked
+`migration_required`. For that quarantine only, the tenancy preview/apply
+routes accept `platform:engine-registration:manage`; they create no
+engine-scoped assignment and do not grant runtime access. Shared engines still
+have null engine ownership by design, but tenant access comes only from
+resolved, same-tenant runtime-resource mappings.
+
+`TEN-AUTHZ-012`: old project-access and project-engine-target records are not
+grandfathered around this rule. EnterpriseGlue validates current engine
+topology before honoring an existing access record, creating a target, or
+evaluating auto-approval. A quarantined engine therefore remains unavailable
+even if an older database contains a reference to it.
+
 ## Timeline
 
 | Stage | Earliest duration | Behavior | Exit gate |
@@ -39,8 +59,8 @@ non-null topology, shared fail-closed behavior, runtime reconciliation,
 aggregate metrics, and cleanup pass through the real browser and HTTP stack.
 See the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-This closes the technical local-adoption gate; it does not shorten the external
-API deprecation window.
+This closes the technical local-adoption and null-owner compatibility gates; it
+does not shorten the external API deprecation window.
 
 ## External Integrator Migration
 

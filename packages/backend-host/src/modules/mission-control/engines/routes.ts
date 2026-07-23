@@ -34,7 +34,7 @@ import { engineTenantMappingService } from '@enterpriseglue/shared/services/plat
 import { engineTenancyTransitionService } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyTransitionService.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
-import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
+import { EnginePermissions, ExternalEngineSystemPermissions, PlatformPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
 import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl, validateBpmnEngineEndpointUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
@@ -1639,7 +1639,7 @@ r.get('/engines-api/engines/:id/tenancy/diagnostics', engineLimiter, requireAuth
   res.json(await engineTenantMappingService.getDiagnostics(String(req.params.id)))
 }))
 
-r.post('/engines-api/engines/:id/tenancy/preview', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), engineRegistrationJsonPayloadLimit, validateBody(EngineTenancyTransitionPreviewRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:id/tenancy/preview', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT], unownedEngineMigrationPermission: PlatformPermissions.ENGINE_REGISTRATION_MANAGE }), engineRegistrationJsonPayloadLimit, validateBody(EngineTenancyTransitionPreviewRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const engineId = String(req.params.id)
   const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
   if (!engine) throw Errors.notFound('Engine')
@@ -1676,7 +1676,7 @@ r.post('/engines-api/engines/:id/tenancy/preview', engineLimiter, requireAuth, e
   res.json(EngineTenancyTransitionPreviewResponseSchema.parse(result))
 }))
 
-r.post('/engines-api/engines/:id/tenancy/apply', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), engineRegistrationJsonPayloadLimit, validateBody(EngineTenancyTransitionApplyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:id/tenancy/apply', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT], unownedEngineMigrationPermission: PlatformPermissions.ENGINE_REGISTRATION_MANAGE }), engineRegistrationJsonPayloadLimit, validateBody(EngineTenancyTransitionApplyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const engineId = String(req.params.id)
   const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
   if (!engine) throw Errors.notFound('Engine')

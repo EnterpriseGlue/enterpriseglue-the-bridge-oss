@@ -2,7 +2,7 @@ import { expect, test, type APIResponse, type Page, type TestInfo } from '@playw
 import { writeFile } from 'node:fs/promises';
 import {
   getE2ECredentials,
-  getE2EFineGrainedFixture,
+  getE2ESeedData,
   hasE2ECredentials,
 } from './utils/credentials';
 
@@ -89,55 +89,32 @@ async function applyReadyClassificationRows(
   page: Page,
   report: ClassificationReport,
   token: string,
-  operatorUserId: string,
-  migrationRoleId: string,
 ): Promise<string[]> {
   const applied: string[] = [];
   for (const row of report.rows.filter((candidate) => candidate.status === 'ready_for_apply')) {
     if (!row.proposed) throw new Error(`Ready row ${row.engineId} has no proposed tenancy state`);
-    const assignment = await responseJson<{ id: string }>(
-      await page.request.post('/api/authz/role-assignments', mutationOptions(token, {
-        principalType: 'user',
-        principalId: operatorUserId,
-        roleId: migrationRoleId,
-        resourceType: 'engine',
-        resourceId: row.engineId,
-      })),
-      `grant temporary tenancy migration access for ${row.engineId}`,
+    const preview = await responseJson<{
+      previewHash: string;
+      previewExpiresAt: number;
+      requiredAcknowledgements: string[];
+    }>(
+      await page.request.post(`/engines-api/engines/${encodeURIComponent(row.engineId)}/tenancy/preview`, {
+        ...mutationOptions(token, { tenancy: row.proposed }),
+      }),
+      `preview tenancy classification for ${row.engineId}`,
     );
-    try {
-      const preview = await responseJson<{
-        previewHash: string;
-        previewExpiresAt: number;
-        requiredAcknowledgements: string[];
-      }>(
-        await page.request.post(`/engines-api/engines/${encodeURIComponent(row.engineId)}/tenancy/preview`, {
-          ...mutationOptions(token, { tenancy: row.proposed }),
+    await responseJson(
+      await page.request.post(`/engines-api/engines/${encodeURIComponent(row.engineId)}/tenancy/apply`, {
+        ...mutationOptions(token, {
+          tenancy: row.proposed,
+          previewHash: preview.previewHash,
+          previewExpiresAt: preview.previewExpiresAt,
+          acknowledgements: preview.requiredAcknowledgements,
         }),
-        `preview tenancy classification for ${row.engineId}`,
-      );
-      await responseJson(
-        await page.request.post(`/engines-api/engines/${encodeURIComponent(row.engineId)}/tenancy/apply`, {
-          ...mutationOptions(token, {
-            tenancy: row.proposed,
-            previewHash: preview.previewHash,
-            previewExpiresAt: preview.previewExpiresAt,
-            acknowledgements: preview.requiredAcknowledgements,
-          }),
-        }),
-        `apply tenancy classification for ${row.engineId}`,
-      );
-      applied.push(row.engineId);
-    } finally {
-      const removal = await page.request.delete(
-        `/api/authz/role-assignments/${encodeURIComponent(assignment.id)}`,
-        mutationOptions(token),
-      );
-      expect(
-        [204, 404],
-        `remove temporary migration assignment ${assignment.id} failed (${removal.status()})`,
-      ).toContain(removal.status());
-    }
+      }),
+      `apply tenancy classification for ${row.engineId}`,
+    );
+    applied.push(row.engineId);
   }
   return applied;
 }
@@ -153,37 +130,27 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
   }, testInfo: TestInfo) => {
     await login(page);
     const token = await csrfToken(page);
-    const session = await responseJson<{ user?: { id?: string }; id?: string }>(
-      await page.request.get('/api/auth/me'),
-      'read local operator session',
-    );
-    const operatorUserId = session.user?.id || session.id;
-    if (!operatorUserId) throw new Error('Local operator session has no canonical user ID');
-    const migrationRoleId = getE2EFineGrainedFixture().runtimeCustomRoleId;
-    if (!migrationRoleId) throw new Error('Disposable engine-scoped migration role is unavailable');
 
     const initialReport = await classificationReport(page);
+    const seededMigrationEngineId = getE2ESeedData().migrationEngineId;
+    expect(seededMigrationEngineId, 'the evidence fixture must include a quarantined migration engine').toBeTruthy();
+    expect(initialReport.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        engineId: seededMigrationEngineId,
+        status: 'ready_for_apply',
+      }),
+    ]));
     expect(initialReport.totals.requiresReview).toBe(0);
     expect(initialReport.totals.conflicts).toBe(0);
 
     let appliedEngineIds: string[] = [];
     if (applyReadyRows && initialReport.totals.readyForApply > 0) {
-      await responseJson(
-        await page.request.put(
-          `/api/authz/roles/${encodeURIComponent(migrationRoleId)}`,
-          mutationOptions(token, {
-            permissionIds: ['engine:instance:view', 'engine:edit'],
-          }),
-        ),
-        'prepare disposable engine-tenancy migration role',
-      );
       appliedEngineIds = await applyReadyClassificationRows(
         page,
         initialReport,
         token,
-        operatorUserId,
-        migrationRoleId,
       );
+      expect(appliedEngineIds).toContain(seededMigrationEngineId);
     }
     const classifiedReport = await classificationReport(page);
     if (applyReadyRows) {

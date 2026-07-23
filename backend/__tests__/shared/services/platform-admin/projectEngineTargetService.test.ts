@@ -26,7 +26,7 @@ describe('projectEngineTargetService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared' }) };
         if (entity === ProjectEngineTarget) return { findOne: targetFindOne, insert };
         throw new Error('Unexpected repository');
       },
@@ -56,6 +56,31 @@ describe('projectEngineTargetService', () => {
     }));
   });
 
+  it('rejects a project target for a null-owned dedicated migration engine', async () => {
+    const insert = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
+        if (entity === Engine) return {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'engine-migration',
+            tenantId: null,
+            tenancyMode: 'dedicated',
+          }),
+        };
+        if (entity === ProjectEngineTarget) return { findOne: vi.fn(), insert };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(projectEngineTargetService.createTarget({
+      tenantId: 'tenant-a',
+      projectId: 'project-1',
+      engineId: 'engine-migration',
+    })).rejects.toThrow('Engine');
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('stores external metadata, approval state, policy tags, and diagnostics for source-owned targets', async () => {
     const insert = vi.fn().mockResolvedValue(undefined);
     const targetFindOne = vi.fn().mockResolvedValue(null);
@@ -63,7 +88,7 @@ describe('projectEngineTargetService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared' }) };
         if (entity === ProjectEngineTarget) return { findOne: targetFindOne, insert };
         throw new Error('Unexpected repository');
       },
@@ -103,7 +128,7 @@ describe('projectEngineTargetService', () => {
     const manager = {
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-1' }) };
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-1' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-1', tenancyMode: 'dedicated' }) };
         if (entity === ProjectEngineTarget) return { findOne: targetFindOne, insert };
         throw new Error('Unexpected repository');
       },
@@ -210,7 +235,7 @@ describe('projectEngineTargetService', () => {
         if (entity === ProjectEngineTarget) return { findOne: targetFindOne, insert };
         if (entity === EngineProjectAccess) return { findOne: accessFindOne };
         if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared' }) };
         throw new Error('Unexpected repository');
       },
     });

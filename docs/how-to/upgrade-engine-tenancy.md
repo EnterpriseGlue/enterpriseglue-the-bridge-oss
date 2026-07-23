@@ -75,10 +75,11 @@ only the safe rows:
 ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
 ```
 
-`TEN-MIGRATION-008`: apply mode temporarily grants the disposable migration
-operator `engine:edit` on one ready engine at a time, submits the exact preview
-hash/expiry/acknowledgements, and removes the assignment in cleanup. It will not
-apply `requires_review` or `conflict`.
+`TEN-MIGRATION-008`: the evidence fixture creates one disposable null-owned
+dedicated engine in `migration_required`. Apply mode uses
+`platform:engine-registration:manage` only for that quarantined row, submits
+the exact preview hash/expiry/acknowledgements, and creates no engine-scoped
+assignment. It will not apply `requires_review` or `conflict`.
 
 Retain the Playwright JSON and screenshot from `test/results`, command output,
 release commit, adapter/version, schema migrations, and the post-run aggregate
@@ -90,7 +91,7 @@ metrics. Success requires:
 - zero orphan engine mappings, inventory, materializations, or assignments;
 - shared inventory is invisible before mapping and visible only after mapping
   plus reconciliation; and
-- no disposable identity or engine remains.
+- no disposable identity, engine, mapping, or assignment remains.
 
 Restore the captured application/database pair if any resource crosses tenants,
 denied inventory is visible, apply is not atomic, cleanup leaves authorization

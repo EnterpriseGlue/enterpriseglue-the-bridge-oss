@@ -8,6 +8,7 @@ import { EngineProjectAccess } from '@enterpriseglue/shared/db/entities/EnginePr
 import { EngineAccessRequest } from '@enterpriseglue/shared/db/entities/EngineAccessRequest.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTag.js';
 import { In } from 'typeorm';
+import { engineTenancyVisibilityWhere } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { applyPreparedEngineImportToProject, type PreparedEngineImport } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
@@ -105,7 +106,10 @@ class ProjectQueryServiceImpl {
     return { id: projectId, name: trimmed };
   }
 
-  async getEngineAccessOverview(projectId: string): Promise<{ accessedEngines: AccessedEngineResponse[]; pendingRequests: PendingRequestWithDetails[]; availableEngines: Array<{ id: string; name: string }> }> {
+  async getEngineAccessOverview(
+    projectId: string,
+    tenantId?: string | null
+  ): Promise<{ accessedEngines: AccessedEngineResponse[]; pendingRequests: PendingRequestWithDetails[]; availableEngines: Array<{ id: string; name: string }> }> {
     const dataSource = await getDataSource();
     const engineProjectAccessRepo = dataSource.getRepository(EngineProjectAccess);
     const engineRepo = dataSource.getRepository(Engine);
@@ -139,9 +143,10 @@ class ProjectQueryServiceImpl {
 
     if (engineIds.length > 0) {
       const engineRows = await engineRepo.find({
-        where: { id: In(engineIds) },
+        where: engineTenancyVisibilityWhere({ id: In(engineIds) }, tenantId),
         select: ['id', 'name', 'baseUrl', 'environmentTagId']
       });
+      const visibleEngineIds = engineRows.map((engine) => engine.id);
 
       const envTagIds = engineRows
         .map((engine) => engine.environmentTagId)
@@ -158,7 +163,7 @@ class ProjectQueryServiceImpl {
       }
 
       const healthRows = await engineHealthRepo.find({
-        where: { engineId: In(engineIds) },
+        where: { engineId: In(visibleEngineIds) },
         order: { checkedAt: 'DESC' },
         select: ['engineId', 'status', 'latencyMs', 'checkedAt']
       });
@@ -172,6 +177,7 @@ class ProjectQueryServiceImpl {
 
       for (const access of accessRows.filter((row) => row.engineId !== '__env__')) {
         const engine = engineRows.find((row) => row.id === access.engineId);
+        if (!engine) continue;
         const envTag = engine?.environmentTagId ? envTagMap.get(engine.environmentTagId) : null;
         const health = healthMap.get(access.engineId) || null;
         accessedEngines.push({
@@ -195,22 +201,23 @@ class ProjectQueryServiceImpl {
     let pendingWithDetails: PendingRequestWithDetails[] = [];
     if (pendingEngineIds.length > 0) {
       const pendingEngineRows = await engineRepo.find({
-        where: { id: In(pendingEngineIds) },
+        where: engineTenancyVisibilityWhere({ id: In(pendingEngineIds) }, tenantId),
         select: ['id', 'name', 'baseUrl']
       });
 
-      pendingWithDetails = pendingRequests.map((row) => {
+      pendingWithDetails = pendingRequests.flatMap((row) => {
         const engine = pendingEngineRows.find((pendingEngine) => pendingEngine.id === row.engineId);
-        return {
+        return engine ? [{
           requestId: row.id,
           engineId: row.engineId,
-          engineName: engine?.name || engine?.baseUrl || 'Unknown',
+          engineName: engine.name || engine.baseUrl || 'Unknown',
           requestedAt: row.createdAt,
-        };
+        }] : [];
       });
     }
 
     const allEngines = await engineRepo.find({
+      where: engineTenancyVisibilityWhere({}, tenantId),
       select: ['id', 'name', 'baseUrl']
     });
 

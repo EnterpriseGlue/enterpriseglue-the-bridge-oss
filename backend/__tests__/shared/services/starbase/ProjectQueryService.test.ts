@@ -173,7 +173,7 @@ describe('ProjectQueryService', () => {
       },
     });
 
-    const result = await projectQueryService.getEngineAccessOverview('project-1');
+    const result = await projectQueryService.getEngineAccessOverview('project-1', 'tenant-a');
 
     expect(result).toEqual({
       accessedEngines: [
@@ -208,5 +208,14 @@ describe('ProjectQueryService', () => {
         { id: 'engine-3', name: 'Engine Three' },
       ],
     });
+    for (const call of engineRepo.find.mock.calls) {
+      expect(call[0].where).toEqual([
+        expect.objectContaining({ tenantId: 'tenant-a' }),
+        expect.objectContaining({
+          tenantId: expect.objectContaining({ _type: 'isNull' }),
+          tenancyMode: 'shared',
+        }),
+      ]);
+    }
   });
 });

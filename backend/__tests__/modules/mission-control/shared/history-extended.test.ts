@@ -22,6 +22,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -75,7 +76,8 @@ describe('mission-control extended history routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-1'),
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
             })),
           };
         }
@@ -106,7 +108,7 @@ describe('mission-control extended history routes', () => {
   it('queries historic tasks only for authorized process definition keys on resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -123,7 +125,7 @@ describe('mission-control extended history routes', () => {
   it('drops historic rows outside the authorized process definition key', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -144,7 +146,7 @@ describe('mission-control extended history routes', () => {
   it('rejects oversized historic task collection requests for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);

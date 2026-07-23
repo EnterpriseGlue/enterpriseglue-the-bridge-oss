@@ -295,7 +295,9 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/engines-api/engines/{id}/tenancy/preview',
           resourceResolver: 'engine.byId',
           additionalChecks: [
-            'engine:edit is required',
+            'engine:edit is required for an owned engine',
+            'platform:engine-registration:manage is accepted only for an unowned dedicated engine quarantined as migration_required',
+            'the migration permission does not make the engine tenant-visible or grant runtime access',
             'externally and configuration-owned topology cannot be changed manually',
             'preview is bounded, expiring, and fingerprinted over affected state',
           ],
@@ -305,7 +307,9 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/engines-api/engines/{id}/tenancy/apply',
           resourceResolver: 'engine.byId',
           additionalChecks: [
-            'engine:edit is required',
+            'engine:edit is required for an owned engine',
+            'platform:engine-registration:manage is accepted only for an unowned dedicated engine quarantined as migration_required',
+            'the migration permission does not make the engine tenant-visible or grant runtime access',
             'matching unexpired preview hash and every required acknowledgement are mandatory',
             'engine, mappings, runtime inventory, and materialization invalidation are applied atomically',
           ],

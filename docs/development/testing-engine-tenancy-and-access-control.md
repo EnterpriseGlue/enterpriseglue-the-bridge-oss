@@ -58,8 +58,9 @@ The authorization lane:
 1. validates the functional-coverage manifest;
 2. enforces 100% source coverage on
    `packages/shared/src/authz/tenant-role-policy.ts`;
-3. executes tenant-role inheritance, runtime visibility, route, schema, config
-   apply/diff/export, and Effective Access tests; and
+3. executes tenant-role inheritance, runtime visibility, topology-aware engine
+   discovery, Engine Set/project-target boundaries, Starbase project access,
+   route, schema, config apply/diff/export, and Effective Access tests; and
 4. executes the Access Control tenant-scope UI tests.
 
 The transition lane:
@@ -191,16 +192,30 @@ acknowledgements:
 ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
 ```
 
-The apply mode creates a temporary engine-scoped migration assignment for each
-ready row and removes it even when the journey fails. It never applies a review
-or conflict row. Both modes create and remove disposable dedicated/shared
-engines and prove the shared unmapped-to-mapped lifecycle.
+The evidence fixture creates one disposable, unowned dedicated engine in
+`migration_required`. Apply mode uses the platform engine-registration
+permission to preview and classify that quarantined row without creating an
+engine-scoped assignment. The permission is not accepted for any other engine
+state and does not grant engine or runtime visibility. The runner never applies
+a review or conflict row. Both modes create and remove disposable
+dedicated/shared engines and prove the shared unmapped-to-mapped lifecycle.
 
 `TEN-MIGRATION-008` requires zero review/conflict rows and, in apply mode, zero
 ready rows. `TEN-RUNTIME-007` requires zero visible unmapped resources, mapped
 visibility after reconciliation, and healthy aggregate metrics. Successful
 runs retain sanitized JSON and a screenshot under `test/results`; CI uploads
 that directory for 14 days.
+
+`TEN-AUTHZ-008` proves that a null-owned dedicated engine is not a default-tenant
+fallback in direct, collection, invitation, assignment, or runtime evaluation.
+The request-authorization module is held to 100% statements, branches,
+functions, and lines, including tenant-present and platform-scoped branches.
+`TEN-AUTHZ-009`, `TEN-AUTHZ-010`, `TEN-AUTHZ-011`, and `TEN-AUTHZ-012` extend
+that proof to engine lists, Engine Set selectors, project
+accessed/pending/available lists, legacy project access, and project-engine
+target creation. The positive side of the same matrix proves same-tenant
+dedicated, authorized platform-wide dedicated, and shared connection discovery
+remain available.
 
 For a manual review:
 

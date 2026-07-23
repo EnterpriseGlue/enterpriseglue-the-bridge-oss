@@ -769,13 +769,14 @@ checkboxes are closed.
 - [x] Enable shared-engine fail-closed enforcement.
 - [x] Make topology non-null.
 - [ ] Remove temporary omission warnings after the external API deprecation window.
-- [ ] Retire any compatibility path that interprets null tenant as default.
+- [x] Retire any compatibility path that interprets null tenant as default.
 
-The first four gates are evidenced by `TEN-MIGRATION-008`,
-`TEN-RUNTIME-007`, and the
+The completed technical gates are evidenced by `TEN-MIGRATION-008`,
+`TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-The final two remain release-governance and compatibility-code gates; neither
-is required to operate explicit dedicated/shared tenancy safely.
+Only the external API omission-warning window remains a release-governance
+gate. It affects new provisioning compatibility, never authorization of an
+existing null-owned engine.
 
 ## Complete Functional Coverage Standard
 

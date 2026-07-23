@@ -75,12 +75,12 @@ meaning of 100% functional coverage are documented in
 | Foundation | 45 |
 | Provisioning | 117 |
 | Mappings and configuration ownership | 248 |
-| Authorization and custom roles | 260 |
-| Runtime enforcement | 339 |
-| Classification and transitions | 150 |
+| Authorization and custom roles | 314 |
+| Runtime enforcement | 348 |
+| Classification and transitions | 151 |
 | Operational metrics | 46 |
 | Documentation and traceability | 43 |
-| **Focused-lane total** | **1,248** |
+| **Focused-lane total** | **1,312** |
 | Live browser enforcement | **1** |
 
 The shared package build and backend/frontend type checks also passed. The
@@ -95,20 +95,21 @@ coverage.
 
 ## Live Installation Evidence
 
-The persistent representative installation began with 74 engines:
-
-- 73 were explicit and ready;
-- one legacy engine required safe default-tenant classification;
-- no engine required manual topology review and none was in conflict; and
-- existing active runtime inventory was tenant-resolved.
+The retained representative installation began with 74 explicit, ready
+engines and tenant-resolved active runtime inventory. Global browser setup then
+created one disposable legacy-shaped engine with dedicated topology, null
+ownership, and `migration_required`. This guarantees that every evidence run
+executes the migration path rather than passing vacuously.
 
 The guarded apply:
 
-1. granted the disposable operator `engine:edit` only on the ready row;
-2. previewed the exact proposed dedicated topology;
-3. submitted every server-returned acknowledgement;
-4. applied the version-guarded transition; and
-5. removed the temporary assignment in a `finally` cleanup path.
+1. observed the disposable engine as `ready_for_apply`;
+2. denied treating null ownership as default-tenant engine access;
+3. used `platform:engine-registration:manage` only on its quarantined
+   preview/apply routes;
+4. submitted the exact preview hash, expiry, and every server-returned
+   acknowledgement; and
+5. classified it without creating an engine-scoped assignment.
 
 The browser journey then proved:
 
@@ -119,8 +120,9 @@ The browser journey then proved:
   zero resources;
 - a versioned default-tenant mapping plus reconciliation changes the engine to
   ready and makes mapped resources visible;
-- the in-test classification report has all 83 engines classified (the 74
-  persistent rows, seven global fixtures, and two journey engines), with zero
+- the in-test classification report has all 84 engines classified (the 74
+  retained rows, eight global fixtures including the migration row, and two
+  journey engines), with zero
   ready-for-apply, review, or conflict rows;
 - tenancy metric collection succeeds;
 - all 72 retained runtime resources are resolved, with zero unmapped,
@@ -139,6 +141,22 @@ and emits the numeric public contract. A route test proves the normalization.
 tenant mappings, materializations, and runtime-scoped assignments behind.
 Deletion now removes the complete dependent tenancy graph transactionally, and
 the route test asserts every affected repository call.
+
+`TEN-AUTHZ-008`: generic null-tenant visibility could make an unowned dedicated
+engine look platform-wide or default-tenant. Engine lookup, collection,
+invitation, assignment, Effective Access, and runtime guards now distinguish
+shared topology from missing dedicated ownership. The only exception is
+platform-authorized preview/apply while the engine is explicitly
+`migration_required`. The request middleware reports 100% statement, branch,
+function, and line coverage for this boundary.
+
+`TEN-AUTHZ-009` through `TEN-AUTHZ-012`: the same boundary now governs user
+engine discovery, platform and tenant Engine Set selectors, project access
+responses, pending access, and project-engine target creation. Explicitly
+owned dedicated engines remain available in their tenant and in authorized
+platform-wide administration; shared engines remain connection candidates.
+Null-owned dedicated rows are absent, and stale legacy access rows cannot
+restore them.
 
 The live database also contained historical orphan inventory created before
 that lifecycle fix. The local evidence run removed those orphan rows and

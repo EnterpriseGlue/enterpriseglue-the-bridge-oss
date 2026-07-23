@@ -686,11 +686,66 @@
     "requirement": "A representative running installation can classify every engine, apply every safe default-tenant proposal through guarded preview and acknowledgement, and finish with no review or conflict rows.",
     "source": "Engine Tenancy Plan / Enforcement and cleanup",
     "dimensions": ["browser", "local_stack", "classification", "preview", "apply", "least_privilege", "cleanup"],
-    "expected": "all engines are classified and temporary engine-edit assignments are removed",
+    "expected": "a disposable quarantined engine is classified and migrated without creating an engine-scoped assignment",
     "testFile": "test/e2e/engine-tenancy-local-enforcement.spec.ts",
     "testName": "proves classification, dedicated defaults, shared fail-closed mapping, and readiness metrics",
     "documentation": "docs/development/engine-tenancy-functional-test-report.md",
     "ciJob": "test:engine-tenancy:enforcement"
+  },
+  {
+    "id": "TEN-AUTHZ-008",
+    "requirement": "A null-owned dedicated engine is never treated as the active or default tenant; only migration_required quarantine may use platform engine-registration permission for preview/apply, without granting engine or runtime visibility.",
+    "source": "Engine Tenancy Plan / Enforcement and cleanup",
+    "dimensions": ["dedicated", "null_owner", "deny", "migration_required", "platform_permission", "runtime"],
+    "expected": "ordinary tenant access denies while the bounded platform migration path succeeds",
+    "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+    "testName": "uses a platform registry permission only for a quarantined unowned-engine migration",
+    "documentation": "docs/reference/engine-tenancy-compatibility-and-deprecation.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
+    "id": "TEN-AUTHZ-009",
+    "requirement": "Tenant engine discovery contains same-tenant dedicated engines plus shared engines, while platform discovery contains explicitly owned engines across tenants plus shared engines; neither includes a null-owned dedicated engine.",
+    "source": "Engine Tenancy Plan / Authorization integration",
+    "dimensions": ["engine_discovery", "tenant", "platform", "dedicated", "shared", "null_owner"],
+    "expected": "discovery queries include only topology-valid dedicated and shared branches",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineService.test.ts",
+    "testName": "uses topology-aware engine discovery for tenant and platform assignments",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-AUTHZ-010",
+    "requirement": "Tenant and platform Engine Set selectors exclude null-owned dedicated engines while retaining valid same-tenant, cross-tenant platform, and shared candidates.",
+    "source": "Engine Tenancy Plan / Authorization integration",
+    "dimensions": ["engine_set", "selector", "tenant", "platform", "null_owner", "deny"],
+    "expected": "Engine Set candidate queries require explicit dedicated ownership or shared topology",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineSetService.test.ts",
+    "testName": "excludes null-owned dedicated engines from tenant and platform Engine Set selectors",
+    "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-AUTHZ-011",
+    "requirement": "Project engine-access discovery filters accessed, pending, and available engines through the same topology-aware tenant boundary.",
+    "source": "Engine Tenancy Plan / Authorization integration",
+    "dimensions": ["project", "engine_discovery", "accessed", "pending", "available", "tenant"],
+    "expected": "project access responses cannot reveal or offer a quarantined null-owned dedicated engine",
+    "testFile": "backend/__tests__/modules/starbase/routes/projects.test.ts",
+    "testName": "uses topology-aware engine queries for project access discovery",
+    "documentation": "docs/how-to/configure-engine-tenancy.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-AUTHZ-012",
+    "requirement": "Legacy project-access or target rows cannot resurrect a null-owned dedicated engine; topology is validated before existing rows, assignment creation, or permission evaluation.",
+    "source": "Engine Tenancy Plan / Authorization integration",
+    "dimensions": ["project_engine_target", "legacy_access", "null_owner", "deny", "no_side_effect"],
+    "expected": "request and target creation deny before legacy rows or permissions can grant access",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineAccessService.test.ts",
+    "testName": "rejects a null-owned dedicated migration engine before honoring legacy access rows",
+    "documentation": "docs/reference/engine-tenancy-compatibility-and-deprecation.md",
+    "ciJob": "test:engine-tenancy:authorization"
   },
   {
     "id": "TEN-RUNTIME-007",

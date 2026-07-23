@@ -24,6 +24,7 @@ import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistenc
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { In, IsNull, type EntityManager } from 'typeorm';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
+import { engineTenancyVisibilityWhere } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import {
@@ -654,9 +655,10 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
   if (engineIds.length > 0) {
     const includeDeploymentDiagnostics = await canViewDeploymentDiagnostics(req);
     const engineRows = await engineRepo.find({
-      where: { id: In(engineIds) },
+      where: engineTenancyVisibilityWhere({ id: In(engineIds) }, tenantId),
       select: ['id', 'name', 'baseUrl', 'environmentTagId', 'deploymentIntegration']
     });
+    const visibleEngineIds = engineRows.map((engine) => engine.id);
     
     // Get environment tags for all engines
     const envTagIds = engineRows
@@ -675,7 +677,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
     
     // Get latest health status for all engines
     const healthRows = await engineHealthRepo.find({
-      where: { engineId: In(engineIds) },
+      where: { engineId: In(visibleEngineIds) },
       order: { checkedAt: 'DESC' },
       select: ['engineId', 'status', 'latencyMs', 'checkedAt']
     });
@@ -690,6 +692,7 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
     
     for (const a of connectedRows.filter((r) => r.engineId !== '__env__')) {
       const engine = engineRows.find((e: Pick<Engine, 'id' | 'name' | 'baseUrl' | 'environmentTagId'>) => e.id === a.engineId);
+      if (!engine) continue;
       const envTag = engine?.environmentTagId ? envTagMap.get(engine.environmentTagId) : null;
       const health = healthMap.get(a.engineId) || null;
       const target = targetByEngineId.get(a.engineId) || null;
@@ -747,23 +750,24 @@ r.get('/starbase-api/projects/:projectId/engine-access', apiLimiter, requireAuth
   let pendingWithDetails: ProjectEngineAccessPendingRequest[] = [];
   if (pendingEngineIds.length > 0) {
     const pendingEngineRows = await engineRepo.find({
-      where: { id: In(pendingEngineIds) },
+      where: engineTenancyVisibilityWhere({ id: In(pendingEngineIds) }, tenantId),
       select: ['id', 'name', 'baseUrl']
     });
     
-    pendingWithDetails = pendingRequests.map((r: Pick<EngineAccessRequest, 'id' | 'engineId' | 'createdAt'>) => {
+    pendingWithDetails = pendingRequests.flatMap((r: Pick<EngineAccessRequest, 'id' | 'engineId' | 'createdAt'>) => {
       const engine = pendingEngineRows.find((e: Pick<Engine, 'id' | 'name' | 'baseUrl'>) => e.id === r.engineId);
-      return {
+      return engine ? [{
         requestId: r.id,
         engineId: r.engineId,
-        engineName: engine?.name || engine?.baseUrl || 'Unknown',
+        engineName: engine.name || engine.baseUrl || 'Unknown',
         requestedAt: r.createdAt,
-      };
+      }] : [];
     });
   }
 
   // Get all available engines (for requesting access)
   const allEngines = await engineRepo.find({
+    where: engineTenancyVisibilityWhere({}, tenantId),
     select: ['id', 'name', 'baseUrl']
   });
 

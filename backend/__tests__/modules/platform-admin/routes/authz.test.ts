@@ -65,6 +65,7 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1', platformRole: 'admin' };
+    req.tenant ||= { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -261,7 +262,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     ]),
     getTarget: vi.fn().mockResolvedValue({
       id: 'target-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       projectId: 'project-1',
       projectName: 'Project One',
       engineId: 'engine-1',
@@ -402,7 +403,8 @@ describe('platform-admin authz routes', () => {
         if (entity.name === 'Engine') {
           const engine = {
             id: 'engine-1',
-            tenantId: null,
+            tenantId: 'tenant-default',
+            tenancyMode: 'dedicated',
             name: 'External Engine',
             baseUrl: 'https://engine.example.com',
             type: 'camunda8',
@@ -444,7 +446,7 @@ describe('platform-admin authz routes', () => {
             find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue({
               id: 'project-1',
-              tenantId: null,
+              tenantId: 'tenant-default',
               name: 'Project One',
             }),
           };
@@ -454,7 +456,7 @@ describe('platform-admin authz routes', () => {
             find: vi.fn().mockResolvedValue([]),
             findOne: vi.fn().mockResolvedValue({
               id: 'target-1',
-              tenantId: null,
+              tenantId: 'tenant-default',
               projectId: 'project-1',
               engineId: 'engine-1',
               status: 'active',
@@ -602,7 +604,7 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       userId: 'user-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       platform: ['platform:authz:check'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
       engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
@@ -648,7 +650,7 @@ describe('platform-admin authz routes', () => {
       userAgent: null,
       timestamp: 1,
     }]);
-    expect(policyService.getAuditLog).toHaveBeenCalledWith(expect.objectContaining({ tenantId: null, limit: 25 }));
+    expect(policyService.getAuditLog).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-default', limit: 25 }));
   });
 
   it('never serializes runtime-resource keys into the coarse current-user permission snapshot', async () => {
@@ -667,7 +669,7 @@ describe('platform-admin authz routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
       userId: 'user-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       platform: ['platform:authz:check'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
       engines: [{ resourceId: 'engine-central', permissions: [] }],
@@ -841,7 +843,7 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(permissionService.listRoleAssignments).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: null,
+      tenantId: 'tenant-default',
       runtimeEngineId: 'engine-1',
     }));
   });
@@ -1138,7 +1140,7 @@ describe('platform-admin authz routes', () => {
     expect(response.body).toEqual({ success: true });
     expect(vi.mocked(policyService.updatePolicy)).toHaveBeenCalledWith(
       '00000000-0000-4000-8000-000000000090',
-      expect.objectContaining({ isActive: false, tenantId: null, updatedById: 'user-1' }),
+      expect.objectContaining({ isActive: false, tenantId: 'tenant-default', updatedById: 'user-1' }),
     );
   });
 
@@ -1419,7 +1421,7 @@ describe('platform-admin authz routes', () => {
       },
     });
     const expectedInput = expect.objectContaining({
-      tenantId: null,
+      tenantId: 'tenant-default',
       providerId: 'microsoft',
       trigger: 'manual',
       details: expect.objectContaining({
@@ -1757,7 +1759,11 @@ describe('platform-admin authz routes', () => {
       getRepository: (entity: any) => {
         if (entity.name === 'Engine') {
           return {
-            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }),
+            findOne: vi.fn().mockResolvedValue({
+              id: 'engine-1',
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
+            }),
           };
         }
         if (entity.name === 'AuditLog') {
@@ -1806,7 +1812,8 @@ describe('platform-admin authz routes', () => {
     };
     const engine = {
       id: 'engine-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
       type: 'ion',
       externalId: 'cluster-a/prod',
       externalSystemId: 'system-1',
@@ -1866,7 +1873,7 @@ describe('platform-admin authz routes', () => {
     expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
       capabilityStatus: 'in_sync',
     }));
-    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', null);
+    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', 'tenant-default');
   });
 
   it('decommissions and reactivates externally registered engines from Access Control', async () => {
@@ -1883,7 +1890,8 @@ describe('platform-admin authz routes', () => {
     };
     const engine = {
       id: 'engine-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
       type: 'camunda8',
       externalId: 'cluster-a/prod',
       externalSystemId: 'system-1',
@@ -1976,7 +1984,7 @@ describe('platform-admin authz routes', () => {
       lifecycleStatus: 'active',
       driftStatus: 'in_sync',
     }));
-    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', null);
+    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', 'tenant-default');
   });
 
   it('does not decommission an externally registered engine from another tenant', async () => {
@@ -2351,7 +2359,7 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({ id: 'identity-task-1', providerId: 'provider-1', status: 'queued', scanned: 500 })]);
-    expect(configBundleIdentityReplayTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', null);
+    expect(configBundleIdentityReplayTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', 'tenant-default');
   });
 
   it('returns durable runtime reconciliation tasks only for a visible configuration apply', async () => {
@@ -2359,7 +2367,7 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([expect.objectContaining({ id: 'runtime-task-1', status: 'queued', runtimeResourceSetIds: ['runtime-set-1'], engineIds: ['engine-1'] })]);
-    expect(configBundleRuntimeReconciliationTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', null);
+    expect(configBundleRuntimeReconciliationTaskMock.listForApplyRun).toHaveBeenCalledWith('config-run-1', 'tenant-default');
   });
 
   it('allows configuration-scoped API clients to apply bundles and preserves machine audit lineage', async () => {

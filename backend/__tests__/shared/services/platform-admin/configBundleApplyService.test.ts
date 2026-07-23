@@ -134,7 +134,16 @@ function setupDataSource() {
   const catalogPermissionRepo = { find: vi.fn().mockResolvedValue([]) };
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
-  const engineRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a' }), insert: engineInsert, update: vi.fn() };
+  const engineRepo = {
+    find: vi.fn().mockResolvedValue([]),
+    findOne: vi.fn().mockResolvedValue({
+      id: 'engine-1',
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+    }),
+    insert: engineInsert,
+    update: vi.fn(),
+  };
   const engineTenantMappingRows: any[] = [];
   const engineTenantMappingRepo = {
     find: vi.fn(async ({ where }: any = {}) => engineTenantMappingRows.filter((row) =>

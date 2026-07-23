@@ -13,9 +13,13 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
-import { In, IsNull, type EntityManager } from 'typeorm';
+import { In, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
+import {
+  engineTenancyVisibilityWhere,
+  isEngineVisibleInTenancyContext,
+} from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 import { ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE, EnginePermissions, permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
 
@@ -83,10 +87,13 @@ export class EngineService {
   async getEngineRole(userId: string, engineId: string, tenantId?: string | null): Promise<EngineRole | null> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    const engine = await engineRepo.findOne({ where: { id: engineId }, select: ['id', 'tenantId'] });
+    const engine = await engineRepo.findOne({
+      where: { id: engineId },
+      select: ['id', 'tenantId', 'tenancyMode'],
+    });
 
     if (!engine) return null;
-    if (tenantId && engine.tenantId && engine.tenantId !== tenantId) return null;
+    if (!isEngineVisibleInTenancyContext(engine, tenantId)) return null;
 
     return await permissionService.getAssignedEngineRole(userId, engineId, tenantId);
   }
@@ -127,13 +134,11 @@ export class EngineService {
     let assignedEngines: Engine[] = [];
 
     if (allEngineRole || hasAllEngineAssignment) {
-      assignedEngines = tenantId
-        ? await engineRepo.find({ where: [{ tenantId }, { tenantId: IsNull() }] })
-        : await engineRepo.find();
+      assignedEngines = await engineRepo.find({ where: engineTenancyVisibilityWhere({}, tenantId) });
     } else if (assignedEngineIds.length > 0) {
-      assignedEngines = tenantId
-        ? await engineRepo.find({ where: [{ id: In(assignedEngineIds), tenantId }, { id: In(assignedEngineIds), tenantId: IsNull() }] })
-        : await engineRepo.find({ where: { id: In(assignedEngineIds) } });
+      assignedEngines = await engineRepo.find({
+        where: engineTenancyVisibilityWhere({ id: In(assignedEngineIds) }, tenantId),
+      });
     }
 
     for (const engine of assignedEngines) {

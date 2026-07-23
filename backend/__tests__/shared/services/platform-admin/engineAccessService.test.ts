@@ -28,8 +28,8 @@ describe('EngineAccessService', () => {
   it('returns approved when access already exists', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue({ id: 'access-1' }) };
     const requestRepo = { findOne: vi.fn() };
-    const engineRepo = { findOne: vi.fn() };
-    const projectRepo = { findOne: vi.fn() };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated' }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -48,8 +48,8 @@ describe('EngineAccessService', () => {
   it('returns pending when request already exists', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null) };
     const requestRepo = { findOne: vi.fn().mockResolvedValue({ id: 'req-1' }) };
-    const engineRepo = { findOne: vi.fn() };
-    const projectRepo = { findOne: vi.fn() };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated' }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -71,8 +71,8 @@ describe('EngineAccessService', () => {
   it('auto-approves when the requester has canonical management permissions for both resources', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
     const requestRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
-    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
-    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated' }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -108,8 +108,8 @@ describe('EngineAccessService', () => {
   it('does not auto-approve from matching accountable metadata without canonical permissions', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
     const requestRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
-    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, ownerId: 'user-1', delegateId: null }) };
-    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null, ownerId: 'user-1' }) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated', ownerId: 'user-1', delegateId: null }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a', ownerId: 'user-1' }) };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -134,7 +134,7 @@ describe('EngineAccessService', () => {
   it('rejects a cross-tenant project and engine before evaluating auto-approval', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null) };
     const requestRepo = { findOne: vi.fn().mockResolvedValue(null) };
-    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-engine' }) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-engine', tenancyMode: 'dedicated' }) };
     const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-project' }) };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null) };
 
@@ -150,6 +150,34 @@ describe('EngineAccessService', () => {
     });
 
     await expect(service.requestAccess('project-1', 'engine-1', 'user-1')).rejects.toThrow('same tenant');
+    expect(permissionService.hasPermission).not.toHaveBeenCalled();
+  });
+
+  it('rejects a null-owned dedicated migration engine before honoring legacy access rows', async () => {
+    const accessRepo = { findOne: vi.fn().mockResolvedValue({ id: 'access-1' }) };
+    const requestRepo = { findOne: vi.fn() };
+    const engineRepo = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'engine-migration',
+        tenantId: null,
+        tenancyMode: 'dedicated',
+      }),
+    };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineProjectAccess) return accessRepo;
+        if (entity === EngineAccessRequest) return requestRepo;
+        if (entity === Engine) return engineRepo;
+        if (entity === Project) return projectRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.requestAccess('project-1', 'engine-migration', 'user-1')).rejects.toThrow('same tenant');
+    expect(accessRepo.findOne).not.toHaveBeenCalled();
+    expect(requestRepo.findOne).not.toHaveBeenCalled();
     expect(permissionService.hasPermission).not.toHaveBeenCalled();
   });
 });

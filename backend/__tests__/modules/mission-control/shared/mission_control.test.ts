@@ -38,6 +38,7 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -120,7 +121,8 @@ describe('mission-control shared mission_control routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-77'),
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
             })),
           };
         }
@@ -181,7 +183,7 @@ describe('mission-control shared mission_control routes', () => {
   it('fails closed for resource-aware process-instance preview counts because aggregate responses cannot be post-filtered', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -265,7 +267,7 @@ describe('mission-control shared mission_control routes', () => {
   it('bounds compatibility process-definition and instance collections for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -285,7 +287,7 @@ describe('mission-control shared mission_control routes', () => {
   it('returns action decisions from the production compatibility process-instance route only when requested', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -317,7 +319,7 @@ describe('mission-control shared mission_control routes', () => {
   it('preserves the fail-closed status for oversized compatibility collections', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -338,7 +340,7 @@ describe('mission-control shared mission_control routes', () => {
   it('drops compatibility process-instance rows outside the authorized definition key', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
@@ -359,8 +361,18 @@ describe('mission-control shared mission_control routes', () => {
   it('allows incidents only when their live process-instance lineage resolves to an authorized runtime resource', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, runtimeAccessScope: 'resource_aware' }) };
-        if (entity === RuntimeResource) return { findOne: vi.fn().mockResolvedValue({ id: 'resource-payments', tenantId: null }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, tenancyMode: 'shared', runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RuntimeResource) {
+          return {
+            findOne: vi.fn()
+              .mockResolvedValueOnce(null)
+              .mockResolvedValueOnce({
+                id: 'resource-payments',
+                tenantId: 'tenant-default',
+                tenantResolutionStatus: 'resolved',
+              }),
+          };
+        }
         return { findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -368,6 +380,12 @@ describe('mission-control shared mission_control routes', () => {
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
       context.resourceType === 'engine_runtime_resource' && context.resourceId === 'resource-payments'
     );
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'resource-payments',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments-order',
+    }]);
     const incidents = [{ id: 'incident-1', incidentType: 'failedJob', engineExtension: { retryable: true } }];
     const { listProcessInstanceIncidents } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js');
     vi.mocked(listProcessInstanceIncidents).mockResolvedValueOnce(incidents as any);
@@ -574,7 +592,7 @@ describe('mission-control shared mission_control routes', () => {
   it('bounds historic process-instance collections for resource-aware engines', async () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => entity === Engine
-        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: null, runtimeAccessScope: 'resource_aware' }) }
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
         : { findOne: vi.fn().mockResolvedValue(null) },
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);

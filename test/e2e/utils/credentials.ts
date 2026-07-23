@@ -9,7 +9,12 @@ export function getE2ESeedData() {
   const seedFile = env.E2E_SEED_FILE || defaultSeedFile;
   if (!existsSync(seedFile)) return {};
   try {
-    return JSON.parse(readFileSync(seedFile, 'utf8')) as { email?: string; password?: string; engineId?: string };
+    return JSON.parse(readFileSync(seedFile, 'utf8')) as {
+      email?: string;
+      password?: string;
+      engineId?: string;
+      migrationEngineId?: string;
+    };
   } catch {
     return {};
   }

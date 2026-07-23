@@ -302,6 +302,13 @@ unowned `engine_wide` engine can be proposed for the configured default tenant.
 An unowned `resource_aware` engine requires human review; it is not inferred as
 shared.
 
+Owned engines require `engine:edit` for preview/apply. A null-owned dedicated
+engine is not tenant-visible and cannot receive an ordinary engine assignment.
+Only when it is quarantined as `migration_required` may
+`platform:engine-registration:manage` authorize these two migration operations.
+That exception does not authorize any engine collection, detail, invitation,
+assignment, or runtime route.
+
 Preview a manual transition:
 
 ```http
@@ -392,9 +399,9 @@ assignment, mapping, inventory, Engine Set, deployment-target, or receipt
 change invalidates the preview. Successful apply invalidates materializations
 and schedules runtime reconciliation.
 
-Manual preview/apply requires engine edit access. External-owned topology and
-configuration-locked topology must be changed through their owning source;
-manual routes reject them.
+After classification, preview/apply requires engine edit access. External-owned
+topology and configuration-locked topology must be changed through their owning
+source; manual routes reject them.
 
 ## Enterprise Resolver Extension
 

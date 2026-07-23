@@ -109,6 +109,17 @@ The migration classifies existing rows conservatively:
 It does not infer shared topology from `resource_aware`, and it does not attach
 null rows to the default tenant.
 
+`TEN-AUTHZ-008`: a dedicated `migration_required` row with null `tenant_id` is
+absent from tenant-visible engine and runtime queries. The platform
+engine-registration permission may classify that quarantine through
+preview/apply, but it does not establish ownership or an engine grant.
+
+`TEN-AUTHZ-009`: the reusable engine-visibility predicate has two explicit
+contexts. A tenant context sees dedicated engines whose persisted tenant
+matches plus valid shared engines. A platform context may span dedicated
+engines with any persisted tenant plus valid shared engines. Neither context
+accepts a dedicated engine without persisted ownership.
+
 ## Canonical Contracts
 
 `TEN-API-001`: the shared engine schema module defines the topology, mapping

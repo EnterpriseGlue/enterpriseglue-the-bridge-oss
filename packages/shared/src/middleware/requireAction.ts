@@ -51,6 +51,13 @@ export interface RequireActionOptions {
   collectionIdsFrom?: ResourceIdLocation;
   collectionIdsKey?: string;
   acceptedPermissions?: Permission[];
+  /**
+   * Allows a platform migration permission to operate only on an unowned
+   * dedicated engine that is explicitly quarantined as migration_required.
+   * Ordinary engine/resource authorization never treats that null owner as the
+   * active or default tenant.
+   */
+  unownedEngineMigrationPermission?: Permission;
 }
 
 export interface RequireRuntimeCollectionActionOptions {
@@ -262,7 +269,17 @@ function isTenantVisible(rowTenantId: string | null | undefined, tenantId?: stri
   return isTenantVisibleForAuthz(rowTenantId, tenantId);
 }
 
+type TenantVisibleEngine = Pick<Engine, 'tenantId' | 'tenancyMode'>;
 type RuntimeGuardEngine = Pick<Engine, 'tenancyMode' | 'runtimeAccessScope'>;
+
+function isEngineVisibleInTenant(
+  engine: TenantVisibleEngine,
+  tenantId?: string | null,
+): boolean {
+  if (engine.tenancyMode === 'shared') return !engine.tenantId;
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  return Boolean(engine.tenantId && visibleTenantIds.includes(engine.tenantId));
+}
 
 function requiresResolvedRuntimeResourceGuard(
   engine: RuntimeGuardEngine,
@@ -354,13 +371,20 @@ async function resolveActionResource(
     const engineId = requiredResourceId(req, resolver, options);
     const engine = await dataSource.getRepository(Engine).findOne({
       where: { id: engineId },
-      select: ['id', 'tenantId'],
+      select: ['id', 'tenantId', 'tenancyMode', 'tenantResolutionStatus'],
     });
     if (!engine) {
       throw Errors.notFound('Engine not found');
     }
-    if (!isTenantVisible(engine.tenantId, tenantId)) {
+    const unownedMigration = engine.tenancyMode === 'dedicated'
+      && !engine.tenantId
+      && engine.tenantResolutionStatus === 'migration_required'
+      && Boolean(options.unownedEngineMigrationPermission);
+    if (!unownedMigration && !isEngineVisibleInTenant(engine, tenantId)) {
       throw Errors.forbidden('Engine not accessible in this tenant');
+    }
+    if (unownedMigration) {
+      (req as Request & { unownedEngineMigrationId?: string }).unownedEngineMigrationId = engineId;
     }
     (req as Request & { engineId?: string }).engineId = engineId;
     return { type: 'engine', id: engineId };
@@ -377,12 +401,12 @@ async function resolveActionResource(
     }
     const engine = await dataSource.getRepository(Engine).findOne({
       where: { id: savedFilter.engineId },
-      select: ['id', 'tenantId'],
+      select: ['id', 'tenantId', 'tenancyMode'],
     });
     if (!engine) {
       throw Errors.notFound('Engine not found');
     }
-    if (!isTenantVisible(engine.tenantId, tenantId)) {
+    if (!isEngineVisibleInTenant(engine, tenantId)) {
       throw Errors.forbidden('Engine not accessible in this tenant');
     }
     (req as Request & { savedFilterId?: string; engineId?: string }).savedFilterId = savedFilterId;
@@ -592,9 +616,9 @@ async function resolveEngineVisibleCollection(
       const visibleTenantIds = tenantIdsForAuthz(tenantId);
       const rows = await dataSource.getRepository(Engine).find({
         where: visibleTenantIds.length > 0
-          ? [{ tenantId: In(visibleTenantIds) }, { tenantId: IsNull() }]
-          : undefined,
-        select: ['id'],
+          ? [{ tenantId: In(visibleTenantIds) }, { tenantId: IsNull(), tenancyMode: 'shared' }]
+          : { tenantId: IsNull(), tenancyMode: 'shared' },
+        select: ['id', 'tenantId', 'tenancyMode'],
       });
       requestedIds = rows.map((row) => String(row.id)).sort();
     } else {
@@ -615,7 +639,7 @@ async function resolveEngineVisibleCollection(
   });
   const existingIds = new Set(rows.map((row) => String(row.id)));
   const visibleIds = new Set(rows
-    .filter((row) => isTenantVisible(row.tenantId, req.tenant?.tenantId || null))
+    .filter((row) => isEngineVisibleInTenant(row, req.tenant?.tenantId || null))
     .map((row) => String(row.id)));
   const allowedIds = new Set<string>();
 
@@ -832,14 +856,37 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       const acceptedPermissions = options.acceptedPermissions?.length
         ? options.acceptedPermissions
         : [action.permissionId];
-      const allowed = (await Promise.all(
+      let allowed = (await Promise.all(
         acceptedPermissions.map((permission) => permissionService.hasPermission(permission, context))
       )).some(Boolean);
+      let policyPermission = action.permissionId;
+      let policyContext = context;
+      const unownedMigrationId = (req as Request & { unownedEngineMigrationId?: string })
+        .unownedEngineMigrationId;
+      if (
+        !allowed
+        && unownedMigrationId === resource.id
+        && options.unownedEngineMigrationPermission
+      ) {
+        const platformContext: PermissionContext = {
+          userId: req.user.userId,
+          tenantId: req.tenant?.tenantId || null,
+          resourceType: 'platform',
+        };
+        allowed = await permissionService.hasPermission(
+          options.unownedEngineMigrationPermission,
+          platformContext,
+        );
+        if (allowed) {
+          policyPermission = options.unownedEngineMigrationPermission;
+          policyContext = platformContext;
+        }
+      }
       if (!allowed) {
         throw Errors.forbidden(`Access denied for action ${action.actionId}`);
       }
 
-      const policy = await policyService.evaluateGate(action.permissionId, context);
+      const policy = await policyService.evaluateGate(policyPermission, policyContext);
       if (policy.decision === 'deny') {
         throw Errors.forbidden(`Access denied for action ${action.actionId}: ${policy.reason}`);
       }
@@ -1009,12 +1056,12 @@ async function resolveInvitationTarget(req: Request): Promise<{
 
   const engine = await dataSource.getRepository(Engine).findOne({
     where: { id: resourceId },
-    select: ['id', 'tenantId'],
+    select: ['id', 'tenantId', 'tenancyMode'],
   });
   if (!engine) {
     throw Errors.notFound('Engine not found');
   }
-  if (!isTenantVisible(engine.tenantId, req.tenant?.tenantId || null)) {
+  if (!isEngineVisibleInTenant(engine, req.tenant?.tenantId || null)) {
     throw Errors.forbidden('Engine not accessible in this tenant');
   }
 
@@ -1073,7 +1120,7 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
         where: { id: engineId },
         select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
-      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      if (!engine || !isEngineVisibleInTenant(engine, tenantId)) throw Errors.notFound('Engine not found');
       const context = { userId: req.user.userId, tenantId, resourceType: 'engine' as const, resourceId: engineId };
       const broad = await permissionService.hasPermission(action.permissionId, context);
       let keys: string[] | undefined;
@@ -1118,7 +1165,7 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
         where: { id: engineId },
         select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
-      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      if (!engine || !isEngineVisibleInTenant(engine, tenantId)) throw Errors.notFound('Engine not found');
       req.runtimeAccessScope = engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide';
 
       const context: PermissionContext = {
@@ -1273,7 +1320,7 @@ export function requireRuntimeProcessInstanceSelectionAction(
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: engineId }, select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
-      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      if (!engine || !isEngineVisibleInTenant(engine, tenantId)) throw Errors.notFound('Engine not found');
       const context: PermissionContext = {
         userId: req.user.userId,
         tenantId,
@@ -1374,7 +1421,7 @@ export function requireRuntimeDeploymentAction(
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: engineId }, select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
-      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      if (!engine || !isEngineVisibleInTenant(engine, tenantId)) throw Errors.notFound('Engine not found');
 
       const context: PermissionContext = {
         userId: req.user.userId,
@@ -1441,7 +1488,7 @@ export function requireRuntimeMigrationAction(
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: engineId }, select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
-      if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
+      if (!engine || !isEngineVisibleInTenant(engine, tenantId)) throw Errors.notFound('Engine not found');
       const context: PermissionContext = {
         userId: req.user.userId,
         tenantId,

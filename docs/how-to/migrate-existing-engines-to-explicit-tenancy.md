@@ -137,6 +137,13 @@ request carries another tenant context. If the Engine Set refresh reports a
 failure, leave the transition in its fail-closed state, correct the selector or
 registration data, and rematerialize before granting connection access.
 
+`TEN-AUTHZ-010`: Engine Set previews and rematerialization also ignore a
+null-owned dedicated engine. Platform Engine Sets still span explicitly owned
+dedicated engines across tenants, tenant Engine Sets retain their owning
+tenant's dedicated engines, and both may select valid shared engines. This
+preserves centralized operation without treating missing ownership as global
+scope.
+
 ## Rollback
 
 Rollback is another reviewed transition, not a direct database edit:
@@ -164,8 +171,8 @@ the canonical OpenAPI document and action registry. `TEN-API-011` keeps
 external-owned and configuration-locked topology out of the manual workflow.
 `TEN-AUDIT-002` requires preview/apply to emit sanitized audit events.
 
-For a complete local rehearsal of this procedure, including temporary
-least-privilege assignment, exact acknowledgements, shared fail-closed
+For a complete local rehearsal of this procedure, including the bounded
+platform migration permission, exact acknowledgements, shared fail-closed
 enforcement, metrics, and cleanup, run:
 
 ```bash
@@ -177,6 +184,13 @@ proposals. A `requires_review` or `conflict` row is a hard stop and must be
 resolved from authoritative ownership evidence; it is never guessed by the
 runner. The expected artifacts and full success/rollback criteria are in the
 [functional test report](../development/engine-tenancy-functional-test-report.md).
+
+An existing null-owned dedicated engine does not belong to the default tenant
+and cannot receive an engine-scoped role assignment. For that row only,
+`platform:engine-registration:manage` authorizes preview/apply while its status
+is `migration_required`. Once classified, ordinary `engine:edit` and persisted
+tenant boundaries apply. This exception never enables Mission Control runtime
+access.
 
 ## Related Documentation
 

@@ -97,6 +97,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: {
+    evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   deploymentEligibilityService: {
     evaluate: routeMocks.evaluateDeploymentEligibility,
@@ -123,6 +129,21 @@ describe('starbase projects routes', () => {
   let app: express.Application;
 
   function mockEngineAccessDataSource(targetRows: Array<Record<string, unknown>> = []) {
+    const engineFind = vi.fn((options?: any) => {
+      if (options?.where) {
+        return Promise.resolve([
+          {
+            id: 'engine-1',
+            name: 'Dev Engine',
+            baseUrl: 'https://engine.example',
+            environmentTagId: 'env-1',
+          },
+        ]);
+      }
+      return Promise.resolve([
+        { id: 'engine-1', name: 'Dev Engine', baseUrl: 'https://engine.example' },
+      ]);
+    });
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: any) => {
         switch (entity?.name) {
@@ -142,21 +163,7 @@ describe('starbase projects routes', () => {
             };
           case 'Engine':
             return {
-              find: vi.fn((options?: any) => {
-                if (options?.where) {
-                  return Promise.resolve([
-                    {
-                      id: 'engine-1',
-                      name: 'Dev Engine',
-                      baseUrl: 'https://engine.example',
-                      environmentTagId: 'env-1',
-                    },
-                  ]);
-                }
-                return Promise.resolve([
-                  { id: 'engine-1', name: 'Dev Engine', baseUrl: 'https://engine.example' },
-                ]);
-              }),
+              find: engineFind,
             };
           case 'EnvironmentTag':
             return {
@@ -179,6 +186,7 @@ describe('starbase projects routes', () => {
         }
       },
     });
+    return { engineFind };
   }
 
   beforeEach(() => {
@@ -485,7 +493,14 @@ describe('starbase projects routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity?.name === 'Engine') {
-          return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }) };
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'engine-1',
+              tenantId: null,
+              tenancyMode: 'shared',
+              tenantResolutionStatus: 'ready',
+            }),
+          };
         }
         return { findOne: vi.fn().mockResolvedValue(null) };
       },
@@ -767,5 +782,24 @@ describe('starbase projects routes', () => {
       'platform:authz:check',
       expect.objectContaining({ userId: 'user-1', tenantId: 'tenant-a', resourceType: 'platform', resourceId: 'platform' }),
     );
+  });
+
+  it('uses topology-aware engine queries for project access discovery', async () => {
+    routeMocks.tenantId = 'tenant-a';
+    const { engineFind } = mockEngineAccessDataSource();
+
+    await request(app)
+      .get('/starbase-api/projects/project-1/engine-access')
+      .expect(200);
+
+    for (const call of engineFind.mock.calls) {
+      expect(call[0].where).toEqual([
+        expect.objectContaining({ tenantId: 'tenant-a' }),
+        expect.objectContaining({
+          tenantId: expect.objectContaining({ _type: 'isNull' }),
+          tenancyMode: 'shared',
+        }),
+      ]);
+    }
   });
 });

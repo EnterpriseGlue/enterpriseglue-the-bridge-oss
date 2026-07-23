@@ -565,7 +565,7 @@ describe('permissionService', () => {
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Engine) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ id: 'engine-granted' }]) };
         if (entity === EngineMember) return { find: vi.fn().mockResolvedValue([]) };
         if (entity === AuthzGroupMembership) return groupMembership.repo;
         if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
@@ -574,7 +574,7 @@ describe('permissionService', () => {
       },
     });
 
-    const result = await permissionService.getKnownEngineIdsForUser('user-1');
+    const result = await permissionService.getKnownEngineIdsForUser('user-1', 'tenant-a');
 
     expect(result).toEqual(['engine-granted']);
     expect(grantQb.where).toHaveBeenCalledWith('grant.userId = :userId', { userId: 'user-1' });
@@ -1547,6 +1547,8 @@ describe('permissionService', () => {
         if (entity === AuthzGroupMembership) return groupMembership.repo;
         if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
         if (entity === RbacRoleAssignment) return assignmentRepo;
+        if (entity === Project) return { find: vi.fn().mockResolvedValue([{ id: 'project-rbac' }]) };
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ id: 'engine-rbac' }]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -1784,7 +1786,7 @@ describe('permissionService', () => {
     }));
   });
 
-  it('rejects a role assignment that names an engine from another tenant', async () => {
+  it('rejects another-tenant and unowned-dedicated engine assignment targets while allowing shared lookup', async () => {
     const engineRepo = { findOne: vi.fn().mockResolvedValue(null) };
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -1799,9 +1801,12 @@ describe('permissionService', () => {
       tenantId: 'tenant-a', principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer', resourceType: 'engine', resourceId: 'foreign-engine', createdById: 'admin-1',
     })).rejects.toThrow('Engine not found');
 
-    expect(engineRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.arrayContaining([expect.objectContaining({ id: 'foreign-engine', tenantId: 'tenant-a' })]),
-    }));
+    const where = engineRepo.findOne.mock.calls[0]?.[0]?.where;
+    expect(where).toHaveLength(2);
+    expect(where).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'foreign-engine', tenantId: 'tenant-a' }),
+      expect.objectContaining({ id: 'foreign-engine', tenancyMode: 'shared' }),
+    ]));
   });
 
   it('rejects runtime-resource assignments when the containing engine is engine-wide', async () => {

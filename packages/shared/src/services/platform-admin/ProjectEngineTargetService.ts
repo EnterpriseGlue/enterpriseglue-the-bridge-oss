@@ -13,6 +13,10 @@ import type {
   ProjectEngineTargetStatus as SharedProjectEngineTargetStatus,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { ProjectEngineTargetPolicyMode } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import {
+  engineTenancyVisibilityWhere,
+  isEngineVisibleInTenancyContext,
+} from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, type DataSource, type EntityManager } from 'typeorm';
 import {
@@ -553,8 +557,14 @@ export class ProjectEngineTargetService {
     if (!project || !isTenantVisible(project.tenantId, tenantId)) {
       throw Errors.notFound('Project', projectId);
     }
-    const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId }, select: ['id', 'tenantId'] });
-    if (!engine || !isTenantVisible(engine.tenantId, tenantId)) {
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: engineId },
+      select: ['id', 'tenantId', 'tenancyMode'],
+    });
+    const topologyMatchesProject = engine?.tenancyMode === 'shared'
+      ? !engine.tenantId
+      : Boolean(engine?.tenantId && project.tenantId === engine.tenantId);
+    if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId) || !topologyMatchesProject) {
       throw Errors.notFound('Engine', engineId);
     }
   }
@@ -568,7 +578,7 @@ export class ProjectEngineTargetService {
       select: ['id', 'name', 'tenantId'],
     });
     const engines = await dataSource.getRepository(Engine).find({
-      where: { id: In(engineIds) },
+      where: engineTenancyVisibilityWhere({ id: In(engineIds) }),
       select: ['id', 'name', 'baseUrl', 'environmentTagId', 'tenantId'],
     });
     const environmentIds = Array.from(new Set(
@@ -583,12 +593,12 @@ export class ProjectEngineTargetService {
       })
       : [];
 
-    return targets.map((target) => toTargetView(
-      target,
-      new Map(projects.map((project) => [project.id, project])),
-      new Map(engines.map((engine) => [engine.id, engine])),
-      new Map(environments.map((environment) => [environment.id, environment]))
-    ));
+    const projectById = new Map(projects.map((project) => [project.id, project]));
+    const engineById = new Map(engines.map((engine) => [engine.id, engine]));
+    const environmentById = new Map(environments.map((environment) => [environment.id, environment]));
+    return targets
+      .filter((target) => engineById.has(target.engineId))
+      .map((target) => toTargetView(target, projectById, engineById, environmentById));
   }
 }
 

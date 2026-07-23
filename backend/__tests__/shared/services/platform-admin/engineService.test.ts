@@ -22,7 +22,13 @@ describe('EngineService', () => {
 
   it('returns the canonical owner role for an engine', async () => {
     const engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'user-1', delegateId: null }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'engine-1',
+        tenantId: 'tenant-a',
+        tenancyMode: 'dedicated',
+        ownerId: 'user-1',
+        delegateId: null,
+      }),
     };
     const assignmentSpy = vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('owner');
 
@@ -40,7 +46,13 @@ describe('EngineService', () => {
 
   it('returns the canonical member role for an engine', async () => {
     const engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'engine-1',
+        tenantId: 'tenant-a',
+        tenancyMode: 'dedicated',
+        ownerId: 'owner-1',
+        delegateId: null,
+      }),
     };
     const assignmentSpy = vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('operator');
 
@@ -58,7 +70,13 @@ describe('EngineService', () => {
 
   it('uses scoped RBAC engine assignments when legacy membership is absent', async () => {
     const engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', ownerId: 'owner-1', delegateId: null }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'engine-1',
+        tenantId: 'tenant-a',
+        tenancyMode: 'dedicated',
+        ownerId: 'owner-1',
+        delegateId: null,
+      }),
     };
     const memberRepo = {
       findOne: vi.fn().mockResolvedValue(null),
@@ -77,6 +95,85 @@ describe('EngineService', () => {
 
     expect(role).toBe('operator');
     expect(assignmentSpy).toHaveBeenCalledWith('user-1', 'engine-1', undefined);
+  });
+
+  it('does not resolve a null-owned dedicated engine role through a tenant context', async () => {
+    const engineRepo = {
+      findOne: vi.fn()
+        .mockResolvedValueOnce({
+          id: 'engine-migration',
+          tenantId: null,
+          tenancyMode: 'dedicated',
+        })
+        .mockResolvedValueOnce({
+          id: 'engine-shared',
+          tenantId: null,
+          tenancyMode: 'shared',
+        })
+        .mockResolvedValueOnce({
+          id: 'engine-migration',
+          tenantId: null,
+          tenancyMode: 'dedicated',
+        }),
+    };
+    const assignmentSpy = vi.spyOn(permissionService, 'getAssignedEngineRole').mockResolvedValue('operator');
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return engineRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.getEngineRole('user-1', 'engine-migration', 'tenant-a')).resolves.toBeNull();
+    await expect(service.getEngineRole('user-1', 'engine-shared', 'tenant-a')).resolves.toBe('operator');
+    await expect(service.getEngineRole('user-1', 'engine-migration')).resolves.toBeNull();
+    expect(assignmentSpy).toHaveBeenCalledTimes(1);
+    expect(assignmentSpy).toHaveBeenCalledWith('user-1', 'engine-shared', 'tenant-a');
+  });
+
+  it('uses topology-aware engine discovery for tenant and platform assignments', async () => {
+    const engineFind = vi.fn().mockResolvedValue([]);
+    const assignmentQb = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    vi.spyOn(permissionService, 'getAssignedEngineRoles').mockResolvedValue([
+      { engineId: null, role: 'operator' },
+    ]);
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { find: engineFind };
+        if (entity === EnvironmentTag) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.getUserEngines('user-1', 'tenant-a');
+    await service.getUserEngines('user-1');
+
+    expect(engineFind).toHaveBeenNthCalledWith(1, {
+      where: [
+        { tenantId: 'tenant-a' },
+        {
+          tenantId: expect.objectContaining({ _type: 'isNull' }),
+          tenancyMode: 'shared',
+        },
+      ],
+    });
+    expect(engineFind).toHaveBeenNthCalledWith(2, {
+      where: [
+        { tenantId: expect.objectContaining({ _type: 'not' }) },
+        {
+          tenantId: expect.objectContaining({ _type: 'isNull' }),
+          tenancyMode: 'shared',
+        },
+      ],
+    });
   });
 
   it('includes engines granted by custom scoped RBAC assignments', async () => {
