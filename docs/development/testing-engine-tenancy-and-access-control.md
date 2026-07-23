@@ -220,8 +220,9 @@ the security-critical modules:
 pnpm run test:engine-tenancy:source-coverage
 ```
 
-The runner refuses a dirty worktree, executes every literal per-file 100%
-coverage lane, verifies the commit did not change, and writes
+The runner refuses a dirty worktree, clears inherited database/secret
+configuration in favor of `scripts/local-safe-test.env`, executes every
+literal per-file 100% coverage lane, verifies the commit did not change, and writes
 `test/results/engine-tenancy-release/source-coverage.json`. It covers
 provisioning, mapping, tenant-role policy, request/runtime filtering,
 classification/transition policy, operational metrics, API-client and

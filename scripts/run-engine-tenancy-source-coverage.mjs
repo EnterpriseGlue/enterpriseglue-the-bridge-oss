@@ -7,6 +7,27 @@ import path from 'node:path';
 const root = process.cwd();
 const outputDirectory = path.join(root, 'test/results/engine-tenancy-release');
 const outputPath = path.join(outputDirectory, 'source-coverage.json');
+const safeEnvironment = { ...process.env };
+for (const key of [
+  'DATABASE_TYPE',
+  'DATABASE_URL',
+  'POSTGRES_URL',
+  'POSTGRES_HOST',
+  'POSTGRES_PORT',
+  'POSTGRES_USER',
+  'POSTGRES_PASSWORD',
+  'POSTGRES_DATABASE',
+  'POSTGRES_SCHEMA',
+  'POSTGRES_SSL',
+  'POSTGRES_SSL_REJECT_UNAUTHORIZED',
+  'JWT_SECRET',
+  'ADMIN_PASSWORD',
+  'ENCRYPTION_KEY',
+  'FRONTEND_URL',
+]) {
+  delete safeEnvironment[key];
+}
+safeEnvironment.EG_ENV_FILE = path.join(root, 'scripts/local-safe-test.env');
 const lanes = [
   {
     id: 'provisioning',
@@ -74,6 +95,7 @@ for (const lane of lanes) {
   console.log(`[engine-tenancy-source-coverage] running ${lane.script}`);
   const result = spawnSync('pnpm', ['run', lane.script], {
     cwd: root,
+    env: safeEnvironment,
     stdio: 'inherit',
   });
   if (result.error) throw result.error;

@@ -109,6 +109,8 @@ test('retains literal 100 percent source coverage for every security-critical mo
   assert.match(sourceCoverageRunner, /functions: 100/);
   assert.match(sourceCoverageRunner, /Source-coverage evidence must be run from a clean worktree/);
   assert.match(sourceCoverageRunner, /Source changed while coverage evidence was running/);
+  assert.match(sourceCoverageRunner, /scripts\/local-safe-test\.env/);
+  assert.match(sourceCoverageRunner, /delete safeEnvironment\[key\]/);
   assert.match(sourceCoverageRunner, /source-coverage\.json/);
   assert.doesNotMatch(sourceCoverageRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
