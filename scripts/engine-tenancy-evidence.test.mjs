@@ -16,6 +16,11 @@ const accessibilityRunner = readFileSync(new URL('./run-authz-accessibility-matr
 const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-evidence.mjs', import.meta.url), 'utf8');
 const compatibilityRunner = readFileSync(new URL('./run-engine-tenancy-compatibility-evidence.mjs', import.meta.url), 'utf8');
 const documentationReviewRunner = readFileSync(new URL('./run-engine-tenancy-documentation-review-evidence.mjs', import.meta.url), 'utf8');
+const provisioningEvidenceWriter = readFileSync(new URL('./write-engine-tenancy-provisioning-evidence.mjs', import.meta.url), 'utf8');
+const provisioningJourneyRegistry = JSON.parse(readFileSync(
+  new URL('../test/authz/engine-tenancy-provisioning-journeys.json', import.meta.url),
+  'utf8',
+));
 const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
@@ -108,6 +113,35 @@ test('builds a fail-closed same-commit release evidence index', () => {
   }
   assert.match(releaseIndexWriter, /README\.md/);
   assert.match(releaseIndexWriter, /process\.exitCode = 1/);
+});
+
+test('assembles provisioning evidence only from exact real-service observations', () => {
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:provisioning-evidence'],
+    /test:engine-tenancy:provisioning-journey-contract/,
+  );
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:provisioning-evidence'],
+    /write-engine-tenancy-provisioning-evidence\.mjs/,
+  );
+  assert.equal(provisioningJourneyRegistry.journeys.length, 14);
+  for (const requiredField of [
+    'realHttpService',
+    'persistentDatabase',
+    'authorizationEvaluator',
+    'userInterface',
+    'missingChannelResults',
+    'unexpectedChannelResults',
+    'releaseCommitQualified',
+  ]) {
+    assert.match(provisioningEvidenceWriter, new RegExp(`\\b${requiredField}\\b`));
+  }
+  assert.match(provisioningEvidenceWriter, /\? 'passed'\s*: 'incomplete'/);
+  assert.match(provisioningEvidenceWriter, /Provisioning-journey evidence must be assembled from a clean worktree/);
+  assert.doesNotMatch(
+    provisioningEvidenceWriter,
+    /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/,
+  );
 });
 
 test('qualifies mutation evidence only for an exact clean commit', () => {

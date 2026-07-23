@@ -1123,6 +1123,14 @@ must stay `incomplete` and must not qualify a release commit.
 Run each supported journey through the real local HTTP service, persistent database,
 authorization evaluator, and UI where applicable:
 
+The machine-readable denominator is
+`test/authz/engine-tenancy-provisioning-journeys.json`. It records the required
+channel executions and assertions for each journey. Assemble the current
+fail-closed artifact with
+`pnpm run test:engine-tenancy:provisioning-evidence`; no journey counts from a
+unit test, mocked HTTP handler, sampled assertion, dirty worktree, stale
+commit, or undocumented channel exclusion.
+
 1. manually create, inspect, update, reconcile, and remove a dedicated engine;
 2. externally upsert the same dedicated lifecycle with idempotent retries;
 3. apply, export, reapply, and remove the same dedicated lifecycle by configuration;

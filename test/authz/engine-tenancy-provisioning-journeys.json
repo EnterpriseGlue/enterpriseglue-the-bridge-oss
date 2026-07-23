@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "coverageStandard": "real-service-provisioning-channel-journeys",
+  "channels": [
+    "manual-ui",
+    "external-api",
+    "configuration-bundle"
+  ],
+  "journeys": [
+    {
+      "id": 1,
+      "key": "manual-dedicated-lifecycle",
+      "description": "Manually create, inspect, update, reconcile, and remove a dedicated engine.",
+      "requiredChannels": ["manual-ui"],
+      "excludedChannels": {
+        "external-api": "Covered by the channel-specific dedicated lifecycle in journey 2.",
+        "configuration-bundle": "Covered by the channel-specific dedicated lifecycle in journey 3."
+      },
+      "requiredAssertions": ["create", "inspect", "update", "reconcile", "remove"]
+    },
+    {
+      "id": 2,
+      "key": "external-dedicated-idempotent-lifecycle",
+      "description": "Externally upsert the dedicated lifecycle with idempotent retries.",
+      "requiredChannels": ["external-api"],
+      "excludedChannels": {
+        "manual-ui": "Covered by the channel-specific dedicated lifecycle in journey 1.",
+        "configuration-bundle": "Covered by the channel-specific dedicated lifecycle in journey 3."
+      },
+      "requiredAssertions": ["create", "inspect", "update", "idempotent-retry", "decommission"]
+    },
+    {
+      "id": 3,
+      "key": "configuration-dedicated-round-trip",
+      "description": "Apply, export, reapply, and remove the dedicated lifecycle by configuration.",
+      "requiredChannels": ["configuration-bundle"],
+      "excludedChannels": {
+        "manual-ui": "Covered by the channel-specific dedicated lifecycle in journey 1.",
+        "external-api": "Covered by the channel-specific dedicated lifecycle in journey 2."
+      },
+      "requiredAssertions": ["preview", "apply", "export", "reapply", "remove"]
+    },
+    {
+      "id": 4,
+      "key": "manual-shared-two-tenant-lifecycle",
+      "description": "Manually create a shared engine, map two tenants, and resolve inventory.",
+      "requiredChannels": ["manual-ui"],
+      "excludedChannels": {
+        "external-api": "Covered by the channel-specific shared lifecycle in journey 5.",
+        "configuration-bundle": "Covered by the channel-specific shared lifecycle in journey 6."
+      },
+      "requiredAssertions": ["create", "map-two-tenants", "reconcile", "disjoint-inventory", "remove"]
+    },
+    {
+      "id": 5,
+      "key": "external-shared-mapping-lifecycle",
+      "description": "Externally provision the shared engine and mapping lifecycle.",
+      "requiredChannels": ["external-api"],
+      "excludedChannels": {
+        "manual-ui": "Covered by the channel-specific shared lifecycle in journey 4.",
+        "configuration-bundle": "Covered by the channel-specific shared lifecycle in journey 6."
+      },
+      "requiredAssertions": ["create", "mapping-preview", "mapping-apply", "reconcile", "decommission"]
+    },
+    {
+      "id": 6,
+      "key": "configuration-shared-round-trip",
+      "description": "Apply and round-trip the shared lifecycle by configuration.",
+      "requiredChannels": ["configuration-bundle"],
+      "excludedChannels": {
+        "manual-ui": "Covered by the channel-specific shared lifecycle in journey 4.",
+        "external-api": "Covered by the channel-specific shared lifecycle in journey 5."
+      },
+      "requiredAssertions": ["preview", "apply", "export", "reapply", "remove"]
+    },
+    {
+      "id": 7,
+      "key": "runtime-resource-tenant-resolution",
+      "description": "Ingest resources and prove dedicated inheritance or shared explicit resolution.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["dedicated-inheritance", "shared-explicit-resolution", "unmapped-quarantine"]
+    },
+    {
+      "id": 8,
+      "key": "principal-role-assignment-matrix",
+      "description": "Assign predefined and custom roles to users, groups, clients, and service accounts.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["user", "group", "api-client", "service-account", "predefined-role", "custom-role"]
+    },
+    {
+      "id": 9,
+      "key": "effective-access-lineage",
+      "description": "Verify Effective Access source, tenant lineage, expiry, and mapping version.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["source", "tenant-lineage", "expiry", "mapping-version"]
+    },
+    {
+      "id": 10,
+      "key": "runtime-path-filtering-and-denial",
+      "description": "Exercise list, count, detail, mutation, batch, job, task, incident, history, and deployment paths with filtered and denied results.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["list", "count", "detail", "mutation", "batch", "job", "task", "incident", "history", "deployment", "no-upstream-call-after-denial"]
+    },
+    {
+      "id": 11,
+      "key": "active-session-revocation",
+      "description": "Revoke assignments and remove mappings during an active browser and API session.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["active-browser-session", "active-api-session", "assignment-revocation", "mapping-removal", "cache-invalidation"]
+    },
+    {
+      "id": 12,
+      "key": "topology-transition-and-rollback",
+      "description": "Transition dedicated to shared and shared to dedicated with preview, acknowledgement, concurrency conflict, apply, cache invalidation, and rollback.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["preview", "acknowledgement", "concurrency-conflict", "apply", "cache-invalidation", "rollback"]
+    },
+    {
+      "id": 13,
+      "key": "credential-rotation-preserves-ownership",
+      "description": "Rotate engine credentials without changing tenant ownership.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["credential-rotation", "tenant-ownership-unchanged", "secret-redaction"]
+    },
+    {
+      "id": 14,
+      "key": "decommission-without-resurrection",
+      "description": "Decommission an engine and prove assignments, mappings, inventory, and cached access cannot resurrect it.",
+      "requiredChannels": ["manual-ui", "external-api", "configuration-bundle"],
+      "excludedChannels": {},
+      "requiredAssertions": ["decommission", "assignments-inactive", "mappings-inactive", "inventory-inactive", "cached-access-denied", "recreation-uses-new-stable-id"]
+    }
+  ]
+}

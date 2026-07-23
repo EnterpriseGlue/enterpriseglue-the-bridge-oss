@@ -87,6 +87,30 @@ The command writes both
 pnpm run test:engine-tenancy:release-evidence
 ```
 
+### Provisioning journey evidence
+
+The canonical denominator for the 14 real-service journeys is
+`test/authz/engine-tenancy-provisioning-journeys.json`. Validate the registry
+and assemble the current fail-closed result with:
+
+```bash
+pnpm run test:engine-tenancy:provisioning-evidence
+```
+
+Journey observations belong in
+`test/results/engine-tenancy-provisioning-observations/`. An observation counts
+only when it names the exact commit, is qualified from a clean source state,
+passes every assertion declared by the registry, and proves the real local
+HTTP service, persistent database, and authorization evaluator. The
+`manual-ui` channel must additionally prove the user interface. Missing,
+duplicate, stale, partial, mocked-service, or database-free observations keep
+`provisioning-journeys.json` incomplete.
+
+Journeys 1–6 are channel-specific companion lifecycles. Journeys 7–14 are
+cross-cutting and must execute through manual UI, external API, and
+configuration-bundle provisioning. This distinction is encoded in the
+registry, rather than inferred by the evidence writer.
+
 That command deliberately fails until traceability, local enforcement,
 mutation, three-browser functional, browser-accessibility,
 authorization-matrix, five-database, 14-journey, source-coverage,
