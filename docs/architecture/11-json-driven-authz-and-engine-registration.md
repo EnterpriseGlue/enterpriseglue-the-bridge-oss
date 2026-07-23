@@ -14,6 +14,10 @@ This document defines the target design and implementation plan for customer-man
 - Engine registration using JSON that matches the current EnterpriseGlue engine UI and APIs.
 - Project-to-engine deployment targets used by deployment dropdowns and Mission Control/Starbase navigation.
 
+The dedicated-versus-shared tenant topology, tenant mapping, and external engine
+provisioning follow-up is specified in
+[Centralized and Decentralized Engine Tenancy Implementation Plan](12-engine-tenancy-and-external-provisioning-plan.md).
+
 The design keeps the runtime authorization model simple:
 
 ```text

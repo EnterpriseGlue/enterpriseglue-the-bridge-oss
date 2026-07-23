@@ -31,6 +31,7 @@ Audience: Developers and architects.
 - [Logical Architecture](architecture/02-oss-logical-architecture.md)
 - [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
 - [JSON-Driven Authorization and Engine Registration](architecture/11-json-driven-authz-and-engine-registration.md)
+- [Centralized and Decentralized Engine Tenancy Implementation Plan](architecture/12-engine-tenancy-and-external-provisioning-plan.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
