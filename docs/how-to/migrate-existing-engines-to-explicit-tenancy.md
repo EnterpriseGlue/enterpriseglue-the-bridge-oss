@@ -124,6 +124,16 @@ ensures a concurrent engine change aborts before dependent writes. After apply:
 A shared transition intentionally hides resources until mapping resolution is
 complete.
 
+`TEN-MIGRATION-006`: Engine Set connection memberships are rebuilt immediately
+after every successful transition. A shared engine is evaluated against every
+tenant set, but an Engine Set assignment still cannot authorize a shared
+runtime resource; that requires a resolved same-tenant runtime-resource or
+Runtime Resource Set grant. `TEN-MIGRATION-007`: a dedicated engine is rebuilt
+only into platform sets and sets for its persisted owning tenant, even if the
+request carries another tenant context. If the Engine Set refresh reports a
+failure, leave the transition in its fail-closed state, correct the selector or
+registration data, and rematerialize before granting connection access.
+
 ## Rollback
 
 Rollback is another reviewed transition, not a direct database edit:

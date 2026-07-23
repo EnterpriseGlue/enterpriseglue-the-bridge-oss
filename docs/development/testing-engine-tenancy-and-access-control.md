@@ -59,8 +59,9 @@ The transition lane:
 3. tests every valid transition and equivalent/invalid proposals;
 4. tests expiry, stale hashes, missing acknowledgements, optimistic
    concurrency, transaction-side invalidation, source ownership, and audits;
-   and
-5. checks routes, action inventory, canonical schemas, and OpenAPI together.
+5. proves topology-aware Engine Set rematerialization for platform, owning
+   tenant, and all-tenant shared-engine cases; and
+6. checks routes, action inventory, canonical schemas, and OpenAPI together.
 
 The runtime lane:
 
@@ -117,6 +118,7 @@ The focused matrix proves:
 | Classification | explicit dedicated/shared and safe engine-wide default proposal | ambiguous resource-aware and invalid topology |
 | Topology transition | all four supported transitions | unchanged proposal, stale/expired hash, missing acknowledgement, source-owner bypass |
 | Transition apply | atomic state change, quarantine/resolution, materialization invalidation, reconciliation | optimistic concurrency failure rolls back before dependent writes |
+| Engine Set rematerialization | platform/owning-tenant dedicated sets and all tenant shared sets, each persisted in set scope | caller tenant cannot partially rewrite a platform set or grant shared runtime access |
 
 Any new canonical permission must make the classifier test fail until it is
 explicitly reviewed as tenant-safe or prohibited.

@@ -3,7 +3,7 @@ import request from 'supertest';
 import express from 'express';
 import { existsSync } from 'fs';
 import enginesRouter from '../../../../../packages/backend-host/src/modules/mission-control/engines/routes.js';
-import { engineService, projectEngineTargetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { engineService, engineSetService, projectEngineTargetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -2059,6 +2059,7 @@ describe('mission-control engines routes', () => {
       }),
       expect.objectContaining({ principalType: 'user', principalId: 'user-1' }),
     );
+    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('e1', null);
     expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(
       'e1',
       null,

@@ -517,6 +517,28 @@
     "ciJob": "test:engine-tenancy:transitions"
   },
   {
+    "id": "TEN-MIGRATION-006",
+    "requirement": "Shared topology transitions rematerialize the engine into every eligible platform and tenant Engine Set, with membership lineage stored in the Engine Set scope.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["engine_set", "shared", "platform", "tenant", "transition"],
+    "expected": "all-tenant shared Engine Set membership with stable set-owned tenant lineage",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineSetService.test.ts",
+    "testName": "rematerializes shared engines across platform and every tenant Engine Set in each set scope",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-MIGRATION-007",
+    "requirement": "Dedicated topology transitions rematerialize the engine only into platform and persisted owning-tenant Engine Sets, regardless of a conflicting caller tenant context.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["engine_set", "dedicated", "platform", "owning_tenant", "sibling_tenant", "transition"],
+    "expected": "dedicated Engine Set membership is bounded by persisted engine ownership",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineSetService.test.ts",
+    "testName": "rematerializes dedicated engines only in their persisted tenant and platform Engine Sets",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
     "id": "TEN-API-010",
     "requirement": "Classification and topology preview/apply schemas and operations are published in OpenAPI and the authorization action registry.",
     "source": "Engine Tenancy Data Model / Classification and Topology Transitions",

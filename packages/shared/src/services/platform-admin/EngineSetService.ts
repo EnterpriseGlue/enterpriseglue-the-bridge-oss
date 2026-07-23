@@ -403,7 +403,12 @@ class EngineSetServiceClass {
     try {
       const selector = parseSelector(set.selectorJson);
       const fingerprint = selectorFingerprint(selector);
-      const matches = await this.resolveMatchingEngines(dataSource, selector, tenantId ?? set.tenantId);
+      // The Engine Set owns the materialization boundary. The tenant argument is
+      // only the caller's visibility context; using it as the selector scope can
+      // partially rematerialize a platform set and delete valid memberships from
+      // other tenants.
+      const materializationTenantId = normalizeTenantId(set.tenantId);
+      const matches = await this.resolveMatchingEngines(dataSource, selector, materializationTenantId);
       const existing = await materializationRepo.find({ where: { engineSetId: id } });
       const existingByEngineId = new Map(existing.map((row) => [row.engineId, row]));
       const matchedEngineIds = new Set(matches.map((match) => match.engineId));
@@ -425,7 +430,7 @@ class EngineSetServiceClass {
         const existingRow = existingByEngineId.get(match.engineId);
         if (existingRow) {
           await materializationRepo.update({ id: existingRow.id }, {
-            tenantId: normalizeTenantId(tenantId ?? set.tenantId),
+            tenantId: materializationTenantId,
             selectorFingerprint: fingerprint,
             matchedByJson,
             lineageJson,
@@ -438,7 +443,7 @@ class EngineSetServiceClass {
         } else {
           await materializationRepo.insert({
             id: generateId(),
-            tenantId: normalizeTenantId(tenantId ?? set.tenantId),
+            tenantId: materializationTenantId,
             engineSetId: id,
             engineId: match.engineId,
             selectorFingerprint: fingerprint,
@@ -490,14 +495,21 @@ class EngineSetServiceClass {
 
   async materializeEngineSetsForEngine(engineId: string, tenantId?: string | null): Promise<Array<EngineSetMaterializationResult | { engineSetId: string; error: string }>> {
     const dataSource = await getDataSource();
-    const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId }, select: ['id', 'tenantId'] });
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: engineId },
+      select: ['id', 'tenantId', 'tenancyMode'],
+    });
     if (!engine) return [];
-    const effectiveTenantId = tenantId ?? engine.tenantId;
-    const sets = await this.listEngineSets({ tenantId: effectiveTenantId });
+    const isShared = engine.tenancyMode === 'shared';
+    const effectiveTenantId = normalizeTenantId(engine.tenantId ?? tenantId);
+    // A shared engine is eligible for tenant-scoped connection sets in every
+    // tenant. Dedicated engines remain eligible only for their owning tenant and
+    // platform sets. Each set is then materialized in its own persisted scope.
+    const sets = await this.listEngineSets(isShared ? {} : { tenantId: effectiveTenantId });
     const results = [];
     for (const set of sets) {
       try {
-        results.push(await this.materializeEngineSet(set.id, effectiveTenantId));
+        results.push(await this.materializeEngineSet(set.id, set.tenantId));
       } catch (error: any) {
         results.push({ engineSetId: set.id, error: error?.message || 'Engine Set materialization failed' });
       }

@@ -1698,8 +1698,8 @@ r.post('/engines-api/engines/:id/tenancy/apply', engineLimiter, requireAuth, eng
     principalId: req.user!.userId,
     resolver: engineTenantReferenceResolver(req),
   })
+  await refreshEngineSetMaterializationsForEngine(engineId, result.transition.proposed.tenantId)
   if (result.transition.proposed.mode === 'dedicated') {
-    await refreshEngineSetMaterializationsForEngine(engineId, result.transition.proposed.tenantId)
     await refreshRuntimeResourceSetMaterializationsForEngine(engineId, result.transition.proposed.tenantId)
   }
   scheduleRuntimeInventoryReconciliation(engineId, result.transition.proposed.tenantId, {

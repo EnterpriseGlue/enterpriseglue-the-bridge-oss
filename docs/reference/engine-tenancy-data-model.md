@@ -340,6 +340,17 @@ new dedicated tenant.
 concurrent engine update aborts and rolls back the whole transaction before
 dependent resource, mapping, or materialization changes are written.
 
+`TEN-MIGRATION-006`: after apply invalidates Engine Set memberships, the route
+rematerializes shared engines into platform and every tenant-scoped Engine Set,
+because Engine Sets grant connection-level access; they never grant broad
+runtime-resource access on a shared engine. The materialization tenant is always
+the Engine Set tenant, not the request or engine tenant, so refreshing a
+platform set cannot delete cross-tenant memberships or rewrite platform lineage.
+
+`TEN-MIGRATION-007`: a dedicated engine is considered only by platform Engine
+Sets and Engine Sets owned by its persisted tenant. A conflicting caller tenant
+cannot move or broaden this boundary.
+
 `TEN-API-010`: classification, preview, and apply use the canonical schemas in
 OpenAPI and the action registry. Manual transitions require engine edit
 permission.

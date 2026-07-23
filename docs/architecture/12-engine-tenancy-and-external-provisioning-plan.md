@@ -59,10 +59,10 @@ retain the authorized tenant reference for portable export, preserve other
 sources, re-resolve known runtime inventory atomically, and schedule bounded
 post-apply reconciliation.
 
-The remaining implementation work is concentrated in Engine Set transition
-materialization, topology/mapping UI and metrics, and final
-documentation/example/browser adoption gates. Mission Control runtime guards
-and transport-denial proof are implemented.
+The remaining implementation work is concentrated in topology/mapping UI and
+metrics, and final documentation/example/browser adoption gates. Engine Set
+transition rematerialization, Mission Control runtime guards, and
+transport-denial proof are implemented.
 
 ## Current-State Gap
 
@@ -737,7 +737,7 @@ checkboxes are closed.
 - [x] Quarantine unresolved resources.
 - [x] Update Mission Control collection/detail/mutation guards.
 - [x] Update Runtime Resource Set materialization to require resolved same-tenant inventory.
-- [ ] Extend Engine Set materialization for topology transitions.
+- [x] Extend Engine Set materialization for topology transitions.
 - [x] Prove engine transport is never called after tenant denial.
 
 ### Phase 6: UI and operations

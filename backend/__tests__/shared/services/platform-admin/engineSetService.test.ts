@@ -300,10 +300,11 @@ describe('engineSetService', () => {
       },
     });
 
-    const result = await engineSetService.materializeEngineSet('set-prod');
+    const result = await engineSetService.materializeEngineSet('set-prod', 'tenant-a');
 
     expect(result).toMatchObject({ engineSetId: 'set-prod', matched: 1, created: 1, updated: 0, removed: 1 });
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: null,
       engineSetId: 'set-prod',
       engineId: 'engine-prod',
       matchedByJson: expect.stringContaining('environment'),
@@ -396,5 +397,131 @@ describe('engineSetService', () => {
       materializationStatus: 'ok',
       materializationError: null,
     }));
+  });
+
+  it('rematerializes shared engines across platform and every tenant Engine Set in each set scope', async () => {
+    const sets = [
+      {
+        id: 'set-platform', tenantId: null, key: 'platform', name: 'Platform',
+        description: null, selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-shared'] }),
+        selectorFingerprint: 'platform-fingerprint', source: 'manual', sourceRef: null,
+        ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+        isArchived: false, createdById: null, lastMaterializedAt: null,
+        materializationStatus: 'pending', materializationError: null, createdAt: 1, updatedAt: 1,
+      },
+      {
+        id: 'set-tenant-a', tenantId: 'tenant-a', key: 'tenant-a', name: 'Tenant A',
+        description: null, selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-shared'] }),
+        selectorFingerprint: 'tenant-a-fingerprint', source: 'manual', sourceRef: null,
+        ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+        isArchived: false, createdById: null, lastMaterializedAt: null,
+        materializationStatus: 'pending', materializationError: null, createdAt: 1, updatedAt: 1,
+      },
+      {
+        id: 'set-tenant-b', tenantId: 'tenant-b', key: 'tenant-b', name: 'Tenant B',
+        description: null, selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-shared'] }),
+        selectorFingerprint: 'tenant-b-fingerprint', source: 'manual', sourceRef: null,
+        ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+        isArchived: false, createdById: null, lastMaterializedAt: null,
+        materializationStatus: 'pending', materializationError: null, createdAt: 1, updatedAt: 1,
+      },
+    ];
+    const setQb = queryBuilder(sets);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return {
+          findOne: vi.fn().mockResolvedValue({ id: 'engine-shared', tenantId: null, tenancyMode: 'shared' }),
+        };
+        if (entity === EngineSet) return {
+          createQueryBuilder: vi.fn().mockReturnValue(setQb),
+        };
+        if (entity === EngineSetMaterialization) return {
+          find: vi.fn().mockResolvedValue([]),
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+    const materialize = vi.spyOn(engineSetService, 'materializeEngineSet').mockImplementation(async (id) => ({
+      engineSetId: id,
+      selectorFingerprint: 'fingerprint',
+      matched: 1,
+      created: 1,
+      updated: 0,
+      removed: 0,
+      materializations: [],
+    }));
+
+    const results = await engineSetService.materializeEngineSetsForEngine('engine-shared', null);
+
+    expect(results).toHaveLength(3);
+    expect(materialize.mock.calls).toEqual([
+      ['set-platform', null],
+      ['set-tenant-a', 'tenant-a'],
+      ['set-tenant-b', 'tenant-b'],
+    ]);
+    expect(setQb.andWhere).not.toHaveBeenCalledWith(
+      '(engineSet.tenantId = :tenantId OR engineSet.tenantId IS NULL)',
+      expect.anything(),
+    );
+  });
+
+  it('rematerializes dedicated engines only in their persisted tenant and platform Engine Sets', async () => {
+    const sets = [
+      {
+        id: 'set-platform', tenantId: null, key: 'platform', name: 'Platform',
+        description: null, selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-dedicated'] }),
+        selectorFingerprint: 'platform-fingerprint', source: 'manual', sourceRef: null,
+        ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+        isArchived: false, createdById: null, lastMaterializedAt: null,
+        materializationStatus: 'pending', materializationError: null, createdAt: 1, updatedAt: 1,
+      },
+      {
+        id: 'set-tenant-a', tenantId: 'tenant-a', key: 'tenant-a', name: 'Tenant A',
+        description: null, selectorJson: JSON.stringify({ mode: 'engine_ids', engineIds: ['engine-dedicated'] }),
+        selectorFingerprint: 'tenant-a-fingerprint', source: 'manual', sourceRef: null,
+        ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+        isArchived: false, createdById: null, lastMaterializedAt: null,
+        materializationStatus: 'pending', materializationError: null, createdAt: 1, updatedAt: 1,
+      },
+    ];
+    const setQb = queryBuilder(sets);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'engine-dedicated',
+            tenantId: 'tenant-a',
+            tenancyMode: 'dedicated',
+          }),
+        };
+        if (entity === EngineSet) return {
+          createQueryBuilder: vi.fn().mockReturnValue(setQb),
+        };
+        if (entity === EngineSetMaterialization) return {
+          find: vi.fn().mockResolvedValue([]),
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+    const materialize = vi.spyOn(engineSetService, 'materializeEngineSet').mockImplementation(async (id) => ({
+      engineSetId: id,
+      selectorFingerprint: 'fingerprint',
+      matched: 1,
+      created: 1,
+      updated: 0,
+      removed: 0,
+      materializations: [],
+    }));
+
+    await engineSetService.materializeEngineSetsForEngine('engine-dedicated', 'tenant-b');
+
+    expect(setQb.andWhere).toHaveBeenCalledWith(
+      '(engineSet.tenantId = :tenantId OR engineSet.tenantId IS NULL)',
+      { tenantId: 'tenant-a' },
+    );
+    expect(materialize.mock.calls).toEqual([
+      ['set-platform', null],
+      ['set-tenant-a', 'tenant-a'],
+    ]);
   });
 });
