@@ -11,6 +11,7 @@ if (requestedBrowsers.some((name) => !supportedBrowsers.has(name))) {
 export default defineConfig({
   testDir: './',
   outputDir: '../results',
+  preserveOutput: process.env.ENGINE_TENANCY_LOCAL_EVIDENCE === 'true' ? 'always' : 'failures-only',
   globalSetup: './setup/global-setup.ts',
   globalTeardown: './setup/global-teardown.ts',
   timeout: 60_000,

@@ -44,6 +44,15 @@ pnpm run test:engine-tenancy:operations
 pnpm run test:engine-tenancy:documentation
 ```
 
+Run the browser enforcement lane against disposable services in CI:
+
+```bash
+pnpm run test:engine-tenancy:enforcement
+```
+
+For the complete guarded local-Docker journey, use
+`test:engine-tenancy:local-evidence` as described below.
+
 The authorization lane:
 
 1. validates the functional-coverage manifest;
@@ -161,6 +170,38 @@ The authorization PR workflow starts PostgreSQL, the backend, frontend, and a
 Camunda-compatible mock before running Chromium. Scheduled jobs repeat the smoke
 in Firefox and WebKit.
 
+The executable local enforcement journey requires:
+
+- a healthy Docker deployment at the default local frontend/backend URLs, or
+  explicit local `PLAYWRIGHT_BASE_URL` and `ENGINE_TENANCY_API_URL` values;
+- `.local/docker/env/docker.env` and the generated local CA;
+- Playwright Chromium; and
+- no `requires_review` or `conflict` classification rows.
+
+Observe without applying existing `ready_for_apply` rows:
+
+```bash
+pnpm run test:engine-tenancy:local-evidence
+```
+
+Apply all safe default-tenant proposals through preview and the exact required
+acknowledgements:
+
+```bash
+ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
+```
+
+The apply mode creates a temporary engine-scoped migration assignment for each
+ready row and removes it even when the journey fails. It never applies a review
+or conflict row. Both modes create and remove disposable dedicated/shared
+engines and prove the shared unmapped-to-mapped lifecycle.
+
+`TEN-MIGRATION-008` requires zero review/conflict rows and, in apply mode, zero
+ready rows. `TEN-RUNTIME-007` requires zero visible unmapped resources, mapped
+visibility after reconciliation, and healthy aggregate metrics. Successful
+runs retain sanitized JSON and a screenshot under `test/results`; CI uploads
+that directory for 14 days.
+
 For a manual review:
 
 1. create one dedicated engine in tenant A;
@@ -213,3 +254,6 @@ for 14 days and publishes authorization decision coverage separately.
 The authoritative traceability source is
 `test/authz/engine-tenancy-functional-coverage.json`; an undocumented or
 unlinked test does not close a functional requirement.
+
+The latest complete evidence summary is
+[Engine Tenancy Functional Test Report](./engine-tenancy-functional-test-report.md).

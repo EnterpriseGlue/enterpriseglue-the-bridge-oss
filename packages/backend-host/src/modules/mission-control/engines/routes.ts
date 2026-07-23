@@ -9,6 +9,7 @@ import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js'
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js'
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js'
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js'
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js'
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js'
 import { SavedFilter } from '@enterpriseglue/shared/infrastructure/persistence/entities/SavedFilter.js'
@@ -1901,10 +1902,35 @@ r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, requireAction('
   if (existing.lifecycleStatus === 'decommissioned') {
     throw Errors.conflict('Decommissioned engines cannot be deleted through manual engine deletion; reactivate or manage them through the external registration lifecycle')
   }
+  const runtimeResourceRepo = dataSource.getRepository(RuntimeResource)
+  const runtimeResourceSetRepo = dataSource.getRepository(RuntimeResourceSet)
+  const runtimeMaterializationRepo = dataSource.getRepository(RuntimeResourceSetMaterialization)
+  const assignmentRepo = dataSource.getRepository(RbacRoleAssignment)
+  const runtimeResources = await runtimeResourceRepo.find({ where: { engineId }, select: ['id'] })
+  const runtimeResourceSets = await runtimeResourceSetRepo.find({ where: { engineId }, select: ['id'] })
+  const runtimeResourceIds = runtimeResources.map((resource) => resource.id)
+  const runtimeResourceSetIds = runtimeResourceSets.map((resourceSet) => resourceSet.id)
+  if (runtimeResourceIds.length > 0) {
+    await runtimeMaterializationRepo.delete({ runtimeResourceId: In(runtimeResourceIds) })
+    await assignmentRepo.delete({
+      scopeType: 'engine_runtime_resource',
+      scopeId: In(runtimeResourceIds),
+    })
+  }
+  if (runtimeResourceSetIds.length > 0) {
+    await runtimeMaterializationRepo.delete({ runtimeResourceSetId: In(runtimeResourceSetIds) })
+    await assignmentRepo.delete({
+      scopeType: 'engine_runtime_resource_set',
+      scopeId: In(runtimeResourceSetIds),
+    })
+  }
+  await runtimeResourceRepo.delete({ engineId })
+  await runtimeResourceSetRepo.delete({ engineId })
+  await dataSource.getRepository(EngineTenantMapping).delete({ engineId })
   await dataSource.getRepository(ExternalEngineRegistration).delete({ engineId })
   await dataSource.getRepository(EngineSetMaterialization).delete({ engineId })
   await engineRepo.delete({ id: engineId })
-  await dataSource.getRepository(RbacRoleAssignment).delete({
+  await assignmentRepo.delete({
     scopeType: 'engine',
     scopeId: engineId,
   })

@@ -26,6 +26,14 @@ export const AuthzPrincipalTypeSchema = z.enum(AUTHZ_PRINCIPAL_TYPES);
 export const AuthzActionRiskSchema = z.enum(AUTHZ_ACTION_RISKS);
 export const AuthzUiBehaviorSchema = z.enum(AUTHZ_UI_BEHAVIORS);
 
+// Bigint timestamps are hydrated as strings by PostgreSQL and as numbers by
+// several other supported adapters. Normalize response contracts here so the
+// same OpenAPI shape is returned for every database.
+const PersistedTimestampSchema = z.union([
+  z.number(),
+  z.string().regex(/^\d+$/).transform(Number),
+]);
+
 export const AuthzOpenApiExtensionSchema = z.object({
   actionId: z.string().min(1),
   permission: z.string().min(1),
@@ -1048,10 +1056,10 @@ export const RuntimeResourceSchema = z.object({
   lineageJson: z.string(),
   source: z.string(),
   sourceRef: z.string().nullable(),
-  observedAt: z.number(),
+  observedAt: PersistedTimestampSchema,
   isActive: z.boolean(),
-  createdAt: z.number(),
-  updatedAt: z.number(),
+  createdAt: PersistedTimestampSchema,
+  updatedAt: PersistedTimestampSchema,
 });
 
 export const RuntimeResourceSetSchema = z.object({

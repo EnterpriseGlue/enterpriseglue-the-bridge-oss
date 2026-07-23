@@ -164,6 +164,20 @@ the canonical OpenAPI document and action registry. `TEN-API-011` keeps
 external-owned and configuration-locked topology out of the manual workflow.
 `TEN-AUDIT-002` requires preview/apply to emit sanitized audit events.
 
+For a complete local rehearsal of this procedure, including temporary
+least-privilege assignment, exact acknowledgements, shared fail-closed
+enforcement, metrics, and cleanup, run:
+
+```bash
+ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
+```
+
+`TEN-MIGRATION-008`: the command applies only `ready_for_apply` default-tenant
+proposals. A `requires_review` or `conflict` row is a hard stop and must be
+resolved from authoritative ownership evidence; it is never guessed by the
+runner. The expected artifacts and full success/rollback criteria are in the
+[functional test report](../development/engine-tenancy-functional-test-report.md).
+
 ## Related Documentation
 
 - [Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md)

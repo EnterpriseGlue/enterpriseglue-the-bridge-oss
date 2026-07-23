@@ -192,8 +192,8 @@ export default async function globalSetup() {
     `INSERT INTO ${schema}.engines
       (id, name, base_url, type, auth_type, username, password_enc, version,
        owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
-       created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+       tenancy_mode, tenant_resolution_status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
     [
       engineId,
       `${prefix}-engine`,
@@ -207,7 +207,9 @@ export default async function globalSetup() {
       null,
       null,
       false,
-      null,
+      'tenant-default',
+      'dedicated',
+      'ready',
       now,
       now,
     ]
@@ -261,9 +263,12 @@ export default async function globalSetup() {
       `INSERT INTO ${schema}.engines
         (id, name, base_url, type, auth_type, username, password_enc, version,
          owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
-         created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-      [id, name, engineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, tenantId, now, now]
+         tenancy_mode, tenant_resolution_status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      [
+        id, name, engineBaseUrl, 'camunda7', null, null, null, null, userId,
+        null, null, false, tenantId, 'dedicated', 'ready', now, now,
+      ]
     );
   }
 
@@ -334,9 +339,13 @@ export default async function globalSetup() {
     `INSERT INTO ${schema}.engines
       (id, name, base_url, type, auth_type, username, password_enc, version,
        owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
-       runtime_access_scope, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-    [runtimeScopedEngineId, `${prefix}-runtime-scoped-engine`, runtimeEngineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, 'tenant-default', 'resource_aware', now, now]
+       runtime_access_scope, tenancy_mode, tenant_resolution_status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+    [
+      runtimeScopedEngineId, `${prefix}-runtime-scoped-engine`, runtimeEngineBaseUrl,
+      'camunda7', null, null, null, null, userId, null, null, false,
+      'tenant-default', 'resource_aware', 'dedicated', 'ready', now, now,
+    ]
   );
   for (const [id, resourceKey, deploymentId] of [
     [runtimeAllowedResourceId, 'invoice-process', 'mock-deployment-primary'],
@@ -346,9 +355,14 @@ export default async function globalSetup() {
       `INSERT INTO ${schema}.runtime_resources
         (id, tenant_id, engine_id, resource_kind, resource_key, runtime_tenant_id,
          engine_resource_id, deployment_id, project_id, file_id, version, labels_json,
-         lineage_json, source, source_ref, observed_at, is_active, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-      [id, null, runtimeScopedEngineId, 'process_definition', resourceKey, '', null, deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', scopedSourceRef, now, true, now, now]
+         lineage_json, source, source_ref, observed_at, is_active,
+         tenant_resolution_status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [
+        id, 'tenant-default', runtimeScopedEngineId, 'process_definition', resourceKey,
+        '', null, deploymentId, null, null, 1, '{}', '{}', 'engine_discovery',
+        scopedSourceRef, now, true, 'resolved', now, now,
+      ]
     );
   }
   await pool.query(
@@ -432,9 +446,13 @@ export default async function globalSetup() {
     `INSERT INTO ${schema}.engines
       (id, name, base_url, type, auth_type, username, password_enc, version,
        owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
-       created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-    [groupScopedEngineId, groupScopedEngineName, engineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, 'tenant-default', now, now]
+       tenancy_mode, tenant_resolution_status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [
+      groupScopedEngineId, groupScopedEngineName, engineBaseUrl, 'camunda7', null,
+      null, null, null, userId, null, null, false, 'tenant-default', 'dedicated',
+      'ready', now, now,
+    ]
   );
   const groupAssignmentKey = canonicalRoleAssignmentKey({
     tenantId: 'tenant-default', principalType: 'group', principalId: groupScopedGroupId,
@@ -481,9 +499,13 @@ export default async function globalSetup() {
     `INSERT INTO ${schema}.engines
       (id, name, base_url, type, auth_type, username, password_enc, version,
        owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
-       created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-    [expiredEngineId, `${prefix}-expired-engine`, engineBaseUrl, 'camunda7', null, null, null, null, userId, null, null, false, 'tenant-default', now, now]
+       tenancy_mode, tenant_resolution_status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+    [
+      expiredEngineId, `${prefix}-expired-engine`, engineBaseUrl, 'camunda7', null,
+      null, null, null, userId, null, null, false, 'tenant-default', 'dedicated',
+      'ready', now, now,
+    ]
   );
   const expiredAssignmentKey = canonicalRoleAssignmentKey({
     tenantId: 'tenant-default', principalType: 'user', principalId: expiredUserId,

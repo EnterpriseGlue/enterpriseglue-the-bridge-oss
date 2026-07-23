@@ -680,5 +680,60 @@
     "testName": "config bundle CLI help documents explicit engine tenancy files and safety rules",
     "documentation": "docs/how-to/configure-engine-tenancy.md",
     "ciJob": "test:engine-tenancy:documentation"
+  },
+  {
+    "id": "TEN-MIGRATION-008",
+    "requirement": "A representative running installation can classify every engine, apply every safe default-tenant proposal through guarded preview and acknowledgement, and finish with no review or conflict rows.",
+    "source": "Engine Tenancy Plan / Enforcement and cleanup",
+    "dimensions": ["browser", "local_stack", "classification", "preview", "apply", "least_privilege", "cleanup"],
+    "expected": "all engines are classified and temporary engine-edit assignments are removed",
+    "testFile": "test/e2e/engine-tenancy-local-enforcement.spec.ts",
+    "testName": "proves classification, dedicated defaults, shared fail-closed mapping, and readiness metrics",
+    "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+    "ciJob": "test:engine-tenancy:enforcement"
+  },
+  {
+    "id": "TEN-RUNTIME-007",
+    "requirement": "A live shared engine exposes no runtime inventory while unmapped, becomes ready only after a versioned mapping and reconciliation, and reports zero unresolved resources.",
+    "source": "Engine Tenancy Plan / Enforcement and cleanup",
+    "dimensions": ["browser", "shared", "unmapped", "deny", "mapping", "reconcile", "metrics"],
+    "expected": "unmapped inventory is hidden and mapped same-tenant inventory becomes visible",
+    "testFile": "test/e2e/engine-tenancy-local-enforcement.spec.ts",
+    "testName": "proves classification, dedicated defaults, shared fail-closed mapping, and readiness metrics",
+    "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+    "ciJob": "test:engine-tenancy:enforcement"
+  },
+  {
+    "id": "TEN-API-013",
+    "requirement": "Runtime inventory responses normalize persisted PostgreSQL bigint timestamp strings into the numeric public API contract.",
+    "source": "Engine Tenancy Plan / Runtime integration",
+    "dimensions": ["postgresql", "runtime_inventory", "timestamp", "response_schema"],
+    "expected": "persisted timestamp strings parse and serialize as numbers",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "lists only tenant-visible sanitized runtime inventory for an authorized engine viewer",
+    "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-API-014",
+    "requirement": "Deleting a manually managed engine also deletes every dependent tenancy inventory, mapping, materialization, and scoped assignment row.",
+    "source": "Engine Tenancy Plan / Lifecycle and cleanup",
+    "dimensions": ["manual", "delete", "runtime_inventory", "mapping", "materialization", "assignment"],
+    "expected": "engine deletion leaves no authorization or tenancy inventory orphan",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "prunes every scoped canonical assignment when a manual engine is deleted",
+    "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-DOCS-006",
+    "requirement": "The complete functional and live enforcement evidence is published as a reproducible developer and operator test report.",
+    "source": "Engine Tenancy Plan / Documentation and adoption",
+    "dimensions": ["developer", "operator", "test_report", "traceability", "evidence"],
+    "expected": "the documentation contract validates the linked test report and navigation",
+    "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+    "testName": "keeps feature documentation links, anchors, and index navigation valid",
+    "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+    "ciJob": "test:engine-tenancy:documentation"
   }
 ]

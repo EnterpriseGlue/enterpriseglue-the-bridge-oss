@@ -144,6 +144,9 @@ jobs:
             -e PLAYWRIGHT_WORKERS=1 \
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_API_BASE_URL=http://localhost:8787 \
+            -e ENGINE_TENANCY_API_URL=http://localhost:8787 \
+            -e ENGINE_TENANCY_LOCAL_EVIDENCE=true \
+            -e ENGINE_TENANCY_APPLY_READY=true \
             -e E2E_SEED_USER=true \
             -e E2E_DIRECT_DB_CLEANUP=true \
             -e CAMUNDA_BASE_URL \
@@ -157,7 +160,16 @@ jobs:
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
-            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts --config test/e2e/playwright.config.ts"
+            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts --config test/e2e/playwright.config.ts && pnpm run test:engine-tenancy:enforcement"
+
+      - name: Upload engine tenancy enforcement evidence
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: engine-tenancy-enforcement-${{ matrix.browser }}-${{ github.run_id }}
+          path: test/results
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Capture database diagnostics on failure
         if: failure()

@@ -477,7 +477,7 @@ describe('mission-control engines routes', () => {
         {
           id: 'resource-payments', tenantId: null, engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '',
           engineResourceId: null, deploymentId: null, projectId: null, fileId: null, version: 1, labelsJson: '{}', lineageJson: '{}', source: 'engine_discovery',
-          sourceRef: null, observedAt: 1, isActive: true, createdAt: 1, updatedAt: 1,
+          sourceRef: null, observedAt: '1', isActive: true, createdAt: '2', updatedAt: '3',
         },
         { id: 'resource-foreign', tenantId: 'tenant-b', engineId: 'e1', resourceKind: 'decision_definition', resourceKey: 'foreign', isActive: true, lineageJson: '{}' },
       ]),
@@ -493,7 +493,13 @@ describe('mission-control engines routes', () => {
     const response = await request(app).get('/engines-api/engines/e1/runtime-resources?resourceKind=process_definition');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual([expect.objectContaining({ id: 'resource-payments', resourceKey: 'payments' })]);
+    expect(response.body).toEqual([expect.objectContaining({
+      id: 'resource-payments',
+      resourceKey: 'payments',
+      observedAt: 1,
+      createdAt: 2,
+      updatedAt: 3,
+    })]);
     expect(resourceRepo.find).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ engineId: 'e1', resourceKind: 'process_definition', isActive: true }),
     }));
@@ -1017,6 +1023,10 @@ describe('mission-control engines routes', () => {
     const registrationDelete = vi.fn().mockResolvedValue(undefined);
     const materializationDelete = vi.fn().mockResolvedValue(undefined);
     const assignmentDelete = vi.fn().mockResolvedValue(undefined);
+    const tenantMappingDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeResourceDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeResourceSetDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeMaterializationDelete = vi.fn().mockResolvedValue(undefined);
     const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: null });
     const findOneBy = vi.fn().mockResolvedValue({
       id: 'e1',
@@ -1030,6 +1040,22 @@ describe('mission-control engines routes', () => {
         if (entity?.name === 'ExternalEngineRegistration') return { delete: registrationDelete };
         if (entity?.name === 'EngineSetMaterialization') return { delete: materializationDelete };
         if (entity?.name === 'RbacRoleAssignment') return { delete: assignmentDelete };
+        if (entity?.name === 'EngineTenantMapping') return { delete: tenantMappingDelete };
+        if (entity?.name === 'RuntimeResource') {
+          return {
+            find: vi.fn().mockResolvedValue([{ id: 'resource-1' }]),
+            delete: runtimeResourceDelete,
+          };
+        }
+        if (entity?.name === 'RuntimeResourceSet') {
+          return {
+            find: vi.fn().mockResolvedValue([{ id: 'resource-set-1' }]),
+            delete: runtimeResourceSetDelete,
+          };
+        }
+        if (entity?.name === 'RuntimeResourceSetMaterialization') {
+          return { delete: runtimeMaterializationDelete };
+        }
         return { findOne, findOneBy, delete: engineDelete };
       },
     });
@@ -1041,6 +1067,18 @@ describe('mission-control engines routes', () => {
       scopeType: 'engine',
       scopeId: 'e1',
     });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      scopeType: 'engine_runtime_resource',
+      scopeId: expect.anything(),
+    });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      scopeType: 'engine_runtime_resource_set',
+      scopeId: expect.anything(),
+    });
+    expect(runtimeMaterializationDelete).toHaveBeenCalledTimes(2);
+    expect(runtimeResourceDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(runtimeResourceSetDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(tenantMappingDelete).toHaveBeenCalledWith({ engineId: 'e1' });
     expect(permissionServiceMock.syncLegacyRoleAssignments).not.toHaveBeenCalled();
   });
 

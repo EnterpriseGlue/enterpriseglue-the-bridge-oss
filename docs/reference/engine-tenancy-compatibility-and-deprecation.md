@@ -34,6 +34,14 @@ This compatibility path:
 No calendar date alone authorizes removal. If evidence is incomplete, extend the
 stage and publish the new target release.
 
+Local enforcement evidence is complete: classification/apply, explicit
+non-null topology, shared fail-closed behavior, runtime reconciliation,
+aggregate metrics, and cleanup pass through the real browser and HTTP stack.
+See the
+[Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
+This closes the technical local-adoption gate; it does not shorten the external
+API deprecation window.
+
 ## External Integrator Migration
 
 1. Inventory every caller of `POST /engines-api/external/engines`.
@@ -72,4 +80,3 @@ documentation contract lane.
 - [Provision Engines Externally](../how-to/provision-engines-externally.md)
 - [Upgrade to Explicit Engine Tenancy](../how-to/upgrade-engine-tenancy.md)
 - [Engine Tenancy Release Note](../releases/engine-tenancy.md)
-

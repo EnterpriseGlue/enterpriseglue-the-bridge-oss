@@ -764,12 +764,18 @@ checkboxes are closed.
 
 ### Phase 8: enforcement and cleanup
 
-- [ ] Run observe-only classification in representative local environments.
-- [ ] Resolve every ambiguous engine/resource.
-- [ ] Enable shared-engine fail-closed enforcement.
-- [ ] Make topology non-null.
+- [x] Run observe-only classification in representative local environments.
+- [x] Resolve every ambiguous engine/resource.
+- [x] Enable shared-engine fail-closed enforcement.
+- [x] Make topology non-null.
 - [ ] Remove temporary omission warnings after the external API deprecation window.
 - [ ] Retire any compatibility path that interprets null tenant as default.
+
+The first four gates are evidenced by `TEN-MIGRATION-008`,
+`TEN-RUNTIME-007`, and the
+[Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
+The final two remain release-governance and compatibility-code gates; neither
+is required to operate explicit dedicated/shared tenancy safely.
 
 ## Complete Functional Coverage Standard
 

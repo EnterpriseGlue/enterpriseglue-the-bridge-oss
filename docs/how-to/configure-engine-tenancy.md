@@ -11,7 +11,8 @@ preview/apply, mapping administration, runtime quarantine, tenant roles,
 configuration bundles, and Effective Access lineage are implemented in the UI
 and APIs. Configuration bundles also own and reconcile shared-engine mapping
 rows. Mission Control collection, detail, and mutation guards enforce resolved
-shared mappings even for broad engine grants.
+shared mappings even for broad engine grants. The real browser/HTTP enforcement
+journey is covered by `TEN-RUNTIME-007`.
 
 ## Choose the Topology
 
@@ -147,6 +148,13 @@ After reconciliation:
 A broad engine permission does not override these shared-engine rules. Use the
 tenancy diagnostics and mapping reconciliation workflow to resolve a
 quarantined resource; do not widen the engine grant.
+
+For users, this means a decentralized dedicated engine works immediately in
+its owning tenant. A centralized shared engine appears empty until its runtime
+tenant identity has an active EnterpriseGlue mapping and reconciliation has
+finished. That empty state is a security control, not a connectivity error.
+If resources remain absent, ask a platform administrator to review **Tenancy
+and tenant mappings**; do not request an engine-wide role.
 
 ### Monitor Resolution and Default Fallback
 

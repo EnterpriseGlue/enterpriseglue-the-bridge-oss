@@ -50,6 +50,53 @@ Follow
 [Migrate Existing Engines to Explicit Tenancy](./migrate-existing-engines-to-explicit-tenancy.md)
 for the guarded apply and rollback workflow.
 
+## Execute the Local Upgrade Rehearsal
+
+Use the local Docker deployment as the representative environment. Required
+inputs are the checked-out release candidate, its local Docker environment
+file and generated CA, a healthy frontend/backend, Playwright Chromium, and a
+database backup. Customer identity-provider credentials are neither required
+nor permitted.
+
+First run observe mode:
+
+```bash
+pnpm run test:engine-tenancy:local-evidence
+```
+
+Observe mode may leave `ready_for_apply` rows unchanged, but it fails on every
+ambiguous/conflicting classification, unresolved final runtime resource,
+fail-open shared response, unhealthy metric collection, or cleanup leak.
+
+After an operator has reviewed the proposed default-tenant ownership, apply
+only the safe rows:
+
+```bash
+ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
+```
+
+`TEN-MIGRATION-008`: apply mode temporarily grants the disposable migration
+operator `engine:edit` on one ready engine at a time, submits the exact preview
+hash/expiry/acknowledgements, and removes the assignment in cleanup. It will not
+apply `requires_review` or `conflict`.
+
+Retain the Playwright JSON and screenshot from `test/results`, command output,
+release commit, adapter/version, schema migrations, and the post-run aggregate
+metrics. Success requires:
+
+- classified equals total engines;
+- zero ready, review, and conflict rows;
+- every retained runtime resource is resolved;
+- zero orphan engine mappings, inventory, materializations, or assignments;
+- shared inventory is invisible before mapping and visible only after mapping
+  plus reconciliation; and
+- no disposable identity or engine remains.
+
+Restore the captured application/database pair if any resource crosses tenants,
+denied inventory is visible, apply is not atomic, cleanup leaves authorization
+state, or the final classification/metric checks fail. A failed row remains
+fail closed while evidence is investigated.
+
 ## Validate Access
 
 For one dedicated engine and one shared engine, where shared topology is
@@ -100,10 +147,12 @@ hash, focused-lane results, browser trace identifiers, and rollback decision.
 Never retain tokens, credential material, raw identity claims, private engine
 URLs, or cross-tenant inventory.
 
+The completed reference run is recorded in
+[Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
+
 ## Related Documentation
 
 - [Database Migrations](../../backend/docs/DATABASE-MIGRATIONS.md)
 - [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md)
 - [Diagnose Engine Tenant Resolution](./diagnose-engine-tenant-resolution.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](../development/testing-engine-tenancy-and-access-control.md)
-

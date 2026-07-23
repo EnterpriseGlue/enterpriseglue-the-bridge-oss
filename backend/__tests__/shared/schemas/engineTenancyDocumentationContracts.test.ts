@@ -36,6 +36,7 @@ const DOCUMENTS = [
   'docs/reference/security-hardening.md',
   'docs/releases/engine-tenancy.md',
   'docs/development/engine-tenancy-documentation-review-checklist.md',
+  'docs/development/engine-tenancy-functional-test-report.md',
   'docs/development/testing-engine-tenancy-and-access-control.md',
 ];
 const CURL_DOCUMENTS = [

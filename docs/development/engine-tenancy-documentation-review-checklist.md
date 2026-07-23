@@ -18,6 +18,7 @@ pnpm run test:engine-tenancy:authorization
 pnpm run test:engine-tenancy:runtime
 pnpm run test:engine-tenancy:transitions
 pnpm run test:engine-tenancy:operations
+ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
 ```
 
 All commands must pass without skipped/quarantined tests. Attach the commit,
@@ -78,5 +79,5 @@ security boundary cannot be waived through documentation review.
 
 - [Centralized and Decentralized Engine Tenancy Implementation Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](./testing-engine-tenancy-and-access-control.md)
+- [Engine Tenancy Functional Test Report](./engine-tenancy-functional-test-report.md)
 - [Upgrade to Explicit Engine Tenancy](../how-to/upgrade-engine-tenancy.md)
-
