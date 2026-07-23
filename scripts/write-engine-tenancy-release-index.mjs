@@ -1,0 +1,200 @@
+#!/usr/bin/env node
+
+import { execFileSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const releaseDirectory = path.join(root, 'test/results/engine-tenancy-release');
+const requireComplete = process.argv.includes('--require-complete');
+
+function command(commandName, args) {
+  return execFileSync(commandName, args, {
+    cwd: root,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+}
+
+const commit = command('git', ['rev-parse', 'HEAD']);
+const trackedChanges = command('git', ['status', '--porcelain', '--untracked-files=no']);
+
+const gateDefinitions = [
+  {
+    id: 'traceability',
+    label: 'Requirement and API traceability',
+    path: 'test/results/engine-tenancy-release/requirement-evidence.json',
+    passes: (value) => value.status === 'passed'
+      && value.manifest?.uncoveredRequirementCount === 0
+      && value.manifest?.waiverCount === 0,
+    clean: (value) => value.worktreeClean === true,
+  },
+  {
+    id: 'localEnforcement',
+    label: 'Local PostgreSQL enforcement',
+    path: 'test/results/engine-tenancy-release/local-enforcement.json',
+    passes: (value) => value.status === 'passed',
+  },
+  {
+    id: 'mutation',
+    label: 'Targeted security mutation',
+    path: 'test/results/engine-tenancy-mutation/mutation-report.json',
+    passes: (value) => value.status === 'passed'
+      && Number(value.total) > 0
+      && value.killed === value.total,
+  },
+  {
+    id: 'browserMatrix',
+    label: 'Chromium, Firefox, and WebKit',
+    path: 'test/results/engine-tenancy-release/browser-matrix.json',
+    passes: (value) => value.status === 'passed'
+      && value.totalPassingExecutions === 27
+      && ['chromium', 'firefox', 'webkit']
+        .every((browser) => value.verifiedTargets?.browsers?.includes(browser)),
+  },
+  {
+    id: 'authorizationMatrix',
+    label: 'Complete supported authorization matrix',
+    path: 'test/results/engine-tenancy-release/authorization-matrix.json',
+    passes: (value) => value.status === 'passed'
+      && value.missingCells === 0
+      && value.skippedCells === 0
+      && value.quarantinedCells === 0,
+  },
+  {
+    id: 'databaseMatrix',
+    label: 'Five-adapter install, upgrade, retry, service, and rollback matrix',
+    path: 'test/results/engine-tenancy-release/database-matrix.json',
+    passes: (value) => value.status === 'passed'
+      && ['postgres', 'mysql', 'mssql', 'oracle', 'spanner']
+        .every((database) => value.verifiedTargets?.databases?.includes(database)),
+  },
+  {
+    id: 'provisioningJourneys',
+    label: 'Fourteen real-service provisioning journeys',
+    path: 'test/results/engine-tenancy-release/provisioning-journeys.json',
+    passes: (value) => value.status === 'passed'
+      && value.passedJourneys === 14
+      && value.missingJourneys === 0,
+  },
+  {
+    id: 'sourceCoverage',
+    label: 'Security-critical 100% source coverage',
+    path: 'test/results/engine-tenancy-release/source-coverage.json',
+    passes: (value) => value.status === 'passed'
+      && ['lines', 'statements', 'branches', 'functions']
+        .every((metric) => value.totals?.[metric] === 100),
+  },
+  {
+    id: 'documentationReview',
+    label: 'Engineering, security, and independent-operator documentation review',
+    path: 'test/results/engine-tenancy-release/documentation-review.json',
+    passes: (value) => value.status === 'passed'
+      && ['engineering', 'security', 'independentOperator']
+        .every((review) => value.reviews?.[review]?.status === 'approved'),
+  },
+];
+
+function readGate(definition) {
+  const absolutePath = path.join(root, definition.path);
+  if (!existsSync(absolutePath)) {
+    return {
+      id: definition.id,
+      label: definition.label,
+      status: 'missing',
+      artifact: definition.path,
+      reason: 'required artifact has not been produced',
+    };
+  }
+
+  let value;
+  try {
+    value = JSON.parse(readFileSync(absolutePath, 'utf8'));
+  } catch {
+    return {
+      id: definition.id,
+      label: definition.label,
+      status: 'invalid',
+      artifact: definition.path,
+      reason: 'artifact is not valid JSON',
+    };
+  }
+
+  const sameCommit = value.commit === commit;
+  const clean = definition.clean
+    ? definition.clean(value)
+    : value.releaseCommitQualified === true;
+  const passed = definition.passes(value);
+  const status = passed && sameCommit && clean ? 'passed' : 'stale_or_failed';
+  return {
+    id: definition.id,
+    label: definition.label,
+    status,
+    artifact: definition.path,
+    artifactCommit: value.commit || null,
+    sameCommit,
+    cleanSourceState: clean,
+    reason: status === 'passed'
+      ? null
+      : !passed
+        ? 'artifact assertions are not fully passing'
+        : !sameCommit
+          ? 'artifact was produced for another commit'
+          : 'artifact was produced from a dirty worktree',
+  };
+}
+
+const gates = gateDefinitions.map(readGate);
+const passedGateCount = gates.filter((gate) => gate.status === 'passed').length;
+const releaseQualified = trackedChanges.length === 0
+  && passedGateCount === gateDefinitions.length;
+const evidence = {
+  schemaVersion: 1,
+  evidenceKind: 'engine-tenancy-release-index',
+  generatedAt: new Date().toISOString(),
+  commit,
+  sourceState: trackedChanges ? 'dirty' : 'clean',
+  status: releaseQualified ? 'passed' : 'incomplete',
+  releaseQualified,
+  passedGateCount,
+  requiredGateCount: gateDefinitions.length,
+  gates,
+  rule: 'A gate passes only when its assertions pass on this exact commit from a clean worktree; declared targets and waivers never count as executed coverage.',
+};
+
+mkdirSync(releaseDirectory, { recursive: true });
+const jsonPath = path.join(releaseDirectory, 'index.json');
+const markdownPath = path.join(releaseDirectory, 'README.md');
+writeFileSync(jsonPath, `${JSON.stringify(evidence, null, 2)}\n`);
+
+const markdown = [
+  '# Engine Tenancy Release Evidence Index',
+  '',
+  `Commit: \`${commit}\``,
+  '',
+  `Status: **${releaseQualified ? 'release qualified' : 'incomplete'}** (${passedGateCount}/${gateDefinitions.length} gates)`,
+  '',
+  '| Gate | Status | Artifact | Reason |',
+  '| --- | --- | --- | --- |',
+  ...gates.map((gate) =>
+    `| ${gate.label} | ${gate.status} | \`${gate.artifact}\` | ${gate.reason || 'Passing on this clean commit'} |`),
+  '',
+  'A target named in the manifest is not considered tested until its separate',
+  'execution artifact passes on the same clean commit. Missing, stale, failed,',
+  'skipped, quarantined, or waived evidence keeps this index incomplete.',
+  '',
+].join('\n');
+writeFileSync(markdownPath, markdown);
+
+console.log(
+  `[engine-tenancy-release-index] ${passedGateCount}/${gateDefinitions.length} gates: ` +
+  `${path.relative(root, markdownPath)}`,
+);
+if (requireComplete && !releaseQualified) {
+  process.exitCode = 1;
+}

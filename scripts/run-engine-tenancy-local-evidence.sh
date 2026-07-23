@@ -70,3 +70,4 @@ export PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
 export PLAYWRIGHT_WORKERS=1
 
 pnpm run test:engine-tenancy:enforcement
+node scripts/write-engine-tenancy-local-evidence.mjs

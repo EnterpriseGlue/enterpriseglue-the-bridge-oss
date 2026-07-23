@@ -34,7 +34,7 @@ function run(command, args) {
 const commit = run('git', ['rev-parse', 'HEAD']);
 const trackedChanges = run('git', ['status', '--porcelain', '--untracked-files=no']);
 const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-const lastRun = JSON.parse(readFileSync(path.join(root, 'test/results/.last-run.json'), 'utf8'));
+const lastRun = JSON.parse(readFileSync(path.join(root, 'test/results/playwright/.last-run.json'), 'utf8'));
 if (lastRun.status !== 'passed' || (lastRun.failedTests || []).length !== 0) {
   throw new Error('The final browser result is not passing; refusing to write browser evidence');
 }

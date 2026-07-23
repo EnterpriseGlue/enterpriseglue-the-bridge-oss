@@ -4,6 +4,12 @@ import test from 'node:test';
 
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const writer = readFileSync(new URL('./write-engine-tenancy-manifest-evidence.mjs', import.meta.url), 'utf8');
+const localWriter = readFileSync(new URL('./write-engine-tenancy-local-evidence.mjs', import.meta.url), 'utf8');
+const releaseIndexWriter = readFileSync(new URL('./write-engine-tenancy-release-index.mjs', import.meta.url), 'utf8');
+const localRunner = readFileSync(new URL('./run-engine-tenancy-local-evidence.sh', import.meta.url), 'utf8');
+const browserWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
+const mutationWriter = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
+const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
   const manifestCommand = packageJson.scripts['test:engine-tenancy:manifest'];
@@ -33,4 +39,50 @@ test('writes sanitized commit, schema, target, waiver, and requirement traceabil
   assert.match(writer, /traceability-only/);
   assert.match(writer, /not inferred from this manifest/);
   assert.doesNotMatch(writer, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
+});
+
+test('keeps transient Playwright output separate from retained release evidence', () => {
+  assert.match(playwrightConfig, /outputDir: '\.\.\/results\/playwright'/);
+  assert.match(browserWriter, /test\/results\/playwright\/\.last-run\.json/);
+  assert.ok(
+    localRunner.indexOf('write-engine-tenancy-local-evidence.mjs')
+      > localRunner.indexOf('test:engine-tenancy:enforcement'),
+  );
+  assert.match(localWriter, /engine-tenancy-release/);
+  assert.match(localWriter, /local-enforcement\.json/);
+  assert.match(localWriter, /appliedEngineIds\.length !== 1/);
+  assert.match(localWriter, /releaseCommitQualified/);
+  assert.doesNotMatch(localWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
+});
+
+test('builds a fail-closed same-commit release evidence index', () => {
+  assert.match(packageJson.scripts['test:engine-tenancy:evidence-index'], /write-engine-tenancy-release-index\.mjs/);
+  assert.match(packageJson.scripts['test:engine-tenancy:release-evidence'], /--require-complete/);
+  for (const gate of [
+    'traceability',
+    'localEnforcement',
+    'mutation',
+    'browserMatrix',
+    'authorizationMatrix',
+    'databaseMatrix',
+    'provisioningJourneys',
+    'sourceCoverage',
+    'documentationReview',
+  ]) {
+    assert.match(releaseIndexWriter, new RegExp(`id: '${gate}'`));
+  }
+  assert.match(releaseIndexWriter, /sameCommit/);
+  assert.match(releaseIndexWriter, /releaseCommitQualified === true/);
+  assert.match(releaseIndexWriter, /passedGateCount === gateDefinitions\.length/);
+  assert.match(releaseIndexWriter, /README\.md/);
+  assert.match(releaseIndexWriter, /process\.exitCode = 1/);
+});
+
+test('qualifies mutation evidence only for an exact clean commit', () => {
+  assert.match(mutationWriter, /evidenceKind: 'engine-tenancy-targeted-mutation'/);
+  assert.match(mutationWriter, /commit/);
+  assert.match(mutationWriter, /sourceState/);
+  assert.match(mutationWriter, /releaseCommitQualified/);
+  assert.match(mutationWriter, /containsCredentials: false/);
+  assert.match(mutationWriter, /containsTokens: false/);
 });

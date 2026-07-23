@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
 
 const root = process.cwd();
@@ -18,6 +18,14 @@ const focusedTests = [
 const vitestOptions = [
   '--config', 'vitest.config.ts', '--reporter=dot', '--maxWorkers=1', '--no-file-parallelism',
 ];
+
+function command(commandName, args) {
+  return execFileSync(commandName, args, {
+    cwd: root,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).trim();
+}
 
 function runFocusedTests(label, options = {}) {
   const result = spawnSync('pnpm', [...commonVitestArgs, ...focusedTests, ...vitestOptions], {
@@ -132,13 +140,28 @@ for (const mutant of mutants) {
 
 rmSync(evidenceDirectory, { recursive: true, force: true });
 mkdirSync(evidenceDirectory, { recursive: true });
+const commit = command('git', ['rev-parse', 'HEAD']);
+const trackedChanges = command('git', ['status', '--porcelain', '--untracked-files=no']);
 writeFileSync(evidencePath, `${JSON.stringify({
   schemaVersion: 1,
+  evidenceKind: 'engine-tenancy-targeted-mutation',
+  coverageScope: 'security-critical-targeted-mutants',
+  status: 'passed',
   generatedAt: new Date().toISOString(),
+  commit,
+  sourceState: trackedChanges ? 'dirty' : 'clean',
+  releaseCommitQualified: trackedChanges.length === 0,
   killed: results.length,
   total: mutants.length,
   faultClasses: Array.from(new Set(results.map((result) => result.faultClass))).sort(),
   results,
+  sanitization: {
+    containsCredentials: false,
+    containsTokens: false,
+    containsPrivateEndpoints: false,
+    containsRawIdentityClaims: false,
+    containsCustomerIdentifiers: false,
+  },
 }, null, 2)}\n`);
 
 console.log(`[authz-mutation] ${mutants.length}/${mutants.length} targeted authorization mutants killed.`);
