@@ -15,6 +15,7 @@ const authorizationFoundationRunner = readFileSync(new URL('./run-local-safe-aut
 const accessibilityRunner = readFileSync(new URL('./run-authz-accessibility-matrix.sh', import.meta.url), 'utf8');
 const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-evidence.mjs', import.meta.url), 'utf8');
 const compatibilityRunner = readFileSync(new URL('./run-engine-tenancy-compatibility-evidence.mjs', import.meta.url), 'utf8');
+const documentationReviewRunner = readFileSync(new URL('./run-engine-tenancy-documentation-review-evidence.mjs', import.meta.url), 'utf8');
 const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
@@ -181,6 +182,19 @@ test('retains omission warnings until the documented removal window closes', () 
   assert.match(compatibilityRunner, /Compatibility-window evidence must be run from a clean worktree/);
   assert.match(compatibilityRunner, /scripts\/local-safe-test\.env/);
   assert.doesNotMatch(compatibilityRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
+});
+
+test('automates documentation checks without self-approving independent reviews', () => {
+  assert.match(packageJson.scripts['test:engine-tenancy:documentation-review-evidence'], /run-engine-tenancy-documentation-review-evidence\.mjs/);
+  assert.match(documentationReviewRunner, /test:engine-tenancy:documentation/);
+  assert.match(documentationReviewRunner, /git', \['ls-files', 'docs\/\*\*\/\*\.md'/);
+  assert.match(documentationReviewRunner, /engineering: \{ status: 'pending'/);
+  assert.match(documentationReviewRunner, /security: \{ status: 'pending'/);
+  assert.match(documentationReviewRunner, /independentOperator: \{ status: 'pending'/);
+  assert.match(documentationReviewRunner, /status: 'incomplete'/);
+  assert.match(documentationReviewRunner, /Documentation-review evidence must be run from a clean worktree/);
+  assert.match(documentationReviewRunner, /scripts\/local-safe-test\.env/);
+  assert.doesNotMatch(documentationReviewRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 
 test('retains literal 100 percent source coverage for every security-critical module lane', () => {

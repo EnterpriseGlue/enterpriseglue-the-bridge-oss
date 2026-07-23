@@ -89,6 +89,19 @@ Release approval requires all three rows, zero unresolved high-risk findings,
 and an expiring waiver for any non-security documentation defect. A failed
 security boundary cannot be waived through documentation review.
 
+Generate the automated portion first:
+
+```bash
+pnpm run test:engine-tenancy:documentation-review-evidence
+```
+
+This executes the documentation contracts and validates every internal file
+link in all tracked `docs/**/*.md` files. The generated artifact deliberately
+keeps engineering, security, and independent-operator reviews `pending`; the
+automation cannot approve its own documentation. Each reviewer must execute
+this checklist against the exact artifact commit before those statuses can be
+changed to `approved`.
+
 After approval, retain
 `test/results/engine-tenancy-release/documentation-review.json` with:
 
