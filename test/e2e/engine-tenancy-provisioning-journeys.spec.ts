@@ -1,4 +1,11 @@
-import { expect, test, type APIResponse, type Page } from '@playwright/test';
+import {
+  expect,
+  request as playwrightRequest,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -244,6 +251,259 @@ test.describe('Engine tenancy provisioning journeys', () => {
           [204, 404],
           `cleanup engine ${engineId} failed (${cleanup.status()}): ${await cleanup.text()}`,
         ).toContain(cleanup.status());
+      }
+    }
+  });
+
+  test('journey 2 external API dedicated idempotent lifecycle', async ({ page }) => {
+    const commit = git(['rev-parse', 'HEAD']);
+    const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
+      ? 'dirty-development-run'
+      : 'clean';
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const originalName = `e2e-journey-02-dedicated-${suffix}`;
+    const updatedName = `${originalName}-updated`;
+    const externalId = `e2e/journey-02/${suffix}`;
+    let apiClientId: string | null = null;
+    let assignmentId: string | null = null;
+    let engineId: string | null = null;
+    let decommissioned = false;
+    let externalApi: APIRequestContext | null = null;
+
+    await login(page);
+    const token = await csrfToken(page);
+
+    try {
+      const apiClientResult = await responseJson<{
+        client: { id: string };
+        token: string;
+      }>(
+        await page.request.post('/api/authz/api-clients', mutationOptions(token, {
+          name: `e2e-journey-02-client-${suffix}`,
+          scopes: ['engine:register'],
+        })),
+        'create disposable external-registration API client',
+      );
+      apiClientId = apiClientResult.client.id;
+      externalApi = await playwrightRequest.newContext({
+        baseURL: apiUrl,
+        ignoreHTTPSErrors: true,
+        extraHTTPHeaders: {
+          Authorization: `Bearer ${apiClientResult.token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const createPayload = {
+        name: originalName,
+        baseUrl: 'https://engine.example.test/engine-rest',
+        externalId,
+        type: 'camunda7',
+        connectionMode: 'direct',
+        runtimeAccessScope: 'engine_wide',
+        metadataDiscoveryEnabled: false,
+        deploymentDiscoveryEnabled: false,
+        fieldOwnership: {
+          display: 'external',
+        },
+        tenancy: {
+          mode: 'dedicated',
+          tenantRef: { type: 'default' },
+        },
+      };
+
+      const unauthorizedCreate = await externalApi.post(
+        '/engines-api/external/engines',
+        { data: createPayload },
+      );
+      const unauthorizedBody = await unauthorizedCreate.json().catch(() => null);
+      expect(
+        unauthorizedCreate.status(),
+        `unassigned external API client was not denied as expected: ${JSON.stringify(unauthorizedBody)}`,
+      ).toBe(403);
+      expect(unauthorizedBody).toMatchObject({
+        code: 'FORBIDDEN',
+        error: expect.stringContaining('not authorized'),
+      });
+
+      const assignment = await responseJson<{ id: string }>(
+        await page.request.post('/api/authz/role-assignments', mutationOptions(token, {
+          principalType: 'api_client',
+          principalId: apiClientId,
+          roleId: 'system.api.engine_registrar',
+          resourceType: 'platform',
+          resourceId: null,
+        })),
+        'grant platform API engine registrar role',
+      );
+      assignmentId = assignment.id;
+
+      const createdResponse = await externalApi.post(
+        '/engines-api/external/engines',
+        { data: createPayload },
+      );
+      expect(createdResponse.status()).toBe(201);
+      const created = await responseJson<{
+        created: boolean;
+        engine: Record<string, unknown>;
+        diagnostics: { tenancyWarnings: string[] };
+      }>(createdResponse, 'externally create dedicated engine');
+      engineId = String(created.engine.id);
+      expect(created).toMatchObject({
+        created: true,
+        engine: {
+          id: engineId,
+          name: originalName,
+          externalId,
+          registrationSource: 'external_api',
+          tenancyMode: 'dedicated',
+          tenantId: 'tenant-default',
+          tenantResolutionStatus: 'ready',
+          fieldOwnership: expect.objectContaining({
+            display: 'external',
+          }),
+        },
+        diagnostics: { tenancyWarnings: [] },
+      });
+
+      const idempotentRetryResponse = await externalApi.post(
+        '/engines-api/external/engines',
+        { data: createPayload },
+      );
+      expect(idempotentRetryResponse.status()).toBe(200);
+      const idempotentRetry = await responseJson<{
+        created: boolean;
+        engine: Record<string, unknown>;
+      }>(idempotentRetryResponse, 'retry external dedicated upsert');
+      expect(idempotentRetry).toMatchObject({
+        created: false,
+        engine: { id: engineId, name: originalName, externalId },
+      });
+
+      const updatePayload = {
+        ...createPayload,
+        name: updatedName,
+        labels: { lifecycle: 'journey-02-updated' },
+      };
+      const updatedResponse = await externalApi.post(
+        '/engines-api/external/engines',
+        { data: updatePayload },
+      );
+      expect(updatedResponse.status()).toBe(200);
+      const updated = await responseJson<{
+        created: boolean;
+        engine: Record<string, unknown>;
+      }>(updatedResponse, 'externally update dedicated engine');
+      expect(updated).toMatchObject({
+        created: false,
+        engine: {
+          id: engineId,
+          name: updatedName,
+          labels: { lifecycle: 'journey-02-updated' },
+          tenancyMode: 'dedicated',
+          tenantId: 'tenant-default',
+        },
+      });
+
+      const persisted = await responseJson<Record<string, unknown>>(
+        await page.request.get(`/engines-api/engines/${encodeURIComponent(engineId)}`),
+        'inspect persisted external dedicated engine',
+      );
+      expect(persisted).toMatchObject({
+        id: engineId,
+        name: updatedName,
+        externalId,
+        registrationSource: 'external_api',
+        tenancyMode: 'dedicated',
+        tenantId: 'tenant-default',
+      });
+
+      const decommissionResponse = await externalApi.post(
+        '/engines-api/external/engines/decommission',
+        {
+          data: {
+            externalId,
+            reason: 'Disposable journey 2 lifecycle completed',
+          },
+        },
+      );
+      const decommission = await responseJson<{
+        decommissioned: boolean;
+        engineId: string;
+        lifecycleStatus: string;
+      }>(decommissionResponse, 'decommission external dedicated engine');
+      expect(decommission).toEqual(expect.objectContaining({
+        decommissioned: true,
+        engineId,
+        lifecycleStatus: 'decommissioned',
+      }));
+      decommissioned = true;
+
+      const externalInventory = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get('/api/authz/external-engines'),
+        'inspect decommissioned external engine registration',
+      );
+      expect(externalInventory).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: engineId,
+          externalId,
+          lifecycleStatus: 'decommissioned',
+        }),
+      ]));
+
+      const observationDirectory = path.join(
+        process.cwd(),
+        'test/results/engine-tenancy-provisioning-observations',
+      );
+      await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-02-external-api.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 2,
+          channel: 'external-api',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: false,
+          assertions: ['create', 'inspect', 'update', 'idempotent-retry', 'decommission'],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
+    } finally {
+      if (externalApi && engineId && !decommissioned) {
+        await externalApi.post('/engines-api/external/engines/decommission', {
+          data: {
+            externalId,
+            reason: 'Cleanup after incomplete journey 2 test',
+          },
+        });
+      }
+      await externalApi?.dispose();
+      if (assignmentId) {
+        const response = await page.request.delete(
+          `/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`,
+          mutationOptions(token),
+        );
+        expect([204, 404]).toContain(response.status());
+      }
+      if (apiClientId) {
+        const response = await page.request.delete(
+          `/api/authz/api-clients/${encodeURIComponent(apiClientId)}`,
+          mutationOptions(token),
+        );
+        expect([204, 404]).toContain(response.status());
       }
     }
   });

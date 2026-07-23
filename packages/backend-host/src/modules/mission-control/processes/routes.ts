@@ -41,8 +41,6 @@ const processDefinitionListQuerySchema = z.object({
   maxResults: z.coerce.number().int().positive().optional(),
 })
 
-r.use(requireAuth)
-
 const requireProcessDefinitionAction = (actionId: string, engineIdFrom: 'query' | 'body' = 'query') => requireRuntimeDefinitionAction(actionId, {
   resourceKind: 'process_definition',
   definitionPath: 'process-definition',
@@ -58,7 +56,7 @@ const requireProcessDefinitionKeyAction = (actionId: string, engineIdFrom: 'quer
 })
 
 // List process definitions
-r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), validateQuery(processDefinitionListQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions', requireAuth, requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' }), validateQuery(processDefinitionListQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const { key, nameLike, latest, maxResults } = req.query as { key?: string; nameLike?: string; latest?: string; maxResults?: number }
   const engineId = (req as any).engineId as string
   const baseQuery = {
@@ -84,7 +82,7 @@ r.get('/mission-control-api/process-definitions', requireRuntimeCollectionAction
 }))
 
 // Resolve Starbase edit target for a deployed process version
-r.get('/mission-control-api/process-definitions/edit-target', validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.process-definitions.edit-target.read', {
+r.get('/mission-control-api/process-definitions/edit-target', requireAuth, validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.process-definitions.edit-target.read', {
   resourceKind: 'process_definition',
   definitionPath: 'process-definition',
   definitionLookup: 'key',
@@ -114,7 +112,7 @@ r.get('/mission-control-api/process-definitions/edit-target', validateQuery(edit
 }))
 
 // Get process definition by ID
-r.get('/mission-control-api/process-definitions/:id', requireProcessDefinitionAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id', requireAuth, requireProcessDefinitionAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinition(engineId, definitionId)
@@ -122,7 +120,7 @@ r.get('/mission-control-api/process-definitions/:id', requireProcessDefinitionAc
 }))
 
 // Get process definition XML
-r.get('/mission-control-api/process-definitions/:id/xml', requireProcessDefinitionAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/:id/xml', requireAuth, requireProcessDefinitionAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionId = String(req.params.id)
   const data = await getProcessDefinitionXml(engineId, definitionId)
@@ -130,7 +128,7 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireProcessDefiniti
 }))
 
 // Get process definition statistics (activity instance counts)
-r.get('/mission-control-api/process-definitions/key/:key/statistics', requireProcessDefinitionKeyAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/process-definitions/key/:key/statistics', requireAuth, requireProcessDefinitionKeyAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
   const runtimeTenantId = getAuthorizedRuntimeTenantIdForKey(req.authorizedRuntimeResourceScopes, definitionKey)
@@ -141,7 +139,7 @@ r.get('/mission-control-api/process-definitions/key/:key/statistics', requirePro
 }))
 
 // Start process instance
-r.post('/mission-control-api/process-definitions/key/:key/start', requireProcessDefinitionKeyAction('engine.runtime.process-definitions.start', 'body'), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-definitions/key/:key/start', requireAuth, requireProcessDefinitionKeyAction('engine.runtime.process-definitions.start', 'body'), asyncHandler(async (req: Request, res: Response) => {
   const { variables, businessKey } = req.body || {}
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)

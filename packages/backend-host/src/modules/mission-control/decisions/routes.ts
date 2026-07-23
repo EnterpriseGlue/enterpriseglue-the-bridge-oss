@@ -37,10 +37,8 @@ const editTargetQuerySchema = z.object({
   decisionDefinitionId: z.string().min(1).optional(),
 });
 
-r.use(requireAuth);
-
 // Resolve Starbase edit target for a deployed decision version
-r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.decisions.edit-target.read', {
+r.get('/mission-control-api/decision-definitions/edit-target', requireAuth, validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.decisions.edit-target.read', {
   resourceKind: 'decision_definition',
   definitionPath: 'decision-definition',
   definitionLookup: 'key',
@@ -70,7 +68,7 @@ r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(edi
 }));
 
 // List decision definitions
-r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions', requireAuth, requireRuntimeCollectionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const keys = req.authorizedRuntimeResourceKeys;
   const scopes = req.authorizedRuntimeResourceScopes;
@@ -90,7 +88,7 @@ r.get('/mission-control-api/decision-definitions', requireRuntimeCollectionActio
 }));
 
 // Get decision definition by ID
-r.get('/mission-control-api/decision-definitions/:id', requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinition(engineId, definitionId);
@@ -98,7 +96,7 @@ r.get('/mission-control-api/decision-definitions/:id', requireRuntimeDefinitionA
 }));
 
 // Get decision definition XML
-r.get('/mission-control-api/decision-definitions/:id/xml', requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id/xml', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinitionXml(engineId, definitionId);
@@ -106,7 +104,7 @@ r.get('/mission-control-api/decision-definitions/:id/xml', requireRuntimeDefinit
 }));
 
 // Evaluate decision
-r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', { resourceKind: 'decision_definition', definitionPath: 'decision-definition', engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/:id/evaluate', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', { resourceKind: 'decision_definition', definitionPath: 'decision-definition', engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await evaluateDecisionById(engineId, definitionId, req.body);
@@ -114,7 +112,7 @@ r.post('/mission-control-api/decision-definitions/:id/evaluate', requireRuntimeD
 }));
 
 // Evaluate decision by key
-r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', {
+r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', {
   resourceKind: 'decision_definition',
   definitionPath: 'decision-definition',
   definitionLookup: 'key',

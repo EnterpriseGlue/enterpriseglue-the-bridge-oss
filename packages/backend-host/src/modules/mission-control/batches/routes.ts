@@ -34,8 +34,6 @@ import { getBoundedRuntimeResourceQuery } from '../shared/runtime-resource-filte
 
 const r = Router()
 
-r.use(requireAuth)
-
 async function insertLocalBatch(type: string, camundaBatchId: string, payload: any, engineDto: any, engineId: string, processDefinitionKeys?: string[]) {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
@@ -118,7 +116,7 @@ function stripLocalAuditFields<T extends Record<string, any>>(body: T): Omit<T, 
   return engineBody
 }
 
-r.post('/mission-control-api/batches/process-instances/delete', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' }), validateBody(BatchDeleteOperationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/delete', requireAuth, requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.delete', { resourceKind: 'process_definition' }), validateBody(BatchDeleteOperationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...(req.body || {}) }
   if (typeof body.deleteReason !== 'string' || !body.deleteReason.trim()) {
     body.deleteReason = 'Canceled via Mission Control'
@@ -135,7 +133,7 @@ r.post('/mission-control-api/batches/process-instances/delete', requireRuntimePr
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'DELETE_INSTANCES' }))
 }))
 
-r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), validateBody(BatchProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/suspend', requireAuth, requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.suspend', { resourceKind: 'process_definition' }), validateBody(BatchProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: true }
   const engineBody = stripLocalAuditFields(body)
   const engineId = (req as any).engineId as string
@@ -144,7 +142,7 @@ r.post('/mission-control-api/batches/process-instances/suspend', requireRuntimeP
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'SUSPEND_INSTANCES' }))
 }))
 
-r.post('/mission-control-api/batches/process-instances/activate', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.activate', { resourceKind: 'process_definition' }), validateBody(BatchProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/process-instances/activate', requireAuth, requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.process-instances.activate', { resourceKind: 'process_definition' }), validateBody(BatchProcessInstanceSuspensionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const body = { ...req.body, suspended: false }
   const engineId = (req as any).engineId as string
   const engineDto: any = await suspendProcessInstancesBatch(engineId, stripLocalAuditFields(body))
@@ -152,7 +150,7 @@ r.post('/mission-control-api/batches/process-instances/activate', requireRuntime
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, camundaBatchId: engineDto?.id, type: 'ACTIVATE_INSTANCES' }))
 }))
 
-r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.jobs.retry', { resourceKind: 'process_definition' }), validateBody(BatchRetryOperationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/batches/jobs/retries', requireAuth, requireRuntimeProcessInstanceSelectionAction('engine.runtime.batches.jobs.retry', { resourceKind: 'process_definition' }), validateBody(BatchRetryOperationRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const { processInstanceIds } = req.body
   
   if (!Array.isArray(processInstanceIds) || processInstanceIds.length === 0) {
@@ -174,7 +172,7 @@ r.post('/mission-control-api/batches/jobs/retries', requireRuntimeProcessInstanc
   res.status(201).json(BatchOperationCreateResponseSchema.parse({ id, type: 'SET_JOB_RETRIES' }))
 }))
 
-r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/batches', requireAuth, requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   await markBatchPollerViewer()
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
@@ -214,7 +212,7 @@ r.get('/mission-control-api/batches', requireRuntimeCollectionAction('engine.run
   })))
 }))
 
-r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), validateBody(BatchSuspensionUpdateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/batches/:id/suspended', requireAuth, requireRuntimeCollectionAction('engine.runtime.batches.suspension.update', { resourceKind: 'process_definition', engineIdFrom: 'body' }), validateBody(BatchSuspensionUpdateRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const suspended = (req.body as { suspended?: boolean })?.suspended
   if (typeof suspended !== 'boolean') {
     throw Errors.validation('suspended (boolean) is required')
@@ -258,7 +256,7 @@ r.put('/mission-control-api/batches/:id/suspended', requireRuntimeCollectionActi
   res.status(204).end()
 }))
 
-r.get('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/batches/:id', requireAuth, requireRuntimeCollectionAction('engine.runtime.batches.read', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   await markBatchPollerViewer()
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
@@ -443,7 +441,7 @@ r.get('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine
   res.json(BatchDetailSchema.parse(redacted))
 }))
 
-r.delete('/mission-control-api/batches/:id', requireRuntimeCollectionAction('engine.runtime.batches.cancel', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/batches/:id', requireAuth, requireRuntimeCollectionAction('engine.runtime.batches.cancel', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string
@@ -462,7 +460,7 @@ r.delete('/mission-control-api/batches/:id', requireRuntimeCollectionAction('eng
 /**
  * Delete batch record from database (for completed/failed/canceled batches only)
  */
-r.delete('/mission-control-api/batches/:id/record', requireRuntimeCollectionAction('engine.runtime.batches.record.delete', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/mission-control-api/batches/:id/record', requireAuth, requireRuntimeCollectionAction('engine.runtime.batches.record.delete', { resourceKind: 'process_definition' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const batchRepo = dataSource.getRepository(Batch)
   const engineId = (req as any).engineId as string

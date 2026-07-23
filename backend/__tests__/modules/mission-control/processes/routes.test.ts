@@ -151,6 +151,17 @@ describe('mission-control processes routes', () => {
 	    );
   });
 
+  it('does not apply browser authentication to unrelated machine API routes', async () => {
+    app.post('/engines-api/external/engines', (req, res) => {
+      res.json({ authenticatedByProcessesRouter: Boolean(req.user) });
+    });
+
+    await request(app)
+      .post('/engines-api/external/engines')
+      .send({})
+      .expect(200, { authenticatedByProcessesRouter: false });
+  });
+
   it('lists process definitions', async () => {
     const response = await request(app)
       .get('/mission-control-api/process-definitions')

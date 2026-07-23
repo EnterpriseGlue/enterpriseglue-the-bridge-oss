@@ -18,6 +18,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default', tenantSlug: 'default' };
     next();
   },
 }));
@@ -64,7 +65,9 @@ describe('mission-control direct routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-1'),
-              tenantId: null,
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
+              runtimeAccessScope: 'engine_wide',
             })),
           };
         }
@@ -82,7 +85,7 @@ describe('mission-control direct routes', () => {
       .post('/mission-control-api/direct/process-instances/delete')
       .send({ engineId: 'engine-1', processInstanceIds: ['i1', 'i2'], deleteReason: 'test' });
 
-    expect(response.status).toBe(200);
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
     expect(response.body.total).toBeDefined();
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:delete', expect.objectContaining({
       resourceType: 'engine',

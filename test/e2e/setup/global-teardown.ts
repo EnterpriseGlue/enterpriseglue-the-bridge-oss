@@ -201,9 +201,26 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     );
     await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
   }
-  await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id IN (SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%')`);
-  await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id IN (SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%')`);
-  await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
+  const staleEngineIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%'`
+  );
+  const staleEngineIds = staleEngineIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleEngineIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'engine' AND resource_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.engine_tenant_mappings WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.external_engine_registrations WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.engines WHERE id = ANY($1::text[])`, [staleEngineIds]);
+  }
+  const staleApiClientIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.api_clients WHERE name LIKE 'e2e-%'`
+  );
+  const staleApiClientIds = staleApiClientIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleApiClientIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE principal_type = 'api_client' AND principal_id = ANY($1::text[])`, [staleApiClientIds]);
+    await pool.query(`DELETE FROM ${schema}.api_clients WHERE id = ANY($1::text[])`, [staleApiClientIds]);
+  }
   await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
 
   await pool.end();

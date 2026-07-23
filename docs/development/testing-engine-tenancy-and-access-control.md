@@ -121,13 +121,24 @@ The runner refuses non-local URLs and dirty tracked source, seeds only the
 disposable local PostgreSQL database, executes Chromium against the Docker
 frontend/backend, and then assembles the registry artifact. Journey 1 proves
 create, inspect, update, reconciliation, persisted state, and removal through
-the manual UI and authenticated HTTP service. Remaining journey/channel
-observations stay explicitly missing until their matching real-service tests
-are implemented.
+the manual UI and authenticated HTTP service. Journey 2 proves the matching
+external API lifecycle described below. Journeys 3–14 and their remaining
+required channel observations stay explicitly missing until their matching
+real-service tests are implemented.
 
-That command deliberately fails until traceability, local enforcement,
-mutation, three-browser functional, browser-accessibility,
-authorization-matrix, five-database, 14-journey, source-coverage,
+Journey 2 creates a reveal-once disposable API client, first proves the
+machine principal is denied without its registrar role, then executes create,
+same-payload retry, update, persisted inspection, and decommission using an
+isolated bearer-token request context with no administrator cookies. The
+local teardown removes its revoked API-client row and decommissioned
+`e2e-*` engine inventory after the assertions complete.
+
+The journey runner succeeds when every currently implemented journey passes,
+but keeps the assembled artifact visibly incomplete while any of the 14
+journeys or 30 required channel executions is missing. The separate
+`test:engine-tenancy:release-evidence` gate fails until traceability, local
+enforcement, mutation, three-browser functional, browser-accessibility,
+authorization-matrix, five-database, 14-journey/30-channel, source-coverage,
 documentation-review, and compatibility-window artifacts all pass for the
 same clean commit.
 
@@ -140,8 +151,8 @@ The detailed artifacts are fail-closed as well:
   baseline, interrupted retry, schema equivalence, service behavior, rollback,
   and cleanup;
 - every one of the 14 `provisioning-journeys.json` entries must execute at
-  least one supported channel and account for every other channel with a
-  passing execution or its documented stable error;
+  least one supported channel, all 30 required channel executions must pass,
+  and every other channel must be accounted for by its declared exclusion;
 - `documentation-review.json` must include zero unresolved high-risk findings
   and complete executable-example and Markdown-link results in addition to the
   three approvals; and

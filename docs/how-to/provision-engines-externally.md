@@ -148,7 +148,15 @@ does not prove the complete authorization rollout.
 ## Update and Retry
 
 The endpoint is an upsert keyed by `externalId`. Retrying the same equivalent
-request is safe. Keep sending explicit `tenancy` on every upsert.
+request is safe: the retry returns `created: false` with the same engine ID
+instead of creating a second row. Keep sending explicit `tenancy` on every
+upsert. A changed name, label, connection field, or credential reference also
+updates that same stable engine ID when the field is owned by the external
+source. Display name and environment are manual-owned by default. If the
+inventory system must manage the display name, include
+`"fieldOwnership": { "display": "external" }` from the first registration and
+on later upserts. Otherwise, a different incoming name is retained as
+`manual_override` drift instead of overwriting the operator's value.
 
 An ordinary upsert cannot change dedicated/shared topology, move a dedicated
 engine to another tenant, or change a shared mapping strategy. Those operations

@@ -68,7 +68,7 @@ export PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
 export PLAYWRIGHT_WORKERS=1
 export PLAYWRIGHT_BROWSERS=chromium
 
-rm -f test/results/engine-tenancy-provisioning-observations/journey-01-manual-ui.json
+rm -f test/results/engine-tenancy-provisioning-observations/*.json
 pnpm exec playwright test test/e2e/engine-tenancy-provisioning-journeys.spec.ts \
   --config test/e2e/playwright.config.ts
 node --test scripts/engine-tenancy-provisioning-journeys.test.mjs

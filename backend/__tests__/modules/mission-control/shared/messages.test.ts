@@ -10,6 +10,7 @@ import { sendMessage, sendSignal } from '../../../../../packages/backend-host/sr
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default', tenantSlug: 'default' };
     next();
   },
 }));
@@ -34,6 +35,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: {
+    evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'test fixture' }),
+  },
+}));
+
 vi.mock('../../../../../packages/backend-host/src/modules/mission-control/shared/messages-service.js', () => ({
   sendMessage: vi.fn().mockResolvedValue([{ resultType: 'Execution', execution: { id: 'i1', processInstanceId: 'pi1' }, engineExtension: { traceId: 'message-1' } }]),
   sendSignal: vi.fn().mockResolvedValue(undefined),
@@ -53,7 +60,12 @@ describe('mission-control messages routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === Engine) {
           return {
-            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }),
+            findOne: vi.fn().mockResolvedValue({
+              id: 'engine-1',
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
+              runtimeAccessScope: 'engine_wide',
+            }),
           };
         }
         return {};
@@ -67,7 +79,7 @@ describe('mission-control messages routes', () => {
       .post('/mission-control-api/messages')
       .send({ engineId: 'engine-1', messageName: 'TestMessage', businessKey: 'test-key' });
 
-    expect(response.status).toBe(200);
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
     expect(response.body).toEqual([{ resultType: 'Execution', execution: { id: 'i1', processInstanceId: 'pi1' }, engineExtension: { traceId: 'message-1' } }]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:modify', expect.objectContaining({
       userId: 'user-1',
