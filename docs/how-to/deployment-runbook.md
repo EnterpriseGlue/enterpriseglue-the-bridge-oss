@@ -22,6 +22,9 @@ pnpm run dev
 - Backend readiness: `http://localhost:8787/ready`. A configured bundle apply is
   not ready until materialization and required identity replay complete.
 - Bootstrap metrics: `http://localhost:8787/metrics`.
+- Engine-tenancy metrics on the same endpoint: require collection success,
+  investigate non-zero unresolved/conflicting/stale counts, and track
+  default-fallback increases as client migration debt.
 - If `EXPOSE_BACKEND=false`, use proxied health endpoint on frontend origin (for example `http://localhost:5173/health`).
 - Frontend: `http://localhost:5173`
 - Login using `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `.local/docker/env/docker.env`.
@@ -39,6 +42,9 @@ pnpm run dev
    referenced secret is available before validation or apply.
 5. Confirm `/ready`, `enterpriseglue_config_bootstrap_info`, and the apply-run
    receipt all report completion before handing traffic to the new backend.
+6. When the bundle changes engine topology or mappings, confirm tenancy
+   diagnostics, mapping version, reconciliation, and one allowed plus one
+   denied Effective Access result before tenant traffic is enabled.
 
 The bundle mount and file-secret mount are independent and read-only. Bundle
 JSON must contain references such as `env://NAME` or `file://name`, never secret

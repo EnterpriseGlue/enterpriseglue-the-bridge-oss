@@ -172,6 +172,10 @@ Do not change this migration to attach null rows to the default tenant or infer
 shared topology from `runtime_access_scope`. A later classification preview
 must produce evidence before unresolved rows become ready.
 
+For the operator sequence, supported-adapter verification, compatibility
+window, rollback conditions, and retained evidence, use
+[Upgrade to Explicit Engine Tenancy](../../docs/how-to/upgrade-engine-tenancy.md).
+
 Focused validation:
 
 ```bash

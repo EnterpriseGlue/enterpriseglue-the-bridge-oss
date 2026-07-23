@@ -59,10 +59,11 @@ retain the authorized tenant reference for portable export, preserve other
 sources, re-resolve known runtime inventory atomically, and schedule bounded
 post-apply reconciliation.
 
-The remaining implementation work is concentrated in final
-documentation/example/browser adoption gates. Topology/mapping UI, Engine Set
-transition rematerialization, Mission Control runtime guards, transport-denial
-proof, and bounded operational metrics are implemented.
+The remaining implementation work is concentrated in independent documentation
+review and final clean-install/upgrade/browser adoption gates.
+Topology/mapping UI, Engine Set transition rematerialization, Mission Control
+runtime guards, transport-denial proof, bounded operational metrics, published
+guides, and executable documentation contracts are implemented.
 
 ## Current-State Gap
 
@@ -749,14 +750,14 @@ checkboxes are closed.
 
 ### Phase 7: documentation and adoption
 
-- [ ] Publish all developer, API, data-model, user, administrator, migration, and
+- [x] Publish all developer, API, data-model, user, administrator, migration, and
   troubleshooting Markdown deliverables listed above.
-- [ ] Add dedicated and shared examples for UI, API, and configuration provisioning.
-- [ ] Validate every machine-readable documentation example against the shipped
+- [x] Add dedicated and shared examples for UI, API, and configuration provisioning.
+- [x] Validate every machine-readable documentation example against the shipped
   schemas, OpenAPI document, and local contract harness.
-- [ ] Update CLI help, configuration examples, operator runbooks, upgrade notes,
+- [x] Update CLI help, configuration examples, operator runbooks, upgrade notes,
   release notes, and the documentation index.
-- [ ] Publish the compatibility/deprecation timeline and external-integrator
+- [x] Publish the compatibility/deprecation timeline and external-integrator
   migration guide.
 - [ ] Complete documentation review with engineering, security, and an operator who
   did not implement the feature.

@@ -179,6 +179,10 @@ action.
 
 ### Provision through Configuration
 
+`TEN-DOCS-005`: `node scripts/config-bundle.mjs --help` lists the engine and
+mapping files plus the shared-engine fail-closed rule without requiring API
+credentials.
+
 A dedicated `engines.json` entry uses the portable tenant reference and may
 keep engine-wide runtime access:
 

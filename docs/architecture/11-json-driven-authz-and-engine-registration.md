@@ -2718,6 +2718,22 @@ Phase 0 exit criteria:
 
 ## Breaking Points To Watch
 
+### Engine Tenancy Implementation Addendum
+
+Dedicated/shared topology now has a focused child architecture and delivery
+contract. Manual UI, external API, and configuration bundles share the same
+tenancy schemas; mapping source ownership and optimistic versions are
+persisted; tenant-role inheritance is bounded to same-tenant project,
+dedicated-engine, and exact shared-resource scopes; topology changes use
+preview/acknowledgement/apply; and Mission Control denies unresolved shared
+resources before transport.
+
+The compatibility default is restricted to dedicated provisioning and is
+observable. It is not a null-tenant authorization rule. Upgrade, deprecation,
+operations, and executable documentation contracts are maintained in
+[Centralized and Decentralized Engine Tenancy](12-engine-tenancy-and-external-provisioning-plan.md)
+and its linked guides.
+
 - Engine credential handling is currently stored through existing `passwordEnc`, `username`, and OAuth fields. The config importer must resolve references into this model without exposing values in logs or UI.
 - Project references are currently stronger by id than by config key. A future project config model should add stable project keys before customers rely on project-key references.
 - Entra `groups` claims can hit overage limits. Product docs should recommend Entra app roles for most human business personas.

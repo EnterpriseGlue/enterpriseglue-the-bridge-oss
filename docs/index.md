@@ -28,6 +28,7 @@ Audience: Developers and architects.
 - [Configure Dedicated and Shared Engine Tenancy](how-to/configure-engine-tenancy.md)
 - [Diagnose Engine Tenant Resolution](how-to/diagnose-engine-tenant-resolution.md)
 - [Migrate Existing Engines to Explicit Tenancy](how-to/migrate-existing-engines-to-explicit-tenancy.md)
+- [Upgrade to Explicit Engine Tenancy](how-to/upgrade-engine-tenancy.md)
 
 ## Architecture
 - [Architecture Overview](architecture/00-architecture-overview.md)
@@ -42,13 +43,18 @@ Audience: Developers and architects.
 - [Database Architecture Overview](reference/database-architecture.md)
 - [Engine Tenancy Data Model](reference/engine-tenancy-data-model.md)
 - [Engine Tenancy and Provisioning API](reference/engine-tenancy-and-provisioning-api.md)
+- [Engine Tenancy Compatibility and Deprecation](reference/engine-tenancy-compatibility-and-deprecation.md)
 - [Provision Engines Externally](how-to/provision-engines-externally.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](development/testing-engine-tenancy-and-access-control.md)
+- [Engine Tenancy Documentation Review Checklist](development/engine-tenancy-documentation-review-checklist.md)
 - [Non-Postgres Database Setup](how-to/database-non-postgres.md)
 
 ## Operations
 - [Observability and Logs](reference/observability-logs.md)
 - [Troubleshooting](how-to/troubleshooting.md)
+
+## Release Notes
+- [Engine Tenancy](releases/engine-tenancy.md)
 
 ## Security
 - [Security Hardening Checklist](reference/security-hardening.md)

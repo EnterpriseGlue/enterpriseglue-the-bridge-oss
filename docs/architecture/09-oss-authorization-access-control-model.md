@@ -73,7 +73,7 @@ The remaining relevant work is:
 - [ ] ⬜ Add `runtimeAccessScope` and deployment integration fields to engine persistence, schemas, OpenAPI, services, config, audit, and existing Engine UI.
 - [ ] ⬜ Extend engine deployment/artifact persistence for direct discovery, optional project lineage, receipt provenance, and complete/reported/discovered/inferred lineage quality.
 - [ ] ⬜ Replace Access Control's role-column matrix with a role list plus one-role-at-a-time grouped permission editor and responsive overflow tests.
-- [ ] ⬜ Mission Control and dashboard filtering by authorized process/decision/runtime resource subsets inside central shared engines.
+- [x] ✅ Mission Control and dashboard filtering by authorized process/decision/runtime resource subsets inside central shared engines.
 - [ ] ⬜ `engineRuntimeAuthorizationMode` setting with `enterpriseglue_authoritative` enabled for v1 and later engine-native modes explicitly unsupported until future milestones.
 - [ ] ⬜ Add `connectionMode = customer_sidecar` to engine persistence, shared schemas, OpenAPI, manual/external/config registration, connection resolution, Engine UI, and mock-sidecar tests. EnterpriseGlue must never receive the customer's downstream peer token.
 - [ ] ⬜ Optional cleanup: reusable composite/branch guard extraction, optional approval workflow semantics if approvals become deployment gates, optional live SAML/OIDC/Google provider diagnostics, and broader reusable diagnostic-link/field-level guard patterns.

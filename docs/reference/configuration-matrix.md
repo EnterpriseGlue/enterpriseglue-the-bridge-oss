@@ -6,6 +6,11 @@ Audience: Developers and architects.
 
 This matrix lists current executable settings; see [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) for the configuration-bundle operating procedure.
 
+Engine topology is not an environment-variable switch. Declare
+dedicated/shared topology in the UI/API or `engines.json`, and shared mappings
+in `engine-tenant-mappings.json`. See
+[Configure Dedicated and Shared Engine Tenancy](../how-to/configure-engine-tenancy.md).
+
 ## Backend (Common Required)
 | Variable | Required | Default (Docker) | Notes |
 | --- | --- | --- | --- |

@@ -175,14 +175,15 @@ preview/apply/diff/export are implemented. Tenant roles, same-tenant
 project/dedicated/shared-resource inheritance, portable config assignments,
 Current tenant assignment controls, and Effective Access mapping lineage are
 implemented. Configuration-owned mapping rows and topology transitions are
-also implemented; engine topology form controls remain gated. Do not treat a
+also implemented. Engine creation and details now expose guarded topology,
+diagnostics, transition acknowledgements, and versioned mapping controls. Do not treat a
 shared engine as authorization-ready until diagnostics have no unmapped or
-conflicting resources and the remaining release gates are complete. The
+conflicting resources and the rollout evidence is complete. The
 migration leaves older tenantless engines in `migration_required`; it does not
 silently assign them to the default tenant.
 
-Until the UI controls are delivered, engine administrators manage shared
-mappings through the published API. Use the external mapping example in
+Engine administrators can manage manual mappings in the engine tenancy panel
+or through the published API. Use the external mapping example in
 [Provision Engines Externally](./provision-engines-externally.md), or the
 authenticated manual endpoints documented in
 [Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md).
@@ -201,6 +202,11 @@ for the gated shared-engine workflow.
 For an end-to-end operator workflow, including custom tenant roles and the
 required negative access checks, use
 [Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md).
+Use
+[Diagnose Engine Tenant Resolution](./diagnose-engine-tenant-resolution.md)
+for quarantined inventory and
+[Upgrade to Explicit Engine Tenancy](./upgrade-engine-tenancy.md) for existing
+installations.
 
 Every engine record requires:
 

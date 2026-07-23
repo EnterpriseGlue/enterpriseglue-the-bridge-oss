@@ -1,0 +1,75 @@
+# Engine Tenancy Compatibility and Deprecation
+
+Summary: Compatibility window, migration duties, removal gates, and rollback
+conditions for explicit engine tenancy.
+
+Audience: API integrators, SDK maintainers, platform operators, and release
+managers.
+
+## Current Compatibility Contract
+
+`tenancy` is optional on manual and external engine creation for compatibility.
+Omission creates a dedicated engine in authenticated request context or the
+canonical local default tenant and returns
+`ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`.
+
+This compatibility path:
+
+- runs only during provisioning;
+- persists the resolved dedicated tenant;
+- never interprets a later null tenant as default;
+- never applies to shared engines or runtime resources; and
+- increments the bounded fallback metric only when request context genuinely
+  falls through to the local default.
+
+## Timeline
+
+| Stage | Earliest duration | Behavior | Exit gate |
+| --- | --- | --- | --- |
+| Explicit contract release | One minor release | Omission accepted with warning; all first-party UI/config/examples send explicit tenancy | Focused lanes and upgrade guide published |
+| Adoption observation | At least 90 days and one additional minor release | Operators monitor fallback counters and integration inventory | Zero omitted-tenancy use in representative environments for the agreed evidence window |
+| Required declaration | Earliest in the next announced breaking release | New/updated external clients must send explicit tenancy; release notes name the cutoff | Supported SDKs/integrations updated and negative contract tests enabled |
+| Compatibility removal | Only after the breaking-release gate | Omitted tenancy is rejected; warning/counter branch may be removed | Clean-install and upgrade evidence, rollback rehearsal, and approved release review |
+
+No calendar date alone authorizes removal. If evidence is incomplete, extend the
+stage and publish the new target release.
+
+## External Integrator Migration
+
+1. Inventory every caller of `POST /engines-api/external/engines`.
+2. Send `tenancy.mode = dedicated` with an authorized portable tenant reference,
+   or `tenancy.mode = shared` with `resource_aware`, a mapping strategy, and
+   `unmappedPolicy = deny`.
+3. Keep the declaration identical on idempotent upserts.
+4. For shared engines, preview and version-guard every mapping batch, reconcile
+   inventory, and require zero unexpected unresolved/conflicting resources.
+5. Treat `ENGINE_TENANCY_TRANSITION_REQUIRED` as a stop signal; do not delete
+   and recreate an engine to change topology.
+6. Update retry logic for stable 400/403/409 codes.
+7. Verify decommission, credential rotation, reconciliation, and audit evidence.
+8. Remove reliance on the omission warning and confirm the fallback metric
+   remains flat through the observation window.
+
+## Removal Pull Request Requirements
+
+The pull request that rejects omission must include:
+
+- the announced breaking release and compatibility-window evidence;
+- SDK, API, OpenAPI, configuration, CLI help, and Markdown updates;
+- clean-install and supported-upgrade results;
+- explicit omission rejection tests for user and API-client paths;
+- removal of the temporary warning only after callers no longer rely on it;
+- rollback conditions and operator communication; and
+- no change to explicit local `default` tenant references.
+
+`TEN-DOCS-004`: upgrade, release, compatibility, integrator migration, and
+documentation navigation are maintained together and validated by the
+documentation contract lane.
+
+## Related Documentation
+
+- [ADR 0001: Limit Default Tenant Fallback to Provisioning](../architecture/decisions/0001-default-tenant-provisioning-fallback.md)
+- [Provision Engines Externally](../how-to/provision-engines-externally.md)
+- [Upgrade to Explicit Engine Tenancy](../how-to/upgrade-engine-tenancy.md)
+- [Engine Tenancy Release Note](../releases/engine-tenancy.md)
+

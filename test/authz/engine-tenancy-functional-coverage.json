@@ -658,5 +658,27 @@
     "testName": "publishes one strict external decommission contract across runtime and OpenAPI",
     "documentation": "docs/how-to/provision-engines-externally.md",
     "ciJob": "test:engine-tenancy:documentation"
+  },
+  {
+    "id": "TEN-DOCS-004",
+    "requirement": "Upgrade, release, compatibility-window, external-integrator migration, removal, and rollback documentation is published and linked before compatibility behavior can be removed.",
+    "source": "Engine Tenancy Plan / Documentation and adoption",
+    "dimensions": ["upgrade", "release_note", "compatibility", "deprecation", "external_integrator", "rollback"],
+    "expected": "all adoption documents and navigation links resolve",
+    "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+    "testName": "keeps feature documentation links, anchors, and index navigation valid",
+    "documentation": "docs/reference/engine-tenancy-compatibility-and-deprecation.md",
+    "ciJob": "test:engine-tenancy:documentation"
+  },
+  {
+    "id": "TEN-DOCS-005",
+    "requirement": "Configuration bundle CLI help documents explicit engine topology and mapping files plus shared-engine fail-closed behavior without credentials.",
+    "source": "Engine Tenancy Plan / Documentation and adoption",
+    "dimensions": ["cli", "configuration", "dedicated", "shared", "secrets"],
+    "expected": "credential-free successful help output with current tenancy guidance",
+    "testFile": "scripts/config-bundle-help.test.mjs",
+    "testName": "config bundle CLI help documents explicit engine tenancy files and safety rules",
+    "documentation": "docs/how-to/configure-engine-tenancy.md",
+    "ciJob": "test:engine-tenancy:documentation"
   }
 ]

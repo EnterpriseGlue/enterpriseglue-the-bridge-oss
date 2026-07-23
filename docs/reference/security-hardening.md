@@ -33,6 +33,11 @@ Implemented config-bundle controls and remaining customer-sidecar controls are d
 - Restrict access to backend/admin endpoints.
 - Use TLS termination at the edge.
 - Limit access to the database to trusted networks.
+- Require shared engines to use resource-aware access and one resolved
+  same-tenant inventory row before runtime access. Never use default tenant,
+  broad engine, or Engine Set access to bypass quarantine.
+- Keep topology/mapping diagnostics authenticated. The public `/metrics`
+  endpoint must remain aggregate and identifier-free.
 
 ## Operational Hygiene
 - Keep dependencies updated.
@@ -41,6 +46,10 @@ Implemented config-bundle controls and remaining customer-sidecar controls are d
 - Route traffic on `/ready`, not `/health`. Monitor the bounded
   `enterpriseglue_config_bootstrap_*` metrics and retain apply-run receipts for
   deployment evidence. Metrics deliberately omit the bundle hash.
+- Monitor `enterpriseglue_engine_tenancy_metrics_collection_success`,
+  unresolved/conflicting/stale resource gauges, and default-fallback rates.
+  Investigate with authenticated diagnostics; never weaken fail-closed runtime
+  enforcement to clear an alert.
 - Treat the hash in health/readiness, logs, and receipts as configuration
   metadata. Those surfaces use stable generic issue codes and must never be
   changed to expose raw parser, provider, or secret-resolution exceptions.

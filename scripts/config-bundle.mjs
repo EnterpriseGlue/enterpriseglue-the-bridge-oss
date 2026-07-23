@@ -4,6 +4,7 @@ import { sanitizeConfigBundleError, toSanitizedJson } from './lib/config-bundle-
 import { ConfigBundleExitCode, classifyConfigBundleHttpFailure, reconciliationExitCode, reconciliationWaitState } from './lib/config-bundle-exit.mjs';
 
 const [command, argument] = process.argv.slice(2);
+const helpRequested = command === '--help' || command === '-h';
 const apiUrl = (process.env.ENTERPRISEGLUE_API_URL || '').replace(/\/$/, '');
 const token = process.env.ENTERPRISEGLUE_API_TOKEN;
 const idempotencyKey = process.env.ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY;
@@ -22,13 +23,21 @@ const reconciliationPollMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIA
 const knownSecrets = [token];
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
+const usage = [
+  'Usage: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs <validate|preview|apply> <bundle.json>',
+  '   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs export <bundle-key>',
+  '   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs wait <apply-run-id>',
+  '   apply also requires ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE.',
+  '   ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE may be none, preview, or apply.',
+  'Engine tenancy: bundle files may include ./engines.json and ./engine-tenant-mappings.json.',
+  'Use explicit dedicated/shared tenancy; shared engines require resource_aware access and deny unmapped resources.',
+  'Examples: docs/how-to/configure-engine-tenancy.md',
+];
 
-if (!['validate', 'preview', 'apply', 'export', 'wait'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope) || (identityReconciliationMode && !['none', 'preview', 'apply'].includes(identityReconciliationMode)) || !Number.isFinite(reconciliationTimeoutMs) || reconciliationTimeoutMs < 1 || !Number.isFinite(reconciliationPollMs) || reconciliationPollMs < 1) {
-  console.error('Usage: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs <validate|preview|apply> <bundle.json>');
-  console.error('   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs export <bundle-key>');
-  console.error('   or: ENTERPRISEGLUE_API_URL=https://host ENTERPRISEGLUE_API_TOKEN=token node scripts/config-bundle.mjs wait <apply-run-id>');
-  console.error('   apply also requires ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE.');
-  console.error('   ENTERPRISEGLUE_CONFIG_IDENTITY_RECONCILIATION_MODE may be none, preview, or apply.');
+if (helpRequested) {
+  console.log(usage.join('\n'));
+} else if (!['validate', 'preview', 'apply', 'export', 'wait'].includes(command) || !argument || !apiUrl || !token || (command === 'apply' && !expectedTenantScope) || (identityReconciliationMode && !['none', 'preview', 'apply'].includes(identityReconciliationMode)) || !Number.isFinite(reconciliationTimeoutMs) || reconciliationTimeoutMs < 1 || !Number.isFinite(reconciliationPollMs) || reconciliationPollMs < 1) {
+  console.error(usage.join('\n'));
   process.exitCode = ConfigBundleExitCode.USAGE;
 } else {
   const request = async (path, options = {}) => {

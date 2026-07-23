@@ -34,6 +34,7 @@ For implementation completion and verification status across authorization, iden
 Related guides:
 
 - [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md)
+- [Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md)
 - [Docker Compose Deployment](./deploy-docker.md)
 - [OpenShift Deployment](./deploy-openshift.md)
 - [Deployment Runbook](./deployment-runbook.md)
@@ -47,6 +48,13 @@ Support two apply paths that use the same validation and apply services:
 2. **CI/CD API apply (implemented):** recommended for later updates because preview, approval, apply, export, and run status are explicit deployment stages.
 
 Do not make automatic startup apply the default. Existing standalone installations must still start without a bundle.
+
+Engine bundles may import both `./engines.json` and
+`./engine-tenant-mappings.json`. Dedicated entries resolve and persist one
+tenant during apply. Shared entries must be resource-aware and begin
+fail-closed; mapping rows are source-owned, versioned, re-resolve known
+inventory atomically, and schedule bounded reconciliation. Always preview
+mapping archives and conflicts before hash-bound apply.
 
 ## Target Environment Variables
 

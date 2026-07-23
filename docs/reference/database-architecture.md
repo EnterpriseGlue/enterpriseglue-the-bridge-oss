@@ -61,8 +61,10 @@ as the default tenant:
 - runtime resources with a tenant become `resolved`;
 - resources without a tenant become `unmapped`.
 
-The migration does not expose shared-engine provisioning. That happens only
-after the resolution and authorization services are implemented and tested.
+Shared-engine provisioning is exposed only through the canonical UI/API/config
+contracts. The resolution service, Mission Control guards, transition workflow,
+mapping reconciliation, and focused test lanes enforce these persisted
+invariants; the migration alone never makes a shared resource visible.
 
 See [Engine Tenancy Data Model](./engine-tenancy-data-model.md) for the canonical
 entities, invariants, lifecycle, and current rollout status.

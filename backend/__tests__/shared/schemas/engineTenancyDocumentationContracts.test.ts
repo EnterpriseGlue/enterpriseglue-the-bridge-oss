@@ -17,19 +17,33 @@ const repoRoot = resolve(import.meta.dirname, '../../../..');
 const DOCUMENTS = [
   'docs/architecture/decisions/0001-default-tenant-provisioning-fallback.md',
   'docs/architecture/decisions/0002-shared-engine-fail-closed-resolution.md',
+  'docs/architecture/09-oss-authorization-access-control-model.md',
+  'docs/architecture/11-json-driven-authz-and-engine-registration.md',
+  'docs/how-to/configure-authorization-and-engines.md',
   'docs/how-to/configure-engine-tenancy.md',
+  'docs/how-to/deploy-authorization-config.md',
+  'docs/how-to/deployment-runbook.md',
+  'docs/how-to/diagnose-engine-tenant-resolution.md',
+  'docs/how-to/migrate-existing-engines-to-explicit-tenancy.md',
+  'docs/how-to/provision-engines-externally.md',
+  'docs/how-to/upgrade-engine-tenancy.md',
+  'docs/reference/engine-tenancy-and-provisioning-api.md',
+  'docs/reference/engine-tenancy-compatibility-and-deprecation.md',
+  'docs/reference/engine-tenancy-data-model.md',
+  'docs/reference/configuration-matrix.md',
+  'docs/reference/database-architecture.md',
+  'docs/reference/observability-logs.md',
+  'docs/reference/security-hardening.md',
+  'docs/releases/engine-tenancy.md',
+  'docs/development/engine-tenancy-documentation-review-checklist.md',
+  'docs/development/testing-engine-tenancy-and-access-control.md',
+];
+const CURL_DOCUMENTS = [
   'docs/how-to/diagnose-engine-tenant-resolution.md',
   'docs/how-to/migrate-existing-engines-to-explicit-tenancy.md',
   'docs/how-to/provision-engines-externally.md',
   'docs/reference/engine-tenancy-and-provisioning-api.md',
-  'docs/reference/engine-tenancy-data-model.md',
-  'docs/development/testing-engine-tenancy-and-access-control.md',
 ];
-const CURL_DOCUMENTS = DOCUMENTS.filter((path) => ![
-  'docs/how-to/configure-engine-tenancy.md',
-  'docs/reference/engine-tenancy-data-model.md',
-  'docs/development/testing-engine-tenancy-and-access-control.md',
-].includes(path));
 const SCHEMAS: Record<string, z.ZodType> = {
   CreateEngineRequestSchema,
   EngineTenancyTransitionApplyRequestSchema,
