@@ -13,11 +13,57 @@ For engine tenancy, 100% means that every implemented requirement ID in
 - a present automated test and exact test name;
 - a Markdown page that cites the requirement;
 - a CI lane; and
+- explicit topology, runtime-access, principal, tenant-relationship, resource,
+  provisioning-channel, and outcome dimensions, including an explicit
+  `not-applicable` where a dimension does not apply;
+- a retained evidence-artifact location; and
 - an explicit allow, deny, quarantine, conflict, or compatibility outcome.
 
 Security-critical pure modules are additionally held to 100% statements,
 branches, functions, and lines. This is not a claim that every unrelated line
 in the monorepo has 100% source coverage.
+
+The version-2 manifest also inventories every public tenancy operation, stable
+error code, supported topology transition, supported database/browser target,
+and required security mutation fault class. The validator compares that
+inventory to OpenAPI, the canonical error enum, the transition policy, and the
+normative requirement registry in the architecture plan. A percentage alone
+cannot satisfy the gate.
+
+## Required Release-Candidate Evidence
+
+`TEN-AUTHZ-013` runs targeted source mutations and must kill tenant-filter
+removal, ownership-check inversion, null-tenant acceptance, mapping-version
+check removal, and upstream-call-after-denial. The runner writes a sanitized
+machine-readable mutation report under `test/results`.
+
+`TEN-AUTHZ-014` keeps the database-backed direct-user and group-derived-user
+custom-role/randomized matrices aligned with resolved engine-tenancy
+inventory. `TEN-AUTHZ-015` provides equivalent database-backed project-scope,
+expiry, credential-rotation, and revocation evidence for API clients and
+service accounts.
+
+`TEN-UI-005` proves that an already authenticated browser session observes
+assignment and group-membership revocation immediately. Pull requests run
+Chromium; the scheduled authorization browser gate repeats the same seeded
+journey in Firefox and WebKit. The full release evidence must include all
+three browser results; a local Chromium pass alone is a development signal,
+not final cross-browser release approval.
+
+`TEN-DOCS-007` writes the validated manifest as sanitized, retained evidence.
+It records the commit, clean/dirty state, schema version, Node and pnpm
+versions, declared database/browser target lists, requirement and contract
+counts, waiver count, and exact test/documentation traceability. It marks
+itself as `traceability-only`: a declared target is not recorded as verified
+until a separate database or browser result artifact passes for the same
+commit. It never reads application credentials or copies runtime secrets into
+the artifact.
+
+The full release-qualification backlog and exit conditions are in phase 9 of
+the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).
+Local PostgreSQL/Chromium evidence must not be used to close the remaining
+database, browser, clean/upgrade, complete Cartesian-matrix, or independent
+documentation-review gates.
 
 ## Prerequisites
 
@@ -62,6 +108,11 @@ The authorization lane:
    discovery, Engine Set/project-target boundaries, Starbase project access,
    route, schema, config apply/diff/export, and Effective Access tests; and
 4. executes the Access Control tenant-scope UI tests.
+
+The pull-request authorization gate additionally runs the database-backed
+direct-user, group-derived-user, API-client, and service-account matrices plus
+the targeted mutation guard. Their sanitized result files are retained with
+the browser evidence even when a later step fails.
 
 The transition lane:
 

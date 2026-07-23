@@ -82,6 +82,7 @@ test('the authorization structure gate requires exhaustive registry action cover
 test('the pull-request authorization gate keeps decision coverage and focused failure modes explicit', () => {
   assert.match(scripts['test:authz:pr'], /authorization-model-randomized\.test\.ts/);
   assert.match(scripts['test:authz:pr'], /custom-role-scope-matrix\.test\.ts/);
+  assert.match(scripts['test:authz:pr'], /machine-principal-authz\.test\.ts/);
   assert.match(scripts['test:authz:pr'], /bpmn-engine-client\.test\.ts/);
 
   const coverage = scripts['test:authz:decision-coverage'];
@@ -95,6 +96,7 @@ test('the pull-request authorization gate keeps decision coverage and focused fa
 test('the pull-request workflow retains browser and database evidence when authorization fails', () => {
   assert.match(authzPrWorkflow, /name: Authorization Browser Gate/);
   assert.match(authzPrWorkflow, /pnpm run test:authz:pr/);
+  assert.match(authzPrWorkflow, /pnpm run test:authz:mutation/);
   assert.match(authzPrWorkflow, /pnpm run test:authz:decision-coverage/);
   assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);

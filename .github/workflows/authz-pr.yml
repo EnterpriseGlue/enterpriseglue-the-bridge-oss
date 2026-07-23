@@ -98,6 +98,9 @@ jobs:
       - name: Run focused authorization decisions
         run: pnpm run test:authz:pr
 
+      - name: Run targeted authorization mutation guard
+        run: pnpm run test:authz:mutation
+
       - name: Verify engine tenancy functional coverage
         run: pnpm run test:engine-tenancy:foundation && pnpm run test:engine-tenancy:provisioning && pnpm run test:engine-tenancy:mappings && pnpm run test:engine-tenancy:authorization && pnpm run test:engine-tenancy:runtime && pnpm run test:engine-tenancy:transitions && pnpm run test:engine-tenancy:operations && pnpm run test:engine-tenancy:documentation
 

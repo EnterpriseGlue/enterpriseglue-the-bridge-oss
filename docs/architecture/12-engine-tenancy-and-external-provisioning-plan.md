@@ -1,6 +1,6 @@
 # Centralized and Decentralized Engine Tenancy Implementation Plan
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## Purpose
 
@@ -51,7 +51,8 @@ platform
 
 ## Implementation Status
 
-Phases 1–4 are complete, including explicit topology persistence, portable
+The production implementation in phases 1–6 is complete, including explicit
+topology persistence, portable
 tenant references, tenant roles, manual and external provisioning, guarded
 topology transitions, and configuration-owned mapping reconciliation.
 Configuration mappings use a separate `engine-tenant-mappings.json` family,
@@ -59,11 +60,57 @@ retain the authorized tenant reference for portable export, preserve other
 sources, re-resolve known runtime inventory atomically, and schedule bounded
 post-apply reconciliation.
 
-The remaining implementation work is concentrated in independent documentation
-review and final clean-install/upgrade/browser adoption gates.
 Topology/mapping UI, Engine Set transition rematerialization, Mission Control
 runtime guards, transport-denial proof, bounded operational metrics, published
 guides, and executable documentation contracts are implemented.
+
+Release qualification is not the same as implementation completion. The local
+PostgreSQL/Chromium journey and focused contract lanes are green, but the full
+end-to-end goal remains open until the following evidence is retained:
+
+| Qualification gate | Current evidence | Exit condition |
+| --- | --- | --- |
+| Requirement traceability | 77 registered requirements; 16 public operations; 11 stable errors; four valid and one invalid transition class; zero waivers | Manifest validator and every linked CI lane pass on the release commit |
+| Security mutation | Nine targeted mutants killed, including every required tenancy fault class | Mutation report retained by CI with zero survivors |
+| Human principals and custom roles | PostgreSQL-backed direct-user, group-derived-user, scoped custom-role, and randomized model tests pass | Generated matrix contains zero missing or skipped supported cells |
+| Machine principals | PostgreSQL-backed API-client and service-account custom-role, expiry, rotation, and revocation tests pass | Same generated matrix and HTTP journeys pass for both machine-principal types |
+| Local running installation | Clean retained PostgreSQL state and Chromium enforcement journey pass | Repeatable clean-install and supported upgrade-baseline artifacts pass |
+| Browser targets | Chromium evidence passes; Firefox and WebKit are configured in the scheduled gate | Chromium, Firefox, and WebKit artifacts pass for the same release commit, including active-session revocation |
+| Database targets | Portable migration/schema and adapter-registration contracts cover PostgreSQL, MySQL, SQL Server, Oracle, and Spanner; PostgreSQL has live evidence | Clean-install, upgrade, retry, schema-equivalence, service, and rollback evidence passes on all five adapters |
+| Documentation | Developer, user, operator, API, migration, compatibility, and test-report Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
+| Compatibility | Null-owned authorization fallback is removed; omitted new-provisioning tenancy remains warned and defaulted | Published deprecation window closes before omission warnings are removed |
+
+No unchecked qualification gate may be described as covered by a target list
+alone. The manifest evidence records declared targets separately from executed
+database and browser artifacts.
+
+## Normative Requirement Registry
+
+The machine-readable coverage manifest is authoritative for requirement
+metadata. This registry makes the set of normative implementation requirements
+visible in the plan itself. CI compares the IDs between the markers with the
+manifest exactly: adding, deleting, or renaming a requirement on only one side
+fails the coverage gate.
+
+<!-- ENGINE_TENANCY_REQUIREMENTS_START -->
+
+| Family | Normative requirement IDs |
+| --- | --- |
+| `TEN-API` | `TEN-API-001`, `TEN-API-002`, `TEN-API-003`, `TEN-API-004`, `TEN-API-005`, `TEN-API-006`, `TEN-API-007`, `TEN-API-008`, `TEN-API-009`, `TEN-API-010`, `TEN-API-011`, `TEN-API-012`, `TEN-API-013`, `TEN-API-014` |
+| `TEN-AUDIT` | `TEN-AUDIT-001`, `TEN-AUDIT-002` |
+| `TEN-AUTHZ` | `TEN-AUTHZ-001`, `TEN-AUTHZ-002`, `TEN-AUTHZ-003`, `TEN-AUTHZ-004`, `TEN-AUTHZ-005`, `TEN-AUTHZ-006`, `TEN-AUTHZ-007`, `TEN-AUTHZ-008`, `TEN-AUTHZ-009`, `TEN-AUTHZ-010`, `TEN-AUTHZ-011`, `TEN-AUTHZ-012`, `TEN-AUTHZ-013`, `TEN-AUTHZ-014`, `TEN-AUTHZ-015` |
+| `TEN-CONFIG` | `TEN-CONFIG-001`, `TEN-CONFIG-002`, `TEN-CONFIG-003`, `TEN-CONFIG-004`, `TEN-CONFIG-005`, `TEN-CONFIG-006`, `TEN-CONFIG-007`, `TEN-CONFIG-008`, `TEN-CONFIG-009` |
+| `TEN-DEDICATED` | `TEN-DEDICATED-001` |
+| `TEN-DOCS` | `TEN-DOCS-001`, `TEN-DOCS-002`, `TEN-DOCS-003`, `TEN-DOCS-004`, `TEN-DOCS-005`, `TEN-DOCS-006`, `TEN-DOCS-007` |
+| `TEN-MIGRATION` | `TEN-MIGRATION-001`, `TEN-MIGRATION-002`, `TEN-MIGRATION-003`, `TEN-MIGRATION-004`, `TEN-MIGRATION-005`, `TEN-MIGRATION-006`, `TEN-MIGRATION-007`, `TEN-MIGRATION-008` |
+| `TEN-MODEL` | `TEN-MODEL-001`, `TEN-MODEL-002`, `TEN-MODEL-003`, `TEN-MODEL-004` |
+| `TEN-OPS` | `TEN-OPS-001` |
+| `TEN-RESOLVE` | `TEN-RESOLVE-001`, `TEN-RESOLVE-002` |
+| `TEN-RUNTIME` | `TEN-RUNTIME-001`, `TEN-RUNTIME-002`, `TEN-RUNTIME-003`, `TEN-RUNTIME-004`, `TEN-RUNTIME-005`, `TEN-RUNTIME-006`, `TEN-RUNTIME-007` |
+| `TEN-SHARED` | `TEN-SHARED-001`, `TEN-SHARED-002` |
+| `TEN-UI` | `TEN-UI-001`, `TEN-UI-002`, `TEN-UI-003`, `TEN-UI-004`, `TEN-UI-005` |
+
+<!-- ENGINE_TENANCY_REQUIREMENTS_END -->
 
 ## Current-State Gap
 
@@ -771,12 +818,45 @@ checkboxes are closed.
 - [ ] Remove temporary omission warnings after the external API deprecation window.
 - [x] Retire any compatibility path that interprets null tenant as default.
 
-The completed technical gates are evidenced by `TEN-MIGRATION-008`,
+The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
 `TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-Only the external API omission-warning window remains a release-governance
-gate. It affects new provisioning compatibility, never authorization of an
-existing null-owned engine.
+The remaining cross-database, cross-browser, generated-matrix, clean/upgrade,
+independent-review, and compatibility-window gates are tracked below.
+
+### Phase 9: full release qualification
+
+- [x] Publish a versioned functional-coverage manifest with exact test,
+  documentation, CI, topology, runtime-mode, principal, tenant-relationship,
+  resource, provisioning-channel, outcome, and evidence references.
+- [x] Validate the manifest against the normative registry, OpenAPI operations,
+  stable error enum, topology transition policy, CI commands, supported target
+  declarations, and required mutation fault classes.
+- [x] Retain sanitized traceability and mutation evidence without credentials,
+  private endpoints, raw identity claims, or customer identifiers.
+- [x] Execute database-backed custom-role matrices for direct users,
+  group-derived users, API clients, and service accounts on PostgreSQL.
+- [x] Execute Chromium local-stack provisioning, mapping, fail-closed runtime,
+  migration, metrics, cleanup, and active-session revocation journeys.
+- [ ] Generate and execute the complete supported authorization Cartesian
+  matrix described below, including invalid combinations, with zero missing,
+  skipped, or quarantined cells.
+- [ ] Execute the clean-install, every supported upgrade baseline, interrupted
+  retry, schema-equivalence, service-behavior, rollback, and cleanup suites on
+  PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.
+- [ ] Retain passing Chromium, Firefox, and WebKit results for the same release
+  commit, including direct URL, stale-tab, multi-tab, refresh, accessibility,
+  and active-session revocation cases.
+- [ ] Execute all 14 provisioning-channel journeys below through the real local
+  HTTP service and persistent database for every supported channel, recording
+  documented stable errors for unsupported channel/action combinations.
+- [ ] Produce one release evidence index that links the exact manifest,
+  generated matrices, source coverage, mutation, database, browser,
+  documentation, migration, retry, rollback, and cleanup artifacts.
+- [ ] Complete independent Markdown documentation review by engineering,
+  security, and an operator using only the published procedures.
+- [ ] Close the external API omission-warning compatibility window before
+  removing that warning behavior.
 
 ## Complete Functional Coverage Standard
 

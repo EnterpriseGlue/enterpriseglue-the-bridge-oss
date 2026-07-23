@@ -1,21 +1,31 @@
 # Engine Tenancy Functional Test Report
 
-Summary: Complete automated and live-stack evidence for centralized and
-decentralized engine tenancy and fine-grained access control.
+Summary: Local automated and live-stack evidence for centralized and
+decentralized engine tenancy and fine-grained access control, with remaining
+release-qualification gates stated explicitly.
 
 Audience: Developers, security reviewers, operators, and release managers.
 
 ## Result
 
-Status: **Passed locally on 23 July 2026** against the Docker-hosted PostgreSQL
+Status: **Passed locally on 24 July 2026** against the Docker-hosted PostgreSQL
 installation and Chromium.
 
-The machine-readable manifest provides 100% traceability for the implemented
-engine-tenancy requirements: every requirement has an exact automated test,
-expected outcome, Markdown reference, and CI lane. Security-critical pure
-modules are separately held to 100% statements, branches, functions, and
-lines. This is functional-requirement coverage, not a claim that every
-unrelated monorepo line is executed.
+The version-2 machine-readable manifest provides 100% traceability for its 77
+registered engine-tenancy requirements: every requirement has an exact
+automated test, expected outcome, Markdown reference, executable CI lane,
+explicit coverage dimensions, and retained evidence location. It also
+inventories 16 public operations, 11 stable errors, four valid transition
+classes, one invalid transition class, five required security fault classes,
+five declared database targets, and three declared browser targets, with zero
+waivers.
+
+This is functional-requirement traceability, not a claim that every unrelated
+monorepo line is executed or that every declared target has passed. The
+manifest evidence is explicitly `traceability-only`; database and browser
+targets become verified only through separate passing artifacts for the same
+commit. Security-critical pure modules are separately held to 100% statements,
+branches, functions, and lines.
 
 The live enforcement journey is `TEN-MIGRATION-008` and `TEN-RUNTIME-007`.
 It uses disposable local identities and engines to prove migration,
@@ -62,6 +72,11 @@ The focused lanes cover:
   behavior; and
 - user, operator, API, data-model, migration, compatibility, release, and
   developer documentation contracts.
+
+The pull-request authorization gate also executes the database-backed custom
+role and randomized direct/group matrix, API-client/service-account parity,
+and the targeted mutation guard. The latest local mutation execution killed
+all nine mutants, including all five mandatory tenancy fault classes.
 
 The authoritative list is
 `test/authz/engine-tenancy-functional-coverage.json`. The commands and exact
@@ -185,17 +200,34 @@ disposable PostgreSQL/browser services. CI retains the result directory for
 
 ## Acceptance and Remaining Release Gates
 
-The implementation and automated evidence close the local enforcement work.
-Two release-governance gates remain deliberately separate:
+The implementation and automated evidence close the local
+PostgreSQL/Chromium enforcement slice. They do not yet close full
+cross-platform release qualification. The remaining gates are:
 
-- engineering, security, and an independent operator must sign the
+- generate and execute the complete supported authorization Cartesian matrix
+  with zero missing, skipped, or quarantined cells;
+- retain clean-install, every supported upgrade-baseline, interrupted-retry,
+  schema-equivalence, service, rollback, and cleanup results for PostgreSQL,
+  MySQL, SQL Server, Oracle, and Spanner;
+- retain Chromium, Firefox, and WebKit results for the same release commit,
+  including active-session revocation and the documented browser-state and
+  accessibility cases;
+- execute all supported UI, external API, and configuration provisioning
+  journeys against persistent local services and record stable errors for
+  unsupported combinations;
+- publish one release evidence index linking the manifest, matrices, source
+  coverage, mutation, database, browser, documentation, migration, retry,
+  rollback, and cleanup artifacts;
+- obtain engineering, security, and independent-operator sign-off on the
   [documentation review checklist](./engine-tenancy-documentation-review-checklist.md);
   and
-- omitted tenancy remains accepted until the published external API
-  compatibility window is formally closed.
+- retain omitted-tenancy compatibility until its published external API
+  deprecation window formally closes.
 
-Neither gate permits null tenant state to authorize an existing engine or an
-unresolved shared resource.
+None of these open gates permits null tenant state to authorize an existing
+engine or an unresolved shared resource. Phase 9 of the
+[implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+is the authoritative executable completion checklist.
 
 `TEN-DOCS-006`: this report, its links, and its documentation-index entry are
 validated by the documentation contract lane.

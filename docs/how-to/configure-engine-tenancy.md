@@ -350,6 +350,32 @@ not grant platform administration, engine connection settings, secrets,
 membership administration, project-access approval, delegation, ownership
 transfer, or environment locks.
 
+### Verify Access Before Go-Live
+
+Use two disposable test users in different tenants and one test identity for
+each machine-principal type you intend to use. Complete this check before
+connecting production workloads:
+
+1. Sign in as the owning-tenant user and confirm the dedicated engine is
+   visible; confirm the sibling-tenant user cannot open it directly.
+2. On a shared engine, map one test resource to each tenant. Confirm each user
+   sees only that tenant's resource and no unmapped resource.
+3. Open **Effective Access** for the allowed resource. Confirm the displayed
+   tenant, role source, mapping ID/version, and topology match the intended
+   configuration.
+4. Remove the assignment or group membership while the user remains signed
+   in. Refresh the engine list and direct URL; access must disappear without a
+   new login (`TEN-UI-005`).
+5. Repeat the same bounded decision with the API client and service account
+   used by automation (`TEN-AUTHZ-015`).
+6. Review the audit entry and tenant-resolution diagnostics. They must explain
+   the decision without exposing credentials or another tenant's resource
+   details.
+
+If any deny case still returns data, stop onboarding that engine and follow
+[Diagnose Engine Tenant Resolution](diagnose-engine-tenant-resolution.md).
+Do not compensate with a broader role or an engine-wide grant.
+
 ## Create a Custom Tenant Role
 
 In **Access Control > Roles**, choose tenant scope. The permission picker shows

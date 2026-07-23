@@ -7,6 +7,7 @@ import {
   EngineSchema,
   EngineConnectionHealthResponseSchema,
   EngineTenancyConfigurationSchema,
+  EngineTenancyErrorCodeSchema,
   EngineTenancyErrorResponseSchema,
   EngineTenancyTransitionApplyRequestSchema,
   EngineTenancyTransitionPreviewResponseSchema,
@@ -214,15 +215,31 @@ describe('EngineSchema', () => {
   });
 
   it('publishes stable sanitized tenancy errors', () => {
-    expect(EngineTenancyErrorResponseSchema.parse({
-      error: 'Shared engines require runtimeAccessScope=resource_aware',
-      code: 'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
-      field: 'tenancy',
-    })).toEqual({
-      error: 'Shared engines require runtimeAccessScope=resource_aware',
-      code: 'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
-      field: 'tenancy',
-    });
+    const stableCodes = [
+      'ENGINE_TENANCY_UNRESOLVED',
+      'ENGINE_TENANCY_CONFLICT',
+      'ENGINE_TENANCY_TRANSITION_REQUIRED',
+      'ENGINE_TENANCY_PREVIEW_STALE',
+      'ENGINE_TENANCY_PREVIEW_EXPIRED',
+      'ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED',
+      'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
+      'ENGINE_TENANT_MAPPING_NOT_FOUND',
+      'ENGINE_TENANT_MAPPING_VERSION_CONFLICT',
+      'ENGINE_TENANT_REFERENCE_FORBIDDEN',
+      'RUNTIME_RESOURCE_TENANT_UNRESOLVED',
+    ] as const;
+    expect(EngineTenancyErrorCodeSchema.options).toEqual(stableCodes);
+    for (const code of stableCodes) {
+      expect(EngineTenancyErrorResponseSchema.parse({
+        error: 'Sanitized engine tenancy error',
+        code,
+        field: 'tenancy',
+      })).toEqual({
+        error: 'Sanitized engine tenancy error',
+        code,
+        field: 'tenancy',
+      });
+    }
     expect(EngineTenancyErrorResponseSchema.safeParse({
       error: 'internal details',
       code: 'UNKNOWN_INTERNAL_ERROR',
