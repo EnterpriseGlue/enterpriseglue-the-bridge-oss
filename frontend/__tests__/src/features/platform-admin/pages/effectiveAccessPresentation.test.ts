@@ -17,6 +17,19 @@ describe('Effective Access deep-link defaults', () => {
     });
   });
 
+  it('preserves tenant-scope Effective Access links', () => {
+    expect(effectiveAccessDefaultsFromSearchParams(new URLSearchParams({
+      tab: 'effective-access',
+      permissionId: 'engine:instance:view',
+      resourceType: 'tenant',
+      resourceId: 'tenant-a',
+    }))).toEqual({
+      permission: 'engine:instance:view',
+      resourceType: 'tenant',
+      resourceId: 'tenant-a',
+    });
+  });
+
   it('recognizes the Effective Access tab link and rejects unsupported resource types', () => {
     const searchParams = new URLSearchParams('tab=effective-access&resourceType=not_a_resource&resourceId=resource-1');
 

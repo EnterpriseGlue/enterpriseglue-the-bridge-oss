@@ -181,7 +181,7 @@ function assignmentDisplayKey(assignment: any): string {
   if (assignment.key) return assignment.key;
   const principal = assignment.principal.key || assignment.principal.id;
   const scope = assignment.scope;
-  const scopeReference = scope.engineKey || scope.engineSetKey || scope.runtimeResourceSetKey || scope.resourceKey || scope.projectRef?.id || scope.projectRef?.key || 'platform';
+  const scopeReference = scope.engineKey || scope.engineSetKey || scope.runtimeResourceSetKey || scope.resourceKey || scope.projectRef?.id || scope.projectRef?.key || scope.type;
   return `${assignment.principal.type}:${principal}:${assignment.roleKey}:${scope.type}:${scopeReference}`;
 }
 
@@ -546,7 +546,7 @@ class ConfigBundleDiffService {
         changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: 'Config apply currently supports group principals only' });
         continue;
       }
-      if (!['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) {
+      if (!['platform', 'tenant', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) {
         changes.push({ objectType: 'assignment', key, operation: 'conflict', reason: `Config apply does not yet support ${assignment.scope.type} assignment scopes` });
         continue;
       }
@@ -555,6 +555,7 @@ class ConfigBundleDiffService {
       const stagedRole = !role && desiredRoleKeys.has(assignment.roleKey);
       const stagedGroup = !group && desiredGroupKeys.has(assignment.principal.key);
       let scopeId: string | null = assignment.scope.type === 'platform' ? null
+        : assignment.scope.type === 'tenant' ? normalizedTenantId
         : assignment.scope.type === 'engine' ? enginesByConfigKey.get(assignment.scope.engineKey)?.id || null
         : assignment.scope.type === 'engine_set' ? engineSetsByKey.get(assignment.scope.engineSetKey)?.id || null
         : assignment.scope.type === 'engine_runtime_resource_set' ? runtimeResourceSetsByKey.get(assignment.scope.runtimeResourceSetKey)?.id || null

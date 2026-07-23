@@ -6,6 +6,7 @@ import {
   ConfigBundleIdentityReplayTaskSchema,
   ConfigBundleRuntimeReconciliationTaskSchema,
   ConfigBundleSecretReferenceStatusSchema,
+  ConfigAssignmentsFileSchema,
   ConfigEnginesFileSchema,
   ConfigIdentityProvidersFileSchema,
   ConfigProjectEngineTargetsFileSchema,
@@ -83,6 +84,30 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
         permissions: ['engine:view'],
       }],
     }).success).toBe(false);
+  });
+
+  it('accepts portable tenant roles and current-bundle-tenant assignments', () => {
+    expect(ConfigRolesFileSchema.parse({
+      roles: [{
+        key: 'custom.tenant.runtime-operator',
+        name: 'Tenant runtime operator',
+        scope: 'tenant',
+        permissions: ['engine:instance:view', 'engine:process:start'],
+      }],
+    })).toMatchObject({
+      roles: [{ scope: 'tenant' }],
+    });
+
+    expect(ConfigAssignmentsFileSchema.parse({
+      assignments: [{
+        key: 'assignment.tenant-runtime-operators',
+        principal: { type: 'group', key: 'group.runtime-operators' },
+        roleKey: 'custom.tenant.runtime-operator',
+        scope: { type: 'tenant' },
+      }],
+    })).toMatchObject({
+      assignments: [{ scope: { type: 'tenant' } }],
+    });
   });
 
   it('rejects duplicate configuration object keys', () => {

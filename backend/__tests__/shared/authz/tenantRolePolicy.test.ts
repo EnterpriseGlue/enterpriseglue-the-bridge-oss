@@ -1,0 +1,89 @@
+import { describe, expect, it } from 'vitest';
+import {
+  isTenantSafePermission,
+  rolePermissionValidationError,
+  TENANT_MACHINE_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  TENANT_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_PROJECT_PERMISSION_IDS,
+} from '@enterpriseglue/shared/authz/tenant-role-policy.js';
+import {
+  EnginePermissions,
+  PermissionCatalog,
+  PlatformPermissions,
+  ProjectPermissions,
+  SystemRoleDefinitions,
+} from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+
+describe('tenant role permission policy', () => {
+  it('classifies the complete project catalog and only runtime-safe engine actions as tenant-safe', () => {
+    expect(new Set(TENANT_SAFE_PROJECT_PERMISSION_IDS)).toEqual(new Set(Object.values(ProjectPermissions)));
+    expect(new Set(TENANT_SAFE_ENGINE_PERMISSION_IDS)).toEqual(new Set([
+      EnginePermissions.DEPLOY,
+      EnginePermissions.DEPLOY_VIEW,
+      EnginePermissions.PROCESS_START,
+      EnginePermissions.PROCESS_CANCEL,
+      EnginePermissions.PROCESS_MODIFY,
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.INSTANCE_DELETE,
+      EnginePermissions.INSTANCE_RETRY,
+      EnginePermissions.VARIABLES_EDIT,
+    ]));
+    expect(TENANT_SAFE_PERMISSION_IDS).toEqual(new Set([
+      ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
+      ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
+    ]));
+  });
+
+  it('keeps platform, connection, secret, membership, and tenant-project-link administration outside tenant roles', () => {
+    const prohibited = [
+      ...Object.values(PlatformPermissions),
+      ...Object.values(EnginePermissions).filter((permission) =>
+        !TENANT_SAFE_ENGINE_PERMISSION_IDS.includes(permission as typeof TENANT_SAFE_ENGINE_PERMISSION_IDS[number])
+      ),
+    ];
+
+    for (const permission of prohibited) {
+      expect(isTenantSafePermission(permission)).toBe(false);
+      expect(TENANT_MACHINE_SAFE_PERMISSION_IDS.has(permission)).toBe(false);
+    }
+    expect(TENANT_MACHINE_SAFE_PERMISSION_IDS).toEqual(new Set([
+      ProjectPermissions.DEPLOY,
+      ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
+    ]));
+  });
+
+  it('keeps the catalog flag and every immutable tenant role aligned with the classifier', () => {
+    for (const permission of PermissionCatalog) {
+      expect(permission.tenantSafe).toBe(isTenantSafePermission(permission.key));
+    }
+    for (const role of SystemRoleDefinitions.filter((candidate) => candidate.scope === 'tenant')) {
+      expect(role.permissions.length).toBeGreaterThan(0);
+      for (const permission of role.permissions) {
+        expect(isTenantSafePermission(permission)).toBe(true);
+      }
+    }
+  });
+
+  it('accepts every classified permission for tenant roles and rejects every unclassified permission', () => {
+    for (const permission of PermissionCatalog) {
+      const result = rolePermissionValidationError('tenant', permission);
+      if (permission.tenantSafe) {
+        expect(result).toBeNull();
+      } else {
+        expect(result).toBe(`Permission ${permission.key} is not tenant-safe`);
+      }
+    }
+  });
+
+  it('preserves exact-scope validation for non-tenant roles', () => {
+    expect(rolePermissionValidationError('project', {
+      key: ProjectPermissions.FILES_VIEW,
+      scope: 'project',
+    })).toBeNull();
+    expect(rolePermissionValidationError('engine', {
+      key: ProjectPermissions.FILES_VIEW,
+      scope: 'project',
+    })).toBe(`Permission ${ProjectPermissions.FILES_VIEW} does not match engine role scope`);
+  });
+});

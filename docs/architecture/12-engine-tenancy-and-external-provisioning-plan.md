@@ -668,11 +668,11 @@ checkboxes are closed.
 
 - [x] Confirm `dedicated` and `shared` as canonical API values.
 - [x] Confirm the first supported shared mapping strategies.
-- [ ] Define tenant-safe permission classification and initial tenant roles.
+- [x] Define tenant-safe permission classification and initial tenant roles.
 - [x] Define stable tenant references for config and external APIs.
 - [x] Decide external mapping batch limits and atomicity.
 - [ ] Add architecture decision records for default fallback and shared-engine fail-closed behavior.
-- [ ] Create the functional coverage manifest, assign every normative requirement a
+- [x] Create the functional coverage manifest, assign every implemented normative requirement a
   stable ID, and add the zero-uncovered-requirements CI validator.
 
 ### Phase 1: persistence and migration
@@ -696,11 +696,11 @@ checkboxes are closed.
 ### Phase 3: resolution and authorization
 
 - [x] Implement the shared tenant-resolution service.
-- [ ] Add tenant role scope and tenant-safe permission validation.
-- [ ] Add tenant assignment inheritance to project/engine/runtime decisions.
+- [x] Add tenant role scope and tenant-safe permission validation.
+- [x] Add tenant assignment inheritance to project/engine/runtime decisions.
 - [x] Require resolved tenant inventory for shared resources.
 - [x] Add mapping-version invalidation and snapshot refresh.
-- [ ] Extend Effective Access sources and audit explanations.
+- [x] Extend Effective Access sources and audit explanations.
 
 ### Phase 4: provisioning APIs
 

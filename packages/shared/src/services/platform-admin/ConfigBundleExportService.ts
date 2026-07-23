@@ -163,6 +163,7 @@ class ConfigBundleExportService {
       if (!roleKey || !groupKey) throw new Error(`Cannot export scoped role assignment ${assignment.id}: its role or group is not config-owned by this bundle`);
       let scope: Record<string, unknown>;
       if (assignment.scopeType === 'platform') scope = { type: 'platform' };
+      else if (assignment.scopeType === 'tenant' && assignment.scopeId === tenantId) scope = { type: 'tenant' };
       else if (assignment.scopeType === 'engine' && assignment.scopeId && engineKeyById.get(assignment.scopeId)) scope = { type: 'engine', engineKey: engineKeyById.get(assignment.scopeId) };
       else if (assignment.scopeType === 'engine_set' && assignment.scopeId && engineSetKeyById.get(assignment.scopeId)) scope = { type: 'engine_set', engineSetKey: engineSetKeyById.get(assignment.scopeId) };
       else if (assignment.scopeType === 'engine_runtime_resource_set' && assignment.scopeId && runtimeResourceSetKeyById.get(assignment.scopeId)) scope = { type: 'engine_runtime_resource_set', runtimeResourceSetKey: runtimeResourceSetKeyById.get(assignment.scopeId) };

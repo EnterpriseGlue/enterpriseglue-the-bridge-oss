@@ -54,6 +54,7 @@ export function EffectiveAccessPanel({
   const selectedPermission = permissions.find((item) => item.key === permission) || null;
   const resourceTypeItems: Array<{ id: AuthzResourceType; label: string }> = [
     { id: 'platform', label: 'Platform' },
+    { id: 'tenant', label: 'Tenant' },
     { id: 'project', label: 'Project' },
     { id: 'engine', label: 'Engine' },
     { id: 'engine_set', label: 'Engine Set' },

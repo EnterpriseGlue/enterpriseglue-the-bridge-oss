@@ -9,8 +9,10 @@ Status: Topology persistence, canonical schemas, tenant-reference resolution,
 manual/external provisioning, atomic mapping administration, runtime mapping
 enforcement, and configuration-bundle topology parity are implemented. Shared
 resources remain fail closed until exactly one current mapping resolves them.
-Topology transitions, configuration-owned mappings, tenant-role inheritance,
-Effective Access lineage, and UI controls remain gated.
+Tenant-role classification, same-tenant inheritance, configuration round-trip,
+Access Control assignment scope, and Effective Access mapping lineage are also
+implemented. Topology transitions, configuration-owned tenant mappings, and
+engine-topology UI controls remain gated.
 
 ## Boundaries
 
@@ -225,6 +227,64 @@ stored with null engine tenant, the declared mapping strategy, resource-aware
 access, and fail-closed `incomplete` status. A normal config apply reports a
 conflict instead of changing an existing engine's topology. Configuration-owned
 mapping rows are a later phase and must not be inferred from topology alone.
+
+## Tenant Role Boundary and Inheritance
+
+A tenant role is a reusable set of tenant-safe project and runtime permissions.
+The assignment is bound to the authenticated tenant; callers never submit a
+trusted tenant ID. Platform Access Control administrators remain responsible for
+creating and assigning tenant roles. Holding a tenant role does not grant access
+to the role catalog or allow the holder to delegate their own access.
+
+The immutable templates are:
+
+| Role | Intended use |
+| --- | --- |
+| Tenant Administrator | Tenant-owned project administration plus tenant-safe engine/runtime operations |
+| Tenant Engine Operator | Runtime deployment, process, instance, and variable operations |
+| Tenant Viewer | Project, deployment, and instance read access |
+
+`TEN-AUTHZ-002`: every canonical project permission is tenant-safe. Engine
+permissions are tenant-safe only when they operate on deployments, processes,
+instances, or variables. Platform permissions, engine lifecycle/configuration,
+credentials and secrets, engine membership, project-to-engine access approval,
+environment locks, delegation, and ownership transfer are excluded. The
+classifier is a security-critical pure module held to 100% statements, branches,
+functions, and lines.
+
+`TEN-AUTHZ-003`: a tenant assignment can satisfy a project decision only when
+the project resolves to the authenticated tenant. A sibling-tenant project and
+every platform permission remain denied.
+
+`TEN-AUTHZ-004`: the same assignment can satisfy an engine decision only for a
+dedicated engine owned by that tenant. On a shared engine it can satisfy only an
+exact runtime resource that is resolved to that tenant. A broad shared-engine or
+Engine Set assignment is not treated as runtime access.
+
+`TEN-AUTHZ-005`: runtime-resource lookup requires an active row with
+`tenantResolutionStatus = resolved` and the authenticated tenant. Unmapped,
+conflicting, stale, null-tenant, and sibling-tenant rows are denied before role
+assignments are evaluated.
+
+`TEN-API-009`: `POST /api/authz/role-assignments` replaces any tenant scope ID
+in the request with the authenticated tenant for both the resource and canonical
+scope fields. A request without an active tenant cannot create a tenant
+assignment.
+
+`TEN-CONFIG-002`: configuration bundles support `scope: tenant` roles and
+`scope: { type: tenant }` assignments. Preview applies the same tenant-safe
+classifier as interactive role creation. Apply resolves the scope to the bundle
+tenant, and export emits no raw tenant ID, so the bundle remains portable.
+
+`TEN-UI-001`: Access Control offers **Current tenant** for user, group,
+API-client, and service-account assignments. It intentionally has no tenant-ID
+text field. Machine principals can receive only the immutable Tenant Engine
+Operator or Tenant Viewer templates.
+
+`TEN-AUDIT-001`: Effective Access sources for runtime decisions include the
+resolved tenant, `resolved` status, mapping ID, mapping version, sanitized
+resolution code, and dedicated/shared topology. They never include raw claims,
+credentials, or another tenant’s mapping inventory.
 
 ## Functional Coverage
 

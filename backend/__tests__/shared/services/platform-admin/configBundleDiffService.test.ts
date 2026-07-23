@@ -676,12 +676,16 @@ describe('configBundleDiffService', () => {
         ],
       },
       files: {
-        './roles.json': { roles: [{ key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] }] },
+        './roles.json': { roles: [
+          { key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] },
+          { key: 'custom.tenant.runtime-viewer', name: 'Tenant runtime viewer', scope: 'tenant', permissions: ['engine:instance:view'] },
+        ] },
         './groups.json': { groups: [{ key: 'group.operations', name: 'Operations' }] },
         './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'PAYMENTS_PASSWORD' } }] },
         './engine-sets.json': { engineSets: [{ key: 'engines.payments', name: 'Payments engines', selector: { mode: 'engine_ids', engineKeys: ['engine.payments'] } }] },
         './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.payments' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
         './assignments.json': { assignments: [
+          { key: 'assignment.tenant', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.tenant.runtime-viewer', scope: { type: 'tenant' } },
           { key: 'assignment.engine', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine', engineKey: 'engine.payments' } },
           { key: 'assignment.engine-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_set', engineSetKey: 'engines.payments' } },
           { key: 'assignment.runtime-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey: 'runtime.payments' } },
@@ -702,6 +706,7 @@ describe('configBundleDiffService', () => {
       expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'create' }),
       expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operations', operation: 'create', reason: expect.stringContaining('will be created') }),
       expect.objectContaining({ objectType: 'project_engine_target', key: 'target.payments', operation: 'create', reason: expect.stringContaining('will be created') }),
+      expect.objectContaining({ objectType: 'assignment', key: 'assignment.tenant', operation: 'create', reason: expect.stringContaining('will be created') }),
       expect.objectContaining({ objectType: 'assignment', key: 'assignment.engine', operation: 'create', reason: expect.stringContaining('will be created') }),
       expect.objectContaining({ objectType: 'assignment', key: 'assignment.engine-set', operation: 'create', reason: expect.stringContaining('will be created') }),
       expect.objectContaining({ objectType: 'assignment', key: 'assignment.runtime-set', operation: 'create', reason: expect.stringContaining('will be created') }),

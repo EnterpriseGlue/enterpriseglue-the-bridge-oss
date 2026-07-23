@@ -89,6 +89,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   ],
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: {
+    evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-matching-deny-policy' }),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
   configBundleApplyService: configBundleApplyMock,
 }));
@@ -800,6 +806,35 @@ describe('platform-admin authz routes', () => {
     expect(deleteResponse.status).toBe(204);
   });
 
+  it('binds tenant role assignments to the authenticated tenant instead of a caller-supplied tenant id', async () => {
+    const tenantApp = express();
+    tenantApp.use(express.json());
+    tenantApp.use((req, _res, next) => {
+      req.tenant = { tenantId: 'tenant-a' } as any;
+      next();
+    });
+    tenantApp.use(authzRouter);
+
+    const response = await request(tenantApp)
+      .post('/api/authz/role-assignments')
+      .send({
+        principalType: 'group',
+        principalId: 'group-1',
+        roleId: 'system.tenant.engine_operator',
+        resourceType: 'tenant',
+        resourceId: 'tenant-b',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.assignRole).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      resourceType: 'tenant',
+      resourceId: 'tenant-a',
+      scopeType: 'tenant',
+      scopeId: 'tenant-a',
+    }));
+  });
+
   it('lists exact runtime grants only through the platform-authorized engine filter', async () => {
     const response = await request(app)
       .get('/api/authz/role-assignments?engineId=engine-1');
@@ -1433,11 +1468,14 @@ describe('platform-admin authz routes', () => {
   it('resolves a runtime resource selector before evaluating access', async () => {
     const findOne = vi.fn().mockResolvedValue({
       id: 'runtime-resource-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       engineId: 'engine-1',
       resourceKind: 'process_definition',
       resourceKey: 'invoice',
       runtimeTenantId: 'finance',
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: 'mapping-1',
+      tenantMappingVersion: 3,
       isActive: true,
     });
     (getDataSource as any).mockResolvedValue({
@@ -1462,19 +1500,30 @@ describe('platform-admin authz routes', () => {
 
     expect(response.status).toBe(200);
     expect(findOne).toHaveBeenCalledWith({
-      where: expect.objectContaining({
-        engineId: 'engine-1',
-        resourceKind: 'process_definition',
-        resourceKey: 'invoice',
-        runtimeTenantId: 'finance',
-        isActive: true,
-      }),
+      where: expect.arrayContaining([
+        expect.objectContaining({
+          engineId: 'engine-1',
+          resourceKind: 'process_definition',
+          resourceKey: 'invoice',
+          runtimeTenantId: 'finance',
+          tenantId: 'tenant-default',
+          tenantResolutionStatus: 'resolved',
+          isActive: true,
+        }),
+      ]),
     });
     expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
       'platform:authz:check',
       expect.objectContaining({ resourceType: 'engine_runtime_resource', resourceId: 'runtime-resource-1' }),
     );
-    expect(response.body.resolvedRuntimeResource).toMatchObject({ id: 'runtime-resource-1', resourceKey: 'invoice' });
+    expect(response.body.resolvedRuntimeResource).toMatchObject({
+      id: 'runtime-resource-1',
+      resourceKey: 'invoice',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: 'mapping-1',
+      tenantMappingVersion: 3,
+    });
   });
 
   it('manages external registration API clients', async () => {

@@ -182,8 +182,9 @@ export function RoleAssignmentForm({
         ) : (
           <TextInput
             id="assignment-resource-id"
-            labelText="Resource ID"
-            disabled={form.resourceType === 'platform'}
+            labelText={form.resourceType === 'tenant' ? 'Tenant' : 'Resource ID'}
+            helperText={form.resourceType === 'tenant' ? 'The authenticated tenant is used automatically.' : undefined}
+            disabled={form.resourceType === 'platform' || form.resourceType === 'tenant'}
             value={form.resourceId}
             onChange={(event) => setForm((current) => ({ ...current, resourceId: event.target.value }))}
           />

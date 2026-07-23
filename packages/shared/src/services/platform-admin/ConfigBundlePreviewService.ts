@@ -55,6 +55,7 @@ function remediationFor(message: string): string {
   if (message.includes('Imported file is missing')) return 'Add the declared file to the bundle files map, or remove it from bundle.imports.';
   if (message.includes('File is not declared')) return 'Add the file path to bundle.imports, or remove the undeclared file from the bundle.';
   if (message.includes('Unknown permission')) return 'Use a permission id from the EnterpriseGlue permission catalog that matches the role scope.';
+  if (message.includes('not tenant-safe')) return 'Use only permissions marked tenant-safe in the EnterpriseGlue permission catalog.';
   if (message.includes('Unknown role key') || message.includes('Unknown group key') || message.includes('Unknown engine key') || message.includes('Unknown Engine Set key') || message.includes('Unknown runtime resource set key')) return 'Define the referenced object in this bundle or use an existing stable key.';
   if (message.includes('scope')) return 'Use values that share the required authorization scope.';
   if (message.includes('Duplicate')) return 'Use one unique stable key or import path for each configuration object.';
@@ -139,7 +140,7 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   const engineKeys = new Set(engines.map((engine) => engine.key));
   const engineSetKeys = new Set(engineSets.map((engineSet) => engineSet.key));
   const runtimeResourceSetKeys = new Set(runtimeResourceSets.map((set) => set.key));
-  const permissionScopes = new Map(PermissionCatalog.map((permission) => [permission.key, permission.scope]));
+  const permissionsByKey = new Map(PermissionCatalog.map((permission) => [permission.key, permission]));
 
   roles.forEach((role, index) => {
     const path = `./roles.json.roles.${index}`;
@@ -150,11 +151,13 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
       ? role.permissions
       : [...(role.addPermissions || []), ...(role.removePermissions || [])];
     for (const permissionId of permissionIds) {
-      const permissionScope = permissionScopes.get(permissionId);
-      if (!permissionScope) {
+      const permission = permissionsByKey.get(permissionId);
+      if (!permission) {
         errors.push({ path: `${path}.permissions`, message: `Unknown permission: ${permissionId}` });
-      } else if (permissionScope !== role.scope) {
-        errors.push({ path: `${path}.permissions`, message: `Permission ${permissionId} has ${permissionScope} scope and cannot be used by a ${role.scope} role` });
+      } else if (role.scope === 'tenant' && !permission.tenantSafe) {
+        errors.push({ path: `${path}.permissions`, message: `Permission ${permissionId} is not tenant-safe` });
+      } else if (role.scope !== 'tenant' && permission.scope !== role.scope) {
+        errors.push({ path: `${path}.permissions`, message: `Permission ${permissionId} has ${permission.scope} scope and cannot be used by a ${role.scope} role` });
       }
     }
   });

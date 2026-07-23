@@ -240,5 +240,93 @@
     "testName": "applies a config-managed shared engine in fail-closed mapping state",
     "documentation": "docs/reference/engine-tenancy-data-model.md",
     "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-AUTHZ-002",
+    "requirement": "Tenant roles accept every classified project permission and only the explicit runtime-safe engine subset.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["tenant_role", "custom_role", "project", "engine", "allow", "deny"],
+    "expected": "complete tenant-safe classifier with prohibited platform and secret actions",
+    "testFile": "backend/__tests__/shared/authz/tenantRolePolicy.test.ts",
+    "testName": "classifies the complete project catalog and only runtime-safe engine actions as tenant-safe",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-AUTHZ-003",
+    "requirement": "A tenant assignment inherits to every tenant-safe project action only for resources in the active tenant.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["tenant_assignment", "project", "same_tenant", "sibling_tenant", "inheritance"],
+    "expected": "same-tenant allow and sibling-tenant deny",
+    "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+    "testName": "inherits every tenant-safe project permission only to a project in the active tenant",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-AUTHZ-004",
+    "requirement": "Tenant assignments inherit to dedicated engines and exactly resolved shared resources without broad shared-engine or Engine Set grants.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["dedicated", "shared", "runtime_resource", "engine_set", "mapping_lineage"],
+    "expected": "dedicated or mapped-resource allow with broad shared scope excluded",
+    "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+    "testName": "inherits a tenant role to a resolved shared runtime resource without accepting broad shared-engine scopes",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-AUTHZ-005",
+    "requirement": "Unresolved shared runtime inventory is denied before role-assignment evaluation.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["shared", "unmapped", "conflict", "stale", "fail_closed"],
+    "expected": "deny before assignment evaluation",
+    "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+    "testName": "denies unresolved shared runtime inventory before assignment evaluation",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-API-009",
+    "requirement": "Tenant assignments are bound to the authenticated tenant and cannot name a sibling tenant in the request body.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["http", "assignment", "authenticated_tenant", "tampered_input"],
+    "expected": "caller tenant id is ignored and the authenticated tenant is persisted",
+    "testFile": "backend/__tests__/modules/platform-admin/routes/authz.test.ts",
+    "testName": "binds tenant role assignments to the authenticated tenant instead of a caller-supplied tenant id",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-CONFIG-002",
+    "requirement": "Configuration bundles preview, diff, apply, and export tenant roles and current-tenant assignments.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["config", "tenant_role", "assignment", "preview", "diff", "apply", "export"],
+    "expected": "portable tenant scope round trip without raw tenant references",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundleExportService.test.ts",
+    "testName": "exports tenant roles and assignments against the bundle tenant without a raw tenant reference",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-UI-001",
+    "requirement": "The Access Control assignment form exposes the authenticated tenant for users, groups, API clients, and service accounts.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["ui", "user", "group", "api_client", "service_account"],
+    "expected": "current tenant is selectable without a caller-entered tenant id",
+    "testFile": "frontend/__tests__/src/features/platform-admin/pages/AccessControl.roles-permissions.test.tsx",
+    "testName": "treats the authenticated tenant as a first-class assignment scope for every principal",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-AUDIT-001",
+    "requirement": "Effective Access sources explain the resolved runtime tenant, mapping id and version, diagnostic code, and topology.",
+    "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+    "dimensions": ["effective_access", "mapping_lineage", "shared", "sanitized"],
+    "expected": "sanitized tenant resolution lineage is returned",
+    "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+    "testName": "inherits a tenant role to a resolved shared runtime resource without accepting broad shared-engine scopes",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:authorization"
   }
 ]

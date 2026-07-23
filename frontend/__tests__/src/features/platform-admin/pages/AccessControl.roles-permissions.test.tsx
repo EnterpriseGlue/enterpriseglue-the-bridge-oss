@@ -22,7 +22,12 @@ const {
   getPermissionRisk,
 } = await import('@src/features/platform-admin/pages/AccessControl');
 const { RoleAssignmentsTable } = await import('@src/features/platform-admin/pages/access-control/RoleAssignmentsTable');
-const { canSubmitAssignment, withAssignmentPrincipalType, withAssignmentResourceType } = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
+const {
+  assignmentResourceTypeOptions,
+  canSubmitAssignment,
+  withAssignmentPrincipalType,
+  withAssignmentResourceType,
+} = await import('@src/features/platform-admin/pages/access-control/assignmentFormOptions');
 import {
   resetAccessControlMocks,
   evaluateAccessState,
@@ -90,6 +95,32 @@ describe('AccessControl roles and permissions', () => {
     expect(canSubmitAssignment(complete, false)).toBe(true);
     expect(canSubmitAssignment({ ...complete, resourceId: '' }, false)).toBe(false);
     expect(canSubmitAssignment(complete, true)).toBe(false);
+  });
+
+  it('treats the authenticated tenant as a first-class assignment scope for every principal', () => {
+    const current = {
+      principalType: 'group' as const,
+      principalId: 'group-1',
+      roleId: 'system.tenant.viewer',
+      resourceType: 'engine' as const,
+      resourceId: 'engine-1',
+      runtimeEngineId: 'engine-1',
+    };
+    const tenant = withAssignmentResourceType(current, 'tenant');
+
+    expect(tenant).toMatchObject({
+      resourceType: 'tenant',
+      resourceId: '',
+      runtimeEngineId: '',
+      roleId: '',
+    });
+    expect(canSubmitAssignment({ ...tenant, roleId: 'system.tenant.viewer' }, false)).toBe(true);
+    for (const principalType of ['user', 'group', 'api_client', 'service_account'] as const) {
+      expect(assignmentResourceTypeOptions(principalType)).toContainEqual({
+        id: 'tenant',
+        label: 'Current tenant',
+      });
+    }
   });
 
   it('renders role and permission catalog data', () => {
@@ -288,7 +319,7 @@ describe('AccessControl roles and permissions', () => {
     expect(within(assignmentRow!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
   });
 
-  it('labels provider-managed assignments without exposing manual removal', () => {
+  it('labels SSO mapping assignments without exposing manual removal', () => {
     const assignment: RoleAssignment = {
       id: 'provider-assignment', tenantId: null, userId: 'provider-user', principalType: 'user', principalId: 'provider-user',
       roleId: 'system.engine.operator', roleKey: 'system.engine.operator', roleName: 'Engine Operator', roleScope: 'engine', resourceType: 'engine', resourceId: 'engine-1',
@@ -300,7 +331,7 @@ describe('AccessControl roles and permissions', () => {
 
     const row = screen.getByText('provider-user').closest('tr');
     expect(row).toBeTruthy();
-    expect(within(row!).getByTitle(/identity-provider mapping/)).toBeInTheDocument();
+    expect(within(row!).getByTitle(/SSO assignment mapping/)).toBeInTheDocument();
     expect(within(row!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
   });
 

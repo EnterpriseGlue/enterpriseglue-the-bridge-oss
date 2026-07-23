@@ -27,7 +27,7 @@ type Scope = ConfigRoleTemplateScope;
 export type RoleLibraryPermission = PermissionCatalogEntry;
 
 function supportsConfigRoleTemplate(scope: RoleSummary['scope']): scope is Scope {
-  return scope === 'platform' || scope === 'project' || scope === 'engine' || scope === 'engine_runtime_resource';
+  return scope === 'platform' || scope === 'tenant' || scope === 'project' || scope === 'engine' || scope === 'engine_runtime_resource';
 }
 
 const blank = { name: '', description: '', scope: 'engine' as Scope };
@@ -159,8 +159,10 @@ export default function RoleLibrarySettingsTab() {
   }, [detail?.id, detail?.permissions?.join('|'), detail?.name, detail?.description, detail?.isAssignable]);
 
   const visibleRoles = roles.filter((role) => `${role.name} ${role.key}`.toLowerCase().includes(roleSearch.toLowerCase()));
-  const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === selected?.scope);
-  const createRolePermissions = (permissionsQuery.data || []).filter((permission) => permission.scope === form.scope);
+  const selectedRolePermissions = (permissionsQuery.data || []).filter((permission) =>
+    permission.scope === selected?.scope || (selected?.scope === 'tenant' && permission.tenantSafe));
+  const createRolePermissions = (permissionsQuery.data || []).filter((permission) =>
+    permission.scope === form.scope || (form.scope === 'tenant' && permission.tenantSafe));
   const createSelectedRiskyPermissions = createRolePermissions.filter((permission) => draft.includes(permission.key) && getPermissionRiskForKey(permission.key));
   const newlySelectedSensitivePermissionIds = detail
     ? selectedRolePermissions
@@ -290,7 +292,7 @@ export default function RoleLibrarySettingsTab() {
         {createTarget === 'config' && <InlineNotification kind="info" title="Configuration-managed duplicate" subtitle="Exports an explicit, reproducible permission snapshot. Import the JSON in Platform Settings > Configuration Bundles, preview it, then apply the exact preview." hideCloseButton lowContrast />}
         <TextInput id="role-library-name" labelText="Role name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
         <TextArea id="role-library-description" labelText="Description" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} />
-        <Select id="role-library-scope" labelText="Scope" value={form.scope} onChange={(event) => { setForm((current) => ({ ...current, scope: event.target.value as Scope })); setDraft([]); setCreateRiskAcknowledged(false); }}><SelectItem value="platform" text="Platform" /><SelectItem value="project" text="Project" /><SelectItem value="engine" text="Engine" /><SelectItem value="engine_runtime_resource" text="Engine runtime resource" /></Select>
+        <Select id="role-library-scope" labelText="Scope" value={form.scope} onChange={(event) => { setForm((current) => ({ ...current, scope: event.target.value as Scope })); setDraft([]); setCreateRiskAcknowledged(false); }}><SelectItem value="platform" text="Platform" /><SelectItem value="tenant" text="Tenant" /><SelectItem value="project" text="Project" /><SelectItem value="engine" text="Engine" /><SelectItem value="engine_runtime_resource" text="Engine runtime resource" /></Select>
         {createTarget === 'config' && <>
           <TextInput id="role-library-config-bundle-key" labelText="Bundle key" helperText="Use the key of the bundle that will own this role." value={configForm.bundleKey} invalid={Boolean(configForm.bundleKey) && !isStableConfigKey(configForm.bundleKey)} invalidText="Use a stable lowercase configuration key." onChange={(event) => setConfigForm((current) => ({ ...current, bundleKey: event.target.value }))} />
           <TextInput id="role-library-config-tenant-key" labelText="Tenant key" value={configForm.tenantKey} invalid={Boolean(configForm.tenantKey) && !isStableConfigKey(configForm.tenantKey)} invalidText="Use a stable lowercase configuration key." onChange={(event) => setConfigForm((current) => ({ ...current, tenantKey: event.target.value }))} />

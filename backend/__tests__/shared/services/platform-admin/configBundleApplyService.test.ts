@@ -963,12 +963,16 @@ describe('configBundleApplyService', () => {
       ],
     };
     const allFiles = {
-      './roles.json': { roles: [{ key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] }] },
+      './roles.json': { roles: [
+        { key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] },
+        { key: 'custom.tenant.runtime-operator', name: 'Tenant runtime operator', scope: 'tenant', permissions: ['engine:instance:view', 'engine:process:start'] },
+      ] },
       './groups.json': { groups: [{ key: 'group.operations', name: 'Operations' }] },
       './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'PAYMENTS_PASSWORD' } }] },
       './engine-sets.json': { engineSets: [{ key: 'engines.payments', name: 'Payments engines', selector: { mode: 'engine_ids', engineKeys: ['engine.payments'] } }] },
       './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.payments' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
       './assignments.json': { assignments: [
+        { key: 'assignment.tenant', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.tenant.runtime-operator', scope: { type: 'tenant' } },
         { key: 'assignment.engine', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine', engineKey: 'engine.payments' } },
         { key: 'assignment.engine-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_set', engineSetKey: 'engines.payments' } },
         { key: 'assignment.runtime-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey: 'runtime.payments' } },
@@ -992,7 +996,7 @@ describe('configBundleApplyService', () => {
     });
 
     expect(result).toMatchObject({
-      created: 11,
+      created: 13,
       updated: 0,
       archived: 0,
       reconciliation: {
@@ -1007,7 +1011,13 @@ describe('configBundleApplyService', () => {
       key: 'engines.payments', selectorJson: expect.stringContaining(engineRows[0].id),
     }));
     expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ engineId: engineRows[0].id }));
-    expect(assignmentRepo.insert).toHaveBeenCalledTimes(3);
+    expect(assignmentRepo.insert).toHaveBeenCalledTimes(4);
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      roleId: roleRows[1].id,
+      scopeType: 'tenant',
+      scopeId: 'tenant-a',
+    }));
     expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       principalId: groupRows[0].id,
       roleId: roleRows[0].id,

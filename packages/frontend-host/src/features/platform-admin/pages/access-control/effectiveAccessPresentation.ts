@@ -2,6 +2,7 @@ import type { AuthzResourceType } from '@enterpriseglue/shared/authz/permission-
 
 export type CoreAssignmentResourceType =
   | 'platform'
+  | 'tenant'
   | 'project'
   | 'engine'
   | 'engine_runtime_resource'
@@ -20,6 +21,7 @@ export const effectiveAccessSourceHeaders = [
 
 const effectiveAccessResourceTypes = new Set<AuthzResourceType>([
   'platform',
+  'tenant',
   'project',
   'engine',
   'engine_set',

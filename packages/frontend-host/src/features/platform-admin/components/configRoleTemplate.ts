@@ -1,4 +1,4 @@
-export type ConfigRoleTemplateScope = 'platform' | 'project' | 'engine' | 'engine_runtime_resource';
+export type ConfigRoleTemplateScope = 'platform' | 'tenant' | 'project' | 'engine' | 'engine_runtime_resource';
 export type ConfigRoleTemplateOwnershipMode = 'config_locked' | 'config_warn';
 
 export type ConfigRoleTemplateInput = {

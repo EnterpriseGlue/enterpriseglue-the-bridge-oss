@@ -171,9 +171,11 @@ in fail-closed `incomplete` state.
 
 Manual/external mapping administration, shared runtime resolution, fail-closed
 Runtime Resource Set materialization, and config-bundle topology
-preview/apply/diff/export are implemented. Configuration-owned mapping rows,
-tenant-role inheritance, Effective Access mapping lineage, topology
-transitions, and UI topology controls are not yet complete. Do not treat a
+preview/apply/diff/export are implemented. Tenant roles, same-tenant
+project/dedicated/shared-resource inheritance, portable config assignments,
+Current tenant assignment controls, and Effective Access mapping lineage are
+implemented. Configuration-owned mapping rows, topology transitions, and engine
+topology controls are not yet complete. Do not treat a
 shared engine as authorization-ready until diagnostics have no unmapped or
 conflicting resources and the remaining release gates are complete. The
 migration leaves older tenantless engines in `migration_required`; it does not
@@ -193,6 +195,10 @@ the implemented foundation,
 examples, and
 [the implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
 for the gated shared-engine workflow.
+
+For an end-to-end operator workflow, including custom tenant roles and the
+required negative access checks, use
+[Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md).
 
 Every engine record requires:
 

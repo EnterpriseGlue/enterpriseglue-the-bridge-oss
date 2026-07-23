@@ -577,11 +577,12 @@ class ConfigBundleApplyService {
       for (const assignment of desiredAssignments) {
         const sourceHash = objectFingerprint('assignment', assignment.key || hashCanonicalConfig(assignment), assignment);
         if (assignment.principal.type !== 'group') fail('Config apply currently supports group principals only', 422);
-        if (!['platform', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
+        if (!['platform', 'tenant', 'engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(assignment.scope.type)) fail(`Config apply does not yet support ${assignment.scope.type} assignment scopes`, 422);
         const role = roleByKey.get(assignment.roleKey);
         const group = groupByKey.get(assignment.principal.key);
         if (!role || !group) fail(`Config assignment references an unresolved role or group: ${assignment.roleKey}`, 422);
         let scopeId: string | null = assignment.scope.type === 'platform' ? null
+          : assignment.scope.type === 'tenant' ? tenantId
           : assignment.scope.type === 'engine' ? engineByKey.get(assignment.scope.engineKey)?.id || null
           : assignment.scope.type === 'engine_set' ? engineSetByKey.get(assignment.scope.engineSetKey)?.id || null
           : assignment.scope.type === 'engine_runtime_resource_set' ? runtimeResourceSetByKey.get(assignment.scope.runtimeResourceSetKey)?.id || null

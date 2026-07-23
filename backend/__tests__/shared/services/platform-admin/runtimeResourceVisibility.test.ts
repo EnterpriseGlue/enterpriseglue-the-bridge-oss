@@ -56,7 +56,13 @@ describe('PermissionService.getVisibleRuntimeResources', () => {
       const [query] = find.mock.calls[0];
       expect(query).toMatchObject({ take: 501 });
       expect(query.where).toEqual(expect.arrayContaining([
-        expect.objectContaining({ engineId: 'engine-1', resourceKind: 'process_definition', isActive: true, tenantId: 'tenant-a' }),
+        expect.objectContaining({
+          engineId: 'engine-1',
+          resourceKind: 'process_definition',
+          isActive: true,
+          tenantId: 'tenant-a',
+          tenantResolutionStatus: 'resolved',
+        }),
       ]));
     });
   }

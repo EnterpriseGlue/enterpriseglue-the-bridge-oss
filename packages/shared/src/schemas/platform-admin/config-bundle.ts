@@ -376,7 +376,7 @@ function uniqueKeys<T extends { key: string }>(items: T[], ctx: z.RefinementCtx,
   });
 }
 
-export const ConfigRoleScopeSchema = z.enum(['platform', 'project', 'engine', 'engine_runtime_resource']);
+export const ConfigRoleScopeSchema = z.enum(['platform', 'tenant', 'project', 'engine', 'engine_runtime_resource']);
 
 const ExplicitConfigRoleSchema = z.object({
   key: ConfigKeySchema.regex(/^custom\./, 'Config bundles may create only custom.* roles'),
@@ -523,6 +523,7 @@ export const ConfigRuntimeResourceSetsFileSchema = z.object({
 
 const ConfigAssignmentScopeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('platform') }).strict(),
+  z.object({ type: z.literal('tenant') }).strict(),
   z.object({ type: z.literal('project'), projectRef: ConfigProjectReferenceSchema }).strict(),
   z.object({ type: z.literal('engine'), engineKey: ReferenceKeySchema }).strict(),
   z.object({ type: z.literal('engine_set'), engineSetKey: ReferenceKeySchema }).strict(),

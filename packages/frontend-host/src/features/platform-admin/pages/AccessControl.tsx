@@ -324,6 +324,7 @@ const DEFAULT_AUTHZ_GROUP_FORM: AuthzGroupFormState = {
 
 function scopeTag(scope: string) {
   if (scope === 'platform') return <Tag type="purple">Platform</Tag>;
+  if (scope === 'tenant') return <Tag type="magenta">Tenant</Tag>;
   if (scope === 'project') return <Tag type="blue">Project</Tag>;
   if (scope === 'external_engine_system') return <Tag type="cyan">External system</Tag>;
   return <Tag type="teal">Engine</Tag>;
@@ -1474,12 +1475,14 @@ export default function AccessControl() {
     }
   };
 
-  const roleScopePermissions = permissions.filter((permission) => permission.scope === roleForm.scope);
+  const roleScopePermissions = permissions.filter((permission) =>
+    permission.scope === roleForm.scope || (roleForm.scope === 'tenant' && permission.tenantSafe));
   const selectedRiskyRolePermissions = roleScopePermissions.filter(
     (permission) => roleForm.permissionIds.includes(permission.key) && getPermissionRisk(permission)
   );
   const selectedRoleScope = [
     { id: 'platform', label: 'Platform' },
+    { id: 'tenant', label: 'Tenant' },
     { id: 'project', label: 'Project' },
     { id: 'engine', label: 'Engine' },
   ].find((item) => item.id === roleForm.scope);
@@ -1915,6 +1918,7 @@ export default function AccessControl() {
             label="Select scope"
             items={[
               { id: 'platform', label: 'Platform' },
+              { id: 'tenant', label: 'Tenant' },
               { id: 'project', label: 'Project' },
               { id: 'engine', label: 'Engine' },
             ]}

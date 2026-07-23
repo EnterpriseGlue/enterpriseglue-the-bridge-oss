@@ -243,4 +243,57 @@ describe('configBundleExportService', () => {
     expect(exportedProvider.allowVerifiedEmailLinking).toBe(true);
     expect(exportedProvider.oidc.allowVerifiedEmailLinking).toBeUndefined();
   });
+
+  it('exports tenant roles and assignments against the bundle tenant without a raw tenant reference', async () => {
+    const role = {
+      id: 'role-tenant', tenantId: 'tenant-a', key: 'custom.tenant.runtime-viewer',
+      name: 'Tenant runtime viewer', description: null, scope: 'tenant',
+      source: 'config', sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked', isArchived: false,
+    };
+    const group = {
+      id: 'group-tenant', tenantId: 'tenant-a', key: 'group.tenant-viewers',
+      name: 'Tenant viewers', description: null, source: 'config',
+      sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', isArchived: false,
+    };
+    const assignment = {
+      id: 'assignment-tenant', tenantId: 'tenant-a', principalType: 'group',
+      principalId: group.id, roleId: role.id, scopeType: 'tenant', scopeId: 'tenant-a',
+      source: 'config', sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked', expiresAt: null,
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === RbacRole) return { find: vi.fn().mockResolvedValue([role]) };
+        if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
+        if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue([{ roleId: role.id, permissionId: 'engine:instance:view' }]) };
+        if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([assignment]) };
+        if ([Engine, EngineSet, RuntimeResourceSet, RuntimeResource, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) {
+          return { find: vi.fn().mockResolvedValue([]) };
+        }
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await configBundleExportService.exportBundle({
+      bundleKey: 'acme.authz',
+      tenantId: 'tenant-a',
+      tenantKey: 'acme',
+    });
+
+    expect(result.files).toMatchObject({
+      './roles.json': {
+        roles: [expect.objectContaining({ key: role.key, scope: 'tenant', permissions: ['engine:instance:view'] })],
+      },
+      './assignments.json': {
+        assignments: [expect.objectContaining({
+          principal: { type: 'group', key: group.key },
+          roleKey: role.key,
+          scope: { type: 'tenant' },
+        })],
+      },
+    });
+    expect(configBundlePreviewService.preview(result)).toMatchObject({ valid: true, errors: [] });
+  });
 });

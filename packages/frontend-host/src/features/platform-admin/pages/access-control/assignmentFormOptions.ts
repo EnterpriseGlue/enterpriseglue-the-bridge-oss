@@ -18,9 +18,9 @@ export const ASSIGNMENT_PRINCIPAL_OPTIONS: Array<{ id: AssignmentPrincipalType; 
   { id: 'user', label: 'User' }, { id: 'group', label: 'Group' }, { id: 'api_client', label: 'API client' }, { id: 'service_account', label: 'Service account' },
 ];
 export function assignmentResourceTypeOptions(principalType: AssignmentPrincipalType) {
-  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
-  if (principalType === 'service_account') return [{ id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
-  return [{ id: 'platform', label: 'Platform' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
+  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
+  if (principalType === 'service_account') return [{ id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
+  return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
 }
 export function withAssignmentPrincipalType(state: AssignmentFormState, principalType: AssignmentPrincipalType): AssignmentFormState {
   return {
@@ -33,10 +33,10 @@ export function withAssignmentPrincipalType(state: AssignmentFormState, principa
   };
 }
 export function withAssignmentResourceType(state: AssignmentFormState, resourceType: CoreAssignmentResourceType): AssignmentFormState {
-  return { ...state, resourceType, resourceId: resourceType === 'platform' ? '' : state.resourceId, runtimeEngineId: resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? state.runtimeEngineId : '', roleId: '' };
+  return { ...state, resourceType, resourceId: resourceType === 'platform' || resourceType === 'tenant' ? '' : state.resourceId, runtimeEngineId: resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? state.runtimeEngineId : '', roleId: '' };
 }
 export function canSubmitAssignment(state: AssignmentFormValues, pending: boolean) {
-  return Boolean(state.principalId && state.roleId && (state.resourceType === 'platform' || state.resourceId) && !pending);
+  return Boolean(state.principalId && state.roleId && (state.resourceType === 'platform' || state.resourceType === 'tenant' || state.resourceId) && !pending);
 }
 export function useAssignmentFormState() {
   const [form, setForm] = React.useState<AssignmentFormState>(DEFAULT_ASSIGNMENT_FORM_STATE);
@@ -51,6 +51,8 @@ export function useAssignmentRuntimeOptions(form: AssignmentFormState) {
 const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
   'system.api.engine_registrar',
   'system.api.external_engine_system_registrar',
+  'system.tenant.engine_operator',
+  'system.tenant.viewer',
   'system.project.deployer',
   'system.engine.operator',
   'system.engine.deployer',

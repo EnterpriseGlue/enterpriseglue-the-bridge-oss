@@ -39,6 +39,22 @@ import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
 import { normalizeTenantIdForPersistence, tenantIdsForAuthz } from '../../authz/tenant-scope.js';
 import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
 import type { AuthzPrincipalType, AuthzResourceType } from '../../authz/permission-actions.js';
+import {
+  isTenantSafePermission,
+  rolePermissionValidationError,
+  TENANT_MACHINE_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  TENANT_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_PROJECT_PERMISSION_IDS,
+} from '../../authz/tenant-role-policy.js';
+
+export {
+  isTenantSafePermission,
+  TENANT_MACHINE_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  TENANT_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_PROJECT_PERMISSION_IDS,
+} from '../../authz/tenant-role-policy.js';
 
 // ============================================================================
 // Permission String Constants
@@ -230,6 +246,7 @@ export interface PermissionDefinition {
   category: string;
   label: string;
   description: string;
+  tenantSafe?: boolean;
   kind?: PermissionKind;
   isEditable?: boolean;
   isArchived?: boolean;
@@ -393,6 +410,16 @@ function tenantScopedWhere<T extends Record<string, unknown>>(where: T, tenantId
   ] as T[];
 }
 
+function tenantOwnedWhere<T extends Record<string, unknown>>(where: T, tenantId?: string | null): T | T[] {
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  if (visibleTenantIds.length === 0) return { ...where, tenantId: IsNull() } as T;
+  return visibleTenantIds.map((visibleTenantId) => ({ ...where, tenantId: visibleTenantId })) as T[];
+}
+
+function resolvedRuntimeResourceWhere<T extends Record<string, unknown>>(where: T, tenantId?: string | null): T | T[] {
+  return tenantOwnedWhere({ ...where, tenantResolutionStatus: 'resolved' }, tenantId) as T | T[];
+}
+
 function parseJsonRecord(value?: string | null): Record<string, unknown> | null {
   if (!value) return null;
   try {
@@ -494,6 +521,14 @@ export interface PermissionEvaluationSource {
   expiresAt?: number | null;
   scopeType?: ResourceType | null;
   scopeId?: string | null;
+  runtimeTenantResolution?: {
+    tenantId: string;
+    status: 'resolved';
+    mappingId: string | null;
+    mappingVersion: number;
+    code: string | null;
+    engineTenancyMode: 'dedicated' | 'shared';
+  } | null;
   groupId?: string | null;
   groupKey?: string | null;
   groupName?: string | null;
@@ -603,7 +638,7 @@ export function annotateRuntimeGrantShadowing(sources: PermissionEvaluationSourc
     .map((source) => source.assignmentId as string);
   if (narrowAssignmentIds.length === 0) return sources;
   return sources.map((source) =>
-    source.scopeType === 'engine'
+    source.scopeType === 'engine' || source.scopeType === 'tenant'
       ? { ...source, shadowedRuntimeAssignmentIds: narrowAssignmentIds }
       : source
   );
@@ -633,6 +668,9 @@ export const SYSTEM_ROLE_IDS = {
   PLATFORM_SSO_ADMIN: 'system.platform.sso_admin',
   PLATFORM_ENGINE_REGISTRY_ADMIN: 'system.platform.engine_registry_admin',
   PLATFORM_API_CLIENT_ADMIN: 'system.platform.api_client_admin',
+  TENANT_ADMIN: 'system.tenant.admin',
+  TENANT_ENGINE_OPERATOR: 'system.tenant.engine_operator',
+  TENANT_VIEWER: 'system.tenant.viewer',
   PROJECT_OWNER: 'system.project.owner',
   PROJECT_DELEGATE: 'system.project.delegate',
   PROJECT_DEPLOYER: 'system.project.deployer',
@@ -696,6 +734,7 @@ function permissionDefinition(permission: Permission, scope: ResourceType, categ
     category,
     label: labelFromPermission(permission),
     description,
+    tenantSafe: isTenantSafePermission(permission),
     kind: 'system',
     isEditable: false,
     isArchived: false,
@@ -1125,6 +1164,21 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
   ],
 };
 
+export const TenantRolePermissions: Record<'admin' | 'engineOperator' | 'viewer', Permission[]> = {
+  admin: [
+    ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
+    ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  ],
+  engineOperator: [...TENANT_SAFE_ENGINE_PERMISSION_IDS],
+  viewer: [
+    ProjectPermissions.MEMBERS_VIEW,
+    ProjectPermissions.FILES_VIEW,
+    ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
+    EnginePermissions.DEPLOY_VIEW,
+    EnginePermissions.INSTANCE_VIEW,
+  ],
+};
+
 export const SystemRoleDefinitions: SystemRoleDefinition[] = [
   {
     id: SYSTEM_ROLE_IDS.PLATFORM_ADMIN,
@@ -1265,6 +1319,39 @@ export const SystemRoleDefinitions: SystemRoleDefinition[] = [
       PlatformPermissions.SERVICE_ACCOUNTS_VIEW,
       PlatformPermissions.SERVICE_ACCOUNTS_MANAGE,
     ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.TENANT_ADMIN,
+    key: SYSTEM_ROLE_IDS.TENANT_ADMIN,
+    name: 'Tenant Administrator',
+    description: 'Manage tenant-owned project and runtime actions without platform authorization or engine-secret administration.',
+    scope: 'tenant',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: TenantRolePermissions.admin,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
+    key: SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
+    name: 'Tenant Engine Operator',
+    description: 'Operate dedicated or explicitly mapped runtime resources inside one tenant without connection administration.',
+    scope: 'tenant',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: TenantRolePermissions.engineOperator,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.TENANT_VIEWER,
+    key: SYSTEM_ROLE_IDS.TENANT_VIEWER,
+    name: 'Tenant Viewer',
+    description: 'Read tenant-owned project content, deployment state, and runtime instances without mutation.',
+    scope: 'tenant',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: TenantRolePermissions.viewer,
   },
   {
     id: SYSTEM_ROLE_IDS.PROJECT_OWNER,
@@ -1416,12 +1503,15 @@ const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set<string>([
   SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
   SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
   SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
+  SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
+  SYSTEM_ROLE_IDS.TENANT_VIEWER,
   SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
   SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
   SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
 ]);
 const MACHINE_ASSIGNABLE_CUSTOM_ROLE_PERMISSIONS: Partial<Record<RoleScope, Set<Permission>>> = {
   platform: new Set<Permission>([PlatformPermissions.ENGINE_REGISTRATION_MANAGE]),
+  tenant: TENANT_MACHINE_SAFE_PERMISSION_IDS,
   external_engine_system: new Set<Permission>([
     ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE,
     ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE,
@@ -1509,6 +1599,7 @@ class PermissionServiceClass {
           category: row.category,
           label: row.label,
           description: row.description || '',
+          tenantSafe: isTenantSafePermission(row.key),
           kind: (row.kind === 'custom' ? 'custom' : 'system'),
           isEditable: Boolean(row.isEditable),
           isArchived: Boolean(row.isArchived),
@@ -2475,9 +2566,8 @@ class PermissionServiceClass {
       if (permission.isArchived) {
         throw new Error(`Permission ${permissionId} is archived`);
       }
-      if (permission.scope !== scope) {
-        throw new Error(`Permission ${permissionId} does not match ${scope} role scope`);
-      }
+      const validationError = rolePermissionValidationError(scope, permission);
+      if (validationError) throw new Error(validationError);
     }
 
     return uniquePermissionIds;
@@ -2643,6 +2733,14 @@ class PermissionServiceClass {
   private async assertResourceExists(dataSource: DataSource | EntityManager, resourceType: ResourceType, resourceId: string | null, tenantId?: string | null): Promise<void> {
     if (resourceType === 'platform') return;
 
+    if (resourceType === 'tenant') {
+      const normalizedTenantId = normalizeTenantId(tenantId);
+      if (!normalizedTenantId || normalizeTenantId(resourceId) !== normalizedTenantId) {
+        throw new Error('Tenant role assignments require the active tenant ID');
+      }
+      return;
+    }
+
     if (resourceType === 'project') {
       const project = await dataSource.getRepository(Project).findOne({
         where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
@@ -2678,10 +2776,10 @@ class PermissionServiceClass {
 
     if (resourceType === 'engine_runtime_resource') {
       const runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({
-        where: tenantScopedWhere({ id: resourceId || '', isActive: true }, tenantId),
+        where: resolvedRuntimeResourceWhere({ id: resourceId || '', isActive: true }, tenantId),
         select: ['id'],
       });
-      if (!runtimeResource) throw new Error('Runtime resource not found or inactive');
+      if (!runtimeResource) throw new Error('Runtime resource not found, unresolved, or inactive');
       return;
     }
 
@@ -2720,7 +2818,7 @@ class PermissionServiceClass {
 
     const runtimeScope = scopeType === 'engine_runtime_resource'
       ? await dataSource.getRepository(RuntimeResource).findOne({
-        where: tenantScopedWhere({ id: scopeId || '', isActive: true }, tenantId),
+        where: resolvedRuntimeResourceWhere({ id: scopeId || '', isActive: true }, tenantId),
         select: ['engineId'],
       })
       : await dataSource.getRepository(RuntimeResourceSet).findOne({
@@ -2851,7 +2949,11 @@ class PermissionServiceClass {
     }
     const dataSource = await getDataSource();
     const rows = await dataSource.getRepository(RuntimeResource).find({
-      where: tenantScopedWhere({ engineId: input.engineId, resourceKind: input.resourceKind, isActive: true }, input.tenantId),
+      where: resolvedRuntimeResourceWhere({
+        engineId: input.engineId,
+        resourceKind: input.resourceKind,
+        isActive: true,
+      }, input.tenantId),
       take: maxRows + 1,
       order: { resourceKey: 'ASC', id: 'ASC' },
     });
@@ -2912,6 +3014,7 @@ class PermissionServiceClass {
     });
 
     const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
       .select(['assignment.scopeId'])
@@ -2926,6 +3029,14 @@ class PermissionServiceClass {
       const projectId = assignment.scopeId;
       if (projectId) ids.add(projectId);
     });
+
+    if (hasTenantAssignment && normalizedTenantId) {
+      const projects = await dataSource.getRepository(Project).find({
+        where: tenantOwnedWhere({}, normalizedTenantId),
+        select: ['id'],
+      });
+      projects.forEach((project) => ids.add(project.id));
+    }
 
     if (hasGlobalExplicitGrant) {
       const projects = await dataSource.getRepository(Project).find({
@@ -2967,6 +3078,7 @@ class PermissionServiceClass {
     });
 
     const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
       .select(['assignment.scopeId'])
@@ -3039,15 +3151,28 @@ class PermissionServiceClass {
     }
     if (runtimeResourceIds.length > 0) {
       const runtimeResources = await dataSource.getRepository(RuntimeResource).find({
-        where: normalizedTenantId
-          ? [
-            { id: In(Array.from(new Set(runtimeResourceIds))), tenantId: normalizedTenantId, isActive: true },
-            { id: In(Array.from(new Set(runtimeResourceIds))), tenantId: IsNull(), isActive: true },
-          ]
-          : { id: In(Array.from(new Set(runtimeResourceIds))), isActive: true },
+        where: resolvedRuntimeResourceWhere({
+          id: In(Array.from(new Set(runtimeResourceIds))),
+          isActive: true,
+        }, normalizedTenantId),
         select: ['engineId'],
       });
       runtimeResources.forEach((runtimeResource) => ids.add(runtimeResource.engineId));
+    }
+
+    if (hasTenantAssignment && normalizedTenantId) {
+      const [dedicatedEngines, sharedResources] = await Promise.all([
+        dataSource.getRepository(Engine).find({
+          where: tenantOwnedWhere({ tenancyMode: 'dedicated' }, normalizedTenantId),
+          select: ['id'],
+        }),
+        dataSource.getRepository(RuntimeResource).find({
+          where: resolvedRuntimeResourceWhere({ isActive: true }, normalizedTenantId),
+          select: ['engineId'],
+        }),
+      ]);
+      dedicatedEngines.forEach((engine) => ids.add(engine.id));
+      sharedResources.forEach((resource) => ids.add(resource.engineId));
     }
 
     if (hasGlobalEngineAssignment || hasGlobalExplicitGrant) {
@@ -3097,6 +3222,25 @@ class PermissionServiceClass {
       `(${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId)`,
       { userPrincipalType: 'user', userId }
     );
+  }
+
+  private async hasActiveTenantAssignment(
+    dataSource: DataSource,
+    userId: string,
+    groupIds: string[],
+    tenantId?: string | null,
+  ): Promise<boolean> {
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (!normalizedTenantId) return false;
+    const qb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.id'])
+      .where('assignment.scopeType = :tenantScope', { tenantScope: 'tenant' })
+      .andWhere('assignment.scopeId = :tenantScopeId', { tenantScopeId: normalizedTenantId })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(qb, 'assignment', normalizedTenantId);
+    return (await qb.getMany()).length > 0;
   }
 
   private async getAuthorizationVersion(
@@ -3242,6 +3386,48 @@ class PermissionServiceClass {
     );
   }
 
+  private async resolveTenantInheritanceScope(
+    dataSource: DataSource,
+    permission: Permission,
+    resourceType: ResourceType | undefined,
+    resourceId: string | undefined,
+    tenantId: string | null | undefined,
+    runtimeResource: RuntimeResource | null,
+  ): Promise<string | null> {
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (!normalizedTenantId || !resourceType || !resourceId || !isTenantSafePermission(permission)) return null;
+    if (resourceType === 'tenant') {
+      return normalizeTenantId(resourceId) === normalizedTenantId ? normalizedTenantId : null;
+    }
+    if (resourceType === 'engine_runtime_resource') {
+      return runtimeResource && normalizeTenantId(runtimeResource.tenantId) === normalizedTenantId
+        ? normalizedTenantId
+        : null;
+    }
+    if (resourceType === 'project') {
+      const project = await dataSource.getRepository(Project).findOne({
+        where: tenantOwnedWhere({ id: resourceId }, normalizedTenantId),
+        select: ['id'],
+      });
+      return project ? normalizedTenantId : null;
+    }
+    if (resourceType === 'engine') {
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: tenantOwnedWhere({ id: resourceId, tenancyMode: 'dedicated' }, normalizedTenantId),
+        select: ['id'],
+      });
+      return engine ? normalizedTenantId : null;
+    }
+    if (resourceType === 'engine_runtime_resource_set') {
+      const set = await dataSource.getRepository(RuntimeResourceSet).findOne({
+        where: tenantOwnedWhere({ id: resourceId, isArchived: false }, normalizedTenantId),
+        select: ['id'],
+      });
+      return set ? normalizedTenantId : null;
+    }
+    return null;
+  }
+
   private async getRoleAssignmentPermissionSources(
     principal: { principalType: PrincipalType; principalId: string },
     permission: Permission,
@@ -3253,11 +3439,37 @@ class PermissionServiceClass {
     const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
     const now = Date.now();
     const runtimeResource = resourceType === 'engine_runtime_resource' && resourceId
-      ? await dataSource.getRepository(RuntimeResource).findOne({ where: tenantScopedWhere({ id: resourceId, isActive: true }, tenantId) })
+      ? await dataSource.getRepository(RuntimeResource).findOne({
+        where: resolvedRuntimeResourceWhere({ id: resourceId, isActive: true }, tenantId),
+      })
       : null;
-    if (resourceType === 'engine_runtime_resource' && resourceId && !runtimeResource) {
+    if (resourceType === 'engine_runtime_resource' && resourceId && (!runtimeResource || !runtimeResource.tenantId)) {
       return [];
     }
+    const runtimeEngine = runtimeResource
+      ? await dataSource.getRepository(Engine).findOne({ where: { id: runtimeResource.engineId } })
+      : null;
+    if (runtimeResource && !runtimeEngine) return [];
+    const tenantInheritanceScope = await this.resolveTenantInheritanceScope(
+      dataSource,
+      permission,
+      resourceType,
+      resourceId,
+      tenantId,
+      runtimeResource,
+    );
+    const runtimeTenantResolution: PermissionEvaluationSource['runtimeTenantResolution'] = runtimeResource && runtimeEngine
+      ? {
+          tenantId: runtimeResource.tenantId!,
+          status: 'resolved',
+          mappingId: runtimeResource.tenantMappingId || null,
+          mappingVersion: Number(runtimeResource.tenantMappingVersion || 0),
+          code: typeof parseJsonRecord(runtimeResource.tenantResolutionDetailsJson)?.code === 'string'
+            ? String(parseJsonRecord(runtimeResource.tenantResolutionDetailsJson)?.code)
+            : null,
+          engineTenancyMode: runtimeEngine.tenancyMode === 'shared' ? 'shared' : 'dedicated',
+        }
+      : null;
     const qb = assignmentRepo.createQueryBuilder('assignment')
       .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
       .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
@@ -3269,17 +3481,37 @@ class PermissionServiceClass {
     addTenantScopeFilter(qb, 'assignment', tenantId);
     addTenantScopeFilter(qb, 'role', tenantId);
 
-    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource) {
+    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource && runtimeEngine) {
+      const engineScopeClause = runtimeEngine.tenancyMode === 'shared'
+        ? ''
+        : ' OR (assignment.scopeType = :engineScope AND (assignment.scopeId = :engineId OR assignment.scopeId IS NULL))';
+      const tenantScopeClause = tenantInheritanceScope
+        ? ' OR (assignment.scopeType = :tenantScope AND assignment.scopeId = :tenantScopeId)'
+        : '';
       qb.andWhere(
-        '((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId) OR ' +
-        '(assignment.scopeType = :engineScope AND (assignment.scopeId = :engineId OR assignment.scopeId IS NULL)))',
-        { resourceType, resourceId, engineScope: 'engine', engineId: runtimeResource.engineId }
+        `((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId)${engineScopeClause}${tenantScopeClause})`,
+        {
+          resourceType,
+          resourceId,
+          engineScope: 'engine',
+          engineId: runtimeResource.engineId,
+          tenantScope: 'tenant',
+          tenantScopeId: tenantInheritanceScope,
+        }
       );
     } else if (resourceType && resourceId) {
+      const tenantScopeClause = tenantInheritanceScope
+        ? ' OR (assignment.scopeType = :tenantScope AND assignment.scopeId = :tenantScopeId)'
+        : '';
       qb.andWhere(
         '((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId) OR ' +
-        '(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL))',
-        { resourceType, resourceId }
+        `(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL)${tenantScopeClause})`,
+        {
+          resourceType,
+          resourceId,
+          tenantScope: 'tenant',
+          tenantScopeId: tenantInheritanceScope,
+        }
       );
     } else if (resourceType) {
       qb.andWhere(
@@ -3303,10 +3535,11 @@ class PermissionServiceClass {
       expiresAt: assignment.expiresAt == null ? null : Number(assignment.expiresAt),
       scopeType: assignment.scopeType as ResourceType | null,
       scopeId: assignment.scopeId,
+      runtimeTenantResolution,
       configBundle: configBundleLineageForAssignment(assignment),
     }));
 
-    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource) {
+    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource && runtimeEngine) {
       const runtimeSetQb = assignmentRepo.createQueryBuilder('assignment')
         .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
         .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
@@ -3321,7 +3554,7 @@ class PermissionServiceClass {
       addTenantScopeFilter(runtimeSetQb, 'role', tenantId);
       addTenantScopeFilter(runtimeSetQb, 'runtimeMaterialization', tenantId);
 
-      const engineSetQb = assignmentRepo.createQueryBuilder('assignment')
+      const engineSetQb = runtimeEngine.tenancyMode === 'shared' ? null : assignmentRepo.createQueryBuilder('assignment')
         .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
         .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
         .innerJoin(EngineSetMaterialization, 'engineMaterialization', 'engineMaterialization.engineSetId = assignment.scopeId AND engineMaterialization.engineId = :engineId', { engineId: runtimeResource.engineId })
@@ -3330,11 +3563,16 @@ class PermissionServiceClass {
         .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
         .andWhere('assignment.scopeType = :engineSetScope', { engineSetScope: 'engine_set' })
         .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
-      await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
-      addTenantScopeFilter(engineSetQb, 'assignment', tenantId);
-      addTenantScopeFilter(engineSetQb, 'role', tenantId);
-      addTenantScopeFilter(engineSetQb, 'engineMaterialization', tenantId);
-      const [runtimeSetAssignments, engineSetAssignments] = await Promise.all([runtimeSetQb.getMany(), engineSetQb.getMany()]);
+      if (engineSetQb) {
+        await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
+        addTenantScopeFilter(engineSetQb, 'assignment', tenantId);
+        addTenantScopeFilter(engineSetQb, 'role', tenantId);
+        addTenantScopeFilter(engineSetQb, 'engineMaterialization', tenantId);
+      }
+      const [runtimeSetAssignments, engineSetAssignments] = await Promise.all([
+        runtimeSetQb.getMany(),
+        engineSetQb ? engineSetQb.getMany() : Promise.resolve([]),
+      ]);
       const inheritedSources: PermissionEvaluationSource[] = [...runtimeSetAssignments, ...engineSetAssignments].map((assignment) => ({
         type: 'role-assignment' as const, assignmentId: assignment.id, roleId: assignment.roleId,
         principalType: assignment.principalType as PrincipalType, principalId: assignment.principalId!, source: assignment.source,
@@ -3342,6 +3580,7 @@ class PermissionServiceClass {
         tenantId: assignment.tenantId,
         expiresAt: assignment.expiresAt == null ? null : Number(assignment.expiresAt),
         scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
+        runtimeTenantResolution,
         configBundle: configBundleLineageForAssignment(assignment),
       }));
       const shadowingSources = annotateRuntimeGrantShadowing([...directSources, ...inheritedSources]);

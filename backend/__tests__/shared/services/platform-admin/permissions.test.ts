@@ -1117,6 +1117,7 @@ describe('permissionService', () => {
         if (entity === RbacRoleAssignment) return assignmentRepo;
         if (entity === RbacRolePermission) return {};
         if (entity === RbacRole) return {};
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1' }) };
         throw new Error('Unexpected repository');
       },
     });

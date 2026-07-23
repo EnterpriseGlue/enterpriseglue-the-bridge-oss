@@ -672,6 +672,32 @@ As of May 31, 2026:
   - Current Mission Control runtime middleware accepts owner, delegate, or operator for important runtime mutation flows.
   - Teams that need narrower operational access should use an explicit custom engine role rather than widening the system deployer role.
 
+## Tenant Scope and Engine Topology
+
+Tenant is a first-class assignment scope between platform and project/engine
+resources. A tenant assignment may inherit only to:
+
+- projects whose persisted tenant matches the authenticated tenant;
+- dedicated engines owned by that tenant; and
+- active shared-engine runtime resources resolved to that tenant.
+
+The inheritance classifier includes all project permissions and only runtime-safe
+engine actions. It excludes platform actions, engine connection/lifecycle/secrets,
+engine membership and project-access approval, delegation, ownership, and
+environment administration.
+
+For shared engines, a tenant or exact runtime-resource assignment may authorize a
+resolved resource. A broad shared-engine or Engine Set assignment is not accepted
+as runtime authority. Unmapped, conflicting, stale, null-tenant, and
+sibling-tenant resources fail before an upstream engine call.
+
+Platform Access Control administrators create and assign tenant roles. Tenant
+roles do not implicitly grant RBAC delegation. Effective Access reports the
+sanitized mapping ID/version and topology used by a runtime decision.
+
+See [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md) for
+the exact permission boundary, persistence invariants, and executable evidence.
+
 ## OSS Tenant Model
 ```mermaid
 flowchart LR
@@ -683,9 +709,11 @@ flowchart LR
 In OSS:
 - unified tenant-style routes exist for compatibility with EE
 - the tenant middleware resolves requests to a default tenant context
-- authenticated users are effectively treated as `tenant_admin` in OSS tenant middleware
 - RBAC and ABAC persistence now carry optional `tenant_id` scope hooks for EE
-- tenant-aware permission evaluation includes tenant-matching records and legacy null-tenant records, preserving existing OSS/global assignments
+- dedicated engine provisioning persists the canonical default tenant when no
+  explicit request tenant is present
+- tenant-role inheritance requires an exact tenant-owned target; null tenant is
+  not a default-tenant authorization signal
 - real tenant membership, tenant-admin, and super-admin semantics are resolved by the EE plugin through a post-auth tenant authorization hook
 
 ## Platform Admin vs Resource Owner Boundary

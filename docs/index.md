@@ -25,6 +25,7 @@ Audience: Developers and architects.
 - [Configuration Matrix](reference/configuration-matrix.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
+- [Configure Dedicated and Shared Engine Tenancy](how-to/configure-engine-tenancy.md)
 
 ## Architecture
 - [Architecture Overview](architecture/00-architecture-overview.md)
@@ -38,6 +39,7 @@ Audience: Developers and architects.
 - [Engine Tenancy Data Model](reference/engine-tenancy-data-model.md)
 - [Engine Tenancy and Provisioning API](reference/engine-tenancy-and-provisioning-api.md)
 - [Provision Engines Externally](how-to/provision-engines-externally.md)
+- [Test Engine Tenancy and Fine-Grained Access Control](development/testing-engine-tenancy-and-access-control.md)
 - [Non-Postgres Database Setup](how-to/database-non-postgres.md)
 
 ## Operations

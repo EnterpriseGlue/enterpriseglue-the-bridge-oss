@@ -188,10 +188,20 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
 
   router.post('/api/authz/role-assignments', apiLimiter, requireAuth, validateBody(RoleAssignmentCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
-      await assertCanAssignScopedRole(req, req.body);
+      const tenantId = req.tenant?.tenantId || null;
+      const input = req.body.resourceType === 'tenant' || req.body.scopeType === 'tenant'
+        ? {
+            ...req.body,
+            resourceType: 'tenant' as const,
+            resourceId: tenantId,
+            scopeType: 'tenant' as const,
+            scopeId: tenantId,
+          }
+        : req.body;
+      await assertCanAssignScopedRole(req, input);
       const result = await permissionService.assignRole({
-        ...req.body,
-        tenantId: req.tenant?.tenantId || null,
+        ...input,
+        tenantId,
         createdById: req.user!.userId,
       });
       res.status(201).json(result);

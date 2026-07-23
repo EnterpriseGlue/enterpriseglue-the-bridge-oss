@@ -10,6 +10,11 @@ import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import {
+  OSS_DEFAULT_TENANT_ID,
+  normalizeTenantIdForPersistence,
+  tenantIdsForAuthz,
+} from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
@@ -210,18 +215,21 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
     }
 
     let resolvedResourceId = resourceId;
-    let resolvedRuntimeResource: Record<string, string> | undefined;
+    let resolvedRuntimeResource: Record<string, unknown> | undefined;
     if (runtimeResource) {
+      const requestTenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
       const runtime = await (await getDataSource()).getRepository(RuntimeResource).findOne({
-        where: {
+        where: tenantIdsForAuthz(requestTenantId).map((visibleTenantId) => ({
           engineId: runtimeResource.engineId,
           resourceKind: runtimeResource.resourceKind,
           resourceKey: runtimeResource.resourceKey,
           runtimeTenantId: runtimeResource.runtimeTenantId || '',
           isActive: true,
-        },
+          tenantId: visibleTenantId,
+          tenantResolutionStatus: 'resolved',
+        })),
       });
-      if (!runtime || (runtime.tenantId || null) !== (req.tenant?.tenantId || null)) {
+      if (!runtime) {
         throw Errors.notFound('Runtime resource');
       }
       resolvedResourceId = runtime.id;
@@ -231,6 +239,10 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
         resourceKind: runtime.resourceKind,
         resourceKey: runtime.resourceKey,
         runtimeTenantId: runtime.runtimeTenantId,
+        tenantId: runtime.tenantId!,
+        tenantResolutionStatus: 'resolved',
+        tenantMappingId: runtime.tenantMappingId,
+        tenantMappingVersion: Number(runtime.tenantMappingVersion || 0),
       };
     }
 
