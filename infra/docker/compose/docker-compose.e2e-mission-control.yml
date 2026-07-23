@@ -17,11 +17,17 @@ services:
       timeout: 5s
       retries: 20
     networks:
-      - enterpriseglue-network
+      enterpriseglue-network:
+        aliases:
+          # Public-shaped local DNS name exercises the external registration
+          # URL contract without weakening its localhost/private-host denylist.
+          - camunda-mock.example.test
 
   backend:
     environment:
       CAMUNDA_BASE_URL: ${CAMUNDA_BASE_URL:-http://camunda-mock:9080/engine-rest}
+      # Disposable mock credential used by configuration-bundle E2E coverage.
+      E2E_ENGINE_PASSWORD: ${E2E_ENGINE_PASSWORD:-e2e-local-only}
     depends_on:
       db:
         condition: service_healthy

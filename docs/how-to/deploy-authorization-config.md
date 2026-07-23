@@ -265,6 +265,36 @@ audit fixtures. Its configuration journey is administrator-session evidence;
 the protected CI test remains separate and must use a least-privilege machine
 client as described above.
 
+### Verify A Shared Engine And Mapping Round Trip Locally
+
+Use this sequence before promoting a centralized shared-engine bundle:
+
+1. Apply a bundle containing one dedicated engine and one shared,
+   resource-aware engine, but no shared mappings. Use stable `engine.*` keys,
+   opaque secret references, and `config_locked` ownership.
+2. Reapply the exact bundle with a new idempotency key. Confirm it is a no-op
+   and both engine IDs remain stable.
+3. Reconcile both engines. Confirm the dedicated inventory inherits its owning
+   tenant, while the shared inventory remains `incomplete`, reports unmapped
+   resources, and exposes no runtime resources.
+4. Add `engine-tenant-mappings.json` with one source-owned mapping for each
+   external runtime tenant ID. Preview and diff, then apply the exact canonical
+   hash and all required acknowledgements.
+5. Reconcile the shared engine again. Confirm it becomes `ready`, diagnostics
+   report no unmapped or conflicting resources, and both runtime tenant
+   segments resolve to the intended EnterpriseGlue tenant.
+6. Apply an empty authoritative engine and mapping declaration. Confirm both
+   engines and both mapping rows are archived and cannot reappear through
+   reconciliation.
+
+`pnpm run test:engine-tenancy:provisioning-journeys:local` automates this
+configuration sequence and the equivalent manual UI and external API
+sequences. The runner resolves a disposable `E2E_ENGINE_PASSWORD` only inside
+the local backend container and never writes its value to the bundle or
+evidence. A release candidate is complete only when the resulting
+`provisioning-journeys.json` reports 14/14 journeys and 30/30 required channel
+executions on the same clean commit.
+
 The CLI calls the same backend APIs used by the UI. It never connects directly to the database. `apply` sends the server-produced canonical hash as `expectedPreviewHash`, so stale or altered bundles fail closed. Set `ENTERPRISEGLUE_CONFIG_IDEMPOTENCY_KEY` for CI retries: a completed matching apply returns its original receipt, while reusing the key with different bundle input is rejected. The CLI returns `64` for invalid invocation, `2` for preview validation failure, and `1` for API, I/O, or transport failures.
 
 Before promoting a bundle workflow or backend image, run the focused contract

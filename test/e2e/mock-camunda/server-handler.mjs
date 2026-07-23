@@ -88,10 +88,45 @@ function getDecisionOutputsById(id) {
   return decisionOutputs.get(id) || []
 }
 
+const partitionedRuntimePathPrefix = '/e2e-shared-engine-rest'
+const standardRuntimePathPrefix = '/engine-rest'
+
+function withPartitionedRuntimeTenant(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item) || !('tenantId' in item)) {
+    return item
+  }
+  const identity = String(
+    item.key
+      || item.definitionKey
+      || item.processDefinitionKey
+      || item.decisionDefinitionKey
+      || item.id
+      || '',
+  )
+  return {
+    ...item,
+    tenantId: /(sequential|rework|risk)/i.test(identity)
+      ? 'e2e-runtime-green'
+      : 'e2e-runtime-blue',
+  }
+}
+
+function withPartitionedRuntimeTenants(value) {
+  return Array.isArray(value)
+    ? value.map(withPartitionedRuntimeTenant)
+    : withPartitionedRuntimeTenant(value)
+}
+
 export function createMockCamundaHandler() {
   return async function mockCamundaHandler(req, res) {
     try {
-      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      const requestedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      const partitionRuntimeTenants = requestedUrl.pathname === partitionedRuntimePathPrefix
+        || requestedUrl.pathname.startsWith(`${partitionedRuntimePathPrefix}/`)
+      if (partitionRuntimeTenants) {
+        requestedUrl.pathname = `${standardRuntimePathPrefix}${requestedUrl.pathname.slice(partitionedRuntimePathPrefix.length)}`
+      }
+      const url = requestedUrl
       const { pathname, searchParams } = url
       const routePath = decodeURIComponent(pathname)
 
@@ -101,7 +136,12 @@ export function createMockCamundaHandler() {
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/process-definition') {
-        sendJson(res, 200, filterProcessDefinitions(searchParams))
+        const definitions = filterProcessDefinitions(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(definitions) : definitions,
+        )
         return
       }
 
@@ -129,7 +169,7 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown process definition: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 
@@ -241,7 +281,12 @@ export function createMockCamundaHandler() {
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/decision-definition') {
-        sendJson(res, 200, filterDecisionDefinitions(searchParams))
+        const definitions = filterDecisionDefinitions(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(definitions) : definitions,
+        )
         return
       }
 
@@ -263,7 +308,7 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown decision definition: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 

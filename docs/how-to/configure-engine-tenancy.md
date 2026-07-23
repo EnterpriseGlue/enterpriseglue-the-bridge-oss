@@ -137,6 +137,31 @@ resource is visible to the signed-in user. If the engine is absent from both
 places, confirm that the operator has `engine:edit`; do not grant runtime access
 to work around a missing administration permission.
 
+### Validate the Result Across Provisioning Channels
+
+Use the same acceptance sequence whether the engine was added in the UI,
+registered through the external API, or applied from a configuration bundle:
+
+1. Reconcile a dedicated engine and confirm every discovered runtime resource
+   inherits the engine's EnterpriseGlue tenant and reports `resolved`.
+2. Reconcile a new shared engine before adding mappings. Confirm its status is
+   `incomplete`, diagnostics report unmapped resources, and runtime-facing
+   lists return none of those resources.
+3. Preview two mapping rows, review the expected mapping version, and apply the
+   exact reviewed batch.
+4. Reconcile again. Confirm the shared engine is `ready`, both external runtime
+   tenant IDs appear in diagnostics, and each visible resource resolves to the
+   intended EnterpriseGlue tenant.
+5. Remove the disposable engine through the same provisioning owner that
+   created it and confirm its mappings and inventory no longer authorize
+   access.
+
+The repository's localhost-only Journey 7 automation executes this sequence
+through all three provisioning channels against the real backend, PostgreSQL
+database, authorization evaluator, and a Docker-hosted Camunda-compatible
+endpoint. Passing that journey proves the channel behavior is aligned; it does
+not replace the full 14-journey, 30-channel release gate.
+
 ### Manage Topology and Mappings in the UI
 
 Open an existing engine. The **Tenancy and tenant mappings** panel shows

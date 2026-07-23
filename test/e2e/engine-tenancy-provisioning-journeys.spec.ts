@@ -7,8 +7,11 @@ import {
   type Page,
 } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { Pool } from 'pg';
+import { canonicalRoleAssignmentKey } from '../../packages/shared/src/authz/role-assignment-identity';
 import { getE2ECredentials, hasE2ECredentials } from './utils/credentials';
 
 function isLocalUrl(value: string): boolean {
@@ -873,6 +876,1069 @@ test.describe('Engine tenancy provisioning journeys', () => {
           }
         }
       }
+    }
+  });
+
+  test('journey 7 manual UI runtime resource tenant resolution', async ({ page }) => {
+    const commit = git(['rev-parse', 'HEAD']);
+    const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
+      ? 'dirty-development-run'
+      : 'clean';
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const dedicatedName = `e2e-journey-07-manual-dedicated-${suffix}`;
+    const sharedName = `e2e-journey-07-manual-shared-${suffix}`;
+    const runtimeBaseUrl = 'http://camunda-mock:9080/e2e-shared-engine-rest';
+    const createdEngineIds: string[] = [];
+
+    await login(page);
+    const token = await csrfToken(page);
+    await page.goto('/t/default/engines');
+    await expect(page.getByRole('heading', { name: 'Engines', exact: true })).toBeVisible();
+    await expect(page.locator('.cds--skeleton')).toHaveCount(0);
+
+    const createEngineThroughUi = async (
+      name: string,
+      mode: 'dedicated' | 'shared',
+    ): Promise<Record<string, unknown>> => {
+      await page.getByRole('button', { name: /Add (?:your first )?engine/ }).click();
+      const modal = page.getByRole('dialog', { name: 'Add engine' });
+      await expect(modal).toBeVisible();
+      await modal.getByLabel('Name', { exact: true }).fill(name);
+      await modal.getByLabel('Base URL', { exact: true }).fill(runtimeBaseUrl);
+      await modal.locator('#eng-type').click();
+      await page.getByRole('option', { name: 'Camunda 7', exact: true }).click();
+      if (mode === 'shared') {
+        await modal.locator('#eng-tenancy-mode').click();
+        await page.getByRole('option', {
+          name: 'Shared — mapped runtime resources',
+          exact: true,
+        }).click();
+        await expect(modal.getByText('Shared engines start fail closed')).toBeVisible();
+      }
+      const deploymentDiscovery = modal.getByRole('switch', {
+        name: 'Deployment history discovery',
+      });
+      await deploymentDiscovery.click({ force: true });
+      await expect(deploymentDiscovery).toHaveAttribute('aria-checked', 'false');
+
+      const responsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST'
+          && new URL(response.url()).pathname.endsWith('/engines-api/engines'),
+      );
+      await modal.getByRole('button', { name: 'Create', exact: true }).click();
+      const created = await responseJson<Record<string, unknown>>(
+        await responsePromise,
+        `create ${mode} runtime-resolution engine through UI`,
+      );
+      createdEngineIds.push(String(created.id));
+      await expect(page.getByText('Engine created', { exact: true })).toBeVisible();
+      await expect(page.getByRole('row').filter({ hasText: name })).toBeVisible();
+      return created;
+    };
+
+    try {
+      const dedicated = await createEngineThroughUi(dedicatedName, 'dedicated');
+      expect(dedicated).toMatchObject({
+        tenancyMode: 'dedicated',
+        tenantId: 'tenant-default',
+        tenantResolutionStatus: 'ready',
+        runtimeAccessScope: 'engine_wide',
+      });
+      const dedicatedEngineId = String(dedicated.id);
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile dedicated runtime inventory',
+      );
+      const dedicatedResources = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}/runtime-resources`,
+        ),
+        'read dedicated inherited runtime inventory',
+      );
+      expect(dedicatedResources.length).toBeGreaterThan(0);
+      expect(new Set(dedicatedResources.map((resource) => resource.tenantId))).toEqual(
+        new Set(['tenant-default']),
+      );
+      expect(new Set(dedicatedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
+        new Set(['resolved']),
+      );
+
+      const shared = await createEngineThroughUi(sharedName, 'shared');
+      expect(shared).toMatchObject({
+        tenancyMode: 'shared',
+        tenantId: null,
+        tenantMappingStrategy: 'engine_tenant_id',
+        tenantResolutionStatus: 'incomplete',
+        runtimeAccessScope: 'resource_aware',
+      });
+      const sharedEngineId = String(shared.id);
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile unmapped shared runtime inventory',
+      );
+      const unmappedDiagnostics = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+        ),
+        'inspect unmapped shared runtime inventory',
+      );
+      expect(unmappedDiagnostics).toMatchObject({
+        mode: 'shared',
+        resolutionStatus: 'incomplete',
+        mappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      });
+      expect(Number(unmappedDiagnostics.unmappedResourceCount)).toBeGreaterThan(0);
+      let expectedMappingVersion = Number(unmappedDiagnostics.mappingVersion);
+      expect(Number.isSafeInteger(expectedMappingVersion)).toBe(true);
+      expect(expectedMappingVersion).toBeGreaterThanOrEqual(0);
+      expect(
+        await responseJson<unknown[]>(
+          await page.request.get(
+            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources`,
+          ),
+          'verify unmapped shared inventory is quarantined',
+        ),
+      ).toEqual([]);
+
+      const sharedRow = page.getByRole('row').filter({ hasText: sharedName });
+      await sharedRow.getByRole('button', { name: 'Options' }).click();
+      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+      const editModal = page.getByRole('dialog', { name: 'Edit engine' });
+      await expect(editModal.getByRole('heading', { name: 'Tenancy and tenant mappings' })).toBeVisible();
+      await expect(editModal.getByText('No tenant mappings')).toBeVisible();
+
+      const applyMappingThroughUi = async (
+        runtimeTenantId: string,
+      ): Promise<void> => {
+        await editModal.getByLabel('External tenant ID').fill(runtimeTenantId);
+        await editModal.getByLabel('Source reference').fill(
+          `manual:journey-07:${runtimeTenantId}:${suffix}`,
+        );
+        await editModal.getByRole('button', { name: 'Preview mapping change' }).click();
+        await expect(
+          editModal.getByText(`Mapping preview at version ${expectedMappingVersion + 1}`),
+        ).toBeVisible();
+        await editModal.getByRole('button', { name: 'Apply mapping change' }).click();
+        await expect(page.getByText('Tenant mapping applied', { exact: true })).toBeVisible();
+        await expect(
+          editModal.getByRole('row').filter({ hasText: runtimeTenantId }),
+        ).toBeVisible();
+        await expect.poll(async () => {
+          const response = await page.request.get(
+            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+          );
+          if (!response.ok()) return -1;
+          return Number((await response.json()).mappingVersion);
+        }).toBe(expectedMappingVersion + 1);
+        expectedMappingVersion += 1;
+      };
+
+      await applyMappingThroughUi('e2e-runtime-blue');
+      await applyMappingThroughUi('e2e-runtime-green');
+
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile explicitly mapped shared runtime inventory',
+      );
+      const mappedDiagnostics = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+        ),
+        'inspect explicitly mapped shared runtime inventory',
+      );
+      expect(mappedDiagnostics).toMatchObject({
+        mode: 'shared',
+        mappingVersion: expectedMappingVersion,
+        resolutionStatus: 'ready',
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      });
+      expect(Number(mappedDiagnostics.mappedResourceCount)).toBeGreaterThan(0);
+
+      const mappedResources = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources`,
+        ),
+        'read explicitly mapped shared runtime inventory',
+      );
+      const blueResourceIds = new Set(
+        mappedResources
+          .filter((resource) => resource.runtimeTenantId === 'e2e-runtime-blue')
+          .map((resource) => String(resource.id)),
+      );
+      const greenResourceIds = new Set(
+        mappedResources
+          .filter((resource) => resource.runtimeTenantId === 'e2e-runtime-green')
+          .map((resource) => String(resource.id)),
+      );
+      expect(blueResourceIds.size).toBeGreaterThan(0);
+      expect(greenResourceIds.size).toBeGreaterThan(0);
+      expect([...blueResourceIds].filter((id) => greenResourceIds.has(id))).toEqual([]);
+      expect(new Set(mappedResources.map((resource) => resource.tenantId))).toEqual(
+        new Set(['tenant-default']),
+      );
+      expect(new Set(mappedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
+        new Set(['resolved']),
+      );
+
+      const observationDirectory = path.join(
+        process.cwd(),
+        'test/results/engine-tenancy-provisioning-observations',
+      );
+      await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-07-manual-ui.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 7,
+          channel: 'manual-ui',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: true,
+          assertions: [
+            'dedicated-inheritance',
+            'shared-explicit-resolution',
+            'unmapped-quarantine',
+          ],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
+    } finally {
+      for (const engineId of createdEngineIds.reverse()) {
+        const response = await page.request.delete(
+          `/engines-api/engines/${encodeURIComponent(engineId)}`,
+          mutationOptions(token),
+        );
+        expect(
+          [204, 404],
+          `cleanup engine ${engineId} failed (${response.status()}): ${await response.text()}`,
+        ).toContain(response.status());
+      }
+    }
+  });
+
+  test('journey 7 external API runtime resource tenant resolution', async ({ page }) => {
+    const commit = git(['rev-parse', 'HEAD']);
+    const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
+      ? 'dirty-development-run'
+      : 'clean';
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const dedicatedExternalId = `e2e-j07-dedicated-${suffix}`;
+    const sharedExternalId = `e2e-j07-shared-${suffix}`;
+    const runtimeBaseUrl = 'http://camunda-mock.example.test:9080/e2e-shared-engine-rest';
+    const externalIds: string[] = [];
+    let apiClientId: string | null = null;
+    let assignmentId: string | null = null;
+    let externalApi: APIRequestContext | null = null;
+
+    await login(page);
+    const token = await csrfToken(page);
+
+    try {
+      const apiClientResult = await responseJson<{
+        client: { id: string };
+        token: string;
+      }>(
+        await page.request.post('/api/authz/api-clients', mutationOptions(token, {
+          name: `e2e-journey-07-client-${suffix}`,
+          scopes: ['engine:register'],
+        })),
+        'create journey 7 external-registration API client',
+      );
+      apiClientId = apiClientResult.client.id;
+      const assignment = await responseJson<{ id: string }>(
+        await page.request.post('/api/authz/role-assignments', mutationOptions(token, {
+          principalType: 'api_client',
+          principalId: apiClientId,
+          roleId: 'system.api.engine_registrar',
+          resourceType: 'platform',
+          resourceId: null,
+        })),
+        'grant journey 7 external-registration role',
+      );
+      assignmentId = assignment.id;
+      externalApi = await playwrightRequest.newContext({
+        baseURL: apiUrl,
+        ignoreHTTPSErrors: true,
+        extraHTTPHeaders: {
+          Authorization: `Bearer ${apiClientResult.token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const register = async (
+        externalId: string,
+        mode: 'dedicated' | 'shared',
+      ): Promise<Record<string, unknown>> => {
+        const response = await externalApi!.post('/engines-api/external/engines', {
+          data: {
+            name: `e2e-journey-07-external-${mode}-${suffix}`,
+            baseUrl: runtimeBaseUrl,
+            externalId,
+            type: 'camunda7',
+            connectionMode: 'direct',
+            runtimeAccessScope: mode === 'dedicated' ? 'engine_wide' : 'resource_aware',
+            metadataDiscoveryEnabled: true,
+            deploymentDiscoveryEnabled: false,
+            pipelineReceiptEnabled: false,
+            tenancy: mode === 'dedicated'
+              ? { mode: 'dedicated', tenantRef: { type: 'default' } }
+              : {
+                mode: 'shared',
+                mappingStrategy: 'engine_tenant_id',
+                unmappedPolicy: 'deny',
+              },
+          },
+        });
+        expect(response.status()).toBe(201);
+        const result = await responseJson<{
+          created: boolean;
+          engine: Record<string, unknown>;
+        }>(response, `externally create ${mode} journey 7 engine`);
+        expect(result.created).toBe(true);
+        externalIds.push(externalId);
+        return result.engine;
+      };
+
+      const dedicated = await register(dedicatedExternalId, 'dedicated');
+      expect(dedicated).toMatchObject({
+        tenancyMode: 'dedicated',
+        tenantId: 'tenant-default',
+        tenantResolutionStatus: 'ready',
+        runtimeAccessScope: 'engine_wide',
+      });
+      const dedicatedEngineId = String(dedicated.id);
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile externally provisioned dedicated inventory',
+      );
+      const dedicatedResources = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}/runtime-resources`,
+        ),
+        'read externally provisioned dedicated inventory',
+      );
+      expect(dedicatedResources.length).toBeGreaterThan(0);
+      expect(new Set(dedicatedResources.map((resource) => resource.tenantId))).toEqual(
+        new Set(['tenant-default']),
+      );
+      expect(new Set(dedicatedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
+        new Set(['resolved']),
+      );
+
+      const shared = await register(sharedExternalId, 'shared');
+      expect(shared).toMatchObject({
+        tenancyMode: 'shared',
+        tenantId: null,
+        tenantMappingStrategy: 'engine_tenant_id',
+        tenantResolutionStatus: 'incomplete',
+        runtimeAccessScope: 'resource_aware',
+      });
+      const sharedEngineId = String(shared.id);
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile externally provisioned unmapped shared inventory',
+      );
+      const unmappedDiagnostics = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+        ),
+        'inspect externally provisioned unmapped shared inventory',
+      );
+      expect(unmappedDiagnostics).toMatchObject({
+        mode: 'shared',
+        resolutionStatus: 'incomplete',
+        mappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      });
+      expect(Number(unmappedDiagnostics.unmappedResourceCount)).toBeGreaterThan(0);
+      expect(
+        await responseJson<unknown[]>(
+          await page.request.get(
+            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources`,
+          ),
+          'verify externally provisioned unmapped inventory is quarantined',
+        ),
+      ).toEqual([]);
+
+      const expectedMappingVersion = Number(unmappedDiagnostics.mappingVersion);
+      expect(Number.isSafeInteger(expectedMappingVersion)).toBe(true);
+      const mappingRequest = {
+        expectedMappingVersion,
+        atomic: true,
+        mappings: ['e2e-runtime-blue', 'e2e-runtime-green'].map((runtimeTenantId) => ({
+          externalTenantId: runtimeTenantId,
+          tenantRef: { type: 'default' },
+          strategy: 'engine_tenant_id',
+          sourceRef: `external:journey-07:${runtimeTenantId}:${suffix}`,
+          active: true,
+        })),
+      };
+      const mappingPath = `/engines-api/external/engines/${
+        encodeURIComponent(sharedExternalId)
+      }/tenant-mappings`;
+      const mappingPreview = await responseJson<{
+        dryRun: boolean;
+        mappingVersion: number;
+        created: number;
+      }>(
+        await externalApi.put(mappingPath, {
+          data: { ...mappingRequest, dryRun: true },
+        }),
+        'preview external shared tenant mappings',
+      );
+      expect(mappingPreview).toMatchObject({
+        dryRun: true,
+        mappingVersion: expectedMappingVersion + 1,
+        created: 2,
+      });
+      const mappingApply = await responseJson<{
+        dryRun: boolean;
+        mappingVersion: number;
+        created: number;
+      }>(
+        await externalApi.put(mappingPath, {
+          data: { ...mappingRequest, dryRun: false },
+        }),
+        'apply external shared tenant mappings',
+      );
+      expect(mappingApply).toMatchObject({
+        dryRun: false,
+        mappingVersion: expectedMappingVersion + 1,
+        created: 2,
+      });
+
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile externally mapped shared inventory',
+      );
+      const mappedDiagnostics = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+        ),
+        'inspect externally mapped shared inventory',
+      );
+      expect(mappedDiagnostics).toMatchObject({
+        mode: 'shared',
+        mappingVersion: expectedMappingVersion + 1,
+        resolutionStatus: 'ready',
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      });
+      const mappedResources = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources`,
+        ),
+        'read externally mapped shared inventory',
+      );
+      expect(
+        mappedResources.some((resource) => resource.runtimeTenantId === 'e2e-runtime-blue'),
+      ).toBe(true);
+      expect(
+        mappedResources.some((resource) => resource.runtimeTenantId === 'e2e-runtime-green'),
+      ).toBe(true);
+      expect(new Set(mappedResources.map((resource) => resource.tenantId))).toEqual(
+        new Set(['tenant-default']),
+      );
+      expect(new Set(mappedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
+        new Set(['resolved']),
+      );
+
+      const observationDirectory = path.join(
+        process.cwd(),
+        'test/results/engine-tenancy-provisioning-observations',
+      );
+      await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-07-external-api.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 7,
+          channel: 'external-api',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: false,
+          assertions: [
+            'dedicated-inheritance',
+            'shared-explicit-resolution',
+            'unmapped-quarantine',
+          ],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
+    } finally {
+      if (externalApi) {
+        for (const externalId of externalIds.reverse()) {
+          const response = await externalApi.post('/engines-api/external/engines/decommission', {
+            data: {
+              externalId,
+              reason: 'Disposable journey 7 external channel completed',
+            },
+          });
+          expect([200, 404]).toContain(response.status());
+        }
+      }
+      await externalApi?.dispose();
+      if (assignmentId) {
+        const response = await page.request.delete(
+          `/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`,
+          mutationOptions(token),
+        );
+        expect([204, 404]).toContain(response.status());
+      }
+      if (apiClientId) {
+        const response = await page.request.delete(
+          `/api/authz/api-clients/${encodeURIComponent(apiClientId)}`,
+          mutationOptions(token),
+        );
+        expect([204, 404]).toContain(response.status());
+      }
+    }
+  });
+
+  test('journey 7 configuration bundle runtime resource tenant resolution', async ({ page }) => {
+    const commit = git(['rev-parse', 'HEAD']);
+    const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
+      ? 'dirty-development-run'
+      : 'clean';
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const bundleKey = `e2e.journey07.${suffix}`;
+    const dedicatedKey = `engine.journey07.dedicated.${suffix}`;
+    const sharedKey = `engine.journey07.shared.${suffix}`;
+    const runtimeBaseUrl = 'http://camunda-mock:9080/e2e-shared-engine-rest';
+    let removed = false;
+    let accessRoleId: string | null = null;
+    const accessAssignmentSourceRef = `e2e-journey-07-config-access:${suffix}`;
+    const database = new Pool({
+      host: process.env.POSTGRES_HOST,
+      port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+      user: process.env.POSTGRES_USER,
+      password: process.env.POSTGRES_PASSWORD,
+      database: process.env.POSTGRES_DATABASE,
+      ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    });
+    const schema = process.env.POSTGRES_SCHEMA || 'main';
+
+    await login(page);
+    const token = await csrfToken(page);
+    const currentUser = await responseJson<{ id: string }>(
+      await page.request.get('/api/auth/me'),
+      'resolve journey 7 configuration test principal',
+    );
+    const bundle = {
+      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      kind: 'EnterpriseGlueConfigBundle',
+      metadata: {
+        key: bundleKey,
+        owner: 'e2e',
+      },
+      tenantKey: 'default',
+      mode: 'authoritative',
+      settings: {},
+      imports: ['./engines.json'],
+    };
+    const enginesFile = {
+      engines: [
+        {
+          key: dedicatedKey,
+          name: `e2e-journey-07-config-dedicated-${suffix}`,
+          type: 'camunda7',
+          baseUrl: runtimeBaseUrl,
+          auth: {
+            type: 'basic',
+            username: 'e2e',
+            passwordRef: 'E2E_ENGINE_PASSWORD',
+          },
+          connectionMode: 'direct',
+          runtimeAccessScope: 'engine_wide',
+          tenancy: {
+            mode: 'dedicated',
+            tenantRef: { type: 'default' },
+          },
+          metadataDiscoveryEnabled: true,
+          deploymentDiscoveryEnabled: false,
+          pipelineReceiptEnabled: false,
+          ownershipMode: 'config_locked',
+        },
+        {
+          key: sharedKey,
+          name: `e2e-journey-07-config-shared-${suffix}`,
+          type: 'camunda7',
+          baseUrl: runtimeBaseUrl,
+          auth: {
+            type: 'basic',
+            username: 'e2e',
+            passwordRef: 'E2E_ENGINE_PASSWORD',
+          },
+          connectionMode: 'direct',
+          runtimeAccessScope: 'resource_aware',
+          tenancy: {
+            mode: 'shared',
+            mappingStrategy: 'engine_tenant_id',
+          },
+          metadataDiscoveryEnabled: true,
+          deploymentDiscoveryEnabled: false,
+          pipelineReceiptEnabled: false,
+          ownershipMode: 'config_locked',
+        },
+      ],
+    };
+    const initialEnvelope = {
+      bundle,
+      files: {
+        './engines.json': enginesFile,
+      },
+    };
+    const mappingKeys = {
+      blue: `engine-tenant-mapping.journey07.blue.${suffix}`,
+      green: `engine-tenant-mapping.journey07.green.${suffix}`,
+    };
+    const mappedEnvelope = {
+      bundle: {
+        ...bundle,
+        imports: [
+          './engines.json',
+          './engine-tenant-mappings.json',
+        ],
+      },
+      files: {
+        './engines.json': enginesFile,
+        './engine-tenant-mappings.json': {
+          engineTenantMappings: [
+            {
+              key: mappingKeys.blue,
+              engineRef: { engineKey: sharedKey },
+              externalTenantId: 'e2e-runtime-blue',
+              tenantRef: { type: 'default' },
+              strategy: 'engine_tenant_id',
+              active: true,
+              ownershipMode: 'config_locked',
+            },
+            {
+              key: mappingKeys.green,
+              engineRef: { engineKey: sharedKey },
+              externalTenantId: 'e2e-runtime-green',
+              tenantRef: { type: 'default' },
+              strategy: 'engine_tenant_id',
+              active: true,
+              ownershipMode: 'config_locked',
+            },
+          ],
+        },
+      },
+    };
+
+    const applyBundle = async (
+      envelope: Record<string, unknown>,
+      idempotencyKey: string,
+      operation: string,
+    ): Promise<{
+      canonicalHash: string;
+      created: number;
+      updated: number;
+      archived: number;
+      changes: Array<Record<string, unknown>>;
+    }> => {
+      const preview = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+        errors: unknown[];
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/preview',
+          mutationOptions(token, envelope),
+        ),
+        `preview ${operation}`,
+      );
+      expect(preview).toMatchObject({
+        valid: true,
+        canonicalHash: expect.any(String),
+        errors: [],
+      });
+      const diff = await responseJson<{
+        valid: boolean;
+        canonicalHash: string;
+        requiredAcknowledgements: string[];
+      }>(
+        await page.request.post(
+          '/api/authz/config-bundles/diff',
+          mutationOptions(token, envelope),
+        ),
+        `diff ${operation}`,
+      );
+      expect(diff).toMatchObject({
+        valid: true,
+        canonicalHash: preview.canonicalHash,
+      });
+      return responseJson(
+        await page.request.post(
+          '/api/authz/config-bundles/apply',
+          mutationOptions(token, {
+            ...envelope,
+            expectedPreviewHash: preview.canonicalHash,
+            acknowledgements: diff.requiredAcknowledgements,
+            idempotencyKey,
+            identityReconciliationMode: 'none',
+          }),
+        ),
+        `apply ${operation}`,
+      );
+    };
+
+    try {
+      const accessRole = await responseJson<{ id: string }>(
+        await page.request.post('/api/authz/roles', mutationOptions(token, {
+          name: 'Journey config inspector',
+          description: 'Disposable role for real-service configuration channel evidence.',
+          scope: 'engine',
+          permissionIds: ['engine:edit', 'engine:instance:view'],
+        })),
+        'create journey 7 configuration inspection role',
+      );
+      accessRoleId = accessRole.id;
+
+      const initialApply = await applyBundle(
+        initialEnvelope,
+        `journey-07-config-engines-${suffix}`,
+        'journey 7 engine configuration',
+      );
+      expect(initialApply).toMatchObject({
+        created: 2,
+        updated: 0,
+        archived: 0,
+      });
+
+      const stableApply = await applyBundle(
+        initialEnvelope,
+        `journey-07-config-engines-reapply-${suffix}`,
+        'journey 7 idempotent engine configuration',
+      );
+      expect(stableApply).toMatchObject({
+        created: 0,
+        updated: 0,
+        archived: 0,
+      });
+      const dedicatedEngineId = String(stableApply.changes.find(
+        (change) => change.objectType === 'engine' && change.key === dedicatedKey,
+      )?.currentId);
+      const sharedEngineId = String(stableApply.changes.find(
+        (change) => change.objectType === 'engine' && change.key === sharedKey,
+      )?.currentId);
+      expect(dedicatedEngineId).not.toBe('undefined');
+      expect(sharedEngineId).not.toBe('undefined');
+
+      for (const engineId of [dedicatedEngineId, sharedEngineId]) {
+        const now = Date.now();
+        const assignmentKey = canonicalRoleAssignmentKey({
+          tenantId: 'tenant-default',
+          principalType: 'user',
+          principalId: currentUser.id,
+          roleId: accessRoleId,
+          scopeType: 'engine',
+          scopeId: engineId,
+          source: 'system',
+          sourceRef: accessAssignmentSourceRef,
+        });
+        await database.query(
+          `INSERT INTO ${schema}.role_assignments
+            (id, tenant_id, principal_type, principal_id, assignment_key, role_id,
+             scope_type, scope_id, source, source_ref, ownership_mode, source_hash,
+             last_applied_at, drift_status, expires_at, last_seen_at, created_by_id,
+             created_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+          [
+            randomUUID(), 'tenant-default', 'user', currentUser.id, assignmentKey,
+            accessRoleId, 'engine', engineId, 'system', accessAssignmentSourceRef,
+            'manual', null, null, null, null, null, currentUser.id, now, now,
+          ],
+        );
+      }
+
+      const dedicated = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}`,
+        ),
+        'inspect configuration-provisioned dedicated engine',
+      );
+      const shared = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}`,
+        ),
+        'inspect configuration-provisioned shared engine',
+      );
+      expect(dedicated).toMatchObject({
+        configKey: dedicatedKey,
+        tenancyMode: 'dedicated',
+        tenantId: 'tenant-default',
+        tenantResolutionStatus: 'ready',
+        runtimeAccessScope: 'engine_wide',
+      });
+      expect(shared).toMatchObject({
+        configKey: sharedKey,
+        tenancyMode: 'shared',
+        tenantId: null,
+        tenantMappingStrategy: 'engine_tenant_id',
+        tenantResolutionStatus: 'incomplete',
+        runtimeAccessScope: 'resource_aware',
+      });
+
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile configuration-provisioned dedicated inventory',
+      );
+      const dedicatedResources = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}/runtime-resources`,
+        ),
+        'read configuration-provisioned dedicated inventory',
+      );
+      expect(dedicatedResources.length).toBeGreaterThan(0);
+      expect(new Set(dedicatedResources.map((resource) => resource.tenantId))).toEqual(
+        new Set(['tenant-default']),
+      );
+      expect(new Set(dedicatedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
+        new Set(['resolved']),
+      );
+
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile configuration-provisioned unmapped shared inventory',
+      );
+      const unmappedDiagnostics = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+        ),
+        'inspect configuration-provisioned unmapped shared inventory',
+      );
+      expect(unmappedDiagnostics).toMatchObject({
+        mode: 'shared',
+        resolutionStatus: 'incomplete',
+        mappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      });
+      expect(Number(unmappedDiagnostics.unmappedResourceCount)).toBeGreaterThan(0);
+      expect(
+        await responseJson<unknown[]>(
+          await page.request.get(
+            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources`,
+          ),
+          'verify configuration-provisioned unmapped inventory is quarantined',
+        ),
+      ).toEqual([]);
+
+      const mappingApply = await applyBundle(
+        mappedEnvelope,
+        `journey-07-config-mappings-${suffix}`,
+        'journey 7 shared mapping configuration',
+      );
+      expect(mappingApply).toMatchObject({
+        created: 2,
+        updated: 0,
+        archived: 0,
+      });
+      expect(mappingApply.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          objectType: 'engine_tenant_mapping',
+          key: mappingKeys.blue,
+          operation: 'create',
+        }),
+        expect.objectContaining({
+          objectType: 'engine_tenant_mapping',
+          key: mappingKeys.green,
+          operation: 'create',
+        }),
+      ]));
+
+      await responseJson(
+        await page.request.post(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources/reconcile`,
+          mutationOptions(token),
+        ),
+        'reconcile configuration-mapped shared inventory',
+      );
+      const mappedDiagnostics = await responseJson<Record<string, unknown>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenancy/diagnostics`,
+        ),
+        'inspect configuration-mapped shared inventory',
+      );
+      expect(mappedDiagnostics).toMatchObject({
+        mode: 'shared',
+        resolutionStatus: 'ready',
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      });
+      expect(Number(mappedDiagnostics.mappedResourceCount)).toBeGreaterThan(0);
+      const mappedResources = await responseJson<Array<Record<string, unknown>>>(
+        await page.request.get(
+          `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/runtime-resources`,
+        ),
+        'read configuration-mapped shared inventory',
+      );
+      expect(
+        mappedResources.some((resource) => resource.runtimeTenantId === 'e2e-runtime-blue'),
+      ).toBe(true);
+      expect(
+        mappedResources.some((resource) => resource.runtimeTenantId === 'e2e-runtime-green'),
+      ).toBe(true);
+      expect(new Set(mappedResources.map((resource) => resource.tenantId))).toEqual(
+        new Set(['tenant-default']),
+      );
+      expect(new Set(mappedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
+        new Set(['resolved']),
+      );
+
+      const removalEnvelope = {
+        bundle: mappedEnvelope.bundle,
+        files: {
+          './engines.json': { engines: [] },
+          './engine-tenant-mappings.json': { engineTenantMappings: [] },
+        },
+      };
+      const removal = await applyBundle(
+        removalEnvelope,
+        `journey-07-config-remove-${suffix}`,
+        'journey 7 authoritative configuration removal',
+      );
+      expect(removal).toMatchObject({
+        created: 0,
+        updated: 0,
+        archived: 4,
+      });
+      removed = true;
+
+      const observationDirectory = path.join(
+        process.cwd(),
+        'test/results/engine-tenancy-provisioning-observations',
+      );
+      await mkdir(observationDirectory, { recursive: true });
+      await writeFile(
+        path.join(observationDirectory, 'journey-07-configuration-bundle.json'),
+        `${JSON.stringify({
+          schemaVersion: 1,
+          journeyId: 7,
+          channel: 'configuration-bundle',
+          status: 'passed',
+          commit,
+          sourceState,
+          releaseCommitQualified: sourceState === 'clean',
+          localhostOnly: true,
+          realHttpService: true,
+          persistentDatabase: true,
+          authorizationEvaluator: true,
+          userInterface: false,
+          assertions: [
+            'dedicated-inheritance',
+            'shared-explicit-resolution',
+            'unmapped-quarantine',
+          ],
+          sanitization: {
+            containsCredentials: false,
+            containsTokens: false,
+            containsPrivateEndpoints: false,
+            containsRawIdentityClaims: false,
+            containsCustomerIdentifiers: false,
+          },
+        }, null, 2)}\n`,
+      );
+    } finally {
+      if (!removed) {
+        const cleanupEnvelope = {
+          bundle: mappedEnvelope.bundle,
+          files: {
+            './engines.json': { engines: [] },
+            './engine-tenant-mappings.json': { engineTenantMappings: [] },
+          },
+        };
+        const cleanupPreview = await page.request.post(
+          '/api/authz/config-bundles/preview',
+          mutationOptions(token, cleanupEnvelope),
+        );
+        if (cleanupPreview.ok()) {
+          const previewBody = await cleanupPreview.json() as { canonicalHash?: string };
+          const cleanupDiff = await page.request.post(
+            '/api/authz/config-bundles/diff',
+            mutationOptions(token, cleanupEnvelope),
+          );
+          if (cleanupDiff.ok() && previewBody.canonicalHash) {
+            const diffBody = await cleanupDiff.json() as {
+              requiredAcknowledgements?: string[];
+            };
+            await page.request.post(
+              '/api/authz/config-bundles/apply',
+              mutationOptions(token, {
+                ...cleanupEnvelope,
+                expectedPreviewHash: previewBody.canonicalHash,
+                acknowledgements: diffBody.requiredAcknowledgements || [],
+                idempotencyKey: `journey-07-config-cleanup-${suffix}`,
+                identityReconciliationMode: 'none',
+              }),
+            );
+          }
+        }
+      }
+      await database.query(
+        `DELETE FROM ${schema}.role_assignments WHERE source = $1 AND source_ref = $2`,
+        ['system', accessAssignmentSourceRef],
+      );
+      if (accessRoleId) {
+        const response = await page.request.delete(
+          `/api/authz/roles/${encodeURIComponent(accessRoleId)}`,
+          mutationOptions(token),
+        );
+        expect([204, 404]).toContain(response.status());
+      }
+      await database.end();
     }
   });
 });

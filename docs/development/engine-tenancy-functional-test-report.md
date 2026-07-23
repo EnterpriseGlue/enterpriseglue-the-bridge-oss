@@ -17,7 +17,16 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The version-2 machine-readable manifest provides 100% traceability for its 78
+The real-service provisioning suite now passes Journeys 1–3 plus all three
+required channels of Journey 7: four of fourteen journeys and six of thirty
+required channel executions. It covers the manual UI, a least-privilege
+external API client, and authoritative configuration bundles against the same
+local HTTP service, PostgreSQL database, authorization evaluator, and
+Camunda-compatible Docker endpoint. The provisioning release artifact remains
+incomplete until all 14 journeys and all 30 channel executions pass on one
+clean commit.
+
+The version-2 machine-readable manifest provides 100% traceability for its 79
 registered engine-tenancy requirements: every requirement has an exact
 automated test, expected outcome, Markdown reference, executable CI lane,
 explicit coverage dimensions, and retained evidence location. It also
@@ -109,6 +118,7 @@ meaning of 100% functional coverage are documented in
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
+| Real-service provisioning channel executions | **6** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -156,6 +166,14 @@ The browser journey then proved:
   unknown rows; and
 - global teardown removes the disposable users, engines, mappings,
   assignments, and tenancy inventory.
+
+The dedicated provisioning companion journeys additionally prove manual UI
+create/update/remove, least-privilege external API idempotency and
+decommissioning, and configuration preview/apply/export/reapply/removal.
+Journey 7 repeats runtime-resource resolution through all three channels:
+dedicated resources inherit their engine tenant, unresolved shared resources
+remain quarantined, and two explicit runtime-tenant mappings make the shared
+inventory ready without widening generic runtime engine discovery.
 
 ## Defects Found and Fixed
 
@@ -263,8 +281,9 @@ release qualification. The remaining gates are:
   MySQL, SQL Server, Oracle, and Spanner;
 - complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
   evidence for all new browser workflows;
-- execute all supported UI, external API, and configuration provisioning
-  journeys against persistent local services and record stable errors for
+- implement Journeys 4–6 and 8–14, then execute all 14 supported UI, external
+  API, and configuration provisioning journeys (30 required channel
+  executions) against persistent local services and record stable errors for
   unsupported combinations;
 - populate every required slot in the implemented release evidence index with
   passing same-clean-commit artifacts;

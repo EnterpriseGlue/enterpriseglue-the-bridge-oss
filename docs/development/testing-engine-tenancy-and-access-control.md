@@ -122,9 +122,12 @@ disposable local PostgreSQL database, executes Chromium against the Docker
 frontend/backend, and then assembles the registry artifact. Journey 1 proves
 create, inspect, update, reconciliation, persisted state, and removal through
 the manual UI and authenticated HTTP service. Journey 2 proves the matching
-external API lifecycle described below. Journeys 4–14 and their remaining
-required channel observations stay explicitly missing until their matching
-real-service tests are implemented.
+external API lifecycle described below. Journey 3 proves the dedicated
+configuration-bundle round trip. Journey 7 proves runtime-resource tenant
+resolution through all three required channels. The implemented denominator is
+therefore four of fourteen journeys and six of thirty required channel
+executions. Journeys 4–6 and 8–14 stay explicitly missing until their matching
+real-service tests are implemented and qualified on the same clean commit.
 
 Journey 2 creates a reveal-once disposable API client, first proves the
 machine principal is denied without its registrar role, then executes create,
@@ -156,6 +159,28 @@ middleware unit lane covers editor allow, non-editor deny, active-tenant and
 no-tenant contexts at literal 100% branch coverage. The route/schema/OpenAPI
 lane rejects unrecognized query values, and the Engines page test proves the
 management-only client call.
+
+The Journey 7 manual channel creates dedicated and shared engines in the UI,
+reconciles the same two-tenant mock inventory, proves dedicated inheritance,
+proves that unmapped shared resources remain quarantined, applies two reviewed
+mappings in the engine editor, and then proves both runtime tenant segments
+resolve to the selected EnterpriseGlue tenant. The external channel uses a
+reveal-once least-privilege API client and a public-shaped Docker DNS alias; the
+alias resolves only inside the local Compose network, so the external URL
+validation contract is exercised without weakening its private-host denylist.
+
+The configuration channel previews, diffs, applies, and idempotently reapplies
+an authoritative bundle containing the same dedicated and shared engines. It
+resolves an opaque E2E-only secret reference from the backend environment,
+proves the unmapped shared quarantine, applies two source-owned mapping rows,
+reconciles to `ready`, and authoritatively archives both engines and both
+mappings. A canonical, tenant-scoped custom-role assignment is inserted
+directly into the disposable PostgreSQL database only as test-fixture setup,
+because the journey's subject is configuration provisioning rather than role
+assignment. All engine reads, authorization decisions, reconciliation,
+mapping, and cleanup still pass through the real HTTP services and canonical
+authorization evaluator; the fixture row and disposable role are removed in
+teardown.
 
 The journey runner succeeds when every currently implemented journey passes,
 but keeps the assembled artifact visibly incomplete while any of the 14
