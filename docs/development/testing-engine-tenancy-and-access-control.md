@@ -140,11 +140,20 @@ cookie-authenticated HTTP request context. It proves both receive immediate
 `403` responses after role-assignment revocation, regain only the exact
 restored grant, lose access again when the source-owned runtime-tenant mapping
 is deactivated through the current provisioning channel, and regain access
-only after that mapping is restored and inventory is reconciled. The
-implemented denominator is therefore eleven of fourteen journeys and
-twenty-one of thirty required channel executions. Journeys 12–14 stay
-explicitly missing until their matching real-service tests
-are implemented and qualified on the same clean commit.
+only after that mapping is restored and inventory is reconciled. The Journey
+12 transition fixture begins with a dedicated engine from each
+provisioning channel. It rejects an apply without every server-returned
+acknowledgement, changes a non-topology field to invalidate the preview,
+requires a fresh preview after the resulting optimistic-concurrency conflict,
+applies dedicated-to-shared, proves the existing engine grant no longer exposes
+runtime resources, and reverses to dedicated. The external fixture is hybrid
+with tenancy explicitly owned by the manual transition workflow; the
+configuration fixture uses `config_warn`, and its next bundle apply proves the
+intentional conflict drift is detected and repaired. The implemented
+denominator is therefore twelve of fourteen journeys and twenty-four of thirty
+required channel executions. Journeys 13–14 stay explicitly missing until
+their matching real-service tests are implemented and qualified on the same
+clean commit.
 
 The Journey 10 fixture exposes a localhost-only mock control endpoint. The
 runner resets its request ledger immediately before the denied detail request

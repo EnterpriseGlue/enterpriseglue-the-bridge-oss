@@ -84,6 +84,279 @@ type ProvisioningJourneyChannel =
   | 'external-api'
   | 'configuration-bundle';
 
+async function proveTopologyTransitionAndRollback(input: {
+  page: Page;
+  csrf: string;
+  engineId: string;
+  channel: ProvisioningJourneyChannel;
+  suffix: string;
+  commit: string;
+  sourceState: string;
+}): Promise<void> {
+  const {
+    page,
+    csrf,
+    engineId,
+    channel,
+    suffix,
+    commit,
+    sourceState,
+  } = input;
+  const fixture = getE2EFineGrainedFixture();
+  expect(fixture.scopedUserId, 'Journey 12 requires the seeded direct user').toBeTruthy();
+  let assignmentId: string | null = null;
+  let restrictedContext: BrowserContext | null = null;
+
+  const transitionPath =
+    `/engines-api/engines/${encodeURIComponent(engineId)}/tenancy`;
+  const sharedTenancy = {
+    mode: 'shared',
+    mappingStrategy: 'engine_tenant_id',
+    unmappedPolicy: 'deny',
+  };
+  const dedicatedTenancy = {
+    mode: 'dedicated',
+    tenantRef: { type: 'default' },
+  };
+
+  try {
+    const assignment = await responseJson<{ id: string }>(
+      await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        roleId: 'system.engine.operator',
+        resourceType: 'engine',
+        resourceId: engineId,
+      })),
+      `assign Journey 12 ${channel} dedicated engine role`,
+    );
+    assignmentId = assignment.id;
+
+    const browser = page.context().browser();
+    if (!browser) throw new Error('Journey 12 requires a browser-backed Playwright page');
+    restrictedContext = await browser.newContext({
+      baseURL: baseUrl,
+      ignoreHTTPSErrors: true,
+    });
+    const restrictedPage = await restrictedContext.newPage();
+    await loginAs(restrictedPage, fixture.email!, fixture.password!);
+    const definitionsPath =
+      `/mission-control-api/process-definitions?engineId=${encodeURIComponent(engineId)}`;
+    const browserDefinitions = async (): Promise<{
+      status: number;
+      keys: string[];
+    }> => restrictedPage.evaluate(async (url) => {
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      const body = await response.json().catch(() => []);
+      return {
+        status: response.status,
+        keys: Array.isArray(body)
+          ? body.map((definition: { key?: unknown }) => String(definition.key)).sort()
+          : [],
+      };
+    }, definitionsPath);
+
+    const beforeTransition = await browserDefinitions();
+    expect(beforeTransition.status).toBe(200);
+    expect(beforeTransition.keys).toContain('invoice-process');
+
+    const preview = await responseJson<{
+      previewHash: string;
+      previewExpiresAt: number;
+      requiredAcknowledgements: string[];
+      kind: string;
+    }>(
+      await page.request.post(
+        `${transitionPath}/preview`,
+        mutationOptions(csrf, { tenancy: sharedTenancy }),
+      ),
+      `preview Journey 12 ${channel} dedicated-to-shared transition`,
+    );
+    expect(preview).toMatchObject({
+      previewHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      previewExpiresAt: expect.any(Number),
+      kind: 'dedicated_to_shared',
+    });
+    expect(preview.requiredAcknowledgements.length).toBeGreaterThan(0);
+
+    const missingAcknowledgement = await page.request.post(
+      `${transitionPath}/apply`,
+      mutationOptions(csrf, {
+        tenancy: sharedTenancy,
+        previewHash: preview.previewHash,
+        previewExpiresAt: preview.previewExpiresAt,
+        acknowledgements: [],
+      }),
+    );
+    expect(missingAcknowledgement.status()).toBe(400);
+    expect(await missingAcknowledgement.json()).toEqual(expect.objectContaining({
+      code: 'ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED',
+    }));
+
+    const engineBeforeConflict = await responseJson<Record<string, unknown>>(
+      await page.request.get(`/engines-api/engines/${encodeURIComponent(engineId)}`),
+      `read Journey 12 ${channel} engine before concurrency conflict`,
+    );
+    const conflictUpdate = await page.request.put(
+      `/engines-api/engines/${encodeURIComponent(engineId)}`,
+      mutationOptions(csrf, {
+        name: `${String(engineBeforeConflict.name)} j12-${suffix}`,
+      }),
+    );
+    expect(conflictUpdate.status()).toBe(200);
+
+    const staleApply = await page.request.post(
+      `${transitionPath}/apply`,
+      mutationOptions(csrf, {
+        tenancy: sharedTenancy,
+        previewHash: preview.previewHash,
+        previewExpiresAt: preview.previewExpiresAt,
+        acknowledgements: preview.requiredAcknowledgements,
+      }),
+    );
+    expect(staleApply.status()).toBe(409);
+    expect(await staleApply.json()).toEqual(expect.objectContaining({
+      code: 'ENGINE_TENANCY_PREVIEW_STALE',
+    }));
+
+    const currentPreview = await responseJson<{
+      previewHash: string;
+      previewExpiresAt: number;
+      requiredAcknowledgements: string[];
+    }>(
+      await page.request.post(
+        `${transitionPath}/preview`,
+        mutationOptions(csrf, { tenancy: sharedTenancy }),
+      ),
+      `refresh Journey 12 ${channel} dedicated-to-shared preview`,
+    );
+    const applied = await responseJson<{
+      applied: boolean;
+      transition: {
+        proposed: Record<string, unknown>;
+      };
+    }>(
+      await page.request.post(
+        `${transitionPath}/apply`,
+        mutationOptions(csrf, {
+          tenancy: sharedTenancy,
+          previewHash: currentPreview.previewHash,
+          previewExpiresAt: currentPreview.previewExpiresAt,
+          acknowledgements: currentPreview.requiredAcknowledgements,
+        }),
+      ),
+      `apply Journey 12 ${channel} dedicated-to-shared transition`,
+    );
+    expect(applied).toMatchObject({
+      applied: true,
+      transition: {
+        proposed: {
+          mode: 'shared',
+          tenantId: null,
+          runtimeAccessScope: 'resource_aware',
+          resolutionStatus: 'incomplete',
+        },
+      },
+    });
+    expect(await browserDefinitions()).toEqual({ status: 403, keys: [] });
+
+    const rollbackPreview = await responseJson<{
+      previewHash: string;
+      previewExpiresAt: number;
+      requiredAcknowledgements: string[];
+      kind: string;
+    }>(
+      await page.request.post(
+        `${transitionPath}/preview`,
+        mutationOptions(csrf, { tenancy: dedicatedTenancy }),
+      ),
+      `preview Journey 12 ${channel} shared-to-dedicated rollback`,
+    );
+    expect(rollbackPreview.kind).toBe('shared_to_dedicated');
+    const rolledBack = await responseJson<{
+      applied: boolean;
+      transition: {
+        proposed: Record<string, unknown>;
+      };
+    }>(
+      await page.request.post(
+        `${transitionPath}/apply`,
+        mutationOptions(csrf, {
+          tenancy: dedicatedTenancy,
+          previewHash: rollbackPreview.previewHash,
+          previewExpiresAt: rollbackPreview.previewExpiresAt,
+          acknowledgements: rollbackPreview.requiredAcknowledgements,
+        }),
+      ),
+      `apply Journey 12 ${channel} shared-to-dedicated rollback`,
+    );
+    expect(rolledBack).toMatchObject({
+      applied: true,
+      transition: {
+        proposed: {
+          mode: 'dedicated',
+          tenantId: 'tenant-default',
+          runtimeAccessScope: 'resource_aware',
+          resolutionStatus: 'ready',
+        },
+      },
+    });
+    const afterRollback = await browserDefinitions();
+    expect(afterRollback.status).toBe(200);
+    expect(afterRollback.keys).toEqual(beforeTransition.keys);
+
+    const observationDirectory = path.join(
+      process.cwd(),
+      'test/results/engine-tenancy-provisioning-observations',
+    );
+    await mkdir(observationDirectory, { recursive: true });
+    await writeFile(
+      path.join(observationDirectory, `journey-12-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 12,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'preview',
+          'acknowledgement',
+          'concurrency-conflict',
+          'apply',
+          'cache-invalidation',
+          'rollback',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
+  } finally {
+    await restrictedContext?.close();
+    if (assignmentId) {
+      const response = await page.request.delete(
+        `/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+  }
+}
+
 async function provePrincipalRoleAssignmentMatrix(input: {
   page: Page;
   csrf: string;
@@ -1720,6 +1993,15 @@ test.describe('Engine tenancy provisioning journeys', () => {
       expect(new Set(dedicatedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
         new Set(['resolved']),
       );
+      await proveTopologyTransitionAndRollback({
+        page,
+        csrf: token,
+        engineId: dedicatedEngineId,
+        channel: 'manual-ui',
+        suffix,
+        commit,
+        sourceState,
+      });
 
       const shared = await createEngineThroughUi(sharedName, 'shared');
       expect(shared).toMatchObject({
@@ -2063,6 +2345,8 @@ test.describe('Engine tenancy provisioning journeys', () => {
             externalId,
             type: 'camunda7',
             connectionMode: 'direct',
+            managementMode: 'hybrid',
+            fieldOwnership: { tenancy: 'manual' },
             runtimeAccessScope: mode === 'dedicated' ? 'engine_wide' : 'resource_aware',
             metadataDiscoveryEnabled: true,
             deploymentDiscoveryEnabled: false,
@@ -2114,6 +2398,15 @@ test.describe('Engine tenancy provisioning journeys', () => {
       expect(new Set(dedicatedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
         new Set(['resolved']),
       );
+      await proveTopologyTransitionAndRollback({
+        page,
+        csrf: token,
+        engineId: dedicatedEngineId,
+        channel: 'external-api',
+        suffix,
+        commit,
+        sourceState,
+      });
 
       const shared = await register(sharedExternalId, 'shared');
       expect(shared).toMatchObject({
@@ -2476,7 +2769,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
           metadataDiscoveryEnabled: true,
           deploymentDiscoveryEnabled: false,
           pipelineReceiptEnabled: false,
-          ownershipMode: 'config_locked',
+          ownershipMode: 'config_warn',
         },
         {
           key: sharedKey,
@@ -2720,6 +3013,15 @@ test.describe('Engine tenancy provisioning journeys', () => {
       expect(new Set(dedicatedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
         new Set(['resolved']),
       );
+      await proveTopologyTransitionAndRollback({
+        page,
+        csrf: token,
+        engineId: dedicatedEngineId,
+        channel: 'configuration-bundle',
+        suffix,
+        commit,
+        sourceState,
+      });
 
       await responseJson(
         await page.request.post(
@@ -2757,10 +3059,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
       );
       expect(mappingApply).toMatchObject({
         created: 2,
-        updated: 0,
+        updated: 1,
         archived: 0,
       });
       expect(mappingApply.changes).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          objectType: 'engine',
+          key: dedicatedKey,
+          operation: 'update',
+          currentId: dedicatedEngineId,
+        }),
         expect.objectContaining({
           objectType: 'engine_tenant_mapping',
           key: mappingKeys.blue,
@@ -2900,7 +3208,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
             mode: 'dedicated',
             tenantRef: { type: 'id', id: 'tenant-default' },
           },
-          ownershipMode: 'config_locked',
+          ownershipMode: 'config_warn',
         }),
         expect.objectContaining({
           key: sharedKey,

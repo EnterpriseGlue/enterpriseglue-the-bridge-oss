@@ -601,8 +601,8 @@ function mergeFieldOwnership(ownership: EngineFieldOwnership | undefined): Engin
 
 function getExternalOwnedUpdateFields(engine: Engine, body: Record<string, unknown>): string[] {
   const registrationSource = engine.registrationSource || ''
+  if (registrationSource !== 'external_api') return []
   const managementMode = engine.managementMode || (registrationSource === 'external_api' ? 'external_managed' : 'manual')
-  if (managementMode === 'manual' && registrationSource !== 'external_api') return []
 
   const ownership = mergeFieldOwnership(parseEngineFieldOwnership(engine.fieldOwnershipJson))
   return Object.keys(ENGINE_UPDATE_FIELD_GROUPS).filter((field) => {

@@ -156,7 +156,7 @@ registered through the external API, or applied from a configuration bundle:
    created it and confirm its mappings and inventory no longer authorize
    access.
 
-The repository's localhost-only Journeys 4–11 automation executes this
+The repository's localhost-only Journeys 4–12 automation executes this
 sequence through the manual, external, and configuration provisioning
 lifecycles against the real backend, PostgreSQL database, authorization
 evaluator, and a Docker-hosted Camunda-compatible endpoint. Passing these
@@ -179,6 +179,16 @@ that resource's tenant mapping through its owning manual, external, or
 configuration channel immediately removes access again; restoring the mapping
 and reconciling inventory restores access. If access survives either removal,
 treat it as a security defect rather than advising the user to log out.
+
+Journey 12 validates the complete transition safety workflow. A topology
+change is applied only from a current preview and only after every displayed
+acknowledgement is accepted. If any engine field changes after preview, apply
+fails and the operator must create a fresh preview. A dedicated-to-shared
+transition immediately quarantines runtime resources, even for an existing
+engine role; the reverse transition resolves them to the dedicated owner
+again. Externally registered hybrid engines may use this workflow only when
+tenancy ownership is explicitly `manual`. Configuration-owned engines may use
+it only in `config_warn`; `config_locked` topology remains bundle-owned.
 
 ### Manage Topology and Mappings in the UI
 

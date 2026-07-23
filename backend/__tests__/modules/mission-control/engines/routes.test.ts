@@ -2088,19 +2088,20 @@ describe('mission-control engines routes', () => {
       previewHash: transition.previewHash,
       transition,
     });
+    const engineFindOne = vi.fn().mockResolvedValue({
+      id: 'e1',
+      registrationSource: 'user',
+      ownershipMode: 'manual',
+      managementMode: 'manual',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      tenantId: 'tenant-default',
+    });
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => entity?.name === 'AuditLog'
         ? { insert: auditInsert }
         : {
-            findOne: vi.fn().mockResolvedValue({
-              id: 'e1',
-              registrationSource: 'user',
-              ownershipMode: 'manual',
-              managementMode: 'manual',
-              metadataDiscoveryEnabled: true,
-              deploymentDiscoveryEnabled: true,
-              tenantId: 'tenant-default',
-            }),
+            findOne: engineFindOne,
           },
     });
 
@@ -2159,6 +2160,20 @@ describe('mission-control engines routes', () => {
       resourceType: 'engine',
       resourceId: 'e1',
     }));
+
+    engineFindOne.mockResolvedValueOnce({
+      id: 'e1',
+      registrationSource: 'config',
+      ownershipMode: 'config_warn',
+      managementMode: 'config_managed',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      tenantId: 'tenant-default',
+    });
+    const configWarnPreview = await request(app)
+      .post('/engines-api/engines/e1/tenancy/preview')
+      .send({ tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' } });
+    expect(configWarnPreview.status).toBe(200);
   });
 
   it('keeps source-owned topology out of the manual transition workflow', async () => {
