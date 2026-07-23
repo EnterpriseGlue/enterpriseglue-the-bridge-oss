@@ -197,6 +197,10 @@ For a shared engine:
 - tenant roles do not expose engine secrets or connection configuration;
 - tenant roles can authorize only mapped runtime resources and tenant-safe engine actions;
 - the engine can appear in a user’s runtime selector when at least one mapped resource is visible.
+- an unresolved shared connection can appear in the Engines administration
+  inventory only through the explicit `includeManageableShared=true` contract
+  and an exact `engine:edit` decision; that administrative row never widens
+  runtime selectors or runtime-resource authorization.
 
 ### Rule 5: tenant membership and tenant roles have different purposes
 

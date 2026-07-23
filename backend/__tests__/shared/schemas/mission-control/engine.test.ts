@@ -6,6 +6,7 @@ import {
   EndpointAuthenticationPolicyMessages,
   EngineSchema,
   EngineConnectionHealthResponseSchema,
+  EngineInventoryQuerySchema,
   EngineTenancyConfigurationSchema,
   EngineTenancyErrorCodeSchema,
   EngineTenancyErrorResponseSchema,
@@ -21,6 +22,18 @@ import {
 import { ConfigEngineSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 describe('EngineSchema', () => {
+  it('keeps manageable shared-engine collection widening explicit and bounded', () => {
+    expect(EngineInventoryQuerySchema.parse({})).toEqual({});
+    expect(EngineInventoryQuerySchema.parse({ includeManageableShared: 'true' })).toEqual({
+      includeManageableShared: 'true',
+    });
+    expect(EngineInventoryQuerySchema.safeParse({ includeManageableShared: 'yes' }).success).toBe(false);
+    expect(EngineInventoryQuerySchema.safeParse({
+      includeManageableShared: 'true',
+      unknown: 'x',
+    }).success).toBe(false);
+  });
+
   it('accepts the stable authorization-filtered engine list fields without discarding permitted metadata', () => {
     expect(AccessibleEngineSummarySchema.parse({
       id: 'engine-1',

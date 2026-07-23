@@ -621,6 +621,16 @@ export const AccessibleEngineSummarySchema = z.object({
 }).passthrough();
 export type EngineGovernance = NonNullable<z.infer<typeof AccessibleEngineSummarySchema>['governance']>;
 
+/**
+ * The default collection is safe for runtime engine selectors and therefore
+ * hides shared engines until at least one resolved runtime resource is
+ * visible. Administrative inventory surfaces may request manageable shared
+ * rows; the authorization resolver still requires engine edit permission.
+ */
+export const EngineInventoryQuerySchema = z.object({
+  includeManageableShared: z.enum(['true', 'false']).optional(),
+}).strict();
+
 export const EngineInsertSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().min(1),

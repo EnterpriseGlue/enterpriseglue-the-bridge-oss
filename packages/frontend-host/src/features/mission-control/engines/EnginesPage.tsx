@@ -60,7 +60,7 @@ import type {
   ProjectEngineTarget as SharedProjectEngineTarget,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { useRuntimeResources, useRuntimeResourceSets } from '../../platform-admin/hooks/useAuthzApi'
-import { createEngine, deleteEngine as deleteEngineRequest, getAccessibleEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineMembers, getEngineProjectTargets, setEngineEnvironment, testEngineConnection, updateEngine } from './api/engines'
+import { createEngine, deleteEngine as deleteEngineRequest, getManageableEngines, getEngineConnectionHealth, getEngineDeploymentHistory, getEngineDeploymentLineage, getEngineDeploymentReceipts, getEngineEnvironmentTags, getEngineMembers, getEngineProjectTargets, setEngineEnvironment, testEngineConnection, updateEngine } from './api/engines'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -1383,7 +1383,7 @@ export default function Engines() {
   const hasSingleTag = Array.isArray(envTags) && envTags.length === 1
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
-  const listQ = useQuery({ queryKey: ['engines'], queryFn: getAccessibleEngines })
+  const listQ = useQuery({ queryKey: ['engines'], queryFn: getManageableEngines })
   const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({

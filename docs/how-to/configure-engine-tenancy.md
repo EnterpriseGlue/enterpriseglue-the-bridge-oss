@@ -128,6 +128,15 @@ reviewed batch. Then reconcile inventory and review:
 The local default tenant is never applied to an unmapped shared resource.
 Unmapped, conflicting, stale, or null-tenant resources remain quarantined.
 
+The new shared connection remains visible in **Mission Control > Engines** to a
+user who has permission to edit that engine, so its mappings and diagnostics
+can be completed. This administrative visibility does not make the engine
+available for runtime work. Engine selectors, dashboards, deployment targets,
+and other runtime-facing lists continue to hide it until at least one resolved
+resource is visible to the signed-in user. If the engine is absent from both
+places, confirm that the operator has `engine:edit`; do not grant runtime access
+to work around a missing administration permission.
+
 ### Manage Topology and Mappings in the UI
 
 Open an existing engine. The **Tenancy and tenant mappings** panel shows

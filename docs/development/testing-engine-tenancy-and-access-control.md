@@ -145,6 +145,18 @@ config-bundle audits. This human-administrator journey proves the
 configuration channel contract; it does not substitute for the separate
 least-privilege CI machine-client journey.
 
+Journey 7 begins by proving the shared-engine administration boundary that
+makes mapping possible without widening runtime access. The generic
+`getAccessibleEngines` client and the default
+`GET /engines-api/engines` response remain fail-closed for Mission Control
+selectors. Only the Engines administration page calls
+`getManageableEngines`, which sends `includeManageableShared=true`; the backend
+then requires `engine:edit` on each otherwise unresolved shared engine. The
+middleware unit lane covers editor allow, non-editor deny, active-tenant and
+no-tenant contexts at literal 100% branch coverage. The route/schema/OpenAPI
+lane rejects unrecognized query values, and the Engines page test proves the
+management-only client call.
+
 The journey runner succeeds when every currently implemented journey passes,
 but keeps the assembled artifact visibly incomplete while any of the 14
 journeys or 30 required channel executions is missing. The separate

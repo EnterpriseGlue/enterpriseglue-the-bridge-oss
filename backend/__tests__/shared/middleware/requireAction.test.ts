@@ -36,6 +36,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
     MEMBERS_MANAGE: 'project:members:manage',
   },
   EnginePermissions: {
+    ENGINE_EDIT: 'engine:edit',
     MEMBERS_MANAGE: 'engine:members:manage',
     DEPLOY_VIEW: 'engine:deploy:view',
     INSTANCE_VIEW: 'engine:instance:view',
@@ -527,7 +528,9 @@ describe('requireAction project resource resolvers', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockReset().mockResolvedValue([]);
-    (policyService.evaluateGate as unknown as Mock).mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
+    (policyService.evaluateGate as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
 
     projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
     projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: null }]);
@@ -1828,6 +1831,76 @@ describe('requireAction project resource resolvers', () => {
 
     expect(visible.status).toBe(200);
     expect(visible.body.authorizedEngineIds).toEqual([engineId]);
+  });
+
+  it('includes an unresolved shared engine only in an explicit management collection for an editor', async () => {
+    engineFind.mockResolvedValue([{
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    }]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) =>
+        permission === 'engine:instance:view' || permission === 'engine:edit',
+    );
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    const manageable = await request(app)
+      .get('/engines?tenantId=tenant-a&includeManageableShared=true');
+
+    expect(manageable.status).toBe(200);
+    expect(manageable.body.authorizedEngineIds).toEqual([engineId]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'engine:edit',
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        resourceType: 'engine',
+        resourceId: engineId,
+      }),
+    );
+    expect(permissionService.getVisibleRuntimeResources).not.toHaveBeenCalled();
+  });
+
+  it('does not widen a management collection when shared-engine edit permission is denied', async () => {
+    engineFind.mockResolvedValue([{
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    }]);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+      async (permission: string) => permission === 'engine:instance:view',
+    );
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    const hidden = await request(app)
+      .get('/engines?tenantId=tenant-a&includeManageableShared=true');
+
+    expect(hidden.status).toBe(200);
+    expect(hidden.body.authorizedEngineIds).toEqual([]);
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledTimes(2);
+  });
+
+  it('checks shared-engine management against a null tenant when no tenant is active', async () => {
+    engineFind.mockResolvedValue([{
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const manageable = await request(app)
+      .get('/engines?includeManageableShared=true')
+      .set('x-test-without-tenant', 'true');
+
+    expect(manageable.status).toBe(200);
+    expect(manageable.body.authorizedEngineIds).toEqual([engineId]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith(
+      'engine:edit',
+      expect.objectContaining({ tenantId: null, resourceId: engineId }),
+    );
   });
 
   it('resolves a direct engine action and attaches the canonical engine identifier', async () => {

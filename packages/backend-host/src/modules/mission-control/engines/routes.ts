@@ -45,6 +45,7 @@ import {
   AccessibleEngineSummarySchema,
   CreateEngineRequestSchema,
   EngineConnectionHealthResponseSchema,
+  EngineInventoryQuerySchema,
   EngineTenancyClassificationReportSchema,
   EngineTenancyTransitionApplyRequestSchema,
   EngineTenancyTransitionApplyResponseSchema,
@@ -943,7 +944,7 @@ async function testEngineConnectionAndRecord(
   }
 }
 
-r.get('/engines-api/engines', engineLimiter, requireAuth, requireAction('engine.inventory.read', { resourceResolver: 'engine.visibleCollection' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/engines-api/engines', engineLimiter, requireAuth, validateQuery(EngineInventoryQuerySchema), requireAction('engine.inventory.read', { resourceResolver: 'engine.visibleCollection' }), asyncHandler(async (req: Request, res: Response) => {
   const tenantId = req.tenant?.tenantId
 
   // Filter engines by tenant context (including null tenantId for legacy data)

@@ -157,6 +157,11 @@ describe('EnginesPage', () => {
     renderPage();
 
     expect(await screen.findByRole('button', { name: /add your first engine/i })).toBeEnabled();
+    expect(apiClient.get).toHaveBeenCalledWith(
+      '/engines-api/engines',
+      { includeManageableShared: 'true' },
+      { credentials: 'include' },
+    );
   });
 
   it('hides manual engine creation when onboarding mode is external-only', async () => {

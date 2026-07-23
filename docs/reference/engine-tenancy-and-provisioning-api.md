@@ -64,6 +64,24 @@ Shared:
 quarantined engine until mapping administration and runtime reconciliation are
 completed. HTTP 201 does not mean a shared engine is authorization-ready.
 
+## Engine Inventory Contract
+
+`GET /engines-api/engines` is authorization filtered. With no query parameter,
+it is safe for runtime selectors: an unresolved shared engine is absent until
+the caller can see at least one resolved runtime resource.
+
+The Engines administration page uses:
+
+```text
+GET /engines-api/engines?includeManageableShared=true
+```
+
+This explicit mode may additionally return an unresolved shared engine only
+when the caller has `engine:edit` for that exact engine. It does not change
+runtime-resource visibility, tenant mapping resolution, or downstream engine
+transport authorization. The only accepted values are the strings `true` and
+`false`; unknown query fields and other values return HTTP 400.
+
 ## Manual API Lifecycle
 
 Create requests require engine-inventory creation permission and use the

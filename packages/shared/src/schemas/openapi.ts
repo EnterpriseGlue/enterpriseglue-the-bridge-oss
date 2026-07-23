@@ -57,6 +57,7 @@ const {
   EngineSchema,
   EngineSchemaRaw,
   AccessibleEngineSummarySchema,
+  EngineInventoryQuerySchema,
   EngineConnectionHealthResponseSchema,
   EngineConnectionModeSchema,
   EngineTransportDiagnosticsSchema,
@@ -1031,6 +1032,7 @@ registry.registerPath({
   method: 'get',
   path: '/engines-api/engines',
   ...authzExtension('engine.inventory.read', 'GET', '/engines-api/engines'),
+  request: { query: EngineInventoryQuerySchema },
   responses: {
     200: { description: 'Authorization-filtered engine inventory', content: { 'application/json': { schema: z.array(AccessibleEngineSummarySchema) } } },
   },

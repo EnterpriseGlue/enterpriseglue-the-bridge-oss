@@ -345,6 +345,14 @@ describe('mission-control engines routes', () => {
     ]);
   });
 
+  it('rejects an invalid manageable-shared inventory query before authorization', async () => {
+    const response = await request(app)
+      .get('/engines-api/engines?includeManageableShared=yes');
+
+    expect(response.status).toBe(400);
+    expect(permissionServiceMock.getKnownEngineIdsForUser).not.toHaveBeenCalled();
+  });
+
   it('normalizes PostgreSQL bigint timestamps in an authorization-filtered inventory response', async () => {
     (engineService as any).hasEngineAccess.mockResolvedValue(false);
     (getDataSource as any).mockResolvedValue({

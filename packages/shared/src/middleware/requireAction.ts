@@ -599,6 +599,7 @@ async function resolveEngineVisibleCollection(
   action: AuthzActionDefinition,
   options: RequireActionOptions
 ): Promise<ResolvedAuthzCollectionResource> {
+  const includeManageableShared = req.query.includeManageableShared === 'true';
   let requestedIds = readRequestValues(
     req,
     options.collectionIdsKey || 'engineIds',
@@ -655,6 +656,18 @@ async function resolveEngineVisibleCollection(
     if (allowed && engine?.tenancyMode !== 'shared') {
       allowedIds.add(engineId);
       continue;
+    }
+    if (engine?.tenancyMode === 'shared' && includeManageableShared) {
+      const manageable = await permissionService.hasPermission(EnginePermissions.ENGINE_EDIT, {
+        userId: req.user!.userId,
+        tenantId: req.tenant?.tenantId || null,
+        resourceType: 'engine',
+        resourceId: engineId,
+      });
+      if (manageable) {
+        allowedIds.add(engineId);
+        continue;
+      }
     }
     if (engine?.runtimeAccessScope !== 'resource_aware') continue;
     // A resource-only grant provides Mission Control discovery without

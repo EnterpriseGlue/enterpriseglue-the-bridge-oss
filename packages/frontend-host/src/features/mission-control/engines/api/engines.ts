@@ -40,6 +40,19 @@ export async function getAccessibleEngines(): Promise<AccessibleEngineSummary[]>
   return apiClient.get<AccessibleEngineSummary[]>('/engines-api/engines', undefined, { credentials: 'include' })
 }
 
+/**
+ * Administrative inventory includes shared engines that the caller may edit
+ * even while their runtime-resource mappings are incomplete. Runtime selectors
+ * must continue to use getAccessibleEngines so quarantine stays fail-closed.
+ */
+export async function getManageableEngines(): Promise<AccessibleEngineSummary[]> {
+  return apiClient.get<AccessibleEngineSummary[]>(
+    '/engines-api/engines',
+    { includeManageableShared: 'true' },
+    { credentials: 'include' },
+  )
+}
+
 export async function createEngine(payload: CreateEngineRequest): Promise<AccessibleEngineSummary> {
   return apiClient.post<AccessibleEngineSummary>('/engines-api/engines', payload, { credentials: 'include' })
 }
