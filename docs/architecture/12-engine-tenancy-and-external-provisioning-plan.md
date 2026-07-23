@@ -1095,6 +1095,12 @@ The authorization evidence artifact must report:
 every applicable cell and invalidity witness executes, and all missing, skipped,
 quarantined, unknown, and unexpected counts are zero.
 
+The repository provides `pnpm run test:authz:state-space-evidence` as the
+fail-closed bridge from the foundation to that final artifact. It executes the
+current unit and guarded PostgreSQL layers and writes the exact remaining
+behavior classes as `missingBehaviorClasses`. While any remain, the artifact
+must stay `incomplete` and must not qualify a release commit.
+
 ### Dedicated engine
 
 - resource inventory inherits the persisted engine tenant;

@@ -272,6 +272,22 @@ explicitly non-release-eligible. Adding a canonical value without updating the
 contract fails this lane. The foundation does not produce or substitute for
 the final `authorization-matrix.json`.
 
+Generate the current executable state-space report with:
+
+```bash
+pnpm run test:authz:state-space-evidence
+```
+
+The runner builds the shared registries, executes the canonical/invalidity
+contracts, generated action/route contracts, permission and role contracts,
+and the guarded PostgreSQL principal/scope/model matrix. It refuses a dirty
+worktree and writes `test/results/engine-tenancy-release/authorization-matrix.json`.
+Until all behavioral generation and equivalence obligations below are
+implemented, the artifact deliberately reports `status: "incomplete"`,
+`releaseCommitQualified: false`, and an exact non-zero `missingCells` count.
+Do not hand-edit those fields or treat registry-only coverage as functional
+release evidence.
+
 Implement the remaining generated coverage in this order:
 
 1. read dimensions only from production registries and store their hashes and

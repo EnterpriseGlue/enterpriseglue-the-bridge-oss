@@ -247,9 +247,11 @@
       "testName": "gives API clients and service accounts the same bounded project decision through a custom role"
     }
   ],
+  "completedReleaseObligations": [
+    "generate a witness for every invalidity class"
+  ],
   "remainingReleaseObligations": [
     "generate every applicable behavior cell",
-    "generate a witness for every invalidity class",
     "execute every generated cell at its declared layer",
     "prove equivalence expansion for compressed independent permission combinations",
     "retain same-clean-commit authorization-matrix.json with all zero-gap counters"

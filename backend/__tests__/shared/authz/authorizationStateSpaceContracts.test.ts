@@ -36,6 +36,7 @@ interface StateSpaceContract {
     testFile: string;
     testName: string;
   }>;
+  completedReleaseObligations: string[];
   remainingReleaseObligations: string[];
 }
 
@@ -141,9 +142,11 @@ describe('authorization state-space foundation', () => {
 
     expect(contract.releaseEligible).toBe(false);
     expect(contract.releaseStatus).toBe('foundation-only');
+    expect(contract.completedReleaseObligations).toContain(
+      'generate a witness for every invalidity class',
+    );
     expect(contract.remainingReleaseObligations).toEqual(expect.arrayContaining([
       'generate every applicable behavior cell',
-      'generate a witness for every invalidity class',
       'execute every generated cell at its declared layer',
       'prove equivalence expansion for compressed independent permission combinations',
       'retain same-clean-commit authorization-matrix.json with all zero-gap counters',

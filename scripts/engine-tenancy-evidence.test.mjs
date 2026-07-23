@@ -10,6 +10,8 @@ const sourceCoverageRunner = readFileSync(new URL('./run-engine-tenancy-source-c
 const localRunner = readFileSync(new URL('./run-engine-tenancy-local-evidence.sh', import.meta.url), 'utf8');
 const browserWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const mutationWriter = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
+const authorizationMatrixRunner = readFileSync(new URL('./run-authz-state-space-evidence.mjs', import.meta.url), 'utf8');
+const authorizationFoundationRunner = readFileSync(new URL('./run-local-safe-authz-state-space-foundation.sh', import.meta.url), 'utf8');
 const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
@@ -111,6 +113,39 @@ test('qualifies mutation evidence only for an exact clean commit', () => {
   assert.match(mutationWriter, /releaseCommitQualified/);
   assert.match(mutationWriter, /containsCredentials: false/);
   assert.match(mutationWriter, /containsTokens: false/);
+});
+
+test('keeps authorization state-space evidence fail-closed until behavior generation is complete', () => {
+  assert.match(packageJson.scripts['test:authz:state-space-evidence'], /run-authz-state-space-evidence\.mjs/);
+  assert.match(packageJson.scripts['test:authz:state-space-foundation'], /run-local-safe-authz-state-space-foundation\.sh/);
+  for (const requiredField of [
+    'canonicalInputHash',
+    'canonicalValueCount',
+    'classifiedCanonicalValueCount',
+    'rawTupleCount',
+    'applicableCellCount',
+    'executedApplicableCellCount',
+    'equivalenceExpandedCellCount',
+    'invalidityClassCount',
+    'executedInvalidityWitnessCount',
+    'missingCells',
+    'skippedCells',
+    'quarantinedCells',
+    'unknownCells',
+    'unexpectedCells',
+  ]) {
+    assert.match(authorizationMatrixRunner, new RegExp(`\\b${requiredField}\\b`));
+  }
+  assert.match(authorizationMatrixRunner, /status: 'incomplete'/);
+  assert.match(authorizationMatrixRunner, /releaseCommitQualified: false/);
+  assert.match(authorizationMatrixRunner, /run-local-safe-custom-role-matrix\.sh/);
+  assert.match(authorizationMatrixRunner, /test:authz:local-smoke:cross-browser/);
+  assert.match(authorizationMatrixRunner, /Authorization state-space evidence must be run from a clean worktree/);
+  assert.match(authorizationMatrixRunner, /scripts\/local-safe-test\.env/);
+  assert.match(authorizationMatrixRunner, /delete process\.env\[key\]/);
+  assert.match(authorizationFoundationRunner, /scripts\/local-safe-test\.env/);
+  assert.match(authorizationFoundationRunner, /unset DATABASE_TYPE DATABASE_URL POSTGRES_URL/);
+  assert.doesNotMatch(authorizationMatrixRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 
 test('retains literal 100 percent source coverage for every security-critical module lane', () => {
