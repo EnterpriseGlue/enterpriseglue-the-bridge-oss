@@ -182,6 +182,10 @@ external registration audit details.
 `TEN-API-005`: create, update, and external registration share the canonical
 `tenancy` schema and stable sanitized error schema in OpenAPI.
 
+`TEN-UI-002`: manual engine creation exposes dedicated/current-tenant and
+shared/mapping-strategy controls backed by that same schema. Shared selection
+forces `resource_aware`; no raw tenant ID is accepted by the form.
+
 `TEN-RUNTIME-001`: dedicated resource observations persist explicit resolved
 state and sanitized lineage.
 
@@ -211,6 +215,12 @@ external source ownership, and emits a sanitized audit summary.
 `TEN-API-008`: list, apply, diagnostics, and external mapping operations use the
 canonical mapping schemas in OpenAPI. Stable mapping conflicts return an engine
 tenancy error without exposing tenant inventory or raw runtime claims.
+
+`TEN-UI-004`: the engine detail panel lists source-owned mapping rows and
+supports a version-guarded, atomic dry run before one reviewed manual mapping
+change is applied. Current/default/stable-key tenant references are selectable;
+an existing resolved tenant is retained as hidden server-validated lineage
+rather than becoming an editable raw ID.
 
 `TEN-RUNTIME-002`: shared runtime inventory resolution uses the persisted engine
 strategy and active mapping rows. A successful decision stores the resolved
@@ -365,6 +375,11 @@ it.
 
 `TEN-AUDIT-002`: preview and successful apply write sanitized audit records
 with the transition kind, hash, acknowledgements, states, and aggregate effects.
+
+`TEN-UI-003`: engine details render sanitized topology diagnostics and every
+preview effect. Apply remains disabled until all acknowledgements returned by
+the exact preview are selected; it sends the matching proposal, hash, expiry,
+and acknowledgement set.
 
 ## Mission Control Runtime Enforcement
 

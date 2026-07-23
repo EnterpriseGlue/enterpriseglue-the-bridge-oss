@@ -4,6 +4,14 @@ import type {
   AccessibleEngineSummary,
   CreateEngineRequest,
   EngineConnectionHealthResponse,
+  EngineTenancyDiagnostics,
+  EngineTenancyTransitionApplyRequest,
+  EngineTenancyTransitionApplyResponse,
+  EngineTenancyTransitionPreviewRequest,
+  EngineTenancyTransitionPreviewResponse,
+  EngineTenantMapping,
+  ExternalEngineTenantMappingsUpsertRequest,
+  ExternalEngineTenantMappingsUpsertResponse,
   UpdateEngineRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
 import type {
@@ -60,6 +68,55 @@ export async function testEngineConnection(engineId: string): Promise<EngineConn
   return apiClient.post<EngineConnectionHealthResponse>(
     `/engines-api/engines/${encodeURIComponent(engineId)}/test`,
     {},
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineTenancyDiagnostics(engineId: string): Promise<EngineTenancyDiagnostics> {
+  return apiClient.get<EngineTenancyDiagnostics>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/tenancy/diagnostics`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function previewEngineTenancyTransition(
+  engineId: string,
+  payload: EngineTenancyTransitionPreviewRequest,
+): Promise<EngineTenancyTransitionPreviewResponse> {
+  return apiClient.post<EngineTenancyTransitionPreviewResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/tenancy/preview`,
+    payload,
+    { credentials: 'include' },
+  )
+}
+
+export async function applyEngineTenancyTransition(
+  engineId: string,
+  payload: EngineTenancyTransitionApplyRequest,
+): Promise<EngineTenancyTransitionApplyResponse> {
+  return apiClient.post<EngineTenancyTransitionApplyResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/tenancy/apply`,
+    payload,
+    { credentials: 'include' },
+  )
+}
+
+export async function getEngineTenantMappings(engineId: string): Promise<EngineTenantMapping[]> {
+  return apiClient.get<EngineTenantMapping[]>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/tenant-mappings`,
+    undefined,
+    { credentials: 'include' },
+  )
+}
+
+export async function upsertEngineTenantMappings(
+  engineId: string,
+  payload: ExternalEngineTenantMappingsUpsertRequest,
+): Promise<ExternalEngineTenantMappingsUpsertResponse> {
+  return apiClient.put<ExternalEngineTenantMappingsUpsertResponse>(
+    `/engines-api/engines/${encodeURIComponent(engineId)}/tenant-mappings`,
+    payload,
     { credentials: 'include' },
   )
 }

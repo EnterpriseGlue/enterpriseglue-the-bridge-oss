@@ -34,6 +34,7 @@ import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
+import EngineTenancyPanel from './components/EngineTenancyPanel'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
@@ -46,6 +47,7 @@ import type {
   AccessibleEngineSummary,
   EngineAuthType,
   EngineConnectionMode,
+  EngineTenantMappingStrategy,
   EngineType,
   UpdateEngineRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
@@ -87,6 +89,8 @@ export type EngineMutationForm = {
   oauthScopes: string
   oauthAudience: string
   environmentTagId: string
+  tenancyMode: 'dedicated' | 'shared'
+  tenantMappingStrategy: EngineTenantMappingStrategy
   runtimeAccessScope: RuntimeAccessScope
   deploymentIntegration: DeploymentIntegration
   metadataDiscoveryEnabled: boolean
@@ -413,7 +417,7 @@ type EngineMembersResponse = SharedEngineMembersResponse
 type EngineRoleAssignment = SharedRoleAssignment
 type EngineRoleAssignmentDisplay = Pick<SharedRoleAssignment, 'id' | 'roleId' | 'source'> & Partial<Pick<SharedRoleAssignment,
   'userId' | 'principalType' | 'principalId' | 'sourceRef'
->>
+>> & { sourceMappingId?: string | null }
 
 type RuntimeResourceAccessInventory = {
   id: string
@@ -503,6 +507,7 @@ export function formatEngineAccessSourceLineage(assignment: EngineRoleAssignment
             : `${formatEngineRegistrationStatus(source || 'unknown')} assignment`
   const parts = [sourceLabel]
   if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
+  if (source === 'sso' && assignment.sourceMappingId) parts.push(`SSO mapping ${assignment.sourceMappingId}`)
   return parts.join('; ')
 }
 
@@ -1187,6 +1192,12 @@ function EngineRegistrationSection({ engine }: { engine: EngineInventory }) {
         <EngineRegistrationDetail label="Configuration ownership" value={engine.ownershipMode ? formatEngineRegistrationStatus(engine.ownershipMode) : '-'} />
         <EngineRegistrationDetail label="Last configuration apply" value={formatEngineTimestamp(engine.lastAppliedAt)} />
         <EngineRegistrationDetail label="Management mode" value={formatEngineRegistrationStatus(engine.managementMode)} tagValue={engine.managementMode || undefined} />
+        <EngineRegistrationDetail label="Tenancy topology" value={engine.tenancyMode === 'shared' ? 'Shared' : 'Dedicated'} tagValue={engine.tenancyMode || 'dedicated'} />
+        <EngineRegistrationDetail label="Owning tenant" value={engine.tenantId || (engine.tenancyMode === 'shared' ? 'Per runtime resource' : '-')} />
+        <EngineRegistrationDetail label="Tenant mapping strategy" value={formatEngineRegistrationStatus(engine.tenantMappingStrategy)} />
+        <EngineRegistrationDetail label="Tenant mapping version" value={String(engine.tenantMappingVersion || 0)} />
+        <EngineRegistrationDetail label="Tenant resolution" value={formatEngineRegistrationStatus(engine.tenantResolutionStatus)} tagValue={engine.tenantResolutionStatus || undefined} />
+        <EngineRegistrationDetail label="Last tenant reconciliation" value={formatEngineTimestamp(engine.lastTenantReconciledAt)} />
         <EngineRegistrationDetail label="Runtime access" value={engine.runtimeAccessScope === 'resource_aware' ? 'Resource-aware (central)' : 'Engine-wide (distributed)'} />
         <EngineRegistrationDetail label="Connection mode" value={engine.connectionMode === 'customer_sidecar' ? 'Customer sidecar' : 'Direct'} />
         <EngineRegistrationDetail label="Endpoint authentication" value={formatEngineAuthentication(engine)} />
@@ -1236,7 +1247,20 @@ export function buildEngineMutationPayload(
     }
   }
 
-  const payload: EngineMutationPayload = { ...form }
+  const {
+    tenancyMode,
+    tenantMappingStrategy,
+    ...registrationForm
+  } = form
+  const payload: EngineMutationPayload = {
+    ...registrationForm,
+    ...(!editing ? {
+      tenancy: tenancyMode === 'shared'
+        ? { mode: 'shared' as const, mappingStrategy: tenantMappingStrategy, unmappedPolicy: 'deny' as const }
+        : { mode: 'dedicated' as const, tenantRef: { type: 'request_context' as const } },
+      runtimeAccessScope: tenancyMode === 'shared' ? 'resource_aware' as const : registrationForm.runtimeAccessScope,
+    } : {}),
+  }
   if (editing && options.canManageSecrets === false) {
     for (const field of ENGINE_SECRET_FORM_FIELDS) {
       payload[field] = undefined
@@ -1303,6 +1327,8 @@ export default function Engines() {
     oauthScopes: '',
     oauthAudience: '',
     environmentTagId: '',
+    tenancyMode: 'dedicated',
+    tenantMappingStrategy: 'engine_tenant_id',
     runtimeAccessScope: 'engine_wide' as RuntimeAccessScope,
     deploymentIntegration: 'enterpriseglue_proxy' as DeploymentIntegration,
     metadataDiscoveryEnabled: true,
@@ -1335,6 +1361,15 @@ export default function Engines() {
   const RUNTIME_ACCESS_SCOPE_ITEMS = React.useMemo(() => ([
     { id: 'engine_wide' as const, label: 'Engine-wide (distributed)' },
     { id: 'resource_aware' as const, label: 'Resource-aware (central)' },
+  ]), [])
+  const TENANCY_MODE_ITEMS = React.useMemo(() => ([
+    { id: 'dedicated' as const, label: 'Dedicated — current tenant' },
+    { id: 'shared' as const, label: 'Shared — mapped runtime resources' },
+  ]), [])
+  const TENANT_MAPPING_STRATEGY_ITEMS = React.useMemo(() => ([
+    { id: 'engine_tenant_id' as const, label: 'Engine tenant ID' },
+    { id: 'deployment_target' as const, label: 'Deployment target' },
+    { id: 'explicit' as const, label: 'Explicit mapping' },
   ]), [])
   const DEPLOYMENT_INTEGRATION_ITEMS = React.useMemo(() => ([
     { id: 'enterpriseglue_proxy' as const, label: 'EnterpriseGlue proxy' },
@@ -1423,6 +1458,8 @@ export default function Engines() {
       oauthScopes: '',
       oauthAudience: '',
       environmentTagId: autoTagId,
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: 'engine_tenant_id',
       runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: true,
@@ -1540,6 +1577,8 @@ export default function Engines() {
       oauthScopes: row.oauthScopes || '',
       oauthAudience: row.oauthAudience || '',
       environmentTagId: row.environmentTagId || '',
+      tenancyMode: row.tenancyMode === 'shared' ? 'shared' : 'dedicated',
+      tenantMappingStrategy: row.tenantMappingStrategy || 'engine_tenant_id',
       runtimeAccessScope: row.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide',
       deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: row.metadataDiscoveryEnabled !== false,
@@ -1760,18 +1799,22 @@ export default function Engines() {
                 <Table {...getTableProps()} size="md" useZebraStyles>
                   <TableHead>
                     <TableRow>
-                      {headers.map((header) => (
-                        <TableHeader
-                          {...getHeaderProps({ header })}
-                          style={
-                            header.key === 'actions'
-                              ? { width: 48, textAlign: 'right' }
-                              : undefined
-                          }
-                        >
-                          {header.header}
-                        </TableHeader>
-                      ))}
+                      {headers.map((header) => {
+                        const { key, ...headerProps } = getHeaderProps({ header })
+                        return (
+                          <TableHeader
+                            key={key || header.key}
+                            {...headerProps}
+                            style={
+                              header.key === 'actions'
+                                ? { width: 48, textAlign: 'right' }
+                                : undefined
+                            }
+                          >
+                            {header.header}
+                          </TableHeader>
+                        )
+                      })}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -1781,6 +1824,7 @@ export default function Engines() {
                       </TableRow>
                     )}
                     {tableRows.map((row) => {
+                      const { key: rowKey, ...rowProps } = getRowProps({ row })
                       const engine = rows.find((e) => e.id === row.id)
                       const actions = getActionsForEngine(engine)
                       const testUnavailableReason = getEngineTestUnavailableReason(actions, engine)
@@ -1790,7 +1834,7 @@ export default function Engines() {
                       const hasActions = Boolean(engine?.id) || actions.canEdit || actions.canTest || actions.canOpenMembers || actions.canDelete
 
                       return (
-                        <TableRow {...getRowProps({ row })}>
+                        <TableRow key={rowKey || row.id} {...rowProps}>
                           {row.cells.map((cell) => {
                             const key = cell.info.header
 
@@ -1999,6 +2043,19 @@ export default function Engines() {
         size="lg"
       >
         {editing && engineDetailSections.includes('registration') && <EngineRegistrationSection engine={editing} />}
+        {editing && (
+          <EngineTenancyPanel
+            engine={editing}
+            canManage={Boolean(editingActions?.canEdit && !isConfigLocked && !isExternallyManagedEngine(editing))}
+            managementReason={isConfigLocked
+              ? 'This topology is managed by its configuration bundle.'
+              : isExternallyManagedEngine(editing)
+                ? 'This topology is managed by its external registration source.'
+                : editingActions?.canEdit
+                  ? null
+                  : 'Engine edit permission is required to change topology or tenant mappings.'}
+          />
+        )}
         {editing && engineDetailSections.includes('access') && (
           <EngineAccessSection
             assignments={accessAssignmentsQ.data || []}
@@ -2140,6 +2197,53 @@ export default function Engines() {
           />
         )}
         <Dropdown
+          id="eng-tenancy-mode"
+          titleText="Tenancy topology"
+          label="Select tenancy topology"
+          items={TENANCY_MODE_ITEMS}
+          itemToString={(item: any) => item ? item.label : ''}
+          selectedItem={TENANCY_MODE_ITEMS.find((item) => item.id === form.tenancyMode)}
+          onChange={({ selectedItem }: any) => setForm((current: any) => ({
+            ...current,
+            tenancyMode: selectedItem?.id || 'dedicated',
+            runtimeAccessScope: selectedItem?.id === 'shared' ? 'resource_aware' : current.runtimeAccessScope,
+          }))}
+          disabled={Boolean(editing) || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+        />
+        {!editing && form.tenancyMode === 'shared' && (
+          <>
+            <Dropdown
+              id="eng-tenant-mapping-strategy"
+              titleText="Tenant mapping strategy"
+              label="Select tenant mapping strategy"
+              items={TENANT_MAPPING_STRATEGY_ITEMS}
+              itemToString={(item: any) => item ? item.label : ''}
+              selectedItem={TENANT_MAPPING_STRATEGY_ITEMS.find((item) => item.id === form.tenantMappingStrategy)}
+              onChange={({ selectedItem }: any) => setForm((current: any) => ({
+                ...current,
+                tenantMappingStrategy: selectedItem?.id || 'engine_tenant_id',
+              }))}
+              disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending}
+            />
+            <InlineNotification
+              lowContrast
+              kind="warning"
+              title="Shared engines start fail closed"
+              subtitle="Runtime resources remain hidden until a tenant mapping resolves exactly one tenant. Configure mappings after creating the engine."
+              hideCloseButton
+            />
+          </>
+        )}
+        {!editing && form.tenancyMode === 'dedicated' && (
+          <InlineNotification
+            lowContrast
+            kind="info"
+            title="Dedicated engine"
+            subtitle="The engine is assigned to your current tenant. No raw tenant ID is required."
+            hideCloseButton
+          />
+        )}
+        <Dropdown
           id="eng-runtime-access-scope"
           titleText="Runtime access"
           label="Select runtime access"
@@ -2147,7 +2251,7 @@ export default function Engines() {
           itemToString={(it: any) => it ? it.label : ''}
           selectedItem={RUNTIME_ACCESS_SCOPE_ITEMS.find((item) => item.id === form.runtimeAccessScope)}
           onChange={({ selectedItem }: any) => setForm((f: any) => ({ ...f, runtimeAccessScope: selectedItem?.id || 'engine_wide' }))}
-          disabled={createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
+          disabled={form.tenancyMode === 'shared' || createM.isPending || updateM.isPending || setEnvironmentM.isPending || areSourceOwnedFieldsReadOnly || isEngineFormReadOnly || isEngineEnvironmentOnlyEditable}
         />
         {form.runtimeAccessScope === 'resource_aware' && (
           <InlineNotification

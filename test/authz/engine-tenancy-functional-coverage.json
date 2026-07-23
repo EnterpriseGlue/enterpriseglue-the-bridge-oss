@@ -385,6 +385,39 @@
     "ciJob": "test:engine-tenancy:authorization"
   },
   {
+    "id": "TEN-UI-002",
+    "requirement": "Manual engine creation exposes canonical dedicated/current-tenant and shared/mapping-strategy controls, forces resource-aware shared access, and never accepts a raw tenant ID.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["ui", "manual", "dedicated", "shared", "request_context", "resource_aware"],
+    "expected": "canonical create payload with no raw tenant-id field",
+    "testFile": "frontend/__tests__/src/features/mission-control/engines/pages/EnginesPage.test.tsx",
+    "testName": "creates dedicated and shared engines with canonical tenancy contracts",
+    "documentation": "docs/how-to/configure-engine-tenancy.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-UI-003",
+    "requirement": "Engine details show sanitized diagnostics and require every acknowledgement before applying the exact topology preview hash and expiry.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["ui", "diagnostics", "preview", "acknowledgement", "apply"],
+    "expected": "unacknowledged apply disabled; exact reviewed preview applied",
+    "testFile": "frontend/__tests__/src/features/mission-control/engines/components/EngineTenancyPanel.test.tsx",
+    "testName": "shows diagnostics, previews and acknowledges topology changes, and applies the exact preview",
+    "documentation": "docs/how-to/configure-engine-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-UI-004",
+    "requirement": "Shared-engine mapping UI previews and applies one version-guarded atomic mapping change using current/default/stable-key or retained existing tenant lineage.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["ui", "mapping", "dry_run", "atomic", "version", "tenant_reference"],
+    "expected": "reviewed mapping dry run followed by version-guarded apply",
+    "testFile": "frontend/__tests__/src/features/mission-control/engines/components/EngineTenancyPanel.test.tsx",
+    "testName": "previews and applies one version-guarded atomic mapping change",
+    "documentation": "docs/how-to/configure-engine-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
     "id": "TEN-AUDIT-001",
     "requirement": "Effective Access sources explain the resolved runtime tenant, mapping id and version, diagnostic code, and topology.",
     "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",

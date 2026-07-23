@@ -6,15 +6,12 @@ tenant-scoped access.
 Audience: Platform administrators, engine administrators, tenant administrators,
 and operators.
 
-Status: Dedicated/shared provisioning, mapping administration, runtime
-quarantine, tenant roles, configuration bundles, and Effective Access lineage
-are implemented. Topology classification and guarded transition preview/apply
-are implemented through the API. Configuration bundles also own and reconcile
-shared-engine mapping rows. Mission Control collection, detail, and mutation
-guards enforce resolved shared mappings even for broad engine grants.
-Engine-topology form controls are still gated; create or transition engines
-through the published API or use a configuration bundle for supported
-create/update operations.
+Status: Dedicated/shared provisioning, topology diagnostics, guarded
+preview/apply, mapping administration, runtime quarantine, tenant roles,
+configuration bundles, and Effective Access lineage are implemented in the UI
+and APIs. Configuration bundles also own and reconcile shared-engine mapping
+rows. Mission Control collection, detail, and mutation guards enforce resolved
+shared mappings even for broad engine grants.
 
 ## Choose the Topology
 
@@ -34,6 +31,11 @@ Topology and runtime access are separate:
 | Shared | `engine_wide` | No |
 
 ## Configure a Dedicated Engine
+
+In **Mission Control > Engines**, choose **Add engine**, then choose
+**Dedicated — current tenant**. The UI sends the canonical
+`request_context` tenant reference; it never asks an operator to copy a tenant
+database ID.
 
 When `tenancy` is omitted, a new engine is dedicated for compatibility. The
 server persists the authenticated request tenant. Local OSS uses
@@ -63,6 +65,11 @@ The default tenant is a provisioning fallback, not an authorization wildcard.
 Once the engine exists, every request must match its persisted tenant.
 
 ## Configure a Shared Engine
+
+In **Mission Control > Engines**, choose **Add engine**, select
+**Shared — mapped runtime resources**, and select the mapping strategy. Runtime
+access is locked to **Resource-aware** and the warning explains that inventory
+starts quarantined.
 
 A shared engine must explicitly declare `resource_aware` and a mapping strategy.
 
@@ -96,6 +103,29 @@ reviewed batch. Then reconcile inventory and review:
 
 The local default tenant is never applied to an unmapped shared resource.
 Unmapped, conflicting, stale, or null-tenant resources remain quarantined.
+
+### Manage Topology and Mappings in the UI
+
+Open an existing engine. The **Tenancy and tenant mappings** panel shows
+topology, owning-tenant behavior, mapping strategy/version, readiness, last
+reconciliation, and mapped/unmapped/conflicting resource counts.
+
+`TEN-UI-002`: engine creation uses the shared tenancy contracts and forces
+resource-aware access for shared topology.
+
+`TEN-UI-003`: to change topology or strategy, choose the proposed state and
+select **Preview topology change**. Review every access, mapping, inventory,
+Engine Set, deployment-target, receipt, and visibility count. The apply button
+stays disabled until every server-returned acknowledgement is checked. Apply
+uses the exact preview hash and expiration.
+
+`TEN-UI-004`: for a shared engine, mapping management lists source ownership
+and active status. New mappings target the current tenant, default tenant, or a
+portable stable tenant key. Existing mappings retain their resolved target
+without exposing an editable raw tenant-ID field. Preview performs a
+version-guarded atomic dry run; apply reuses the reviewed row and expected
+mapping version. Configuration-locked and externally managed rows stay
+read-only.
 
 ### Verify Mission Control Behavior
 

@@ -88,6 +88,8 @@ describe('EnginesPage', () => {
       oauthScopes: '',
       oauthAudience: '',
       environmentTagId: '',
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: 'engine_tenant_id',
       runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: true,
@@ -875,6 +877,31 @@ describe('EnginesPage', () => {
       oauthAudience: undefined,
       runtimeAccessScope: 'resource_aware',
       deploymentIntegration: 'direct_engine',
+    });
+  });
+
+  it('creates dedicated and shared engines with canonical tenancy contracts', () => {
+    expect(buildEngineMutationPayload(engineForm({
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: 'explicit',
+    }), null)).toMatchObject({
+      tenancy: {
+        mode: 'dedicated',
+        tenantRef: { type: 'request_context' },
+      },
+      runtimeAccessScope: 'engine_wide',
+    });
+    expect(buildEngineMutationPayload(engineForm({
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'deployment_target',
+      runtimeAccessScope: 'engine_wide',
+    }), null)).toMatchObject({
+      tenancy: {
+        mode: 'shared',
+        mappingStrategy: 'deployment_target',
+        unmappedPolicy: 'deny',
+      },
+      runtimeAccessScope: 'resource_aware',
     });
   });
 

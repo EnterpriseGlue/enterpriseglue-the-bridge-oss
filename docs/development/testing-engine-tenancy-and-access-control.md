@@ -61,7 +61,9 @@ The transition lane:
    concurrency, transaction-side invalidation, source ownership, and audits;
 5. proves topology-aware Engine Set rematerialization for platform, owning
    tenant, and all-tenant shared-engine cases; and
-6. checks routes, action inventory, canonical schemas, and OpenAPI together.
+6. exercises diagnostics, exact preview acknowledgements, apply, and mapping
+   preview/apply in the engine administration UI; and
+7. checks routes, action inventory, canonical schemas, and OpenAPI together.
 
 The runtime lane:
 
@@ -113,6 +115,7 @@ The focused matrix proves:
 | Config mapping | stable tenant key, shared strategy, source-owned create/update/export | dedicated engine, strategy mismatch, foreign owner, unauthorized tenant, stale authoritative removal |
 | Effective Access | sanitized mapping lineage | raw claims, credentials, or foreign inventory |
 | UI | Current tenant for every supported principal | no raw tenant-ID field |
+| Engine topology UI | canonical dedicated/shared create, diagnostics, exact preview acknowledgements, mapping dry run/apply | raw tenant entry, unacknowledged apply, source-owned mutation, or shared engine-wide access |
 | Mission Control collection | resolved keys plus exact runtime-tenant scopes | broad shared grant, unresolved row, wrong runtime tenant, or unbounded response |
 | Mission Control detail/mutation | exact resolved inventory and authorized live lineage | no mapping, ambiguous key tenant, uninventoried detail, batch, deployment, or migration |
 | Classification | explicit dedicated/shared and safe engine-wide default proposal | ambiguous resource-aware and invalid topology |

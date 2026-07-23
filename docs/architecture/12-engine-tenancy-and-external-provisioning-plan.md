@@ -59,9 +59,9 @@ retain the authorized tenant reference for portable export, preserve other
 sources, re-resolve known runtime inventory atomically, and schedule bounded
 post-apply reconciliation.
 
-The remaining implementation work is concentrated in topology/mapping UI and
-metrics, and final documentation/example/browser adoption gates. Engine Set
-transition rematerialization, Mission Control runtime guards, and
+The remaining implementation work is concentrated in operational metrics and
+final documentation/example/browser adoption gates. Topology/mapping UI, Engine
+Set transition rematerialization, Mission Control runtime guards, and
 transport-denial proof are implemented.
 
 ## Current-State Gap
@@ -742,9 +742,9 @@ checkboxes are closed.
 
 ### Phase 6: UI and operations
 
-- [ ] Add engine topology controls and diagnostics.
-- [ ] Add tenant mapping management.
-- [ ] Add migration preview and acknowledgements.
+- [x] Add engine topology controls and diagnostics.
+- [x] Add tenant mapping management.
+- [x] Add migration preview and acknowledgements.
 - [ ] Add metrics for unresolved/conflicting resources and fallback use.
 
 ### Phase 7: documentation and adoption
