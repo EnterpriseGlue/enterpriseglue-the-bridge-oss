@@ -363,9 +363,11 @@ connecting production workloads:
 3. Open **Effective Access** for the allowed resource. Confirm the displayed
    tenant, role source, mapping ID/version, and topology match the intended
    configuration.
-4. Remove the assignment or group membership while the user remains signed
-   in. Refresh the engine list and direct URL; access must disappear without a
-   new login (`TEN-UI-005`).
+4. Keep the engine list open in one tab and open the engine direct URL in a
+   second tab. Remove the assignment or group membership while the user
+   remains signed in. Both tabs must receive a newer authorization version and
+   lose the engine without a new login. Refresh, use browser back/forward, and
+   open the direct URL again; none may restore the old row (`TEN-UI-005`).
 5. Repeat the same bounded decision with the API client and service account
    used by automation (`TEN-AUTHZ-015`).
 6. Review the audit entry and tenant-resolution diagnostics. They must explain

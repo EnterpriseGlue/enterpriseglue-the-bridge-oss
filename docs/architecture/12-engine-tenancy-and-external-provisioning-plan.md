@@ -65,8 +65,9 @@ runtime guards, transport-denial proof, bounded operational metrics, published
 guides, and executable documentation contracts are implemented.
 
 Release qualification is not the same as implementation completion. The local
-PostgreSQL/Chromium journey and focused contract lanes are green, but the full
-end-to-end goal remains open until the following evidence is retained:
+PostgreSQL topology journey, three-browser fine-grained access matrix, and
+focused contract lanes are green, but the full end-to-end goal remains open
+until the following evidence is retained:
 
 | Qualification gate | Current evidence | Exit condition |
 | --- | --- | --- |
@@ -74,10 +75,10 @@ end-to-end goal remains open until the following evidence is retained:
 | Security mutation | Nine targeted mutants killed, including every required tenancy fault class | Mutation report retained by CI with zero survivors |
 | Human principals and custom roles | PostgreSQL-backed direct-user, group-derived-user, scoped custom-role, and randomized model tests pass | Generated matrix contains zero missing or skipped supported cells |
 | Machine principals | PostgreSQL-backed API-client and service-account custom-role, expiry, rotation, and revocation tests pass | Same generated matrix and HTTP journeys pass for both machine-principal types |
-| Local running installation | Clean retained PostgreSQL state and Chromium enforcement journey pass | Repeatable clean-install and supported upgrade-baseline artifacts pass |
-| Browser targets | Chromium evidence passes; Firefox and WebKit are configured in the scheduled gate | Chromium, Firefox, and WebKit artifacts pass for the same release commit, including active-session revocation |
+| Local running installation | Guarded PostgreSQL/Chromium enforcement proves owned legacy classification, dedicated defaulting, shared fail-closed mapping, reconciliation, metrics, and cleanup | Repeatable clean-install and supported upgrade-baseline artifacts pass |
+| Browser targets | The guarded local runner passes 27 executions across Chromium, Firefox, and WebKit for login, Effective Access, resource-scoped access, expiry, revocation, direct URL, stale tab, multi-tab, refresh, and history restoration | The same clean release commit retains that matrix plus the remaining contrast, zoom, reduced-motion, and error-announcement audit |
 | Database targets | Portable migration/schema and adapter-registration contracts cover PostgreSQL, MySQL, SQL Server, Oracle, and Spanner; PostgreSQL has live evidence | Clean-install, upgrade, retry, schema-equivalence, service, and rollback evidence passes on all five adapters |
-| Documentation | Developer, user, operator, API, migration, compatibility, and test-report Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
+| Documentation | Developer, user, operator, API, migration, compatibility, test, review, and release-evidence Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
 | Compatibility | Null-owned authorization fallback is removed; omitted new-provisioning tenancy remains warned and defaulted | Published deprecation window closes before omission warnings are removed |
 
 No unchecked qualification gate may be described as covered by a target list
@@ -821,8 +822,9 @@ checkboxes are closed.
 The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
 `TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-The remaining cross-database, cross-browser, generated-matrix, clean/upgrade,
-independent-review, and compatibility-window gates are tracked below.
+The remaining cross-database, browser-accessibility, generated-matrix,
+clean/upgrade, independent-review, and compatibility-window gates are tracked
+below.
 
 ### Phase 9: full release qualification
 
@@ -844,19 +846,45 @@ independent-review, and compatibility-window gates are tracked below.
 - [ ] Execute the clean-install, every supported upgrade baseline, interrupted
   retry, schema-equivalence, service-behavior, rollback, and cleanup suites on
   PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.
-- [ ] Retain passing Chromium, Firefox, and WebKit results for the same release
-  commit, including direct URL, stale-tab, multi-tab, refresh, accessibility,
-  and active-session revocation cases.
+- [x] Retain passing Chromium, Firefox, and WebKit results for the same clean
+  commit for direct URL, stale-tab, multi-tab, refresh, history restoration,
+  keyboard/accessibility names, and active-session revocation cases.
+- [ ] Complete the remaining browser accessibility audit for error
+  announcements, contrast, 200% zoom/reflow, and reduced motion in every new
+  tenancy workflow.
 - [ ] Execute all 14 provisioning-channel journeys below through the real local
   HTTP service and persistent database for every supported channel, recording
   documented stable errors for unsupported channel/action combinations.
-- [ ] Produce one release evidence index that links the exact manifest,
+- [x] Produce one fail-closed release evidence index that links the exact manifest,
   generated matrices, source coverage, mutation, database, browser,
-  documentation, migration, retry, rollback, and cleanup artifacts.
+  documentation, migration, retry, rollback, and cleanup artifacts; missing,
+  dirty, or different-commit evidence remains visibly incomplete.
 - [ ] Complete independent Markdown documentation review by engineering,
   security, and an operator using only the published procedures.
 - [ ] Close the external API omission-warning compatibility window before
   removing that warning behavior.
+
+### Remaining end-to-end execution sequence
+
+Run the remaining work in this order. Each work package must update production
+code, schemas/OpenAPI, the functional manifest, developer documentation, user
+documentation, tests, and retained evidence together when its contract
+changes.
+
+| Order | Work package | Required output and success criteria | Stop or rollback condition |
+| --- | --- | --- | --- |
+| 1 | Freeze a clean candidate | Run the manifest, mutation, guarded local enforcement, and three-browser lanes. `requirement-evidence.json`, `mutation-report.json`, `local-enforcement.json`, and `browser-matrix.json` must name the same clean commit. | Any artifact is missing, dirty, stale, sanitized incorrectly, or refers to another commit. |
+| 2 | Complete authorization generation | Generate only valid supported cells from the canonical permission/action registry, plus stable invalidity classes. Execute every applicable principal, scope, topology, runtime mode, source, tenant relationship, lifecycle, and outcome cell. Write `authorization-matrix.json` with zero missing, skipped, quarantined, or unexpected cells. | Any canonical action/resource type is unclassified, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
+| 3 | Qualify all database adapters | For PostgreSQL, MySQL, SQL Server, Oracle, and Spanner, run clean install, every supported upgrade baseline, interruption/retry, schema equivalence, service behavior, rollback, and cleanup. Write one `database-matrix.json` containing versions, schema fingerprints, and per-stage results. | Schema or behavior differs, retry is not idempotent, rollback loses explanatory metadata, or cleanup leaves owned rows. |
+| 4 | Complete real-service provisioning journeys | Execute all 14 journeys through the local HTTP service and persistent database for manual UI, external API, and configuration channels where supported. Unsupported combinations must return their documented stable error. Write `provisioning-journeys.json` with 14 passed and zero missing journeys. | A channel silently changes topology/ownership, a retry duplicates state, a deny leaks data, or decommissioned access can reappear. |
+| 5 | Finish browser accessibility | Add automated/manual evidence for error announcement, contrast, 200% zoom/reflow, and reduced motion. Re-run Chromium, Firefox, and WebKit after every browser-flow change. | A keyboard/screen-reader workflow cannot complete, content becomes unavailable at zoom, or stale authorization returns after any navigation/session path. |
+| 6 | Complete documentation review | Engineering, security, and an independent operator execute the published Markdown only, record findings, and approve the exact commit in `documentation-review.json`. | A guide needs undocumented knowledge, an example disagrees with runtime/OpenAPI, or any security finding remains unresolved. |
+| 7 | Assemble and enforce release evidence | Run `pnpm run test:engine-tenancy:evidence-index` while iterating and `pnpm run test:engine-tenancy:release-evidence` for the final gate. The latter must report every required gate passing on the same clean commit. | The index is incomplete, a waiver is used as executed coverage, or the external omission-warning window has not closed when warning removal is proposed. |
+
+The release index is intentionally useful before completion: it reports which
+artifact is missing or stale. It becomes a release gate only with
+`--require-complete`; declared targets, historical passes, and time-limited
+waivers never count as executed coverage.
 
 ## Complete Functional Coverage Standard
 

@@ -2897,7 +2897,7 @@
     },
     {
       "id": "TEN-MIGRATION-008",
-      "requirement": "A representative running installation can classify every engine, apply every safe default-tenant proposal through guarded preview and acknowledgement, and finish with no review or conflict rows.",
+      "requirement": "A representative running installation can classify every engine without broad mutation, apply its owned safe default-tenant fixture through guarded preview and acknowledgement, preserve unrelated rows, and finish with no review or conflict rows.",
       "source": "Engine Tenancy Plan / Enforcement and cleanup",
       "dimensions": [
         "browser",
@@ -2906,9 +2906,10 @@
         "preview",
         "apply",
         "least_privilege",
+        "preserve_existing",
         "cleanup"
       ],
-      "expected": "a disposable quarantined engine is classified and migrated without creating an engine-scoped assignment",
+      "expected": "exactly the disposable quarantined engine is classified and migrated without changing unrelated engines or creating an engine-scoped assignment",
       "testFile": "test/e2e/engine-tenancy-local-enforcement.spec.ts",
       "testName": "proves classification, dedicated defaults, shared fail-closed mapping, and readiness metrics",
       "documentation": "docs/development/engine-tenancy-functional-test-report.md",

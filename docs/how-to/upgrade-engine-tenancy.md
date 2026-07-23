@@ -68,8 +68,8 @@ Observe mode may leave `ready_for_apply` rows unchanged, but it fails on every
 ambiguous/conflicting classification, unresolved final runtime resource,
 fail-open shared response, unhealthy metric collection, or cleanup leak.
 
-After an operator has reviewed the proposed default-tenant ownership, apply
-only the safe rows:
+Run the guarded evidence fixture after an operator has reviewed the
+installation:
 
 ```bash
 ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
@@ -81,12 +81,18 @@ dedicated engine in `migration_required`. Apply mode uses
 the exact preview hash/expiry/acknowledgements, and creates no engine-scoped
 assignment. It will not apply `requires_review` or `conflict`.
 
+The evidence command changes only its single disposable engine. It reports
+other `ready_for_apply` rows but deliberately does not migrate them. Classify
+each real engine separately through its tenancy preview/apply API after
+reviewing ownership and acknowledgements; never use a test runner as a bulk
+migration tool.
+
 Retain the Playwright JSON and screenshot from `test/results`, command output,
 release commit, adapter/version, schema migrations, and the post-run aggregate
 metrics. Success requires:
 
-- classified equals total engines;
-- zero ready, review, and conflict rows;
+- the disposable engine changes from ready-for-apply to classified;
+- zero review and conflict rows;
 - every retained runtime resource is resolved;
 - zero orphan engine mappings, inventory, materializations, or assignments;
 - shared inventory is invisible before mapping and visible only after mapping

@@ -19,6 +19,8 @@ pnpm run test:engine-tenancy:runtime
 pnpm run test:engine-tenancy:transitions
 pnpm run test:engine-tenancy:operations
 ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
+pnpm run test:authz:local-smoke:cross-browser
+pnpm run test:engine-tenancy:evidence-index
 ```
 
 All commands must pass without skipped/quarantined tests. Attach the commit,
@@ -56,9 +58,11 @@ Markdown guides to:
 3. reconcile and diagnose one intentionally unmapped resource;
 4. assign a predefined and custom tenant role;
 5. verify same-tenant allow and sibling/unmapped deny;
-6. preview/apply/roll back a topology or mapping change;
-7. rotate a credential reference and decommission an external engine; and
-8. identify the compatibility warning, metrics, and rollback conditions.
+6. revoke a role or membership and verify an active tab, stale second tab,
+   refresh, direct URL, and browser history cannot restore access;
+7. preview/apply/roll back a topology or mapping change;
+8. rotate a credential reference and decommission an external engine; and
+9. identify the compatibility warning, metrics, and rollback conditions.
 
 Use local placeholder engines and identities. No deployed customer identity
 provider or credential is required.
@@ -74,6 +78,21 @@ provider or credential is required.
 Release approval requires all three rows, zero unresolved high-risk findings,
 and an expiring waiver for any non-security documentation defect. A failed
 security boundary cannot be waived through documentation review.
+
+After approval, retain
+`test/results/engine-tenancy-release/documentation-review.json` with:
+
+- `schemaVersion`, `evidenceKind`, `generatedAt`, and the exact `commit`;
+- `status: "passed"` and `releaseCommitQualified: true`;
+- `reviews.engineering.status`, `reviews.security.status`, and
+  `reviews.independentOperator.status`, each set to `approved`;
+- reviewer identity, review date, and tenant-safe evidence location for each
+  review; and
+- a sanitization declaration confirming that no credentials, tokens, private
+  endpoints, raw claims, or customer identifiers are present.
+
+The release evidence index rejects a missing, dirty, different-commit, or
+partially approved review artifact.
 
 ## Related Documentation
 

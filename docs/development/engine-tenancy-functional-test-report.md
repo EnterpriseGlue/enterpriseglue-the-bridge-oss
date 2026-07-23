@@ -8,8 +8,14 @@ Audience: Developers, security reviewers, operators, and release managers.
 
 ## Result
 
-Status: **Passed locally on 24 July 2026** against the Docker-hosted PostgreSQL
-installation and Chromium.
+Status: **Implemented and passing for the completed local qualification
+slices on 24 July 2026; full release qualification remains incomplete.**
+
+The guarded Docker-hosted PostgreSQL/Chromium enforcement journey passes. The
+fine-grained access browser matrix also passes nine tests in each of Chromium,
+Firefox, and WebKit: 27 browser executions covering login, Effective Access,
+direct/group/runtime custom-role scope, expiry, revocation, direct URL,
+stale/multi-tab state, refresh, and browser-history restoration.
 
 The version-2 machine-readable manifest provides 100% traceability for its 77
 registered engine-tenancy requirements: every requirement has an exact
@@ -40,7 +46,7 @@ readiness metrics, and cleanup through the real browser and HTTP stack.
 | Database | PostgreSQL, schema migrations through `0097` |
 | Frontend | Local TLS endpoint |
 | Backend | Local readiness and metrics endpoints |
-| Browser | Playwright Chromium |
+| Browser | Chromium for topology enforcement; Chromium, Firefox, and WebKit for the 27-execution fine-grained access matrix |
 | Identity | Disposable canonical local platform administrator |
 | Engine transport | Local Camunda-compatible test endpoint |
 | Customer or deployed IdP data | None |
@@ -96,7 +102,9 @@ meaning of 100% functional coverage are documented in
 | Operational metrics | 46 |
 | Documentation and traceability | 43 |
 | **Focused-lane total** | **1,312** |
+| PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
+| Fine-grained access browser matrix | **27** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -110,11 +118,12 @@ coverage.
 
 ## Live Installation Evidence
 
-The retained representative installation began with 74 explicit, ready
-engines and tenant-resolved active runtime inventory. Global browser setup then
-created one disposable legacy-shaped engine with dedicated topology, null
-ownership, and `migration_required`. This guarantees that every evidence run
-executes the migration path rather than passing vacuously.
+The representative installation begins with explicit, ready engines and
+tenant-resolved active runtime inventory. Global browser setup then creates
+one disposable legacy-shaped engine with dedicated topology, null ownership,
+and `migration_required`. This guarantees that every evidence run executes
+the migration path rather than passing vacuously; it does not depend on an
+environment-specific retained row count.
 
 The guarded apply:
 
@@ -124,7 +133,8 @@ The guarded apply:
    preview/apply routes;
 4. submitted the exact preview hash, expiry, and every server-returned
    acknowledgement; and
-5. classified it without creating an engine-scoped assignment.
+5. classified exactly that owned fixture without changing another proposal or
+   creating an engine-scoped assignment.
 
 The browser journey then proved:
 
@@ -135,16 +145,13 @@ The browser journey then proved:
   zero resources;
 - a versioned default-tenant mapping plus reconciliation changes the engine to
   ready and makes mapped resources visible;
-- the in-test classification report has all 84 engines classified (the 74
-  retained rows, eight global fixtures including the migration row, and two
-  journey engines), with zero
-  ready-for-apply, review, or conflict rows;
+- the in-test classification report has zero review or conflict rows and shows
+  the owned migration fixture as classified;
 - tenancy metric collection succeeds;
-- all 72 retained runtime resources are resolved, with zero unmapped,
-  conflicting, stale, or unknown resources; and
-- global teardown returns the persistent installation to 74 of 74 classified
-  engines, with no disposable users, engines, mappings, assignments, or
-  orphaned tenancy inventory.
+- active runtime resources report zero unmapped, conflicting, stale, or
+  unknown rows; and
+- global teardown removes the disposable users, engines, mappings,
+  assignments, and tenancy inventory.
 
 ## Defects Found and Fixed
 
@@ -173,9 +180,24 @@ platform-wide administration; shared engines remain connection candidates.
 Null-owned dedicated rows are absent, and stale legacy access rows cannot
 restore them.
 
-The live database also contained historical orphan inventory created before
-that lifecycle fix. The local evidence run removed those orphan rows and
-verified all orphan counts are zero.
+The public authorization routes initially evaluated an omitted tenant as
+`null`, even while local runtime and engine lookup correctly resolved the
+canonical default tenant. This denied valid Effective Access and omitted
+tenant-owned group engines. Evaluation now uses the effective default tenant
+while the browser snapshot remains bound to the raw session tenant contract.
+Route tests and the live browser journeys cover both sides.
+
+The initial active-session test covered only a single Chromium page. It now
+proves a new authorization version and no stale grant in two simultaneous
+tabs, after refresh, through direct navigation, and after back/forward history
+restoration in Chromium, Firefox, and WebKit.
+
+Two release-evidence defects were also corrected. The local migration journey
+now applies only its single owned fixture instead of every proposal in a
+reused database, and database test fixtures persist a valid dedicated/ready
+state. Playwright now clears only `test/results/playwright`, so it cannot erase
+manifest, mutation, browser, or release-index artifacts produced by another
+lane.
 
 ## Reproduce and Retain Evidence
 
@@ -187,12 +209,35 @@ ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
 
 The runner refuses non-local browser and API URLs, verifies the local CA and
 backend readiness, loads the local Docker database settings without printing
-secrets, and uses one worker. Playwright retains:
+secrets, uses one worker, and applies only its owned migration fixture.
+Playwright retains:
 
-- `engine-tenancy-local-evidence.json`, containing only aggregate totals,
-  disposable test IDs, sanitized diagnostics, and assertion results; and
+- a transient `engine-tenancy-local-evidence.json` under
+  `test/results/playwright`, containing aggregate totals, disposable test IDs,
+  sanitized diagnostics, and assertion results;
 - `engine-tenancy-dashboard.png`, a browser screenshot of the disposable
-  test session.
+  test session; and
+- stable `requirement-evidence.json` and `local-enforcement.json` under
+  `test/results/engine-tenancy-release`.
+
+Run the retained three-browser matrix with:
+
+```bash
+pnpm run test:authz:local-smoke:cross-browser
+```
+
+It writes `browser-matrix.json` only after all 27 executions pass.
+
+Generate the fail-closed evidence summary with:
+
+```bash
+pnpm run test:engine-tenancy:evidence-index
+```
+
+The generated JSON and Markdown index accepts only passing artifacts from the
+same clean commit. The final
+`pnpm run test:engine-tenancy:release-evidence` command exits non-zero while
+any required gate is missing, stale, dirty, or failed.
 
 Pull requests run the same `test:engine-tenancy:enforcement` journey against
 disposable PostgreSQL/browser services. CI retains the result directory for
@@ -201,23 +246,22 @@ disposable PostgreSQL/browser services. CI retains the result directory for
 ## Acceptance and Remaining Release Gates
 
 The implementation and automated evidence close the local
-PostgreSQL/Chromium enforcement slice. They do not yet close full
-cross-platform release qualification. The remaining gates are:
+PostgreSQL/Chromium topology-enforcement slice and the three-browser
+fine-grained session-state slice. They do not yet close full cross-platform
+release qualification. The remaining gates are:
 
 - generate and execute the complete supported authorization Cartesian matrix
   with zero missing, skipped, or quarantined cells;
 - retain clean-install, every supported upgrade-baseline, interrupted-retry,
   schema-equivalence, service, rollback, and cleanup results for PostgreSQL,
   MySQL, SQL Server, Oracle, and Spanner;
-- retain Chromium, Firefox, and WebKit results for the same release commit,
-  including active-session revocation and the documented browser-state and
-  accessibility cases;
+- complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
+  evidence for all new browser workflows;
 - execute all supported UI, external API, and configuration provisioning
   journeys against persistent local services and record stable errors for
   unsupported combinations;
-- publish one release evidence index linking the manifest, matrices, source
-  coverage, mutation, database, browser, documentation, migration, retry,
-  rollback, and cleanup artifacts;
+- populate every required slot in the implemented release evidence index with
+  passing same-clean-commit artifacts;
 - obtain engineering, security, and independent-operator sign-off on the
   [documentation review checklist](./engine-tenancy-documentation-review-checklist.md);
   and

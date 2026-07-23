@@ -44,11 +44,12 @@ expiry, credential-rotation, and revocation evidence for API clients and
 service accounts.
 
 `TEN-UI-005` proves that an already authenticated browser session observes
-assignment and group-membership revocation immediately. Pull requests run
-Chromium; the scheduled authorization browser gate repeats the same seeded
-journey in Firefox and WebKit. The full release evidence must include all
-three browser results; a local Chromium pass alone is a development signal,
-not final cross-browser release approval.
+assignment and group-membership revocation immediately in the active tab, a
+stale second tab, a direct URL, a refreshed session, and a page restored
+through browser history. The guarded local matrix runs nine tests in each of
+Chromium, Firefox, and WebKit and writes `browser-matrix.json` only after all
+27 executions pass. Contrast, 200% zoom/reflow, reduced motion, and
+error-announcement evidence are separate remaining accessibility gates.
 
 `TEN-DOCS-007` writes the validated manifest as sanitized, retained evidence.
 It records the commit, clean/dirty state, schema version, Node and pnpm
@@ -59,11 +60,35 @@ until a separate database or browser result artifact passes for the same
 commit. It never reads application credentials or copies runtime secrets into
 the artifact.
 
-The full release-qualification backlog and exit conditions are in phase 9 of
+The release-evidence index combines the individual artifacts without treating
+declared targets as executed tests. It accepts an artifact only when its
+assertions pass, it names the current commit, and it was produced from a clean
+worktree. Generate the current gap report with:
+
+```bash
+pnpm run test:engine-tenancy:evidence-index
+```
+
+The command writes both
+`test/results/engine-tenancy-release/index.json` and a readable
+`test/results/engine-tenancy-release/README.md`. The final release gate is:
+
+```bash
+pnpm run test:engine-tenancy:release-evidence
+```
+
+That command deliberately fails until traceability, local enforcement,
+mutation, browser, authorization-matrix, five-database, 14-journey, source
+coverage, and documentation-review artifacts all pass for the same clean
+commit.
+
+The full release-qualification backlog, execution order, rollback conditions,
+and exit conditions are in phase 9 of
 the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).
-Local PostgreSQL/Chromium evidence must not be used to close the remaining
-database, browser, clean/upgrade, complete Cartesian-matrix, or independent
-documentation-review gates.
+Local PostgreSQL and three-browser access evidence must not be used to close
+the remaining five-database, clean/upgrade, complete Cartesian-matrix,
+provisioning-journey, accessibility, or independent documentation-review
+gates.
 
 ## Prerequisites
 
@@ -219,8 +244,13 @@ explicitly reviewed as tenant-safe or prohibited.
 
 When a running local stack is required, use isolated local tenants and engines.
 The authorization PR workflow starts PostgreSQL, the backend, frontend, and a
-Camunda-compatible mock before running Chromium. Scheduled jobs repeat the smoke
-in Firefox and WebKit.
+Camunda-compatible mock before running Chromium. Scheduled jobs repeat the
+smoke in Firefox and WebKit. For one retained local artifact covering all
+three targets, run:
+
+```bash
+pnpm run test:authz:local-smoke:cross-browser
+```
 
 The executable local enforcement journey requires:
 
@@ -236,8 +266,8 @@ Observe without applying existing `ready_for_apply` rows:
 pnpm run test:engine-tenancy:local-evidence
 ```
 
-Apply all safe default-tenant proposals through preview and the exact required
-acknowledgements:
+Apply the evidence lane's single owned default-tenant proposal through preview
+and the exact required acknowledgements:
 
 ```bash
 ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
@@ -246,16 +276,20 @@ ENGINE_TENANCY_APPLY_READY=true pnpm run test:engine-tenancy:local-evidence
 The evidence fixture creates one disposable, unowned dedicated engine in
 `migration_required`. Apply mode uses the platform engine-registration
 permission to preview and classify that quarantined row without creating an
-engine-scoped assignment. The permission is not accepted for any other engine
-state and does not grant engine or runtime visibility. The runner never applies
-a review or conflict row. Both modes create and remove disposable
-dedicated/shared engines and prove the shared unmapped-to-mapped lifecycle.
+engine-scoped assignment. The owned-engine allowlist is asserted to contain
+exactly that row: other existing proposals are reported but never changed.
+The permission is not accepted for any other engine state and does not grant
+engine or runtime visibility. The runner never applies a review or conflict
+row. Both modes create and remove disposable dedicated/shared engines and
+prove the shared unmapped-to-mapped lifecycle.
 
-`TEN-MIGRATION-008` requires zero review/conflict rows and, in apply mode, zero
-ready rows. `TEN-RUNTIME-007` requires zero visible unmapped resources, mapped
-visibility after reconciliation, and healthy aggregate metrics. Successful
-runs retain sanitized JSON and a screenshot under `test/results`; CI uploads
-that directory for 14 days.
+`TEN-MIGRATION-008` requires zero review/conflict rows and proves that exactly
+the owned migration fixture changes to classified state. `TEN-RUNTIME-007`
+requires zero active unmapped resources, mapped visibility after
+reconciliation, and healthy aggregate metrics. Playwright keeps transient
+screenshots/traces under `test/results/playwright`; the runner writes stable,
+sanitized `requirement-evidence.json` and `local-enforcement.json` under
+`test/results/engine-tenancy-release`. CI uploads `test/results` for 14 days.
 
 `TEN-AUTHZ-008` proves that a null-owned dedicated engine is not a default-tenant
 fallback in direct, collection, invitation, assignment, or runtime evaluation.
@@ -316,6 +350,11 @@ traces. Never retain tokens, credentials, raw SSO claims, or private endpoints.
 Use unique test tenant, engine, mapping, group, role, and assignment keys. Remove
 them after both successful and failed local runs. CI retains failure diagnostics
 for 14 days and publishes authorization decision coverage separately.
+
+Playwright may clear only `test/results/playwright`. It must never clear
+`test/results/engine-tenancy-release` or
+`test/results/engine-tenancy-mutation`, because those directories combine
+evidence produced by independent lanes.
 
 The authoritative traceability source is
 `test/authz/engine-tenancy-functional-coverage.json`; an undocumented or
