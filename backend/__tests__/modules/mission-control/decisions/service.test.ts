@@ -1,4 +1,11 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import {
+  camundaPost,
+  evaluateDecision,
+  getDecisionDefinition,
+  getDecisionDefinitionXml,
+  getDecisionDefinitions,
+} from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
   listDecisionDefinitions,
   fetchDecisionDefinition,
@@ -16,6 +23,15 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
 }));
 
 describe('decisions service', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(camundaPost).mockResolvedValue({});
+    vi.mocked(getDecisionDefinitions).mockResolvedValue([]);
+    vi.mocked(getDecisionDefinition).mockResolvedValue({});
+    vi.mocked(getDecisionDefinitionXml).mockResolvedValue({ xml: '<dmn/>' });
+    vi.mocked(evaluateDecision).mockResolvedValue([]);
+  });
+
   it('lists decision definitions', async () => {
     const result = await listDecisionDefinitions('engine-1', {});
     expect(result).toBeDefined();
@@ -39,5 +55,20 @@ describe('decisions service', () => {
   it('evaluates decision by key', async () => {
     const result = await evaluateDecisionByKey('engine-1', 'decision-key', { input: 'test' });
     expect(result).toBeDefined();
+    expect(camundaPost).toHaveBeenCalledWith(
+      'engine-1',
+      '/decision-definition/key/decision-key/evaluate',
+      { input: 'test' },
+    );
+  });
+
+  it('uses the tenant-specific decision endpoint for a mapped shared tenant', async () => {
+    await evaluateDecisionByKey('engine-1', 'decision/key', { input: 'test' }, 'runtime/a');
+
+    expect(camundaPost).toHaveBeenCalledWith(
+      'engine-1',
+      '/decision-definition/key/decision%2Fkey/tenant-id/runtime%2Fa/evaluate',
+      { input: 'test' },
+    );
   });
 });

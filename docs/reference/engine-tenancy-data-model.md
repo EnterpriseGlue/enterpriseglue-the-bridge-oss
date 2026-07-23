@@ -355,6 +355,47 @@ it.
 `TEN-AUDIT-002`: preview and successful apply write sanitized audit records
 with the transition kind, hash, acknowledgements, states, and aggregate effects.
 
+## Mission Control Runtime Enforcement
+
+Mission Control treats shared topology as an unconditional resource boundary,
+not as a hint that disappears when a principal also has a broad engine
+permission.
+
+`TEN-AUTHZ-006`: collection guards always resolve the principal's active,
+same-tenant runtime-resource rows for a shared engine. The handler receives only
+their stable keys and engine runtime-tenant scopes. This applies to broad
+platform/engine grants as well as tenant roles.
+
+`TEN-AUTHZ-007`: a shared engine is included in the runtime engine selector only
+when at least one resolved process or decision resource is visible. An empty
+mapping, an unmapped/conflicting inventory, or an authorization dependency
+failure leaves the selector entry hidden.
+
+`TEN-RUNTIME-003`: exact shared definition access first checks authorized
+inventory. If no resolved resource is visible, authorization returns 403 before
+calling engine transport. A historical definition ID may make one bounded
+metadata lookup only after that preflight, and its returned stable key plus
+runtime tenant must match the visible inventory before the request continues.
+
+`TEN-RUNTIME-004`: exact key-based process and decision operations require one
+authorized runtime tenant. Tenant-owned definitions use the engine's
+tenant-specific endpoint; the no-tenant partition uses the standard endpoint.
+No scope or more than one runtime tenant for the same key fails closed rather
+than letting the engine choose.
+
+`TEN-RUNTIME-005`: collection results are bounded, filtered locally after
+upstream tenant/key pushdown, and retain a row only when its own runtime tenant
+or an actually resolved definition has matching tenant lineage. A mismatched row
+cannot fall through to the no-tenant partition.
+
+`TEN-RUNTIME-006`: referenced details, explicit batch selections, deployments,
+and migrations all take the same resolved-resource path. Missing mapping access
+is denied before transport; live lineage outside the visible resource set is
+denied before the downstream mutation handler runs.
+
+Both `requireAction.ts` and the Mission Control runtime-resource filter are held
+to 100% statements, branches, functions, and lines in the runtime CI lane.
+
 ## Tenant Role Boundary and Inheritance
 
 A tenant role is a reusable set of tenant-safe project and runtime permissions.
@@ -421,12 +462,13 @@ fails when an entry has a duplicate or invalid identifier, missing test file or
 test name, missing Markdown page, or a documentation page that does not cite
 the requirement identifier.
 
-The provisioning policy, mapping service, tenant-role policy, topology
-transition policy, and migration classification policy are held to 100%
-statements, branches, functions, and lines. The focused gates also exercise
-inventory, route, authorization registry, configuration, schema, and OpenAPI
-suites. This is 100% coverage of the implemented functional requirement IDs,
-not a claim that every unrelated repository line has 100% code coverage.
+The provisioning policy, mapping service, tenant-role policy, Mission Control
+authorization middleware, runtime-resource filter, topology transition policy,
+and migration classification policy are held to 100% statements, branches,
+functions, and lines. The focused gates also exercise inventory, route,
+authorization registry, configuration, schema, and OpenAPI suites. This is
+100% coverage of the implemented functional requirement IDs, not a claim that
+every unrelated repository line has 100% code coverage.
 
 ## Related Documentation
 

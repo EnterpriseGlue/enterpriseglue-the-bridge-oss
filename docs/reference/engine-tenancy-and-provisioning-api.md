@@ -171,6 +171,33 @@ resolver with principal type `system` and principal ID
 `system:config-bootstrap`. A tenant key that cannot be resolved and authorized
 there fails bootstrap through the normal fail-closed configuration status.
 
+## Mission Control Runtime Boundary
+
+All Mission Control collection, definition, referenced-detail, batch,
+deployment, and migration routes use the canonical runtime-resource guard.
+For a shared engine, a broad engine grant does not enable the engine-wide fast
+path. The guard returns only active resources with:
+
+- `tenantResolutionStatus = resolved`;
+- the authenticated EnterpriseGlue tenant;
+- the requested process/decision resource kind; and
+- permission for the exact runtime resource.
+
+Collection handlers receive `authorizedRuntimeResourceKeys` plus sanitized
+`authorizedRuntimeResourceScopes` and push both key and engine runtime tenant to
+the upstream API. They still apply a bounded local filter to the response.
+
+Exact key operations require one runtime tenant scope. Process starts and
+decision evaluations with a non-empty runtime tenant use the upstream
+`tenant-id/{tenantId}` path. Empty runtime tenant uses the upstream no-tenant
+partition. Missing or multiple scopes return 403.
+
+An unresolved shared resource returns 403 before the downstream route handler.
+When no authorized resource is visible, no engine transport is attempted.
+Historical IDs may require one bounded metadata resolution after that preflight;
+the resolved key and runtime tenant must match authorized inventory before any
+read or mutation continues.
+
 ## Compatibility
 
 Omitted tenancy means dedicated request-context tenancy. In OSS, a missing

@@ -11,7 +11,12 @@ import {
   getProcessDefinitionStatistics,
   startProcessInstance,
 } from './service.js'
-import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
+import {
+  filterRuntimeItemsByResourceKey,
+  getAuthorizedRuntimeTenantIdForKey,
+  getBoundedRuntimeResourceQuery,
+  withAuthorizedRuntimeTenantQuery,
+} from '../shared/runtime-resource-filter.js'
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js'
 import {
   ActivityCountByActivityIdSchema,
@@ -128,7 +133,10 @@ r.get('/mission-control-api/process-definitions/:id/xml', requireProcessDefiniti
 r.get('/mission-control-api/process-definitions/key/:key/statistics', requireProcessDefinitionKeyAction('engine.runtime.process-definitions.read'), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
-  const data = await getProcessDefinitionStatistics(engineId, definitionKey)
+  const runtimeTenantId = getAuthorizedRuntimeTenantIdForKey(req.authorizedRuntimeResourceScopes, definitionKey)
+  const data = runtimeTenantId === undefined
+    ? await getProcessDefinitionStatistics(engineId, definitionKey)
+    : await getProcessDefinitionStatistics(engineId, definitionKey, runtimeTenantId)
   res.json(ActivityCountByActivityIdSchema.parse(data))
 }))
 
@@ -137,7 +145,10 @@ r.post('/mission-control-api/process-definitions/key/:key/start', requireProcess
   const { variables, businessKey } = req.body || {}
   const engineId = (req as any).engineId as string
   const definitionKey = String(req.params.key)
-  const data = await startProcessInstance(engineId, definitionKey, { variables, businessKey })
+  const runtimeTenantId = getAuthorizedRuntimeTenantIdForKey(req.authorizedRuntimeResourceScopes, definitionKey)
+  const data = runtimeTenantId === undefined
+    ? await startProcessInstance(engineId, definitionKey, { variables, businessKey })
+    : await startProcessInstance(engineId, definitionKey, { variables, businessKey }, runtimeTenantId)
   res.json(ProcessInstanceStartResponseSchema.parse(data))
 }))
 

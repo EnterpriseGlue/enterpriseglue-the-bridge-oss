@@ -38,8 +38,20 @@ export async function getProcessDefinitionXml(engineId: string, id: string): Pro
   return camundaGet<{ id: string; bpmn20Xml: string }>(engineId, `/process-definition/${encodeURIComponent(id)}/xml`)
 }
 
-export async function getProcessDefinitionStatistics(engineId: string, key: string): Promise<Record<string, number>> {
-  const instances = await camundaGet<any[]>(engineId, '/process-instance', { processDefinitionKey: key, active: true })
+export async function getProcessDefinitionStatistics(
+  engineId: string,
+  key: string,
+  runtimeTenantId?: string,
+): Promise<Record<string, number>> {
+  const instances = await camundaGet<any[]>(engineId, '/process-instance', {
+    processDefinitionKey: key,
+    active: true,
+    ...(runtimeTenantId === undefined
+      ? {}
+      : runtimeTenantId
+        ? { tenantIdIn: [runtimeTenantId] }
+        : { withoutTenantId: true }),
+  })
   const counts: Record<string, number> = {}
   
   for (const inst of instances) {
@@ -65,9 +77,17 @@ export interface StartProcessParams {
   businessKey?: string
 }
 
-export async function startProcessInstance(engineId: string, key: string, params: StartProcessParams = {}): Promise<ProcessInstanceStartResponse> {
+export async function startProcessInstance(
+  engineId: string,
+  key: string,
+  params: StartProcessParams = {},
+  runtimeTenantId?: string,
+): Promise<ProcessInstanceStartResponse> {
   const payload: any = {}
   if (params.variables) payload.variables = params.variables
   if (params.businessKey) payload.businessKey = params.businessKey
-  return camundaPost<ProcessInstanceStartResponse>(engineId, `/process-definition/key/${encodeURIComponent(key)}/start`, payload)
+  const definitionPath = runtimeTenantId
+    ? `/process-definition/key/${encodeURIComponent(key)}/tenant-id/${encodeURIComponent(runtimeTenantId)}`
+    : `/process-definition/key/${encodeURIComponent(key)}`
+  return camundaPost<ProcessInstanceStartResponse>(engineId, `${definitionPath}/start`, payload)
 }

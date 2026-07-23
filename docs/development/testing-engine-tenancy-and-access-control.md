@@ -38,6 +38,7 @@ pnpm run test:engine-tenancy:foundation
 pnpm run test:engine-tenancy:provisioning
 pnpm run test:engine-tenancy:mappings
 pnpm run test:engine-tenancy:authorization
+pnpm run test:engine-tenancy:runtime
 pnpm run test:engine-tenancy:transitions
 ```
 
@@ -60,6 +61,19 @@ The transition lane:
    concurrency, transaction-side invalidation, source ownership, and audits;
    and
 5. checks routes, action inventory, canonical schemas, and OpenAPI together.
+
+The runtime lane:
+
+1. holds `requireAction.ts` and the Mission Control runtime-resource filter to
+   100% statements, branches, functions, and lines;
+2. proves broad grants still use resolved same-tenant filtering on shared
+   engines;
+3. covers collection, exact detail, referenced detail, batch, deployment, and
+   migration allow/deny paths;
+4. proves missing shared mapping access makes zero engine transport calls;
+5. tests tenant-specific process start/decision evaluation and no-tenant
+   behavior; and
+6. executes the Mission Control route and authorization inventory suites.
 
 The mapping lane holds `EngineTenantMappingService.ts` to 100% statements,
 branches, functions, and lines. Its configuration-bundle matrix includes:
@@ -98,6 +112,8 @@ The focused matrix proves:
 | Config mapping | stable tenant key, shared strategy, source-owned create/update/export | dedicated engine, strategy mismatch, foreign owner, unauthorized tenant, stale authoritative removal |
 | Effective Access | sanitized mapping lineage | raw claims, credentials, or foreign inventory |
 | UI | Current tenant for every supported principal | no raw tenant-ID field |
+| Mission Control collection | resolved keys plus exact runtime-tenant scopes | broad shared grant, unresolved row, wrong runtime tenant, or unbounded response |
+| Mission Control detail/mutation | exact resolved inventory and authorized live lineage | no mapping, ambiguous key tenant, uninventoried detail, batch, deployment, or migration |
 | Classification | explicit dedicated/shared and safe engine-wide default proposal | ambiguous resource-aware and invalid topology |
 | Topology transition | all four supported transitions | unchanged proposal, stale/expired hash, missing acknowledgement, source-owner bypass |
 | Transition apply | atomic state change, quarantine/resolution, materialization invalidation, reconciliation | optimistic concurrency failure rolls back before dependent writes |

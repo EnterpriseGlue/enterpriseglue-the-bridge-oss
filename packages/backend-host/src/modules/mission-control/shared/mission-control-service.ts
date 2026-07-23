@@ -16,10 +16,19 @@ import {
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 
-export async function listProcessDefinitions(engineId: string, params: { key?: string; nameLike?: string; latest?: string; maxResults?: number }) {
-  const { key, nameLike, latest, maxResults } = params
+export async function listProcessDefinitions(engineId: string, params: {
+  key?: string
+  tenantIdIn?: string[]
+  withoutTenantId?: boolean
+  nameLike?: string
+  latest?: string
+  maxResults?: number
+}) {
+  const { key, tenantIdIn, withoutTenantId, nameLike, latest, maxResults } = params
   const query: Record<string, any> = {}
   if (key) query.key = key
+  if (tenantIdIn?.length) query.tenantIdIn = tenantIdIn
+  if (withoutTenantId) query.withoutTenantId = true
   if (nameLike) query.nameLike = nameLike
   if (latest) query.latestVersion = latest === 'true' || latest === '1'
   if (maxResults !== undefined) query.maxResults = maxResults
@@ -34,7 +43,11 @@ export async function getProcessDefinitionXmlById(engineId: string, id: string) 
   return camundaGet<any>(engineId, `/process-definition/${encodeURIComponent(id)}/xml`)
 }
 
-export async function resolveProcessDefinition(engineId: string, params: { key?: string; version?: string }) {
+export async function resolveProcessDefinition(
+  engineId: string,
+  params: { key?: string; version?: string },
+  runtimeTenantId?: string,
+) {
   const { key, version } = params
   if (!key || !version) {
     throw new Error('key and version are required')
@@ -42,6 +55,11 @@ export async function resolveProcessDefinition(engineId: string, params: { key?:
   const defs = await camundaGet<any[]>(engineId, '/process-definition', {
     key,
     version: Number(version),
+    ...(runtimeTenantId === undefined
+      ? {}
+      : runtimeTenantId
+        ? { tenantIdIn: [runtimeTenantId] }
+        : { withoutTenantId: true }),
   })
   if (!defs || defs.length === 0) {
     const err: any = new Error('Process definition not found')

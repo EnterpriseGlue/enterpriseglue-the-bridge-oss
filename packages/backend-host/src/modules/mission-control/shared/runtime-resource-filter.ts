@@ -14,6 +14,28 @@ function runtimeFilterNotSupported(message: string): AppError {
 }
 
 /**
+ * Resolves the one runtime tenant that may be used by an exact key-based
+ * operation. Multiple authorized runtime tenants remain safe for collection
+ * reads, but an exact mutation/evaluation must never let the engine choose
+ * between them implicitly.
+ */
+export function getAuthorizedRuntimeTenantIdForKey(
+  scopes: AuthorizedRuntimeResourceScope[] | undefined,
+  resourceKey: string,
+): string | undefined {
+  if (!scopes) return undefined
+  const runtimeTenantIds = [...new Set(scopes
+    .filter((scope) => scope.resourceKey === resourceKey)
+    .map((scope) => scope.runtimeTenantId))]
+  if (runtimeTenantIds.length !== 1) {
+    throw runtimeFilterNotSupported(
+      'An exact runtime operation requires one resolved runtime tenant scope',
+    )
+  }
+  return runtimeTenantIds[0]
+}
+
+/**
  * Resource-aware routes must never query an unbounded central-engine
  * collection. This normalizes an omitted limit and rejects attempts to exceed
  * the supported post-filtering page size.
@@ -159,6 +181,7 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
     const candidateDefinitionId = item.processDefinitionId ?? item.definitionId
     const definitionId = typeof candidateDefinitionId === 'string' ? candidateDefinitionId : ''
     const definition = definitions.find(([id]) => id === definitionId)?.[1]
+    if (!definition) return false
     const definitionTenantId = typeof definition?.tenantId === 'string' ? definition.tenantId : ''
     return scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === definitionTenantId)
   })

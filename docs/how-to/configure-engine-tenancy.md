@@ -10,9 +10,11 @@ Status: Dedicated/shared provisioning, mapping administration, runtime
 quarantine, tenant roles, configuration bundles, and Effective Access lineage
 are implemented. Topology classification and guarded transition preview/apply
 are implemented through the API. Configuration bundles also own and reconcile
-shared-engine mapping rows. Engine-topology form controls are still gated;
-create or transition engines through the published API or use a configuration
-bundle for supported create/update operations.
+shared-engine mapping rows. Mission Control collection, detail, and mutation
+guards enforce resolved shared mappings even for broad engine grants.
+Engine-topology form controls are still gated; create or transition engines
+through the published API or use a configuration bundle for supported
+create/update operations.
 
 ## Choose the Topology
 
@@ -94,6 +96,25 @@ reviewed batch. Then reconcile inventory and review:
 
 The local default tenant is never applied to an unmapped shared resource.
 Unmapped, conflicting, stale, or null-tenant resources remain quarantined.
+
+### Verify Mission Control Behavior
+
+After reconciliation:
+
+- the shared engine appears in the Mission Control selector only when the
+  signed-in principal can see at least one resolved mapped resource;
+- collection results contain only authorized definition keys and the matching
+  engine runtime tenant;
+- start/evaluate by key uses the tenant-specific engine endpoint when the
+  definition has a runtime tenant;
+- an exact key mapped to more than one runtime tenant is rejected until the
+  request can be made unambiguous; and
+- missing mappings reject details, batches, deployments, and migrations before
+  the downstream operation is sent to the engine.
+
+A broad engine permission does not override these shared-engine rules. Use the
+tenancy diagnostics and mapping reconciliation workflow to resolve a
+quarantined resource; do not widen the engine grant.
 
 ### Manage Shared Mappings as Configuration
 

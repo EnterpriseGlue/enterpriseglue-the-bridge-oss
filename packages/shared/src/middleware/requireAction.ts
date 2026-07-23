@@ -262,6 +262,42 @@ function isTenantVisible(rowTenantId: string | null | undefined, tenantId?: stri
   return isTenantVisibleForAuthz(rowTenantId, tenantId);
 }
 
+type RuntimeGuardEngine = Pick<Engine, 'tenancyMode' | 'runtimeAccessScope'>;
+
+function requiresResolvedRuntimeResourceGuard(
+  engine: RuntimeGuardEngine,
+  hasBroadPermission: boolean,
+): boolean {
+  return engine.tenancyMode === 'shared'
+    || (!hasBroadPermission && engine.runtimeAccessScope === 'resource_aware');
+}
+
+function resolvedRuntimeResourceWhere(
+  where: Record<string, unknown>,
+  tenantId?: string | null,
+): Record<string, unknown> | Array<Record<string, unknown>> {
+  const tenantIds = tenantIdsForAuthz(tenantId);
+  const resolved = { ...where, tenantResolutionStatus: 'resolved' };
+  return tenantIds.length
+    ? tenantIds.map((visibleTenantId) => ({ ...resolved, tenantId: visibleTenantId }))
+    : resolved;
+}
+
+function isUsableRuntimeResource(
+  resource: Pick<RuntimeResource, 'tenantId' | 'tenantResolutionStatus'> | null | undefined,
+  tenantId: string | null,
+  engine: RuntimeGuardEngine,
+): boolean {
+  if (!resource || !isTenantVisible(resource.tenantId, tenantId)) return false;
+  if (engine.tenancyMode === 'shared') {
+    return Boolean(resource.tenantId) && resource.tenantResolutionStatus === 'resolved';
+  }
+  // Persisted inventory always carries the status. The undefined compatibility
+  // case keeps older adapters/tests on the dedicated-engine path only.
+  return resource.tenantResolutionStatus === undefined
+    || resource.tenantResolutionStatus === 'resolved';
+}
+
 function resolverDefinition(resolverId: string): AuthzResourceResolverDefinition {
   const resolver = AUTHZ_RESOURCE_RESOLVERS.find((candidate) => candidate.id === resolverId);
   if (!resolver) {
@@ -575,7 +611,7 @@ async function resolveEngineVisibleCollection(
   const dataSource = await getDataSource();
   const rows = await dataSource.getRepository(Engine).find({
     where: { id: In(requestedIds) },
-    select: ['id', 'tenantId', 'runtimeAccessScope'],
+    select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
   });
   const existingIds = new Set(rows.map((row) => String(row.id)));
   const visibleIds = new Set(rows
@@ -591,14 +627,16 @@ async function resolveEngineVisibleCollection(
       resourceType: 'engine',
       resourceId: engineId,
     });
-    if (allowed) {
+    const engine = rows.find((row) => String(row.id) === engineId);
+    if (allowed && engine?.tenancyMode !== 'shared') {
       allowedIds.add(engineId);
       continue;
     }
-    const engine = rows.find((row) => String(row.id) === engineId);
     if (engine?.runtimeAccessScope !== 'resource_aware') continue;
     // A resource-only grant provides Mission Control discovery without
-    // widening the engine's inventory permission.
+    // widening the engine's inventory permission. Shared engines always take
+    // this path, even with a broad engine grant, so an empty or quarantined
+    // mapping never creates a selector entry.
     const runtimeVisible = await Promise.all([
       permissionService.getVisibleRuntimeResources({
         userId: req.user!.userId,
@@ -1031,13 +1069,16 @@ export function requireRuntimeCollectionAction(actionId: string, options: Requir
       const engineId = readRequestValue(req, options.engineIdKey || 'engineId', options.engineIdFrom || 'query') || (req as Request & { engineId?: string }).engineId;
       if (!engineId) throw Errors.validation('engineId is required');
       const tenantId = req.tenant?.tenantId || null;
-      const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'] });
+      const engine = await (await getDataSource()).getRepository(Engine).findOne({
+        where: { id: engineId },
+        select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
+      });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
       const context = { userId: req.user.userId, tenantId, resourceType: 'engine' as const, resourceId: engineId };
       const broad = await permissionService.hasPermission(action.permissionId, context);
       let keys: string[] | undefined;
       let scopes: Array<{ resourceKey: string; runtimeTenantId: string }> | undefined;
-      if (!broad && engine.runtimeAccessScope === 'resource_aware') {
+      if (requiresResolvedRuntimeResourceGuard(engine, broad)) {
         const visible = await permissionService.getVisibleRuntimeResources({ userId: req.user.userId, tenantId, engineId, resourceKind: options.resourceKind, permission: action.permissionId });
         keys = visible.map((resource) => resource.resourceKey);
         scopes = visible.map((resource) => ({ resourceKey: resource.resourceKey, runtimeTenantId: resource.runtimeTenantId || '' }));
@@ -1075,7 +1116,7 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       const dataSource = await getDataSource();
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: engineId },
-        select: ['id', 'tenantId', 'runtimeAccessScope'],
+        select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
       req.runtimeAccessScope = engine.runtimeAccessScope === 'resource_aware' ? 'resource_aware' : 'engine_wide';
@@ -1092,52 +1133,111 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
       }
 
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
-      if (!broad) {
-        const resolvedDefinition = definitionLookup === 'id'
-          ? await camundaGet<Record<string, unknown>>(
-            engineId,
-            `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
-          )
-          : await resolveRuntimeDefinitionByKey(engineId, options, definitionId, req);
-        const referenceId = options.definitionReferenceField
-          ? resolvedDefinition[options.definitionReferenceField]
-          : undefined;
-        if (options.definitionReferenceField && (typeof referenceId !== 'string' || !referenceId.trim())) {
-          throw Errors.forbidden('Runtime definition cannot be linked to an authorization resource');
-        }
-        const linkedDefinitionId = typeof referenceId === 'string' ? referenceId : '';
-        const definition = options.definitionReferenceField
-          ? await camundaGet<Record<string, unknown>>(
-            engineId,
-            `/${options.definitionReferencePath || 'process-definition'}/${encodeURIComponent(linkedDefinitionId)}`
-          )
-          : resolvedDefinition;
-        const resourceKey = (options.resourceKeyFields || ['key'])
-          .map((field) => definition[field])
-          .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
-          ?.trim() || '';
-        if (!resourceKey) throw Errors.forbidden('Runtime definition cannot be resolved for authorization');
-        const runtimeTenantId = typeof definition.tenantId === 'string' ? definition.tenantId : '';
-        const runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({
-          where: {
+      if (requiresResolvedRuntimeResourceGuard(engine, broad)) {
+        const visibleResources = engine.tenancyMode === 'shared'
+          ? await permissionService.getVisibleRuntimeResources({
+            userId: req.user.userId,
+            tenantId,
             engineId,
             resourceKind: options.resourceKind,
-            resourceKey,
-            runtimeTenantId,
-            isActive: true,
-          },
-          select: ['id', 'tenantId'],
-        });
-        if (!runtimeResource || !isTenantVisible(runtimeResource.tenantId, tenantId)) {
+            permission: action.permissionId,
+            limit: 5_000,
+          })
+          : null;
+        if (visibleResources && !visibleResources.length) {
+          throw Errors.forbidden('Runtime definition is not present in the authorization inventory');
+        }
+        let runtimeResource: RuntimeResource | null = null;
+        if (engine.tenancyMode === 'shared' && !options.definitionReferenceField) {
+          if (definitionLookup === 'key') {
+            const candidates = visibleResources!.filter((candidate) => candidate.resourceKey === definitionId);
+            const runtimeTenantIds = new Set(candidates.map((candidate) => candidate.runtimeTenantId || ''));
+            runtimeResource = candidates.length > 0 && runtimeTenantIds.size === 1
+              ? candidates[0]
+              : null;
+          } else {
+            const direct = await dataSource.getRepository(RuntimeResource).findOne({
+              where: resolvedRuntimeResourceWhere({
+                engineId,
+                resourceKind: options.resourceKind,
+                engineResourceId: definitionId,
+                isActive: true,
+              }, tenantId),
+              select: ['id', 'tenantId', 'tenantResolutionStatus', 'resourceKey', 'runtimeTenantId'],
+            });
+            runtimeResource = direct && visibleResources!.some((candidate) => candidate.id === direct.id)
+              ? direct
+              : null;
+            if (!runtimeResource) {
+              const definition = await camundaGet<Record<string, unknown>>(
+                engineId,
+                `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
+              );
+              const resourceKey = (options.resourceKeyFields || ['key'])
+                .map((field) => definition[field])
+                .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+                ?.trim() || '';
+              const runtimeTenantId = typeof definition.tenantId === 'string' ? definition.tenantId : '';
+              runtimeResource = visibleResources!.find((candidate) =>
+                candidate.resourceKey === resourceKey
+                && (candidate.runtimeTenantId || '') === runtimeTenantId) || null;
+            }
+          }
+        } else {
+          const resolvedDefinition = definitionLookup === 'id'
+            ? await camundaGet<Record<string, unknown>>(
+              engineId,
+              `/${options.definitionPath}/${encodeURIComponent(definitionId)}`
+            )
+            : await resolveRuntimeDefinitionByKey(engineId, options, definitionId, req);
+          const referenceId = options.definitionReferenceField
+            ? resolvedDefinition[options.definitionReferenceField]
+            : undefined;
+          if (options.definitionReferenceField && (typeof referenceId !== 'string' || !referenceId.trim())) {
+            throw Errors.forbidden('Runtime definition cannot be linked to an authorization resource');
+          }
+          const linkedDefinitionId = typeof referenceId === 'string' ? referenceId : '';
+          const definition = options.definitionReferenceField
+            ? await camundaGet<Record<string, unknown>>(
+              engineId,
+              `/${options.definitionReferencePath || 'process-definition'}/${encodeURIComponent(linkedDefinitionId)}`
+            )
+            : resolvedDefinition;
+          const resourceKey = (options.resourceKeyFields || ['key'])
+            .map((field) => definition[field])
+            .find((value): value is string => typeof value === 'string' && value.trim().length > 0)
+            ?.trim() || '';
+          if (!resourceKey) throw Errors.forbidden('Runtime definition cannot be resolved for authorization');
+          const runtimeTenantId = typeof definition.tenantId === 'string' ? definition.tenantId : '';
+          runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({
+            where: resolvedRuntimeResourceWhere({
+              engineId,
+              resourceKind: options.resourceKind,
+              resourceKey,
+              runtimeTenantId,
+              isActive: true,
+            }, tenantId),
+            select: ['id', 'tenantId', 'tenantResolutionStatus', 'resourceKey', 'runtimeTenantId'],
+          });
+          if (visibleResources && runtimeResource && !visibleResources.some((candidate) => candidate.id === runtimeResource!.id)) {
+            runtimeResource = null;
+          }
+        }
+        if (!isUsableRuntimeResource(runtimeResource, tenantId, engine)) {
           throw Errors.forbidden('Runtime definition is not present in the authorization inventory');
         }
         const resourceAllowed = await permissionService.hasPermission(action.permissionId, {
           ...context,
           resourceType: 'engine_runtime_resource',
-          resourceId: runtimeResource.id,
+          resourceId: runtimeResource!.id,
         });
         if (!resourceAllowed) throw Errors.forbidden(`Access denied for action ${action.actionId}`);
-        resource = { type: 'engine_runtime_resource', id: runtimeResource.id };
+        resource = { type: 'engine_runtime_resource', id: runtimeResource!.id };
+        req.authorizedRuntimeResourceKeys = [runtimeResource!.resourceKey];
+        req.authorizedRuntimeResourceScopes = [{
+          resourceKey: runtimeResource!.resourceKey,
+          runtimeTenantId: runtimeResource!.runtimeTenantId || '',
+        }];
       }
 
       (req as Request & { engineId?: string }).engineId = engineId;
@@ -1171,7 +1271,7 @@ export function requireRuntimeProcessInstanceSelectionAction(
       const tenantId = req.tenant?.tenantId || null;
       const dataSource = await getDataSource();
       const engine = await dataSource.getRepository(Engine).findOne({
-        where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'],
+        where: { id: engineId }, select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
       const context: PermissionContext = {
@@ -1187,27 +1287,47 @@ export function requireRuntimeProcessInstanceSelectionAction(
 
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
       let resourceKeys: string[] | undefined;
-      if (!broad) {
+      if (requiresResolvedRuntimeResourceGuard(engine, broad)) {
         const ids = readRequestValues(req, options.processInstanceIdsKey || 'processInstanceIds', 'body');
         if (!ids.length) {
           throw Errors.forbidden('Resource-aware batch operations require explicit processInstanceIds');
         }
+        const visibleResources = engine.tenancyMode === 'shared'
+          ? await permissionService.getVisibleRuntimeResources({
+            userId: req.user.userId,
+            tenantId,
+            engineId,
+            resourceKind: options.resourceKind,
+            permission: action.permissionId,
+            limit: 5_000,
+          })
+          : null;
+        if (visibleResources && !visibleResources.length) {
+          throw Errors.forbidden('A selected process instance is not present in the authorization inventory');
+        }
         const instances = await Promise.all(ids.map((id) => camundaGet<Record<string, unknown>>(
           engineId, `/process-instance/${encodeURIComponent(id)}`
         )));
-        resourceKeys = Array.from(new Set(instances.map((instance) => {
+        const resourceIdentities = Array.from(new Map(instances.map((instance) => {
           const definitionKey = instance.definitionKey;
           const key = definitionKey === null || typeof definitionKey === 'undefined'
             ? instance.processDefinitionKey
             : definitionKey;
-          return typeof key === 'string' ? key.trim() : '';
-        }).filter(Boolean)));
+          const resourceKey = typeof key === 'string' ? key.trim() : '';
+          const runtimeTenantId = typeof instance.tenantId === 'string' ? instance.tenantId : '';
+          return [`${resourceKey}\u0000${runtimeTenantId}`, { resourceKey, runtimeTenantId }] as const;
+        }).filter(([, identity]) => Boolean(identity.resourceKey))).values());
+        resourceKeys = Array.from(new Set(resourceIdentities.map((identity) => identity.resourceKey)));
         if (!resourceKeys.length) throw Errors.forbidden('Selected process instances cannot be resolved for authorization');
-        const resources = await Promise.all(resourceKeys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
-          where: { engineId, resourceKind: options.resourceKind, resourceKey, isActive: true },
-          select: ['id', 'tenantId'],
+        const resources = await Promise.all(resourceIdentities.map(({ resourceKey, runtimeTenantId }) => dataSource.getRepository(RuntimeResource).findOne({
+          where: resolvedRuntimeResourceWhere({ engineId, resourceKind: options.resourceKind, resourceKey, runtimeTenantId, isActive: true }, tenantId),
+          select: ['id', 'tenantId', 'tenantResolutionStatus'],
         })));
-        if (resources.some((candidate) => !candidate || !isTenantVisible(candidate.tenantId, tenantId))) {
+        if (
+          resources.some((candidate) => !isUsableRuntimeResource(candidate, tenantId, engine))
+          || (visibleResources && resources.some((candidate) =>
+            !visibleResources.some((visible) => visible.id === candidate!.id)))
+        ) {
           throw Errors.forbidden('A selected process instance is not present in the authorization inventory');
         }
         const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {
@@ -1252,7 +1372,7 @@ export function requireRuntimeDeploymentAction(
       const tenantId = req.tenant?.tenantId || null;
       const dataSource = await getDataSource();
       const engine = await dataSource.getRepository(Engine).findOne({
-        where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'],
+        where: { id: engineId }, select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
 
@@ -1269,17 +1389,17 @@ export function requireRuntimeDeploymentAction(
 
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
       let resourceKeys: string[] | undefined;
-      if (!broad) {
+      if (requiresResolvedRuntimeResourceGuard(engine, broad)) {
         const resources = await dataSource.getRepository(RuntimeResource).find({
-          where: {
+          where: resolvedRuntimeResourceWhere({
             engineId,
             deploymentId,
             isActive: true,
             ...(options.resourceKinds?.length === 1 ? { resourceKind: options.resourceKinds[0] } : {}),
-          },
-          select: ['id', 'tenantId', 'resourceKey'],
+          }, tenantId),
+          select: ['id', 'tenantId', 'tenantResolutionStatus', 'resourceKey'],
         });
-        if (!resources.length || resources.some((candidate) => !isTenantVisible(candidate.tenantId, tenantId))) {
+        if (!resources.length || resources.some((candidate) => !isUsableRuntimeResource(candidate, tenantId, engine))) {
           throw Errors.forbidden('Runtime deployment is not present in the authorization inventory');
         }
         const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {
@@ -1319,7 +1439,7 @@ export function requireRuntimeMigrationAction(
       const tenantId = req.tenant?.tenantId || null;
       const dataSource = await getDataSource();
       const engine = await dataSource.getRepository(Engine).findOne({
-        where: { id: engineId }, select: ['id', 'tenantId', 'runtimeAccessScope'],
+        where: { id: engineId }, select: ['id', 'tenantId', 'tenancyMode', 'runtimeAccessScope'],
       });
       if (!engine || !isTenantVisible(engine.tenantId, tenantId)) throw Errors.notFound('Engine not found');
       const context: PermissionContext = {
@@ -1334,7 +1454,7 @@ export function requireRuntimeMigrationAction(
       }
       let resource: ResolvedAuthzActionResource = { type: 'engine', id: engineId };
       let resourceKeys: string[] | undefined;
-      if (!broad) {
+      if (requiresResolvedRuntimeResourceGuard(engine, broad)) {
         const plan = (req.body?.[options.planKey || 'plan'] && typeof req.body[options.planKey || 'plan'] === 'object')
           ? req.body[options.planKey || 'plan'] as Record<string, unknown>
           : req.body as Record<string, unknown>;
@@ -1345,17 +1465,38 @@ export function requireRuntimeMigrationAction(
         if (typeof sourceId !== 'string' || typeof targetId !== 'string' || !sourceId || !targetId) {
           throw Errors.validation('sourceProcessDefinitionId and targetProcessDefinitionId are required');
         }
+        const visibleResources = engine.tenancyMode === 'shared'
+          ? await permissionService.getVisibleRuntimeResources({
+            userId: req.user.userId,
+            tenantId,
+            engineId,
+            resourceKind: options.resourceKind,
+            permission: action.permissionId,
+            limit: 5_000,
+          })
+          : null;
+        if (visibleResources && !visibleResources.length) {
+          throw Errors.forbidden('A migration definition is not present in the authorization inventory');
+        }
         const definitions = await Promise.all([sourceId, targetId].map((id) => camundaGet<Record<string, unknown>>(
           engineId, `/process-definition/${encodeURIComponent(id)}`
         )));
-        const resolvedResourceKeys = definitions.map((definition) => typeof definition.key === 'string' ? definition.key.trim() : '');
+        const resolvedResourceIdentities = definitions.map((definition) => ({
+          resourceKey: typeof definition.key === 'string' ? definition.key.trim() : '',
+          runtimeTenantId: typeof definition.tenantId === 'string' ? definition.tenantId : '',
+        }));
+        const resolvedResourceKeys = resolvedResourceIdentities.map((identity) => identity.resourceKey);
         if (resolvedResourceKeys.some((key) => !key)) throw Errors.forbidden('Migration definitions cannot be resolved for authorization');
         resourceKeys = resolvedResourceKeys;
-        const resources = await Promise.all(resolvedResourceKeys.map((resourceKey) => dataSource.getRepository(RuntimeResource).findOne({
-          where: { engineId, resourceKind: options.resourceKind, resourceKey, isActive: true },
-          select: ['id', 'tenantId'],
+        const resources = await Promise.all(resolvedResourceIdentities.map(({ resourceKey, runtimeTenantId }) => dataSource.getRepository(RuntimeResource).findOne({
+          where: resolvedRuntimeResourceWhere({ engineId, resourceKind: options.resourceKind, resourceKey, runtimeTenantId, isActive: true }, tenantId),
+          select: ['id', 'tenantId', 'tenantResolutionStatus'],
         })));
-        if (resources.some((candidate) => !candidate || !isTenantVisible(candidate.tenantId, tenantId))) {
+        if (
+          resources.some((candidate) => !isUsableRuntimeResource(candidate, tenantId, engine))
+          || (visibleResources && resources.some((candidate) =>
+            !visibleResources.some((visible) => visible.id === candidate!.id)))
+        ) {
           throw Errors.forbidden('A migration definition is not present in the authorization inventory');
         }
         const allowed = await Promise.all(resources.map((candidate) => permissionService.hasPermission(action.permissionId, {

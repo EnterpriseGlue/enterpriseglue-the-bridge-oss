@@ -26,6 +26,14 @@ export async function evaluateDecisionById(engineId: string, id: string, body: a
   return evaluateDecision<any>(engineId, id, body)
 }
 
-export async function evaluateDecisionByKey(engineId: string, key: string, body: any) {
-  return camundaPost<any>(engineId, `/decision-definition/key/${encodeURIComponent(key)}/evaluate`, body)
+export async function evaluateDecisionByKey(
+  engineId: string,
+  key: string,
+  body: any,
+  runtimeTenantId?: string,
+) {
+  const definitionPath = runtimeTenantId
+    ? `/decision-definition/key/${encodeURIComponent(key)}/tenant-id/${encodeURIComponent(runtimeTenantId)}`
+    : `/decision-definition/key/${encodeURIComponent(key)}`
+  return camundaPost<any>(engineId, `${definitionPath}/evaluate`, body)
 }

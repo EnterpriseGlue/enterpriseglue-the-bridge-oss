@@ -20,7 +20,12 @@ import {
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
 import { DecisionEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js';
-import { filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js';
+import {
+  filterRuntimeItemsByResourceKey,
+  getAuthorizedRuntimeTenantIdForKey,
+  getBoundedRuntimeResourceQuery,
+  withAuthorizedRuntimeTenantQuery,
+} from '../shared/runtime-resource-filter.js';
 import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js';
 
 const r = Router();
@@ -117,7 +122,10 @@ r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireRun
 }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionKey = String(req.params.key);
-  const data = await evaluateDecisionByKey(engineId, definitionKey, req.body);
+  const runtimeTenantId = getAuthorizedRuntimeTenantIdForKey(req.authorizedRuntimeResourceScopes, definitionKey);
+  const data = runtimeTenantId === undefined
+    ? await evaluateDecisionByKey(engineId, definitionKey, req.body)
+    : await evaluateDecisionByKey(engineId, definitionKey, req.body, runtimeTenantId);
   res.json(DecisionEvaluationResultSchema.parse(data));
 }));
 

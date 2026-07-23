@@ -30,7 +30,13 @@ import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/v
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
-import { filterRuntimeItemsByProcessDefinitionKeys, filterRuntimeItemsByResourceKey, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js'
+import {
+  filterRuntimeItemsByProcessDefinitionKeys,
+  filterRuntimeItemsByResourceKey,
+  getAuthorizedRuntimeTenantIdForKey,
+  getBoundedRuntimeResourceQuery,
+  withAuthorizedRuntimeTenantQuery,
+} from './runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from './runtime-row-action-decisions.js'
 import {
   ActivityCountByActivityIdSchema,
@@ -120,9 +126,14 @@ r.get('/mission-control-api/process-definitions/resolve', requireRuntimeDefiniti
 }), asyncHandler(async (req: Request, res: Response) => {
   try {
     const engineId = (req as any).engineId as string
-    const data = await resolveProcessDefinition(engineId, req.query as { key?: string; version?: string })
+    const key = String(req.query.key || '')
+    const runtimeTenantId = getAuthorizedRuntimeTenantIdForKey(req.authorizedRuntimeResourceScopes, key)
+    const data = runtimeTenantId === undefined
+      ? await resolveProcessDefinition(engineId, req.query as { key?: string; version?: string })
+      : await resolveProcessDefinition(engineId, req.query as { key?: string; version?: string }, runtimeTenantId)
     res.json(ProcessDefinitionSchema.parse(data))
   } catch (e: any) {
+    if (e?.statusCode) throw e
     throw Errors.internal(e?.message || 'Failed to resolve process definition')
   }
 }))

@@ -199,6 +199,72 @@ describe('requireRuntimeCollectionAction', () => {
     expect(req.runtimeAccessScope).toBe('engine_wide');
   });
 
+  it('does not let a broad engine grant bypass shared-engine resource filtering', async () => {
+    const next = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'engine-1',
+          tenantId: null,
+          tenancyMode: 'shared',
+          runtimeAccessScope: 'resource_aware',
+        }),
+      }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
+      { user: { userId: 'user-1' }, tenant: { tenantId: 'tenant-a' }, query: { engineId: 'engine-1' } } as any,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode: 403,
+      message: 'No authorized runtime resources are available for this engine',
+    }));
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      tenantId: 'tenant-a',
+    }));
+  });
+
+  it('narrows a broad shared-engine grant to resolved visible resource scopes', async () => {
+    const next = vi.fn();
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'engine-1',
+          tenantId: null,
+          tenancyMode: 'shared',
+          runtimeAccessScope: 'resource_aware',
+        }),
+      }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      { id: 'resource-1', resourceKey: 'payments', runtimeTenantId: 'runtime-a' },
+    ]);
+    const req: any = {
+      user: { userId: 'user-1' },
+      tenant: { tenantId: 'tenant-a' },
+      query: { engineId: 'engine-1' },
+    };
+
+    await requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' })(
+      req,
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledWith();
+    expect(req.authorizedRuntimeResourceKeys).toEqual(['payments']);
+    expect(req.authorizedRuntimeResourceScopes).toEqual([
+      { resourceKey: 'payments', runtimeTenantId: 'runtime-a' },
+    ]);
+  });
+
   it('denies resource-aware runtime collections with no visible resources', async () => {
     const next = vi.fn();
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -437,6 +503,7 @@ describe('requireAction project resource resolvers', () => {
     });
     app.use(errorHandler);
     vi.clearAllMocks();
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockReset().mockResolvedValue([]);
     (policyService.evaluateGate as unknown as Mock).mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
 
     projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
@@ -453,15 +520,15 @@ describe('requireAction project resource resolvers', () => {
     versionFindOne = vi.fn().mockResolvedValue({ id: versionId, fileId });
     runtimeResourceFindOne = vi.fn().mockResolvedValue({ id: 'runtime-resource-1', tenantId: null });
     runtimeResourceFind = vi.fn().mockResolvedValue([{ id: 'runtime-resource-1', tenantId: null, resourceKey: 'payments' }]);
-    camundaGet.mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
+    camundaGet.mockReset().mockResolvedValue({ id: 'definition-1', key: 'payments', tenantId: null });
 
-    (permissionService.hasPermission as unknown as Mock).mockImplementation(
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockImplementation(
       async (permission: string) =>
         permission === 'project:files:view' ||
         permission === 'engine:instance:view'
     );
-    (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockResolvedValue([engineId]);
-    (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([projectId]);
+    (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockReset().mockResolvedValue([engineId]);
+    (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockReset().mockResolvedValue([projectId]);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: projectFindOne, find: projectFind };
@@ -522,7 +589,9 @@ describe('requireAction project resource resolvers', () => {
 
     expect(response.status).toBe(403);
     expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ resourceKey: 'payments', runtimeTenantId: 'runtime-tenant-a' }),
+      where: expect.arrayContaining([
+        expect.objectContaining({ resourceKey: 'payments', runtimeTenantId: 'runtime-tenant-a', tenantResolutionStatus: 'resolved' }),
+      ]),
     }));
     expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
     expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
@@ -540,6 +609,264 @@ describe('requireAction project resource resolvers', () => {
     expect(camundaGet).not.toHaveBeenCalled();
     expect(runtimeResourceFindOne).not.toHaveBeenCalled();
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
+  });
+
+  it('denies an uninventoried shared definition before any engine transport despite a broad grant', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue(null);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(runtimeResourceFindOne).not.toHaveBeenCalled();
+  });
+
+  it('allows a broad shared definition only through its resolved same-tenant inventory row', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue({
+      id: 'runtime-resource-1',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: 'runtime-a',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-1',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: 'runtime-a',
+    }]);
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(response.body.resource).toEqual({
+      type: 'engine_runtime_resource',
+      id: 'runtime-resource-1',
+    });
+  });
+
+  it('authorizes an older shared definition ID through visible key and runtime-tenant lineage', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue(null);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-1',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: 'runtime-a',
+    }]);
+    camundaGet.mockResolvedValue({
+      id: 'definition-v1',
+      key: 'payments',
+      tenantId: 'runtime-a',
+    });
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).toHaveBeenCalledTimes(1);
+    expect(response.body.resource).toEqual({
+      type: 'engine_runtime_resource',
+      id: 'runtime-resource-1',
+    });
+  });
+
+  it('authorizes one exact shared definition key without engine discovery transport', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      {
+        id: 'runtime-resource-1',
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        resourceKey: 'payments',
+        runtimeTenantId: 'runtime-a',
+      },
+      {
+        id: 'runtime-resource-duplicate',
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        resourceKey: 'payments',
+        runtimeTenantId: 'runtime-a',
+      },
+    ]);
+
+    const response = await request(app)
+      .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(200);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(response.body.resource).toEqual({
+      type: 'engine_runtime_resource',
+      id: 'runtime-resource-1',
+    });
+
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-no-tenant',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: undefined,
+    }]);
+    expect((await request(app)
+      .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`)).status).toBe(200);
+  });
+
+  it('denies missing or runtime-tenant-ambiguous shared definition keys', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      {
+        id: 'runtime-resource-other',
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        resourceKey: 'other',
+        runtimeTenantId: 'runtime-a',
+      },
+    ]);
+    expect((await request(app)
+      .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`)).status).toBe(403);
+
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      {
+        id: 'runtime-resource-a',
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        resourceKey: 'payments',
+        runtimeTenantId: 'runtime-a',
+      },
+      {
+        id: 'runtime-resource-b',
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        resourceKey: 'payments',
+        runtimeTenantId: 'runtime-b',
+      },
+    ]);
+    expect((await request(app)
+      .get(`/runtime-definitions-by-key/payments?engineId=${engineId}&tenantId=tenant-a`)).status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a historical shared definition has no stable authorization key', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue({
+      id: 'stale-direct-row',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'stale',
+      runtimeTenantId: '',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      {
+        id: 'runtime-resource-other',
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        resourceKey: 'other',
+        runtimeTenantId: undefined,
+      },
+    ]);
+    camundaGet.mockResolvedValue({ id: 'definition-v1', key: 42, tenantId: null });
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('authorizes historical shared no-tenant lineage without treating null as an enterprise tenant', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue(null);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-no-tenant',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: undefined,
+    }]);
+    camundaGet.mockResolvedValue({
+      id: 'definition-v1',
+      key: 'payments',
+      tenantId: null,
+    });
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.resource.id).toBe('runtime-resource-no-tenant');
+  });
+
+  it('quarantines an unresolved shared definition before any engine transport', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue({
+      id: 'runtime-resource-1',
+      tenantId: null,
+      tenantResolutionStatus: 'unmapped',
+      resourceKey: 'payments',
+      runtimeTenantId: 'runtime-a',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
   });
 
   it('denies engine-wide runtime definitions without a broad grant', async () => {
@@ -865,10 +1192,61 @@ describe('requireAction project resource resolvers', () => {
     expect((await request(app).get(`/runtime-jobs/job-1?engineId=${engineId}`)).status).toBe(403);
   });
 
+  it('denies a shared referenced detail before transport when no resolved resource is visible', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    const response = await request(app)
+      .get(`/runtime-jobs/job-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+  });
+
+  it('denies a shared referenced detail when live lineage resolves outside the visible resource set', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-visible',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'visible',
+      runtimeTenantId: '',
+    }]);
+    runtimeResourceFindOne.mockResolvedValue({
+      id: 'runtime-resource-other',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: '',
+    });
+    camundaGet
+      .mockResolvedValueOnce({ id: 'job-1', processDefinitionId: 'definition-1' })
+      .mockResolvedValueOnce({ id: 'definition-1', key: 'payments', tenantId: null });
+
+    const response = await request(app)
+      .get(`/runtime-jobs/job-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).toHaveBeenCalledTimes(2);
+    expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
+  });
+
   it('requires explicit and fully authorized instances for resource-aware batch actions', async () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
+    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments', tenantId: 'runtime-a' });
 
     const response = await request(app)
       .post('/runtime-instance-selection')
@@ -881,6 +1259,7 @@ describe('requireAction project resource resolvers', () => {
         engineId,
         resourceKind: 'process_definition',
         resourceKey: 'payments',
+        runtimeTenantId: 'runtime-a',
       }),
     }));
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
@@ -1014,6 +1393,121 @@ describe('requireAction project resource resolvers', () => {
     expect(migration.body.resource).toEqual({ type: 'engine', id: engineId });
   });
 
+  it('denies shared batch and migration mutations before transport when mapping access is unavailable', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    const selection = await request(app)
+      .post('/runtime-instance-selection?tenantId=tenant-a')
+      .send({ engineId, processInstanceIds: ['instance-1'] });
+    expect(selection.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+
+    const migration = await request(app)
+      .post('/runtime-migration?tenantId=tenant-a')
+      .send({
+        engineId,
+        plan: {
+          sourceProcessDefinitionId: 'source-v1',
+          targetProcessDefinitionId: 'target-v2',
+        },
+      });
+    expect(migration.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+  });
+
+  it('denies shared batch and migration lineage outside the visible resource set', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-visible',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'visible',
+      runtimeTenantId: '',
+    }]);
+    runtimeResourceFindOne.mockResolvedValue({
+      id: 'runtime-resource-other',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+    });
+    camundaGet.mockResolvedValue({ id: 'instance-1', definitionKey: 'payments' });
+
+    const selection = await request(app)
+      .post('/runtime-instance-selection?tenantId=tenant-a')
+      .send({ engineId, processInstanceIds: ['instance-1'] });
+    expect(selection.status).toBe(403);
+
+    camundaGet
+      .mockReset()
+      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
+    const migration = await request(app)
+      .post('/runtime-migration?tenantId=tenant-a')
+      .send({
+        engineId,
+        plan: {
+          sourceProcessDefinitionId: 'source-v1',
+          targetProcessDefinitionId: 'target-v2',
+        },
+      });
+    expect(migration.status).toBe(403);
+  });
+
+  it('quarantines shared deployment mutations even when a broad grant exists', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFind.mockResolvedValue([{
+      id: 'runtime-resource-1',
+      tenantId: null,
+      tenantResolutionStatus: 'conflict',
+      resourceKey: 'payments',
+    }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+
+    const response = await request(app)
+      .get(`/runtime-deployments/deployment-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unresolved dedicated resource-aware deployment inventory', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFind.mockResolvedValue([{
+      id: 'runtime-resource-1',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'conflict',
+      resourceKey: 'payments',
+    }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .get(`/runtime-deployments/deployment-1?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+  });
+
   it('normalizes non-Error runtime authorization failures to safe internal errors', async () => {
     const collection = requireRuntimeCollectionAction('engine.runtime.process-definitions.read', { resourceKind: 'process_definition' });
     const definition = requireRuntimeDefinitionAction('engine.runtime.process-definitions.read', {
@@ -1044,8 +1538,8 @@ describe('requireAction project resource resolvers', () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(true);
     camundaGet
-      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1' })
-      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2' });
+      .mockResolvedValueOnce({ id: 'source-v1', key: 'payments-v1', tenantId: 'runtime-a' })
+      .mockResolvedValueOnce({ id: 'target-v2', key: 'payments-v2', tenantId: 'runtime-a' });
 
     const response = await request(app).post('/runtime-migration').send({
       engineId,
@@ -1055,6 +1549,9 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(200);
     expect(camundaGet).toHaveBeenNthCalledWith(1, engineId, '/process-definition/source-v1');
     expect(camundaGet).toHaveBeenNthCalledWith(2, engineId, '/process-definition/target-v2');
+    expect(runtimeResourceFindOne).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ resourceKey: 'payments-v1', runtimeTenantId: 'runtime-a' }),
+    }));
     expect(response.body.resource).toEqual({ type: 'engine_runtime_resource', id: 'runtime-resource-1' });
   });
 
@@ -1208,6 +1705,30 @@ describe('requireAction project resource resolvers', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.authorizedEngineIds).toEqual([engineId]);
+  });
+
+  it('hides a shared engine selector until at least one resolved runtime resource is visible', async () => {
+    engineFind.mockResolvedValue([{
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    }]);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([]);
+
+    const hidden = await request(app).get('/engines?tenantId=tenant-a');
+
+    expect(hidden.status).toBe(200);
+    expect(hidden.body.authorizedEngineIds).toEqual([]);
+
+    (permissionService.getVisibleRuntimeResources as unknown as Mock)
+      .mockResolvedValueOnce([{ id: 'runtime-resource-1' }])
+      .mockResolvedValueOnce([]);
+    const visible = await request(app).get('/engines?tenantId=tenant-a');
+
+    expect(visible.status).toBe(200);
+    expect(visible.body.authorizedEngineIds).toEqual([engineId]);
   });
 
   it('resolves a direct engine action and attaches the canonical engine identifier', async () => {

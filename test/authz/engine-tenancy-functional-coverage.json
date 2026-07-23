@@ -396,6 +396,72 @@
     "ciJob": "test:engine-tenancy:authorization"
   },
   {
+    "id": "TEN-AUTHZ-006",
+    "requirement": "A broad engine permission never bypasses resolved same-tenant resource filtering on a shared engine.",
+    "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+    "dimensions": ["shared", "collection", "broad_grant", "resolved", "same_tenant"],
+    "expected": "only visible resolved resource keys and runtime tenant scopes reach the handler",
+    "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+    "testName": "does not let a broad engine grant bypass shared-engine resource filtering",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
+    "id": "TEN-AUTHZ-007",
+    "requirement": "A shared engine appears in the Mission Control selector only when the principal can see at least one resolved mapped runtime resource.",
+    "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+    "dimensions": ["shared", "selector", "discovery", "quarantine"],
+    "expected": "empty or quarantined shared engines remain hidden",
+    "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+    "testName": "hides a shared engine selector until at least one resolved runtime resource is visible",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
+    "id": "TEN-RUNTIME-003",
+    "requirement": "Missing or unresolved shared definition inventory is denied before Mission Control calls the engine.",
+    "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+    "dimensions": ["shared", "detail", "unmapped", "conflict", "no_transport"],
+    "expected": "403 with zero engine transport calls",
+    "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+    "testName": "denies an uninventoried shared definition before any engine transport despite a broad grant",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
+    "id": "TEN-RUNTIME-004",
+    "requirement": "Exact key-based shared runtime operations use one authorized engine runtime tenant and never let the engine select an ambiguous tenant.",
+    "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+    "dimensions": ["shared", "exact_key", "engine_runtime_tenant", "process", "decision"],
+    "expected": "tenant-specific path or fail-closed ambiguity rejection",
+    "testFile": "backend/__tests__/modules/mission-control/processes/service.test.ts",
+    "testName": "uses the tenant-specific start endpoint for a mapped shared runtime tenant",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
+    "id": "TEN-RUNTIME-005",
+    "requirement": "Returned runtime rows cannot fall back from a mismatched tenant to the no-tenant partition without resolved definition lineage.",
+    "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+    "dimensions": ["shared", "collection", "runtime_tenant", "no_tenant", "lineage"],
+    "expected": "mismatched or unresolvable rows are filtered out",
+    "testFile": "backend/__tests__/modules/mission-control/shared/runtime-resource-filter.test.ts",
+    "testName": "uses item or resolved-definition tenant lineage for scoped process rows",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
+    "id": "TEN-RUNTIME-006",
+    "requirement": "Shared batch and migration mutations are denied before transport when no authorized resolved mapping is available.",
+    "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+    "dimensions": ["shared", "batch", "migration", "mutation", "no_transport"],
+    "expected": "403 with zero engine transport calls",
+    "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+    "testName": "denies shared batch and migration mutations before transport when mapping access is unavailable",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:runtime"
+  },
+  {
     "id": "TEN-MIGRATION-001",
     "requirement": "Existing engines are classified conservatively and resource-aware access alone never infers shared topology or default-tenant ownership.",
     "source": "Engine Tenancy Data Model / Classification and Topology Transitions",

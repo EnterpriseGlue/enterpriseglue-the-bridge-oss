@@ -11,6 +11,8 @@ let getActivityCountsByState: typeof import('../../../../../packages/backend-hos
 let getProcessInstanceVariables: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariables;
 let getProcessInstanceVariableHistory: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariableHistory;
 let getProcessInstanceExecutionDetails: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceExecutionDetails;
+let listProcessDefinitions: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').listProcessDefinitions;
+let resolveProcessDefinition: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').resolveProcessDefinition;
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn(),
@@ -33,6 +35,8 @@ describe('mission-control-service', () => {
       getProcessInstanceVariables,
       getProcessInstanceVariableHistory,
       getProcessInstanceExecutionDetails,
+      listProcessDefinitions,
+      resolveProcessDefinition,
     } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js'));
   });
 
@@ -52,6 +56,38 @@ describe('mission-control-service', () => {
       requestBody: { value: { foo: 'bar' }, type: 'Json' },
     });
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/history/variable-instance', { processInstanceId: 'proc-1' });
+  });
+
+  it('passes shared runtime-tenant filters through the compatibility definition list', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce([] as any);
+
+    await listProcessDefinitions('engine-1', {
+      key: 'invoice',
+      tenantIdIn: ['runtime-a'],
+      maxResults: 10,
+    });
+
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition', {
+      key: 'invoice',
+      tenantIdIn: ['runtime-a'],
+      maxResults: 10,
+    });
+  });
+
+  it('resolves an exact definition version inside its authorized runtime tenant', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce([{ id: 'definition-2', key: 'invoice' }] as any);
+
+    await resolveProcessDefinition(
+      'engine-1',
+      { key: 'invoice', version: '2' },
+      'runtime-a',
+    );
+
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition', {
+      key: 'invoice',
+      version: 2,
+      tenantIdIn: ['runtime-a'],
+    });
   });
 
   it('keeps compatibility when executionId is not provided by engine response', async () => {
