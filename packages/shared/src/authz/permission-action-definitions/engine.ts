@@ -146,6 +146,12 @@ export const ENGINE_AUTHZ_ACTIONS = [
           resourceResolver: 'engine.byId',
           additionalChecks: ['returns only sanitized runtime-inventory rows in the caller tenant'],
         },
+        {
+          method: 'GET',
+          route: '/engines-api/engines/{id}/tenancy/diagnostics',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['returns aggregate sanitized mapping state without credentials or raw tenant claims'],
+        },
       ],
     },
   {
@@ -191,6 +197,16 @@ export const ENGINE_AUTHZ_ACTIONS = [
             'API client must have either platform:engine-registration:manage at platform scope or external-engine-system:engine-registration:manage for the provided externalSystemId',
             'external registration rejects local, private, link-local, reserved, and credential-bearing URLs',
             'Engine Set materializations refresh after create or update',
+          ],
+        },
+        {
+          method: 'PUT',
+          route: '/engines-api/external/engines/{externalId}/tenant-mappings',
+          resourceResolver: 'platform.self',
+          additionalChecks: [
+            'API client bearer token with engine:register scope is required',
+            'every tenant reference requires an authorized resolution',
+            'mapping changes are atomic and mapping-version guarded',
           ],
         },
       ],
@@ -251,6 +267,22 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/engines-api/engines/{id}/runtime-resources/reconcile',
           resourceResolver: 'engine.byId',
           additionalChecks: ['runs idempotent runtime and deployment metadata discovery with Runtime Resource Set rematerialization'],
+        },
+        {
+          method: 'GET',
+          route: '/engines-api/engines/{id}/tenant-mappings',
+          resourceResolver: 'engine.byId',
+          additionalChecks: ['engine:edit is required because mapping rows contain tenant ownership identifiers'],
+        },
+        {
+          method: 'PUT',
+          route: '/engines-api/engines/{id}/tenant-mappings',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engine:edit is required',
+            'every tenant reference requires an authorized resolution',
+            'mapping changes are atomic and mapping-version guarded',
+          ],
         },
       ],
     },

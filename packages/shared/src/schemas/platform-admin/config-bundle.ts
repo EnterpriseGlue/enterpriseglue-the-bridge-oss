@@ -11,7 +11,10 @@ import {
   EngineRuntimeAuthorizationModeSchema,
   ProjectEngineTargetPolicyModeSchema,
 } from './platform-settings.js';
-import { EngineConnectionModeSchema } from '../mission-control/engine.js';
+import {
+  EngineConnectionModeSchema,
+  EngineTenancyConfigurationSchema,
+} from '../mission-control/engine.js';
 
 export const ENTERPRISEGLUE_CONFIG_API_VERSION = 'enterpriseglue.ai/v1alpha1' as const;
 export const ENTERPRISEGLUE_CONFIG_KIND = 'EnterpriseGlueConfigBundle' as const;
@@ -450,6 +453,10 @@ export const ConfigEngineSchema = z.object({
   auth: ConfigEngineAuthSchema,
   connectionMode: EngineConnectionModeSchema.default('direct'),
   runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).default('engine_wide'),
+  tenancy: EngineTenancyConfigurationSchema.default({
+    mode: 'dedicated',
+    tenantRef: { type: 'request_context' },
+  }),
   deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).default('enterpriseglue_proxy'),
   metadataDiscoveryEnabled: z.boolean().default(true),
   deploymentDiscoveryEnabled: z.boolean().default(true),
@@ -464,6 +471,13 @@ export const ConfigEngineSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ['auth', 'type'],
       message: 'Credentialless endpoint authentication is allowed only for customer_sidecar engines',
+    });
+  }
+  if (engine.tenancy.mode === 'shared' && engine.runtimeAccessScope !== 'resource_aware') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['runtimeAccessScope'],
+      message: 'Shared engines require runtimeAccessScope=resource_aware',
     });
   }
 });

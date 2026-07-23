@@ -669,6 +669,8 @@ describe('configBundleApplyService', () => {
       configKey: 'engine.prod-payments', configKeyIdentity: 'tenant-a:engine.prod-payments', registrationSource: 'config',
       sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
       deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900, pipelineReceiptEnabled: false, connectionMode: 'direct',
+      tenantId: 'tenant-a', tenancyMode: 'dedicated', tenantMappingStrategy: null,
+      tenantMappingVersion: 0, tenantResolutionStatus: 'ready',
     }));
     expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a', engineSetIds: [], runtimeResourceSetIds: [], engineIds: [expect.any(String)],
@@ -678,6 +680,45 @@ describe('configBundleApplyService', () => {
     expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
     expect(applyAudit!.details).toContain('"secretReferences":["PAYMENTS_ENGINE_PASSWORD"]');
     expect(applyAudit!.details).not.toContain('passwordRef');
+  });
+
+  it('applies a config-managed shared engine in fail-closed mapping state', async () => {
+    const { engineInsert } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.com/engine-rest',
+          auth: { type: 'basic', username: 'eg-client', passwordRef: 'CENTRAL_ENGINE_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.created).toBe(1);
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'incomplete',
+      runtimeAccessScope: 'resource_aware',
+    }));
   });
 
   it.each([

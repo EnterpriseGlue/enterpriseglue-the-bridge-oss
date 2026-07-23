@@ -5,9 +5,9 @@ engine API.
 
 Audience: Platform operators and external inventory/CMDB integrators.
 
-Status: Dedicated and fail-closed shared registration are implemented. Shared
-tenant mapping administration is not yet available, so shared engines remain
-incomplete and must not be used for production runtime access.
+Status: Dedicated/shared registration and atomic shared tenant mapping are
+implemented. Shared runtime resources remain unavailable until reconciliation
+resolves each resource to exactly one tenant.
 
 ## Before You Start
 
@@ -91,9 +91,57 @@ curl --fail-with-body \
 ```
 
 The connection is created with null `tenantId` and
-`tenantResolutionStatus = incomplete`. This is a safe quarantine state. Do not
-enable production access until mapping, reconciliation, and Effective Access
-evidence described in the implementation plan are complete.
+`tenantResolutionStatus = incomplete`. This is a safe quarantine state.
+
+## Map Shared Runtime Tenants
+
+Preview the mapping batch first:
+
+```bash
+curl --fail-with-body \
+  -X PUT "$ENTERPRISEGLUE_URL/engines-api/external/engines/cmdb%2Fcentral-prod/tenant-mappings" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "externalSystemId": "cmdb",
+    "expectedMappingVersion": 0,
+    "dryRun": true,
+    "atomic": true,
+    "mappings": [
+      {
+        "externalTenantId": "payments",
+        "tenantRef": { "type": "key", "key": "tenant.payments" },
+        "strategy": "engine_tenant_id",
+        "sourceRef": "central-prod/payments",
+        "active": true
+      }
+    ]
+  }'
+```
+
+Review the per-row result and aggregate resource counts, then repeat with
+`"dryRun": false` and the same current `expectedMappingVersion`. If another
+operator or integration changed mappings, the API returns
+`ENGINE_TENANT_MAPPING_VERSION_CONFLICT`; refresh and rebuild the batch instead
+of removing the version guard.
+
+The selected strategy determines the source key:
+
+| Strategy | Mapping key observed at runtime |
+| --- | --- |
+| `engine_tenant_id` | Native engine tenant id |
+| `deployment_target` | EnterpriseGlue project/deployment target id |
+| `explicit` | Explicit runtime tenant id supplied by the adapter or receipt |
+
+Deactivate a mapping by sending the same `externalTenantId`, `strategy`, and
+`sourceRef` with `"active": false`. Deactivation immediately reconciles known
+resources and quarantines resources that no longer have exactly one mapping.
+
+Before allowing tenant users to rely on a shared engine, reconcile inventory and
+verify diagnostics show zero unmapped and zero conflicting resources. The
+remaining release gate also requires tenant assignment, Effective Access, and
+runtime-path evidence from the implementation plan; mapping readiness alone
+does not prove the complete authorization rollout.
 
 ## Update and Retry
 
@@ -124,6 +172,8 @@ Update the integration to send explicit tenancy when this warning appears.
 | `ENGINE_SHARED_REQUIRES_RESOURCE_AWARE` | Set `runtimeAccessScope` to `resource_aware` or use dedicated topology |
 | `ENGINE_TENANT_REFERENCE_FORBIDDEN` | Use request/default tenancy or ask an administrator to authorize/configure the reference |
 | `ENGINE_TENANCY_TRANSITION_REQUIRED` | Preserve topology and use the controlled transition workflow when available |
+| `ENGINE_TENANT_MAPPING_VERSION_CONFLICT` | Read the current mapping version, rebuild the batch, and retry |
+| `ENGINE_TENANCY_CONFLICT` | Correct the strategy, duplicate identity, or source-ownership conflict |
 
 See [Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md)
 for the developer contract.

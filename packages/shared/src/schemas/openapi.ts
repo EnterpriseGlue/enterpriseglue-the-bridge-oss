@@ -1054,6 +1054,30 @@ registry.registerPath({
 })
 
 registry.registerPath({
+  method: 'put',
+  path: '/engines-api/external/engines/{externalId}/tenant-mappings',
+  ...authzExtension('engine.external-registration.upsert', 'PUT', '/engines-api/external/engines/{externalId}/tenant-mappings'),
+  request: {
+    params: z.object({ externalId: z.string() }),
+    body: {
+      content: {
+        'application/json': {
+          schema: ExternalEngineTenantMappingsUpsertRequestSchema.extend({
+            externalSystemId: z.string().nullable().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: { description: 'External tenant mappings previewed or atomically applied', content: { 'application/json': { schema: ExternalEngineTenantMappingsUpsertResponseSchema } } },
+    400: { description: 'Engine topology or mapping request is invalid', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    403: { description: 'A tenant reference or external engine system is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    409: { description: 'Mapping version or ownership conflict', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+  },
+})
+
+registry.registerPath({
   method: 'post',
   path: '/engines-api/external/engines/decommission',
   ...authzExtension('engine.external-registration.decommission', 'POST', '/engines-api/external/engines/decommission'),
@@ -1135,6 +1159,45 @@ registry.registerPath({
     400: { description: 'Endpoint or tenancy policy rejected the engine update', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
     403: { description: 'Tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
     409: { description: 'Topology transition is required', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+  },
+})
+
+registry.registerPath({
+  method: 'get',
+  path: '/engines-api/engines/{id}/tenancy/diagnostics',
+  ...authzExtension('engine.inventory.read', 'GET', '/engines-api/engines/{id}/tenancy/diagnostics'),
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { description: 'Sanitized engine tenancy diagnostics', content: { 'application/json': { schema: EngineTenancyDiagnosticsSchema } } },
+    404: { description: 'Engine not found' },
+  },
+})
+
+registry.registerPath({
+  method: 'get',
+  path: '/engines-api/engines/{id}/tenant-mappings',
+  ...authzExtension('engine.inventory.update', 'GET', '/engines-api/engines/{id}/tenant-mappings'),
+  request: { params: z.object({ id: z.string() }) },
+  responses: {
+    200: { description: 'Tenant mappings', content: { 'application/json': { schema: z.array(EngineTenantMappingSchema) } } },
+    400: { description: 'Engine is not shared', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    404: { description: 'Engine not found' },
+  },
+})
+
+registry.registerPath({
+  method: 'put',
+  path: '/engines-api/engines/{id}/tenant-mappings',
+  ...authzExtension('engine.inventory.update', 'PUT', '/engines-api/engines/{id}/tenant-mappings'),
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: ExternalEngineTenantMappingsUpsertRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Tenant mappings previewed or atomically applied', content: { 'application/json': { schema: ExternalEngineTenantMappingsUpsertResponseSchema } } },
+    400: { description: 'Engine topology or mapping request is invalid', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    403: { description: 'Tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    409: { description: 'Mapping version or ownership conflict', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
   },
 })
 

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
@@ -13,15 +15,28 @@ function setup() {
   const resourceRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), update: vi.fn(), find: vi.fn().mockResolvedValue([]) };
   const setRepo = { findOne: vi.fn().mockResolvedValue(null) };
   const materializationRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
+  const engineRepo = {
+    findOne: vi.fn().mockResolvedValue({
+      id: 'engine-1',
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: null,
+      tenantMappingVersion: 0,
+    }),
+    update: vi.fn(),
+  };
+  const mappingRepo = { find: vi.fn().mockResolvedValue([]) };
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository(entity: unknown) {
       if (entity === RuntimeResource) return resourceRepo;
       if (entity === RuntimeResourceSet) return setRepo;
       if (entity === RuntimeResourceSetMaterialization) return materializationRepo;
+      if (entity === Engine) return engineRepo;
+      if (entity === EngineTenantMapping) return mappingRepo;
       throw new Error('Unexpected repository');
     },
   });
-  return { resourceRepo, setRepo, materializationRepo };
+  return { resourceRepo, setRepo, materializationRepo, engineRepo, mappingRepo };
 }
 
 describe('runtimeResourceInventoryService', () => {
@@ -53,8 +68,8 @@ describe('runtimeResourceInventoryService', () => {
     const { resourceRepo, setRepo, materializationRepo } = setup();
     setRepo.findOne.mockResolvedValue({ id: 'set-1', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), isArchived: false });
     resourceRepo.find.mockResolvedValue([
-      { id: 'resource-1', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-order', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
-      { id: 'resource-2', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'hr-onboard', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
+      { id: 'resource-1', engineId: 'engine-1', tenantId: 'tenant-a', tenantResolutionStatus: 'resolved', resourceKind: 'process_definition', resourceKey: 'payments-order', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
+      { id: 'resource-2', engineId: 'engine-1', tenantId: 'tenant-a', tenantResolutionStatus: 'resolved', resourceKind: 'process_definition', resourceKey: 'hr-onboard', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
     ]);
     materializationRepo.find.mockResolvedValue([{ id: 'old-row', runtimeResourceId: 'stale-resource' }]);
 
@@ -72,8 +87,8 @@ describe('runtimeResourceInventoryService', () => {
       selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), runtimeTenantId: 'runtime-payments', isArchived: false,
     });
     resourceRepo.find.mockResolvedValue([
-      { id: 'payments-tenant', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-order', runtimeTenantId: 'runtime-payments', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
-      { id: 'risk-tenant', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments-risk', runtimeTenantId: 'runtime-risk', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
+      { id: 'payments-tenant', engineId: 'engine-1', tenantId: 'tenant-a', tenantResolutionStatus: 'resolved', resourceKind: 'process_definition', resourceKey: 'payments-order', runtimeTenantId: 'runtime-payments', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
+      { id: 'risk-tenant', engineId: 'engine-1', tenantId: 'tenant-a', tenantResolutionStatus: 'resolved', resourceKind: 'process_definition', resourceKey: 'payments-risk', runtimeTenantId: 'runtime-risk', labelsJson: '{}', source: 'engine_discovery', sourceRef: null },
     ]);
 
     const result = await runtimeResourceInventoryService.materialize('set-1', 'tenant-a');
@@ -87,6 +102,102 @@ describe('runtimeResourceInventoryService', () => {
     const { setRepo } = setup();
     setRepo.findOne.mockResolvedValue({ id: 'set-1', tenantId: 'tenant-a', isArchived: false });
     await expect(runtimeResourceInventoryService.materialize('set-1', 'tenant-b')).rejects.toThrow('Runtime Resource Set not found');
+  });
+
+  it('resolves shared runtime observations through the current mapping version', async () => {
+    const { resourceRepo, engineRepo, mappingRepo } = setup();
+    engineRepo.findOne.mockResolvedValue({
+      id: 'engine-1',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 4,
+    });
+    mappingRepo.find.mockResolvedValue([{
+      id: 'mapping-1',
+      engineId: 'engine-1',
+      externalTenantId: 'runtime-a',
+      enterpriseTenantId: 'tenant-a',
+      strategy: 'engine_tenant_id',
+      isActive: true,
+    }]);
+
+    await runtimeResourceInventoryService.observe('engine-1', null, [{
+      resourceKind: 'process_definition',
+      resourceKey: 'payments-order',
+      runtimeTenantId: 'runtime-a',
+    }]);
+
+    expect(resourceRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: 'mapping-1',
+      tenantMappingVersion: 4,
+      tenantResolutionDetailsJson: '{"code":"shared_engine_mapping"}',
+    }));
+    expect(engineRepo.update).toHaveBeenCalledWith({ id: 'engine-1' }, expect.objectContaining({
+      tenantResolutionStatus: 'ready',
+      lastTenantReconciledAt: expect.any(Number),
+    }));
+  });
+
+  it('quarantines unmapped and conflicting shared runtime observations', async () => {
+    const { resourceRepo, engineRepo, mappingRepo } = setup();
+    engineRepo.findOne.mockResolvedValue({
+      id: 'engine-1',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'explicit',
+      tenantMappingVersion: 2,
+    });
+    mappingRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      { id: 'mapping-1', externalTenantId: 'runtime-a', enterpriseTenantId: 'tenant-a', strategy: 'explicit' },
+      { id: 'mapping-2', externalTenantId: 'runtime-a', enterpriseTenantId: 'tenant-b', strategy: 'explicit' },
+    ]);
+
+    await runtimeResourceInventoryService.observe('engine-1', null, [{
+      resourceKind: 'process_definition', resourceKey: 'unmapped', runtimeTenantId: 'runtime-a',
+    }]);
+    expect(resourceRepo.insert).toHaveBeenLastCalledWith(expect.objectContaining({
+      tenantId: null,
+      tenantResolutionStatus: 'unmapped',
+      tenantMappingId: null,
+      tenantResolutionDetailsJson: '{"code":"tenant_mapping_not_found"}',
+    }));
+
+    await runtimeResourceInventoryService.observe('engine-1', null, [{
+      resourceKind: 'process_definition', resourceKey: 'conflict', runtimeTenantId: 'runtime-a',
+    }]);
+    expect(resourceRepo.insert).toHaveBeenLastCalledWith(expect.objectContaining({
+      tenantId: null,
+      tenantResolutionStatus: 'conflict',
+      tenantMappingId: null,
+      tenantResolutionDetailsJson: '{"code":"multiple_active_mappings"}',
+    }));
+  });
+
+  it('never materializes unresolved or cross-tenant runtime resources', async () => {
+    const { resourceRepo, setRepo, materializationRepo } = setup();
+    setRepo.findOne.mockResolvedValue({
+      id: 'set-1',
+      tenantId: 'tenant-a',
+      engineId: 'engine-1',
+      resourceKind: 'process_definition',
+      selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }),
+      isArchived: false,
+    });
+    resourceRepo.find.mockResolvedValue([
+      { id: 'allowed', tenantId: 'tenant-a', tenantResolutionStatus: 'resolved', resourceKey: 'payments-a', labelsJson: '{}' },
+      { id: 'unmapped', tenantId: null, tenantResolutionStatus: 'unmapped', resourceKey: 'payments-b', labelsJson: '{}' },
+      { id: 'other', tenantId: 'tenant-b', tenantResolutionStatus: 'resolved', resourceKey: 'payments-c', labelsJson: '{}' },
+    ]);
+
+    const result = await runtimeResourceInventoryService.materialize('set-1', 'tenant-a');
+
+    expect(result.matched).toBe(1);
+    expect(materializationRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ runtimeResourceId: 'allowed' }));
+    expect(materializationRepo.insert).not.toHaveBeenCalledWith(expect.objectContaining({ runtimeResourceId: 'unmapped' }));
+    expect(materializationRepo.insert).not.toHaveBeenCalledWith(expect.objectContaining({ runtimeResourceId: 'other' }));
   });
 
   it('reconciles process and decision definitions then refreshes engine resource sets', async () => {

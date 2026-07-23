@@ -47,6 +47,7 @@ export type ConfiguredEngineUpdate = Pick<Engine,
   'name' | 'baseUrl' | 'type' | 'externalId' | 'labelsJson' | 'sourceHash' | 'lastAppliedAt' | 'ownershipMode'
   | 'lifecycleStatus' | 'driftStatus' | 'authType' | 'username' | 'passwordEnc' | 'oauthTokenUrl' | 'oauthScopes'
   | 'oauthAudience' | 'version' | 'environmentTagId' | 'runtimeAccessScope' | 'deploymentIntegration'
+  | 'tenancyMode' | 'tenantId' | 'tenantMappingStrategy' | 'tenantMappingVersion' | 'tenantResolutionStatus' | 'lastTenantReconciledAt'
   | 'metadataDiscoveryEnabled' | 'deploymentDiscoveryEnabled' | 'reconciliationIntervalSeconds' | 'pipelineReceiptEnabled'
   | 'connectionMode'>;
 

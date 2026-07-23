@@ -1,4 +1,4 @@
-import { In, IsNull } from 'typeorm';
+import { In, IsNull, Like } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
@@ -56,10 +56,16 @@ class ConfigBundleExportService {
     const tenantId = input.tenantId || null;
     const sourceRef = `config_bundle:${input.bundleKey}`;
     const where = { sourceRef, ...(tenantId ? { tenantId } : { tenantId: IsNull() }) };
+    const engineScopePrefix = `${tenantId || 'platform'}:`;
     const [roles, groups, engines, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources] = await Promise.all([
       dataSource.getRepository(RbacRole).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(AuthzGroup).find({ where: { ...where, isArchived: false } }),
-      dataSource.getRepository(Engine).find({ where: { ...where, lifecycleStatus: 'active' } }),
+      dataSource.getRepository(Engine).find({
+        where: [
+          { sourceRef, lifecycleStatus: 'active', tenantId: tenantId || IsNull() },
+          { sourceRef, lifecycleStatus: 'active', configKeyIdentity: Like(`${engineScopePrefix}%`) },
+        ],
+      }),
       dataSource.getRepository(EngineSet).find({ where: { ...where, source: 'config', isArchived: false } }),
       dataSource.getRepository(RuntimeResourceSet).find({ where: { ...where, source: 'config', isArchived: false } }),
       dataSource.getRepository(RbacRoleAssignment).find({ where: { ...where, source: 'config' } }),
@@ -97,7 +103,19 @@ class ConfigBundleExportService {
             : engine.authType === 'oauth2-client-credentials'
               ? { type: 'oauth2-client-credentials', username: engine.username || '', passwordRef: credentialRef || undefined, tokenUrl: engine.oauthTokenUrl || '', scopes: engine.oauthScopes || undefined, audience: engine.oauthAudience || undefined }
               : { type: 'none' };
-        return { key: engine.configKey, name: engine.name, baseUrl: engine.baseUrl, type: engine.type, externalId: engine.externalId || undefined, labels: json(engine.labelsJson), auth, version: engine.version || undefined, runtimeAccessScope: engine.runtimeAccessScope, deploymentIntegration: engine.deploymentIntegration, metadataDiscoveryEnabled: engine.metadataDiscoveryEnabled !== false, deploymentDiscoveryEnabled: engine.deploymentDiscoveryEnabled !== false, reconciliationIntervalSeconds: Number(engine.reconciliationIntervalSeconds || 300), pipelineReceiptEnabled: engine.pipelineReceiptEnabled !== false, connectionMode: engine.connectionMode, ownershipMode: engine.ownershipMode };
+        const tenancy = engine.tenancyMode === 'shared'
+          ? {
+              mode: 'shared',
+              mappingStrategy: engine.tenantMappingStrategy,
+              unmappedPolicy: 'deny',
+            }
+          : {
+              mode: 'dedicated',
+              tenantRef: engine.tenantId
+                ? { type: 'id', id: engine.tenantId }
+                : { type: 'request_context' },
+            };
+        return { key: engine.configKey, name: engine.name, baseUrl: engine.baseUrl, type: engine.type, externalId: engine.externalId || undefined, labels: json(engine.labelsJson), auth, version: engine.version || undefined, runtimeAccessScope: engine.runtimeAccessScope, tenancy, deploymentIntegration: engine.deploymentIntegration, metadataDiscoveryEnabled: engine.metadataDiscoveryEnabled !== false, deploymentDiscoveryEnabled: engine.deploymentDiscoveryEnabled !== false, reconciliationIntervalSeconds: Number(engine.reconciliationIntervalSeconds || 300), pipelineReceiptEnabled: engine.pipelineReceiptEnabled !== false, connectionMode: engine.connectionMode, ownershipMode: engine.ownershipMode };
       }) };
     if (engineSets.length) files['./engine-sets.json'] = { engineSets: sortedByKey(engineSets).map((set) => ({ key: set.key, name: set.name, description: set.description || undefined, selector: json(set.selectorJson), ownershipMode: set.ownershipMode || 'config_locked' })) };
 

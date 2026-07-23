@@ -20,6 +20,7 @@ import { resolveConfigEngineSetSelector } from './config-engine-set-selector.js'
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { permissionService } from './permissions.js';
 import { engineService } from './EngineService.js';
+import { engineTenancyProvisioningService } from './EngineTenancyProvisioningService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
@@ -417,9 +418,16 @@ class ConfigBundleApplyService {
           const desired = desiredEngines.get(change.key);
           const sourceHash = desired ? objectFingerprint('engine', desired.key, desired) : objectFingerprint('engine', change.key, { archived: true });
           if (change.operation === 'create' && desired) {
+            const resolvedTenancy = await engineTenancyProvisioningService.resolveForCreate({
+              tenancy: desired.tenancy,
+              runtimeAccessScope: desired.runtimeAccessScope,
+              requestTenantId: tenantId,
+              principalType: 'system',
+              principalId: input.actorId,
+            });
             const engineId = generateId();
             await engineService.createEngineWithGovernanceAssignments({
-              id: engineId, tenantId, name: desired.name, baseUrl: desired.baseUrl, type: desired.type,
+              id: engineId, tenantId: resolvedTenancy.tenantId, name: desired.name, baseUrl: desired.baseUrl, type: desired.type,
               externalId: desired.externalId || null, labelsJson: JSON.stringify(desired.labels || {}),
               registrationSource: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`,
               configKey: desired.key, configKeyIdentity: canonicalEngineKeyIdentity(tenantId, desired.key),
@@ -429,18 +437,34 @@ class ConfigBundleApplyService {
               ...engineCredentialFields(desired.auth), version: desired.version || null, ownerId: null, delegateId: null,
               environmentTagId: desired.environmentTagId || null, environmentLocked: false,
               runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, deploymentDiscoveryEnabled: desired.deploymentDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, lastMetadataReconciledAt: null, lastMetadataReconciliationStatus: null, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode,
+              tenancyMode: resolvedTenancy.tenancyMode, tenantMappingStrategy: resolvedTenancy.tenantMappingStrategy,
+              tenantMappingVersion: resolvedTenancy.tenantMappingVersion, tenantResolutionStatus: resolvedTenancy.tenantResolutionStatus,
+              lastTenantReconciledAt: null,
               createdAt: now, updatedAt: now,
             } as Engine, manager, true);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.create', resourceType: 'engine', resourceId: engineId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
             changedEngineIds.push(engineId);
             created += 1;
           } else if (change.operation === 'update' && desired && change.currentId) {
+            const existingEngine = await engineRepo.findOne({ where: { id: change.currentId } });
+            if (!existingEngine) fail(`Engine ${desired.key} no longer exists`, 409);
+            const resolvedTenancy = await engineTenancyProvisioningService.validateUpdate(existingEngine, {
+              tenancy: desired.tenancy,
+              runtimeAccessScope: desired.runtimeAccessScope,
+              requestTenantId: tenantId,
+              principalType: 'system',
+              principalId: input.actorId,
+            });
             await engineService.updateConfiguredEngine(change.currentId, {
               name: desired.name, baseUrl: desired.baseUrl, type: desired.type, externalId: desired.externalId || null,
               labelsJson: JSON.stringify(desired.labels || {}), sourceHash, lastAppliedAt: now,
               ownershipMode: desired.ownershipMode || 'config_locked', lifecycleStatus: 'active', driftStatus: 'in_sync',
               ...engineCredentialFields(desired.auth), version: desired.version || null, environmentTagId: desired.environmentTagId || null,
               runtimeAccessScope: desired.runtimeAccessScope, deploymentIntegration: desired.deploymentIntegration, metadataDiscoveryEnabled: desired.metadataDiscoveryEnabled, deploymentDiscoveryEnabled: desired.deploymentDiscoveryEnabled, reconciliationIntervalSeconds: desired.reconciliationIntervalSeconds, pipelineReceiptEnabled: desired.pipelineReceiptEnabled, connectionMode: desired.connectionMode,
+              tenancyMode: resolvedTenancy?.tenancyMode, tenantId: resolvedTenancy?.tenantId,
+              tenantMappingStrategy: resolvedTenancy?.tenantMappingStrategy,
+              tenantMappingVersion: resolvedTenancy?.tenantMappingVersion,
+              tenantResolutionStatus: resolvedTenancy?.tenantResolutionStatus,
             }, manager);
             await writeAudit(manager, { tenantId, actorId: input.actorId, action: 'authz.config_bundle.engine.update', resourceType: 'engine', resourceId: change.currentId, details: { bundleKey: manifest.metadata.key, engineKey: desired.key, canonicalHash: diff.canonicalHash } });
             changedEngineIds.push(change.currentId);

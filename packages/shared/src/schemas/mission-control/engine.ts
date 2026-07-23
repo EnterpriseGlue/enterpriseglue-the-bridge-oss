@@ -138,6 +138,8 @@ export const ExternalEngineTenantMappingsUpsertResponseSchema = z.object({
 
 export type EngineTenancyMode = z.infer<typeof EngineTenancyModeSchema>;
 export type EngineTenantMappingStrategy = z.infer<typeof EngineTenantMappingStrategySchema>;
+export type EngineTenantMappingSource = z.infer<typeof EngineTenantMappingSourceSchema>;
+export type EngineTenantMappingOwnershipMode = z.infer<typeof EngineTenantMappingOwnershipModeSchema>;
 export type EngineTenantReference = z.infer<typeof EngineTenantReferenceSchema>;
 export type EngineTenancyConfiguration = z.infer<typeof EngineTenancyConfigurationSchema>;
 export type EngineTenancyErrorCode = z.infer<typeof EngineTenancyErrorCodeSchema>;

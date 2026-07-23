@@ -159,6 +159,40 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('defaults config engines to dedicated tenancy and requires resource-aware shared topology', () => {
+    const base = {
+      key: 'engine-central',
+      name: 'Central',
+      type: 'operaton',
+      baseUrl: 'https://central.example.com/engine-rest',
+      auth: { type: 'basic', username: 'eg-client', passwordRef: 'ENGINE_PASSWORD' },
+    };
+    expect(ConfigEnginesFileSchema.parse({ engines: [base] }).engines[0].tenancy).toEqual({
+      mode: 'dedicated',
+      tenantRef: { type: 'request_context' },
+    });
+    expect(ConfigEnginesFileSchema.safeParse({
+      engines: [{
+        ...base,
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+      }],
+    }).success).toBe(false);
+    expect(ConfigEnginesFileSchema.parse({
+      engines: [{
+        ...base,
+        runtimeAccessScope: 'resource_aware',
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+      }],
+    }).engines[0]).toMatchObject({
+      runtimeAccessScope: 'resource_aware',
+      tenancy: {
+        mode: 'shared',
+        mappingStrategy: 'engine_tenant_id',
+        unmappedPolicy: 'deny',
+      },
+    });
+  });
+
   it('forbids plaintext credential fields across engine and identity-provider bundle contracts', () => {
     const engine = {
       key: 'engine-prod-payments',

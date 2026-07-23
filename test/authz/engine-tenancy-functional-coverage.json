@@ -174,5 +174,71 @@
     "testName": "publishes stable sanitized tenancy errors",
     "documentation": "docs/reference/engine-tenancy-data-model.md",
     "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-API-006",
+    "requirement": "Tenant mapping batches are atomic, source-owned, dry-runnable, and optimistic-version guarded.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["manual", "atomic", "dry_run", "version", "source_ownership"],
+    "expected": "one mapping version and all-or-nothing resolution",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenantMappingService.test.ts",
+    "testName": "atomically creates a mapping, resolves inventory, advances version, and records readiness",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-API-007",
+    "requirement": "External integrators manage mappings by stable external engine identity and external-system authorization.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["external", "api_client", "external_id", "audit"],
+    "expected": "guarded external mapping upsert",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "atomically provisions tenant mappings through the external engine identity",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-API-008",
+    "requirement": "Mapping list, apply, diagnostics, and external operations are published in OpenAPI with stable errors.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["openapi", "list", "apply", "diagnostics", "external"],
+    "expected": "public contract parity",
+    "testFile": "backend/__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts",
+    "testName": "publishes canonical engine tenancy, mapping, diagnostics, and batch contracts",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-RUNTIME-002",
+    "requirement": "Shared runtime observations resolve through the current mapping and persist mapping lineage/version.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["shared", "runtime_inventory", "resolved", "unmapped", "conflict"],
+    "expected": "current mapping evidence or quarantine",
+    "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+    "testName": "resolves shared runtime observations through the current mapping version",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-AUTHZ-001",
+    "requirement": "Runtime Resource Sets never materialize unresolved or cross-tenant shared resources.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["authorization", "runtime_resource_set", "fail_closed", "cross_tenant"],
+    "expected": "only resolved same-tenant resources materialize",
+    "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+    "testName": "never materializes unresolved or cross-tenant runtime resources",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-CONFIG-001",
+    "requirement": "Configuration bundles preview, apply, diff, and export explicit dedicated/shared topology.",
+    "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+    "dimensions": ["config", "preview", "apply", "diff", "export"],
+    "expected": "canonical topology parity and transition conflict",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundleApplyService.test.ts",
+    "testName": "applies a config-managed shared engine in fail-closed mapping state",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
   }
 ]

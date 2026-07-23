@@ -30,6 +30,11 @@ const secretResolverMock = vi.hoisted(() => ({
   normalizeForStorage: vi.fn((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null),
   resolveStored: vi.fn((value: string | null | undefined) => value?.startsWith('v2:test:') ? Buffer.from(value.slice('v2:test:'.length), 'base64').toString() : value || null),
 }));
+const engineTenantMappingServiceMock = vi.hoisted(() => ({
+  list: vi.fn(),
+  getDiagnostics: vi.fn(),
+  upsert: vi.fn(),
+}));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -41,6 +46,10 @@ vi.mock('undici', () => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SecretResolver.js', () => ({
   secretResolver: secretResolverMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js', () => ({
+  engineTenantMappingService: engineTenantMappingServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -181,6 +190,9 @@ describe('mission-control engines routes', () => {
     policyServiceMock.evaluateGate.mockReset();
     secretResolverMock.normalizeForStorage.mockReset();
     secretResolverMock.resolveStored.mockReset();
+    engineTenantMappingServiceMock.list.mockReset();
+    engineTenantMappingServiceMock.getDiagnostics.mockReset();
+    engineTenantMappingServiceMock.upsert.mockReset();
     (engineService as any).listEngines.mockReset();
     (engineService as any).getEngine.mockReset();
     (engineService as any).hasEngineAccess.mockReset();
@@ -238,6 +250,18 @@ describe('mission-control engines routes', () => {
     });
     (runtimeResourceInventoryService as any).materializeForEngine.mockResolvedValue([]);
     (existsSync as any).mockReturnValue(false);
+    engineTenantMappingServiceMock.list.mockResolvedValue([]);
+    engineTenantMappingServiceMock.getDiagnostics.mockResolvedValue({
+      mode: 'shared',
+      tenantId: null,
+      mappingStrategy: 'engine_tenant_id',
+      mappingVersion: 0,
+      resolutionStatus: 'incomplete',
+      lastReconciledAt: null,
+      mappedResourceCount: 0,
+      unmappedResourceCount: 0,
+      conflictingResourceCount: 0,
+    });
     fetchMock.mockReset();
     (engineService as any).hasEngineAccess.mockResolvedValue(true);
     (engineService as any).getEngineRole.mockResolvedValue('owner');
@@ -1794,6 +1818,161 @@ describe('mission-control engines routes', () => {
       field: 'tenancy',
     });
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('lists, previews, applies, and diagnoses shared tenant mappings through guarded engine routes', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engine = { id: 'e1', tenancyMode: 'shared', tenantId: null };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue(engine),
+        insert: vi.fn().mockResolvedValue({}),
+      }),
+    });
+    engineTenantMappingServiceMock.list.mockResolvedValue([{
+      id: 'mapping-1',
+      engineId: 'e1',
+      externalTenantId: 'runtime-a',
+      enterpriseTenantId: 'tenant-default',
+      strategy: 'engine_tenant_id',
+      source: 'manual',
+      sourceRef: 'manual:runtime-a',
+      ownershipMode: 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      isActive: true,
+      createdAt: '10',
+      updatedAt: '11',
+    }]);
+    const mappingResult = {
+      engineId: 'e1',
+      externalId: 'central-1',
+      dryRun: true,
+      mappingVersion: 1,
+      created: 1,
+      updated: 0,
+      deactivated: 0,
+      unchanged: 0,
+      results: [{ index: 0, status: 'created', mappingId: 'mapping-1', code: null }],
+      diagnostics: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'engine_tenant_id',
+        mappingVersion: 1,
+        resolutionStatus: 'ready',
+        lastReconciledAt: 10,
+        mappedResourceCount: 1,
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      },
+    };
+    engineTenantMappingServiceMock.upsert.mockResolvedValue(mappingResult);
+
+    const listed = await request(app).get('/engines-api/engines/e1/tenant-mappings');
+    expect(listed.status).toBe(200);
+    expect(listed.body[0]).toMatchObject({ id: 'mapping-1', createdAt: 10, updatedAt: 11 });
+
+    const diagnostics = await request(app).get('/engines-api/engines/e1/tenancy/diagnostics');
+    expect(diagnostics.status).toBe(200);
+    expect(diagnostics.body).toMatchObject({ mode: 'shared', resolutionStatus: 'incomplete' });
+
+    const applied = await request(app)
+      .put('/engines-api/engines/e1/tenant-mappings')
+      .send({
+        expectedMappingVersion: 0,
+        dryRun: true,
+        mappings: [{
+          externalTenantId: 'runtime-a',
+          tenantRef: { type: 'default' },
+          strategy: 'engine_tenant_id',
+          sourceRef: 'manual:runtime-a',
+        }],
+      });
+    expect(applied.status).toBe(200);
+    expect(applied.body).toMatchObject({ dryRun: true, mappingVersion: 1 });
+    expect(engineTenantMappingServiceMock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1',
+      principalType: 'user',
+      principalId: 'user-1',
+      source: 'manual',
+      ownershipMode: 'manual',
+      request: expect.objectContaining({ dryRun: true }),
+    }));
+  });
+
+  it('atomically provisions tenant mappings through the external engine identity', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'e1',
+          externalId: 'central-1',
+          externalSystemId: 'system-1',
+          tenancyMode: 'shared',
+        }),
+        insert: vi.fn().mockResolvedValue({}),
+      }),
+    });
+    engineTenantMappingServiceMock.upsert.mockResolvedValue({
+      engineId: 'e1',
+      externalId: 'central-1',
+      dryRun: false,
+      mappingVersion: 2,
+      created: 1,
+      updated: 0,
+      deactivated: 0,
+      unchanged: 0,
+      results: [{ index: 0, status: 'created', mappingId: 'mapping-1', code: null }],
+      diagnostics: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'explicit',
+        mappingVersion: 2,
+        resolutionStatus: 'ready',
+        lastReconciledAt: 10,
+        mappedResourceCount: 1,
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      },
+    });
+
+    const response = await request(app)
+      .put('/engines-api/external/engines/central-1/tenant-mappings')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalSystemId: 'system-1',
+        expectedMappingVersion: 1,
+        mappings: [{
+          externalTenantId: 'runtime-a',
+          tenantRef: { type: 'default' },
+          strategy: 'explicit',
+          sourceRef: 'cmdb:central-1:runtime-a',
+        }],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ mappingVersion: 2, created: 1 });
+    expect(engineTenantMappingServiceMock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1',
+      principalType: 'api_client',
+      principalId: 'client-1',
+      source: 'external',
+      ownershipMode: 'external_managed',
+      request: expect.not.objectContaining({ externalSystemId: expect.anything() }),
+    }));
   });
 
   it('stores external system and hybrid field ownership during external registration', async () => {

@@ -60,6 +60,62 @@ describe('configBundleExportService', () => {
       .rejects.toThrow('credentials must be replaced with a secret reference before export');
   });
 
+  it('exports shared topology by config management scope even when engine tenant is null', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{
+          id: 'engine-1',
+          tenantId: null,
+          configKey: 'engine.central',
+          configKeyIdentity: 'tenant-a:engine.central',
+          name: 'Central',
+          baseUrl: 'https://central.example.test/engine-rest',
+          type: 'operaton',
+          externalId: null,
+          labelsJson: '{}',
+          authType: 'basic',
+          username: 'eg',
+          passwordEnc: 'ref:CENTRAL_PASSWORD',
+          oauthTokenUrl: null,
+          oauthScopes: null,
+          oauthAudience: null,
+          version: null,
+          runtimeAccessScope: 'resource_aware',
+          tenancyMode: 'shared',
+          tenantMappingStrategy: 'engine_tenant_id',
+          deploymentIntegration: 'enterpriseglue_proxy',
+          metadataDiscoveryEnabled: true,
+          deploymentDiscoveryEnabled: true,
+          reconciliationIntervalSeconds: 300,
+          pipelineReceiptEnabled: true,
+          connectionMode: 'direct',
+          ownershipMode: 'config_locked',
+          lifecycleStatus: 'active',
+          sourceRef: 'config_bundle:acme.authz',
+        }]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await configBundleExportService.exportBundle({
+      bundleKey: 'acme.authz',
+      tenantId: 'tenant-a',
+    });
+    expect(result.files['./engines.json']).toEqual({
+      engines: [expect.objectContaining({
+        key: 'engine.central',
+        runtimeAccessScope: 'resource_aware',
+        tenancy: {
+          mode: 'shared',
+          mappingStrategy: 'engine_tenant_id',
+          unmappedPolicy: 'deny',
+        },
+      })],
+    });
+    expect(configBundlePreviewService.preview(result)).toMatchObject({ valid: true, errors: [] });
+  });
+
   it('refuses to export a provider row containing a resolved legacy credential', async () => {
     const rawClientSecret = 'must-not-leak-provider-client-secret';
     (getDataSource as unknown as Mock).mockResolvedValue({

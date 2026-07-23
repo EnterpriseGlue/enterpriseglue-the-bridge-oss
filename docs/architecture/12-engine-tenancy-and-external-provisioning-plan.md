@@ -689,7 +689,7 @@ checkboxes are closed.
 - [x] Add canonical tenancy and mapping schemas.
 - [x] Extend create/update/external registration requests.
 - [x] Extend sanitized responses and OpenAPI.
-- [ ] Extend configuration-bundle schemas.
+- [x] Extend configuration-bundle schemas.
 - [x] Add stable API error schemas.
 - [x] Add schema compatibility tests for omitted dedicated mode.
 
@@ -698,8 +698,8 @@ checkboxes are closed.
 - [x] Implement the shared tenant-resolution service.
 - [ ] Add tenant role scope and tenant-safe permission validation.
 - [ ] Add tenant assignment inheritance to project/engine/runtime decisions.
-- [ ] Require resolved tenant inventory for shared resources.
-- [ ] Add mapping-version invalidation and snapshot refresh.
+- [x] Require resolved tenant inventory for shared resources.
+- [x] Add mapping-version invalidation and snapshot refresh.
 - [ ] Extend Effective Access sources and audit explanations.
 
 ### Phase 4: provisioning APIs
@@ -707,17 +707,19 @@ checkboxes are closed.
 - [x] Update manual create/update services and routes.
 - [x] Update external engine upsert and field ownership.
 - [ ] Add topology preview/apply APIs.
-- [ ] Add mapping list/upsert APIs.
-- [ ] Update config preview/diff/apply/export.
+- [x] Add mapping list/upsert APIs.
+- [x] Update config preview/diff/apply/export for engine topology.
+- [ ] Add configuration-owned mapping rows and drift reconciliation.
 - [ ] Add lifecycle and reconciliation scheduling.
 
 ### Phase 5: runtime integration
 
-- [ ] Apply tenant resolution during runtime inventory ingestion.
-- [ ] Apply it to deployment targets and receipts.
-- [ ] Quarantine unresolved resources.
+- [x] Apply tenant resolution during runtime inventory ingestion.
+- [x] Apply deployment-target strategy to runtime resources and receipts carrying project lineage.
+- [x] Quarantine unresolved resources.
 - [ ] Update Mission Control collection/detail/mutation guards.
-- [ ] Update Engine Set and Runtime Resource Set materialization.
+- [x] Update Runtime Resource Set materialization to require resolved same-tenant inventory.
+- [ ] Extend Engine Set materialization for topology transitions.
 - [ ] Prove engine transport is never called after tenant denial.
 
 ### Phase 6: UI and operations

@@ -4,6 +4,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { z } from 'zod'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js'
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js'
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js'
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js'
@@ -28,6 +29,7 @@ import {
   ApiClientScopes,
 } from '@enterpriseglue/shared/services/platform-admin/index.js'
 import { engineTenancyProvisioningService } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyProvisioningService.js'
+import { engineTenantMappingService } from '@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
@@ -43,6 +45,8 @@ import {
   EngineConnectionHealthResponseSchema,
   EndpointAuthenticationPolicyMessages,
   EngineRuntimeQueryCapabilitiesSchema,
+  EngineTenantMappingSchema,
+  ExternalEngineTenantMappingsUpsertRequestSchema,
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
@@ -59,6 +63,7 @@ type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[]
 
 // Validation schemas
 const engineIdParamSchema = z.object({ id: z.string().min(1) })
+const externalEngineIdParamSchema = z.object({ externalId: z.string().min(1).max(255) })
 const runtimeResourceInventoryQuerySchema = z.object({
   resourceKind: z.enum(['process_definition', 'decision_definition']).optional(),
   includeInactive: z.enum(['true', 'false']).optional(),
@@ -293,6 +298,9 @@ const externalRegisterEngineBodySchema = ExternalEngineRegistrationRequestSchema
   baseUrl: externalRegistrationUrlSchema,
   oauthTokenUrl: externalRegistrationUrlSchema.nullable().optional(),
   capabilities: externalEngineCapabilitiesSchema.optional(),
+})
+const externalTenantMappingsBodySchema = ExternalEngineTenantMappingsUpsertRequestSchema.extend({
+  externalSystemId: z.string().min(1).nullable().optional(),
 })
 
 const decommissionExternalEngineBodySchema = z.object({
@@ -1319,6 +1327,51 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   })
 }))
 
+r.put('/engines-api/external/engines/:externalId/tenant-mappings', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'engine.external-registration.upsert', {
+  permissionId: ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE,
+  resourceType: 'external_engine_system',
+  resourceIdFrom: 'body',
+  resourceIdKey: 'externalSystemId',
+}), engineRegistrationLimiter, validateParams(externalEngineIdParamSchema), engineRegistrationJsonPayloadLimit, validateBody(externalTenantMappingsBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const externalId = String(req.params.externalId)
+  const engine = await dataSource.getRepository(Engine).findOne({ where: { externalId } })
+  if (!engine) throw Errors.notFound('Engine')
+  if (req.body.externalSystemId && engine.externalSystemId !== req.body.externalSystemId) {
+    throw Errors.notFound('Engine')
+  }
+  const { externalSystemId: _externalSystemId, ...mappingRequest } = req.body
+  const result = await engineTenantMappingService.upsert({
+    engineId: String(engine.id),
+    request: mappingRequest,
+    requestTenantId: req.tenant?.tenantId || null,
+    principalType: 'api_client',
+    principalId: req.apiClient?.id || null,
+    source: 'external',
+    ownershipMode: 'external_managed',
+    resolver: engineTenantReferenceResolver(req),
+  })
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.apiClient?.createdById || undefined,
+    action: req.body.dryRun ? 'engine.tenant_mappings.preview' : 'engine.tenant_mappings.upsert',
+    resourceType: 'engine',
+    resourceId: String(engine.id),
+    details: {
+      apiClientId: req.apiClient?.id,
+      externalId,
+      externalSystemId: engine.externalSystemId,
+      dryRun: result.dryRun,
+      mappingVersion: result.mappingVersion,
+      created: result.created,
+      updated: result.updated,
+      deactivated: result.deactivated,
+      unchanged: result.unchanged,
+    },
+  })
+  res.json(result)
+}))
+
 r.post('/engines-api/external/engines/decommission', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'engine.external-registration.decommission', {
   permissionId: ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE,
   resourceType: 'external_engine_system',
@@ -1570,6 +1623,49 @@ r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, va
     tenantId: req.tenant?.tenantId || null,
   })
   res.json(ProjectEngineTargetSchema.array().parse(targets))
+}))
+
+r.get('/engines-api/engines/:id/tenancy/diagnostics', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
+  res.json(await engineTenantMappingService.getDiagnostics(String(req.params.id)))
+}))
+
+r.get('/engines-api/engines/:id/tenant-mappings', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), asyncHandler(async (req: Request, res: Response) => {
+  const rows = await engineTenantMappingService.list(String(req.params.id))
+  res.json(EngineTenantMappingSchema.array().parse(rows.map((row: EngineTenantMapping) => ({
+    ...row,
+    createdAt: Number(row.createdAt),
+    updatedAt: Number(row.updatedAt),
+    lastAppliedAt: row.lastAppliedAt == null ? null : Number(row.lastAppliedAt),
+  }))))
+}))
+
+r.put('/engines-api/engines/:id/tenant-mappings', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), engineRegistrationJsonPayloadLimit, validateBody(ExternalEngineTenantMappingsUpsertRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const result = await engineTenantMappingService.upsert({
+    engineId: String(req.params.id),
+    request: req.body,
+    requestTenantId: req.tenant?.tenantId || null,
+    principalType: 'user',
+    principalId: req.user!.userId,
+    source: 'manual',
+    ownershipMode: 'manual',
+    resolver: engineTenantReferenceResolver(req),
+  })
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.user!.userId,
+    action: req.body.dryRun ? 'engine.tenant_mappings.preview' : 'engine.tenant_mappings.upsert',
+    resourceType: 'engine',
+    resourceId: String(req.params.id),
+    details: {
+      dryRun: result.dryRun,
+      mappingVersion: result.mappingVersion,
+      created: result.created,
+      updated: result.updated,
+      deactivated: result.deactivated,
+      unchanged: result.unchanged,
+    },
+  })
+  res.json(result)
 }))
 
 r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT, EnginePermissions.SECRETS_MANAGE] }), engineRegistrationJsonPayloadLimit, validateBody(updateEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {

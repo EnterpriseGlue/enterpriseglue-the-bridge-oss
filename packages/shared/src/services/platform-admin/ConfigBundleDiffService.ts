@@ -18,6 +18,7 @@ import { configBundlePreviewService, type ConfigBundlePolicyContext, type Config
 import { matchRuntimeResourceSetSelector, type RuntimeResourceSetSelector } from './RuntimeResourceInventoryService.js';
 import { EnginePermissions, SystemRoleDefinitions } from './permissions.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
+import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
@@ -51,6 +52,20 @@ export interface ConfigBundleDiffChange {
     latestSnapshotAt: number | null;
     warnings: string[];
   };
+}
+
+function configEngineIdentity(tenantId: string | null, key: string): string {
+  return `${tenantId || 'platform'}:${key}`;
+}
+
+function desiredDedicatedTenantId(engine: any, tenantId: string | null): string | null {
+  if (engine.tenancy?.mode !== 'dedicated') return null;
+  const reference = engine.tenancy.tenantRef || { type: 'request_context' };
+  if (reference.type === 'request_context') return normalizeTenantIdForPersistence(tenantId) || OSS_DEFAULT_TENANT_ID;
+  if (reference.type === 'default') return OSS_DEFAULT_TENANT_ID;
+  if (reference.type === 'id') return normalizeTenantIdForPersistence(reference.id);
+  if (reference.type === 'key' && ['default', 'tenant.default'].includes(reference.key)) return OSS_DEFAULT_TENANT_ID;
+  return null;
 }
 
 export interface ConfigBundleDiffWarning {
@@ -234,7 +249,9 @@ class ConfigBundleDiffService {
     const tenantGroups = groups.filter((group) => (group.tenantId || null) === normalizedTenantId);
     const rolesByKey = new Map(tenantRoles.map((role) => [role.key, role]));
     const groupsByKey = new Map(tenantGroups.map((group) => [group.key, group]));
-    const tenantEngines = engines.filter((engine) => (engine.tenantId || null) === normalizedTenantId);
+    const tenantEngines = engines.filter((engine) =>
+      (engine.tenantId || null) === normalizedTenantId
+      || Boolean(engine.configKey && engine.configKeyIdentity === configEngineIdentity(normalizedTenantId, engine.configKey)));
     const enginesByConfigKey = new Map(tenantEngines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
     const tenantEngineSets = engineSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
     const engineSetsByKey = new Map(tenantEngineSets.map((set) => [set.key, set]));
@@ -327,10 +344,26 @@ class ConfigBundleDiffService {
 
     for (const engine of desiredEngines) {
       const existing = enginesByConfigKey.get(engine.key) || tenantEngines.find((candidate) => candidate.externalId && candidate.externalId === engine.externalId);
+      const desiredTenancyMode = engine.tenancy?.mode || 'dedicated';
+      const desiredTenantId = desiredDedicatedTenantId(engine, normalizedTenantId);
       if (!existing) {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'create', reason: 'No persisted engine uses this config key or external id' });
       } else if (existing.registrationSource !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'conflict', currentId: existing.id, reason: 'Existing engine is not owned by this configuration bundle' });
+      } else if (
+        (existing.tenancyMode || 'dedicated') !== desiredTenancyMode
+        || (
+          desiredTenancyMode === 'shared'
+          && existing.tenantMappingStrategy !== engine.tenancy.mappingStrategy
+        )
+        || (
+          desiredTenancyMode === 'dedicated'
+          && desiredTenantId !== null
+          && normalizeTenantIdForPersistence(existing.tenantId) !== null
+          && normalizeTenantIdForPersistence(existing.tenantId) !== desiredTenantId
+        )
+      ) {
+        changes.push({ objectType: 'engine', key: engine.key, operation: 'conflict', currentId: existing.id, reason: 'Engine tenancy changes require the dedicated topology transition workflow' });
       } else if (
         existing.name !== engine.name || existing.baseUrl !== engine.baseUrl || existing.type !== engine.type ||
         existing.externalId !== (engine.externalId || null) || existing.labelsJson !== JSON.stringify(engine.labels || {}) ||

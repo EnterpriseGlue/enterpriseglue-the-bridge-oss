@@ -54,6 +54,7 @@ export * from './RuntimeResourceInventoryService.js';
 export * from './RuntimeResourceSetService.js';
 export * from './EngineMetadataReconciliationService.js';
 export * from './EngineTenancyProvisioningService.js';
+export * from './EngineTenantMappingService.js';
 export * from './DeploymentReceiptService.js';
 export * from './DeploymentDiscoveryService.js';
 export * from './SecretResolver.js';

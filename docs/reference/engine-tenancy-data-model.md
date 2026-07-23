@@ -5,11 +5,12 @@ EnterpriseGlue engines.
 
 Audience: Developers, architects, database administrators, and API integrators.
 
-Status: The topology, mapping, runtime-resolution persistence foundation,
-canonical schemas, tenant-reference resolution, and manual/external provisioning
-contracts are implemented. Shared engines are admitted only in fail-closed
-`incomplete` state. Mapping administration, runtime mapping enforcement, config
-bundle support, transitions, and UI controls remain gated.
+Status: Topology persistence, canonical schemas, tenant-reference resolution,
+manual/external provisioning, atomic mapping administration, runtime mapping
+enforcement, and configuration-bundle topology parity are implemented. Shared
+resources remain fail closed until exactly one current mapping resolves them.
+Topology transitions, configuration-owned mappings, tenant-role inheritance,
+Effective Access lineage, and UI controls remain gated.
 
 ## Boundaries
 
@@ -80,9 +81,9 @@ The mapping service must validate both before it writes.
 | `tenantResolutionDetailsJson` | Sanitized diagnostic codes; never credentials or raw claims |
 
 `TEN-MODEL-003`: a dedicated-engine observation with an explicit persisted
-tenant is resolved directly. A missing tenant stays unmapped. Shared-engine
-resources will be exposed only after a mapping service marks them `resolved`
-against the engine’s current mapping version.
+tenant is resolved directly. A missing tenant stays unmapped. A shared-engine
+resource is resolved only when exactly one active mapping matches the configured
+strategy. Otherwise it is persisted as `unmapped` or `conflict`, with no tenant.
 
 ## Database Portability
 
@@ -177,8 +178,53 @@ external registration audit details.
 `tenancy` schema and stable sanitized error schema in OpenAPI.
 
 `TEN-RUNTIME-001`: dedicated resource observations persist explicit resolved
-state and sanitized lineage. Shared resources remain unmapped until the mapping
-service is available.
+state and sanitized lineage.
+
+## Mapping Administration and Runtime Enforcement
+
+`TEN-API-006`: mapping writes are validated before mutation and are applied in
+one database transaction. A batch may contain up to 500 rows, must use the
+engine's mapping strategy, cannot contain duplicate mapping or source identities,
+and may supply `expectedMappingVersion`. `dryRun: true` calculates the complete
+result without writing. A changed batch increments the engine mapping version
+once; a no-op batch preserves it.
+
+Manual administration uses:
+
+```text
+GET /engines-api/engines/{id}/tenant-mappings
+PUT /engines-api/engines/{id}/tenant-mappings
+GET /engines-api/engines/{id}/tenancy/diagnostics
+```
+
+`TEN-API-007`: an authorized API client can apply the same atomic mapping
+contract through
+`PUT /engines-api/external/engines/{externalId}/tenant-mappings`. The route
+verifies external-system ownership, resolves every tenant reference, records
+external source ownership, and emits a sanitized audit summary.
+
+`TEN-API-008`: list, apply, diagnostics, and external mapping operations use the
+canonical mapping schemas in OpenAPI. Stable mapping conflicts return an engine
+tenancy error without exposing tenant inventory or raw runtime claims.
+
+`TEN-RUNTIME-002`: shared runtime inventory resolution uses the persisted engine
+strategy and active mapping rows. A successful decision stores the resolved
+tenant, mapping id, and current engine mapping version. Missing or multiple
+matches are quarantined as `unmapped` or `conflict`. Reconciliation updates the
+engine readiness summary and rematerializes tenant-specific runtime-resource
+sets.
+
+`TEN-AUTHZ-001`: Runtime Resource Set materialization requires both
+`tenantResolutionStatus = resolved` and equality between the resource tenant and
+the set tenant. An unresolved or cross-tenant resource is never materialized,
+even if its labels or selectors match.
+
+`TEN-CONFIG-001`: configuration bundles parse, preview, apply, diff, and export
+the same explicit dedicated/shared topology contract. Shared config engines are
+stored with null engine tenant, the declared mapping strategy, resource-aware
+access, and fail-closed `incomplete` status. A normal config apply reports a
+conflict instead of changing an existing engine's topology. Configuration-owned
+mapping rows are a later phase and must not be inferred from topology alone.
 
 ## Functional Coverage
 
@@ -188,9 +234,10 @@ fails when an entry has a duplicate or invalid identifier, missing test file or
 test name, missing Markdown page, or a documentation page that does not cite
 the requirement identifier.
 
-The provisioning policy module is held to 100% statements, branches, functions,
-and lines. Route, schema, and OpenAPI tests prove every provisioning channel and
-stable error introduced by this slice. This is functional requirement coverage,
+The provisioning policy and mapping service modules are each held to 100%
+statements, branches, functions, and lines. The mapping gate also exercises
+inventory, route, authorization registry, configuration, schema, and OpenAPI
+suites. This is 100% coverage of the implemented functional requirement IDs,
 not a claim that every unrelated repository line has 100% code coverage.
 
 ## Related Documentation

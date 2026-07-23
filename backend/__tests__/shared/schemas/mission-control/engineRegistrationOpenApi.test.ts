@@ -60,7 +60,8 @@ describe('engine registration OpenAPI contracts', () => {
   });
 
   it('publishes canonical engine tenancy, mapping, diagnostics, and batch contracts', () => {
-    const schemas = generateOpenApi().components?.schemas;
+    const document = generateOpenApi();
+    const schemas = document.components?.schemas;
 
     expect(schemas?.EngineTenancyMode).toEqual({
       type: 'string',
@@ -106,5 +107,14 @@ describe('engine registration OpenAPI contracts', () => {
     }
     expect(paths?.['/engines-api/engines/{id}']?.put?.responses?.['409']).toBeDefined();
     expect(paths?.['/engines-api/external/engines']?.post?.responses?.['409']).toBeDefined();
+
+    expect(document.paths?.['/engines-api/engines/{id}/tenancy/diagnostics']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenant-mappings']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenant-mappings']?.put?.requestBody)
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/external/engines/{externalId}/tenant-mappings']?.put?.responses?.['409'])
+      .toBeDefined();
   });
 });

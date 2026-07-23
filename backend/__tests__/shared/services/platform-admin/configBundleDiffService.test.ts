@@ -92,6 +92,43 @@ describe('configBundleDiffService', () => {
     expect(JSON.stringify(result)).not.toContain(plaintext);
   });
 
+  it('requires the transition workflow for config-managed topology changes', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-1',
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: null,
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central',
+            type: 'operaton',
+            baseUrl: 'https://central.example.com/engine-rest',
+            auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+            runtimeAccessScope: 'resource_aware',
+            tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+          }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'engine',
+      key: 'engine.central',
+      operation: 'conflict',
+      reason: expect.stringContaining('transition workflow'),
+    }));
+  });
+
   it('identifies creation and authoritative archival without mutating persisted state', async () => {
     mockDataSource([], [{
       id: 'group-stale', tenantId: 'tenant-a', key: 'group.stale', name: 'Stale', description: null,

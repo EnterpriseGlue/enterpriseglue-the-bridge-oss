@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { In } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -69,13 +71,22 @@ class RuntimeResourceInventoryService {
     ];
     const observed = await this.observe(engineId, tenantId, observations);
     const deactivated = await this.deactivateMissing(engineId, tenantId, observations);
-    const materializations = await this.materializeForEngine(engineId, tenantId);
+    const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } });
+    const materializations = await this.materializeForEngine(
+      engineId,
+      engine?.tenancyMode === 'shared' ? undefined : tenantId,
+    );
     return { ...observed, deactivated, materializedSets: materializations.length };
   }
   async observe(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<{ created: number; updated: number }> {
     const validatedObservations = RuntimeResourceObservationSchema.array().parse(observations);
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(RuntimeResource);
+    const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } });
+    if (!engine) throw new Error('Engine not found');
+    const mappings = engine.tenancyMode === 'shared'
+      ? await dataSource.getRepository(EngineTenantMapping).find({ where: { engineId, isActive: true } })
+      : [];
     const now = Date.now();
     let created = 0;
     let updated = 0;
@@ -88,13 +99,29 @@ class RuntimeResourceInventoryService {
       // richer pipeline/proxy project and file lineage already recorded here.
       const source = observation.source || 'engine_discovery';
       const preservesExistingLineage = source === 'engine_discovery' && Boolean(existing);
+      const mappingKey = engine.tenantMappingStrategy === 'deployment_target'
+        ? observation.projectId || ''
+        : runtimeTenantId;
+      const matchingMappings = mappings.filter((mapping) =>
+        mapping.strategy === engine.tenantMappingStrategy
+        && mapping.externalTenantId === mappingKey);
+      const dedicatedTenantId = engine.tenantId || tenantId || null;
+      const resolvedTenantId = engine.tenancyMode === 'shared'
+        ? matchingMappings.length === 1 ? matchingMappings[0].enterpriseTenantId : null
+        : dedicatedTenantId;
+      const tenantResolutionStatus = engine.tenancyMode === 'shared'
+        ? matchingMappings.length > 1 ? 'conflict' : matchingMappings.length === 1 ? 'resolved' : 'unmapped'
+        : resolvedTenantId ? 'resolved' : 'unmapped';
+      const tenantResolutionCode = engine.tenancyMode === 'shared'
+        ? matchingMappings.length > 1 ? 'multiple_active_mappings' : matchingMappings.length === 1 ? 'shared_engine_mapping' : 'tenant_mapping_not_found'
+        : resolvedTenantId ? 'dedicated_engine_tenant' : 'tenant_context_missing';
       const values = {
-        tenantId: tenantId || null,
-        tenantResolutionStatus: tenantId ? 'resolved' : 'unmapped',
-        tenantMappingId: null,
-        tenantMappingVersion: 0,
+        tenantId: resolvedTenantId,
+        tenantResolutionStatus,
+        tenantMappingId: matchingMappings.length === 1 ? matchingMappings[0].id : null,
+        tenantMappingVersion: engine.tenancyMode === 'shared' ? Number(engine.tenantMappingVersion || 0) : 0,
         tenantResolutionDetailsJson: stableJson({
-          code: tenantId ? 'dedicated_engine_tenant' : 'tenant_context_missing',
+          code: tenantResolutionCode,
         }),
         engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId,
         engineResourceId: observation.engineResourceId || existing?.engineResourceId || null,
@@ -111,6 +138,16 @@ class RuntimeResourceInventoryService {
       if (existing) { await repo.update({ id: existing.id }, values); updated += 1; }
       else { await repo.insert({ id: generateId(), ...values, createdAt: now }); created += 1; }
     }
+    if (engine.tenancyMode === 'shared') {
+      const activeResources = await repo.find({ where: { engineId, isActive: true } });
+      const hasConflict = activeResources.some((resource) => resource.tenantResolutionStatus === 'conflict');
+      const hasUnmapped = activeResources.some((resource) => resource.tenantResolutionStatus !== 'resolved');
+      await dataSource.getRepository(Engine).update({ id: engineId }, {
+        tenantResolutionStatus: hasConflict ? 'conflict' : mappings.length > 0 && !hasUnmapped ? 'ready' : 'incomplete',
+        lastTenantReconciledAt: now,
+        updatedAt: now,
+      });
+    }
     return { created, updated };
   }
 
@@ -118,9 +155,10 @@ class RuntimeResourceInventoryService {
   private async deactivateMissing(engineId: string, tenantId: string | null | undefined, observations: RuntimeResourceObservation[]): Promise<number> {
     const dataSource = await getDataSource();
     const repo = dataSource.getRepository(RuntimeResource);
+    const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } });
     const observed = new Set(observations.map((item) => `${item.resourceKind}|${item.resourceKey.trim()}|${item.runtimeTenantId?.trim() || ''}`));
     const active = await repo.find({ where: { engineId, isActive: true } });
-    const stale = active.filter((resource) => (resource.tenantId || null) === (tenantId || null)
+    const stale = active.filter((resource) => (engine?.tenancyMode === 'shared' || (resource.tenantId || null) === (engine?.tenantId || tenantId || null))
       && ['process_definition', 'decision_definition'].includes(resource.resourceKind)
       && !observed.has(`${resource.resourceKind}|${resource.resourceKey}|${resource.runtimeTenantId || ''}`));
     if (stale.length) {
@@ -144,6 +182,9 @@ class RuntimeResourceInventoryService {
     // matching resource in that tenant. Keep the constraint here, at the
     // materialization boundary, so set-based grants cannot cross tenants.
     const matches = resources
+      .filter((resource) =>
+        resource.tenantResolutionStatus === 'resolved'
+        && (resource.tenantId || null) === (set.tenantId || null))
       .filter((resource) => !set.runtimeTenantId || resource.runtimeTenantId === set.runtimeTenantId)
       .map((resource) => ({ resource, matchedBy: matchRuntimeResourceSetSelector(resource, selector) }))
       .filter((match): match is { resource: RuntimeResource; matchedBy: Record<string, unknown> } => Boolean(match.matchedBy));

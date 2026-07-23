@@ -169,11 +169,23 @@ remains compatible and creates a dedicated engine in the request tenant, or
 `tenant-default` in local OSS. Shared mode requires `resource_aware` and starts
 in fail-closed `incomplete` state.
 
-Shared mapping administration, runtime enforcement, config-bundle tenancy, and
-UI topology controls are not yet complete. Operators may exercise shared
-registration in development but must not use an incomplete shared engine for
-production runtime access. The migration leaves older tenantless engines in
-`migration_required`; it does not silently assign them to the default tenant.
+Manual/external mapping administration, shared runtime resolution, fail-closed
+Runtime Resource Set materialization, and config-bundle topology
+preview/apply/diff/export are implemented. Configuration-owned mapping rows,
+tenant-role inheritance, Effective Access mapping lineage, topology
+transitions, and UI topology controls are not yet complete. Do not treat a
+shared engine as authorization-ready until diagnostics have no unmapped or
+conflicting resources and the remaining release gates are complete. The
+migration leaves older tenantless engines in `migration_required`; it does not
+silently assign them to the default tenant.
+
+Until the UI controls are delivered, engine administrators manage shared
+mappings through the published API. Use the external mapping example in
+[Provision Engines Externally](./provision-engines-externally.md), or the
+authenticated manual endpoints documented in
+[Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md).
+Configuration bundles may declare dedicated/shared topology, but mapping rows
+must currently be applied through one of those mapping endpoints.
 
 See [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md) for
 the implemented foundation,
