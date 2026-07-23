@@ -236,13 +236,23 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect([403, 404]).toContain(deniedRead.status);
   });
 
-  test('revokes an active browser session without serving a stale post-revocation snapshot', async ({ page }) => {
+  test('revokes active, refreshed, direct-URL, and multi-tab sessions without stale access', async ({ page, context }) => {
     await login(page);
 
     const before = await request(page, '/api/authz/me/permissions');
     expect(before.status, JSON.stringify(before.body)).toBe(200);
     expect(before.body.authorizationVersion).toEqual(expect.any(String));
     expect(before.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).toContain(fixture.scopedEngineId);
+
+    // Open the collection directly in a second tab before revocation. This tab
+    // deliberately holds a rendered, potentially stale view while the first
+    // tab changes the authorization graph.
+    const staleTab = await context.newPage();
+    await staleTab.goto('/t/default/engines');
+    await expect(staleTab.getByRole('heading', { name: /^engines$/i })).toBeVisible();
+    await expect(staleTab.getByText(fixture.scopedEngineName!, { exact: true })).toBeVisible();
+    const staleTabBefore = await request(staleTab, '/api/authz/me/permissions');
+    expect(staleTabBefore.body.authorizationVersion).toBe(before.body.authorizationVersion);
 
     // These reads are launched with the already-authenticated browser session
     // immediately before revocation. A request may complete on either side of
@@ -255,6 +265,11 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(after.status, JSON.stringify(after.body)).toBe(200);
     expect(after.body.authorizationVersion).not.toBe(before.body.authorizationVersion);
     expect(after.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.scopedEngineId);
+
+    const staleTabAfter = await request(staleTab, '/api/authz/me/permissions');
+    expect(staleTabAfter.status, JSON.stringify(staleTabAfter.body)).toBe(200);
+    expect(staleTabAfter.body.authorizationVersion).toBe(after.body.authorizationVersion);
+    expect(staleTabAfter.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.scopedEngineId);
 
     for (const snapshot of await Promise.all(activeSnapshots)) {
       expect(snapshot.status, JSON.stringify(snapshot.body)).toBe(200);
@@ -273,5 +288,24 @@ test.describe('Smoke: fine-grained local engine access', () => {
 
     const deniedRead = await request(page, `/engines-api/engines/${fixture.scopedEngineId}`);
     expect([403, 404]).toContain(deniedRead.status);
+
+    // A full session refresh must retain the revoked decision.
+    await page.reload();
+    const refreshed = await request(page, '/api/authz/me/permissions');
+    expect(refreshed.status, JSON.stringify(refreshed.body)).toBe(200);
+    expect(refreshed.body.authorizationVersion).toBe(after.body.authorizationVersion);
+    expect(refreshed.body.engines.map((engine: { resourceId: string }) => engine.resourceId)).not.toContain(fixture.scopedEngineId);
+
+    // Exercise browser history after the second tab rendered the now-revoked
+    // engine. Back/forward-cache restoration and a fresh direct URL must both
+    // revalidate against the current snapshot instead of showing the old row.
+    await staleTab.goto('/t/default/');
+    await staleTab.goBack();
+    await expect(staleTab.getByRole('heading', { name: /^engines$/i })).toBeVisible();
+    await expect(staleTab.getByText(fixture.scopedEngineName!, { exact: true })).not.toBeVisible();
+    await staleTab.goto('/t/default/engines');
+    await expect(staleTab.getByRole('heading', { name: /^engines$/i })).toBeVisible();
+    await expect(staleTab.getByText(fixture.scopedEngineName!, { exact: true })).not.toBeVisible();
+    await staleTab.close();
   });
 });

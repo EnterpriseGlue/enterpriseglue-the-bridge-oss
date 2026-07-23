@@ -9,6 +9,8 @@ const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsa
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
+const localCrossBrowserAuthzRunner = readFileSync(new URL('./run-authz-local-seeded-cross-browser.sh', import.meta.url), 'utf8');
+const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
@@ -187,6 +189,25 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
   assert.match(e2eGlobalSetup, /process\.env\.E2E_SEED_FILE/);
+});
+
+test('cross-browser authorization writes sanitized evidence only after all targets pass', () => {
+  assert.match(localCrossBrowserAuthzRunner, /for browser in chromium firefox webkit/);
+  assert.match(localCrossBrowserAuthzRunner, /write-authz-browser-evidence\.mjs/);
+  assert.ok(
+    localCrossBrowserAuthzRunner.indexOf('write-authz-browser-evidence.mjs')
+      > localCrossBrowserAuthzRunner.indexOf('done'),
+  );
+  assert.match(browserEvidenceWriter, /engine-tenancy-release/);
+  assert.match(browserEvidenceWriter, /browser-matrix\.json/);
+  assert.match(browserEvidenceWriter, /releaseCommitQualified/);
+  assert.match(browserEvidenceWriter, /containsCredentials: false/);
+  assert.match(browserEvidenceWriter, /containsTokens: false/);
+  assert.match(browserEvidenceWriter, /'chromium', 'firefox', 'webkit'/);
+  assert.match(browserEvidenceWriter, /direct_url_revalidation/);
+  assert.match(browserEvidenceWriter, /multi_tab_revalidation/);
+  assert.match(browserEvidenceWriter, /session_refresh_revalidation/);
+  assert.match(browserEvidenceWriter, /back_forward_cache_revalidation/);
 });
 
 test('the authorization mutation guard kills every required tenancy fault class and retains evidence', () => {

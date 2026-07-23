@@ -22,3 +22,5 @@ for browser in chromium firefox webkit; do
     PLAYWRIGHT_BROWSERS="$browser" PLAYWRIGHT_WORKERS=1 "$repo_root/scripts/run-authz-local-seeded-smoke.sh"
   fi
 done
+
+node "$repo_root/scripts/write-authz-browser-evidence.mjs"
