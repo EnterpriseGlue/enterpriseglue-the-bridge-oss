@@ -563,7 +563,106 @@ UX requirements:
 - Audit topology changes, mapping changes, fallback use, conflicts, quarantine, and denied cross-tenant attempts.
 - Keep connection credentials and sidecar downstream authentication outside tenant-level permissions.
 
+## Markdown Documentation Deliverables
+
+Documentation is part of the implementation, not a follow-up task. Each implementation
+slice must update its affected Markdown pages in the same pull request as the schema,
+API, UI, or enforcement change. Documentation must not describe a capability as
+available until its validation and enforcement paths have shipped.
+
+### Developer and architecture documentation
+
+Update these existing pages:
+
+- `docs/architecture/09-oss-authorization-access-control-model.md` with tenant
+  scope, inheritance, isolation boundaries, and Effective Access behavior;
+- `docs/architecture/11-json-driven-authz-and-engine-registration.md` with the
+  canonical provisioning contract, topology ownership, and compatibility rules;
+- this plan with decisions, status, implementation evidence, and deviations;
+- `docs/reference/database-architecture.md` with the engine topology, mapping,
+  resource-resolution, indexes, and supported-database invariants;
+- `backend/docs/DATABASE-MIGRATIONS.md` with migration ordering, classification,
+  verification, retry, and rollback procedures.
+
+Create these Markdown references:
+
+- `docs/reference/engine-tenancy-and-provisioning-api.md`, covering authentication,
+  permissions, request/response fields, idempotency, optimistic concurrency,
+  limits, errors, retries, lifecycle, reconciliation, transition preview/apply,
+  and decommissioning;
+- `docs/reference/engine-tenancy-data-model.md`, covering entities, relationships,
+  invariants, ownership, mapping versions, quarantine, and audit events;
+- `docs/development/testing-engine-tenancy-and-access-control.md`, covering local
+  prerequisites, fixtures, commands, matrix generation, browser tests, database
+  variants, coverage artifacts, failure diagnosis, and test-data cleanup.
+
+The developer documentation must include:
+
+- sequence examples for manual, external API, and configuration-bundle provisioning;
+- dedicated and shared topology diagrams;
+- valid and invalid state-transition tables;
+- example JSON, YAML, and `curl` payloads generated from or validated against the
+  canonical Zod schemas and OpenAPI document;
+- permission and tenant-context requirements for every public operation;
+- stable error codes and retry guidance;
+- cache invalidation, reconciliation, and fail-closed behavior;
+- upgrade, compatibility-window, and removal criteria.
+
+### User, administrator, and operator documentation
+
+Update these existing pages:
+
+- `docs/how-to/configure-authorization-and-engines.md`;
+- `docs/how-to/deploy-authorization-config.md`;
+- `docs/how-to/troubleshooting.md`;
+- `docs/reference/configuration.md`;
+- `docs/reference/configuration-matrix.md`;
+- `docs/reference/security-hardening.md`;
+- `docs/index.md`.
+
+Create these Markdown guides:
+
+- `docs/how-to/configure-engine-tenancy.md`, showing when to choose decentralized
+  dedicated mode or centralized shared mode, how the default tenant is resolved,
+  how to review mappings, and how access is verified;
+- `docs/how-to/provision-engines-externally.md`, with end-to-end API examples for
+  create, update, transition, mapping, reconciliation, rotation, and removal;
+- `docs/how-to/migrate-existing-engines-to-explicit-tenancy.md`, with inventory,
+  classification preview, review, apply, validation, rollback, and evidence
+  retention;
+- `docs/how-to/diagnose-engine-tenant-resolution.md`, with unresolved, duplicate,
+  conflicting, stale, and quarantined resource procedures.
+
+The user-facing guides must make these points explicit:
+
+- a decentralized engine normally belongs to one persisted tenant, which may be
+  selected from the installation default only during initial provisioning;
+- a centralized engine is shared infrastructure and requires explicit per-resource
+  tenant mappings;
+- the default tenant never grants access to an unmapped shared resource;
+- engine topology and runtime access scope are separate choices;
+- tenant membership does not grant connection-secret or platform administration
+  access;
+- topology and mapping changes can revoke active access immediately.
+
+### Documentation validation
+
+CI must:
+
+- validate internal Markdown links and navigation entries;
+- validate JSON and YAML snippets against the production schemas;
+- execute safe `curl` examples against the local test stack or contract harness;
+- compare documented request/response shapes and error codes with OpenAPI;
+- verify that examples contain no real credentials, tenant identifiers, or secrets;
+- fail if a functional-coverage requirement references a missing documentation page
+  or if a public API operation lacks a documented example.
+
 ## Implementation Phases
+
+Every phase exits with its production code, migrations, automated tests, functional
+coverage-manifest entries, OpenAPI/schema changes, and affected Markdown
+documentation updated together. A phase is not complete when only its implementation
+checkboxes are closed.
 
 ### Phase 0: contract decisions
 
@@ -573,6 +672,8 @@ UX requirements:
 - [ ] Define stable tenant references for config and external APIs.
 - [ ] Decide external mapping batch limits and atomicity.
 - [ ] Add architecture decision records for default fallback and shared-engine fail-closed behavior.
+- [ ] Create the functional coverage manifest, assign every normative requirement a
+  stable ID, and add the zero-uncovered-requirements CI validator.
 
 ### Phase 1: persistence and migration
 
@@ -624,10 +725,23 @@ UX requirements:
 - [ ] Add engine topology controls and diagnostics.
 - [ ] Add tenant mapping management.
 - [ ] Add migration preview and acknowledgements.
-- [ ] Update config examples, CLI help, runbooks, and troubleshooting.
 - [ ] Add metrics for unresolved/conflicting resources and fallback use.
 
-### Phase 7: enforcement and cleanup
+### Phase 7: documentation and adoption
+
+- [ ] Publish all developer, API, data-model, user, administrator, migration, and
+  troubleshooting Markdown deliverables listed above.
+- [ ] Add dedicated and shared examples for UI, API, and configuration provisioning.
+- [ ] Validate every machine-readable documentation example against the shipped
+  schemas, OpenAPI document, and local contract harness.
+- [ ] Update CLI help, configuration examples, operator runbooks, upgrade notes,
+  release notes, and the documentation index.
+- [ ] Publish the compatibility/deprecation timeline and external-integrator
+  migration guide.
+- [ ] Complete documentation review with engineering, security, and an operator who
+  did not implement the feature.
+
+### Phase 8: enforcement and cleanup
 
 - [ ] Run observe-only classification in representative local environments.
 - [ ] Resolve every ambiguous engine/resource.
@@ -635,6 +749,64 @@ UX requirements:
 - [ ] Make topology non-null.
 - [ ] Remove temporary omission warnings after the external API deprecation window.
 - [ ] Retire any compatibility path that interprets null tenant as default.
+
+## Complete Functional Coverage Standard
+
+For this plan, **100% functional coverage** has a concrete, auditable meaning: every
+normative requirement, supported operation, decision branch, state transition,
+stable error, and documented user journey has at least one automated test that
+proves its expected result. It does not mean claiming that every unrelated line in
+the repository is executed.
+
+Create a machine-readable functional coverage manifest at
+`test/authz/engine-tenancy-functional-coverage.json`. Every entry must contain:
+
+- a stable requirement ID;
+- the requirement and source section;
+- topology and runtime-access dimensions;
+- applicable principal, tenant, resource, and provisioning-channel dimensions;
+- expected allow, deny, quarantine, conflict, or audit outcome;
+- automated test file and test name;
+- documentation page and example, when user-visible;
+- CI job and retained evidence artifact.
+
+Use stable requirement families:
+
+- `TEN-MODEL-*` for persistence and invariants;
+- `TEN-RESOLVE-*` for tenant resolution and fallback;
+- `TEN-DEDICATED-*` and `TEN-SHARED-*` for topology behavior;
+- `TEN-AUTHZ-*` for grants, inheritance, denial, and revocation;
+- `TEN-API-*`, `TEN-CONFIG-*`, and `TEN-UI-*` for provisioning channels;
+- `TEN-MIGRATION-*` for classification, transitions, and rollback;
+- `TEN-RUNTIME-*` for inventory and upstream-call protection;
+- `TEN-AUDIT-*` for event and explanation coverage;
+- `TEN-DOCS-*` for documented journeys and executable examples.
+
+The manifest validator must fail CI when:
+
+- a normative plan requirement has no requirement ID;
+- an ID has no executable test evidence;
+- a public endpoint, stable error, or supported state transition is absent;
+- a matrix dimension is silently skipped;
+- a documented example does not map to a passing contract or end-to-end test;
+- a test is skipped, quarantined, or removed without an explicit expiring waiver.
+
+Required coverage thresholds are:
+
+- 100% of functional requirement IDs linked to passing automated tests;
+- 100% of public tenancy/provisioning API operations and stable errors;
+- 100% of supported valid and invalid topology/mapping state transitions;
+- 100% allow/deny/audit coverage for security-sensitive actions;
+- 100% statements, branches, functions, and lines for new security-critical pure
+  modules, including tenant resolution, transition planning, mapping reconciliation,
+  and schema refinements;
+- 100% killed mutants in the targeted security mutation set, including removed
+  tenant filters, inverted ownership checks, accepted null tenant context, skipped
+  mapping-version checks, and upstream calls after denial.
+
+Any unavoidable platform or browser exclusion must be represented by a time-limited
+waiver with an owner, reason, equivalent evidence, and expiry date. Waivers do not
+count as covered functional requirements.
 
 ## Test Plan
 
@@ -650,21 +822,42 @@ UX requirements:
 - mapping optimistic-concurrency conflict;
 - OpenAPI request/response parity.
 
-### Authorization matrix
+Add property-based and fuzz coverage for tenant references, resource keys, mapping
+batches, unknown fields, malformed identifiers, duplicate mappings, invalid topology
+combinations, and version boundaries. Generated examples must round-trip through
+parse, serialize, OpenAPI validation, and parse again without semantic drift.
 
-Cover user, group, API client, and service account across:
+### Exhaustive authorization matrix
 
-- platform assignment;
-- tenant assignment;
-- project assignment;
-- dedicated engine assignment;
-- shared runtime-resource assignment;
-- Engine Set assignment;
-- Runtime Resource Set assignment;
-- expired and revoked assignments;
-- same-tenant sibling denial;
-- cross-tenant denial;
-- ambiguous and missing tenant context.
+Generate, rather than hand-maintain, the Cartesian matrix of:
+
+- principal: user, group-derived user, API client, and service account;
+- assignment scope: platform, tenant, project, dedicated engine, shared runtime
+  resource, Engine Set, and Runtime Resource Set;
+- topology: dedicated and shared;
+- runtime access: engine-wide and resource-aware where valid;
+- permission source: predefined role, custom role, direct assignment, group
+  assignment, and inherited assignment;
+- assignment state: active, future, expired, revoked, deleted, and stale cached;
+- tenant relationship: same tenant, sibling tenant, unrelated tenant, missing
+  context, conflicting context, and deleted tenant;
+- secured object type: tenant, project, engine, Engine Set, every registered runtime
+  resource type, Runtime Resource Set, deployment target, deployment receipt,
+  migration, job, task, incident, and history record;
+- permission: every canonical permission individually, every predefined role, and
+  every tenant-safe custom-role composition;
+- resource state: mapped, unmapped, multiply mapped, stale mapping, quarantined,
+  deleted, and re-created with a new stable identifier;
+- action sensitivity: read, mutate, administer, credential/secret, and destructive.
+
+Invalid combinations must be asserted as rejected rather than omitted. Each valid
+cell must assert the decision, filtered result set, Effective Access explanation,
+audit event, and whether the upstream engine was called. Pairwise reduction is not
+permitted for security boundaries; every supported matrix cell must execute.
+
+Custom-role tests must cover every tenant-safe permission individually, all allowed
+combinations, rejection of platform-only and secret permissions, group inheritance,
+scope narrowing, expiry, revocation, edit invalidation, and role deletion.
 
 ### Dedicated engine
 
@@ -683,15 +876,62 @@ Cover user, group, API client, and service account across:
 - mapping removal invalidates access immediately;
 - external-engine outage cannot bypass authorization or expose stale resources.
 
-### Migration and configuration
+### Provisioning-channel end-to-end journeys
+
+Run each supported journey through the real local HTTP service, persistent database,
+authorization evaluator, and UI where applicable:
+
+1. manually create, inspect, update, reconcile, and remove a dedicated engine;
+2. externally upsert the same dedicated lifecycle with idempotent retries;
+3. apply, export, reapply, and remove the same dedicated lifecycle by configuration;
+4. manually create a shared engine, map two tenants, and resolve inventory;
+5. externally provision the same shared engine and mapping lifecycle;
+6. apply and round-trip the same shared lifecycle by configuration;
+7. ingest resources and prove dedicated inheritance or shared explicit resolution;
+8. assign predefined and custom roles to users, groups, clients, and service accounts;
+9. verify Effective Access source, tenant lineage, expiry, and mapping version;
+10. exercise list, count, detail, mutation, batch, job, task, incident, history, and
+    deployment paths with filtered and denied results;
+11. revoke assignments and remove mappings during an active browser/API session;
+12. transition dedicated to shared and shared to dedicated with preview,
+    acknowledgement, concurrency conflict, apply, cache invalidation, and rollback;
+13. rotate engine credentials without changing tenant ownership;
+14. decommission an engine and prove assignments, mappings, inventory, and cached
+    access cannot resurrect it.
+
+For every journey, repeat the contract assertions for manual UI, external API, and
+configuration bundle wherever that channel is supported. Unsupported channel/action
+combinations must return a documented stable error.
+
+### Migration, transition, and configuration
 
 - existing dedicated classification;
 - ambiguous resource-aware classification requires review;
 - migration is idempotent across supported databases;
+- PostgreSQL, MySQL, SQL Server, Oracle, and Spanner produce equivalent canonical
+  entities, constraints, indexes, and service behavior;
+- clean install, upgrade from every supported schema baseline, interrupted migration
+  retry, partially classified data, duplicate data, and downgrade/rollback;
 - config preview/diff/apply/export round trip;
 - source ownership and drift behavior;
 - rollback restores topology/mappings and invalidates snapshots;
 - audit records contain no secrets or cross-tenant data.
+
+### Resilience, concurrency, and isolation
+
+- concurrent engine upserts with the same and different idempotency keys;
+- concurrent mapping edits using the same and stale versions;
+- inventory arrival before, during, and after topology changes;
+- database, cache, queue, and external-engine outages;
+- retry and replay after timeouts without duplicate engines or audit gaps;
+- stale authorization snapshots after role, assignment, topology, tenant, or mapping
+  changes;
+- fail-closed behavior when tenant lookup, mapping lookup, or audit persistence is
+  unavailable according to the documented failure policy;
+- no test depends on production credentials, deployed identity providers, or shared
+  mutable test data;
+- isolated fixtures use unique tenants and engines and are removed by a verified
+  sweeper after success and failure.
 
 ### Browser coverage
 
@@ -700,7 +940,63 @@ Cover user, group, API client, and service account across:
 - mapping diagnostics are accessible by keyboard and screen reader;
 - Effective Access shows tenant and mapping lineage;
 - cross-tenant access is denied after browser-session reuse;
-- Chromium PR gate plus scheduled Firefox/WebKit coverage.
+- Chromium PR gate plus scheduled Firefox/WebKit coverage;
+- keyboard-only, focus order, accessible names, error announcement, contrast, zoom,
+  and reduced-motion checks for every new workflow;
+- direct URL, stale tab, back/forward cache, multi-tab revocation, and session refresh
+  tests;
+- screenshots, traces, network logs, and tenant-safe failure artifacts retained for
+  every failed matrix case.
+
+### Documentation tests
+
+- every documented JSON/YAML payload validates against the canonical schema;
+- every documented `curl` request executes against the local contract stack;
+- every documented success and error response matches OpenAPI;
+- internal links, anchors, navigation, and referenced configuration keys exist;
+- dedicated, shared, migration, rollback, and troubleshooting guides each map to a
+  passing end-to-end journey;
+- examples are scanned for secrets and non-placeholder customer identifiers.
+
+### Coverage reporting
+
+CI must publish a single evidence bundle containing:
+
+- the validated functional coverage manifest and uncovered-ID count of zero;
+- generated authorization and state-transition matrices with zero missing cells;
+- unit/integration/end-to-end results by database, provisioning channel, and browser;
+- source coverage for security-critical modules at 100% for statements, branches,
+  functions, and lines;
+- targeted mutation report with all defined security mutants killed;
+- OpenAPI/schema/documentation parity results;
+- browser traces and sanitized failure artifacts;
+- migration classification, retry, and rollback evidence.
+
+The evidence bundle must identify the commit, schema version, browser/database
+versions, test seed, and any active waiver. A green aggregate percentage without
+the underlying requirement and matrix evidence is insufficient.
+
+## End-to-End Definition of Done
+
+The implementation is end-to-end complete only when a clean local installation and
+an upgraded installation can both:
+
+1. provision dedicated and shared engines through UI, external API, and
+   configuration bundles using the same canonical contracts;
+2. persist explicit topology and tenant ownership or mappings on every supported
+   database;
+3. ingest inventory and resolve exactly one tenant before exposing a resource;
+4. grant predefined and custom-role access to users, groups, API clients, and
+   service accounts;
+5. show accurate Effective Access and audit lineage;
+6. filter or deny every runtime path and prove denied requests do not call the
+   upstream engine;
+7. revoke access immediately after assignment, role, topology, tenant, or mapping
+   changes;
+8. preview, apply, reconcile, and roll back topology/mapping changes safely;
+9. complete all documented operator journeys using only the published Markdown
+   guides;
+10. produce the complete passing evidence bundle defined above.
 
 ## Release Gates
 
@@ -715,8 +1011,25 @@ The implementation is complete only when:
 - topology transitions are previewed, acknowledged, audited, and atomic;
 - all supported database adapters pass migration/schema tests;
 - tenant-role and shared-engine authorization matrices are green;
+- every canonical permission and secured object type appears in the generated
+  authorization matrix with its valid allow, deny, inheritance, and revocation
+  cases;
 - browser and active-session revocation tests are green;
-- failure artifacts and tenant-resolution diagnostics are retained in CI.
+- failure artifacts and tenant-resolution diagnostics are retained in CI;
+- the functional coverage manifest reports 100% requirement, endpoint, stable-error,
+  and state-transition coverage with no skipped or quarantined tests;
+- new security-critical pure modules report 100% statements, branches, functions,
+  and lines;
+- every targeted security mutant is killed;
+- every named developer, user, administrator, API, migration, and troubleshooting
+  Markdown deliverable is published, linked, and reviewed;
+- all documented machine-readable examples pass schema, OpenAPI, and local execution
+  checks;
+- OpenAPI, Zod schemas, implementation, configuration reference, and Markdown API
+  reference are proven equivalent;
+- the End-to-End Definition of Done passes on clean-install and upgrade test paths;
+- no implementation-phase checkbox remains open without an approved, expiring
+  release waiver.
 
 ## Rollback Conditions
 
