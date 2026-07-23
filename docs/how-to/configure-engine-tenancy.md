@@ -156,7 +156,7 @@ registered through the external API, or applied from a configuration bundle:
    created it and confirm its mappings and inventory no longer authorize
    access.
 
-The repository's localhost-only Journeys 4–12 automation executes this
+The repository's localhost-only Journeys 4–13 automation executes this
 sequence through the manual, external, and configuration provisioning
 lifecycles against the real backend, PostgreSQL database, authorization
 evaluator, and a Docker-hosted Camunda-compatible endpoint. Passing these
@@ -189,6 +189,16 @@ engine role; the reverse transition resolves them to the dedicated owner
 again. Externally registered hybrid engines may use this workflow only when
 tenancy ownership is explicitly `manual`. Configuration-owned engines may use
 it only in `config_warn`; `config_locked` topology remains bundle-owned.
+
+Journey 13 verifies credential rotation without changing ownership. Manual
+operators update the credential on the engine, external owners repeat the
+registration with a new credential, and configuration owners change only the
+opaque `passwordRef` or `tokenRef`. A reference-only bundle change must appear
+as an engine update. After rotation, topology, owning tenant, mapping strategy,
+mapping version, and resolution status remain unchanged. API responses never
+return the credential: `passwordEnc` is `null`, while `hasCredential` confirms
+that one is configured. Do not place a plaintext credential in a bundle or
+expect an export to reveal it.
 
 ### Manage Topology and Mappings in the UI
 

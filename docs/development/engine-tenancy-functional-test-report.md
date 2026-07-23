@@ -17,9 +17,9 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The real-service provisioning suite now passes Journeys 1–12, including all
-three required channels of Journeys 7–12: twelve of fourteen journeys and
-twenty-four of thirty required channel executions. It covers the manual UI, a least-privilege
+The real-service provisioning suite now passes Journeys 1–13, including all
+three required channels of Journeys 7–13: thirteen of fourteen journeys and
+twenty-seven of thirty required channel executions. It covers the manual UI, a least-privilege
 external API client, and authoritative configuration bundles against the same
 local HTTP service, PostgreSQL database, authorization evaluator, and
 Camunda-compatible Docker endpoint. The provisioning release artifact remains
@@ -108,17 +108,17 @@ meaning of 100% functional coverage are documented in
 | --- | ---: |
 | Foundation | 45 |
 | Provisioning | 117 |
-| Mappings and configuration ownership | 248 |
+| Mappings and configuration ownership | 249 |
 | Authorization and custom roles | 329 |
 | Runtime enforcement | 354 |
 | Classification and transitions | 152 |
 | Operational metrics | 46 |
 | Documentation and traceability | 52 |
-| **Focused-lane total** | **1,343** |
+| **Focused-lane total** | **1,344** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
-| Real-service provisioning channel executions | **24** |
+| Real-service provisioning channel executions | **27** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -305,7 +305,7 @@ release qualification. The remaining gates are:
   MySQL, SQL Server, Oracle, and Spanner;
 - complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
   evidence for all new browser workflows;
-- implement Journeys 13–14, then execute all 14 supported UI, external API, and
+- implement Journey 14, then execute all 14 supported UI, external API, and
   configuration provisioning journeys (30 required channel executions)
   against persistent local services and record stable errors for unsupported
   combinations;

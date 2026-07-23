@@ -357,6 +357,140 @@ async function proveTopologyTransitionAndRollback(input: {
   }
 }
 
+async function proveCredentialRotation(input: {
+  page: Page;
+  engineId: string;
+  channel: ProvisioningJourneyChannel;
+  suffix: string;
+  commit: string;
+  sourceState: string;
+  rotateCredential: (input: {
+    secret: string;
+    reference: string;
+  }) => Promise<unknown>;
+  verifyChannelState?: (input: {
+    secret: string;
+    reference: string;
+  }) => Promise<void>;
+}): Promise<{ rotatedReference: string }> {
+  const {
+    page,
+    engineId,
+    channel,
+    suffix,
+    commit,
+    sourceState,
+    rotateCredential,
+    verifyChannelState,
+  } = input;
+  const database = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  });
+  const schema = process.env.POSTGRES_SCHEMA || 'main';
+  const marker = suffix.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase();
+  const initial = {
+    secret: `e2e-j13-initial-${suffix}`,
+    reference: `E2E_J13_INITIAL_${marker}`,
+  };
+  const rotated = {
+    secret: `e2e-j13-rotated-${suffix}`,
+    reference: `E2E_J13_ROTATED_${marker}`,
+  };
+
+  const storedCredential = async (): Promise<string | null> => {
+    const result = await database.query(
+      `SELECT password_enc FROM ${schema}.engines WHERE id = $1`,
+      [engineId],
+    );
+    expect(result.rowCount).toBe(1);
+    return result.rows[0]?.password_enc ?? null;
+  };
+
+  try {
+    const before = await responseJson<Record<string, unknown>>(
+      await page.request.get(`/engines-api/engines/${encodeURIComponent(engineId)}`),
+      `read Journey 13 ${channel} ownership before credential rotation`,
+    );
+    const ownership = {
+      tenantId: before.tenantId,
+      tenancyMode: before.tenancyMode,
+      tenantMappingStrategy: before.tenantMappingStrategy,
+      tenantMappingVersion: before.tenantMappingVersion,
+      tenantResolutionStatus: before.tenantResolutionStatus,
+    };
+
+    const initialResult = await rotateCredential(initial);
+    expect(JSON.stringify(initialResult)).not.toContain(initial.secret);
+    const initialStoredCredential = await storedCredential();
+    expect(initialStoredCredential).toBeTruthy();
+    expect(initialStoredCredential).not.toBe(initial.secret);
+
+    const rotatedResult = await rotateCredential(rotated);
+    expect(JSON.stringify(rotatedResult)).not.toContain(rotated.secret);
+    expect(JSON.stringify(rotatedResult)).not.toContain(initial.secret);
+    const rotatedStoredCredential = await storedCredential();
+    expect(rotatedStoredCredential).toBeTruthy();
+    expect(rotatedStoredCredential).not.toBe(initialStoredCredential);
+    expect(rotatedStoredCredential).not.toBe(rotated.secret);
+
+    const after = await responseJson<Record<string, unknown>>(
+      await page.request.get(`/engines-api/engines/${encodeURIComponent(engineId)}`),
+      `read Journey 13 ${channel} ownership after credential rotation`,
+    );
+    expect(after).toMatchObject({
+      ...ownership,
+      passwordEnc: null,
+      hasCredential: true,
+    });
+    expect(JSON.stringify(after)).not.toContain(initial.secret);
+    expect(JSON.stringify(after)).not.toContain(rotated.secret);
+    await verifyChannelState?.(rotated);
+
+    const observationDirectory = path.join(
+      process.cwd(),
+      'test/results/engine-tenancy-provisioning-observations',
+    );
+    await mkdir(observationDirectory, { recursive: true });
+    await writeFile(
+      path.join(observationDirectory, `journey-13-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 13,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'credential-rotation',
+          'tenant-ownership-unchanged',
+          'secret-redaction',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
+    return { rotatedReference: rotated.reference };
+  } finally {
+    await database.end();
+  }
+}
+
 async function provePrincipalRoleAssignmentMatrix(input: {
   page: Page;
   csrf: string;
@@ -2002,6 +2136,21 @@ test.describe('Engine tenancy provisioning journeys', () => {
         commit,
         sourceState,
       });
+      await proveCredentialRotation({
+        page,
+        engineId: dedicatedEngineId,
+        channel: 'manual-ui',
+        suffix,
+        commit,
+        sourceState,
+        rotateCredential: async ({ secret }) => responseJson(
+          await page.request.put(
+            `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}`,
+            mutationOptions(token, { passwordEnc: secret }),
+          ),
+          'rotate Journey 13 manual engine credential',
+        ),
+      });
 
       const shared = await createEngineThroughUi(sharedName, 'shared');
       expect(shared).toMatchObject({
@@ -2406,6 +2555,45 @@ test.describe('Engine tenancy provisioning journeys', () => {
         suffix,
         commit,
         sourceState,
+      });
+      await proveCredentialRotation({
+        page,
+        engineId: dedicatedEngineId,
+        channel: 'external-api',
+        suffix,
+        commit,
+        sourceState,
+        rotateCredential: async ({ secret }) => {
+          const current = await responseJson<Record<string, unknown>>(
+            await page.request.get(
+              `/engines-api/engines/${encodeURIComponent(dedicatedEngineId)}`,
+            ),
+            'read Journey 13 external engine before credential update',
+          );
+          return responseJson(
+            await externalApi!.post('/engines-api/external/engines', {
+              data: {
+                name: current.name,
+                baseUrl: runtimeBaseUrl,
+                externalId: dedicatedExternalId,
+                type: 'camunda7',
+                connectionMode: 'direct',
+                managementMode: 'hybrid',
+                fieldOwnership: { tenancy: 'manual' },
+                runtimeAccessScope: current.runtimeAccessScope,
+                metadataDiscoveryEnabled: true,
+                deploymentDiscoveryEnabled: false,
+                pipelineReceiptEnabled: false,
+                passwordEnc: secret,
+                tenancy: {
+                  mode: 'dedicated',
+                  tenantRef: { type: 'default' },
+                },
+              },
+            }),
+            'rotate Journey 13 external engine credential',
+          );
+        },
       });
 
       const shared = await register(sharedExternalId, 'shared');
@@ -3178,6 +3366,59 @@ test.describe('Engine tenancy provisioning journeys', () => {
         setRuntimeTenantMappingActive: setConfigRuntimeTenantMappingActive,
       });
 
+      const configCredentialRotation = await proveCredentialRotation({
+        page,
+        engineId: dedicatedEngineId,
+        channel: 'configuration-bundle',
+        suffix,
+        commit,
+        sourceState,
+        rotateCredential: async ({ reference }) => {
+          const rotatedEngines = enginesFile.engines.map((engine) => engine.key === dedicatedKey
+            ? {
+                ...engine,
+                auth: {
+                  ...engine.auth,
+                  passwordRef: reference,
+                },
+              }
+            : engine);
+          return applyBundle(
+            {
+              bundle: mappedEnvelope.bundle,
+              files: {
+                './engines.json': { engines: rotatedEngines },
+                './engine-tenant-mappings.json':
+                  mappedEnvelope.files['./engine-tenant-mappings.json'],
+              },
+            },
+            `journey-13-config-credential-${reference}-${suffix}`,
+            'Journey 13 configuration credential rotation',
+          );
+        },
+        verifyChannelState: async ({ secret, reference }) => {
+          const currentExport = await responseJson<{
+            files: Record<string, {
+              engines?: Array<Record<string, unknown>>;
+            }>;
+          }>(
+            await page.request.get(
+              `/api/authz/config-bundles/export?bundleKey=${encodeURIComponent(bundleKey)}&tenantKey=default`,
+            ),
+            'verify Journey 13 configuration credential reference',
+          );
+          expect(currentExport.files['./engines.json']?.engines).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                key: dedicatedKey,
+                auth: expect.objectContaining({ passwordRef: reference }),
+              }),
+            ]),
+          );
+          expect(JSON.stringify(currentExport)).not.toContain(secret);
+        },
+      });
+
       const exported = await responseJson<{
         bundle: Record<string, unknown>;
         files: Record<string, {
@@ -3208,6 +3449,9 @@ test.describe('Engine tenancy provisioning journeys', () => {
             mode: 'dedicated',
             tenantRef: { type: 'id', id: 'tenant-default' },
           },
+          auth: expect.objectContaining({
+            passwordRef: configCredentialRotation.rotatedReference,
+          }),
           ownershipMode: 'config_warn',
         }),
         expect.objectContaining({

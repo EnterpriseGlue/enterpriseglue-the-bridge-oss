@@ -70,6 +70,54 @@ function desiredDedicatedTenantId(engine: any, tenantId: string | null): string 
   return null;
 }
 
+function desiredEngineCredentialFields(auth: any): {
+  authType: string;
+  username: string | null;
+  passwordEnc: string | null;
+  oauthTokenUrl: string | null;
+  oauthScopes: string | null;
+  oauthAudience: string | null;
+} {
+  if (auth?.type === 'basic') {
+    return {
+      authType: 'basic',
+      username: auth.username,
+      passwordEnc: `ref:${auth.passwordRef}`,
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+    };
+  }
+  if (auth?.type === 'bearer') {
+    return {
+      authType: 'bearer',
+      username: null,
+      passwordEnc: `ref:${auth.tokenRef}`,
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+    };
+  }
+  if (auth?.type === 'oauth2-client-credentials') {
+    return {
+      authType: 'oauth2-client-credentials',
+      username: auth.username,
+      passwordEnc: `ref:${auth.passwordRef}`,
+      oauthTokenUrl: auth.tokenUrl,
+      oauthScopes: auth.scopes || null,
+      oauthAudience: auth.audience || null,
+    };
+  }
+  return {
+    authType: 'none',
+    username: null,
+    passwordEnc: null,
+    oauthTokenUrl: null,
+    oauthScopes: null,
+    oauthAudience: null,
+  };
+}
+
 export interface ConfigBundleDiffWarning {
   id: string;
   message: string;
@@ -360,6 +408,7 @@ class ConfigBundleDiffService {
       const existing = enginesByConfigKey.get(engine.key) || tenantEngines.find((candidate) => candidate.externalId && candidate.externalId === engine.externalId);
       const desiredTenancyMode = engine.tenancy?.mode || 'dedicated';
       const desiredTenantId = desiredDedicatedTenantId(engine, normalizedTenantId);
+      const desiredCredentials = desiredEngineCredentialFields(engine.auth);
       if (!existing) {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'create', reason: 'No persisted engine uses this config key or external id' });
       } else if (existing.registrationSource !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
@@ -387,6 +436,12 @@ class ConfigBundleDiffService {
         Number(existing.reconciliationIntervalSeconds || 300) !== engine.reconciliationIntervalSeconds ||
         (existing.pipelineReceiptEnabled !== false) !== engine.pipelineReceiptEnabled ||
         existing.connectionMode !== engine.connectionMode || existing.ownershipMode !== (engine.ownershipMode || 'config_locked') ||
+        (existing.authType || 'none') !== desiredCredentials.authType ||
+        (existing.username || null) !== desiredCredentials.username ||
+        (existing.passwordEnc || null) !== desiredCredentials.passwordEnc ||
+        (existing.oauthTokenUrl || null) !== desiredCredentials.oauthTokenUrl ||
+        (existing.oauthScopes || null) !== desiredCredentials.oauthScopes ||
+        (existing.oauthAudience || null) !== desiredCredentials.oauthAudience ||
         existing.lifecycleStatus === 'decommissioned'
       ) {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'update', currentId: existing.id, reason: 'Config-owned engine differs from desired connection, metadata, or authorization settings' });

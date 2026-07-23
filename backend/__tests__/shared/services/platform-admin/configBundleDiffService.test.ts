@@ -132,6 +132,67 @@ describe('configBundleDiffService', () => {
     }));
   });
 
+  it('detects an opaque engine credential-reference rotation', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-1',
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: null,
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      name: 'Central',
+      baseUrl: 'https://central.example.com/engine-rest',
+      type: 'operaton',
+      externalId: null,
+      labelsJson: '{}',
+      authType: 'basic',
+      username: 'eg',
+      passwordEnc: 'ref:CENTRAL_PASSWORD_OLD',
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      runtimeAccessScope: 'engine_wide',
+      deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true,
+      connectionMode: 'direct',
+      ownershipMode: 'config_locked',
+      lifecycleStatus: 'active',
+    }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central',
+            type: 'operaton',
+            baseUrl: 'https://central.example.com/engine-rest',
+            auth: {
+              type: 'basic',
+              username: 'eg',
+              passwordRef: 'CENTRAL_PASSWORD_ROTATED',
+            },
+          }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        objectType: 'engine',
+        key: 'engine.central',
+        operation: 'update',
+        currentId: 'engine-1',
+      }),
+    ]));
+  });
+
   it('diffs config-owned shared-engine tenant mappings with authorized tenant-key resolution', async () => {
     mockDataSource([], [], [], [{
       id: 'engine-1',

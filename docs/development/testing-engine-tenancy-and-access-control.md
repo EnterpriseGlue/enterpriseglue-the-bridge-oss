@@ -150,10 +150,18 @@ runtime resources, and reverses to dedicated. The external fixture is hybrid
 with tenancy explicitly owned by the manual transition workflow; the
 configuration fixture uses `config_warn`, and its next bundle apply proves the
 intentional conflict drift is detected and repaired. The implemented
-denominator is therefore twelve of fourteen journeys and twenty-four of thirty
-required channel executions. Journeys 13–14 stay explicitly missing until
-their matching real-service tests are implemented and qualified on the same
-clean commit.
+denominator is extended again by Journey 13. Its fixture performs an initial
+credential write and a second rotation through each engine's owning channel.
+It compares the persistent database value without retaining it, requires the
+two stored values to differ, rejects plaintext storage, compares tenant,
+topology, and mapping ownership before and after, and confirms public responses
+expose only `hasCredential` with `passwordEnc: null`. The configuration path
+rotates only an opaque secret reference; configuration diff now classifies a
+reference change as an engine update without returning either secret material
+or the stored value. The implemented denominator is therefore thirteen of
+fourteen journeys and twenty-seven of thirty required channel executions.
+Journey 14 stays explicitly missing until its matching real-service tests are
+implemented and qualified on the same clean commit.
 
 The Journey 10 fixture exposes a localhost-only mock control endpoint. The
 runner resets its request ledger immediately before the denied detail request
