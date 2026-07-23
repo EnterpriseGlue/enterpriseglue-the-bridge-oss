@@ -105,7 +105,12 @@ export function registerConfigBundleRoutes(
 
   router.post('/api/authz/config-bundles/diff', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
-    const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null, settings);
+    const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null, {
+      ...settings,
+      tenantReferenceResolver: req.app.locals.engineTenantReferenceResolver || null,
+      tenantReferencePrincipalType: req.apiClient ? 'api_client' : 'user',
+      tenantReferencePrincipalId: req.apiClient?.id || req.user!.userId,
+    });
     res.status(diff.valid ? 200 : 422).json(diff);
   }));
 
@@ -116,7 +121,12 @@ export function registerConfigBundleRoutes(
       ...req.body,
       tenantId: req.tenant?.tenantId || null,
       actorId,
-    }, settings);
+    }, {
+      ...settings,
+      tenantReferenceResolver: req.app.locals.engineTenantReferenceResolver || null,
+      tenantReferencePrincipalType: req.apiClient ? 'api_client' : 'user',
+      tenantReferencePrincipalId: req.apiClient?.id || req.user!.userId,
+    });
     await logAudit({
       tenantId: req.tenant?.tenantId || undefined,
       userId: actorId,

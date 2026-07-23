@@ -226,6 +226,7 @@ describe('EngineTenantMappingService', () => {
       engineId: 'engine-1',
       externalTenantId: 'runtime-a',
       enterpriseTenantId: 'tenant-default',
+      tenantReferenceJson: '{"type":"default"}',
       source: 'external',
       ownershipMode: 'external_managed',
       isActive: true,
@@ -249,6 +250,7 @@ describe('EngineTenantMappingService', () => {
       engineId: 'engine-1',
       externalTenantId: 'runtime-a',
       enterpriseTenantId: 'tenant-default',
+      tenantReferenceJson: '{"type":"default"}',
       strategy: 'engine_tenant_id',
       source: 'manual',
       sourceRef: 'source:runtime-a',
@@ -401,6 +403,7 @@ describe('EngineTenantMappingService', () => {
         engineId: 'engine-1',
         externalTenantId: 'runtime-a',
         enterpriseTenantId: 'tenant-default',
+        tenantReferenceJson: '{"type":"default"}',
         strategy: 'engine_tenant_id',
         source: 'config',
         sourceRef: 'config:runtime-a',
@@ -474,6 +477,7 @@ describe('EngineTenantMappingService', () => {
           engineId: 'engine-1',
           externalTenantId: 'runtime-a',
           enterpriseTenantId: 'tenant-default',
+          tenantReferenceJson: '{"type":"default"}',
           strategy: 'engine_tenant_id',
           source: 'manual',
           sourceRef: 'source:other',
@@ -485,6 +489,7 @@ describe('EngineTenantMappingService', () => {
           engineId: 'engine-1',
           externalTenantId: 'runtime-b',
           enterpriseTenantId: 'tenant-default',
+          tenantReferenceJson: '{"type":"default"}',
           strategy: 'engine_tenant_id',
           source: 'manual',
           sourceRef: 'source:runtime-a',
@@ -511,6 +516,7 @@ describe('EngineTenantMappingService', () => {
       engineId: 'engine-1',
       externalTenantId: 'runtime-a',
       enterpriseTenantId: 'tenant-default',
+      tenantReferenceJson: '{"type":"default"}',
       strategy: 'engine_tenant_id',
       source: 'manual',
       sourceRef: 'source:runtime-a',
@@ -578,5 +584,169 @@ describe('EngineTenantMappingService', () => {
       unmappedResourceCount: 1,
       conflictingResourceCount: 0,
     });
+  });
+
+  it('allows a manual config-warning override while preserving config ownership', async () => {
+    const state = setup({
+      mappings: [{
+        id: 'mapping-config-warn',
+        engineId: 'engine-1',
+        externalTenantId: 'runtime-a',
+        enterpriseTenantId: 'tenant-default',
+        tenantReferenceJson: '{"type":"default"}',
+        strategy: 'engine_tenant_id',
+        source: 'config',
+        sourceRef: 'config_bundle:acme:engine_tenant_mapping:engine-tenant-mapping.runtime-a',
+        ownershipMode: 'config_warn',
+        sourceHash: 'applied-hash',
+        lastAppliedAt: 10,
+        isActive: true,
+        createdAt: 1,
+        updatedAt: 1,
+      }],
+    });
+
+    const result = await service.upsert({
+      engineId: 'engine-1',
+      request: request([mapping('runtime-a', {
+        sourceRef: 'manual:operator-override',
+        active: false,
+      })]),
+      principalType: 'user',
+      principalId: 'admin-1',
+      source: 'manual',
+      ownershipMode: 'manual',
+    });
+
+    expect(result).toMatchObject({ deactivated: 1, mappingVersion: 3 });
+    expect(state.mappingRepo.update).toHaveBeenCalledWith(
+      { id: 'mapping-config-warn' },
+      expect.objectContaining({
+        source: 'config',
+        sourceRef: 'config_bundle:acme:engine_tenant_mapping:engine-tenant-mapping.runtime-a',
+        ownershipMode: 'config_warn',
+        sourceHash: 'applied-hash',
+        tenantReferenceJson: '{"type":"default"}',
+        isActive: false,
+      }),
+    );
+  });
+
+  it('reconciles config-written mappings inside the caller transaction', async () => {
+    const existing = {
+      id: 'mapping-1',
+      engineId: 'engine-1',
+      externalTenantId: 'runtime-a',
+      enterpriseTenantId: 'tenant-a',
+      tenantReferenceJson: '{"type":"id","id":"tenant-a"}',
+      strategy: 'engine_tenant_id',
+      source: 'config',
+      sourceRef: 'config:runtime-a',
+      ownershipMode: 'config_locked',
+      isActive: true,
+    };
+    const state = setup({
+      mappings: [existing],
+      resources: [{
+        id: 'resource-resolved',
+        runtimeTenantId: 'runtime-a',
+        projectId: null,
+      }, {
+        id: 'resource-unmapped',
+        runtimeTenantId: 'runtime-b',
+        projectId: null,
+      }],
+    });
+
+    const result = await service.reconcileInStore('engine-1', state.dataSource as any);
+
+    expect(result).toMatchObject({
+      mappingVersion: 3,
+      resolutionStatus: 'incomplete',
+      mappedResourceCount: 1,
+      unmappedResourceCount: 1,
+      conflictingResourceCount: 0,
+    });
+    expect(state.resourceRepo.update).toHaveBeenCalledWith(
+      { id: 'resource-resolved' },
+      expect.objectContaining({
+        tenantId: 'tenant-a',
+        tenantResolutionStatus: 'resolved',
+        tenantMappingId: 'mapping-1',
+        tenantMappingVersion: 3,
+      }),
+    );
+    expect(state.resourceRepo.update).toHaveBeenCalledWith(
+      { id: 'resource-unmapped' },
+      expect.objectContaining({
+        tenantId: null,
+        tenantResolutionStatus: 'unmapped',
+        tenantMappingId: null,
+        tenantMappingVersion: 3,
+      }),
+    );
+    expect(state.engineRepo.update).toHaveBeenCalledWith(
+      { id: 'engine-1' },
+      expect.objectContaining({
+        tenantMappingVersion: 3,
+        tenantResolutionStatus: 'incomplete',
+        lastTenantReconciledAt: expect.any(Number),
+      }),
+    );
+
+    const noVersionAdvance = setup({
+      engine: sharedEngine({ tenantMappingVersion: undefined }),
+      mappings: [existing],
+      resources: [],
+    });
+    await expect(service.reconcileInStore(
+      'engine-1',
+      noVersionAdvance.dataSource as any,
+      false,
+    )).resolves.toMatchObject({
+      mappingVersion: 0,
+      resolutionStatus: 'ready',
+    });
+
+    const conflictState = setup({
+      mappings: [
+        existing,
+        { ...existing, id: 'mapping-2', sourceRef: 'config:duplicate' },
+      ],
+      resources: [{
+        id: 'resource-conflict',
+        runtimeTenantId: 'runtime-a',
+        projectId: null,
+      }],
+    });
+    await expect(service.reconcileInStore(
+      'engine-1',
+      conflictState.dataSource as any,
+    )).resolves.toMatchObject({
+      resolutionStatus: 'conflict',
+      conflictingResourceCount: 1,
+    });
+    expect(conflictState.resourceRepo.update).toHaveBeenCalledWith(
+      { id: 'resource-conflict' },
+      expect.objectContaining({
+        tenantId: null,
+        tenantResolutionStatus: 'conflict',
+        tenantMappingId: null,
+      }),
+    );
+  });
+
+  it('fails closed when transactional reconciliation cannot use a shared engine', async () => {
+    const missing = setup({ engine: null });
+    await expect(service.reconcileInStore('missing', missing.dataSource as any))
+      .rejects.toMatchObject({ code: 'NOT_FOUND', statusCode: 404 });
+
+    const dedicated = setup({
+      engine: sharedEngine({ tenancyMode: 'dedicated', tenantMappingStrategy: null }),
+    });
+    await service.reconcileInStore('engine-1', dedicated.dataSource as any).then(
+      () => { throw new Error('expected rejection'); },
+      (error) => expectCode(error, 'ENGINE_TENANCY_CONFLICT', 400),
+    );
   });
 });

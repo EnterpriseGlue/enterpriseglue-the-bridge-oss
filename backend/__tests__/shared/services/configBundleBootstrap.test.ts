@@ -113,6 +113,26 @@ describe('configBundleBootstrap', () => {
     );
   });
 
+  it('passes the enterprise tenant reference resolver to startup mapping apply', async () => {
+    config.configExpectedTenantScope = 'tenant-a';
+    apply.mockResolvedValue({ canonicalHash: 'preview-hash' });
+    const tenantReferenceResolver = { resolve: vi.fn() };
+
+    await expect(runConfigBundleBootstrap({ tenantReferenceResolver })).resolves.toMatchObject({
+      mode: 'apply',
+      status: 'applied',
+    });
+
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'system:config-bootstrap' }),
+      expect.objectContaining({
+        tenantReferenceResolver,
+        tenantReferencePrincipalType: 'system',
+        tenantReferencePrincipalId: 'system:config-bootstrap',
+      }),
+    );
+  });
+
   it('rejects a mounted bundle when its image-bound hash does not match', async () => {
     config.configExpectedSha256 = 'a'.repeat(64);
     readFile.mockResolvedValue(Buffer.from('{"bundle":{},"files":{}}'));

@@ -2,6 +2,7 @@ import { In, IsNull, Like } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -11,6 +12,8 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
+import { EngineTenantReferenceSchema } from '../../schemas/mission-control/engine.js';
 
 function json(value: string | null | undefined): Record<string, unknown> {
   try { const parsed = value ? JSON.parse(value) : {}; return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
@@ -50,14 +53,33 @@ function withoutUndefined(value: unknown): unknown {
   return value;
 }
 
+function exportedTenantReference(
+  mapping: EngineTenantMapping,
+  bundleTenantId: string | null,
+) {
+  try {
+    const parsed = EngineTenantReferenceSchema.safeParse(
+      mapping.tenantReferenceJson ? JSON.parse(mapping.tenantReferenceJson) : null,
+    );
+    if (parsed.success) return parsed.data;
+  } catch {
+    // Legacy or corrupted reference metadata falls back to the resolved ID.
+  }
+  const normalizedBundleTenantId = normalizeTenantIdForPersistence(bundleTenantId) || OSS_DEFAULT_TENANT_ID;
+  if (mapping.enterpriseTenantId === normalizedBundleTenantId) return { type: 'request_context' as const };
+  if (mapping.enterpriseTenantId === OSS_DEFAULT_TENANT_ID) return { type: 'default' as const };
+  return { type: 'id' as const, id: mapping.enterpriseTenantId };
+}
+
 class ConfigBundleExportService {
   async exportBundle(input: { bundleKey: string; tenantId?: string | null; tenantKey?: string }): Promise<{ bundle: Record<string, unknown>; files: Record<string, unknown> }> {
     const dataSource = await getDataSource();
     const tenantId = input.tenantId || null;
     const sourceRef = `config_bundle:${input.bundleKey}`;
+    const mappingSourcePrefix = `${sourceRef}:engine_tenant_mapping:`;
     const where = { sourceRef, ...(tenantId ? { tenantId } : { tenantId: IsNull() }) };
     const engineScopePrefix = `${tenantId || 'platform'}:`;
-    const [roles, groups, engines, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources] = await Promise.all([
+    const [roles, groups, engines, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources] = await Promise.all([
       dataSource.getRepository(RbacRole).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(AuthzGroup).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(Engine).find({
@@ -65,6 +87,9 @@ class ConfigBundleExportService {
           { sourceRef, lifecycleStatus: 'active', tenantId: tenantId || IsNull() },
           { sourceRef, lifecycleStatus: 'active', configKeyIdentity: Like(`${engineScopePrefix}%`) },
         ],
+      }),
+      dataSource.getRepository(EngineTenantMapping).find({
+        where: { source: 'config', sourceRef: Like(`${mappingSourcePrefix}%`), isActive: true },
       }),
       dataSource.getRepository(EngineSet).find({ where: { ...where, source: 'config', isArchived: false } }),
       dataSource.getRepository(RuntimeResourceSet).find({ where: { ...where, source: 'config', isArchived: false } }),
@@ -120,6 +145,31 @@ class ConfigBundleExportService {
     if (engineSets.length) files['./engine-sets.json'] = { engineSets: sortedByKey(engineSets).map((set) => ({ key: set.key, name: set.name, description: set.description || undefined, selector: json(set.selectorJson), ownershipMode: set.ownershipMode || 'config_locked' })) };
 
     const engineKeyById = new Map(engines.filter((engine) => engine.configKey).map((engine) => [engine.id, engine.configKey!]));
+    if (engineTenantMappings.length) {
+      files['./engine-tenant-mappings.json'] = {
+        engineTenantMappings: [...engineTenantMappings]
+          .map((mapping) => ({
+            mapping,
+            key: mapping.sourceRef.slice(mappingSourcePrefix.length),
+          }))
+          .sort((left, right) => left.key.localeCompare(right.key))
+          .map(({ mapping, key }) => {
+            const engineKey = engineKeyById.get(mapping.engineId);
+            if (!engineKey) {
+              throw new Error(`Cannot export engine tenant mapping ${key}: its engine is not config-owned by this bundle`);
+            }
+            return {
+              key,
+              engineRef: { engineKey },
+              externalTenantId: mapping.externalTenantId,
+              tenantRef: exportedTenantReference(mapping, tenantId),
+              strategy: mapping.strategy,
+              active: true,
+              ownershipMode: mapping.ownershipMode,
+            };
+          }),
+      };
+    }
     if (runtimeResourceSets.length) files['./runtime-resource-sets.json'] = { runtimeResourceSets: sortedByKey(runtimeResourceSets).map((set) => {
       const engineKey = engineKeyById.get(set.engineId);
       if (!engineKey) throw new Error(`Cannot export Runtime Resource Set ${set.key}: its engine is not config-owned by this bundle`);

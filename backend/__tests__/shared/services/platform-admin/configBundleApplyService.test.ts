@@ -4,6 +4,7 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
@@ -56,6 +57,17 @@ const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 
 const previewMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, additions: 0, removals: 0, unchanged: 0, failed: 0, truncated: false }));
 const enqueueReplayTask = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const enqueueRuntimeReconciliationTask = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'runtime-task-1' }));
+const reconcileEngineTenantMappings = vi.hoisted(() => vi.fn().mockResolvedValue({
+  mode: 'shared',
+  tenantId: null,
+  mappingStrategy: 'engine_tenant_id',
+  mappingVersion: 1,
+  resolutionStatus: 'ready',
+  lastReconciledAt: 1,
+  mappedResourceCount: 0,
+  unmappedResourceCount: 0,
+  conflictingResourceCount: 0,
+}));
 vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
   runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
 }));
@@ -71,6 +83,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityRepl
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js', () => ({
   configBundleRuntimeReconciliationTaskService: { enqueue: enqueueRuntimeReconciliationTask },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js', () => ({
+  engineTenantMappingService: { reconcileInStore: reconcileEngineTenantMappings },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -120,6 +135,22 @@ function setupDataSource() {
   const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
   const engineInsert = vi.fn().mockResolvedValue(undefined);
   const engineRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a' }), insert: engineInsert, update: vi.fn() };
+  const engineTenantMappingRows: any[] = [];
+  const engineTenantMappingRepo = {
+    find: vi.fn(async ({ where }: any = {}) => engineTenantMappingRows.filter((row) =>
+      !where || Object.entries(where).every(([key, value]) => row[key] === value)
+    )),
+    findOne: vi.fn(async ({ where }: any) => engineTenantMappingRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null),
+    insert: vi.fn(async (row: any) => { engineTenantMappingRows.push({ ...row }); }),
+    update: vi.fn(async (where: any, values: any) => {
+      const row = engineTenantMappingRows.find((candidate) =>
+        Object.entries(where).every(([key, value]) => candidate[key] === value)
+      );
+      if (row) Object.assign(row, values);
+    }),
+  };
   const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetMaterializationRepo = { find: vi.fn().mockResolvedValue([]) };
@@ -142,6 +173,7 @@ function setupDataSource() {
     if (entity === RbacPermission) return catalogPermissionRepo;
     if (entity === AuthzGroup) return groupRepo;
     if (entity === Engine) return engineRepo;
+    if (entity === EngineTenantMapping) return engineTenantMappingRepo;
     if (entity === EngineSet) return engineSetRepo;
     if (entity === RuntimeResourceSet) return runtimeResourceSetRepo;
     if (entity === RuntimeResourceSetMaterialization) return runtimeResourceSetMaterializationRepo;
@@ -163,7 +195,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -247,6 +279,231 @@ describe('configBundleApplyService', () => {
 
     expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
     expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync', groupKeyIdentity: 'tenant-a:group.deployers' }));
+  });
+
+  it('atomically creates a config-owned tenant mapping and schedules shared-engine reconciliation', async () => {
+    const {
+      engineRepo,
+      engineTenantMappingRepo,
+      engineTenantMappingRows,
+    } = setupDataSource();
+    const sharedEngine = {
+      id: 'engine-1',
+      tenantId: null,
+      name: 'Central',
+      baseUrl: 'https://central.example.test/engine-rest',
+      type: 'operaton',
+      externalId: null,
+      labelsJson: '{}',
+      authType: 'basic',
+      username: 'eg',
+      passwordEnc: 'ref:CENTRAL_PASSWORD',
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      version: null,
+      environmentTagId: null,
+      runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'incomplete',
+      deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true,
+      connectionMode: 'direct',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      lifecycleStatus: 'active',
+    };
+    engineRepo.find.mockResolvedValue([sharedEngine]);
+    engineRepo.findOne.mockImplementation(async ({ where }: any) =>
+      where.id === sharedEngine.id ? sharedEngine : null);
+    const mappingBundle = {
+      ...bundle,
+      imports: ['./engines.json', './engine-tenant-mappings.json'],
+    };
+    const mappingFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.test/engine-rest',
+          auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+      './engine-tenant-mappings.json': {
+        engineTenantMappings: [{
+          key: 'engine-tenant-mapping.central-acme',
+          engineRef: { engineKey: 'engine.central' },
+          externalTenantId: 'acme',
+          tenantRef: { type: 'request_context' },
+          strategy: 'engine_tenant_id',
+          ownershipMode: 'config_warn',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({
+      bundle: mappingBundle,
+      files: mappingFiles,
+    });
+
+    const result = await configBundleApplyService.apply({
+      bundle: mappingBundle,
+      files: mappingFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 1,
+      updated: 0,
+      archived: 0,
+      reconciliation: {
+        engineCount: 1,
+        runtimeReconciliation: {
+          status: 'queued',
+          taskId: 'runtime-task-1',
+          engineCount: 1,
+        },
+      },
+    });
+    expect(engineTenantMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      externalTenantId: 'acme',
+      enterpriseTenantId: 'tenant-a',
+      tenantReferenceJson: '{"type":"request_context"}',
+      strategy: 'engine_tenant_id',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-acme',
+      ownershipMode: 'config_warn',
+      sourceHash: expect.any(String),
+      lastAppliedAt: expect.any(Number),
+      isActive: true,
+    }));
+    expect(engineTenantMappingRows).toHaveLength(1);
+    expect(reconcileEngineTenantMappings).toHaveBeenCalledWith(
+      'engine-1',
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+    );
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      engineIds: ['engine-1'],
+    }));
+  });
+
+  it('authoritatively disables only omitted mappings owned by this bundle', async () => {
+    const {
+      engineRepo,
+      engineTenantMappingRows,
+    } = setupDataSource();
+    const sharedEngine = {
+      id: 'engine-1',
+      tenantId: null,
+      name: 'Central',
+      baseUrl: 'https://central.example.test/engine-rest',
+      type: 'operaton',
+      externalId: null,
+      labelsJson: '{}',
+      runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 1,
+      tenantResolutionStatus: 'ready',
+      deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true,
+      connectionMode: 'direct',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      lifecycleStatus: 'active',
+    };
+    engineRepo.find.mockResolvedValue([sharedEngine]);
+    engineRepo.findOne.mockImplementation(async ({ where }: any) =>
+      where.id === sharedEngine.id ? sharedEngine : null);
+    engineTenantMappingRows.push({
+      id: 'config-mapping',
+      engineId: 'engine-1',
+      externalTenantId: 'acme',
+      enterpriseTenantId: 'tenant-a',
+      strategy: 'engine_tenant_id',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-acme',
+      ownershipMode: 'config_locked',
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    }, {
+      id: 'external-mapping',
+      engineId: 'engine-1',
+      externalTenantId: 'external',
+      enterpriseTenantId: 'tenant-a',
+      strategy: 'engine_tenant_id',
+      source: 'external',
+      sourceRef: 'external:acme',
+      ownershipMode: 'external_managed',
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const mappingBundle = {
+      ...bundle,
+      imports: ['./engines.json', './engine-tenant-mappings.json'],
+    };
+    const mappingFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.test/engine-rest',
+          auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+      './engine-tenant-mappings.json': { engineTenantMappings: [] },
+    };
+    const preview = configBundlePreviewService.preview({
+      bundle: mappingBundle,
+      files: mappingFiles,
+    });
+
+    const result = await configBundleApplyService.apply({
+      bundle: mappingBundle,
+      files: mappingFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: [
+        'config.authoritative_archive:engine_tenant_mapping:engine-tenant-mapping.central-acme',
+      ],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({ archived: 1 });
+    expect(engineTenantMappingRows.find((row) => row.id === 'config-mapping')).toMatchObject({
+      isActive: false,
+    });
+    expect(engineTenantMappingRows.find((row) => row.id === 'external-mapping')).toMatchObject({
+      isActive: true,
+    });
+    expect(reconcileEngineTenantMappings).toHaveBeenCalledWith(
+      'engine-1',
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+    );
   });
 
   it('restores drifted config-warning roles and groups to the previewed state', async () => {
@@ -718,6 +975,79 @@ describe('configBundleApplyService', () => {
       tenantMappingVersion: 0,
       tenantResolutionStatus: 'incomplete',
       runtimeAccessScope: 'resource_aware',
+    }));
+  });
+
+  it('creates a shared engine and its source-owned mappings in one transaction', async () => {
+    const {
+      engineRepo,
+      engineInsert,
+      engineTenantMappingRepo,
+    } = setupDataSource();
+    const engineRows: any[] = [];
+    engineInsert.mockImplementation(async (row: any) => {
+      engineRows.push({ ...row });
+    });
+    engineRepo.find.mockImplementation(async () => [...engineRows]);
+    engineRepo.findOne.mockImplementation(async ({ where }: any) =>
+      engineRows.find((row) => row.id === where.id) || null);
+    const engineBundle = {
+      ...bundle,
+      imports: ['./engines.json', './engine-tenant-mappings.json'],
+    };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.com/engine-rest',
+          auth: { type: 'basic', username: 'eg-client', passwordRef: 'CENTRAL_ENGINE_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+      './engine-tenant-mappings.json': {
+        engineTenantMappings: [{
+          key: 'engine-tenant-mapping.central-acme',
+          engineRef: { engineKey: 'engine.central' },
+          externalTenantId: 'acme',
+          tenantRef: { type: 'request_context' },
+          strategy: 'engine_tenant_id',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({
+      bundle: engineBundle,
+      files: engineFiles,
+    });
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 2,
+      reconciliation: {
+        engineCount: 1,
+        runtimeReconciliation: { engineCount: 1, status: 'queued' },
+      },
+    });
+    expect(engineTenantMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: engineRows[0].id,
+      enterpriseTenantId: 'tenant-a',
+      tenantReferenceJson: '{"type":"request_context"}',
+    }));
+    expect(reconcileEngineTenantMappings).toHaveBeenCalledWith(
+      engineRows[0].id,
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+    );
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      engineIds: [engineRows[0].id],
     }));
   });
 

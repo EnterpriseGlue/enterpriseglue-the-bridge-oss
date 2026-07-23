@@ -20,12 +20,20 @@ const bundle = {
 
 describe('configBundleArchiveService', () => {
   it('converts a folder-style ZIP into the existing configuration envelope', () => {
+    const mappingBundle = {
+      ...bundle,
+      imports: ['./groups.json', './engine-tenant-mappings.json'],
+    };
     expect(configBundleArchiveService.readZip(archive({
-      'bundle.json': bundle,
+      'bundle.json': mappingBundle,
       'groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] },
+      'engine-tenant-mappings.json': { engineTenantMappings: [] },
     }))).toEqual({
-      bundle,
-      files: { './groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] } },
+      bundle: mappingBundle,
+      files: {
+        './groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] },
+        './engine-tenant-mappings.json': { engineTenantMappings: [] },
+      },
     });
   });
 

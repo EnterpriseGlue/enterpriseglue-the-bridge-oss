@@ -8,6 +8,7 @@ import { configBundleRuntimeReconciliationTaskService } from '@enterpriseglue/sh
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import type { EngineTenantReferenceResolver } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyProvisioningService.js';
 import { readConfigBundleFile } from './configBundleFileIngress.js';
 
 export const CONFIG_BOOTSTRAP_ISSUE_CODES = [
@@ -80,7 +81,9 @@ async function persistBootstrapReceipt(applyRunId: string | null, bootstrap: Con
   }
 }
 
-export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus> {
+export async function runConfigBundleBootstrap(options: {
+  tenantReferenceResolver?: EngineTenantReferenceResolver | null;
+} = {}): Promise<ConfigBootstrapStatus> {
   const mode = config.configBootstrapMode;
   let secretPreflight: ConfigBootstrapStatus['secretPreflight'] = 'not_required';
   let phase: 'read' | 'hash' | 'validate' | 'preflight' | 'apply' | 'identity' = 'read';
@@ -117,7 +120,12 @@ export async function runConfigBundleBootstrap(): Promise<ConfigBootstrapStatus>
         idempotencyKey: `bootstrap:${hash}`,
         expectedTenantScope: config.configExpectedTenantScope,
         actorId: 'system:config-bootstrap',
-      }, settings);
+      }, {
+        ...settings,
+        tenantReferenceResolver: options.tenantReferenceResolver || null,
+        tenantReferencePrincipalType: 'system',
+        tenantReferencePrincipalId: 'system:config-bootstrap',
+      });
       applyRunId = result.applyRunId || null;
       phase = 'identity';
       const identityStatus = result.reconciliation?.identitySnapshot?.status;

@@ -66,6 +66,95 @@ describe('configBundlePreviewService', () => {
     expect(permitted).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
   });
 
+  it('accepts portable config-owned mappings for a shared engine', () => {
+    const result = configBundlePreviewService.preview({
+      bundle: {
+        ...bundle,
+        imports: ['./engines.json', './engine-tenant-mappings.json'],
+      },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central',
+            type: 'operaton',
+            baseUrl: 'https://central.example.test/engine-rest',
+            auth: { type: 'basic', username: 'engine-user', passwordRef: 'CENTRAL_PASSWORD' },
+            runtimeAccessScope: 'resource_aware',
+            tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+          }],
+        },
+        './engine-tenant-mappings.json': {
+          engineTenantMappings: [{
+            key: 'engine-tenant-mapping.central-acme',
+            engineRef: { engineKey: 'engine.central' },
+            externalTenantId: 'acme',
+            tenantRef: { type: 'key', key: 'tenant.acme' },
+            strategy: 'engine_tenant_id',
+          }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      valid: true,
+      counts: {
+        './engines.json': 1,
+        './engine-tenant-mappings.json': 1,
+      },
+      canonicalHash: expect.any(String),
+    });
+  });
+
+  it('rejects dedicated-engine and strategy-mismatched tenant mappings', () => {
+    const result = configBundlePreviewService.preview({
+      bundle: {
+        ...bundle,
+        imports: ['./engines.json', './engine-tenant-mappings.json'],
+      },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.dedicated',
+            name: 'Dedicated',
+            type: 'operaton',
+            baseUrl: 'https://dedicated.example.test/engine-rest',
+            auth: { type: 'basic', username: 'engine-user', passwordRef: 'ENGINE_PASSWORD' },
+          }, {
+            key: 'engine.shared',
+            name: 'Shared',
+            type: 'operaton',
+            baseUrl: 'https://shared.example.test/engine-rest',
+            auth: { type: 'basic', username: 'engine-user', passwordRef: 'ENGINE_PASSWORD' },
+            runtimeAccessScope: 'resource_aware',
+            tenancy: { mode: 'shared', mappingStrategy: 'deployment_target' },
+          }],
+        },
+        './engine-tenant-mappings.json': {
+          engineTenantMappings: [{
+            key: 'engine-tenant-mapping.dedicated',
+            engineRef: { engineKey: 'engine.dedicated' },
+            externalTenantId: 'acme',
+            tenantRef: { type: 'request_context' },
+            strategy: 'engine_tenant_id',
+          }, {
+            key: 'engine-tenant-mapping.shared',
+            engineRef: { engineKey: 'engine.shared' },
+            externalTenantId: 'project-a',
+            tenantRef: { type: 'request_context' },
+            strategy: 'engine_tenant_id',
+          }],
+        },
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringContaining('requires a shared engine') }),
+      expect.objectContaining({ message: expect.stringContaining('does not match engine strategy') }),
+    ]));
+  });
+
   it.each([
     { name: 'basic password', auth: { type: 'basic', username: 'engine-user', password: 'literal-basic-password' } },
     { name: 'bearer token', auth: { type: 'bearer', token: 'literal-bearer-token' } },

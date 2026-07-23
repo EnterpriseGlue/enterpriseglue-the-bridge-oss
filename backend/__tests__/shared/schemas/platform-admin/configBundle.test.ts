@@ -7,6 +7,7 @@ import {
   ConfigBundleRuntimeReconciliationTaskSchema,
   ConfigBundleSecretReferenceStatusSchema,
   ConfigAssignmentsFileSchema,
+  ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
   ConfigIdentityProvidersFileSchema,
   ConfigProjectEngineTargetsFileSchema,
@@ -216,6 +217,34 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
         unmappedPolicy: 'deny',
       },
     });
+  });
+
+  it('defines portable config-owned tenant mappings and rejects duplicate identities', () => {
+    const mapping = {
+      key: 'engine-tenant-mapping.central-acme',
+      engineRef: { engineKey: 'engine-central' },
+      externalTenantId: 'acme',
+      tenantRef: { type: 'key', key: 'tenant.acme' },
+      strategy: 'engine_tenant_id',
+    };
+    expect(ConfigEngineTenantMappingsFileSchema.parse({
+      engineTenantMappings: [mapping],
+    })).toEqual({
+      engineTenantMappings: [{
+        ...mapping,
+        active: true,
+        ownershipMode: 'config_locked',
+      }],
+    });
+    expect(ConfigEngineTenantMappingsFileSchema.safeParse({
+      engineTenantMappings: [
+        mapping,
+        { ...mapping, key: 'engine-tenant-mapping.central-acme-duplicate' },
+      ],
+    }).success).toBe(false);
+    expect(ConfigEngineTenantMappingsFileSchema.safeParse({
+      engineTenantMappings: [{ ...mapping, ownershipMode: 'manual' }],
+    }).success).toBe(false);
   });
 
   it('forbids plaintext credential fields across engine and identity-provider bundle contracts', () => {

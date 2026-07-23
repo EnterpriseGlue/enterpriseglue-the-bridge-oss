@@ -13,6 +13,8 @@ import {
 } from './platform-settings.js';
 import {
   EngineConnectionModeSchema,
+  EngineTenantMappingStrategySchema,
+  EngineTenantReferenceSchema,
   EngineTenancyConfigurationSchema,
 } from '../mission-control/engine.js';
 
@@ -43,6 +45,7 @@ const LabelSchema = z.record(LabelKeySchema, z.string().min(1).max(512));
 
 const AllowedImportPaths = [
   './engines.json',
+  './engine-tenant-mappings.json',
   './engine-sets.json',
   './runtime-resource-sets.json',
   './roles.json',
@@ -144,7 +147,7 @@ export const ConfigBundleSecretPreflightResponseSchema = z.object({
 
 export const ConfigBundleDiffOperationSchema = z.enum(['create', 'update', 'noop', 'archive', 'conflict']);
 export const ConfigBundleDiffObjectTypeSchema = z.enum([
-  'role', 'group', 'engine', 'engine_set', 'runtime_resource_set',
+  'role', 'group', 'engine', 'engine_tenant_mapping', 'engine_set', 'runtime_resource_set',
   'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
 ]);
 const ConfigBundleRuntimeResourceReferenceSchema = z.object({
@@ -485,6 +488,39 @@ export const ConfigEnginesFileSchema = z.object({
   engines: z.array(ConfigEngineSchema),
 }).strict().superRefine((file, ctx) => uniqueKeys(file.engines, ctx, 'engines'));
 
+export const ConfigEngineTenantMappingSchema = z.object({
+  key: ConfigKeySchema.regex(
+    /^engine-tenant-mapping[._-]/,
+    'Engine tenant mapping keys must begin with engine-tenant-mapping',
+  ),
+  engineRef: ConfigEngineReferenceSchema,
+  externalTenantId: z.string().max(255).default(''),
+  tenantRef: EngineTenantReferenceSchema,
+  strategy: EngineTenantMappingStrategySchema,
+  active: z.boolean().default(true),
+  ownershipMode: z.enum(['config_locked', 'config_warn']).default('config_locked'),
+}).strict();
+
+export const ConfigEngineTenantMappingsFileSchema = z.object({
+  engineTenantMappings: z.array(ConfigEngineTenantMappingSchema),
+}).strict().superRefine((file, ctx) => {
+  uniqueKeys(file.engineTenantMappings, ctx, 'engineTenantMappings');
+  const identities = new Map<string, number>();
+  file.engineTenantMappings.forEach((mapping, index) => {
+    const identity = `${mapping.engineRef.engineKey}\u0000${mapping.strategy}\u0000${mapping.externalTenantId}`;
+    const duplicateIndex = identities.get(identity);
+    if (duplicateIndex !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['engineTenantMappings', index, 'externalTenantId'],
+        message: `Duplicate engine tenant mapping identity also declared at engineTenantMappings.${duplicateIndex}`,
+      });
+    } else {
+      identities.set(identity, index);
+    }
+  });
+});
+
 export const ConfigEngineSetSelectorSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('all') }).strict(),
   z.object({ mode: z.literal('engine_ids'), engineKeys: z.array(ReferenceKeySchema).min(1) }).strict(),
@@ -731,6 +767,7 @@ export type ConfigBundleRuntimeReconciliationTask = z.infer<typeof ConfigBundleR
 export type ConfigRole = z.infer<typeof ConfigRoleSchema>;
 export type ConfigIdentityProvider = z.infer<typeof ConfigIdentityProviderSchema>;
 export type ConfigIdentityMapping = z.infer<typeof ConfigIdentityMappingSchema>;
+export type ConfigEngineTenantMapping = z.infer<typeof ConfigEngineTenantMappingSchema>;
 export type ConfigEngineReference = z.infer<typeof ConfigEngineReferenceSchema>;
 export type ConfigEngineSetReference = z.infer<typeof ConfigEngineSetReferenceSchema>;
 export type ConfigGroupReference = z.infer<typeof ConfigGroupReferenceSchema>;

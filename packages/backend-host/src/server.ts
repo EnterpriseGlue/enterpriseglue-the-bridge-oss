@@ -102,7 +102,7 @@ export async function startServer() {
   await bootstrapDefaultEmailConfig();
 
   try {
-    await runConfigBundleBootstrap();
+    await runConfigBundleBootstrap({ tenantReferenceResolver: engineTenantReferenceResolver });
   } catch {
     console.error('Configuration bundle bootstrap failed:', getConfigBootstrapStatus());
     if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');

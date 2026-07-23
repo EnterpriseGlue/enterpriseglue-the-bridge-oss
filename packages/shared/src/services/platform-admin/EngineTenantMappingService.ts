@@ -125,6 +125,95 @@ export class EngineTenantMappingService {
     );
   }
 
+  /**
+   * Re-materializes tenant resolution after a trusted caller has changed
+   * mapping rows inside an existing transaction. This keeps config-bundle
+   * reconciliation atomic without opening a nested transaction.
+   */
+  async reconcileInStore(
+    engineId: string,
+    store: EntityManager,
+    mappingChanged = true,
+  ): Promise<EngineTenancyDiagnostics> {
+    const engineRepo = store.getRepository(Engine);
+    const mappingRepo = store.getRepository(EngineTenantMapping);
+    const resourceRepo = store.getRepository(RuntimeResource);
+    const engine = await engineRepo.findOne({ where: { id: engineId } });
+    if (!engine) throw Errors.notFound('Engine', engineId);
+    if (engine.tenancyMode !== 'shared' || !engine.tenantMappingStrategy) {
+      throw mappingError('ENGINE_TENANCY_CONFLICT', 'Tenant mappings require a shared engine with a mapping strategy', 400);
+    }
+
+    const [mappings, resources] = await Promise.all([
+      mappingRepo.find({ where: { engineId, isActive: true } }),
+      resourceRepo.find({ where: { engineId, isActive: true } }),
+    ]);
+    const now = Date.now();
+    const currentVersion = Number(engine.tenantMappingVersion || 0);
+    const nextVersion = mappingChanged ? currentVersion + 1 : currentVersion;
+    let mapped = 0;
+    let unmapped = 0;
+    let conflicts = 0;
+
+    for (const resource of resources) {
+      const matches = matchingMappings(engine, resource, mappings);
+      if (matches.length === 1) {
+        mapped += 1;
+        await resourceRepo.update({ id: resource.id }, {
+          tenantId: matches[0].enterpriseTenantId,
+          tenantResolutionStatus: 'resolved',
+          tenantMappingId: matches[0].id,
+          tenantMappingVersion: nextVersion,
+          tenantResolutionDetailsJson: JSON.stringify({ code: 'shared_engine_mapping' }),
+          updatedAt: now,
+        });
+      } else if (matches.length > 1) {
+        conflicts += 1;
+        await resourceRepo.update({ id: resource.id }, {
+          tenantId: null,
+          tenantResolutionStatus: 'conflict',
+          tenantMappingId: null,
+          tenantMappingVersion: nextVersion,
+          tenantResolutionDetailsJson: JSON.stringify({ code: 'multiple_active_mappings' }),
+          updatedAt: now,
+        });
+      } else {
+        unmapped += 1;
+        await resourceRepo.update({ id: resource.id }, {
+          tenantId: null,
+          tenantResolutionStatus: 'unmapped',
+          tenantMappingId: null,
+          tenantMappingVersion: nextVersion,
+          tenantResolutionDetailsJson: JSON.stringify({ code: 'tenant_mapping_not_found' }),
+          updatedAt: now,
+        });
+      }
+    }
+
+    const resolutionStatus = conflicts > 0
+      ? 'conflict'
+      : mappings.length > 0 && unmapped === 0
+        ? 'ready'
+        : 'incomplete';
+    await engineRepo.update({ id: engineId }, {
+      tenantMappingVersion: nextVersion,
+      tenantResolutionStatus: resolutionStatus,
+      lastTenantReconciledAt: now,
+      updatedAt: now,
+    });
+    return {
+      ...diagnostics(
+        { ...engine, tenantResolutionStatus: resolutionStatus },
+        [],
+        nextVersion,
+        now,
+      ),
+      mappedResourceCount: mapped,
+      unmappedResourceCount: unmapped,
+      conflictingResourceCount: conflicts,
+    };
+  }
+
   async upsert(context: MappingWriteContext): Promise<ExternalEngineTenantMappingsUpsertResponse> {
     const requestPayload = ExternalEngineTenantMappingsUpsertRequestSchema.parse(context.request);
     const dataSource = await getDataSource();
@@ -204,7 +293,17 @@ export class EngineTenantMappingService {
           throw mappingError('ENGINE_TENANCY_CONFLICT', 'Mapping identity and source are owned by different rows');
         }
         const existing = identityRow || sourceRow;
-        if (existing && (existing.source !== context.source || existing.sourceRef !== item.request.sourceRef)) {
+        const allowsConfigWarnOverride = Boolean(
+          existing
+          && context.source === 'manual'
+          && existing.source === 'config'
+          && existing.ownershipMode === 'config_warn',
+        );
+        if (
+          existing
+          && (existing.source !== context.source || existing.sourceRef !== item.request.sourceRef)
+          && !allowsConfigWarnOverride
+        ) {
           throw mappingError('ENGINE_TENANCY_CONFLICT', 'The mapping identity is owned by another source');
         }
         if (!existing && !item.request.active) {
@@ -216,6 +315,7 @@ export class EngineTenantMappingService {
               engineId: context.engineId,
               externalTenantId: item.request.externalTenantId,
               enterpriseTenantId: item.enterpriseTenantId,
+              tenantReferenceJson: JSON.stringify(item.request.tenantRef),
               strategy: item.request.strategy,
               source: context.source,
               sourceRef: item.request.sourceRef,
@@ -235,6 +335,7 @@ export class EngineTenantMappingService {
             engineId: context.engineId,
             externalTenantId: item.request.externalTenantId,
             enterpriseTenantId: item.enterpriseTenantId,
+            tenantReferenceJson: JSON.stringify(item.request.tenantRef),
             strategy: item.request.strategy,
             source: context.source,
             sourceRef: item.request.sourceRef,
@@ -251,8 +352,12 @@ export class EngineTenantMappingService {
           bySource.set(source, row);
           continue;
         }
+        const tenantReferenceJson = allowsConfigWarnOverride
+          ? existing.tenantReferenceJson
+          : JSON.stringify(item.request.tenantRef);
         const changed = (
           existing.enterpriseTenantId !== item.enterpriseTenantId
+          || existing.tenantReferenceJson !== tenantReferenceJson
           || existing.externalTenantId !== item.request.externalTenantId
           || existing.strategy !== item.request.strategy
           || existing.ownershipMode !== context.ownershipMode
@@ -261,9 +366,10 @@ export class EngineTenantMappingService {
         const row = {
           ...existing,
           enterpriseTenantId: item.enterpriseTenantId,
+          tenantReferenceJson,
           externalTenantId: item.request.externalTenantId,
           strategy: item.request.strategy,
-          ownershipMode: context.ownershipMode,
+          ownershipMode: allowsConfigWarnOverride ? existing.ownershipMode : context.ownershipMode,
           isActive: item.request.active,
           updatedAt: changed ? now : existing.updatedAt,
         } as MappingRow;

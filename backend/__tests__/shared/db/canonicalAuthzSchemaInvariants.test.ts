@@ -22,6 +22,7 @@ import { AddDeploymentHistoryLineage1700000000058 } from '@enterpriseglue/shared
 import { RequireCanonicalRoleAssignmentShape1700000000084 } from '@enterpriseglue/shared/db/migrations/1700000000084-require-canonical-role-assignment-shape.js';
 import { AddRoleAssignmentSourceRefIndex1700000000085 } from '@enterpriseglue/shared/db/migrations/1700000000085-add-role-assignment-source-ref-index.js';
 import { AddEngineTenancyFoundation1700000000096 } from '@enterpriseglue/shared/db/migrations/1700000000096-add-engine-tenancy-foundation.js';
+import { AddEngineTenantMappingReference1700000000097 } from '@enterpriseglue/shared/db/migrations/1700000000097-add-engine-tenant-mapping-reference.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -215,6 +216,7 @@ describe('canonical authorization persistence schema invariants', () => {
     ]));
     expect(column(EngineTenantMapping, 'externalTenantId')?.options.default).toBe('');
     expect(column(EngineTenantMapping, 'enterpriseTenantId')?.options.nullable).not.toBe(true);
+    expect(column(EngineTenantMapping, 'tenantReferenceJson')?.options.nullable).toBe(true);
     expect(column(EngineTenantMapping, 'sourceRef')?.options.nullable).not.toBe(true);
 
     const addColumn = vi.fn().mockResolvedValue(undefined);
@@ -262,5 +264,17 @@ describe('canonical authorization persistence schema invariants', () => {
       expect.objectContaining({ columnNames: ['engine_id', 'strategy', 'external_tenant_id'] }),
       expect.objectContaining({ columnNames: ['engine_id', 'source', 'source_ref'] }),
     ]));
+
+    const addReferenceColumn = vi.fn().mockResolvedValue(undefined);
+    await new AddEngineTenantMappingReference1700000000097().up({
+      hasTable: vi.fn().mockResolvedValue(true),
+      hasColumn: vi.fn().mockResolvedValue(false),
+      addColumn: addReferenceColumn,
+      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+    } as any);
+    expect(addReferenceColumn).toHaveBeenCalledWith(
+      'engine_tenant_mappings',
+      expect.objectContaining({ name: 'tenant_reference_json', isNullable: true }),
+    );
   });
 });

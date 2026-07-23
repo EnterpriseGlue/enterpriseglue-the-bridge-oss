@@ -8,6 +8,7 @@ const MANIFEST_PATH = 'bundle.json';
 const ALLOWED_ARCHIVE_PATHS = new Set([
   MANIFEST_PATH,
   'engines.json',
+  'engine-tenant-mappings.json',
   'engine-sets.json',
   'runtime-resource-sets.json',
   'roles.json',

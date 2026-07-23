@@ -61,6 +61,20 @@ The transition lane:
    and
 5. checks routes, action inventory, canonical schemas, and OpenAPI together.
 
+The mapping lane holds `EngineTenantMappingService.ts` to 100% statements,
+branches, functions, and lines. Its configuration-bundle matrix includes:
+
+- schema defaults, duplicate identities, engine references, and strategy
+  mismatch;
+- tenant-key resolution and denial;
+- create, update, no-op, disable, and authoritative omission;
+- manual or foreign ownership conflict and `config_warn` drift;
+- transaction-local mapping version and runtime-resource re-resolution;
+- bounded follow-up reconciliation scheduling;
+- ZIP import, startup tenant-resolver propagation, and OpenAPI file-envelope
+  parity; and
+- export/preview/diff round-trip with the original stable tenant key.
+
 Run package type checks after any contract change:
 
 ```bash
@@ -81,6 +95,7 @@ The focused matrix proves:
 | Shared runtime | resolved exact resource plus tenant scope | broad shared-engine/Engine Set, unresolved, stale, null, or sibling tenant |
 | Assignment API | authenticated tenant replaces request value | caller-supplied sibling tenant cannot be persisted |
 | Configuration | tenant role/assignment preview, diff, apply, export | unsafe tenant-role permission |
+| Config mapping | stable tenant key, shared strategy, source-owned create/update/export | dedicated engine, strategy mismatch, foreign owner, unauthorized tenant, stale authoritative removal |
 | Effective Access | sanitized mapping lineage | raw claims, credentials, or foreign inventory |
 | UI | Current tenant for every supported principal | no raw tenant-ID field |
 | Classification | explicit dedicated/shared and safe engine-wide default proposal | ambiguous resource-aware and invalid topology |
@@ -107,6 +122,20 @@ For a manual review:
 5. verify sibling and unresolved resources deny;
 6. inspect Effective Access mapping lineage; and
 7. remove the assignment or mapping and verify access disappears immediately.
+
+For a configuration-owned mapping, also run this lifecycle:
+
+1. preview an additive bundle and confirm one
+   `engine_tenant_mapping:create`;
+2. apply and confirm one mapping-version increment plus a queued runtime
+   reconciliation task;
+3. export and verify the mapping, engine, and tenant keys are unchanged;
+4. attempt a manual edit against `config_locked` and confirm denial;
+5. repeat with `config_warn`, confirm diff reports update drift, and reapply;
+6. omit the row from an authoritative bundle, review and submit the returned
+   archive acknowledgement; and
+7. confirm only that bundle's row is inactive while a seeded external row on
+   the same engine remains active.
 
 Capture only sanitized response bodies, mapping versions, test IDs, and browser
 traces. Never retain tokens, credentials, raw SSO claims, or private endpoints.

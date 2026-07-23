@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
@@ -48,12 +49,14 @@ function mockDataSource(
   groupMemberships: unknown[] = [],
   runtimeResourceSets: unknown[] = [],
   runtimeResourceSetMaterializations: unknown[] = [],
+  engineTenantMappings: unknown[] = [],
 ) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
       if (entity === RbacRole) return { find: vi.fn().mockResolvedValue(roles) };
       if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue(groups) };
       if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
+      if (entity === EngineTenantMapping) return { find: vi.fn().mockResolvedValue(engineTenantMappings) };
       if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue(runtimeResourceSets) };
       if (entity === RuntimeResourceSetMaterialization) return { find: vi.fn().mockResolvedValue(runtimeResourceSetMaterializations) };
@@ -127,6 +130,193 @@ describe('configBundleDiffService', () => {
       operation: 'conflict',
       reason: expect.stringContaining('transition workflow'),
     }));
+  });
+
+  it('diffs config-owned shared-engine tenant mappings with authorized tenant-key resolution', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-1',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    }]);
+    const resolver = {
+      resolve: vi.fn().mockResolvedValue({
+        tenantId: 'tenant-b',
+        tenantKey: 'tenant.bravo',
+        authorized: true,
+      }),
+    };
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './engine-tenant-mappings.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central',
+            type: 'operaton',
+            baseUrl: 'https://central.example.test/engine-rest',
+            auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+            runtimeAccessScope: 'resource_aware',
+            tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+          }],
+        },
+        './engine-tenant-mappings.json': {
+          engineTenantMappings: [{
+            key: 'engine-tenant-mapping.central-bravo',
+            engineRef: { engineKey: 'engine.central' },
+            externalTenantId: 'bravo',
+            tenantRef: { type: 'key', key: 'tenant.bravo' },
+            strategy: 'engine_tenant_id',
+          }],
+        },
+      },
+    }, 'tenant-a', {
+      credentiallessCustomerSidecarsEnabled: false,
+      tenantReferenceResolver: resolver,
+      tenantReferencePrincipalType: 'user',
+      tenantReferencePrincipalId: 'admin-1',
+    });
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'engine_tenant_mapping',
+      key: 'engine-tenant-mapping.central-bravo',
+      operation: 'create',
+    }));
+    expect(resolver.resolve).toHaveBeenCalledWith(expect.objectContaining({
+      reference: { type: 'key', key: 'tenant.bravo' },
+      requestTenantId: 'tenant-a',
+      principalType: 'user',
+      principalId: 'admin-1',
+    }));
+  });
+
+  it('refuses to take over a manual shared-engine tenant identity', async () => {
+    const engine = {
+      id: 'engine-1',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    };
+    mockDataSource(
+      [], [], [], [engine], [], [], [], [], [], [], [], [], [], [{
+        id: 'manual-mapping',
+        engineId: 'engine-1',
+        externalTenantId: 'acme',
+        enterpriseTenantId: 'tenant-a',
+        strategy: 'engine_tenant_id',
+        source: 'manual',
+        sourceRef: 'manual:acme',
+        ownershipMode: 'manual',
+        isActive: true,
+      }],
+    );
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './engine-tenant-mappings.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central',
+            type: 'operaton',
+            baseUrl: 'https://central.example.test/engine-rest',
+            auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+            runtimeAccessScope: 'resource_aware',
+            tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+          }],
+        },
+        './engine-tenant-mappings.json': {
+          engineTenantMappings: [{
+            key: 'engine-tenant-mapping.central-acme',
+            engineRef: { engineKey: 'engine.central' },
+            externalTenantId: 'acme',
+            tenantRef: { type: 'request_context' },
+            strategy: 'engine_tenant_id',
+          }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'engine_tenant_mapping',
+      operation: 'conflict',
+      currentId: 'manual-mapping',
+      reason: expect.stringContaining('owned by another source'),
+    }));
+  });
+
+  it('archives only omitted mapping rows owned by the authoritative bundle', async () => {
+    const engine = {
+      id: 'engine-1',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    };
+    mockDataSource(
+      [], [], [], [engine], [], [], [], [], [], [], [], [], [], [{
+        id: 'stale-config-mapping',
+        engineId: 'engine-1',
+        externalTenantId: 'stale',
+        enterpriseTenantId: 'tenant-a',
+        strategy: 'engine_tenant_id',
+        source: 'config',
+        sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.stale',
+        ownershipMode: 'config_locked',
+        isActive: true,
+      }, {
+        id: 'external-mapping',
+        engineId: 'engine-1',
+        externalTenantId: 'external',
+        enterpriseTenantId: 'tenant-a',
+        strategy: 'engine_tenant_id',
+        source: 'external',
+        sourceRef: 'external:tenant-a',
+        ownershipMode: 'external_managed',
+        isActive: true,
+      }],
+    );
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './engine-tenant-mappings.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central',
+            type: 'operaton',
+            baseUrl: 'https://central.example.test/engine-rest',
+            auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+            runtimeAccessScope: 'resource_aware',
+            tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+          }],
+        },
+        './engine-tenant-mappings.json': { engineTenantMappings: [] },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'engine_tenant_mapping',
+      key: 'engine-tenant-mapping.stale',
+      operation: 'archive',
+      currentId: 'stale-config-mapping',
+    }));
+    expect(result.changes).not.toContainEqual(expect.objectContaining({ currentId: 'external-mapping' }));
+    expect(result.requiredAcknowledgements).toContain(
+      'config.authoritative_archive:engine_tenant_mapping:engine-tenant-mapping.stale',
+    );
   });
 
   it('identifies creation and authoritative archival without mutating persisted state', async () => {

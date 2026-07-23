@@ -21,6 +21,9 @@ export class EngineTenantMapping extends AppBaseEntity {
   @Column({ name: 'enterprise_tenant_id', type: 'text' })
   enterpriseTenantId!: string;
 
+  @Column({ name: 'tenant_reference_json', type: 'text', nullable: true })
+  tenantReferenceJson!: string | null;
+
   @Column({ type: 'text' })
   strategy!: string;
 

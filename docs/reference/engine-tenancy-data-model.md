@@ -13,7 +13,8 @@ Tenant-role classification, same-tenant inheritance, configuration round-trip,
 Access Control assignment scope, and Effective Access mapping lineage are also
 implemented. Existing-engine classification and topology transition
 preview/apply are implemented. Configuration-owned tenant mappings and
-engine-topology UI controls remain gated.
+their source-scoped reconciliation lifecycle are implemented. Engine-topology
+UI controls remain gated.
 
 ## Boundaries
 
@@ -57,6 +58,7 @@ The `engines` table owns topology and reconciliation state.
 | `engineId` | Shared engine receiving the native identity |
 | `externalTenantId` | Native engine tenant identifier; empty string is the canonical no-value representation |
 | `enterpriseTenantId` | Resolved EnterpriseGlue tenant |
+| `tenantReferenceJson` | Sanitized authorized reference retained for portable config export; runtime authorization still uses the resolved tenant ID |
 | `strategy` | `engine_tenant_id`, `deployment_target`, or `explicit` |
 | `source` / `sourceRef` | Stable provenance for manual, API, external, config, or system ownership |
 | `ownershipMode` | `manual`, `config_warn`, `config_locked`, or `external_managed` |
@@ -226,8 +228,63 @@ even if its labels or selectors match.
 the same explicit dedicated/shared topology contract. Shared config engines are
 stored with null engine tenant, the declared mapping strategy, resource-aware
 access, and fail-closed `incomplete` status. A normal config apply reports a
-conflict instead of changing an existing engine's topology. Configuration-owned
-mapping rows are a later phase and must not be inferred from topology alone.
+conflict instead of changing an existing engine's topology.
+
+## Configuration-Owned Mapping Lifecycle
+
+`TEN-CONFIG-004`: configuration mappings use the separate
+`engine-tenant-mappings.json` object family. Each row has a stable config key,
+an engine config-key reference, the external tenant identity, a canonical
+tenant reference, the engine mapping strategy, active state, and
+`config_locked` or `config_warn` ownership.
+
+```json
+{
+  "engineTenantMappings": [
+    {
+      "key": "engine-tenant-mapping.central-payments",
+      "engineRef": { "engineKey": "engine.central" },
+      "externalTenantId": "payments",
+      "tenantRef": { "type": "key", "key": "tenant.payments" },
+      "strategy": "engine_tenant_id",
+      "active": true,
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+Preview requires the referenced engine in the same bundle, requires shared
+topology, and requires the mapping strategy to match the engine. Apply resolves
+and authorizes every tenant reference before writing. The resolved tenant ID is
+the runtime authority; the sanitized original reference is retained so an
+export can preserve a portable tenant key.
+
+`TEN-CONFIG-005`: a bundle cannot take over an engine tenant identity owned by
+manual, API, external, system, or another configuration source. Diff reports a
+conflict and apply rechecks ownership inside the transaction.
+
+`TEN-CONFIG-006`: mapping create/update/disable, mapping-version advancement,
+known-runtime-resource re-resolution, sanitized audit records, and follow-up
+runtime reconciliation scheduling are one hash-bound apply lifecycle. Mapping
+changes are included in the config result as the distinct
+`engine_tenant_mapping` object type.
+
+`TEN-CONFIG-007`: export includes only active mappings owned by the selected
+bundle and uses stable mapping and engine keys. A persisted key reference is
+exported unchanged; legacy rows without reference metadata safely fall back to
+request context, default, or the resolved ID.
+
+`TEN-CONFIG-008`: an operator may override a `config_warn` mapping through the
+manual mapping API. The row deliberately retains config ownership, its stable
+source reference, and last-applied hash so the next diff exposes and can
+restore the drift. `config_locked` mappings remain immutable outside bundle
+apply.
+
+`TEN-CONFIG-009`: authoritative omission disables only active mapping rows
+whose source reference belongs to that exact bundle. Manual, API, external,
+system, and other-bundle mappings on the same shared engine are preserved. The
+removal requires the normal authoritative-archive acknowledgement.
 
 ## Classification and Topology Transitions
 

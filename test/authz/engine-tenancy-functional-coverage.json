@@ -242,6 +242,72 @@
     "ciJob": "test:engine-tenancy:mappings"
   },
   {
+    "id": "TEN-CONFIG-004",
+    "requirement": "Configuration bundles accept a separate portable shared-engine tenant-mapping file and validate engine references and strategies.",
+    "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+    "dimensions": ["config", "schema", "preview", "tenant_key", "shared"],
+    "expected": "portable mapping compiles or fails with an object-scoped diagnostic",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundlePreviewService.test.ts",
+    "testName": "accepts portable config-owned mappings for a shared engine",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-CONFIG-005",
+    "requirement": "A configuration bundle never takes over a manual, API, or external mapping identity.",
+    "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+    "dimensions": ["config", "source_ownership", "conflict"],
+    "expected": "foreign mapping identity is preserved and reported as a conflict",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundleDiffService.test.ts",
+    "testName": "refuses to take over a manual shared-engine tenant identity",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-CONFIG-006",
+    "requirement": "Configuration mapping writes, resource re-resolution, version advancement, audit, and follow-up reconciliation scheduling are atomic.",
+    "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+    "dimensions": ["config", "apply", "atomic", "mapping_version", "reconciliation"],
+    "expected": "one transaction and queued engine reconciliation",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundleApplyService.test.ts",
+    "testName": "atomically creates a config-owned tenant mapping and schedules shared-engine reconciliation",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-CONFIG-007",
+    "requirement": "Configuration export round-trips source-owned engine mappings with stable mapping and engine references.",
+    "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+    "dimensions": ["config", "export", "round_trip", "stable_reference"],
+    "expected": "exported mapping previews and diffs as a no-op",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundleExportService.test.ts",
+    "testName": "exports all apply-supported config families with stable references",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-CONFIG-008",
+    "requirement": "Manual changes to config-warning mappings preserve config ownership so the next bundle diff can detect and restore drift; config-locked mappings remain protected.",
+    "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+    "dimensions": ["config_warn", "config_locked", "manual_override", "drift"],
+    "expected": "warn override retained as config-owned drift; locked override denied",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenantMappingService.test.ts",
+    "testName": "allows a manual config-warning override while preserving config ownership",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
+    "id": "TEN-CONFIG-009",
+    "requirement": "Authoritative configuration omission disables only mappings owned by that bundle and preserves external mappings on the same engine.",
+    "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+    "dimensions": ["config", "authoritative", "lifecycle", "source_ownership", "audit"],
+    "expected": "source-owned mapping disabled; external mapping remains active",
+    "testFile": "backend/__tests__/shared/services/platform-admin/configBundleApplyService.test.ts",
+    "testName": "authoritatively disables only omitted mappings owned by this bundle",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:mappings"
+  },
+  {
     "id": "TEN-AUTHZ-002",
     "requirement": "Tenant roles accept every classified project permission and only the explicit runtime-safe engine subset.",
     "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",

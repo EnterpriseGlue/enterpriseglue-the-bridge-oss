@@ -9,9 +9,10 @@ and operators.
 Status: Dedicated/shared provisioning, mapping administration, runtime
 quarantine, tenant roles, configuration bundles, and Effective Access lineage
 are implemented. Topology classification and guarded transition preview/apply
-are implemented through the API. Engine-topology form controls are still
-gated; create or transition engines through the published API or use a
-configuration bundle for supported create/update operations.
+are implemented through the API. Configuration bundles also own and reconcile
+shared-engine mapping rows. Engine-topology form controls are still gated;
+create or transition engines through the published API or use a configuration
+bundle for supported create/update operations.
 
 ## Choose the Topology
 
@@ -93,6 +94,60 @@ reviewed batch. Then reconcile inventory and review:
 
 The local default tenant is never applied to an unmapped shared resource.
 Unmapped, conflicting, stale, or null-tenant resources remain quarantined.
+
+### Manage Shared Mappings as Configuration
+
+For GitOps-managed engines, add this import to `bundle.json`:
+
+```json
+{
+  "imports": [
+    "./engines.json",
+    "./engine-tenant-mappings.json"
+  ]
+}
+```
+
+Keep the shared topology in `engines.json`, and add the mappings in
+`engine-tenant-mappings.json`:
+
+```json
+{
+  "engineTenantMappings": [
+    {
+      "key": "engine-tenant-mapping.central-team-a",
+      "engineRef": { "engineKey": "engine.central" },
+      "externalTenantId": "team-a",
+      "tenantRef": { "type": "key", "key": "tenant.team-a" },
+      "strategy": "engine_tenant_id",
+      "active": true,
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+Run preview, diff, and secret-reference validation before apply. Review mapping
+changes separately from engine connection changes. If an authoritative bundle
+omits a previously active mapping, copy the returned mapping-archive
+acknowledgement into the apply request only after reviewing which runtime
+resources will lose resolution.
+
+Choose:
+
+- `config_locked` for production GitOps ownership; manual/API/external mapping
+  writes cannot take over the identity.
+- `config_warn` when an emergency manual override is allowed. The mapping stays
+  config-owned, so the next diff shows the drift and the next apply restores
+  the file.
+
+An authoritative bundle affects only mappings owned by that exact bundle.
+External or manual mappings on the same engine are not deleted. Export retains
+stable mapping, engine, and tenant keys, so the bundle can be reviewed and
+applied in another environment with the corresponding tenant resolver.
+Mounted startup bundles use that same resolver and system bootstrap identity,
+so Docker and Kubernetes startup apply have the same tenant-key behavior as
+interactive API apply.
 
 ## Assign Tenant Access
 

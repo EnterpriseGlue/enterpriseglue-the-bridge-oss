@@ -1,14 +1,19 @@
 import { z } from 'zod';
 import {
-  ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineSetsFileSchema, ConfigGroupsFileSchema,
+  ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineSetsFileSchema, ConfigEngineTenantMappingsFileSchema, ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema, ConfigIdentityProvidersFileSchema, ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema, ConfigRuntimeResourceSetsFileSchema, EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import { PermissionCatalog, SystemRoleDefinitions } from './permissions.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
+import type {
+  EngineTenancyPrincipalType,
+  EngineTenantReferenceResolver,
+} from './EngineTenancyProvisioningService.js';
 
 const FILE_SCHEMAS: Record<string, z.ZodType> = {
   './engines.json': ConfigEnginesFileSchema,
+  './engine-tenant-mappings.json': ConfigEngineTenantMappingsFileSchema,
   './engine-sets.json': ConfigEngineSetsFileSchema,
   './runtime-resource-sets.json': ConfigRuntimeResourceSetsFileSchema,
   './roles.json': ConfigRolesFileSchema,
@@ -20,7 +25,12 @@ const FILE_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 export interface ConfigBundlePreviewInput { bundle: unknown; files: Record<string, unknown>; }
-export interface ConfigBundlePolicyContext { credentiallessCustomerSidecarsEnabled: boolean; }
+export interface ConfigBundlePolicyContext {
+  credentiallessCustomerSidecarsEnabled: boolean;
+  tenantReferenceResolver?: EngineTenantReferenceResolver | null;
+  tenantReferencePrincipalType?: EngineTenancyPrincipalType;
+  tenantReferencePrincipalId?: string | null;
+}
 export interface ConfigBundleValidationIssue {
   path: string;
   message: string;
@@ -128,6 +138,7 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   const roles = fileEntries(normalizedFiles, './roles.json', 'roles');
   const groups = fileEntries(normalizedFiles, './groups.json', 'groups');
   const engines = fileEntries(normalizedFiles, './engines.json', 'engines');
+  const engineTenantMappings = fileEntries(normalizedFiles, './engine-tenant-mappings.json', 'engineTenantMappings');
   const engineSets = fileEntries(normalizedFiles, './engine-sets.json', 'engineSets');
   const runtimeResourceSets = fileEntries(normalizedFiles, './runtime-resource-sets.json', 'runtimeResourceSets');
   const identityProviders = fileEntries(normalizedFiles, './identity-providers.json', 'identityProviders');
@@ -174,6 +185,23 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   runtimeResourceSets.forEach((set, index) => {
     if (!engineKeys.has(set.engineRef.engineKey)) {
       errors.push({ path: `./runtime-resource-sets.json.runtimeResourceSets.${index}.engineRef.engineKey`, message: `Unknown engine key: ${set.engineRef.engineKey}` });
+    }
+  });
+
+  engineTenantMappings.forEach((mapping, index) => {
+    const engine = engines.find((candidate) => candidate.key === mapping.engineRef.engineKey);
+    const path = `./engine-tenant-mappings.json.engineTenantMappings.${index}`;
+    if (!engine) {
+      errors.push({ path: `${path}.engineRef.engineKey`, message: `Unknown engine key: ${mapping.engineRef.engineKey}` });
+      return;
+    }
+    if (engine.tenancy.mode !== 'shared') {
+      errors.push({ path: `${path}.engineRef.engineKey`, message: `Engine tenant mapping ${mapping.key} requires a shared engine` });
+    } else if (engine.tenancy.mappingStrategy !== mapping.strategy) {
+      errors.push({
+        path: `${path}.strategy`,
+        message: `Engine tenant mapping strategy ${mapping.strategy} does not match engine strategy ${engine.tenancy.mappingStrategy}`,
+      });
     }
   });
 

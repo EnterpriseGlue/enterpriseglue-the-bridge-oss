@@ -49,9 +49,27 @@ platform
       -> shared-engine runtime resource mapped to this tenant
 ```
 
+## Implementation Status
+
+Phases 1–4 are complete, including explicit topology persistence, portable
+tenant references, tenant roles, manual and external provisioning, guarded
+topology transitions, and configuration-owned mapping reconciliation.
+Configuration mappings use a separate `engine-tenant-mappings.json` family,
+retain the authorized tenant reference for portable export, preserve other
+sources, re-resolve known runtime inventory atomically, and schedule bounded
+post-apply reconciliation.
+
+The remaining implementation work is concentrated in Mission Control runtime
+guards and transport-denial proof, Engine Set transition materialization,
+topology/mapping UI and metrics, and final documentation/example/browser
+adoption gates.
+
 ## Current-State Gap
 
-The current implementation already provides:
+This section records the gap that motivated the plan. The phase checklist near
+the end of this document is the authoritative current status.
+
+The implementation already provided:
 
 - `Engine.tenantId`, which is nullable;
 - `runtimeAccessScope` with `engine_wide` and `resource_aware`;
@@ -709,8 +727,8 @@ checkboxes are closed.
 - [x] Add topology preview/apply APIs.
 - [x] Add mapping list/upsert APIs.
 - [x] Update config preview/diff/apply/export for engine topology.
-- [ ] Add configuration-owned mapping rows and drift reconciliation.
-- [ ] Add lifecycle and reconciliation scheduling.
+- [x] Add configuration-owned mapping rows and drift reconciliation.
+- [x] Add lifecycle and reconciliation scheduling.
 
 ### Phase 5: runtime integration
 

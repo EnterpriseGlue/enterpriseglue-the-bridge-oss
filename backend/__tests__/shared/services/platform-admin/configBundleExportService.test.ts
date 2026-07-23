@@ -2,6 +2,7 @@ import { describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
@@ -30,7 +31,7 @@ describe('configBundleExportService', () => {
           labelsJson: '{"environment":"prod"}', authType: 'basic', username: 'eg', passwordEnc: 'ref:PROD_ENGINE_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
           version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'direct_engine', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked',
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -51,7 +52,7 @@ describe('configBundleExportService', () => {
           labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'v2:encrypted-downstream-token', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
           version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'customer_sidecar', ownershipMode: 'config_locked',
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -93,6 +94,18 @@ describe('configBundleExportService', () => {
           lifecycleStatus: 'active',
           sourceRef: 'config_bundle:acme.authz',
         }]) };
+        if (entity === EngineTenantMapping) return { find: vi.fn().mockResolvedValue([{
+          id: 'mapping-1',
+          engineId: 'engine-1',
+          externalTenantId: 'bravo',
+          enterpriseTenantId: 'tenant-b',
+          tenantReferenceJson: '{"type":"key","key":"tenant.bravo"}',
+          strategy: 'engine_tenant_id',
+          source: 'config',
+          sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-bravo',
+          ownershipMode: 'config_locked',
+          isActive: true,
+        }]) };
         if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
@@ -113,6 +126,13 @@ describe('configBundleExportService', () => {
         },
       })],
     });
+    expect(result.files['./engine-tenant-mappings.json']).toEqual({
+      engineTenantMappings: [expect.objectContaining({
+        key: 'engine-tenant-mapping.central-bravo',
+        engineRef: { engineKey: 'engine.central' },
+        tenantRef: { type: 'key', key: 'tenant.bravo' },
+      })],
+    });
     expect(configBundlePreviewService.preview(result)).toMatchObject({ valid: true, errors: [] });
   });
 
@@ -124,7 +144,7 @@ describe('configBundleExportService', () => {
           id: 'provider-1', key: 'identity.oidc.legacy', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null,
           configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test', clientId: 'enterpriseglue', clientSecret: rawClientSecret, nested: { apiKey: rawClientSecret } }), syncJson: '{}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz',
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, Engine, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, Engine, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -150,7 +170,7 @@ describe('configBundleExportService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository(entity: unknown) {
         if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -173,7 +193,7 @@ describe('configBundleExportService', () => {
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([{ id: 'group-1', key: 'group.operators' }]) };
         if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{ id: 'provider-1', key: 'identity.oidc.main' }]) };
         if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([legacyScopeMapping]) };
-        if ([RbacRole, RbacRolePermission, Engine, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, RbacRolePermission, Engine, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -185,7 +205,8 @@ describe('configBundleExportService', () => {
     const configRole = { id: 'role-config', tenantId: null, key: 'custom.engine.reader', name: 'Reader', description: null, scope: 'engine', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const systemRole = { id: 'role-system', tenantId: null, key: 'system.platform.user', name: 'Platform User', description: null, scope: 'platform', sourceRef: null, isArchived: false };
     const group = { id: 'group-1', tenantId: null, key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
-    const engine = { id: 'engine-1', tenantId: null, configKey: 'engine.central', name: 'Central', baseUrl: 'https://central.example.test/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'ref:CENTRAL_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, version: null, runtimeAccessScope: 'resource_aware', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' };
+    const engine = { id: 'engine-1', tenantId: null, configKey: 'engine.central', name: 'Central', baseUrl: 'https://central.example.test/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'ref:CENTRAL_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null, version: null, runtimeAccessScope: 'resource_aware', tenancyMode: 'shared', tenantMappingStrategy: 'engine_tenant_id', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300, pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' };
+    const engineTenantMapping = { id: 'engine-mapping-1', engineId: engine.id, externalTenantId: 'default', enterpriseTenantId: 'tenant-default', tenantReferenceJson: '{"type":"request_context"}', strategy: 'engine_tenant_id', source: 'config', sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-default', ownershipMode: 'config_locked', sourceHash: 'hash', lastAppliedAt: 1, isActive: true, createdAt: 1, updatedAt: 1 };
     const engineSet = { id: 'engine-set-1', tenantId: null, key: 'engines.central', name: 'Central engines', description: null, selectorJson: '{"mode":"engine_ids","engineKeys":["engine.central"]}', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const runtimeResourceSet = { id: 'runtime-set-1', tenantId: null, key: 'runtime.payments', name: 'Payments', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: '{"mode":"prefix","prefix":"payments-"}', runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false };
     const configProvider = { id: 'provider-config', tenantId: null, key: 'identity.oidc.config', protocol: 'oidc', isEnabled: true, authenticationMode: 'claims_only', directoryTenantId: null, configurationJson: '{"issuerUrl":"https://issuer.example.test","clientId":"enterpriseglue","callbackUrl":"https://app.example.test/callback","scopes":["openid"],"allowVerifiedEmailLinking":true}', syncJson: '{"triggers":["login"],"requiredForLogin":true,"incompleteEntitlements":"fail_closed","connectorCapability":"claim_only","scheduled":false}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz' };
@@ -199,6 +220,7 @@ describe('configBundleExportService', () => {
         if (entity === RbacRole) return { find: vi.fn().mockImplementation(({ where }: any = {}) => Promise.resolve(where?.sourceRef ? [configRole] : [configRole, systemRole])) };
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([engine]) };
+        if (entity === EngineTenantMapping) return { find: vi.fn().mockResolvedValue([engineTenantMapping]) };
         if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([engineSet]) };
         if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([runtimeResourceSet]) };
         if ([RuntimeResource, RuntimeResourceSetMaterialization, AuthzGroupMembership].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
@@ -216,6 +238,7 @@ describe('configBundleExportService', () => {
 
     expect(result.files).toMatchObject({
       './engine-sets.json': { engineSets: [expect.objectContaining({ key: 'engines.central', selector: { mode: 'engine_ids', engineKeys: ['engine.central'] } })] },
+      './engine-tenant-mappings.json': { engineTenantMappings: [expect.objectContaining({ key: 'engine-tenant-mapping.central-default', engineRef: { engineKey: 'engine.central' }, tenantRef: { type: 'request_context' } })] },
       './runtime-resource-sets.json': { runtimeResourceSets: [expect.objectContaining({ key: 'runtime.payments', engineRef: { engineKey: 'engine.central' }, ownershipMode: 'config_warn' })] },
       './identity-providers.json': { identityProviders: [expect.objectContaining({ key: 'identity.oidc.config', type: 'oidc' })] },
       './identity-mappings.json': { identityMappings: [expect.objectContaining({ key: 'mapping.operators', providerKey: 'identity.ldap.external', targetGroupKey: 'group.operators' })] },
@@ -231,6 +254,7 @@ describe('configBundleExportService', () => {
       expect.objectContaining({ objectType: 'role', key: 'custom.engine.reader', operation: 'noop' }),
       expect.objectContaining({ objectType: 'group', key: 'group.operators', operation: 'noop' }),
       expect.objectContaining({ objectType: 'engine', key: 'engine.central', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'engine_tenant_mapping', key: 'engine-tenant-mapping.central-default', operation: 'noop' }),
       expect.objectContaining({ objectType: 'engine_set', key: 'engines.central', operation: 'noop' }),
       expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'noop' }),
       expect.objectContaining({ objectType: 'identity_provider', key: 'identity.oidc.config', operation: 'noop' }),
@@ -269,7 +293,7 @@ describe('configBundleExportService', () => {
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
         if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue([{ roleId: role.id, permissionId: 'engine:instance:view' }]) };
         if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([assignment]) };
-        if ([Engine, EngineSet, RuntimeResourceSet, RuntimeResource, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) {
+        if ([Engine, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) {
           return { find: vi.fn().mockResolvedValue([]) };
         }
         throw new Error('Unexpected repository');

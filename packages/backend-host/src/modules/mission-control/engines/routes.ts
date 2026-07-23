@@ -1727,12 +1727,15 @@ r.post('/engines-api/engines/:id/tenancy/apply', engineLimiter, requireAuth, eng
 
 r.get('/engines-api/engines/:id/tenant-mappings', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), asyncHandler(async (req: Request, res: Response) => {
   const rows = await engineTenantMappingService.list(String(req.params.id))
-  res.json(EngineTenantMappingSchema.array().parse(rows.map((row: EngineTenantMapping) => ({
-    ...row,
-    createdAt: Number(row.createdAt),
-    updatedAt: Number(row.updatedAt),
-    lastAppliedAt: row.lastAppliedAt == null ? null : Number(row.lastAppliedAt),
-  }))))
+  res.json(EngineTenantMappingSchema.array().parse(rows.map((row: EngineTenantMapping) => {
+    const { tenantReferenceJson: _tenantReferenceJson, ...publicRow } = row
+    return {
+      ...publicRow,
+      createdAt: Number(row.createdAt),
+      updatedAt: Number(row.updatedAt),
+      lastAppliedAt: row.lastAppliedAt == null ? null : Number(row.lastAppliedAt),
+    }
+  })))
 }))
 
 r.put('/engines-api/engines/:id/tenant-mappings', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), engineRegistrationJsonPayloadLimit, validateBody(ExternalEngineTenantMappingsUpsertRequestSchema), asyncHandler(async (req: Request, res: Response) => {

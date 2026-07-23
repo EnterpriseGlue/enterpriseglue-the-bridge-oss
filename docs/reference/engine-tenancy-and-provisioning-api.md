@@ -8,8 +8,8 @@ and security reviewers.
 
 Status: Manual and external create/update tenancy contracts, tenant mapping
 administration, diagnostics, and runtime reconciliation are implemented.
-Classification and topology transition APIs are implemented. Configuration-owned
-mapping rows remain planned.
+Classification, topology transition APIs, and configuration-owned mapping
+reconciliation are implemented.
 
 ## Request Contract
 
@@ -116,6 +116,60 @@ An engine is runtime-ready only when diagnostics report no unmapped or
 conflicting active resources. An empty shared engine with at least one active
 mapping can report ready; readiness must be checked again after inventory
 reconciliation.
+
+## Configuration Bundle Mapping Contract
+
+Configuration bundles declare shared-engine mappings in
+`./engine-tenant-mappings.json`, separately from engine connection topology:
+
+```json
+{
+  "engineTenantMappings": [
+    {
+      "key": "engine-tenant-mapping.central-payments",
+      "engineRef": { "engineKey": "engine.central" },
+      "externalTenantId": "payments",
+      "tenantRef": { "type": "key", "key": "tenant.payments" },
+      "strategy": "engine_tenant_id",
+      "active": true,
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+Declare both `./engines.json` and `./engine-tenant-mappings.json` in the bundle
+imports. Preview verifies that the engine is shared and that both files use the
+same strategy. Diff resolves the tenant reference with the authenticated
+principal and enterprise resolver, reports mapping changes under
+`objectType = engine_tenant_mapping`, and reports a conflict if another source
+owns the desired identity.
+
+Apply uses the normal preview hash, idempotency, and acknowledgement contract.
+Mapping writes and known-resource re-resolution occur inside the config
+transaction. A changed engine is then placed on the bounded runtime
+reconciliation queue. An authoritative omission requires:
+
+```text
+config.authoritative_archive:engine_tenant_mapping:{mappingKey}
+```
+
+and disables only mapping rows owned by that bundle. It does not remove manual,
+API, external, system, or other-bundle rows. Additive bundles never retire
+omitted mappings.
+
+Use `config_locked` when only the bundle may change the row. `config_warn`
+permits a reviewed manual override while retaining config ownership; the next
+diff exposes the drift and the next apply restores the declared state.
+
+Export preserves the stable mapping key, engine key, and original authorized
+tenant key. Rows created before tenant-reference metadata existed use a safe
+legacy fallback. Never infer mappings from shared topology alone.
+
+The mounted configuration bootstrap passes the installed enterprise tenant
+resolver with principal type `system` and principal ID
+`system:config-bootstrap`. A tenant key that cannot be resolved and authorized
+there fails bootstrap through the normal fail-closed configuration status.
 
 ## Compatibility
 
@@ -290,6 +344,8 @@ Errors are sanitized and do not reveal whether another tenant exists.
 - Ordinary updates never mutate topology.
 - External omission is warned and audited.
 - Mapping writes are atomic and version guarded.
+- Configuration mapping ownership is source-scoped; authoritative apply cannot
+  retire another source's rows.
 - Runtime resolution records the mapping id and version; missing or conflicting
   matches have no tenant and remain quarantined.
 - Runtime access scope and topology remain separate, although shared requires

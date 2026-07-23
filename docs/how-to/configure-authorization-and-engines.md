@@ -174,8 +174,8 @@ Runtime Resource Set materialization, and config-bundle topology
 preview/apply/diff/export are implemented. Tenant roles, same-tenant
 project/dedicated/shared-resource inheritance, portable config assignments,
 Current tenant assignment controls, and Effective Access mapping lineage are
-implemented. Configuration-owned mapping rows, topology transitions, and engine
-topology controls are not yet complete. Do not treat a
+implemented. Configuration-owned mapping rows and topology transitions are
+also implemented; engine topology form controls remain gated. Do not treat a
 shared engine as authorization-ready until diagnostics have no unmapped or
 conflicting resources and the remaining release gates are complete. The
 migration leaves older tenantless engines in `migration_required`; it does not
@@ -186,8 +186,10 @@ mappings through the published API. Use the external mapping example in
 [Provision Engines Externally](./provision-engines-externally.md), or the
 authenticated manual endpoints documented in
 [Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md).
-Configuration bundles may declare dedicated/shared topology, but mapping rows
-must currently be applied through one of those mapping endpoints.
+Configuration bundles may declare dedicated/shared topology and source-owned
+mapping rows through `engine-tenant-mappings.json`. Bundle preview/diff/apply
+preserves other ownership sources, resolves stable tenant references, and
+schedules runtime reconciliation after mapping changes.
 
 See [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md) for
 the implemented foundation,

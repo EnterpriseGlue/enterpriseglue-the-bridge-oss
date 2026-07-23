@@ -1,6 +1,7 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
@@ -19,11 +20,12 @@ import { matchRuntimeResourceSetSelector, type RuntimeResourceSetSelector } from
 import { EnginePermissions, SystemRoleDefinitions } from './permissions.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
+import { engineTenancyProvisioningService } from './EngineTenancyProvisioningService.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment';
+  objectType: 'role' | 'group' | 'engine' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -95,6 +97,14 @@ const RUNTIME_RESOURCE_DIFF_DETAIL_LIMIT = 50;
 
 export function configBundleSourceRef(bundleKey: string): string {
   return `config_bundle:${bundleKey}`;
+}
+
+export function configEngineTenantMappingSourceRef(bundleKey: string, mappingKey: string): string {
+  return `${configBundleSourceRef(bundleKey)}:engine_tenant_mapping:${mappingKey}`;
+}
+
+export function configEngineTenantMappingSourcePrefix(bundleKey: string): string {
+  return `${configBundleSourceRef(bundleKey)}:engine_tenant_mapping:`;
 }
 
 function values(files: Record<string, unknown>, path: string, key: string): any[] {
@@ -225,10 +235,11 @@ class ConfigBundleDiffService {
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships] = await Promise.all([
+    const [roles, groups, engines, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
+      dataSource.getRepository(EngineTenantMapping).find(),
       dataSource.getRepository(EngineSet).find(),
       dataSource.getRepository(RuntimeResourceSet).find(),
       dataSource.getRepository(RuntimeResourceSetMaterialization).find(),
@@ -295,6 +306,9 @@ class ConfigBundleDiffService {
     const desiredGroupKeys = new Set(desiredGroups.map((group) => group.key));
     const desiredEngines = values(compilation.files, './engines.json', 'engines');
     const desiredEngineKeys = new Set(desiredEngines.map((engine) => engine.key));
+    const desiredEngineByKey = new Map(desiredEngines.map((engine) => [engine.key, engine]));
+    const desiredEngineTenantMappings = values(compilation.files, './engine-tenant-mappings.json', 'engineTenantMappings');
+    const desiredEngineTenantMappingKeys = new Set(desiredEngineTenantMappings.map((mapping) => mapping.key));
     const desiredEngineSets = values(compilation.files, './engine-sets.json', 'engineSets');
     const desiredEngineSetKeys = new Set(desiredEngineSets.map((set) => set.key));
     const desiredRuntimeResourceSets = values(compilation.files, './runtime-resource-sets.json', 'runtimeResourceSets');
@@ -378,6 +392,134 @@ class ConfigBundleDiffService {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'update', currentId: existing.id, reason: 'Config-owned engine differs from desired connection, metadata, or authorization settings' });
       } else {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned engine already matches the desired state' });
+      }
+    }
+
+    for (const mapping of desiredEngineTenantMappings) {
+      const desiredEngine = desiredEngineByKey.get(mapping.engineRef.engineKey);
+      const engine = enginesByConfigKey.get(mapping.engineRef.engineKey);
+      const mappingSourceRef = configEngineTenantMappingSourceRef(manifest.metadata.key, mapping.key);
+      const sourceRows = engineTenantMappings.filter((row) =>
+        row.source === CONFIG_SOURCE && row.sourceRef === mappingSourceRef);
+      const sourceRow = sourceRows[0];
+      const identityRow = engine
+        ? engineTenantMappings.find((row) =>
+          row.engineId === engine.id
+          && row.strategy === mapping.strategy
+          && row.externalTenantId === mapping.externalTenantId)
+        : undefined;
+      const existing = sourceRow || identityRow;
+
+      if (!desiredEngine || desiredEngine.tenancy?.mode !== 'shared') {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'conflict',
+          currentId: existing?.id,
+          reason: 'Engine tenant mapping references an unresolved or non-shared configured engine',
+        });
+        continue;
+      }
+      if (desiredEngine.tenancy.mappingStrategy !== mapping.strategy) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'conflict',
+          currentId: existing?.id,
+          reason: 'Engine tenant mapping strategy does not match the configured shared engine',
+        });
+        continue;
+      }
+      if (sourceRows.length > 1) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'conflict',
+          currentId: sourceRow?.id,
+          reason: 'More than one persisted mapping is associated with this stable config key',
+        });
+        continue;
+      }
+      if (sourceRow && identityRow && sourceRow.id !== identityRow.id) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'conflict',
+          currentId: identityRow.id,
+          reason: 'The desired engine tenant identity is already owned by another mapping row',
+        });
+        continue;
+      }
+      if (identityRow && (identityRow.source !== CONFIG_SOURCE || identityRow.sourceRef !== mappingSourceRef)) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'conflict',
+          currentId: identityRow.id,
+          reason: 'The desired engine tenant identity is owned by another source',
+        });
+        continue;
+      }
+
+      let enterpriseTenantId: string;
+      try {
+        const resolution = await engineTenancyProvisioningService.resolveForCreate({
+          tenancy: { mode: 'dedicated', tenantRef: mapping.tenantRef },
+          requestTenantId: normalizedTenantId,
+          principalType: policy?.tenantReferencePrincipalType || 'system',
+          principalId: policy?.tenantReferencePrincipalId || null,
+          resolver: policy?.tenantReferenceResolver,
+        });
+        enterpriseTenantId = resolution.tenantId!;
+      } catch {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'conflict',
+          currentId: existing?.id,
+          reason: 'Engine tenant mapping references a tenant that cannot be resolved or authorized',
+        });
+        continue;
+      }
+
+      if (!existing && !mapping.active) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'noop',
+          reason: 'Inactive mapping is absent and already has no effect',
+        });
+      } else if (!existing) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'create',
+          reason: 'No persisted engine tenant mapping uses this config key or engine tenant identity',
+        });
+      } else if (
+        existing.engineId !== engine?.id
+        || existing.enterpriseTenantId !== enterpriseTenantId
+        || existing.tenantReferenceJson !== JSON.stringify(mapping.tenantRef)
+        || existing.externalTenantId !== mapping.externalTenantId
+        || existing.strategy !== mapping.strategy
+        || existing.ownershipMode !== mapping.ownershipMode
+        || existing.isActive !== mapping.active
+      ) {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'update',
+          currentId: existing.id,
+          reason: 'Config-owned engine tenant mapping differs from the desired engine, tenant, strategy, identity, ownership, or active state',
+        });
+      } else {
+        changes.push({
+          objectType: 'engine_tenant_mapping',
+          key: mapping.key,
+          operation: 'noop',
+          currentId: existing.id,
+          reason: 'Config-owned engine tenant mapping already matches the desired state',
+        });
       }
     }
 
@@ -610,7 +752,6 @@ class ConfigBundleDiffService {
     for (const role of SystemRoleDefinitions) rolePermissionsByKey.set(role.key, role.permissions);
     for (const role of desiredRoles) rolePermissionsByKey.set(role.key, compilation.preview.expandedRolePermissions?.[role.key] || role.permissions || []);
     const runtimeSetEngineKeyByKey = new Map(desiredRuntimeResourceSets.map((set) => [set.key, set.engineRef.engineKey]));
-    const desiredEngineByKey = new Map(desiredEngines.map((engine) => [engine.key, engine]));
     for (const engine of desiredEngines.filter((candidate) => candidate.deploymentIntegration === 'direct_engine')) {
       warnings.push({
         id: `config.direct_engine_lineage:${engine.key}`,
@@ -671,6 +812,23 @@ class ConfigBundleDiffService {
       for (const engine of tenantEngines) {
         if (engine.registrationSource === CONFIG_SOURCE && engine.sourceRef === sourceRef && engine.configKey && !desiredEngineKeys.has(engine.configKey) && engine.lifecycleStatus !== 'decommissioned') {
           changes.push({ objectType: 'engine', key: engine.configKey, operation: 'archive', currentId: engine.id, reason: 'Config-owned engine is absent from an authoritative bundle' });
+        }
+      }
+      const mappingSourcePrefix = configEngineTenantMappingSourcePrefix(manifest.metadata.key);
+      for (const mapping of engineTenantMappings) {
+        if (
+          mapping.source === CONFIG_SOURCE
+          && mapping.sourceRef.startsWith(mappingSourcePrefix)
+          && !desiredEngineTenantMappingKeys.has(mapping.sourceRef.slice(mappingSourcePrefix.length))
+          && mapping.isActive
+        ) {
+          changes.push({
+            objectType: 'engine_tenant_mapping',
+            key: mapping.sourceRef.slice(mappingSourcePrefix.length),
+            operation: 'archive',
+            currentId: mapping.id,
+            reason: 'Config-owned engine tenant mapping is absent from an authoritative bundle',
+          });
         }
       }
       for (const set of tenantEngineSets) {

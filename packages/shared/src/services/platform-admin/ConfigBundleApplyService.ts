@@ -4,6 +4,7 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -22,7 +23,12 @@ import { permissionService } from './permissions.js';
 import { engineService } from './EngineService.js';
 import { engineTenancyProvisioningService } from './EngineTenancyProvisioningService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { configBundleDiffService, type ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
+import {
+  configBundleDiffService,
+  configEngineTenantMappingSourcePrefix,
+  configEngineTenantMappingSourceRef,
+  type ConfigBundleDiffChange,
+} from './ConfigBundleDiffService.js';
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
@@ -32,6 +38,7 @@ import { identityEntitlementMappingService } from './IdentityEntitlementMappingS
 import { authzGroupService } from './AuthzGroupService.js';
 import { runtimeResourceSetService } from './RuntimeResourceSetService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
+import { engineTenantMappingService } from './EngineTenantMappingService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import type {
   ConfigBundleApplyReconciliation as SchemaConfigBundleApplyReconciliation,
@@ -256,7 +263,7 @@ class ConfigBundleApplyService {
         return fail('Secret reference availability changed or is no longer available since preflight', 409);
       }
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-tenant-mappings.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -280,7 +287,7 @@ class ConfigBundleApplyService {
     if (!diff.valid || !diff.canonicalHash) return fail('Configuration bundle diff is invalid', 422);
     const conflicts = diff.changes.filter((change) => change.operation === 'conflict');
     if (conflicts.length > 0) {
-      return fail(`Config apply conflicts with manually owned objects: ${conflicts.map((change) => `${change.objectType}:${change.key}`).join(', ')}`, 409);
+      return fail(`Config apply conflicts with existing ownership or unresolved references: ${conflicts.map((change) => `${change.objectType}:${change.key}`).join(', ')}`, 409);
     }
     const acknowledgements = new Set(input.acknowledgements || []);
     const missingAcknowledgements = diff.requiredAcknowledgements.filter((acknowledgement) => !acknowledgements.has(acknowledgement));
@@ -319,6 +326,7 @@ class ConfigBundleApplyService {
     const desiredRoles = new Map(entries(compilation.files, './roles.json', 'roles').map((role) => [role.key, role]));
     const desiredGroups = new Map(entries(compilation.files, './groups.json', 'groups').map((group) => [group.key, group]));
     const desiredEngines = new Map(entries(compilation.files, './engines.json', 'engines').map((engine) => [engine.key, engine]));
+    const desiredEngineTenantMappings = entries(compilation.files, './engine-tenant-mappings.json', 'engineTenantMappings');
     const desiredEngineSets = new Map(entries(compilation.files, './engine-sets.json', 'engineSets').map((set) => [set.key, set]));
     const desiredRuntimeResourceSets = new Map(entries(compilation.files, './runtime-resource-sets.json', 'runtimeResourceSets').map((set) => [set.key, set]));
     const desiredAssignments = entries(compilation.files, './assignments.json', 'assignments');
@@ -339,6 +347,7 @@ class ConfigBundleApplyService {
       const roleRepo = manager.getRepository(RbacRole);
       const groupRepo = manager.getRepository(AuthzGroup);
       const engineRepo = manager.getRepository(Engine);
+      const engineTenantMappingRepo = manager.getRepository(EngineTenantMapping);
       const engineSetRepo = manager.getRepository(EngineSet);
       const runtimeResourceSetRepo = manager.getRepository(RuntimeResourceSet);
       const runtimeResourceRepo = manager.getRepository(RuntimeResource);
@@ -422,8 +431,9 @@ class ConfigBundleApplyService {
               tenancy: desired.tenancy,
               runtimeAccessScope: desired.runtimeAccessScope,
               requestTenantId: tenantId,
-              principalType: 'system',
-              principalId: input.actorId,
+              principalType: policy?.tenantReferencePrincipalType || 'system',
+              principalId: policy?.tenantReferencePrincipalId || input.actorId,
+              resolver: policy?.tenantReferenceResolver,
             });
             const engineId = generateId();
             await engineService.createEngineWithGovernanceAssignments({
@@ -452,8 +462,9 @@ class ConfigBundleApplyService {
               tenancy: desired.tenancy,
               runtimeAccessScope: desired.runtimeAccessScope,
               requestTenantId: tenantId,
-              principalType: 'system',
-              principalId: input.actorId,
+              principalType: policy?.tenantReferencePrincipalType || 'system',
+              principalId: policy?.tenantReferencePrincipalId || input.actorId,
+              resolver: policy?.tenantReferenceResolver,
             });
             await engineService.updateConfiguredEngine(change.currentId, {
               name: desired.name, baseUrl: desired.baseUrl, type: desired.type, externalId: desired.externalId || null,
@@ -573,6 +584,160 @@ class ConfigBundleApplyService {
       const engineSetByKey = new Map(engineSets.map((set) => [set.key, set]));
       const runtimeResourceSetByKey = new Map(runtimeResourceSets.map((set) => [set.key, set]));
       const sourceRef = `config_bundle:${manifest.metadata.key}`;
+      const mappingSourcePrefix = configEngineTenantMappingSourcePrefix(manifest.metadata.key);
+      const mappingChangesByKey = new Map(
+        diff.changes
+          .filter((change) => change.objectType === 'engine_tenant_mapping')
+          .map((change) => [change.key, change]),
+      );
+      const mappingEngineIdsToReconcile = new Set<string>();
+      for (const mapping of desiredEngineTenantMappings) {
+        const change = mappingChangesByKey.get(mapping.key);
+        if (!change || change.operation === 'noop') continue;
+        if (change.operation === 'conflict' || change.operation === 'archive') {
+          fail(`Engine tenant mapping ${mapping.key} no longer matches its previewed operation`, 409);
+        }
+        const engine = engineByKey.get(mapping.engineRef.engineKey);
+        if (!engine || engine.tenancyMode !== 'shared' || engine.tenantMappingStrategy !== mapping.strategy) {
+          fail(`Engine tenant mapping ${mapping.key} references an unresolved or incompatible shared engine`, 409);
+        }
+        const resolvedTenant = await engineTenancyProvisioningService.resolveForCreate({
+          tenancy: { mode: 'dedicated', tenantRef: mapping.tenantRef },
+          requestTenantId: tenantId,
+          principalType: policy?.tenantReferencePrincipalType || 'system',
+          principalId: policy?.tenantReferencePrincipalId || input.actorId,
+          resolver: policy?.tenantReferenceResolver,
+        });
+        const mappingSourceRef = configEngineTenantMappingSourceRef(manifest.metadata.key, mapping.key);
+        const existing = change.currentId
+          ? await engineTenantMappingRepo.findOne({ where: { id: change.currentId } })
+          : await engineTenantMappingRepo.findOne({
+            where: { engineId: engine.id, source: 'config', sourceRef: mappingSourceRef },
+          });
+        const identityOwner = await engineTenantMappingRepo.findOne({
+          where: {
+            engineId: engine.id,
+            strategy: mapping.strategy,
+            externalTenantId: mapping.externalTenantId,
+          },
+        });
+        if (existing && (existing.source !== 'config' || existing.sourceRef !== mappingSourceRef)) {
+          fail(`Engine tenant mapping ${mapping.key} is no longer owned by this configuration bundle`, 409);
+        }
+        if (identityOwner && identityOwner.id !== existing?.id) {
+          fail(`Engine tenant identity for ${mapping.key} is now owned by another mapping`, 409);
+        }
+        const sourceHash = objectFingerprint('engine_tenant_mapping', mapping.key, mapping);
+        if (change.operation === 'create') {
+          if (existing || identityOwner || !mapping.active) {
+            fail(`Engine tenant mapping ${mapping.key} no longer matches its previewed create`, 409);
+          }
+          const id = generateId();
+          await engineTenantMappingRepo.insert({
+            id,
+            engineId: engine.id,
+            externalTenantId: mapping.externalTenantId,
+            enterpriseTenantId: resolvedTenant.tenantId!,
+            tenantReferenceJson: JSON.stringify(mapping.tenantRef),
+            strategy: mapping.strategy,
+            source: 'config',
+            sourceRef: mappingSourceRef,
+            ownershipMode: mapping.ownershipMode,
+            sourceHash,
+            lastAppliedAt: now,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+          });
+          await writeAudit(manager, {
+            tenantId,
+            actorId: input.actorId,
+            action: 'authz.config_bundle.engine_tenant_mapping.create',
+            resourceType: 'engine_tenant_mapping',
+            resourceId: id,
+            details: {
+              bundleKey: manifest.metadata.key,
+              mappingKey: mapping.key,
+              engineKey: mapping.engineRef.engineKey,
+              canonicalHash: diff.canonicalHash,
+            },
+          });
+          mappingEngineIdsToReconcile.add(engine.id);
+          created += 1;
+        } else if (change.operation === 'update') {
+          if (!existing) fail(`Engine tenant mapping ${mapping.key} disappeared during apply`, 409);
+          mappingEngineIdsToReconcile.add(existing.engineId);
+          mappingEngineIdsToReconcile.add(engine.id);
+          await engineTenantMappingRepo.update({ id: existing.id }, {
+            engineId: engine.id,
+            externalTenantId: mapping.externalTenantId,
+            enterpriseTenantId: resolvedTenant.tenantId!,
+            tenantReferenceJson: JSON.stringify(mapping.tenantRef),
+            strategy: mapping.strategy,
+            ownershipMode: mapping.ownershipMode,
+            sourceHash,
+            lastAppliedAt: now,
+            isActive: mapping.active,
+            updatedAt: now,
+          });
+          await writeAudit(manager, {
+            tenantId,
+            actorId: input.actorId,
+            action: mapping.active
+              ? 'authz.config_bundle.engine_tenant_mapping.update'
+              : 'authz.config_bundle.engine_tenant_mapping.disable',
+            resourceType: 'engine_tenant_mapping',
+            resourceId: existing.id,
+            details: {
+              bundleKey: manifest.metadata.key,
+              mappingKey: mapping.key,
+              engineKey: mapping.engineRef.engineKey,
+              canonicalHash: diff.canonicalHash,
+            },
+          });
+          updated += 1;
+        }
+      }
+      for (const change of diff.changes) {
+        if (change.objectType !== 'engine_tenant_mapping' || change.operation !== 'archive' || !change.currentId) continue;
+        const existing = await engineTenantMappingRepo.findOne({ where: { id: change.currentId } });
+        if (
+          !existing
+          || existing.source !== 'config'
+          || !existing.sourceRef.startsWith(mappingSourcePrefix)
+        ) {
+          fail(`Engine tenant mapping ${change.key} no longer matches its previewed archive`, 409);
+        }
+        if (!existing.isActive) continue;
+        await engineTenantMappingRepo.update({ id: existing.id }, {
+          sourceHash: objectFingerprint('engine_tenant_mapping', change.key, { active: false }),
+          lastAppliedAt: now,
+          isActive: false,
+          updatedAt: now,
+        });
+        await writeAudit(manager, {
+          tenantId,
+          actorId: input.actorId,
+          action: 'authz.config_bundle.engine_tenant_mapping.disable',
+          resourceType: 'engine_tenant_mapping',
+          resourceId: existing.id,
+          details: {
+            bundleKey: manifest.metadata.key,
+            mappingKey: change.key,
+            canonicalHash: diff.canonicalHash,
+          },
+        });
+        mappingEngineIdsToReconcile.add(existing.engineId);
+        archived += 1;
+      }
+      for (const engineId of mappingEngineIdsToReconcile) {
+        const engine = await engineRepo.findOne({ where: { id: engineId } });
+        if (engine?.tenancyMode === 'shared') {
+          await engineTenantMappingService.reconcileInStore(engineId, manager);
+          changedEngineIds.push(engineId);
+        }
+      }
+
       const desiredKeys = new Set<string>();
       for (const assignment of desiredAssignments) {
         const sourceHash = objectFingerprint('assignment', assignment.key || hashCanonicalConfig(assignment), assignment);
@@ -756,10 +921,13 @@ class ConfigBundleApplyService {
         },
       });
     });
+      const reconciledEngineSetIds = Array.from(new Set(materializeIds));
+      const reconciledRuntimeResourceSetIds = Array.from(new Set(materializeRuntimeResourceSetIds));
+      const reconciledEngineIds = Array.from(new Set(changedEngineIds));
       const runtimeCounts = {
-        engineSetCount: materializeIds.length,
-        runtimeResourceSetCount: materializeRuntimeResourceSetIds.length,
-        engineCount: new Set(changedEngineIds).size,
+        engineSetCount: reconciledEngineSetIds.length,
+        runtimeResourceSetCount: reconciledRuntimeResourceSetIds.length,
+        engineCount: reconciledEngineIds.length,
       };
       let runtimeReconciliation: ConfigBundleApplyResult['reconciliation']['runtimeReconciliation'] = {
         status: 'not_needed', taskId: null, ...runtimeCounts,
@@ -769,9 +937,9 @@ class ConfigBundleApplyService {
           const task = await configBundleRuntimeReconciliationTaskService.enqueue({
             tenantId,
             applyRunId: applyRunId!,
-            engineSetIds: materializeIds,
-            runtimeResourceSetIds: materializeRuntimeResourceSetIds,
-            engineIds: changedEngineIds,
+            engineSetIds: reconciledEngineSetIds,
+            runtimeResourceSetIds: reconciledRuntimeResourceSetIds,
+            engineIds: reconciledEngineIds,
           });
           runtimeReconciliation = { status: task ? 'queued' : 'not_needed', taskId: task?.id || null, ...runtimeCounts };
         } catch {
