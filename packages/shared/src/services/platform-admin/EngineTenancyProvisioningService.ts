@@ -2,6 +2,7 @@ import {
   OSS_DEFAULT_TENANT_ID,
   normalizeTenantIdForPersistence,
 } from '../../authz/tenant-scope.js';
+import { recordEngineTenancyDefaultFallback } from '../../engine-tenancy/operational-metrics.js';
 import { Errors } from '../../middleware/errorHandler.js';
 import type {
   EngineTenancyConfiguration,
@@ -87,6 +88,7 @@ function normalizedExistingState(existing: EngineTenancyState): {
 async function resolveDedicatedTenant(
   reference: EngineTenantReference,
   input: ResolveEngineTenancyInput,
+  onDefaultFallback: () => void,
 ): Promise<string> {
   const requestTenantId = normalizeTenantIdForPersistence(input.requestTenantId);
 
@@ -111,7 +113,9 @@ async function resolveDedicatedTenant(
   }
 
   if (reference.type === 'request_context') {
-    return requestTenantId || OSS_DEFAULT_TENANT_ID;
+    if (requestTenantId) return requestTenantId;
+    onDefaultFallback();
+    return OSS_DEFAULT_TENANT_ID;
   }
   if (reference.type === 'default') {
     return OSS_DEFAULT_TENANT_ID;
@@ -159,6 +163,10 @@ export class EngineTenancyProvisioningService {
     const tenantId = await resolveDedicatedTenant(
       tenancy.tenantRef || { type: 'request_context' },
       input,
+      () => recordEngineTenancyDefaultFallback({
+        principalType: input.principalType,
+        declaration: compatibilityDefaulted ? 'omitted' : 'explicit_request_context',
+      }),
     );
     return {
       tenancyMode: 'dedicated',

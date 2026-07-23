@@ -19,6 +19,7 @@ const knownRequirementFamilies = new Set([
   'TEN-RUNTIME',
   'TEN-AUDIT',
   'TEN-DOCS',
+  'TEN-OPS',
 ]);
 
 test('validates every engine tenancy functional coverage entry', () => {

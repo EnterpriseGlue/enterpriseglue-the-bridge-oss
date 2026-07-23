@@ -118,6 +118,11 @@ separate scheduled operation.
 `enterpriseglue_config_bootstrap_info`. Metric labels contain bounded status
 enums and a stable issue code only; the bundle hash is retained in JSON health
 and apply-run receipts but omitted from metrics to avoid high-cardinality data.
+The same endpoint publishes bounded aggregate engine-tenancy resolution gauges,
+a collection-success gauge, and process-local default-fallback counters. These
+series contain no engine, tenant, mapping, resource, URL, or principal
+identifiers; see
+[Configure Dedicated and Shared Engine Tenancy](../how-to/configure-engine-tenancy.md#monitor-resolution-and-default-fallback).
 
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:

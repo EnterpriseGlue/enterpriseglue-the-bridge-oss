@@ -40,6 +40,7 @@ pnpm run test:engine-tenancy:mappings
 pnpm run test:engine-tenancy:authorization
 pnpm run test:engine-tenancy:runtime
 pnpm run test:engine-tenancy:transitions
+pnpm run test:engine-tenancy:operations
 ```
 
 The authorization lane:
@@ -92,6 +93,19 @@ branches, functions, and lines. Its configuration-bundle matrix includes:
   parity; and
 - export/preview/diff round-trip with the original stable tenant key.
 
+The operations lane:
+
+1. validates the functional-coverage manifest;
+2. holds the process-local fallback counter and aggregate Prometheus exporter
+   to 100% statements, branches, functions, and lines;
+3. covers every bounded topology, resolution-status, principal-type, and
+   declaration label, including unknown and zero-value series;
+4. proves only an actual request-context fall-through increments the default
+   tenant counter; and
+5. proves database collection failure keeps `/metrics` available, reports a
+   failure gauge, preserves process-local counters, and never emits engine or
+   tenant identifiers.
+
 Run package type checks after any contract change:
 
 ```bash
@@ -122,6 +136,7 @@ The focused matrix proves:
 | Topology transition | all four supported transitions | unchanged proposal, stale/expired hash, missing acknowledgement, source-owner bypass |
 | Transition apply | atomic state change, quarantine/resolution, materialization invalidation, reconciliation | optimistic concurrency failure rolls back before dependent writes |
 | Engine Set rematerialization | platform/owning-tenant dedicated sets and all tenant shared sets, each persisted in set scope | caller tenant cannot partially rewrite a platform set or grant shared runtime access |
+| Operations | bounded engine/resource resolution gauges and actual default-fallback counters | no engine/tenant identifiers; persistence failure reports collection failure without breaking the scrape |
 
 Any new canonical permission must make the classifier test fail until it is
 explicitly reviewed as tenant-safe or prohibited.

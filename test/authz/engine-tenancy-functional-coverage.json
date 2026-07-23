@@ -614,5 +614,16 @@
     "testName": "marks an allowed config-warn transition as manual topology drift",
     "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
     "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-OPS-001",
+    "requirement": "Operators can monitor unresolved or conflicting tenancy state and actual local default-tenant fallback use through bounded identifier-free metrics that remain scrapeable during persistence failure.",
+    "source": "Engine Tenancy Data Model / Operational Metrics",
+    "dimensions": ["dedicated", "shared", "unmapped", "conflict", "stale", "fallback", "collection_failure", "privacy"],
+    "expected": "stable aggregate Prometheus series with no resource identifiers and exact critical-module source coverage",
+    "testFile": "backend/__tests__/services/engineTenancyMetrics.test.ts",
+    "testName": "exports bounded aggregate topology, resolution, and fallback metrics without resource identifiers",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:operations"
   }
 ]

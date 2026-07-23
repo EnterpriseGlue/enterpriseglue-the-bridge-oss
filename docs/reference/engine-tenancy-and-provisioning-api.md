@@ -338,6 +338,25 @@ Return `authorized: false` for a known tenant the principal cannot use, and
 claims, or tenant inventory. The host installs this resolver before base routes
 are registered.
 
+## Operational Metrics API
+
+`GET /metrics` includes the existing configuration-bootstrap metrics and these
+Prometheus engine-tenancy series:
+
+```text
+enterpriseglue_engine_tenancy_metrics_collection_success
+enterpriseglue_engine_tenancy_engines{mode,resolution_status}
+enterpriseglue_engine_tenancy_runtime_resources{resolution_status}
+enterpriseglue_engine_tenancy_default_fallback_total{principal_type,declaration}
+```
+
+The route is unauthenticated for infrastructure scraping, so it exposes only
+bounded aggregate labels. It never exposes an engine, tenant, mapping,
+resource, URL, or principal identifier. The fallback total is process-local
+and resets on backend restart. Persistence collection failure produces
+`enterpriseglue_engine_tenancy_metrics_collection_success 0` while keeping the
+scrape valid and the process-local counters available.
+
 ## Stable Errors
 
 | HTTP | Code | Meaning | Retry |
@@ -385,8 +404,9 @@ Run `pnpm run test:engine-tenancy:provisioning` for provisioning and
 authorization-registry, schema, and OpenAPI contracts. Run
 `pnpm run test:engine-tenancy:transitions` for the complete transition matrix,
 classification, concurrency, route, schema, OpenAPI, audit, and 100% critical
-policy coverage. Every lane validates the machine-readable functional coverage
-manifest.
+policy coverage. Run `pnpm run test:engine-tenancy:operations` for operational
+metrics, privacy, failure behavior, and exact source coverage. Every lane
+validates the machine-readable functional coverage manifest.
 
 See [Engine Tenancy Data Model](./engine-tenancy-data-model.md) for persistence
 and [Provision Engines Externally](../how-to/provision-engines-externally.md)

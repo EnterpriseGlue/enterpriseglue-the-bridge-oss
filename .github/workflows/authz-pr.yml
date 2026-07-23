@@ -99,7 +99,7 @@ jobs:
         run: pnpm run test:authz:pr
 
       - name: Verify engine tenancy functional coverage
-        run: pnpm run test:engine-tenancy:foundation && pnpm run test:engine-tenancy:provisioning && pnpm run test:engine-tenancy:mappings && pnpm run test:engine-tenancy:authorization && pnpm run test:engine-tenancy:runtime && pnpm run test:engine-tenancy:transitions
+        run: pnpm run test:engine-tenancy:foundation && pnpm run test:engine-tenancy:provisioning && pnpm run test:engine-tenancy:mappings && pnpm run test:engine-tenancy:authorization && pnpm run test:engine-tenancy:runtime && pnpm run test:engine-tenancy:transitions && pnpm run test:engine-tenancy:operations
 
       - name: Enforce authorization decision coverage
         run: pnpm run test:authz:decision-coverage

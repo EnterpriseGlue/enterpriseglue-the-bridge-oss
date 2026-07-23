@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import {
+  getEngineTenancyDefaultFallbackMetrics,
+  resetEngineTenancyOperationalMetricsForTests,
+} from '@enterpriseglue/shared/engine-tenancy/operational-metrics.js';
 import {
   EngineTenancyProvisioningService,
   type EngineTenantReferenceResolver,
@@ -17,6 +21,10 @@ function expectAppError(
 }
 
 describe('EngineTenancyProvisioningService', () => {
+  beforeEach(() => {
+    resetEngineTenancyOperationalMetricsForTests();
+  });
+
   it('defaults omitted tenancy to a ready dedicated engine in the request or OSS default tenant', async () => {
     await expect(service.resolveForCreate({
       requestTenantId: ' default-tenant-id ',
@@ -38,6 +46,11 @@ describe('EngineTenancyProvisioningService', () => {
     })).resolves.toMatchObject({
       tenantId: 'tenant-default',
       compatibilityDefaulted: true,
+    });
+    expect(getEngineTenancyDefaultFallbackMetrics()).toContainEqual({
+      principalType: 'api_client',
+      declaration: 'omitted',
+      count: 1,
     });
   });
 
@@ -71,6 +84,17 @@ describe('EngineTenancyProvisioningService', () => {
         principalType: 'service_account',
       })).resolves.toMatchObject({ tenantId: 'tenant-default' });
     }
+
+    await expect(service.resolveForCreate({
+      tenancy: { mode: 'dedicated', tenantRef: { type: 'request_context' } },
+      requestTenantId: null,
+      principalType: 'service_account',
+    })).resolves.toMatchObject({ tenantId: 'tenant-default' });
+    expect(getEngineTenancyDefaultFallbackMetrics()).toContainEqual({
+      principalType: 'service_account',
+      declaration: 'explicit_request_context',
+      count: 1,
+    });
   });
 
   it('uses the enterprise resolver and sends principal context without trusting parsing alone', async () => {

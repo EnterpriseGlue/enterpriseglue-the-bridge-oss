@@ -141,4 +141,17 @@ describe('engine registration OpenAPI contracts', () => {
     expect(document.paths?.['/engines-api/external/engines/{externalId}/tenant-mappings']?.put?.responses?.['409'])
       .toBeDefined();
   });
+
+  it('documents the sanitized aggregate engine-tenancy metrics contract', () => {
+    const metrics = generateOpenApi().paths?.['/metrics']?.get;
+
+    expect(metrics?.responses?.['200']).toMatchObject({
+      description: 'Sanitized Prometheus configuration-bootstrap and aggregate engine-tenancy metrics',
+      content: {
+        'text/plain': {
+          schema: { type: 'string' },
+        },
+      },
+    });
+  });
 });

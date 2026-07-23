@@ -309,7 +309,7 @@ registry.registerPath({
   method: 'get',
   path: '/metrics',
   ...authzExemption('GET', '/metrics'),
-  responses: { 200: { description: 'Sanitized Prometheus configuration-bootstrap metrics', content: { 'text/plain': { schema: z.string() } } } },
+  responses: { 200: { description: 'Sanitized Prometheus configuration-bootstrap and aggregate engine-tenancy metrics', content: { 'text/plain': { schema: z.string() } } } },
 });
 
 registry.register('Project', ProjectSchema);

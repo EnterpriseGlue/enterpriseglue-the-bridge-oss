@@ -146,6 +146,35 @@ A broad engine permission does not override these shared-engine rules. Use the
 tenancy diagnostics and mapping reconciliation workflow to resolve a
 quarantined resource; do not widen the engine grant.
 
+### Monitor Resolution and Default Fallback
+
+`TEN-OPS-001`: scrape `GET /metrics` and monitor these bounded Prometheus
+series:
+
+- `enterpriseglue_engine_tenancy_metrics_collection_success`: `1` when the
+  current scrape read tenancy persistence and `0` when it could not;
+- `enterpriseglue_engine_tenancy_engines{mode,resolution_status}`: current
+  engine counts by dedicated/shared/unknown topology and
+  ready/incomplete/conflict/migration-required/unknown state;
+- `enterpriseglue_engine_tenancy_runtime_resources{resolution_status}`:
+  current active runtime-resource counts by
+  resolved/unmapped/conflict/stale/unknown state; and
+- `enterpriseglue_engine_tenancy_default_fallback_total{principal_type,declaration}`:
+  process-local count of provisioning decisions that actually fell through to
+  the canonical local default tenant.
+
+Alert when collection success is `0`, any conflict/unknown count is non-zero,
+or unresolved/stale resource counts remain non-zero after reconciliation.
+Treat a rising fallback counter as adoption debt: update callers to provide an
+authenticated tenant context or an explicit portable tenant reference. A
+restart resets that process-local counter, so use Prometheus rate/increase
+functions rather than treating it as durable audit history.
+
+The endpoint deliberately exports no engine, tenant, mapping, resource, URL,
+or principal identifiers. Use the authenticated tenancy diagnostics, mapping
+list, Effective Access, and audit log to investigate which objects require
+action.
+
 ### Manage Shared Mappings as Configuration
 
 For GitOps-managed engines, add this import to `bundle.json`:
@@ -308,5 +337,6 @@ for the complete evidence and rollback procedure.
 - [Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md)
 - [Provision Engines Externally](./provision-engines-externally.md)
 - [Migrate Existing Engines to Explicit Tenancy](./migrate-existing-engines-to-explicit-tenancy.md)
+- [Test Engine Tenancy and Fine-Grained Access Control](../development/testing-engine-tenancy-and-access-control.md)
 - [Configure Authorization, Identity, and Engines](./configure-authorization-and-engines.md)
 - [Engine Tenancy End-to-End Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)

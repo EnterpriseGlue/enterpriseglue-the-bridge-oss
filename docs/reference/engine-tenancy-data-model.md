@@ -480,6 +480,30 @@ resolved tenant, `resolved` status, mapping ID, mapping version, sanitized
 resolution code, and dedicated/shared topology. They never include raw claims,
 credentials, or another tenant’s mapping inventory.
 
+## Operational Metrics
+
+`TEN-OPS-001`: `/metrics` exposes a bounded, identifier-free operational view
+of engine tenancy:
+
+- current engines grouped by `mode` and `resolution_status`;
+- current active runtime resources grouped by `resolution_status`;
+- a collection-success gauge that becomes `0` when the database view cannot be
+  collected; and
+- process-local default-fallback counters grouped only by canonical principal
+  type and whether tenancy was omitted or explicitly used request context.
+
+All label values come from closed enums. Unknown persistence values are
+collapsed into `unknown`; zero-valued combinations are still emitted for stable
+alert queries. The exporter selects only topology/resolution columns and never
+exports engine, tenant, mapping, resource, URL, or principal identifiers. A
+database failure does not fail the scrape: it omits persistence gauges, emits
+collection success `0`, and retains the in-process fallback counters.
+
+A fallback is counted only when dedicated provisioning uses request context,
+no request tenant is present, and resolution actually selects the canonical
+local default tenant. An explicit default reference and a resolver-authorized
+default tenant do not increment the compatibility counter.
+
 ## Functional Coverage
 
 `TEN-DOCS-001`: implemented requirements are recorded in

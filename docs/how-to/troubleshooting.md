@@ -64,6 +64,28 @@ disable `EG_CONFIG_FAIL_CLOSED` merely to make the pod ready.
   authoritative bundle; destructive removals require explicit archive
   acknowledgements.
 
+## Shared engine resources remain hidden
+
+Read the aggregate tenancy series on `/metrics` first:
+
+- `enterpriseglue_engine_tenancy_metrics_collection_success 0` means the
+  backend could not collect persistence gauges; restore database connectivity
+  before trusting the remaining engine/resource gauge values.
+- Non-zero runtime-resource `unmapped`, `conflict`, or `stale` counts mean
+  those resources are intentionally quarantined. Open the engine's **Tenancy
+  and tenant mappings** panel, correct the mapping, and reconcile inventory.
+- A non-zero engine `incomplete`, `conflict`, `migration_required`, or
+  `unknown` count means at least one topology needs diagnostics or the guarded
+  transition workflow.
+- A rising `enterpriseglue_engine_tenancy_default_fallback_total` means a
+  provisioning caller reached the local default tenant because request context
+  was absent. Correct the caller; do not use this fallback as a centralized
+  shared-engine mapping.
+
+Metrics contain only aggregate bounded labels. Use authenticated diagnostics,
+Effective Access, and audit history to find the affected object. Never weaken
+shared-engine fail-closed behavior to make a quarantined resource visible.
+
 ## Tests fail with "relation does not exist" errors
 - First-time test setup requires database schema sync:
   ```bash

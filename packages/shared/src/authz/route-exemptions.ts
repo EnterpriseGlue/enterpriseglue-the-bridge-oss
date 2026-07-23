@@ -32,7 +32,7 @@ function tokenAuthenticatedRoute(method: string, route: string, risk: AuthzActio
 export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only sanitized configuration bootstrap state.'),
   publicRoute('GET', '/ready', 'low', 'platform-runtime', 'Unauthenticated readiness probes expose only sanitized configuration bootstrap state.'),
-  publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap gauges.'),
+  publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap and aggregate engine-tenancy gauges/counters without tenant or engine identifiers.'),
   publicRoute('POST', '/api/auth/login', 'high', 'platform-auth', 'Credential login must be reachable before a session exists and is protected by authentication rate limits.'),
   tokenAuthenticatedRoute('POST', '/api/auth/complete-onboarding', 'high', 'A one-time onboarding token authorizes completion before the normal user session is issued.'),
   tokenAuthenticatedRoute('POST', '/api/auth/refresh', 'medium', 'The refresh cookie authenticates session renewal when the access token is unavailable or expired.'),

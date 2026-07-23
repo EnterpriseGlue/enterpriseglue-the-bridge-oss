@@ -14,8 +14,10 @@ const getConfigBootstrapStatus = vi.hoisted(() => vi.fn<() => {
   mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null,
 })));
 const getConfigBootstrapMetrics = vi.hoisted(() => vi.fn(() => 'enterpriseglue_config_bootstrap_ready 1\n'));
+const getEngineTenancyMetrics = vi.hoisted(() => vi.fn(async () => 'enterpriseglue_engine_tenancy_metrics_collection_success 1\n'));
 
 vi.mock('../../packages/backend-host/src/services/configBundleBootstrap.js', () => ({ getConfigBootstrapStatus, getConfigBootstrapMetrics }));
+vi.mock('../../packages/backend-host/src/services/engineTenancyMetrics.js', () => ({ getEngineTenancyMetrics }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
@@ -80,12 +82,16 @@ describe('app', () => {
     });
   });
 
-  it('exposes bounded Prometheus bootstrap metrics without JSON status details', async () => {
+  it('exposes bounded Prometheus bootstrap and aggregate tenancy metrics without identifiers', async () => {
     const app = createApp({ registerRoutes: false, includeDocs: false, includeRateLimiting: false });
     const response = await request(app).get('/metrics');
 
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toContain('text/plain');
-    expect(response.text).toBe('enterpriseglue_config_bootstrap_ready 1\n');
+    expect(response.text).toBe([
+      'enterpriseglue_config_bootstrap_ready 1',
+      'enterpriseglue_engine_tenancy_metrics_collection_success 1',
+      '',
+    ].join('\n'));
   });
 });
