@@ -3428,20 +3428,24 @@
     },
     {
       "id": "TEN-UI-005",
-      "requirement": "An already authenticated browser session observes assignment and group revocation immediately, with Chromium on pull requests and Firefox/WebKit on the scheduled gate.",
+      "requirement": "Active, refreshed, direct-URL, history-restored, and multi-tab browser sessions observe assignment and group revocation immediately in Chromium, Firefox, and WebKit.",
       "source": "Engine Tenancy Plan / Browser Coverage",
       "dimensions": [
         "browser",
         "user",
         "group",
         "revocation",
+        "direct_url",
+        "multi_tab",
+        "session_refresh",
+        "back_forward_cache",
         "chromium",
         "firefox",
         "webkit"
       ],
       "expected": "new authorization version contains no stale engine grant in every browser lane",
       "testFile": "test/e2e/smoke/fine-grained-access-local.spec.ts",
-      "testName": "revokes an active browser session without serving a stale post-revocation snapshot",
+      "testName": "revokes active, refreshed, direct-URL, and multi-tab sessions without stale access",
       "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
       "ciJob": "authz-pr.yml:authorization",
       "coverage": {
