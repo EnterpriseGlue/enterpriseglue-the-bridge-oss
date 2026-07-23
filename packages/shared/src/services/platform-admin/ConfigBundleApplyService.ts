@@ -490,7 +490,9 @@ class ConfigBundleApplyService {
           const desired = desiredEngineSets.get(change.key);
           const sourceHash = desired ? objectFingerprint('engine_set', desired.key, desired) : objectFingerprint('engine_set', change.key, { archived: true });
           const engineRows = await engineRepo.find();
-          const keyToId = new Map(engineRows.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine.id]));
+          const keyToId = new Map(engineRows
+            .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
+            .map((engine) => [engine.configKey!, engine.id]));
           if (change.operation === 'create' && desired) {
             const selector = resolveConfigEngineSetSelector(desired.selector, keyToId);
             const createdSet = await engineSetService.createEngineSet({ tenantId, key: desired.key, name: desired.name, description: desired.description || null, selector, source: 'config', sourceRef: `config_bundle:${manifest.metadata.key}`, ownershipMode: desired.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', createdById: input.actorId, riskAcknowledged: true }, manager, true);
@@ -505,7 +507,9 @@ class ConfigBundleApplyService {
           const desired = desiredRuntimeResourceSets.get(change.key);
           const sourceHash = desired ? objectFingerprint('runtime_resource_set', desired.key, desired) : objectFingerprint('runtime_resource_set', change.key, { archived: true });
           const engineRows = await engineRepo.find();
-          const engineByConfigKey = new Map(engineRows.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
+          const engineByConfigKey = new Map(engineRows
+            .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
+            .map((engine) => [engine.configKey!, engine]));
           const engine = desired ? engineByConfigKey.get(desired.engineRef.engineKey) : null;
           if (desired && !engine) fail(`Runtime Resource Set ${desired.key} references an unresolved engine`, 422);
           if (change.operation === 'create' && desired && engine) {
@@ -580,7 +584,9 @@ class ConfigBundleApplyService {
       ]);
       const roleByKey = new Map(roles.map((role) => [role.key, role]));
       const groupByKey = new Map(groups.map((group) => [group.key, group]));
-      const engineByKey = new Map(engines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
+      const engineByKey = new Map(engines
+        .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
+        .map((engine) => [engine.configKey!, engine]));
       const engineSetByKey = new Map(engineSets.map((set) => [set.key, set]));
       const runtimeResourceSetByKey = new Map(runtimeResourceSets.map((set) => [set.key, set]));
       const sourceRef = `config_bundle:${manifest.metadata.key}`;
@@ -708,7 +714,14 @@ class ConfigBundleApplyService {
         ) {
           fail(`Engine tenant mapping ${change.key} no longer matches its previewed archive`, 409);
         }
-        if (!existing.isActive) continue;
+        if (!existing.isActive) {
+          // The engine archive in this same apply may already have retired the
+          // mapping through the shared decommission operation. It still
+          // satisfies this previewed logical archive and must be reflected in
+          // the apply result.
+          archived += 1;
+          continue;
+        }
         await engineTenantMappingRepo.update({ id: existing.id }, {
           sourceHash: objectFingerprint('engine_tenant_mapping', change.key, { active: false }),
           lastAppliedAt: now,

@@ -311,7 +311,9 @@ class ConfigBundleDiffService {
     const tenantEngines = engines.filter((engine) =>
       (engine.tenantId || null) === normalizedTenantId
       || Boolean(engine.configKey && engine.configKeyIdentity === configEngineIdentity(normalizedTenantId, engine.configKey)));
-    const enginesByConfigKey = new Map(tenantEngines.filter((engine) => engine.configKey).map((engine) => [engine.configKey!, engine]));
+    const enginesByConfigKey = new Map(tenantEngines
+      .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
+      .map((engine) => [engine.configKey!, engine]));
     const tenantEngineSets = engineSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
     const engineSetsByKey = new Map(tenantEngineSets.map((set) => [set.key, set]));
     const tenantRuntimeResourceSets = runtimeResourceSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
@@ -405,7 +407,12 @@ class ConfigBundleDiffService {
     }
 
     for (const engine of desiredEngines) {
-      const existing = enginesByConfigKey.get(engine.key) || tenantEngines.find((candidate) => candidate.externalId && candidate.externalId === engine.externalId);
+      const existing = enginesByConfigKey.get(engine.key) || tenantEngines.find(
+        (candidate) =>
+          candidate.lifecycleStatus !== 'decommissioned'
+          && candidate.externalId
+          && candidate.externalId === engine.externalId,
+      );
       const desiredTenancyMode = engine.tenancy?.mode || 'dedicated';
       const desiredTenantId = desiredDedicatedTenantId(engine, normalizedTenantId);
       const desiredCredentials = desiredEngineCredentialFields(engine.auth);
@@ -441,8 +448,7 @@ class ConfigBundleDiffService {
         (existing.passwordEnc || null) !== desiredCredentials.passwordEnc ||
         (existing.oauthTokenUrl || null) !== desiredCredentials.oauthTokenUrl ||
         (existing.oauthScopes || null) !== desiredCredentials.oauthScopes ||
-        (existing.oauthAudience || null) !== desiredCredentials.oauthAudience ||
-        existing.lifecycleStatus === 'decommissioned'
+        (existing.oauthAudience || null) !== desiredCredentials.oauthAudience
       ) {
         changes.push({ objectType: 'engine', key: engine.key, operation: 'update', currentId: existing.id, reason: 'Config-owned engine differs from desired connection, metadata, or authorization settings' });
       } else {

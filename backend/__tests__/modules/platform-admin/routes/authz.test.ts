@@ -5,6 +5,7 @@ import authzRouter from '../../../../../packages/backend-host/src/modules/platfo
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import {
   deploymentEligibilityService,
+  engineService,
   engineSetService,
   permissionService,
   policyService,
@@ -302,6 +303,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   },
   engineSetService: {
     materializeEngineSetsForEngine: vi.fn().mockResolvedValue([{ engineSetId: 'set-1', matched: 1, created: 0, updated: 1, removed: 0 }]),
+  },
+  engineService: {
+    decommissionEngine: vi.fn().mockResolvedValue(undefined),
   },
   AllPermissions: {
     AUTHZ_CHECK: 'platform:authz:check',
@@ -1980,7 +1984,8 @@ describe('platform-admin authz routes', () => {
   it('decommissions and reactivates externally registered engines from Access Control', async () => {
     const engineUpdate = vi.fn().mockResolvedValue(undefined);
     const registrationUpdate = vi.fn().mockResolvedValue(undefined);
-    const materializationDelete = vi.fn().mockResolvedValue({ affected: 1 });
+    const decommissionEngine = vi.spyOn(engineService, 'decommissionEngine')
+      .mockResolvedValue(undefined);
     const registration = {
       id: 'registration-1',
       engineId: 'engine-1',
@@ -2000,8 +2005,7 @@ describe('platform-admin authz routes', () => {
       lifecycleStatus: 'active',
       driftStatus: 'in_sync',
     };
-    (getDataSource as any).mockResolvedValue({
-      getRepository: (entity: any) => {
+    const getRepository = (entity: any) => {
         if (entity.name === 'ExternalEngineRegistration') {
           return {
             findOne: vi.fn().mockResolvedValue(registration),
@@ -2015,11 +2019,11 @@ describe('platform-admin authz routes', () => {
             update: engineUpdate,
           };
         }
-        if (entity.name === 'EngineSetMaterialization') {
-          return { delete: materializationDelete };
-        }
         return { find: vi.fn().mockResolvedValue([]) };
-      },
+      };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: (callback: (manager: unknown) => unknown) => callback({ getRepository }),
     });
 
     const response = await request(app)
@@ -2032,18 +2036,21 @@ describe('platform-admin authz routes', () => {
       engineId: 'engine-1',
       lifecycleStatus: 'decommissioned',
     });
-    expect(engineUpdate).toHaveBeenCalledWith({ id: 'engine-1' }, expect.objectContaining({
-      lifecycleStatus: 'decommissioned',
-      driftStatus: 'decommissioned',
-    }));
     expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
       lifecycleStatus: 'decommissioned',
       driftStatus: 'decommissioned',
     }));
-    expect(materializationDelete).toHaveBeenCalledWith({ engineId: 'engine-1' });
+    expect(decommissionEngine).toHaveBeenCalledWith(
+      'engine-1',
+      {},
+      expect.objectContaining({ getRepository }),
+    );
 
     const decommissionedRegistration = { ...registration, lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned' };
     const decommissionedEngine = { ...engine, lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned' };
+    const findReactivationEngine = vi.fn()
+      .mockResolvedValueOnce(decommissionedEngine)
+      .mockResolvedValueOnce(null);
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity.name === 'ExternalEngineRegistration') {
@@ -2054,7 +2061,7 @@ describe('platform-admin authz routes', () => {
         }
         if (entity.name === 'Engine') {
           return {
-            findOne: vi.fn().mockResolvedValue(decommissionedEngine),
+            findOne: findReactivationEngine,
             findOneBy: vi.fn().mockResolvedValue(decommissionedEngine),
             update: engineUpdate,
           };
@@ -2086,6 +2093,52 @@ describe('platform-admin authz routes', () => {
       driftStatus: 'in_sync',
     }));
     expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('engine-1', 'tenant-default');
+  });
+
+  it('refuses to reactivate a retired external engine after a replacement is active', async () => {
+    const update = vi.fn().mockResolvedValue(undefined);
+    const retired = {
+      id: 'engine-retired',
+      tenantId: 'tenant-default',
+      externalId: 'cluster-a/prod',
+      registrationSource: 'external_api',
+      lifecycleStatus: 'decommissioned',
+    };
+    const registration = {
+      id: 'registration-retired',
+      engineId: retired.id,
+      externalId: retired.externalId,
+      lifecycleStatus: 'decommissioned',
+    };
+    const findReactivationEngine = vi.fn()
+      .mockResolvedValueOnce(retired)
+      .mockResolvedValueOnce({
+        id: 'engine-replacement',
+        externalId: retired.externalId,
+        lifecycleStatus: 'active',
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'ExternalEngineRegistration') {
+          return { findOne: vi.fn().mockResolvedValue(registration), update };
+        }
+        if (entity.name === 'Engine') {
+          return {
+            findOneBy: vi.fn().mockResolvedValue(retired),
+            findOne: findReactivationEngine,
+            update,
+          };
+        }
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+
+    const response = await request(app)
+      .post(`/api/authz/external-engines/${retired.id}/reactivate`)
+      .send({ reason: 'Attempted stale recovery' });
+
+    expect(response.status).toBe(409);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('does not decommission an externally registered engine from another tenant', async () => {

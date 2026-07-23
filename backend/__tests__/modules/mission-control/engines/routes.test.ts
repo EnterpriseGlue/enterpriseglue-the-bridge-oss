@@ -136,6 +136,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
       { engine: { id: 'e1', name: 'Engine 1' }, role: 'admin' },
     ]),
     getEngineRole: vi.fn().mockResolvedValue('owner'),
+    decommissionEngine: vi.fn().mockResolvedValue(undefined),
     createEngineWithGovernanceAssignments: vi.fn(async (engine: unknown, dataSource: any) => {
       await dataSource.getRepository({ name: 'Engine' }).insert(engine);
     }),
@@ -2520,8 +2521,9 @@ describe('mission-control engines routes', () => {
     });
     const engineUpdate = vi.fn().mockResolvedValue({});
     const registrationUpdate = vi.fn().mockResolvedValue({});
-    const materializationDelete = vi.fn().mockResolvedValue({});
     const auditInsert = vi.fn().mockResolvedValue({});
+    const decommissionEngine = vi.spyOn(engineService, 'decommissionEngine')
+      .mockResolvedValue(undefined);
     const registrationFindOne = vi.fn().mockResolvedValue({
       id: 'registration-1',
       engineId: 'e1',
@@ -2535,26 +2537,27 @@ describe('mission-control engines routes', () => {
       registrationSource: 'external_api',
     });
 
-    (getDataSource as any).mockResolvedValue({
-      getRepository: (entity: any) => {
-        if (entity?.name === 'ExternalEngineRegistration') {
-          return {
-            findOne: registrationFindOne,
-            update: registrationUpdate,
-          };
-        }
-        if (entity?.name === 'EngineSetMaterialization') {
-          return { delete: materializationDelete };
-        }
-        if (entity?.name === 'AuditLog') {
-          return { insert: auditInsert };
-        }
+    const getRepository = (entity: any) => {
+      if (entity?.name === 'ExternalEngineRegistration') {
         return {
-          findOneBy: engineFindOneBy,
-          update: engineUpdate,
+          findOne: registrationFindOne,
+          update: registrationUpdate,
         };
-      },
-    });
+      }
+      if (entity?.name === 'AuditLog') {
+        return { insert: auditInsert };
+      }
+      return {
+        findOne: engineFindOneBy,
+        findOneBy: engineFindOneBy,
+        update: engineUpdate,
+      };
+    };
+    const dataSource = {
+      getRepository,
+      transaction: (callback: (manager: unknown) => unknown) => callback({ getRepository }),
+    };
+    (getDataSource as any).mockResolvedValue(dataSource);
 
     const response = await request(app)
       .post('/engines-api/external/engines/decommission')
@@ -2583,7 +2586,11 @@ describe('mission-control engines routes', () => {
       driftStatus: 'decommissioned',
       lastExternalSyncAt: expect.any(Number),
     }));
-    expect(materializationDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(decommissionEngine).toHaveBeenCalledWith(
+      'e1',
+      {},
+      expect.objectContaining({ getRepository }),
+    );
     expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
       action: 'engine.external_registration.decommission',
       resourceId: 'e1',

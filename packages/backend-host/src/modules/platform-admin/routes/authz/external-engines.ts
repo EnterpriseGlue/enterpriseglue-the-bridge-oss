@@ -11,10 +11,9 @@ import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
-import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
 import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
-import { engineSetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { engineService, engineSetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { getExternalEngineCapabilityDiagnostics, getExternalEngineMaterializationDiagnostics, parseExternalEngineCapabilities } from './external-engine-diagnostics.js';
 import { parseExternalEngineFieldOwnership } from './external-engine-ownership.js';
 import { parseExternalEngineJson, parseExternalEngineLabels, redactExternalEngineAuditDetails } from './external-engine-serialization.js';
@@ -133,9 +132,15 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
       const registration = await registrationRepo.findOne({ where: { engineId: engine.id } });
       const now = Date.now();
       const previousLifecycleStatus = registration?.lifecycleStatus || engine.lifecycleStatus || 'active';
-      await engineRepo.update({ id: engine.id }, { lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', updatedAt: now });
-      if (registration) await registrationRepo.update({ id: registration.id }, { lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', updatedAt: now });
-      await dataSource.getRepository(EngineSetMaterialization).delete({ engineId: engine.id });
+      await dataSource.transaction(async (manager) => {
+        await engineService.decommissionEngine(engine.id, {}, manager);
+        if (registration) {
+          await manager.getRepository(ExternalEngineRegistration).update(
+            { id: registration.id },
+            { lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', updatedAt: now },
+          );
+        }
+      });
       await logAudit({
         tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.external_registration.decommission', resourceType: 'engine', resourceId: engine.id,
         details: { source: 'platform_admin', externalId: registration?.externalId || engine.externalId || null, externalSystemId: registration?.externalSystemId || engine.externalSystemId || null, previousLifecycleStatus, lifecycleStatus: 'decommissioned', reason: req.body.reason || null },
@@ -157,6 +162,19 @@ export function registerExternalEngineRoutes(router: Router, { requirePlatformAc
       if (!engine || !isExternalEngineTenantVisible(engine.tenantId, req.tenant?.tenantId || null)) throw Errors.notFound('Engine');
       if (!isExternallyRegistered(engine)) throw Errors.validation('Only externally registered engines can be reactivated');
       const registration = await registrationRepo.findOne({ where: { engineId: engine.id } });
+      const externalId = registration?.externalId || engine.externalId || null;
+      if (externalId) {
+        const activeReplacement = await engineRepo.findOne({
+          where: {
+            id: Not(engine.id),
+            externalId,
+            lifecycleStatus: Not('decommissioned'),
+          },
+        });
+        if (activeReplacement) {
+          throw Errors.conflict('A replacement engine with this externalId is already active');
+        }
+      }
       const now = Date.now();
       const previousLifecycleStatus = registration?.lifecycleStatus || engine.lifecycleStatus || 'active';
       const driftStatus = (registration?.driftStatus || engine.driftStatus) === 'decommissioned' ? 'in_sync' : registration?.driftStatus || engine.driftStatus || 'in_sync';

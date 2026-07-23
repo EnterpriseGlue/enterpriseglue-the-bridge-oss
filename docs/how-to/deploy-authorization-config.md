@@ -285,14 +285,16 @@ Use this sequence before promoting a centralized shared-engine bundle:
    segments resolve to the intended EnterpriseGlue tenant.
 6. Apply an empty authoritative engine and mapping declaration. Confirm both
    engines and both mapping rows are archived and cannot reappear through
-   reconciliation.
+   reconciliation. Reapply the former logical engine key once, confirm the
+   replacement receives a new stable engine ID, then remove it again.
 
 `pnpm run test:engine-tenancy:provisioning-journeys:local` automates this
 Journey 6 configuration round trip and the equivalent manual UI and external
-API shared lifecycles. Journey 7 then repeats tenant resolution through all
-three channels. The runner resolves a disposable `E2E_ENGINE_PASSWORD` only
-inside the local backend container and never writes its value to the bundle
-or evidence. A release candidate is complete only when the resulting
+API shared lifecycles. Journeys 7–14 then repeat tenant resolution, fine-grained
+access, transition, credential rotation, and non-resurrection through all three
+channels. The runner resolves a disposable `E2E_ENGINE_PASSWORD` only inside
+the local backend container and never writes its value to the bundle or
+evidence. A release candidate is complete only when the resulting
 `provisioning-journeys.json` reports 14/14 journeys and 30/30 required channel
 executions on the same clean commit.
 

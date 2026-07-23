@@ -17,14 +17,14 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The real-service provisioning suite now passes Journeys 1–13, including all
-three required channels of Journeys 7–13: thirteen of fourteen journeys and
-twenty-seven of thirty required channel executions. It covers the manual UI, a least-privilege
+The real-service provisioning suite now passes Journeys 1–14, including all
+three required channels of Journeys 7–14: fourteen of fourteen journeys and
+thirty of thirty required channel executions. It covers the manual UI, a least-privilege
 external API client, and authoritative configuration bundles against the same
 local HTTP service, PostgreSQL database, authorization evaluator, and
-Camunda-compatible Docker endpoint. The provisioning release artifact remains
-incomplete until all 14 journeys and all 30 channel executions pass on one
-clean commit.
+Camunda-compatible Docker endpoint. The provisioning artifact is complete only
+when the same 14 journeys and 30 channel executions are retained from one clean
+commit.
 
 The version-2 machine-readable manifest provides 100% traceability for its 79
 registered engine-tenancy requirements: every requirement has an exact
@@ -107,18 +107,18 @@ meaning of 100% functional coverage are documented in
 | Lane | Passing test executions |
 | --- | ---: |
 | Foundation | 45 |
-| Provisioning | 117 |
-| Mappings and configuration ownership | 249 |
-| Authorization and custom roles | 329 |
+| Provisioning | 118 |
+| Mappings and configuration ownership | 250 |
+| Authorization and custom roles | 324 |
 | Runtime enforcement | 354 |
 | Classification and transitions | 152 |
-| Operational metrics | 46 |
-| Documentation and traceability | 52 |
-| **Focused-lane total** | **1,344** |
+| Operational metrics | 45 |
+| Documentation and traceability | 43 |
+| **Focused-lane total** | **1,331** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
-| Real-service provisioning channel executions | **27** |
+| Real-service provisioning channel executions | **30** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -292,9 +292,10 @@ disposable PostgreSQL/browser services. CI retains the result directory for
 ## Acceptance and Remaining Release Gates
 
 The implementation and automated evidence close the local
-PostgreSQL/Chromium topology-enforcement slice and the three-browser
-fine-grained session-state slice. They do not yet close full cross-platform
-release qualification. The remaining gates are:
+PostgreSQL/Chromium topology-enforcement slice, the three-browser
+fine-grained session-state slice, and the three-browser accessibility slice.
+They do not yet close full cross-platform release qualification. The remaining
+gates are:
 
 - generate and execute the complete constraint-derived authorization
   state-space, including every supported behavior cell and every named
@@ -303,12 +304,6 @@ release qualification. The remaining gates are:
 - retain clean-install, every supported upgrade-baseline, interrupted-retry,
   schema-equivalence, service, rollback, and cleanup results for PostgreSQL,
   MySQL, SQL Server, Oracle, and Spanner;
-- complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
-  evidence for all new browser workflows;
-- implement Journey 14, then execute all 14 supported UI, external API, and
-  configuration provisioning journeys (30 required channel executions)
-  against persistent local services and record stable errors for unsupported
-  combinations;
 - populate every required slot in the implemented release evidence index with
   passing same-clean-commit artifacts;
 - obtain engineering, security, and independent-operator sign-off on the

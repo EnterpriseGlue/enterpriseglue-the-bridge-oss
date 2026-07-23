@@ -219,9 +219,10 @@ curl --fail-with-body \
 
 ## Decommission
 
-Decommission preserves audit and inventory evidence while removing the engine
-from active materializations. It is safer than deleting and recreating an
-externally owned engine.
+Decommission preserves the retired engine, mapping, inventory, and audit rows
+as inactive evidence while removing every direct engine/runtime assignment,
+active mapping, active inventory record, Engine Set materialization, Runtime
+Resource Set materialization, and active deployment target.
 
 `TEN-API-012`: runtime validation and OpenAPI use the same strict external
 decommission request schema.
@@ -239,10 +240,18 @@ curl --fail-with-body \
   }'
 ```
 
-After decommission, verify the lifecycle status, empty Engine Set
-materializations, denied connection tests, and retained sanitized audit
-history. Reactivation is a separate administrator action and must be followed
-by reconciliation and access verification.
+After decommission, verify the lifecycle status, zero active mappings and
+inventory rows, empty materializations, denied connection tests, denied
+already-authenticated sessions, and retained sanitized audit history. If the
+owning system registers the same `externalId` again, EnterpriseGlue creates a
+new active engine with a new stable engine ID; it does not update the retired
+row. Update downstream references to the new ID.
+
+Explicit administrator reactivation is a separate recovery action. It does not
+restore removed assignments or reactivate retired mappings/inventory, and it
+must be followed by deliberate remapping, reassignment, reconciliation, and
+access verification. Do not reactivate a retired row when a replacement with
+the same external identity is active.
 
 ## Troubleshooting
 

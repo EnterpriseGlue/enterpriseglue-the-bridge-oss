@@ -215,6 +215,28 @@ conflicting active resources. An empty shared engine with at least one active
 mapping can report ready; readiness must be checked again after inventory
 reconciliation.
 
+## Decommission and Stable-Identity Contract
+
+External owners retire an engine with:
+
+```text
+POST /engines-api/external/engines/decommission
+```
+
+An authoritative bundle retires a configuration-owned engine by omitting it.
+Manual owners use `DELETE /engines-api/engines/{id}`. All three paths remove
+direct engine and runtime-resource assignments, leave no active mapping or
+runtime-inventory row, remove set materializations, retire engine-bound Runtime
+Resource Sets and deployment targets, and deny existing sessions immediately.
+External/config paths retain inactive history; manual deletion removes the
+owned rows.
+
+A later external upsert of the same `externalId` or bundle apply of the same
+engine key is a create, not an update of the retired row. The response has a
+new stable engine ID. Authorization and runtime calls using the old ID remain
+denied. Explicit platform-administrator reactivation is a separate recovery
+operation and does not restore assignments, mappings, or inventory.
+
 ## Configuration Bundle Mapping Contract
 
 Configuration bundles declare shared-engine mappings in

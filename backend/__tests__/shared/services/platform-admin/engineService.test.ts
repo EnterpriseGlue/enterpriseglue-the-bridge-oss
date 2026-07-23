@@ -7,6 +7,12 @@ import { EngineMember } from '@enterpriseglue/shared/db/entities/EngineMember.js
 import { EnvironmentTag } from '@enterpriseglue/shared/db/entities/EnvironmentTag.js';
 import { RbacRoleAssignment } from '@enterpriseglue/shared/db/entities/RbacRoleAssignment.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
+import { EngineSetMaterialization } from '@enterpriseglue/shared/db/entities/EngineSetMaterialization.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/db/entities/EngineTenantMapping.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/db/entities/ProjectEngineTarget.js';
+import { RuntimeResource } from '@enterpriseglue/shared/db/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/db/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/db/entities/RuntimeResourceSetMaterialization.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -489,8 +495,41 @@ describe('EngineService', () => {
 
   it('writes configuration engine updates and decommissions through a supplied transaction store', async () => {
     const update = vi.fn().mockResolvedValue(undefined);
+    const assignmentDelete = vi.fn().mockResolvedValue(undefined);
+    const engineSetMaterializationDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeSetMaterializationDelete = vi.fn().mockResolvedValue(undefined);
+    const mappingUpdate = vi.fn().mockResolvedValue(undefined);
+    const runtimeResourceUpdate = vi.fn().mockResolvedValue(undefined);
+    const runtimeResourceSetUpdate = vi.fn().mockResolvedValue(undefined);
+    const projectTargetUpdate = vi.fn().mockResolvedValue(undefined);
+    const engineMemberDelete = vi.fn().mockResolvedValue(undefined);
     const store = { getRepository: (entity: unknown) => {
-      if (entity === Engine) return { update };
+      if (entity === Engine) return {
+        update,
+        findOne: vi.fn().mockResolvedValue({
+          id: 'engine-1',
+          registrationSource: 'config',
+          configKeyIdentity: 'tenant-a:engine.central',
+        }),
+      };
+      if (entity === RbacRoleAssignment) return { delete: assignmentDelete };
+      if (entity === EngineMember) return { delete: engineMemberDelete };
+      if (entity === EngineTenantMapping) return { update: mappingUpdate };
+      if (entity === RuntimeResource) return {
+        find: vi.fn().mockResolvedValue([{ id: 'runtime-1' }]),
+        update: runtimeResourceUpdate,
+      };
+      if (entity === RuntimeResourceSet) return {
+        find: vi.fn().mockResolvedValue([{ id: 'runtime-set-1' }]),
+        update: runtimeResourceSetUpdate,
+      };
+      if (entity === RuntimeResourceSetMaterialization) {
+        return { delete: runtimeSetMaterializationDelete };
+      }
+      if (entity === ProjectEngineTarget) return { update: projectTargetUpdate };
+      if (entity === EngineSetMaterialization) {
+        return { delete: engineSetMaterializationDelete };
+      }
       throw new Error('Unexpected repository');
     } };
     await service.updateConfiguredEngine('engine-1', {
@@ -507,8 +546,29 @@ describe('EngineService', () => {
       name: 'Payments', sourceHash: 'hash-1', lifecycleStatus: 'active', updatedAt: expect.any(Number),
     }));
     expect(update).toHaveBeenNthCalledWith(2, { id: 'engine-1' }, expect.objectContaining({
-      lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: 200,
+      lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned',
+      configKeyIdentity: null, lastAppliedAt: 200,
     }));
+    expect(assignmentDelete).toHaveBeenCalledTimes(3);
+    expect(engineMemberDelete).toHaveBeenCalledWith({ engineId: 'engine-1' });
+    expect(mappingUpdate).toHaveBeenCalledWith(
+      { engineId: 'engine-1' },
+      expect.objectContaining({ isActive: false }),
+    );
+    expect(runtimeResourceUpdate).toHaveBeenCalledWith(
+      { engineId: 'engine-1' },
+      expect.objectContaining({ isActive: false }),
+    );
+    expect(runtimeResourceSetUpdate).toHaveBeenCalledWith(
+      { engineId: 'engine-1' },
+      expect.objectContaining({ isArchived: true }),
+    );
+    expect(projectTargetUpdate).toHaveBeenCalledWith(
+      { engineId: 'engine-1' },
+      expect.objectContaining({ status: 'archived' }),
+    );
+    expect(engineSetMaterializationDelete).toHaveBeenCalledWith({ engineId: 'engine-1' });
+    expect(runtimeSetMaterializationDelete).toHaveBeenCalledTimes(2);
   });
 
   it('removes canonical legacy assignments when a legacy engine member is removed', async () => {

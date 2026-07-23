@@ -76,7 +76,7 @@ until the following evidence is retained:
 | Human principals and custom roles | PostgreSQL-backed direct-user, group-derived-user, scoped custom-role, and randomized model tests pass | Generated matrix contains zero missing or skipped supported cells |
 | Machine principals | PostgreSQL-backed API-client and service-account custom-role, expiry, rotation, and revocation tests pass | Same generated matrix and HTTP journeys pass for both machine-principal types |
 | Local running installation | Guarded PostgreSQL/Chromium enforcement proves owned legacy classification, dedicated defaulting, shared fail-closed mapping, reconciliation, metrics, and cleanup | Repeatable clean-install and supported upgrade-baseline artifacts pass |
-| Provisioning channels | Journeys 1–13 pass locally, including all three Journey 7–13 channels: 13/14 journeys and 27/30 required channel executions | `provisioning-journeys.json` reports 14/14 journeys and 30/30 channel executions from one clean commit |
+| Provisioning channels | All 14 journeys pass locally, including all three Journey 7–14 channels: 14/14 journeys and 30/30 required channel executions | `provisioning-journeys.json` reports 14/14 journeys and 30/30 channel executions from one clean commit |
 | Browser targets | The guarded local runner passes 27 authorization executions plus 12 database-free accessibility executions across Chromium, Firefox, and WebKit, including error announcements, contrast, 200% reflow, and reduced motion | Both browser artifacts are retained from the same clean release commit |
 | Database targets | Portable migration/schema and adapter-registration contracts cover PostgreSQL, MySQL, SQL Server, Oracle, and Spanner; PostgreSQL has live evidence | Clean-install, upgrade, retry, schema-equivalence, service, and rollback evidence passes on all five adapters |
 | Documentation | Developer, user, operator, API, migration, compatibility, test, review, and release-evidence Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
@@ -844,9 +844,8 @@ checkboxes are closed.
 The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
 `TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-The remaining cross-database, browser-accessibility, generated-matrix,
-clean/upgrade, independent-review, and compatibility-window gates are tracked
-below.
+The remaining cross-database, generated-matrix, clean/upgrade,
+independent-review, and compatibility-window gates are tracked below.
 
 ### Phase 9: full release qualification
 
@@ -882,14 +881,17 @@ below.
 - [x] Complete the browser accessibility audit for error announcements,
   contrast, 200% zoom/reflow, and reduced motion in Chromium, Firefox, and
   WebKit with database-free retained evidence.
-- [ ] Execute all 14 provisioning-channel journeys below through the real local
+- [x] Execute all 14 provisioning-channel journeys below through the real local
   HTTP service and persistent database for every supported channel, recording
   documented stable errors for unsupported channel/action combinations. The
   executable denominator contains 30 required channel executions: journeys
   1–6 each use their matching channel and journeys 7–14 use all three.
-  Journeys 1–13 are implemented and passing locally, including all three
-  channels of Journeys 7–13: 13/14 journeys and 27/30 channel executions.
-  Journey 14 remains open, so this gate is intentionally not checked.
+  Journeys 1–14 are implemented and passing locally, including all three
+  channels of Journeys 7–14: 14/14 journeys and 30/30 channel executions.
+  Journey 14 proves decommission removes every direct engine/runtime
+  assignment, retires mappings and inventory, denies already-authenticated
+  browser and API sessions, and makes owner-channel recreation allocate a new
+  stable engine ID.
 - [x] Produce one fail-closed release evidence index that links the exact manifest,
   generated matrices, source coverage, mutation, database, functional browser,
   browser accessibility, documentation, compatibility-window, migration,
@@ -912,7 +914,7 @@ changes.
 | 1 | Freeze a clean candidate | Run the manifest, mutation, guarded local enforcement, and three-browser lanes. `requirement-evidence.json`, `mutation-report.json`, `local-enforcement.json`, and `browser-matrix.json` must name the same clean commit. | Any artifact is missing, dirty, stale, sanitized incorrectly, or refers to another commit. |
 | 2 | Complete authorization generation | Build the canonical dimension and applicability registries, then generate every supported behavior cell and every invalidity class. Execute every applicable principal, scope, topology, runtime mode, source, tenant relationship, lifecycle, resource state, action, and outcome. Write `authorization-matrix.json` with zero unknown, missing, skipped, quarantined, or unexpected cells. | Any canonical action/resource type is unclassified, an exclusion has no stable rule and executed witness, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
 | 3 | Qualify all database adapters | For PostgreSQL, MySQL, SQL Server, Oracle, and Spanner, run clean install, every supported upgrade baseline, interruption/retry, schema equivalence, service behavior, rollback, and cleanup. Write one `database-matrix.json` containing versions, schema fingerprints, and per-stage results. | Schema or behavior differs, retry is not idempotent, rollback loses explanatory metadata, or cleanup leaves owned rows. |
-| 4 | Complete real-service provisioning journeys | Execute all 14 journeys through the local HTTP service and persistent database for manual UI, external API, and configuration channels where supported. Unsupported combinations must return their documented stable error. Write `provisioning-journeys.json` with 14/14 journeys, 30/30 required channel executions, and zero invalid or unexpected observations. Journeys 1–13 are currently implemented (13/14 journeys and 27/30 channel executions). Journey 10 proves list/count/detail/mutation/batch/job/task/incident/history/deployment enforcement and records that a denied inventoried sibling makes no matching downstream engine call. Journey 11 keeps browser and HTTP sessions open while assignment revocation and mapping deactivation take effect immediately, then restores the exact mapping to prove cache invalidation. Journey 12 proves preview, acknowledgement, stale-preview conflict, apply, immediate shared-topology quarantine, and reverse transition for manual, hybrid-external/manual-tenancy-owner, and `config_warn` engines. Journey 13 rotates credentials twice through every owner, proves persisted values change without plaintext storage, preserves tenant ownership, and verifies public redaction; configuration diffing treats an opaque secret-reference change as an engine update. Implement Journey 14 last so decommission and non-resurrection are observed after all other lifecycle behaviors. The artifact must remain incomplete until every observation is qualified on the same clean commit. | A channel silently changes topology/ownership, a retry duplicates state, a deny leaks data, or decommissioned access can reappear. |
+| 4 | Complete real-service provisioning journeys | Execute all 14 journeys through the local HTTP service and persistent database for manual UI, external API, and configuration channels where supported. Unsupported combinations must return their documented stable error. Write `provisioning-journeys.json` with 14/14 journeys, 30/30 required channel executions, and zero invalid or unexpected observations. Journeys 1–14 are implemented and passing locally. Journey 10 proves list/count/detail/mutation/batch/job/task/incident/history/deployment enforcement and records that a denied inventoried sibling makes no matching downstream engine call. Journey 11 keeps browser and HTTP sessions open while assignment revocation and mapping deactivation take effect immediately, then restores the exact mapping to prove cache invalidation. Journey 12 proves preview, acknowledgement, stale-preview conflict, apply, immediate shared-topology quarantine, and reverse transition for manual, hybrid-external/manual-tenancy-owner, and `config_warn` engines. Journey 13 rotates credentials twice through every owner, proves persisted values change without plaintext storage, preserves tenant ownership, and verifies public redaction; configuration diffing treats an opaque secret-reference change as an engine update. Journey 14 retires direct assignments, mappings, inventory, set materializations, runtime sets, and deployment targets, denies cached browser/API sessions immediately, preserves inactive history for external/config owners, and proves owner-channel recreation receives a new stable engine ID. Retain all observations on the same clean commit. | A channel silently changes topology/ownership, a retry duplicates state, a deny leaks data, or decommissioned access can reappear. |
 | 5 | Finish browser accessibility | Add automated/manual evidence for error announcement, contrast, 200% zoom/reflow, and reduced motion. Re-run Chromium, Firefox, and WebKit after every browser-flow change. | A keyboard/screen-reader workflow cannot complete, content becomes unavailable at zoom, or stale authorization returns after any navigation/session path. |
 | 6 | Complete documentation review | Engineering, security, and an independent operator execute the published Markdown only, record findings, and approve the exact commit in `documentation-review.json`. | A guide needs undocumented knowledge, an example disagrees with runtime/OpenAPI, or any security finding remains unresolved. |
 | 7 | Assemble and enforce release evidence | Run `pnpm run test:engine-tenancy:evidence-index` while iterating and `pnpm run test:engine-tenancy:release-evidence` for the final gate. The latter must report every required gate passing on the same clean commit. | The index is incomplete, a waiver is used as executed coverage, or the external omission-warning window has not closed when warning removal is proposed. |

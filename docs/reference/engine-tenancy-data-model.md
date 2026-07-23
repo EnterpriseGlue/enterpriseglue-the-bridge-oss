@@ -73,6 +73,15 @@ Tenant existence and caller access cannot be represented as a portable foreign
 key because tenant ownership is resolved by the deployment’s tenant provider.
 The mapping service must validate both before it writes.
 
+`TEN-MODEL-002A`: decommission is an authorization boundary. Direct
+engine/runtime assignments are deleted; mapping and runtime-inventory rows are
+inactive; engine and runtime-set materializations are removed; engine-bound
+Runtime Resource Sets and project-engine targets are archived. A
+configuration-owned retired engine releases `config_key_identity`, allowing
+the same logical key to create a new row without reusing the retired stable
+engine ID. External lookup similarly excludes decommissioned rows while
+retaining their historical external identity.
+
 ## Runtime-Resource Resolution
 
 `runtime_resources` keeps only sanitized authorization metadata:

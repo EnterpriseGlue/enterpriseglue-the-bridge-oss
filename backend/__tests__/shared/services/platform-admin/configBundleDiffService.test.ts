@@ -183,12 +183,66 @@ describe('configBundleDiffService', () => {
       },
     }, 'tenant-a');
 
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({
         objectType: 'engine',
         key: 'engine.central',
         operation: 'update',
         currentId: 'engine-1',
+      }),
+    ]));
+  });
+
+  it('creates a new stable engine identity instead of updating a decommissioned config row', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-retired',
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+      tenantMappingStrategy: null,
+      configKey: 'engine.central',
+      configKeyIdentity: null,
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      externalId: null,
+      lifecycleStatus: 'decommissioned',
+    }]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.central',
+            name: 'Central replacement',
+            type: 'operaton',
+            baseUrl: 'https://central.example.com/engine-rest',
+            auth: {
+              type: 'basic',
+              username: 'eg',
+              passwordRef: 'CENTRAL_PASSWORD_REPLACEMENT',
+            },
+          }],
+        },
+      },
+    }, 'tenant-a');
+
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        objectType: 'engine',
+        key: 'engine.central',
+        operation: 'create',
+      }),
+    ]));
+    expect(result.changes).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        objectType: 'engine',
+        key: 'engine.central',
+        operation: 'update',
+        currentId: 'engine-retired',
       }),
     ]));
   });

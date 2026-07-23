@@ -4,6 +4,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js'
 import { z } from 'zod'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
+import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js'
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js'
 import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js'
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js'
@@ -807,7 +808,12 @@ async function syncExternalEngineRegistration(
   }
 
   const existingForEngine = await registrationRepo.findOne({ where: { engineId: input.engineId } })
-  const existingForExternalId = await registrationRepo.findOne({ where: { externalId: input.externalId } })
+  const existingForExternalId = await registrationRepo.findOne({
+    where: {
+      externalId: input.externalId,
+      lifecycleStatus: Not('decommissioned'),
+    },
+  })
   if (existingForExternalId && existingForExternalId.engineId !== input.engineId) {
     throw Errors.conflict('An engine with this externalId already exists')
   }
@@ -1115,7 +1121,12 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   const reportedCapabilities = normalizeExternalEngineCapabilities(req.body.capabilities)
   const capabilitiesJson = capabilitiesToJson(reportedCapabilities)
   const capabilityStatus = getCapabilityStatus(req.body.type, reportedCapabilities)
-  const existing = await engineRepo.findOne({ where: { externalId } })
+  const existing = await engineRepo.findOne({
+    where: {
+      externalId,
+      lifecycleStatus: Not('decommissioned'),
+    },
+  })
   const resolvedTenancy = existing
     ? await engineTenancyProvisioningService.validateUpdate(existing, {
       tenancy: req.body.tenancy,
@@ -1345,7 +1356,12 @@ r.put('/engines-api/external/engines/:externalId/tenant-mappings', engineLimiter
 }), engineRegistrationLimiter, validateParams(externalEngineIdParamSchema), engineRegistrationJsonPayloadLimit, validateBody(externalTenantMappingsBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const externalId = String(req.params.externalId)
-  const engine = await dataSource.getRepository(Engine).findOne({ where: { externalId } })
+  const engine = await dataSource.getRepository(Engine).findOne({
+    where: {
+      externalId,
+      lifecycleStatus: Not('decommissioned'),
+    },
+  })
   if (!engine) throw Errors.notFound('Engine')
   if (req.body.externalSystemId && engine.externalSystemId !== req.body.externalSystemId) {
     throw Errors.notFound('Engine')
@@ -1395,11 +1411,15 @@ r.post('/engines-api/external/engines/decommission', engineLimiter, requireApiCl
   const externalId = req.body.externalId.trim()
   const tenantId = req.tenant?.tenantId || null
 
-  const registration = await registrationRepo.findOne({ where: { externalId } })
-  const engine = registration
-    ? await engineRepo.findOneBy({ id: registration.engineId })
-    : await engineRepo.findOne({ where: { externalId } })
+  const activeEngine = await engineRepo.findOne({
+    where: {
+      externalId,
+      lifecycleStatus: Not('decommissioned'),
+    },
+  })
+  const engine = activeEngine || await engineRepo.findOne({ where: { externalId } })
   if (!engine) throw Errors.notFound('Engine')
+  const registration = await registrationRepo.findOne({ where: { engineId: engine.id } })
   if (engine.registrationSource !== 'external_api') {
     throw Errors.validation('Only externally registered engines can be decommissioned through the external registration API')
   }
@@ -1417,18 +1437,20 @@ r.post('/engines-api/external/engines/decommission', engineLimiter, requireApiCl
     lastExternalSyncAt: now,
     updatedAt: now,
   }
-  await engineRepo.update({ id: engine.id }, updates)
-  if (registration) {
-    await registrationRepo.update({ id: registration.id }, {
-      apiClientId: req.apiClient?.id || registration.apiClientId,
-      lifecycleStatus,
-      driftStatus: 'decommissioned',
-      lastExternalSyncAt: now,
-      lastRegisteredAt: now,
-      updatedAt: now,
-    })
-  }
-  await dataSource.getRepository(EngineSetMaterialization).delete({ engineId: engine.id })
+  await dataSource.transaction(async (manager) => {
+    await engineService.decommissionEngine(engine.id, {}, manager)
+    if (registration) {
+      await manager.getRepository(ExternalEngineRegistration).update({ id: registration.id }, {
+        apiClientId: req.apiClient?.id || registration.apiClientId,
+        lifecycleStatus,
+        driftStatus: 'decommissioned',
+        lastExternalSyncAt: now,
+        lastRegisteredAt: now,
+        updatedAt: now,
+      })
+    }
+    await manager.getRepository(Engine).update({ id: engine.id }, updates)
+  })
   await logAudit({
     tenantId: tenantId || undefined,
     userId: req.apiClient?.createdById || undefined,
@@ -1935,6 +1957,7 @@ r.delete('/engines-api/engines/:id', engineLimiter, requireAuth, requireAction('
   await dataSource.getRepository(EngineTenantMapping).delete({ engineId })
   await dataSource.getRepository(ExternalEngineRegistration).delete({ engineId })
   await dataSource.getRepository(EngineSetMaterialization).delete({ engineId })
+  await dataSource.getRepository(EngineMember).delete({ engineId })
   await engineRepo.delete({ id: engineId })
   await assignmentRepo.delete({
     scopeType: 'engine',

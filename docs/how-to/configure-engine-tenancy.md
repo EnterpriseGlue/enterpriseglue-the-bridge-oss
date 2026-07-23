@@ -156,7 +156,7 @@ registered through the external API, or applied from a configuration bundle:
    created it and confirm its mappings and inventory no longer authorize
    access.
 
-The repository's localhost-only Journeys 4–13 automation executes this
+The repository's localhost-only Journeys 4–14 automation executes this
 sequence through the manual, external, and configuration provisioning
 lifecycles against the real backend, PostgreSQL database, authorization
 evaluator, and a Docker-hosted Camunda-compatible endpoint. Passing these
@@ -199,6 +199,15 @@ mapping version, and resolution status remain unchanged. API responses never
 return the credential: `passwordEnc` is `null`, while `hasCredential` confirms
 that one is configured. Do not place a plaintext credential in a bundle or
 expect an export to reveal it.
+
+Journey 14 verifies retirement without accidental resurrection. The owning
+manual UI, external API, or authoritative bundle decommissions the engine;
+direct engine/runtime assignments stop existing, mappings and inventory have
+no active rows, and already-authenticated browser and API sessions are denied
+immediately. Recreating the same logical engine through its owner produces a
+new stable engine ID. External and configuration retirement keep the old row
+as inactive history, while manual deletion removes the disposable row. Treat
+reuse of the retired ID or access through the old ID as a security defect.
 
 ### Manage Topology and Mappings in the UI
 

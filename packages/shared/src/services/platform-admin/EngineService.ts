@@ -13,6 +13,12 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { In, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
@@ -311,11 +317,87 @@ export class EngineService {
     await dataSource.getRepository(Engine).update({ id }, { ...input, updatedAt: Date.now() });
   }
 
-  async decommissionConfiguredEngine(id: string, input: Pick<ConfiguredEngineUpdate, 'lastAppliedAt'>, store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager): Promise<void> {
+  /**
+   * Retire every authorization path attached to an engine while preserving
+   * the engine, mapping, and inventory rows as inactive lifecycle evidence.
+   * Configuration-owned stable-key identities are released so a later
+   * re-provision creates a new engine ID instead of resurrecting this row.
+   */
+  async decommissionEngine(
+    id: string,
+    input: { lastAppliedAt?: number | null } = {},
+    store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+  ): Promise<void> {
     const dataSource = store || await getDataSource();
-    await dataSource.getRepository(Engine).update({ id }, {
-      lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned', lastAppliedAt: input.lastAppliedAt, updatedAt: Date.now(),
+    const engineRepo = dataSource.getRepository(Engine);
+    const engine = await engineRepo.findOne({ where: { id } });
+    if (!engine) throw new Error('Engine not found');
+
+    const now = Date.now();
+    const runtimeResourceRepo = dataSource.getRepository(RuntimeResource);
+    const runtimeResourceSetRepo = dataSource.getRepository(RuntimeResourceSet);
+    const runtimeResources = await runtimeResourceRepo.find({
+      where: { engineId: id },
+      select: ['id'],
     });
+    const runtimeResourceSets = await runtimeResourceSetRepo.find({
+      where: { engineId: id },
+      select: ['id'],
+    });
+    const runtimeResourceIds = runtimeResources.map((resource) => resource.id);
+    const runtimeResourceSetIds = runtimeResourceSets.map((resourceSet) => resourceSet.id);
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+
+    await dataSource.getRepository(EngineMember).delete({ engineId: id });
+    await assignmentRepo.delete({ scopeType: 'engine', scopeId: id });
+    if (runtimeResourceIds.length > 0) {
+      await assignmentRepo.delete({
+        scopeType: 'engine_runtime_resource',
+        scopeId: In(runtimeResourceIds),
+      });
+      await dataSource.getRepository(RuntimeResourceSetMaterialization).delete({
+        runtimeResourceId: In(runtimeResourceIds),
+      });
+    }
+    if (runtimeResourceSetIds.length > 0) {
+      await assignmentRepo.delete({
+        scopeType: 'engine_runtime_resource_set',
+        scopeId: In(runtimeResourceSetIds),
+      });
+      await dataSource.getRepository(RuntimeResourceSetMaterialization).delete({
+        runtimeResourceSetId: In(runtimeResourceSetIds),
+      });
+    }
+
+    await dataSource.getRepository(EngineTenantMapping).update(
+      { engineId: id },
+      { isActive: false, updatedAt: now },
+    );
+    await runtimeResourceRepo.update(
+      { engineId: id },
+      { isActive: false, updatedAt: now },
+    );
+    await runtimeResourceSetRepo.update(
+      { engineId: id },
+      { isArchived: true, updatedAt: now },
+    );
+    await dataSource.getRepository(ProjectEngineTarget).update(
+      { engineId: id },
+      { status: 'archived', updatedAt: now },
+    );
+    await dataSource.getRepository(EngineSetMaterialization).delete({ engineId: id });
+
+    await engineRepo.update({ id }, {
+      lifecycleStatus: 'decommissioned',
+      driftStatus: 'decommissioned',
+      ...(engine.registrationSource === 'config' ? { configKeyIdentity: null } : {}),
+      ...(input.lastAppliedAt === undefined ? {} : { lastAppliedAt: input.lastAppliedAt }),
+      updatedAt: now,
+    });
+  }
+
+  async decommissionConfiguredEngine(id: string, input: Pick<ConfiguredEngineUpdate, 'lastAppliedAt'>, store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager): Promise<void> {
+    await this.decommissionEngine(id, input, store);
   }
 
   /**

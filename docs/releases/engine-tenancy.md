@@ -15,6 +15,9 @@ EnterpriseGlue now models engine topology explicitly:
   concurrency, reconciliation, audit, and cache/materialization invalidation;
 - UI, external API, configuration bundles, OpenAPI, and persistence use the
   same canonical contracts; and
+- decommission retires assignments, mappings, inventory, materializations,
+  Runtime Resource Sets, and deployment targets; owner-channel recreation
+  receives a new stable engine ID; and
 - bounded operational metrics report resolution health and provisioning
   fallback adoption without exposing identifiers.
 
@@ -41,6 +44,8 @@ The earliest removal conditions are documented in
 Shared runtime requests now fail before engine transport unless active
 inventory proves one resolved same-tenant resource. Broad engine or Engine Set
 grants do not bypass this boundary. Metrics and errors remain sanitized.
+Decommission also invalidates already-authenticated sessions immediately; a
+later owner registration cannot reactivate the retired stable ID.
 
 ## Rollback
 
@@ -48,4 +53,3 @@ Rollback the application and database as one reviewed unit. Preserve the
 classification report, transition previews, mapping versions, reconciliation
 summaries, and test evidence. Do not repair topology by directly editing
 database columns.
-

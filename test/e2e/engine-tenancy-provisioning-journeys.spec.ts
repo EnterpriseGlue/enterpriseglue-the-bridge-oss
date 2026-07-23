@@ -491,6 +491,254 @@ async function proveCredentialRotation(input: {
   }
 }
 
+async function proveDecommissionWithoutResurrection(input: {
+  page: Page;
+  csrf: string;
+  engineId: string;
+  runtimeResource: Record<string, unknown>;
+  channel: ProvisioningJourneyChannel;
+  suffix: string;
+  commit: string;
+  sourceState: string;
+  retiredEngineState: 'absent' | 'decommissioned';
+  decommission: () => Promise<void>;
+  recreate: () => Promise<string>;
+  cleanupRecreated: (engineId: string) => Promise<void>;
+}): Promise<void> {
+  const {
+    page,
+    csrf,
+    engineId,
+    runtimeResource,
+    channel,
+    suffix,
+    commit,
+    sourceState,
+    retiredEngineState,
+    decommission,
+    recreate,
+    cleanupRecreated,
+  } = input;
+  const fixture = getE2EFineGrainedFixture();
+  expect(fixture.scopedUserId, 'Journey 14 requires the seeded direct user').toBeTruthy();
+  const runtimeResourceId = String(runtimeResource.id);
+  const resourceKey = String(runtimeResource.resourceKey);
+  expect(runtimeResourceId).not.toBe('undefined');
+  expect(resourceKey).not.toBe('undefined');
+
+  const database = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+  });
+  const schema = process.env.POSTGRES_SCHEMA || 'main';
+  let roleId: string | null = null;
+  let assignmentId: string | null = null;
+  let restrictedContext: BrowserContext | null = null;
+  let activeApiSession: APIRequestContext | null = null;
+  let recreatedEngineId: string | null = null;
+
+  const scalarCount = async (sql: string, values: unknown[]): Promise<number> => {
+    const result = await database.query(sql, values);
+    return Number(result.rows[0]?.count || 0);
+  };
+
+  try {
+    const role = await responseJson<{ id: string }>(
+      await page.request.post('/api/authz/roles', mutationOptions(csrf, {
+        name: `Journey 14 retired-engine reader ${channel} ${suffix}`,
+        description: 'Disposable role proving decommission invalidates live sessions.',
+        scope: 'engine',
+        permissionIds: ['engine:instance:view'],
+      })),
+      `create Journey 14 ${channel} role`,
+    );
+    roleId = role.id;
+    const assignment = await responseJson<{ id: string }>(
+      await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        roleId,
+        resourceType: 'engine_runtime_resource',
+        resourceId: runtimeResourceId,
+      })),
+      `assign Journey 14 ${channel} runtime role`,
+    );
+    assignmentId = assignment.id;
+
+    expect(await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.role_assignments WHERE id = $1`,
+      [assignmentId],
+    )).toBe(1);
+    expect(await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.engine_tenant_mappings
+       WHERE engine_id = $1 AND is_active = TRUE`,
+      [engineId],
+    )).toBeGreaterThan(0);
+    expect(await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.runtime_resources
+       WHERE engine_id = $1 AND is_active = TRUE`,
+      [engineId],
+    )).toBeGreaterThan(0);
+
+    const browser = page.context().browser();
+    if (!browser) throw new Error('Journey 14 requires a browser-backed Playwright page');
+    restrictedContext = await browser.newContext({
+      baseURL: baseUrl,
+      ignoreHTTPSErrors: true,
+    });
+    const restrictedPage = await restrictedContext.newPage();
+    await loginAs(restrictedPage, fixture.email!, fixture.password!);
+    activeApiSession = await playwrightRequest.newContext({
+      baseURL: baseUrl,
+      ignoreHTTPSErrors: true,
+      storageState: await restrictedContext.storageState(),
+    });
+    const definitionsPath =
+      `/mission-control-api/process-definitions?engineId=${encodeURIComponent(engineId)}`;
+    const browserDefinitions = async (): Promise<{ status: number; keys: string[] }> =>
+      restrictedPage.evaluate(async (url) => {
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
+        const body = await response.json().catch(() => []);
+        return {
+          status: response.status,
+          keys: Array.isArray(body)
+            ? body.map((definition: { key?: unknown }) => String(definition.key))
+            : [],
+        };
+      }, definitionsPath);
+    const apiDefinitions = async (): Promise<{ status: number; keys: string[] }> => {
+      const response = await activeApiSession!.get(definitionsPath);
+      const body = await response.json().catch(() => []);
+      return {
+        status: response.status(),
+        keys: Array.isArray(body)
+          ? body.map((definition: { key?: unknown }) => String(definition.key))
+          : [],
+      };
+    };
+
+    expect(await browserDefinitions()).toEqual({ status: 200, keys: [resourceKey] });
+    expect(await apiDefinitions()).toEqual({ status: 200, keys: [resourceKey] });
+
+    await decommission();
+
+    const remainingAssignmentCount = await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.role_assignments WHERE id = $1`,
+      [assignmentId],
+    );
+    if (remainingAssignmentCount === 0) assignmentId = null;
+    expect(remainingAssignmentCount).toBe(0);
+    expect(await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.engine_tenant_mappings
+       WHERE engine_id = $1 AND is_active = TRUE`,
+      [engineId],
+    )).toBe(0);
+    expect(await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.runtime_resources
+       WHERE engine_id = $1 AND is_active = TRUE`,
+      [engineId],
+    )).toBe(0);
+    const retiredEngine = await database.query(
+      `SELECT lifecycle_status FROM ${schema}.engines WHERE id = $1`,
+      [engineId],
+    );
+    if (retiredEngineState === 'absent') {
+      expect(retiredEngine.rowCount).toBe(0);
+    } else {
+      expect(retiredEngine.rows).toEqual([
+        expect.objectContaining({ lifecycle_status: 'decommissioned' }),
+      ]);
+    }
+
+    const browserDenied = await browserDefinitions();
+    const apiDenied = await apiDefinitions();
+    expect([403, 404]).toContain(browserDenied.status);
+    expect(browserDenied.keys).toEqual([]);
+    expect([403, 404]).toContain(apiDenied.status);
+    expect(apiDenied.keys).toEqual([]);
+
+    recreatedEngineId = await recreate();
+    expect(recreatedEngineId).toBeTruthy();
+    expect(recreatedEngineId).not.toBe(engineId);
+    expect(await scalarCount(
+      `SELECT COUNT(*) FROM ${schema}.engines
+       WHERE id = $1 AND lifecycle_status = 'active'`,
+      [recreatedEngineId],
+    )).toBe(1);
+
+    const browserStillDenied = await browserDefinitions();
+    const apiStillDenied = await apiDefinitions();
+    expect([403, 404]).toContain(browserStillDenied.status);
+    expect(browserStillDenied.keys).toEqual([]);
+    expect([403, 404]).toContain(apiStillDenied.status);
+    expect(apiStillDenied.keys).toEqual([]);
+
+    const observationDirectory = path.join(
+      process.cwd(),
+      'test/results/engine-tenancy-provisioning-observations',
+    );
+    await mkdir(observationDirectory, { recursive: true });
+    await writeFile(
+      path.join(observationDirectory, `journey-14-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 14,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'decommission',
+          'assignments-inactive',
+          'mappings-inactive',
+          'inventory-inactive',
+          'cached-access-denied',
+          'recreation-uses-new-stable-id',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
+  } finally {
+    if (recreatedEngineId) await cleanupRecreated(recreatedEngineId);
+    await activeApiSession?.dispose();
+    await restrictedContext?.close();
+    if (assignmentId) {
+      const response = await page.request.delete(
+        `/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+    if (roleId) {
+      const response = await page.request.delete(
+        `/api/authz/roles/${encodeURIComponent(roleId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+    await database.end();
+  }
+}
+
 async function provePrincipalRoleAssignmentMatrix(input: {
   page: Page;
   csrf: string;
@@ -1284,7 +1532,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         tenantId: 'tenant-default',
         tenantResolutionStatus: 'ready',
       });
-      await expect(page.getByText('Engine created', { exact: true })).toBeVisible();
+      await expect(page.getByText('Engine created', { exact: true }).last()).toBeVisible();
 
       let row = page.getByRole('row').filter({ hasText: originalName });
       await expect(row).toBeVisible();
@@ -2093,7 +2341,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         `create ${mode} runtime-resolution engine through UI`,
       );
       createdEngineIds.push(String(created.id));
-      await expect(page.getByText('Engine created', { exact: true })).toBeVisible();
+      await expect(page.getByText('Engine created', { exact: true }).last()).toBeVisible();
       await expect(page.getByRole('row').filter({ hasText: name })).toBeVisible();
       return created;
     };
@@ -2335,25 +2583,54 @@ test.describe('Engine tenancy provisioning journeys', () => {
         setRuntimeTenantMappingActive: setManualRuntimeTenantMappingActive,
       });
 
-      await editModal.getByRole('button', { name: 'Cancel', exact: true }).click();
-      await expect(editModal).not.toBeVisible();
-      const mappedSharedRow = page.getByRole('row').filter({ hasText: sharedName });
-      await expect(mappedSharedRow).toBeVisible();
-      await mappedSharedRow.getByRole('button', { name: 'Options' }).click();
-      const deleteResponsePromise = page.waitForResponse(
-        (response) =>
-          response.request().method() === 'DELETE'
-          && new URL(response.url()).pathname.endsWith(
-            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}`,
-          ),
-      );
-      await page.getByRole('menuitem', { name: /^Delete/ }).click();
-      expect((await deleteResponsePromise).status()).toBe(204);
-      const sharedEngineCleanupIndex = createdEngineIds.indexOf(sharedEngineId);
-      expect(sharedEngineCleanupIndex).toBeGreaterThanOrEqual(0);
-      createdEngineIds.splice(sharedEngineCleanupIndex, 1);
-      await expect(page.getByText('Engine deleted', { exact: true })).toBeVisible();
-      await expect(page.getByRole('row').filter({ hasText: sharedName })).toHaveCount(0);
+      await proveDecommissionWithoutResurrection({
+        page,
+        csrf: token,
+        engineId: sharedEngineId,
+        runtimeResource: mappedResources.find(
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-blue'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-process',
+        )!,
+        channel: 'manual-ui',
+        suffix,
+        commit,
+        sourceState,
+        retiredEngineState: 'absent',
+        decommission: async () => {
+          await editModal.getByRole('button', { name: 'Cancel', exact: true }).click();
+          await expect(editModal).not.toBeVisible();
+          const mappedSharedRow = page.getByRole('row').filter({ hasText: sharedName });
+          await expect(mappedSharedRow).toBeVisible();
+          await mappedSharedRow.getByRole('button', { name: 'Options' }).click();
+          const deleteResponsePromise = page.waitForResponse(
+            (response) =>
+              response.request().method() === 'DELETE'
+              && new URL(response.url()).pathname.endsWith(
+                `/engines-api/engines/${encodeURIComponent(sharedEngineId)}`,
+              ),
+          );
+          await page.getByRole('menuitem', { name: /^Delete/ }).click();
+          expect((await deleteResponsePromise).status()).toBe(204);
+          const cleanupIndex = createdEngineIds.indexOf(sharedEngineId);
+          expect(cleanupIndex).toBeGreaterThanOrEqual(0);
+          createdEngineIds.splice(cleanupIndex, 1);
+          await expect(page.getByText('Engine deleted', { exact: true })).toBeVisible();
+          await expect(page.getByRole('row').filter({ hasText: sharedName })).toHaveCount(0);
+        },
+        recreate: async () => String((await createEngineThroughUi(sharedName, 'shared')).id),
+        cleanupRecreated: async (recreatedEngineId) => {
+          const response = await page.request.delete(
+            `/engines-api/engines/${encodeURIComponent(recreatedEngineId)}`,
+            mutationOptions(token),
+          );
+          expect(response.status()).toBe(204);
+          const cleanupIndex = createdEngineIds.indexOf(recreatedEngineId);
+          expect(cleanupIndex).toBeGreaterThanOrEqual(0);
+          createdEngineIds.splice(cleanupIndex, 1);
+        },
+      });
 
       const observationDirectory = path.join(
         process.cwd(),
@@ -2515,7 +2792,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
           engine: Record<string, unknown>;
         }>(response, `externally create ${mode} journey 7 engine`);
         expect(result.created).toBe(true);
-        externalIds.push(externalId);
+        if (!externalIds.includes(externalId)) externalIds.push(externalId);
         return result.engine;
       };
 
@@ -2778,27 +3055,58 @@ test.describe('Engine tenancy provisioning journeys', () => {
         setRuntimeTenantMappingActive: setExternalRuntimeTenantMappingActive,
       });
 
-      const sharedDecommission = await responseJson<{
-        decommissioned: boolean;
-        engineId: string;
-        lifecycleStatus: string;
-      }>(
-        await externalApi.post('/engines-api/external/engines/decommission', {
-          data: {
-            externalId: sharedExternalId,
-            reason: 'Disposable journey 5 shared lifecycle completed',
-          },
-        }),
-        'decommission externally mapped shared engine',
-      );
-      expect(sharedDecommission).toEqual(expect.objectContaining({
-        decommissioned: true,
+      await proveDecommissionWithoutResurrection({
+        page,
+        csrf: token,
         engineId: sharedEngineId,
-        lifecycleStatus: 'decommissioned',
-      }));
-      const sharedExternalCleanupIndex = externalIds.indexOf(sharedExternalId);
-      expect(sharedExternalCleanupIndex).toBeGreaterThanOrEqual(0);
-      externalIds.splice(sharedExternalCleanupIndex, 1);
+        runtimeResource: mappedResources.find(
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-blue'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-process',
+        )!,
+        channel: 'external-api',
+        suffix,
+        commit,
+        sourceState,
+        retiredEngineState: 'decommissioned',
+        decommission: async () => {
+          const decommissioned = await responseJson<{
+            decommissioned: boolean;
+            engineId: string;
+            lifecycleStatus: string;
+          }>(
+            await externalApi!.post('/engines-api/external/engines/decommission', {
+              data: {
+                externalId: sharedExternalId,
+                reason: 'Journey 14 external engine decommission',
+              },
+            }),
+            'decommission Journey 14 external shared engine',
+          );
+          expect(decommissioned).toEqual(expect.objectContaining({
+            decommissioned: true,
+            engineId: sharedEngineId,
+            lifecycleStatus: 'decommissioned',
+          }));
+        },
+        recreate: async () => String((await register(sharedExternalId, 'shared')).id),
+        cleanupRecreated: async (recreatedEngineId) => {
+          const decommissioned = await responseJson<{ engineId: string }>(
+            await externalApi!.post('/engines-api/external/engines/decommission', {
+              data: {
+                externalId: sharedExternalId,
+                reason: 'Journey 14 recreated external engine cleanup',
+              },
+            }),
+            'clean up Journey 14 recreated external shared engine',
+          );
+          expect(decommissioned.engineId).toBe(recreatedEngineId);
+          const cleanupIndex = externalIds.indexOf(sharedExternalId);
+          expect(cleanupIndex).toBeGreaterThanOrEqual(0);
+          externalIds.splice(cleanupIndex, 1);
+        },
+      });
 
       const observationDirectory = path.join(
         process.cwd(),
@@ -3512,6 +3820,32 @@ test.describe('Engine tenancy provisioning journeys', () => {
         }),
       ]));
 
+      const currentEngines = enginesFile.engines.map((engine) => engine.key === dedicatedKey
+        ? {
+            ...engine,
+            auth: {
+              ...engine.auth,
+              passwordRef: configCredentialRotation.rotatedReference,
+            },
+          }
+        : engine);
+      const sharedRetirementEnvelope = {
+        bundle: mappedEnvelope.bundle,
+        files: {
+          './engines.json': {
+            engines: currentEngines.filter((engine) => engine.key === dedicatedKey),
+          },
+          './engine-tenant-mappings.json': { engineTenantMappings: [] },
+        },
+      };
+      const recreationEnvelope = {
+        bundle: mappedEnvelope.bundle,
+        files: {
+          './engines.json': { engines: currentEngines },
+          './engine-tenant-mappings.json':
+            mappedEnvelope.files['./engine-tenant-mappings.json'],
+        },
+      };
       const removalEnvelope = {
         bundle: mappedEnvelope.bundle,
         files: {
@@ -3519,17 +3853,66 @@ test.describe('Engine tenancy provisioning journeys', () => {
           './engine-tenant-mappings.json': { engineTenantMappings: [] },
         },
       };
-      const removal = await applyBundle(
-        removalEnvelope,
-        `journey-07-config-remove-${suffix}`,
-        'journey 7 authoritative configuration removal',
-      );
-      expect(removal).toMatchObject({
-        created: 0,
-        updated: 0,
-        archived: 4,
+      await proveDecommissionWithoutResurrection({
+        page,
+        csrf: token,
+        engineId: sharedEngineId,
+        runtimeResource: mappedResources.find(
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-blue'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-process',
+        )!,
+        channel: 'configuration-bundle',
+        suffix,
+        commit,
+        sourceState,
+        retiredEngineState: 'decommissioned',
+        decommission: async () => {
+          const retirement = await applyBundle(
+            sharedRetirementEnvelope,
+            `journey-14-config-retire-${suffix}`,
+            'Journey 14 configuration shared-engine retirement',
+          );
+          expect(retirement).toMatchObject({
+            created: 0,
+            updated: 0,
+            archived: 3,
+          });
+        },
+        recreate: async () => {
+          const recreation = await applyBundle(
+            recreationEnvelope,
+            `journey-14-config-recreate-${suffix}`,
+            'Journey 14 configuration shared-engine recreation',
+          );
+          expect(recreation.created).toBeGreaterThanOrEqual(1);
+          const result = await database.query(
+            `SELECT id FROM ${schema}.engines
+             WHERE config_key = $1 AND lifecycle_status = 'active'
+             ORDER BY created_at DESC LIMIT 1`,
+            [sharedKey],
+          );
+          expect(result.rowCount).toBe(1);
+          return String(result.rows[0].id);
+        },
+        cleanupRecreated: async (recreatedEngineId) => {
+          const removal = await applyBundle(
+            removalEnvelope,
+            `journey-14-config-cleanup-${suffix}`,
+            'Journey 14 configuration recreated-engine cleanup',
+          );
+          expect(removal.archived).toBeGreaterThanOrEqual(2);
+          const result = await database.query(
+            `SELECT lifecycle_status FROM ${schema}.engines WHERE id = $1`,
+            [recreatedEngineId],
+          );
+          expect(result.rows).toEqual([
+            expect.objectContaining({ lifecycle_status: 'decommissioned' }),
+          ]);
+          removed = true;
+        },
       });
-      removed = true;
 
       const afterRemoval = await responseJson<{
         bundle: Record<string, unknown>;

@@ -158,10 +158,15 @@ topology, and mapping ownership before and after, and confirms public responses
 expose only `hasCredential` with `passwordEnc: null`. The configuration path
 rotates only an opaque secret reference; configuration diff now classifies a
 reference change as an engine update without returning either secret material
-or the stored value. The implemented denominator is therefore thirteen of
-fourteen journeys and twenty-seven of thirty required channel executions.
-Journey 14 stays explicitly missing until its matching real-service tests are
-implemented and qualified on the same clean commit.
+or the stored value. Journey 14 then keeps authenticated browser and API
+sessions open while the owning channel decommissions the shared engine. It
+proves direct engine/runtime assignments are removed, mappings and runtime
+inventory have no active rows, the old session is denied before and after
+recreation, and manual, external, and configuration recreation each allocate a
+new stable engine ID. External and configuration retirement preserve inactive
+history; manual deletion removes the disposable rows. The implemented
+denominator is therefore all fourteen journeys and all thirty required channel
+executions.
 
 The Journey 10 fixture exposes a localhost-only mock control endpoint. The
 runner resets its request ledger immediately before the denied detail request
