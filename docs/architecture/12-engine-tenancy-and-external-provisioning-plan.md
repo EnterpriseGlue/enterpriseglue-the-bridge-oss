@@ -687,15 +687,15 @@ checkboxes are closed.
 ### Phase 2: shared contracts
 
 - [x] Add canonical tenancy and mapping schemas.
-- [ ] Extend create/update/external registration requests.
+- [x] Extend create/update/external registration requests.
 - [x] Extend sanitized responses and OpenAPI.
 - [ ] Extend configuration-bundle schemas.
-- [ ] Add stable API error schemas.
-- [ ] Add schema compatibility tests for omitted dedicated mode.
+- [x] Add stable API error schemas.
+- [x] Add schema compatibility tests for omitted dedicated mode.
 
 ### Phase 3: resolution and authorization
 
-- [ ] Implement the shared tenant-resolution service.
+- [x] Implement the shared tenant-resolution service.
 - [ ] Add tenant role scope and tenant-safe permission validation.
 - [ ] Add tenant assignment inheritance to project/engine/runtime decisions.
 - [ ] Require resolved tenant inventory for shared resources.
@@ -704,8 +704,8 @@ checkboxes are closed.
 
 ### Phase 4: provisioning APIs
 
-- [ ] Update manual create/update services and routes.
-- [ ] Update external engine upsert and field ownership.
+- [x] Update manual create/update services and routes.
+- [x] Update external engine upsert and field ownership.
 - [ ] Add topology preview/apply APIs.
 - [ ] Add mapping list/upsert APIs.
 - [ ] Update config preview/diff/apply/export.

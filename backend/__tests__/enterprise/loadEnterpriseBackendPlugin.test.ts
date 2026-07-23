@@ -45,6 +45,9 @@ describe('loadEnterpriseBackendPlugin validation helpers', () => {
         getNotificationTenantResolver: async () => ({
           resolve: () => ({ userId: 'user-1', tenantId: 'tenant-1' }),
         }),
+        getEngineTenantReferenceResolver: async () => ({
+          resolve: async () => ({ tenantId: 'tenant-1', authorized: true }),
+        }),
       });
     }).not.toThrow();
   });
@@ -163,6 +166,9 @@ describe('loadEnterpriseBackendPlugin validation helpers', () => {
     }
     if (plugin.getNotificationTenantResolver !== undefined) {
       expect(typeof plugin.getNotificationTenantResolver).toBe('function');
+    }
+    if (plugin.getEngineTenantReferenceResolver !== undefined) {
+      expect(typeof plugin.getEngineTenantReferenceResolver).toBe('function');
     }
   });
 });

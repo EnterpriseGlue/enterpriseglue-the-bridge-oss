@@ -66,6 +66,8 @@ const {
   EngineTenantMappingSchema,
   EngineTenancyConfigurationSchema,
   EngineTenancyDiagnosticsSchema,
+  EngineTenancyErrorCodeSchema,
+  EngineTenancyErrorResponseSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
   ExternalEngineTenantMappingsUpsertResponseSchema,
   EndpointAuthenticationPolicyErrorSchema,
@@ -955,6 +957,8 @@ registry.register('EngineTenantReference', EngineTenantReferenceSchema)
 registry.register('EngineTenantMapping', EngineTenantMappingSchema)
 registry.register('EngineTenancyConfiguration', EngineTenancyConfigurationSchema)
 registry.register('EngineTenancyDiagnostics', EngineTenancyDiagnosticsSchema)
+registry.register('EngineTenancyErrorCode', EngineTenancyErrorCodeSchema)
+registry.register('EngineTenancyErrorResponse', EngineTenancyErrorResponseSchema)
 registry.register('ExternalEngineTenantMappingsUpsertRequest', ExternalEngineTenantMappingsUpsertRequestSchema)
 registry.register('ExternalEngineTenantMappingsUpsertResponse', ExternalEngineTenantMappingsUpsertResponseSchema)
 registry.register('EndpointAuthenticationPolicyError', EndpointAuthenticationPolicyErrorSchema)
@@ -974,6 +978,9 @@ const ExternalEngineRegistrationResponseSchema = z.object({
   created: z.boolean(),
   engine: EngineSchema,
   health: ExternalRegistrationHealthSchema.nullable().optional(),
+  diagnostics: z.object({
+    tenancyWarnings: z.array(z.literal('ENGINE_TENANCY_DEFAULTED_TO_DEDICATED')),
+  }).strict(),
 })
 registry.register('ExternalEngineRegistrationResponse', ExternalEngineRegistrationResponseSchema)
 const ExternalProjectEngineTargetModeFlagsSchema = z.object({
@@ -1019,7 +1026,8 @@ registry.registerPath({
   request: { body: { content: { 'application/json': { schema: CreateEngineRequestSchema } } } },
   responses: {
     201: { description: 'Created', content: { 'application/json': { schema: EngineSchema } } },
-    400: { description: 'Endpoint authentication policy rejected the engine registration', content: { 'application/json': { schema: EndpointAuthenticationPolicyErrorSchema } } },
+    400: { description: 'Endpoint or tenancy policy rejected the engine registration', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
+    403: { description: 'Tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
   },
 })
 
@@ -1039,7 +1047,9 @@ registry.registerPath({
   responses: {
     201: { description: 'External engine registered', content: { 'application/json': { schema: ExternalEngineRegistrationResponseSchema } } },
     200: { description: 'External engine updated', content: { 'application/json': { schema: ExternalEngineRegistrationResponseSchema } } },
-    400: { description: 'Endpoint authentication policy rejected the external registration', content: { 'application/json': { schema: EndpointAuthenticationPolicyErrorSchema } } },
+    400: { description: 'Endpoint or tenancy policy rejected the external registration', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
+    403: { description: 'Tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    409: { description: 'Topology transition is required', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
   },
 })
 
@@ -1122,7 +1132,9 @@ registry.registerPath({
   request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdateEngineRequestSchema } } } },
   responses: {
     200: { description: 'Updated', content: { 'application/json': { schema: EngineSchema } } },
-    400: { description: 'Endpoint authentication policy rejected the engine update', content: { 'application/json': { schema: EndpointAuthenticationPolicyErrorSchema } } },
+    400: { description: 'Endpoint or tenancy policy rejected the engine update', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
+    403: { description: 'Tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    409: { description: 'Topology transition is required', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
   },
 })
 

@@ -45,14 +45,22 @@ export async function startServer() {
     },
   } as any;
   const notificationTenantResolver = await enterprisePlugin.getNotificationTenantResolver?.(enterpriseContext);
+  const engineTenantReferenceResolver = await enterprisePlugin.getEngineTenantReferenceResolver?.(enterpriseContext);
+  app.locals.engineTenantReferenceResolver = engineTenantReferenceResolver;
   app.locals.enterprisePluginLoaded = Boolean(
-    enterprisePlugin && (enterprisePlugin.registerRoutes || enterprisePlugin.migrateEnterpriseDatabase || enterprisePlugin.getNotificationTenantResolver)
+    enterprisePlugin && (
+      enterprisePlugin.registerRoutes
+      || enterprisePlugin.migrateEnterpriseDatabase
+      || enterprisePlugin.getNotificationTenantResolver
+      || enterprisePlugin.getEngineTenantReferenceResolver
+    )
   );
   console.log(
     `[Enterprise] Backend plugin status: loaded=${app.locals.enterprisePluginLoaded}, ` +
       `registerRoutes=${Boolean(enterprisePlugin.registerRoutes)}, ` +
       `migrateEnterpriseDatabase=${Boolean(enterprisePlugin.migrateEnterpriseDatabase)}, ` +
-      `getNotificationTenantResolver=${Boolean(enterprisePlugin.getNotificationTenantResolver)}`
+      `getNotificationTenantResolver=${Boolean(enterprisePlugin.getNotificationTenantResolver)}, ` +
+      `getEngineTenantReferenceResolver=${Boolean(enterprisePlugin.getEngineTenantReferenceResolver)}`
   );
 
   try {

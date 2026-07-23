@@ -56,6 +56,23 @@ export const EngineTenancyConfigurationSchema = z.discriminatedUnion('mode', [
   SharedEngineTenancyConfigurationSchema,
 ]);
 
+export const EngineTenancyErrorCodeSchema = z.enum([
+  'ENGINE_TENANCY_UNRESOLVED',
+  'ENGINE_TENANCY_CONFLICT',
+  'ENGINE_TENANCY_TRANSITION_REQUIRED',
+  'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
+  'ENGINE_TENANT_MAPPING_NOT_FOUND',
+  'ENGINE_TENANT_MAPPING_VERSION_CONFLICT',
+  'ENGINE_TENANT_REFERENCE_FORBIDDEN',
+  'RUNTIME_RESOURCE_TENANT_UNRESOLVED',
+]);
+
+export const EngineTenancyErrorResponseSchema = z.object({
+  error: z.string(),
+  code: EngineTenancyErrorCodeSchema,
+  field: z.string().optional(),
+}).strict();
+
 export const EngineTenancyDiagnosticsSchema = z.object({
   mode: EngineTenancyModeSchema,
   tenantId: z.string().nullable(),
@@ -123,6 +140,7 @@ export type EngineTenancyMode = z.infer<typeof EngineTenancyModeSchema>;
 export type EngineTenantMappingStrategy = z.infer<typeof EngineTenantMappingStrategySchema>;
 export type EngineTenantReference = z.infer<typeof EngineTenantReferenceSchema>;
 export type EngineTenancyConfiguration = z.infer<typeof EngineTenancyConfigurationSchema>;
+export type EngineTenancyErrorCode = z.infer<typeof EngineTenancyErrorCodeSchema>;
 export type EngineTenancyDiagnostics = z.infer<typeof EngineTenancyDiagnosticsSchema>;
 export type EngineTenantMapping = z.infer<typeof EngineTenantMappingSchema>;
 export type ExternalEngineTenantMappingsUpsertRequest = z.input<typeof ExternalEngineTenantMappingsUpsertRequestSchema>;
@@ -202,6 +220,7 @@ const EngineRegistrationFieldsSchema = z.object({
   version: z.string().nullable().optional(),
   environmentTagId: z.string().nullable().optional(),
   runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).optional(),
+  tenancy: EngineTenancyConfigurationSchema.optional(),
   deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).optional(),
   metadataDiscoveryEnabled: z.boolean().optional(),
   deploymentDiscoveryEnabled: z.boolean().optional(),

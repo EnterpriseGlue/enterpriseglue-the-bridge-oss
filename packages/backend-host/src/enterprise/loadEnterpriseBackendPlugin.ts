@@ -46,6 +46,7 @@ function assertValidPluginShape(plugin: Record<string, unknown>): void {
     'registerRoutes',
     'migrateEnterpriseDatabase',
     'getNotificationTenantResolver',
+    'getEngineTenantReferenceResolver',
   ];
 
   const invalidHooks = optionalHookNames.filter((hookName) => {

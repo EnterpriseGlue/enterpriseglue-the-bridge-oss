@@ -25,6 +25,9 @@ describe('Backend host contract conformance', () => {
         getNotificationTenantResolver: async () => ({
           resolve: () => ({ userId: 'user-1', tenantId: 'tenant-1' }),
         }),
+        getEngineTenantReferenceResolver: async () => ({
+          resolve: async () => ({ tenantId: 'tenant-1', authorized: true }),
+        }),
       }),
     ).not.toThrow();
 

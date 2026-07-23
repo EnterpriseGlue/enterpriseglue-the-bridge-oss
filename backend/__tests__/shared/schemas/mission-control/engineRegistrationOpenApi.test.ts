@@ -51,8 +51,11 @@ describe('engine registration OpenAPI contracts', () => {
       ['/engines-api/engines/{id}', 'put'],
       ['/engines-api/external/engines', 'post'],
     ] as const) {
-      expect(paths?.[path]?.[method]?.responses?.['400']?.content?.['application/json']?.schema)
-        .toEqual(schemas?.EndpointAuthenticationPolicyError);
+      expect(paths?.[path]?.[method]?.responses?.['400']?.content?.['application/json']?.schema?.anyOf)
+        .toEqual(expect.arrayContaining([
+          schemas?.EndpointAuthenticationPolicyError,
+          schemas?.EngineTenancyErrorResponse,
+        ]));
     }
   });
 
@@ -77,11 +80,31 @@ describe('engine registration OpenAPI contracts', () => {
       }),
     ]));
     expect(schemas?.EngineTenancyDiagnostics?.properties).toHaveProperty('resolutionStatus');
+    expect(schemas?.EngineTenancyErrorCode?.enum).toContain('ENGINE_TENANCY_TRANSITION_REQUIRED');
+    expect(schemas?.EngineTenancyErrorResponse?.properties).not.toHaveProperty('details');
     expect(schemas?.EngineTenantMapping?.properties).not.toHaveProperty('credentials');
+    for (const schemaName of [
+      'CreateEngineRequest',
+      'UpdateEngineRequest',
+      'ExternalEngineRegistrationRequest',
+    ]) {
+      expect(schemas?.[schemaName]?.properties).toHaveProperty('tenancy');
+    }
     expect(schemas?.ExternalEngineTenantMappingsUpsertRequest?.properties).toMatchObject({
       expectedMappingVersion: { type: 'integer', minimum: 0 },
       atomic: { type: 'boolean', default: true, enum: [true] },
     });
     expect(schemas?.ExternalEngineTenantMappingsUpsertResponse?.properties).toHaveProperty('diagnostics');
+
+    const paths = generateOpenApi().paths;
+    for (const [path, method] of [
+      ['/engines-api/engines', 'post'],
+      ['/engines-api/engines/{id}', 'put'],
+      ['/engines-api/external/engines', 'post'],
+    ] as const) {
+      expect(paths?.[path]?.[method]?.responses?.['403']).toBeDefined();
+    }
+    expect(paths?.['/engines-api/engines/{id}']?.put?.responses?.['409']).toBeDefined();
+    expect(paths?.['/engines-api/external/engines']?.post?.responses?.['409']).toBeDefined();
   });
 });

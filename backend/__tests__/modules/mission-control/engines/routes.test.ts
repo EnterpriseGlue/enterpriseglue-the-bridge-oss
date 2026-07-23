@@ -1329,11 +1329,102 @@ describe('mission-control engines routes', () => {
       .send({ name: 'Distributed engine', baseUrl: 'https://distributed.example.com/engine-rest' });
 
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ runtimeAccessScope: 'engine_wide' });
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ runtimeAccessScope: 'engine_wide' }));
-    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(expect.any(String), null, {
+    expect(response.body).toMatchObject({
+      runtimeAccessScope: 'engine_wide',
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'ready',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeAccessScope: 'engine_wide',
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'ready',
+    }));
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(expect.any(String), 'tenant-default', {
       runtimeMetadataDiscoveryEnabled: false,
       deploymentDiscoveryEnabled: true,
+    });
+  });
+
+  it('creates explicit shared engines only with resource-aware access and fail-closed mapping state', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
+
+    const rejected = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Unsafe shared engine',
+        baseUrl: 'https://central.example.com/engine-rest',
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+      });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body).toMatchObject({
+      code: 'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
+      field: 'tenancy',
+    });
+    expect(insert).not.toHaveBeenCalled();
+
+    const created = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Central shared engine',
+        baseUrl: 'https://central.example.com/engine-rest',
+        runtimeAccessScope: 'resource_aware',
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+      });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'incomplete',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantResolutionStatus: 'incomplete',
+    }));
+  });
+
+  it('requires authorized resolution for explicit tenant references', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
+
+    const forbidden = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Cross-tenant engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'id', id: 'tenant-other' } },
+      });
+    expect(forbidden.status).toBe(403);
+    expect(forbidden.body).toMatchObject({
+      code: 'ENGINE_TENANT_REFERENCE_FORBIDDEN',
+      field: 'tenancy',
+    });
+
+    app.locals.engineTenantReferenceResolver = {
+      resolve: vi.fn().mockResolvedValue({
+        tenantId: 'tenant-enterprise',
+        tenantKey: 'team-a',
+        authorized: true,
+      }),
+    };
+    const created = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Resolved engine',
+        baseUrl: 'https://resolved.example.com/engine-rest',
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'key', key: 'team-a' } },
+      });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-enterprise',
+      tenantResolutionStatus: 'ready',
     });
   });
 
@@ -1536,7 +1627,7 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       lastExternalSyncAt: null,
     }));
-    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenCalledWith(expect.any(String), null);
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenCalledWith(expect.any(String), 'tenant-default');
   });
 
   it('upserts engines through the external registration API', async () => {
@@ -1607,6 +1698,9 @@ describe('mission-control engines routes', () => {
 
     expect(createResponse.status).toBe(201);
     expect(createResponse.body.created).toBe(true);
+    expect(createResponse.body.diagnostics).toEqual({
+      tenancyWarnings: ['ENGINE_TENANCY_DEFAULTED_TO_DEDICATED'],
+    });
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('platform:engine-registration:manage', expect.objectContaining({
       principalType: 'api_client',
       principalId: 'client-1',
@@ -1661,7 +1755,45 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       lastExternalSyncAt: expect.any(Number),
     }));
-    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenLastCalledWith('e1', null);
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenLastCalledWith('e1', 'tenant-default');
+  });
+
+  it('rejects silent topology changes during normal engine updates', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const update = vi.fn().mockResolvedValue({});
+    const existing = {
+      id: 'e1',
+      name: 'Dedicated engine',
+      registrationSource: 'user',
+      runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-default',
+      tenantMappingStrategy: null,
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'ready',
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue(existing),
+        findOneBy: vi.fn().mockResolvedValue(existing),
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({
+        tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+        runtimeAccessScope: 'resource_aware',
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: 'ENGINE_TENANCY_TRANSITION_REQUIRED',
+      field: 'tenancy',
+    });
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('stores external system and hybrid field ownership during external registration', async () => {
@@ -1742,6 +1874,55 @@ describe('mission-control engines routes', () => {
       lifecycleStatus: 'active',
       capabilitiesJson: expect.stringContaining('engine.read'),
       capabilityStatus: 'mismatch',
+    }));
+  });
+
+  it('externally provisions explicit shared engines without the compatibility warning', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    const insert = vi.fn().mockResolvedValue({});
+    const registrationInsert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'ExternalEngineRegistration'
+        ? { findOne: vi.fn().mockResolvedValue(null), insert: registrationInsert }
+        : { findOne: vi.fn().mockResolvedValue(null), insert },
+    });
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Central external engine',
+        baseUrl: 'https://central.example.com/engine-rest',
+        externalId: 'cluster/central',
+        runtimeAccessScope: 'resource_aware',
+        tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.diagnostics).toEqual({ tenancyWarnings: [] });
+    expect(response.body.engine).toMatchObject({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'explicit',
+      tenantResolutionStatus: 'incomplete',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'explicit',
+      tenantResolutionStatus: 'incomplete',
     }));
   });
 

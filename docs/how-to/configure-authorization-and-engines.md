@@ -164,18 +164,21 @@ LDAP groups map to the same internal groups used by OIDC and SAML. Store stable 
 
 ### Engine tenancy rollout status
 
-The explicit tenancy persistence foundation is implemented in this worktree,
-but centralized/shared engine provisioning is not yet exposed in the UI or
-public APIs. Manual, external, and configuration-managed onboarding must still
-be treated as dedicated-engine onboarding.
+Manual and external APIs accept explicit dedicated/shared tenancy. Omission
+remains compatible and creates a dedicated engine in the request tenant, or
+`tenant-default` in local OSS. Shared mode requires `resource_aware` and starts
+in fail-closed `incomplete` state.
 
-New manual and external engine records persist `dedicated` topology and the
-resolved request tenant. The migration leaves older tenantless engines in
+Shared mapping administration, runtime enforcement, config-bundle tenancy, and
+UI topology controls are not yet complete. Operators may exercise shared
+registration in development but must not use an incomplete shared engine for
+production runtime access. The migration leaves older tenantless engines in
 `migration_required`; it does not silently assign them to the default tenant.
-Do not use `resource_aware` as a substitute for shared topology.
 
 See [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md) for
-the implemented foundation and
+the implemented foundation,
+[Provision Engines Externally](./provision-engines-externally.md) for API
+examples, and
 [the implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
 for the gated shared-engine workflow.
 

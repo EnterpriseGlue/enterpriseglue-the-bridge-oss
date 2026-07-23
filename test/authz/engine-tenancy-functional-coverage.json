@@ -86,5 +86,93 @@
     "testName": "validates every engine tenancy functional coverage entry",
     "documentation": "docs/reference/engine-tenancy-data-model.md",
     "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-RESOLVE-001",
+    "requirement": "Omitted and request-context dedicated tenancy resolves to the request tenant or canonical OSS default.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["manual", "external", "request_context", "default"],
+    "expected": "ready dedicated tenancy with a non-null canonical tenant",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyProvisioningService.test.ts",
+    "testName": "defaults omitted tenancy to a ready dedicated engine in the request or OSS default tenant",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-RESOLVE-002",
+    "requirement": "Explicit tenant references require local proof or an authorized enterprise resolver decision.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["id", "key", "user", "api_client", "enterprise_extension"],
+    "expected": "authorized resolution or stable 403",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "requires authorized resolution for explicit tenant references",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-DEDICATED-001",
+    "requirement": "Compatibility provisioning persists a dedicated engine in a resolved tenant instead of leaving ambiguous null ownership.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["manual", "external", "dedicated", "compatibility"],
+    "expected": "tenant-default and ready resolution in OSS",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "defaults distributed engines to engine-wide access without runtime inventory reconciliation",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-SHARED-001",
+    "requirement": "Shared engines require resource-aware authorization and begin in fail-closed incomplete mapping state.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["shared", "resource_aware", "manual", "fail_closed"],
+    "expected": "stable rejection or incomplete shared persistence",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "creates explicit shared engines only with resource-aware access and fail-closed mapping state",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-SHARED-002",
+    "requirement": "External registration accepts explicit shared topology without emitting a dedicated compatibility warning.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["shared", "resource_aware", "external", "diagnostics"],
+    "expected": "incomplete shared persistence with no omission warning",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "externally provisions explicit shared engines without the compatibility warning",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-API-003",
+    "requirement": "Ordinary manual and external upserts cannot silently change engine topology, mapping strategy, or dedicated tenant.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["manual", "external", "update", "transition"],
+    "expected": "ENGINE_TENANCY_TRANSITION_REQUIRED",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "rejects silent topology changes during normal engine updates",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-API-004",
+    "requirement": "External registration omission remains dedicated-compatible and emits a machine-readable warning.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["external", "compatibility", "diagnostics", "audit"],
+    "expected": "ENGINE_TENANCY_DEFAULTED_TO_DEDICATED",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "upserts engines through the external registration API",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
+  },
+  {
+    "id": "TEN-API-005",
+    "requirement": "Manual, update, and external OpenAPI contracts expose canonical tenancy input and stable sanitized errors.",
+    "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+    "dimensions": ["schema", "openapi", "manual", "external", "errors"],
+    "expected": "request and error contract parity",
+    "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+    "testName": "publishes stable sanitized tenancy errors",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:provisioning"
   }
 ]

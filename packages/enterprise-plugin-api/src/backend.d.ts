@@ -23,6 +23,26 @@ export interface NotificationTenantResolver {
   };
 }
 
+export type EngineTenancyPrincipalType = 'user' | 'api_client' | 'service_account' | 'system';
+export type EngineTenantReference =
+  | { type: 'request_context' }
+  | { type: 'default' }
+  | { type: 'key'; key: string }
+  | { type: 'id'; id: string };
+
+export interface EngineTenantReferenceResolver {
+  resolve(input: {
+    reference: EngineTenantReference;
+    requestTenantId: string | null;
+    principalType: EngineTenancyPrincipalType;
+    principalId: string | null;
+  }): Promise<{
+    tenantId: string;
+    tenantKey?: string | null;
+    authorized: boolean;
+  } | null>;
+}
+
 export type EnterpriseAuthzBackendRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface EnterpriseBackendRouteAuthz {
@@ -124,4 +144,7 @@ export interface EnterpriseBackendPlugin {
   getNotificationTenantResolver?: (
     ctx: EnterpriseBackendContext,
   ) => NotificationTenantResolver | undefined | Promise<NotificationTenantResolver | undefined>;
+  getEngineTenantReferenceResolver?: (
+    ctx: EnterpriseBackendContext,
+  ) => EngineTenantReferenceResolver | undefined | Promise<EngineTenantReferenceResolver | undefined>;
 }

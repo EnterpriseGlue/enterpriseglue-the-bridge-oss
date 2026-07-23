@@ -36,6 +36,8 @@ Audience: Developers and architects.
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
 - [Engine Tenancy Data Model](reference/engine-tenancy-data-model.md)
+- [Engine Tenancy and Provisioning API](reference/engine-tenancy-and-provisioning-api.md)
+- [Provision Engines Externally](how-to/provision-engines-externally.md)
 - [Non-Postgres Database Setup](how-to/database-non-postgres.md)
 
 ## Operations

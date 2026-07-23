@@ -5,10 +5,11 @@ EnterpriseGlue engines.
 
 Audience: Developers, architects, database administrators, and API integrators.
 
-Status: The topology, mapping, runtime-resolution persistence foundation and
-canonical standalone schemas are implemented. Public shared-engine provisioning,
-mapping administration, resolution enforcement, and UI controls remain disabled
-until their implementation and functional coverage gates pass.
+Status: The topology, mapping, runtime-resolution persistence foundation,
+canonical schemas, tenant-reference resolution, and manual/external provisioning
+contracts are implemented. Shared engines are admitted only in fail-closed
+`incomplete` state. Mapping administration, runtime mapping enforcement, config
+bundle support, transitions, and UI controls remain gated.
 
 ## Boundaries
 
@@ -133,17 +134,51 @@ prove that the caller can use the referenced tenant.
 support optimistic mapping versions and dry runs, and return sanitized per-row
 results plus aggregate diagnostics.
 
-## Current Provisioning Behavior
+## Provisioning and Resolution
 
-`TEN-RUNTIME-001`: manual and external engine creation continue to create
-dedicated engines. They now persist explicit topology and readiness metadata.
-Shared mode is not accepted by the public create/update routes in this
-foundation phase.
+`TEN-RESOLVE-001`: omitting `tenancy` remains backward-compatible. Creation and
+external upsert interpret omission as dedicated request-context tenancy. The
+request tenant is normalized and persisted. An OSS request without a tenant
+context uses the canonical `tenant-default`; it never creates another ambiguous
+null-owned engine.
 
-The next implementation slice will connect the canonical `tenancy` request to
-tenant-reference authorization and persisted dedicated/shared behavior. Until
-then, operators must not interpret `resource_aware` as centralized/shared
-tenancy.
+`TEN-DEDICATED-001`: a successfully provisioned dedicated engine always has one
+tenant and `tenantResolutionStatus = ready`.
+
+`TEN-RESOLVE-002`: an explicit `id` or `key` is not trusted merely because it
+parses. The local resolver can prove only the request tenant and canonical
+default aliases. Enterprise deployments provide an
+`EngineTenantReferenceResolver` through the enterprise backend plugin. It
+receives the reference, request tenant, principal type, and principal id, and
+must return both the normalized tenant and an authorization decision. A denied
+or unprovable reference returns `ENGINE_TENANT_REFERENCE_FORBIDDEN` without
+tenant inventory details.
+
+`TEN-SHARED-001`: shared creation requires
+`runtimeAccessScope = resource_aware`. It persists null engine `tenantId`, the
+declared mapping strategy, mapping version zero, and
+`tenantResolutionStatus = incomplete`. This is deliberate quarantine. A shared
+engine is not ready merely because its connection works.
+
+`TEN-SHARED-002`: external registration uses the same explicit shared contract
+and returns an empty tenancy-warning list when `tenancy` is present.
+
+`TEN-API-003`: ordinary manual updates and external upserts may repeat an
+equivalent declaration, but cannot change dedicated/shared topology, the
+dedicated tenant, or a shared mapping strategy. Such a request returns
+`ENGINE_TENANCY_TRANSITION_REQUIRED` with HTTP 409.
+
+`TEN-API-004`: an external request that omits `tenancy` receives the
+machine-readable warning `ENGINE_TENANCY_DEFAULTED_TO_DEDICATED` in
+`diagnostics.tenancyWarnings`. The same compatibility decision is attached to
+external registration audit details.
+
+`TEN-API-005`: create, update, and external registration share the canonical
+`tenancy` schema and stable sanitized error schema in OpenAPI.
+
+`TEN-RUNTIME-001`: dedicated resource observations persist explicit resolved
+state and sanitized lineage. Shared resources remain unmapped until the mapping
+service is available.
 
 ## Functional Coverage
 
@@ -153,9 +188,16 @@ fails when an entry has a duplicate or invalid identifier, missing test file or
 test name, missing Markdown page, or a documentation page that does not cite
 the requirement identifier.
 
+The provisioning policy module is held to 100% statements, branches, functions,
+and lines. Route, schema, and OpenAPI tests prove every provisioning channel and
+stable error introduced by this slice. This is functional requirement coverage,
+not a claim that every unrelated repository line has 100% code coverage.
+
 ## Related Documentation
 
 - [Engine Tenancy and External Provisioning Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+- [Engine Tenancy and Provisioning API](./engine-tenancy-and-provisioning-api.md)
+- [Provision Engines Externally](../how-to/provision-engines-externally.md)
 - [Database Architecture](./database-architecture.md)
 - [Configure Authorization, Identity, and Engines](../how-to/configure-authorization-and-engines.md)
 - [Database Migrations Guide](../../backend/docs/DATABASE-MIGRATIONS.md)

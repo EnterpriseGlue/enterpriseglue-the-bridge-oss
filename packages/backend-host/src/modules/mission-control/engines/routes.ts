@@ -20,7 +20,14 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js'
 import { apiLimiter, engineLimiter, engineRegistrationLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
-import { engineService, engineSetService, platformSettingsService, projectEngineTargetService, ApiClientScopes } from '@enterpriseglue/shared/services/platform-admin/index.js'
+import {
+  engineService,
+  engineSetService,
+  platformSettingsService,
+  projectEngineTargetService,
+  ApiClientScopes,
+} from '@enterpriseglue/shared/services/platform-admin/index.js'
+import { engineTenancyProvisioningService } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyProvisioningService.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
@@ -275,6 +282,12 @@ const ENGINE_SECRET_UPDATE_FIELDS = [
   'oauthScopes',
   'oauthAudience',
 ] as const
+
+const EXTERNAL_TENANCY_COMPATIBILITY_WARNING = 'ENGINE_TENANCY_DEFAULTED_TO_DEDICATED'
+
+function engineTenantReferenceResolver(req: Request) {
+  return req.app.locals.engineTenantReferenceResolver || null
+}
 
 const externalRegisterEngineBodySchema = ExternalEngineRegistrationRequestSchema.extend({
   baseUrl: externalRegistrationUrlSchema,
@@ -961,8 +974,15 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
   if (dockerLoopbackError) {
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
   }
-  // Set tenantId from request context (OSS: tenant-default, EE: actual tenant)
-  const tenantId = req.tenant?.tenantId || null
+  const resolvedTenancy = await engineTenancyProvisioningService.resolveForCreate({
+    tenancy: req.body.tenancy,
+    runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
+    requestTenantId: req.tenant?.tenantId || null,
+    principalType: 'user',
+    principalId: req.user!.userId,
+    resolver: engineTenantReferenceResolver(req),
+  })
+  const tenantId = resolvedTenancy.tenantId
   const externalId = req.body.externalId?.trim() || null
   if (externalId) {
     const existingExternal = await engineRepo.findOne({ where: { externalId }, select: ['id'] })
@@ -1000,10 +1020,10 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
     environmentTagId: req.body.environmentTagId || null,
     environmentLocked: false,
     runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
-    tenancyMode: 'dedicated',
-    tenantMappingStrategy: null,
-    tenantMappingVersion: 0,
-    tenantResolutionStatus: tenantId ? 'ready' : 'migration_required',
+    tenancyMode: resolvedTenancy.tenancyMode,
+    tenantMappingStrategy: resolvedTenancy.tenantMappingStrategy,
+    tenantMappingVersion: resolvedTenancy.tenantMappingVersion,
+    tenantResolutionStatus: resolvedTenancy.tenantResolutionStatus,
     lastTenantReconciledAt: null,
     deploymentIntegration: req.body.deploymentIntegration || 'enterpriseglue_proxy',
     metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled ?? true,
@@ -1064,9 +1084,9 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     return res.status(400).json({ error: dockerLoopbackError, field: 'baseUrl' })
   }
 
-  const tenantId = req.tenant?.tenantId || null
+  const requestTenantId = req.tenant?.tenantId || null
   const externalId = req.body.externalId.trim()
-  const externalSystem = await resolveExternalEngineSystem(dataSource, req.body.externalSystemId ?? null, tenantId)
+  const externalSystem = await resolveExternalEngineSystem(dataSource, req.body.externalSystemId ?? null, requestTenantId)
   const externalSystemManagementMode = engineManagementModeSchema.safeParse(externalSystem?.defaultManagementMode).success
     ? externalSystem?.defaultManagementMode
     : undefined
@@ -1078,6 +1098,29 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   const capabilitiesJson = capabilitiesToJson(reportedCapabilities)
   const capabilityStatus = getCapabilityStatus(req.body.type, reportedCapabilities)
   const existing = await engineRepo.findOne({ where: { externalId } })
+  const resolvedTenancy = existing
+    ? await engineTenancyProvisioningService.validateUpdate(existing, {
+      tenancy: req.body.tenancy,
+      runtimeAccessScope: req.body.runtimeAccessScope || existing.runtimeAccessScope || 'engine_wide',
+      requestTenantId,
+      principalType: 'api_client',
+      principalId: req.apiClient?.id || null,
+      resolver: engineTenantReferenceResolver(req),
+    }, { compatibilityOmissionMeansDedicated: true })
+    : await engineTenancyProvisioningService.resolveForCreate({
+      tenancy: req.body.tenancy,
+      runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
+      requestTenantId,
+      principalType: 'api_client',
+      principalId: req.apiClient?.id || null,
+      resolver: engineTenantReferenceResolver(req),
+    })
+  if (!resolvedTenancy) {
+    throw Errors.internal('External engine tenancy resolution returned no decision')
+  }
+  const tenancyWarnings = req.body.tenancy === undefined
+    ? [EXTERNAL_TENANCY_COMPATIBILITY_WARNING]
+    : []
   if (existing && req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
     await assertEngineCanUseEngineWideAccess(dataSource, String(existing.id))
   }
@@ -1129,6 +1172,11 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       capabilitiesJson: nextCapabilitiesJson,
       capabilityStatus: nextCapabilityStatus,
       externalUpdatedAt: now,
+      tenancyMode: resolvedTenancy?.tenancyMode,
+      tenantId: resolvedTenancy?.tenantId,
+      tenantMappingStrategy: resolvedTenancy?.tenantMappingStrategy,
+      tenantMappingVersion: resolvedTenancy?.tenantMappingVersion,
+      tenantResolutionStatus: resolvedTenancy?.tenantResolutionStatus,
       updatedAt: now,
     }
     await engineRepo.update({ id: existing.id }, updatePayload)
@@ -1149,9 +1197,10 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       lastRegisteredAt: now,
       now,
     })
-    await refreshEngineSetMaterializationsForEngine(String(existing.id), tenantId)
-    await refreshRuntimeResourceSetMaterializationsForEngine(String(existing.id), tenantId)
-    scheduleRuntimeInventoryReconciliation(String(existing.id), tenantId, {
+    const effectiveTenantId = resolvedTenancy?.tenantId ?? existing.tenantId
+    await refreshEngineSetMaterializationsForEngine(String(existing.id), effectiveTenantId)
+    await refreshRuntimeResourceSetMaterializationsForEngine(String(existing.id), effectiveTenantId)
+    scheduleRuntimeInventoryReconciliation(String(existing.id), effectiveTenantId, {
       runtimeAccessScope: (updatePayload.runtimeAccessScope as string | undefined) ?? existing.runtimeAccessScope,
       metadataDiscoveryEnabled: (updatePayload.metadataDiscoveryEnabled as boolean | undefined) ?? existing.metadataDiscoveryEnabled,
       deploymentDiscoveryEnabled: (updatePayload.deploymentDiscoveryEnabled as boolean | undefined) ?? (existing.deploymentDiscoveryEnabled !== false),
@@ -1160,7 +1209,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     if (!updated) throw Errors.notFound('Engine')
     const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, updated) : null
     await logAudit({
-      tenantId: tenantId || undefined,
+      tenantId: effectiveTenantId || undefined,
       userId: req.apiClient?.createdById || undefined,
       action: 'engine.external_registration.update',
       resourceType: 'engine',
@@ -1176,11 +1225,22 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
         capabilities: req.body.capabilities === undefined ? parseExternalEngineCapabilities(existing.capabilitiesJson) : reportedCapabilities,
         externalId,
         labels: normalizeEngineLabels(req.body.labels),
+        tenancy: {
+          mode: resolvedTenancy?.tenancyMode,
+          tenantId: resolvedTenancy?.tenantId,
+          mappingStrategy: resolvedTenancy?.tenantMappingStrategy,
+          warnings: tenancyWarnings,
+        },
         connectionTest: health ? { status: health.status, latencyMs: health.latencyMs, version: health.version ?? null } : undefined,
       },
     })
     const responseEngine = health?.version ? { ...updated, version: health.version } : updated
-    return res.status(200).json({ created: false, engine: withEngineCapabilities(serializeEngine(responseEngine)), health })
+    return res.status(200).json({
+      created: false,
+      engine: withEngineCapabilities(serializeEngine(responseEngine)),
+      health,
+      diagnostics: { tenancyWarnings },
+    })
   }
 
   const id = generateId()
@@ -1190,11 +1250,11 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     ownerId: req.apiClient?.createdById || null,
     delegateId: null,
     environmentLocked: false,
-    tenantId,
-    tenancyMode: 'dedicated',
-    tenantMappingStrategy: null,
-    tenantMappingVersion: 0,
-    tenantResolutionStatus: tenantId ? 'ready' : 'migration_required',
+    tenantId: resolvedTenancy.tenantId,
+    tenancyMode: resolvedTenancy.tenancyMode,
+    tenantMappingStrategy: resolvedTenancy.tenantMappingStrategy,
+    tenantMappingVersion: resolvedTenancy.tenantMappingVersion,
+    tenantResolutionStatus: resolvedTenancy.tenantResolutionStatus,
     lastTenantReconciledAt: null,
     createdAt: now,
   }
@@ -1216,16 +1276,16 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     lastRegisteredAt: now,
     now,
   })
-  await refreshEngineSetMaterializationsForEngine(id, tenantId)
-  await refreshRuntimeResourceSetMaterializationsForEngine(id, tenantId)
-  scheduleRuntimeInventoryReconciliation(id, tenantId, {
+  await refreshEngineSetMaterializationsForEngine(id, resolvedTenancy.tenantId)
+  await refreshRuntimeResourceSetMaterializationsForEngine(id, resolvedTenancy.tenantId)
+  scheduleRuntimeInventoryReconciliation(id, resolvedTenancy.tenantId, {
     runtimeAccessScope: payload.runtimeAccessScope || 'engine_wide',
     metadataDiscoveryEnabled: payload.metadataDiscoveryEnabled,
     deploymentDiscoveryEnabled: payload.deploymentDiscoveryEnabled !== false,
   })
   const health = req.body.testConnection ? await testEngineConnectionAndRecord(dataSource, created) : null
   await logAudit({
-    tenantId: tenantId || undefined,
+    tenantId: resolvedTenancy.tenantId || undefined,
     userId: req.apiClient?.createdById || undefined,
     action: 'engine.external_registration.create',
     resourceType: 'engine',
@@ -1241,11 +1301,22 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       capabilities: reportedCapabilities,
       externalId,
       labels: normalizeEngineLabels(req.body.labels),
+      tenancy: {
+        mode: resolvedTenancy.tenancyMode,
+        tenantId: resolvedTenancy.tenantId,
+        mappingStrategy: resolvedTenancy.tenantMappingStrategy,
+        warnings: tenancyWarnings,
+      },
       connectionTest: health ? { status: health.status, latencyMs: health.latencyMs, version: health.version ?? null } : undefined,
     },
   })
   const responseEngine = health?.version ? { ...created, version: health.version } : created
-  return res.status(201).json({ created: true, engine: withEngineCapabilities(serializeEngine(responseEngine)), health })
+  return res.status(201).json({
+    created: true,
+    engine: withEngineCapabilities(serializeEngine(responseEngine)),
+    health,
+    diagnostics: { tenancyWarnings },
+  })
 }))
 
 r.post('/engines-api/external/engines/decommission', engineLimiter, requireApiClientAction(ApiClientScopes.ENGINE_REGISTER, 'engine.external-registration.decommission', {
@@ -1529,6 +1600,14 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistration
   if (req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
     await assertEngineCanUseEngineWideAccess(dataSource, engineId)
   }
+  const resolvedTenancy = await engineTenancyProvisioningService.validateUpdate(existing, {
+    tenancy: req.body.tenancy,
+    runtimeAccessScope: req.body.runtimeAccessScope || existing.runtimeAccessScope || 'engine_wide',
+    requestTenantId: req.tenant?.tenantId || null,
+    principalType: 'user',
+    principalId: req.user!.userId,
+    resolver: engineTenantReferenceResolver(req),
+  })
   const nextConnectionMode = req.body.connectionMode || existing.connectionMode || 'direct'
   const nextAuthType = req.body.authType || existing.authType || 'basic'
   const settings = await platformSettingsService.get()
@@ -1566,6 +1645,11 @@ r.put('/engines-api/engines/:id', engineLimiter, requireAuth, engineRegistration
     deploymentDiscoveryEnabled: req.body.deploymentDiscoveryEnabled,
     reconciliationIntervalSeconds: req.body.reconciliationIntervalSeconds,
     pipelineReceiptEnabled: req.body.pipelineReceiptEnabled,
+    tenancyMode: resolvedTenancy?.tenancyMode,
+    tenantId: resolvedTenancy?.tenantId,
+    tenantMappingStrategy: resolvedTenancy?.tenantMappingStrategy,
+    tenantMappingVersion: resolvedTenancy?.tenantMappingVersion,
+    tenantResolutionStatus: resolvedTenancy?.tenantResolutionStatus,
     driftStatus: isConfigWarnUpdate(existing, req.body) ? 'manual_override' : undefined,
     updatedAt: now,
   }

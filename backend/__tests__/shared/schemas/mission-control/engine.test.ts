@@ -7,6 +7,7 @@ import {
   EngineSchema,
   EngineConnectionHealthResponseSchema,
   EngineTenancyConfigurationSchema,
+  EngineTenancyErrorResponseSchema,
   EngineTenantMappingSchema,
   EngineTenantReferenceSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
@@ -177,6 +178,52 @@ describe('EngineSchema', () => {
     expect(EngineTenancyConfigurationSchema.safeParse({
       mode: 'dedicated',
       mappingStrategy: 'explicit',
+    }).success).toBe(false);
+  });
+
+  it('exposes the canonical tenancy contract on manual, update, and external provisioning requests', () => {
+    expect(CreateEngineRequestSchema.parse({
+      name: 'Shared manual',
+      baseUrl: 'https://manual.example.test/engine-rest',
+      runtimeAccessScope: 'resource_aware',
+      tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+    }).tenancy).toEqual({
+      mode: 'shared',
+      mappingStrategy: 'engine_tenant_id',
+      unmappedPolicy: 'deny',
+    });
+    expect(UpdateEngineRequestSchema.parse({
+      tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+    }).tenancy).toEqual({
+      mode: 'dedicated',
+      tenantRef: { type: 'default' },
+    });
+    expect(ExternalEngineRegistrationRequestSchema.parse({
+      name: 'External shared',
+      baseUrl: 'https://external.example.test/engine-rest',
+      externalId: 'central-1',
+      tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+    }).tenancy).toMatchObject({ mode: 'shared', mappingStrategy: 'explicit' });
+    expect(CreateEngineRequestSchema.safeParse({
+      name: 'Invalid',
+      baseUrl: 'https://manual.example.test/engine-rest',
+      tenancy: { mode: 'shared', mappingStrategy: 'unknown' },
+    }).success).toBe(false);
+  });
+
+  it('publishes stable sanitized tenancy errors', () => {
+    expect(EngineTenancyErrorResponseSchema.parse({
+      error: 'Shared engines require runtimeAccessScope=resource_aware',
+      code: 'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
+      field: 'tenancy',
+    })).toEqual({
+      error: 'Shared engines require runtimeAccessScope=resource_aware',
+      code: 'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
+      field: 'tenancy',
+    });
+    expect(EngineTenancyErrorResponseSchema.safeParse({
+      error: 'internal details',
+      code: 'UNKNOWN_INTERNAL_ERROR',
     }).success).toBe(false);
   });
 
