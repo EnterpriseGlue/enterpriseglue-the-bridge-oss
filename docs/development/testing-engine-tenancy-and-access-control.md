@@ -111,6 +111,19 @@ The detailed artifacts are fail-closed as well:
   remains retained with no removal proposed, or was removed only after the
   window closed and replacement documentation shipped.
 
+Generate the retained-warning compatibility artifact with:
+
+```bash
+pnpm run test:engine-tenancy:compatibility-evidence
+```
+
+This is an executable contract for engine-provisioning omission behavior, not
+a claim about deployed SSO providers or customer adoption. It reruns the
+provisioning, HTTP response, and OpenAPI warning tests under the local-safe
+environment. The artifact passes while the warning is retained and
+`removalProposed` is false; removing the fallback requires the separately
+documented breaking-release and observation-window evidence.
+
 The full release-qualification backlog, execution order, rollback conditions,
 and exit conditions are in phase 9 of
 the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).

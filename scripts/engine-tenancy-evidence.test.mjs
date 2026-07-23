@@ -14,6 +14,7 @@ const authorizationMatrixRunner = readFileSync(new URL('./run-authz-state-space-
 const authorizationFoundationRunner = readFileSync(new URL('./run-local-safe-authz-state-space-foundation.sh', import.meta.url), 'utf8');
 const accessibilityRunner = readFileSync(new URL('./run-authz-accessibility-matrix.sh', import.meta.url), 'utf8');
 const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-evidence.mjs', import.meta.url), 'utf8');
+const compatibilityRunner = readFileSync(new URL('./run-engine-tenancy-compatibility-evidence.mjs', import.meta.url), 'utf8');
 const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
@@ -169,6 +170,17 @@ test('retains database-free cross-browser accessibility evidence', () => {
   assert.match(accessibilityWriter, /passedWorkflowCount/);
   assert.match(accessibilityWriter, /missingChecks: 0/);
   assert.doesNotMatch(accessibilityWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
+});
+
+test('retains omission warnings until the documented removal window closes', () => {
+  assert.match(packageJson.scripts['test:engine-tenancy:compatibility-evidence'], /run-engine-tenancy-compatibility-evidence\.mjs/);
+  assert.match(compatibilityRunner, /warningBehaviorTestsPassed: true/);
+  assert.match(compatibilityRunner, /warningBehavior: 'retained'/);
+  assert.match(compatibilityRunner, /removalProposed: false/);
+  assert.match(compatibilityRunner, /ENGINE_TENANCY_DEFAULTED_TO_DEDICATED/);
+  assert.match(compatibilityRunner, /Compatibility-window evidence must be run from a clean worktree/);
+  assert.match(compatibilityRunner, /scripts\/local-safe-test\.env/);
+  assert.doesNotMatch(compatibilityRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 
 test('retains literal 100 percent source coverage for every security-critical module lane', () => {
