@@ -27,6 +27,7 @@ private, link-local, reserved, metadata, or Docker-internal hosts.
 Send explicit tenancy so the integration does not depend on temporary omission
 compatibility:
 
+<!-- enterpriseglue-curl-contract: POST /engines-api/external/engines ExternalEngineRegistrationRequestSchema -->
 ```bash
 curl --fail-with-body \
   -X POST "$ENTERPRISEGLUE_URL/engines-api/external/engines" \
@@ -48,7 +49,7 @@ curl --fail-with-body \
 
 A successful OSS engine includes:
 
-```json
+```text
 {
   "created": true,
   "engine": {
@@ -70,6 +71,7 @@ authenticated context or enterprise tenant resolver.
 
 Shared mode must be explicit and resource-aware:
 
+<!-- enterpriseglue-curl-contract: POST /engines-api/external/engines ExternalEngineRegistrationRequestSchema -->
 ```bash
 curl --fail-with-body \
   -X POST "$ENTERPRISEGLUE_URL/engines-api/external/engines" \
@@ -97,13 +99,13 @@ The connection is created with null `tenantId` and
 
 Preview the mapping batch first:
 
+<!-- enterpriseglue-curl-contract: PUT /engines-api/external/engines/{externalId}/tenant-mappings ExternalEngineTenantMappingsUpsertRequestSchema -->
 ```bash
 curl --fail-with-body \
   -X PUT "$ENTERPRISEGLUE_URL/engines-api/external/engines/cmdb%2Fcentral-prod/tenant-mappings" \
   -H "Authorization: Bearer $ENTERPRISEGLUE_TOKEN" \
   -H "Content-Type: application/json" \
   --data '{
-    "externalSystemId": "cmdb",
     "expectedMappingVersion": 0,
     "dryRun": true,
     "atomic": true,
@@ -155,7 +157,7 @@ the error by deleting and recreating production inventory.
 
 If tenancy is omitted, the API treats the request as dedicated and returns:
 
-```json
+```text
 {
   "diagnostics": {
     "tenancyWarnings": ["ENGINE_TENANCY_DEFAULTED_TO_DEDICATED"]
@@ -164,6 +166,75 @@ If tenancy is omitted, the API treats the request as dedicated and returns:
 ```
 
 Update the integration to send explicit tenancy when this warning appears.
+
+## Rotate Credentials and Reconcile
+
+Rotate the value in the configured secret provider first, then repeat the
+idempotent registration with the same `externalId`, explicit tenancy, and a
+new opaque secret reference. This example never places credential material in
+the request or documentation:
+
+<!-- enterpriseglue-curl-contract: POST /engines-api/external/engines ExternalEngineRegistrationRequestSchema -->
+```bash
+curl --fail-with-body \
+  -X POST "$ENTERPRISEGLUE_URL/engines-api/external/engines" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "Payments production",
+    "baseUrl": "https://engine.example.com/engine-rest",
+    "externalId": "cmdb/payments-prod",
+    "externalSystemId": "cmdb",
+    "type": "operaton",
+    "connectionMode": "direct",
+    "authType": "basic",
+    "username": "enterpriseglue",
+    "passwordEnc": "ref:env://PAYMENTS_ENGINE_PASSWORD_V2",
+    "runtimeAccessScope": "engine_wide",
+    "tenancy": {
+      "mode": "dedicated",
+      "tenantRef": { "type": "request_context" }
+    }
+  }'
+```
+
+An authenticated platform operator can then reconcile capability and Engine
+Set materialization state. This endpoint uses a normal administrator session
+token, not the external API-client token:
+
+<!-- enterpriseglue-curl-contract: POST /api/authz/external-engines/{id}/reconcile none -->
+```bash
+curl --fail-with-body \
+  -X POST "$ENTERPRISEGLUE_URL/api/authz/external-engines/$ENGINE_ID/reconcile" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_ADMIN_TOKEN"
+```
+
+## Decommission
+
+Decommission preserves audit and inventory evidence while removing the engine
+from active materializations. It is safer than deleting and recreating an
+externally owned engine.
+
+`TEN-API-012`: runtime validation and OpenAPI use the same strict external
+decommission request schema.
+
+<!-- enterpriseglue-curl-contract: POST /engines-api/external/engines/decommission ExternalEngineDecommissionRequestSchema -->
+```bash
+curl --fail-with-body \
+  -X POST "$ENTERPRISEGLUE_URL/engines-api/external/engines/decommission" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "externalId": "cmdb/payments-prod",
+    "externalSystemId": "cmdb",
+    "reason": "Retired by the owning inventory system"
+  }'
+```
+
+After decommission, verify the lifecycle status, empty Engine Set
+materializations, denied connection tests, and retained sanitized audit
+history. Reactivation is a separate administrator action and must be followed
+by reconciliation and access verification.
 
 ## Troubleshooting
 

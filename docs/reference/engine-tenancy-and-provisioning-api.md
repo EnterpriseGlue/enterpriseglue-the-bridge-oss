@@ -18,6 +18,7 @@ same optional `tenancy` object.
 
 Dedicated in the authenticated request tenant:
 
+<!-- enterpriseglue-config-schema: EngineTenancyConfigurationSchema -->
 ```json
 {
   "mode": "dedicated",
@@ -27,6 +28,7 @@ Dedicated in the authenticated request tenant:
 
 Dedicated in the installation default tenant:
 
+<!-- enterpriseglue-config-schema: EngineTenancyConfigurationSchema -->
 ```json
 {
   "mode": "dedicated",
@@ -36,6 +38,7 @@ Dedicated in the installation default tenant:
 
 Dedicated using a deployment-specific stable reference:
 
+<!-- enterpriseglue-config-schema: EngineTenancyConfigurationSchema -->
 ```json
 {
   "mode": "dedicated",
@@ -45,6 +48,7 @@ Dedicated using a deployment-specific stable reference:
 
 Shared:
 
+<!-- enterpriseglue-config-schema: UpdateEngineRequestSchema -->
 ```json
 {
   "runtimeAccessScope": "resource_aware",
@@ -60,6 +64,57 @@ Shared:
 quarantined engine until mapping administration and runtime reconciliation are
 completed. HTTP 201 does not mean a shared engine is authorization-ready.
 
+## Manual API Lifecycle
+
+Create requests require engine-inventory creation permission and use the
+authenticated tenant context:
+
+<!-- enterpriseglue-curl-contract: POST /engines-api/engines CreateEngineRequestSchema -->
+```bash
+curl --fail-with-body \
+  -X POST "$ENTERPRISEGLUE_URL/engines-api/engines" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "Team A engine",
+    "baseUrl": "https://team-a.example.test/engine-rest",
+    "type": "operaton",
+    "connectionMode": "direct",
+    "runtimeAccessScope": "engine_wide",
+    "tenancy": {
+      "mode": "dedicated",
+      "tenantRef": { "type": "request_context" }
+    }
+  }'
+```
+
+Ordinary updates may change connection metadata or rotate an opaque secret
+reference, but cannot change topology, dedicated tenant, or mapping strategy:
+
+<!-- enterpriseglue-curl-contract: PUT /engines-api/engines/{id} UpdateEngineRequestSchema -->
+```bash
+curl --fail-with-body \
+  -X PUT "$ENTERPRISEGLUE_URL/engines-api/engines/$ENGINE_ID" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "authType": "basic",
+    "username": "enterpriseglue",
+    "passwordEnc": "ref:env://TEAM_A_ENGINE_PASSWORD_V2"
+  }'
+```
+
+Deletion requires engine-inventory deletion permission. Export the topology,
+mappings, assignments, and diagnostics first; an externally owned engine must
+use its decommission workflow instead.
+
+<!-- enterpriseglue-curl-contract: DELETE /engines-api/engines/{id} none -->
+```bash
+curl --fail-with-body \
+  -X DELETE "$ENTERPRISEGLUE_URL/engines-api/engines/$ENGINE_ID" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_ADMIN_TOKEN"
+```
+
 ## Tenant Mapping API
 
 For an engine created with `tenancy.mode = shared`, administrators can list and
@@ -73,6 +128,7 @@ GET /engines-api/engines/{id}/tenancy/diagnostics
 
 Example apply request:
 
+<!-- enterpriseglue-config-schema: ExternalEngineTenantMappingsUpsertRequestSchema -->
 ```json
 {
   "expectedMappingVersion": 0,
@@ -88,6 +144,30 @@ Example apply request:
     }
   ]
 }
+```
+
+The equivalent version-guarded call is:
+
+<!-- enterpriseglue-curl-contract: PUT /engines-api/engines/{id}/tenant-mappings ExternalEngineTenantMappingsUpsertRequestSchema -->
+```bash
+curl --fail-with-body \
+  -X PUT "$ENTERPRISEGLUE_URL/engines-api/engines/$ENGINE_ID/tenant-mappings" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "expectedMappingVersion": 0,
+    "dryRun": true,
+    "atomic": true,
+    "mappings": [
+      {
+        "externalTenantId": "payments",
+        "tenantRef": { "type": "key", "key": "tenant.payments" },
+        "strategy": "engine_tenant_id",
+        "sourceRef": "central-prod/payments",
+        "active": true
+      }
+    ]
+  }'
 ```
 
 Every row must use the engine's declared mapping strategy. The service resolves
@@ -122,6 +202,7 @@ reconciliation.
 Configuration bundles declare shared-engine mappings in
 `./engine-tenant-mappings.json`, separately from engine connection topology:
 
+<!-- enterpriseglue-config-schema: ConfigEngineTenantMappingsFileSchema -->
 ```json
 {
   "engineTenantMappings": [
@@ -239,6 +320,7 @@ Content-Type: application/json
 The response reports aggregate affected objects and visibility changes, for
 example:
 
+<!-- enterpriseglue-config-schema: EngineTenancyTransitionPreviewResponseSchema -->
 ```json
 {
   "engineId": "engine-1",
@@ -372,6 +454,7 @@ scrape valid and the process-local counters available.
 
 The canonical error body is:
 
+<!-- enterpriseglue-config-schema: EngineTenancyErrorResponseSchema -->
 ```json
 {
   "error": "Changing engine tenancy topology requires the dedicated transition workflow",

@@ -356,6 +356,12 @@ export const ExternalEngineRegistrationRequestSchema = EngineRegistrationFieldsS
   testConnection: z.boolean().optional(),
 });
 
+export const ExternalEngineDecommissionRequestSchema = z.object({
+  externalId: z.string().min(1).max(255),
+  externalSystemId: z.string().min(1).nullable().optional(),
+  reason: z.string().max(2000).nullable().optional(),
+}).strict();
+
 export const ExternalEngineCapabilityDiagnosticsSchema = z.object({
   status: EngineCapabilityStatusSchema,
   expectedOperations: z.array(z.string()),

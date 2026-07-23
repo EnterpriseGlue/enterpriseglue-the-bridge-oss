@@ -625,5 +625,38 @@
     "testName": "exports bounded aggregate topology, resolution, and fallback metrics without resource identifiers",
     "documentation": "docs/reference/engine-tenancy-data-model.md",
     "ciJob": "test:engine-tenancy:operations"
+  },
+  {
+    "id": "TEN-DOCS-002",
+    "requirement": "Every published engine-tenancy curl journey is linked, uses placeholder credentials, resolves to a canonical OpenAPI operation, and parses request bodies with the runtime Zod schema.",
+    "source": "Engine Tenancy Plan / Documentation validation",
+    "dimensions": ["manual_api", "external_api", "diagnostics", "transition", "mapping", "reconcile", "decommission"],
+    "expected": "zero undocumented or schema-divergent engine-tenancy curl contracts",
+    "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+    "testName": "validates every published curl example against OpenAPI and its runtime request schema",
+    "documentation": "docs/how-to/diagnose-engine-tenant-resolution.md",
+    "ciJob": "test:engine-tenancy:documentation"
+  },
+  {
+    "id": "TEN-DOCS-003",
+    "requirement": "Default-tenant fallback and shared-engine fail-closed decisions, user guides, developer references, and troubleshooting pages are linked from the documentation index with valid local anchors.",
+    "source": "Engine Tenancy Plan / Markdown Documentation Deliverables",
+    "dimensions": ["architecture_decision", "developer", "user", "administrator", "operator", "navigation"],
+    "expected": "all feature documentation links and index entries resolve",
+    "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+    "testName": "keeps feature documentation links, anchors, and index navigation valid",
+    "documentation": "docs/architecture/decisions/0001-default-tenant-provisioning-fallback.md",
+    "ciJob": "test:engine-tenancy:documentation"
+  },
+  {
+    "id": "TEN-API-012",
+    "requirement": "External engine decommission uses one strict canonical request schema in runtime validation, OpenAPI, and published integration examples.",
+    "source": "Engine Tenancy and Provisioning API / Decommission",
+    "dimensions": ["external_api", "decommission", "schema", "openapi", "documentation"],
+    "expected": "strict external decommission contract parity",
+    "testFile": "backend/__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts",
+    "testName": "publishes one strict external decommission contract across runtime and OpenAPI",
+    "documentation": "docs/how-to/provision-engines-externally.md",
+    "ciJob": "test:engine-tenancy:documentation"
   }
 ]

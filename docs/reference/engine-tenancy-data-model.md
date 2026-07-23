@@ -117,18 +117,22 @@ mapping-batch contracts. The contracts are also registered in OpenAPI.
 
 Tenant references are explicit:
 
+<!-- enterpriseglue-config-schema: EngineTenantReferenceSchema -->
 ```json
 { "type": "request_context" }
 ```
 
+<!-- enterpriseglue-config-schema: EngineTenantReferenceSchema -->
 ```json
 { "type": "default" }
 ```
 
+<!-- enterpriseglue-config-schema: EngineTenantReferenceSchema -->
 ```json
 { "type": "key", "key": "tenant.team-a" }
 ```
 
+<!-- enterpriseglue-config-schema: EngineTenantReferenceSchema -->
 ```json
 { "type": "id", "id": "tenant-default" }
 ```
@@ -248,6 +252,7 @@ an engine config-key reference, the external tenant identity, a canonical
 tenant reference, the engine mapping strategy, active state, and
 `config_locked` or `config_warn` ownership.
 
+<!-- enterpriseglue-config-schema: ConfigEngineTenantMappingsFileSchema -->
 ```json
 {
   "engineTenantMappings": [

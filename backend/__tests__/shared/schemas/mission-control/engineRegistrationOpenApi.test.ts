@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { ExternalEngineDecommissionRequestSchema } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 
 describe('engine registration OpenAPI contracts', () => {
   it('publishes one connection-mode enum across manual, external, and config registration', () => {
@@ -151,6 +152,36 @@ describe('engine registration OpenAPI contracts', () => {
         'text/plain': {
           schema: { type: 'string' },
         },
+      },
+    });
+  });
+
+  it('publishes one strict external decommission contract across runtime and OpenAPI', () => {
+    expect(ExternalEngineDecommissionRequestSchema.parse({
+      externalId: 'cmdb/payments-prod',
+      externalSystemId: 'cmdb',
+      reason: 'Retired by source',
+    })).toEqual({
+      externalId: 'cmdb/payments-prod',
+      externalSystemId: 'cmdb',
+      reason: 'Retired by source',
+    });
+    expect(ExternalEngineDecommissionRequestSchema.safeParse({
+      externalId: 'cmdb/payments-prod',
+      unexpected: true,
+    }).success).toBe(false);
+
+    const requestSchema = generateOpenApi()
+      .paths?.['/engines-api/external/engines/decommission']
+      ?.post?.requestBody?.content?.['application/json']?.schema;
+    expect(requestSchema).toMatchObject({
+      type: 'object',
+      required: ['externalId'],
+      additionalProperties: false,
+      properties: {
+        externalId: { type: 'string', minLength: 1, maxLength: 255 },
+        externalSystemId: { nullable: true },
+        reason: { nullable: true, maxLength: 2000 },
       },
     });
   });

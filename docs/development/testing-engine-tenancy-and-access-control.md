@@ -41,6 +41,7 @@ pnpm run test:engine-tenancy:authorization
 pnpm run test:engine-tenancy:runtime
 pnpm run test:engine-tenancy:transitions
 pnpm run test:engine-tenancy:operations
+pnpm run test:engine-tenancy:documentation
 ```
 
 The authorization lane:
@@ -105,6 +106,18 @@ The operations lane:
 5. proves database collection failure keeps `/metrics` available, reports a
    failure gauge, preserves process-local counters, and never emits engine or
    tenant identifiers.
+
+The documentation lane:
+
+1. validates every tagged JSON example with the production Zod schema;
+2. validates every published tenancy curl method/path against OpenAPI and its
+   request body with the runtime schema;
+3. rejects untagged curl/JSON examples, literal bearer tokens, and credential
+   values that are not opaque secret references;
+4. checks feature-document links, anchors, and documentation-index entries;
+5. verifies the external decommission schema is identical across runtime,
+   OpenAPI, and the integration guide; and
+6. validates the functional-coverage manifest after documentation changes.
 
 Run package type checks after any contract change:
 

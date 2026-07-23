@@ -41,6 +41,7 @@ When `tenancy` is omitted, a new engine is dedicated for compatibility. The
 server persists the authenticated request tenant. Local OSS uses
 `tenant-default` only when no request tenant exists.
 
+<!-- enterpriseglue-config-schema: CreateEngineRequestSchema -->
 ```json
 {
   "name": "Team A Engine",
@@ -73,6 +74,7 @@ starts quarantined.
 
 A shared engine must explicitly declare `resource_aware` and a mapping strategy.
 
+<!-- enterpriseglue-config-schema: CreateEngineRequestSchema -->
 ```json
 {
   "name": "Central Engine",
@@ -175,12 +177,78 @@ or principal identifiers. Use the authenticated tenancy diagnostics, mapping
 list, Effective Access, and audit log to investigate which objects require
 action.
 
-### Manage Shared Mappings as Configuration
+### Provision through Configuration
 
-For GitOps-managed engines, add this import to `bundle.json`:
+A dedicated `engines.json` entry uses the portable tenant reference and may
+keep engine-wide runtime access:
 
+<!-- enterpriseglue-config-schema: ConfigEnginesFileSchema -->
 ```json
 {
+  "engines": [
+    {
+      "key": "engine.team-a",
+      "name": "Team A engine",
+      "type": "operaton",
+      "baseUrl": "https://team-a.example.test/engine-rest",
+      "auth": {
+        "type": "basic",
+        "username": "enterpriseglue",
+        "passwordRef": "env://TEAM_A_ENGINE_PASSWORD"
+      },
+      "connectionMode": "direct",
+      "runtimeAccessScope": "engine_wide",
+      "tenancy": {
+        "mode": "dedicated",
+        "tenantRef": { "type": "request_context" }
+      }
+    }
+  ]
+}
+```
+
+A centralized connection declares shared topology and resource-aware access:
+
+<!-- enterpriseglue-config-schema: ConfigEnginesFileSchema -->
+```json
+{
+  "engines": [
+    {
+      "key": "engine.central",
+      "name": "Central engine",
+      "type": "operaton",
+      "baseUrl": "https://central.example.test/engine-rest",
+      "auth": {
+        "type": "basic",
+        "username": "enterpriseglue",
+        "passwordRef": "env://CENTRAL_ENGINE_PASSWORD"
+      },
+      "connectionMode": "direct",
+      "runtimeAccessScope": "resource_aware",
+      "tenancy": {
+        "mode": "shared",
+        "mappingStrategy": "engine_tenant_id",
+        "unmappedPolicy": "deny"
+      }
+    }
+  ]
+}
+```
+
+For GitOps-managed engines, declare both files in `enterpriseglue.json`:
+
+<!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
+```json
+{
+  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "kind": "EnterpriseGlueConfigBundle",
+  "metadata": {
+    "key": "bundle.engine-tenancy",
+    "owner": "platform-operations"
+  },
+  "tenantKey": "tenant.team-a",
+  "mode": "authoritative",
+  "settings": {},
   "imports": [
     "./engines.json",
     "./engine-tenant-mappings.json"
@@ -191,6 +259,7 @@ For GitOps-managed engines, add this import to `bundle.json`:
 Keep the shared topology in `engines.json`, and add the mappings in
 `engine-tenant-mappings.json`:
 
+<!-- enterpriseglue-config-schema: ConfigEngineTenantMappingsFileSchema -->
 ```json
 {
   "engineTenantMappings": [
@@ -260,6 +329,7 @@ In **Access Control > Roles**, choose tenant scope. The permission picker shows
 only permissions marked tenant-safe. Configuration bundles use the equivalent
 shape:
 
+<!-- enterpriseglue-config-schema: ConfigRoleSchema -->
 ```json
 {
   "key": "custom.tenant.runtime-operator",
@@ -275,6 +345,7 @@ shape:
 
 Assign it portably in `assignments.json`:
 
+<!-- enterpriseglue-config-schema: ConfigAssignmentSchema -->
 ```json
 {
   "key": "assignment.tenant-runtime-operators",

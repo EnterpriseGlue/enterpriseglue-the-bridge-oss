@@ -3,25 +3,61 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
+  ConfigAssignmentSchema,
   ConfigEngineSchema,
+  ConfigEngineTenantMappingsFileSchema,
+  ConfigEnginesFileSchema,
   ConfigIdentityProviderSchema,
+  ConfigRoleSchema,
+  EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import {
+  CreateEngineRequestSchema,
+  EngineTenancyConfigurationSchema,
+  EngineTenancyErrorResponseSchema,
+  EngineTenancyTransitionApplyRequestSchema,
+  EngineTenancyTransitionPreviewRequestSchema,
+  EngineTenancyTransitionPreviewResponseSchema,
+  EngineTenantReferenceSchema,
+  ExternalEngineRegistrationRequestSchema,
+  ExternalEngineTenantMappingsUpsertRequestSchema,
+  UpdateEngineRequestSchema,
+} from '@enterpriseglue/shared/schemas/mission-control/engine.js';
 
 const SCHEMAS: Record<string, z.ZodType> = {
+  ConfigAssignmentSchema,
   ConfigEngineSchema,
+  ConfigEngineTenantMappingsFileSchema,
+  ConfigEnginesFileSchema,
   ConfigIdentityProviderSchema,
+  ConfigRoleSchema,
+  CreateEngineRequestSchema,
+  EngineTenancyTransitionApplyRequestSchema,
+  EngineTenancyConfigurationSchema,
+  EngineTenancyErrorResponseSchema,
+  EngineTenancyTransitionPreviewRequestSchema,
+  EngineTenancyTransitionPreviewResponseSchema,
+  EngineTenantReferenceSchema,
+  EnterpriseGlueConfigBundleSchema,
+  ExternalEngineRegistrationRequestSchema,
+  ExternalEngineTenantMappingsUpsertRequestSchema,
+  UpdateEngineRequestSchema,
 };
 
 const repoRoot = resolve(import.meta.dirname, '../../../../..');
 const taggedJsonBlock = /<!--\s*enterpriseglue-config-schema:\s*([A-Za-z0-9_]+)\s*-->\s*```json\s*\n([\s\S]*?)\n```/g;
 const jsonFence = /^```json\s*$/gm;
-const DOCUMENTS = readdirSync(resolve(repoRoot, 'docs/how-to'), { recursive: true })
+const howToDocuments = readdirSync(resolve(repoRoot, 'docs/how-to'), { recursive: true })
   .filter((entry): entry is string => typeof entry === 'string' && entry.endsWith('.md'))
   .map((entry) => `docs/how-to/${entry}`)
-  .filter((documentPath) => readFileSync(resolve(repoRoot, documentPath), 'utf8').includes('```json'))
-  .sort();
+  .filter((documentPath) => readFileSync(resolve(repoRoot, documentPath), 'utf8').includes('```json'));
+const DOCUMENTS = [
+  ...howToDocuments,
+  'docs/reference/engine-tenancy-and-provisioning-api.md',
+  'docs/reference/engine-tenancy-data-model.md',
+].sort();
 
-describe('published configuration JSON examples', () => {
+describe('published machine-readable JSON examples', () => {
   it('discovers every executable JSON example in the published how-to guides', () => {
     expect(DOCUMENTS.length).toBeGreaterThan(0);
   });

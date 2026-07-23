@@ -82,6 +82,7 @@ const {
   CreateEngineRequestSchema,
   UpdateEngineRequestSchema,
   ExternalEngineRegistrationRequestSchema,
+  ExternalEngineDecommissionRequestSchema,
   SavedFilterSchema,
   SavedFilterCreateRequestSchema,
   SavedFilterUpdateRequestSchema,
@@ -1101,11 +1102,7 @@ registry.registerPath({
     body: {
       content: {
         'application/json': {
-          schema: z.object({
-            externalId: z.string(),
-            externalSystemId: z.string().nullable().optional(),
-            reason: z.string().nullable().optional(),
-          }),
+          schema: ExternalEngineDecommissionRequestSchema,
         },
       },
     },

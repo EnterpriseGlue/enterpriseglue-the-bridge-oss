@@ -26,6 +26,7 @@ Audience: Developers and architects.
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
 - [Configure Dedicated and Shared Engine Tenancy](how-to/configure-engine-tenancy.md)
+- [Diagnose Engine Tenant Resolution](how-to/diagnose-engine-tenant-resolution.md)
 - [Migrate Existing Engines to Explicit Tenancy](how-to/migrate-existing-engines-to-explicit-tenancy.md)
 
 ## Architecture
@@ -34,6 +35,8 @@ Audience: Developers and architects.
 - [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
 - [JSON-Driven Authorization and Engine Registration](architecture/11-json-driven-authz-and-engine-registration.md)
 - [Centralized and Decentralized Engine Tenancy Implementation Plan](architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+- [ADR 0001: Limit Default Tenant Fallback to Provisioning](architecture/decisions/0001-default-tenant-provisioning-fallback.md)
+- [ADR 0002: Fail Closed for Shared-Engine Tenant Resolution](architecture/decisions/0002-shared-engine-fail-closed-resolution.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)

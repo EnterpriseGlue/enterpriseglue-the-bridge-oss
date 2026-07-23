@@ -689,7 +689,7 @@ checkboxes are closed.
 - [x] Define tenant-safe permission classification and initial tenant roles.
 - [x] Define stable tenant references for config and external APIs.
 - [x] Decide external mapping batch limits and atomicity.
-- [ ] Add architecture decision records for default fallback and shared-engine fail-closed behavior.
+- [x] Add architecture decision records for default fallback and shared-engine fail-closed behavior.
 - [x] Create the functional coverage manifest, assign every implemented normative requirement a
   stable ID, and add the zero-uncovered-requirements CI validator.
 

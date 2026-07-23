@@ -52,6 +52,7 @@ import {
   EndpointAuthenticationPolicyMessages,
   EngineRuntimeQueryCapabilitiesSchema,
   EngineTenantMappingSchema,
+  ExternalEngineDecommissionRequestSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
@@ -309,12 +310,6 @@ const externalRegisterEngineBodySchema = ExternalEngineRegistrationRequestSchema
 })
 const externalTenantMappingsBodySchema = ExternalEngineTenantMappingsUpsertRequestSchema.extend({
   externalSystemId: z.string().min(1).nullable().optional(),
-})
-
-const decommissionExternalEngineBodySchema = z.object({
-  externalId: z.string().min(1).max(255),
-  externalSystemId: z.string().min(1).nullable().optional(),
-  reason: z.string().max(2000).nullable().optional(),
 })
 
 const externalProjectEngineTargetModeFlagsSchema = z.object({
@@ -1385,7 +1380,7 @@ r.post('/engines-api/external/engines/decommission', engineLimiter, requireApiCl
   resourceType: 'external_engine_system',
   resourceIdFrom: 'body',
   resourceIdKey: 'externalSystemId',
-}), validateBody(decommissionExternalEngineBodySchema), asyncHandler(async (req: Request, res: Response) => {
+}), validateBody(ExternalEngineDecommissionRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource()
   const engineRepo = dataSource.getRepository(Engine)
   const registrationRepo = dataSource.getRepository(ExternalEngineRegistration)

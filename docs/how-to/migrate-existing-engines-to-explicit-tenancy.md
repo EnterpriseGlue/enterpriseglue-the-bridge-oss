@@ -24,6 +24,7 @@ rehearsal.
 
 ## 1. Generate the Classification Report
 
+<!-- enterpriseglue-curl-contract: GET /engines-api/engines/tenancy/classification-report none -->
 ```bash
 curl --fail-with-body \
   -H "Authorization: Bearer $ENTERPRISEGLUE_TOKEN" \
@@ -53,6 +54,7 @@ The supported matrix is `TEN-MIGRATION-002`:
 
 Example dedicated-to-shared preview:
 
+<!-- enterpriseglue-curl-contract: POST /engines-api/engines/{id}/tenancy/preview EngineTenancyTransitionPreviewRequestSchema -->
 ```bash
 curl --fail-with-body \
   -X POST "$ENTERPRISEGLUE_URL/engines-api/engines/$ENGINE_ID/tenancy/preview" \
@@ -77,6 +79,7 @@ receipts are affected.
 `TEN-MIGRATION-003`: apply requires the returned `previewHash`,
 `previewExpiresAt`, and every returned acknowledgement ID:
 
+<!-- enterpriseglue-curl-contract: POST /engines-api/engines/{id}/tenancy/apply EngineTenancyTransitionApplyRequestSchema -->
 ```bash
 curl --fail-with-body \
   -X POST "$ENTERPRISEGLUE_URL/engines-api/engines/$ENGINE_ID/tenancy/apply" \
