@@ -205,6 +205,14 @@ A broad engine permission does not override these shared-engine rules. Use the
 tenancy diagnostics and mapping reconciliation workflow to resolve a
 quarantined resource; do not widen the engine grant.
 
+When local OSS has no explicit tenant middleware context, Access Control
+targets scoped project, engine, tenant, and runtime-resource assignments at
+the canonical `tenant-default`. This is request-context resolution for the
+selected object, not a fallback for shared inventory: the runtime resource
+must already have an active mapping to that tenant. Platform assignments stay
+tenant-neutral. A direct engine assignment on a shared engine is never
+reported as already granting its mapped runtime resources.
+
 For users, this means a decentralized dedicated engine works immediately in
 its owning tenant. A centralized shared engine appears empty until its runtime
 tenant identity has an active EnterpriseGlue mapping and reconciliation has
@@ -494,8 +502,10 @@ Complete this checklist for each engine before granting normal user access:
    user, API client, or service account.
 4. In Effective Access, verify one allowed object at every scope you use:
    tenant, project, engine, Engine Set, runtime resource, or Runtime Resource
-   Set. Then verify a sibling-tenant and an unresolved shared resource are
-   denied.
+   Set. For a mapped shared resource, also verify the assignment source,
+   expiry, tenant lineage, and exact mapping version. Then verify an expired
+   assignment, a sibling-tenant resource, and an unresolved shared resource
+   are denied.
 5. Exercise the actual work the role permits—a read, mutation, deployment, task,
    job, incident, or history action as applicable—and confirm a prohibited
    action remains unavailable.

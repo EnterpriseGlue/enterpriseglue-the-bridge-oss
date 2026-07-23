@@ -2468,6 +2468,11 @@ class PermissionServiceClass {
     if (scopeType !== 'engine_runtime_resource' && scopeType !== 'engine_runtime_resource_set') return [];
     const engineId = await this.resolveRuntimeScopeEngineId(dataSource, scopeType, scopeId, tenantId);
     if (!engineId) return [];
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: engineId },
+      select: ['id', 'tenancyMode'],
+    });
+    if (engine?.tenancyMode === 'shared') return [];
 
     const rolePermissions = await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: role.id }, select: ['permissionId'] });
     const requestedPermissions = new Set(rolePermissions.map((permission) => permission.permissionId));

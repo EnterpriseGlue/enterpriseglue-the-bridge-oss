@@ -23,6 +23,10 @@ import {
   RoleAssignmentCreateSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { AUTHZ_PRINCIPAL_TYPES, AUTHZ_RESOURCE_TYPES } from '@enterpriseglue/shared/authz/permission-actions.js';
+import {
+  normalizeTenantIdForPersistence,
+  OSS_DEFAULT_TENANT_ID,
+} from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 const authzResourceTypeSchema = z.enum(AUTHZ_RESOURCE_TYPES);
 const authzPrincipalTypeSchema = z.enum(AUTHZ_PRINCIPAL_TYPES);
@@ -41,6 +45,17 @@ const authzGroupMembershipQuerySchema = z.object({
   groupId: z.string().min(1).optional(),
   userId: z.string().uuid().optional(),
 });
+
+function effectiveTenantId(req: Request): string {
+  return normalizeTenantIdForPersistence(req.tenant?.tenantId) || OSS_DEFAULT_TENANT_ID;
+}
+
+function assignmentTenantId(req: Request, input: z.infer<typeof RoleAssignmentCreateSchema>): string | null {
+  const explicitTenantId = normalizeTenantIdForPersistence(req.tenant?.tenantId);
+  if (explicitTenantId) return explicitTenantId;
+  const resourceType = input.scopeType || input.resourceType || 'platform';
+  return resourceType === 'platform' ? null : OSS_DEFAULT_TENANT_ID;
+}
 
 type ScopedAssignmentResource = {
   resourceType: 'project' | 'engine';
@@ -85,7 +100,7 @@ function isScopedManagerAssignableRole(role: ScopedAssignableRoleLike, resource:
 async function hasPlatformPermission(req: Request, permission: Permission): Promise<boolean> {
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
-    tenantId: req.tenant?.tenantId || null,
+    tenantId: effectiveTenantId(req),
     resourceType: 'platform',
   });
 }
@@ -108,7 +123,7 @@ function scopedAssignmentViewPermission(resourceType: ScopedAssignmentResource['
 async function hasScopedAssignmentPermission(req: Request, resource: ScopedAssignmentResource, permission: Permission): Promise<boolean> {
   return permissionService.hasPermission(permission, {
     userId: req.user!.userId,
-    tenantId: req.tenant?.tenantId || null,
+    tenantId: effectiveTenantId(req),
     resourceType: resource.resourceType,
     resourceId: resource.resourceId,
   });
@@ -133,7 +148,7 @@ async function assertCanAssignScopedRole(req: Request, input: z.infer<typeof Rol
   const resource = toScopedAssignmentResource(input.resourceType, input.resourceId);
   if (!resource || !await canManageScopedAssignments(req, resource)) throw Errors.adminRequired();
 
-  const role = await permissionService.getRole(input.roleId, req.tenant?.tenantId || null);
+  const role = await permissionService.getRole(input.roleId, effectiveTenantId(req));
   if (!role) throw Errors.notFound('Role');
   if (!isScopedManagerAssignableRole(role, resource)) {
     throw Errors.forbidden('Resource managers can assign only delegated system roles or active custom roles for the same resource scope');
@@ -150,7 +165,7 @@ async function assertCanRemoveScopedAssignment(req: Request, id: string): Promis
     assignment.scopeId
   );
   if (!resource || !await canManageScopedAssignments(req, resource)) throw Errors.adminRequired();
-  const role = await permissionService.getRole(assignment.roleId, req.tenant?.tenantId || null);
+  const role = await permissionService.getRole(assignment.roleId, effectiveTenantId(req));
   if (!role || !isScopedManagerAssignableRole(role, resource) || assignment.source !== 'manual') {
     throw Errors.forbidden('Resource managers can remove only manual delegated system or custom role assignments for the same resource scope');
   }
@@ -169,7 +184,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
       // this cross-resource inventory view from exposing unrelated grants.
       await assertCanViewRoleAssignments(req, req.query.engineId ? null : resource);
       const assignments = await permissionService.listRoleAssignments({
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         principalType: typeof req.query.principalType === 'string' ? req.query.principalType as any : undefined,
         principalId: typeof req.query.principalId === 'string' ? req.query.principalId : undefined,
         resourceType: typeof req.query.resourceType === 'string' ? req.query.resourceType as any : undefined,
@@ -188,7 +203,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
 
   router.post('/api/authz/role-assignments', apiLimiter, requireAuth, validateBody(RoleAssignmentCreateSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
-      const tenantId = req.tenant?.tenantId || null;
+      const tenantId = assignmentTenantId(req, req.body);
       const input = req.body.resourceType === 'tenant' || req.body.scopeType === 'tenant'
         ? {
             ...req.body,
@@ -227,7 +242,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
   router.get('/api/authz/groups', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.read'), asyncHandler(async (req: Request, res: Response) => {
     try {
       const groups = await authzGroupService.listGroups({
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         includeArchived: req.query.includeArchived === 'true',
       });
       res.json(groups);
@@ -242,7 +257,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     try {
       const result = await authzGroupService.createGroup({
         ...req.body,
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         source: 'manual',
         createdById: req.user!.userId,
       });
@@ -258,7 +273,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     try {
       await authzGroupService.updateGroup(String(req.params.id), {
         ...req.body,
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         updatedById: req.user!.userId,
       });
       res.json({ success: true });
@@ -272,7 +287,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
   router.delete('/api/authz/groups/:id', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.manage'), validateParams(resourceIdParamSchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       await authzGroupService.updateGroup(String(req.params.id), {
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         isArchived: true,
         updatedById: req.user!.userId,
       });
@@ -287,7 +302,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
   router.get('/api/authz/group-memberships', apiLimiter, requireAuth, requirePlatformAction('platform.authz.groups.read'), validateQuery(authzGroupMembershipQuerySchema), asyncHandler(async (req: Request, res: Response) => {
     try {
       const memberships = await authzGroupService.listMemberships({
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         groupId: typeof req.query.groupId === 'string' ? req.query.groupId : undefined,
         userId: typeof req.query.userId === 'string' ? req.query.userId : undefined,
       });
@@ -303,7 +318,7 @@ export function registerAssignmentRoutes(router: Router, { requirePlatformAction
     try {
       const result = await authzGroupService.addMembership({
         ...req.body,
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: effectiveTenantId(req),
         source: 'manual',
         createdById: req.user!.userId,
       });

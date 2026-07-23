@@ -849,6 +849,44 @@ describe('platform-admin authz routes', () => {
     }));
   });
 
+  it('uses the OSS default tenant for scoped assignments without tenant middleware while keeping platform assignments global', async () => {
+    const scopedResponse = await request(app)
+      .post('/api/authz/role-assignments')
+      .set('x-test-omit-tenant-context', 'true')
+      .send({
+        principalType: 'user',
+        principalId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'system.engine.operator',
+        resourceType: 'engine_runtime_resource',
+        resourceId: 'runtime-resource-1',
+      });
+
+    expect(scopedResponse.status).toBe(201);
+    expect(permissionService.assignRole).toHaveBeenLastCalledWith(expect.objectContaining({
+      tenantId: 'tenant-default',
+      resourceType: 'engine_runtime_resource',
+      resourceId: 'runtime-resource-1',
+    }));
+
+    const platformResponse = await request(app)
+      .post('/api/authz/role-assignments')
+      .set('x-test-omit-tenant-context', 'true')
+      .send({
+        principalType: 'user',
+        principalId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'system.platform.admin',
+        resourceType: 'platform',
+        resourceId: null,
+      });
+
+    expect(platformResponse.status).toBe(201);
+    expect(permissionService.assignRole).toHaveBeenLastCalledWith(expect.objectContaining({
+      tenantId: null,
+      resourceType: 'platform',
+      resourceId: null,
+    }));
+  });
+
   it('lists exact runtime grants only through the platform-authorized engine filter', async () => {
     const response = await request(app)
       .get('/api/authz/role-assignments?engineId=engine-1');

@@ -81,12 +81,22 @@ async function provePrincipalRoleAssignmentMatrix(input: {
   page: Page;
   csrf: string;
   engineId: string;
+  runtimeResource: Record<string, unknown>;
   channel: ProvisioningJourneyChannel;
   suffix: string;
   commit: string;
   sourceState: string;
 }): Promise<void> {
-  const { page, csrf, engineId, channel, suffix, commit, sourceState } = input;
+  const {
+    page,
+    csrf,
+    engineId,
+    runtimeResource,
+    channel,
+    suffix,
+    commit,
+    sourceState,
+  } = input;
   const fixture = getE2EFineGrainedFixture();
   expect(fixture.scopedUserId, 'Journey 8 requires the seeded direct user').toBeTruthy();
   expect(fixture.groupScopedUserId, 'Journey 8 requires the seeded group member').toBeTruthy();
@@ -242,6 +252,130 @@ async function provePrincipalRoleAssignmentMatrix(input: {
       ]));
     }
 
+    const runtimeResourceId = String(runtimeResource.id);
+    const resourceKind = String(runtimeResource.resourceKind);
+    const resourceKey = String(runtimeResource.resourceKey);
+    const runtimeTenantId = String(runtimeResource.runtimeTenantId);
+    const tenantId = String(runtimeResource.tenantId);
+    const tenantMappingId = String(runtimeResource.tenantMappingId);
+    const tenantMappingVersion = Number(runtimeResource.tenantMappingVersion);
+    expect(runtimeResourceId).not.toBe('undefined');
+    expect(['process_definition', 'decision_definition']).toContain(resourceKind);
+    expect(resourceKey).not.toBe('undefined');
+    expect(runtimeTenantId).not.toBe('undefined');
+    expect(tenantId).toBe('tenant-default');
+    expect(tenantMappingId).not.toBe('undefined');
+    expect(tenantMappingVersion).toBeGreaterThan(0);
+
+    const expiresAt = Date.now() + 60_000;
+    const expiringAssignment = await responseJson<{ id: string; warnings?: string[] }>(
+      await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        roleId,
+        resourceType: 'engine_runtime_resource',
+        resourceId: runtimeResourceId,
+        expiresAt,
+      })),
+      `assign Journey 9 ${channel} expiring runtime role`,
+    );
+    assignmentIds.push(expiringAssignment.id);
+    expect(expiringAssignment.warnings ?? []).toEqual([]);
+
+    const runtimeEvaluation = await responseJson<{
+      allowed: boolean;
+      resolvedRuntimeResource: Record<string, unknown>;
+      sources: Array<Record<string, unknown>>;
+    }>(
+      await page.request.post('/api/authz/evaluate', mutationOptions(csrf, {
+        userId: fixture.scopedUserId,
+        permission: 'engine:instance:view',
+        resourceType: 'engine_runtime_resource',
+        runtimeResource: {
+          engineId,
+          resourceKind,
+          resourceKey,
+          runtimeTenantId,
+        },
+      })),
+      `evaluate Journey 9 ${channel} runtime lineage`,
+    );
+    expect(runtimeEvaluation.allowed).toBe(true);
+    expect(runtimeEvaluation.resolvedRuntimeResource).toMatchObject({
+      id: runtimeResourceId,
+      engineId,
+      resourceKind,
+      resourceKey,
+      runtimeTenantId,
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId,
+      tenantMappingVersion,
+    });
+    expect(runtimeEvaluation.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        assignmentId: expiringAssignment.id,
+        roleId,
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        tenantId: 'tenant-default',
+        expiresAt,
+        scopeType: 'engine_runtime_resource',
+        scopeId: runtimeResourceId,
+        runtimeTenantResolution: expect.objectContaining({
+          tenantId: 'tenant-default',
+          status: 'resolved',
+          mappingId: tenantMappingId,
+          mappingVersion: tenantMappingVersion,
+          engineTenancyMode: 'shared',
+        }),
+      }),
+    ]));
+
+    const removeExpiringAssignment = await page.request.delete(
+      `/api/authz/role-assignments/${encodeURIComponent(expiringAssignment.id)}`,
+      mutationOptions(csrf),
+    );
+    expect(removeExpiringAssignment.status()).toBe(204);
+    assignmentIds.splice(assignmentIds.indexOf(expiringAssignment.id), 1);
+
+    const expiredAssignment = await responseJson<{ id: string }>(
+      await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        roleId,
+        resourceType: 'engine_runtime_resource',
+        resourceId: runtimeResourceId,
+        expiresAt: Date.now() - 1,
+      })),
+      `assign Journey 9 ${channel} expired runtime role`,
+    );
+    assignmentIds.push(expiredAssignment.id);
+
+    const expiredEvaluation = await responseJson<{
+      allowed: boolean;
+      reason: string;
+      sources: Array<Record<string, unknown>>;
+    }>(
+      await page.request.post('/api/authz/evaluate', mutationOptions(csrf, {
+        userId: fixture.scopedUserId,
+        permission: 'engine:instance:view',
+        resourceType: 'engine_runtime_resource',
+        runtimeResource: {
+          engineId,
+          resourceKind,
+          resourceKey,
+          runtimeTenantId,
+        },
+      })),
+      `evaluate Journey 9 ${channel} expired runtime role`,
+    );
+    expect(expiredEvaluation).toMatchObject({
+      allowed: false,
+      reason: 'no-permission',
+      sources: [],
+    });
+
     const observationDirectory = path.join(
       process.cwd(),
       'test/results/engine-tenancy-provisioning-observations',
@@ -269,6 +403,36 @@ async function provePrincipalRoleAssignmentMatrix(input: {
           'service-account',
           'predefined-role',
           'custom-role',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
+    await writeFile(
+      path.join(observationDirectory, `journey-09-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 9,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'source',
+          'tenant-lineage',
+          'expiry',
+          'mapping-version',
         ],
         sanitization: {
           containsCredentials: false,
@@ -1339,6 +1503,9 @@ test.describe('Engine tenancy provisioning journeys', () => {
         page,
         csrf: token,
         engineId: sharedEngineId,
+        runtimeResource: mappedResources.find(
+          (resource) => resource.runtimeTenantId === 'e2e-runtime-blue',
+        )!,
         channel: 'manual-ui',
         suffix,
         commit,
@@ -1684,6 +1851,9 @@ test.describe('Engine tenancy provisioning journeys', () => {
         page,
         csrf: token,
         engineId: sharedEngineId,
+        runtimeResource: mappedResources.find(
+          (resource) => resource.runtimeTenantId === 'e2e-runtime-blue',
+        )!,
         channel: 'external-api',
         suffix,
         commit,
@@ -2209,6 +2379,9 @@ test.describe('Engine tenancy provisioning journeys', () => {
         page,
         csrf: token,
         engineId: sharedEngineId,
+        runtimeResource: mappedResources.find(
+          (resource) => resource.runtimeTenantId === 'e2e-runtime-blue',
+        )!,
         channel: 'configuration-bundle',
         suffix,
         commit,

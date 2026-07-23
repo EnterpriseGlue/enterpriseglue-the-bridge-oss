@@ -129,8 +129,9 @@ Journey 7 proves runtime-resource tenant resolution through all three required
 channels. Journey 8 proves direct-user, group-derived-user, API-client, and
 service-account assignments with both predefined and custom engine roles
 against each channel-provisioned shared engine. The implemented denominator is
-therefore eight of fourteen journeys and twelve of thirty required channel
-executions. Journeys 9–14 stay explicitly missing until their matching
+extended by Journey 9's Effective Access source, tenant-lineage, real expiry,
+and exact mapping-version checks. It is therefore nine of fourteen journeys
+and fifteen of thirty required channel executions. Journeys 10–14 stay explicitly missing until their matching
 real-service tests are implemented and qualified on the same clean commit.
 
 Journey 2 creates a reveal-once disposable API client, first proves the
@@ -205,6 +206,15 @@ HTTP deployment, rotation, expiry, and revocation behavior is covered by the
 machine-principal lane and will be repeated in the relevant later journeys.
 All Journey 8 assignments, credentials, and roles are removed or archived
 before the channel removes its engine.
+
+Journey 9 adds a time-bounded assignment for one mapped shared runtime
+resource and evaluates it by its engine/resource/runtime-tenant selector. The
+response must identify the exact assignment and custom role, the canonical
+default tenant, the mapping ID and version, and `shared` topology. The test
+then replaces that assignment with an already-expired assignment and proves
+the same selector is denied with no active authorization sources. This also
+proves that a shared engine-wide assignment is not treated as runtime-resource
+inheritance.
 
 The journey runner succeeds when every currently implemented journey passes,
 but keeps the assembled artifact visibly incomplete while any of the 14

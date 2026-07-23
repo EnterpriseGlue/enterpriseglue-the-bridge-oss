@@ -17,9 +17,9 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The real-service provisioning suite now passes Journeys 1–8, including all
-three required channels of Journeys 7 and 8: eight of fourteen journeys and
-twelve of thirty required channel executions. It covers the manual UI, a least-privilege
+The real-service provisioning suite now passes Journeys 1–9, including all
+three required channels of Journeys 7–9: nine of fourteen journeys and
+fifteen of thirty required channel executions. It covers the manual UI, a least-privilege
 external API client, and authoritative configuration bundles against the same
 local HTTP service, PostgreSQL database, authorization evaluator, and
 Camunda-compatible Docker endpoint. The provisioning release artifact remains
@@ -109,16 +109,16 @@ meaning of 100% functional coverage are documented in
 | Foundation | 45 |
 | Provisioning | 117 |
 | Mappings and configuration ownership | 248 |
-| Authorization and custom roles | 327 |
+| Authorization and custom roles | 329 |
 | Runtime enforcement | 348 |
 | Classification and transitions | 151 |
 | Operational metrics | 46 |
 | Documentation and traceability | 52 |
-| **Focused-lane total** | **1,334** |
+| **Focused-lane total** | **1,336** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
-| Real-service provisioning channel executions | **12** |
+| Real-service provisioning channel executions | **15** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -182,6 +182,9 @@ engine: direct users, groups, API clients, and service accounts are persisted
 through canonical assignments; both predefined and custom engine roles are
 covered; and the live Effective Access evaluator proves direct and
 group-derived sources.
+Journey 9 proves the exact source, tenant, mapping ID/version, and expiry
+lineage for an allowed mapped runtime resource, then proves an expired
+replacement assignment yields a denial with no active sources.
 
 ## Defects Found and Fixed
 
@@ -216,6 +219,19 @@ canonical default tenant. This denied valid Effective Access and omitted
 tenant-owned group engines. Evaluation now uses the effective default tenant
 while the browser snapshot remains bound to the raw session tenant contract.
 Route tests and the live browser journeys cover both sides.
+
+Scoped role-assignment routes had the same omitted-context mismatch for
+default-tenant runtime resources. They now use the canonical OSS default
+tenant for project, engine, tenant, and runtime scopes when middleware has no
+tenant, while platform assignments remain tenant-neutral. The live Journey 9
+test proves the route can create and evaluate a default-tenant runtime
+assignment.
+
+Runtime-assignment guidance also incorrectly warned that a direct engine role
+already granted the same runtime permission on a shared engine. Shared
+topology intentionally disables that inheritance. The warning service now
+checks topology and emits no broad-grant warning for shared engines; a
+dedicated resource-aware engine retains the warning.
 
 The initial active-session test covered only a single Chromium page. It now
 proves a new authorization version and no stale grant in two simultaneous
@@ -289,7 +305,7 @@ release qualification. The remaining gates are:
   MySQL, SQL Server, Oracle, and Spanner;
 - complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
   evidence for all new browser workflows;
-- implement Journeys 9–14, then execute all 14 supported UI, external API, and
+- implement Journeys 10–14, then execute all 14 supported UI, external API, and
   configuration provisioning journeys (30 required channel executions)
   against persistent local services and record stable errors for unsupported
   combinations;

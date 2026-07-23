@@ -1889,6 +1889,33 @@ describe('permissionService', () => {
     expect(result.warnings).toEqual([expect.stringContaining(EnginePermissions.INSTANCE_VIEW)]);
   });
 
+  it('does not claim that engine-wide assignments grant runtime resources on shared engines', async () => {
+    const insertAssignment = vi.fn().mockResolvedValue(undefined);
+    const duplicateQb = { where: vi.fn().mockReturnThis(), getOne: vi.fn().mockResolvedValue(null) };
+    const rolePermissionFind = vi.fn()
+      .mockResolvedValueOnce([{ permissionId: EnginePermissions.INSTANCE_VIEW }]);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { findOne: vi.fn().mockResolvedValue({ id: 'custom.engine.viewer', scope: 'engine', kind: 'custom', tenantId: null, isArchived: false, isAssignable: true }) };
+        if (entity === AuthzGroup) return { findOne: vi.fn().mockResolvedValue({ id: 'group-1', isArchived: false }) };
+        if (entity === RuntimeResource) return { findOne: vi.fn().mockResolvedValue({ id: 'runtime-1', engineId: 'engine-1' }) };
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenancyMode: 'shared', runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RbacRolePermission) return { find: rolePermissionFind };
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(duplicateQb), insert: insertAssignment };
+        if (entity === AuditLog) return { insert: vi.fn().mockResolvedValue(undefined) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await permissionService.assignRole({
+      principalType: 'group', principalId: 'group-1', roleId: 'custom.engine.viewer',
+      scopeType: 'engine_runtime_resource', scopeId: 'runtime-1', createdById: 'admin-1',
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(rolePermissionFind).not.toHaveBeenCalled();
+  });
+
   it('lets an engine-scoped role target a runtime-resource set without changing its role scope', async () => {
     const insertAssignment = vi.fn().mockResolvedValue(undefined);
     const duplicateQb = { where: vi.fn().mockReturnThis(), getOne: vi.fn().mockResolvedValue(null) };
