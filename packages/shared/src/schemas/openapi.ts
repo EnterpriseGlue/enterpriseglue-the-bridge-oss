@@ -60,6 +60,14 @@ const {
   EngineConnectionHealthResponseSchema,
   EngineConnectionModeSchema,
   EngineTransportDiagnosticsSchema,
+  EngineTenancyModeSchema,
+  EngineTenantMappingStrategySchema,
+  EngineTenantReferenceSchema,
+  EngineTenantMappingSchema,
+  EngineTenancyConfigurationSchema,
+  EngineTenancyDiagnosticsSchema,
+  ExternalEngineTenantMappingsUpsertRequestSchema,
+  ExternalEngineTenantMappingsUpsertResponseSchema,
   EndpointAuthenticationPolicyErrorSchema,
   CreateEngineRequestSchema,
   UpdateEngineRequestSchema,
@@ -941,6 +949,14 @@ registry.registerPath({
 registry.register('Engine', EngineSchema)
 registry.register('EngineConnectionMode', EngineConnectionModeSchema)
 registry.register('EngineTransportDiagnostics', EngineTransportDiagnosticsSchema)
+registry.register('EngineTenancyMode', EngineTenancyModeSchema)
+registry.register('EngineTenantMappingStrategy', EngineTenantMappingStrategySchema)
+registry.register('EngineTenantReference', EngineTenantReferenceSchema)
+registry.register('EngineTenantMapping', EngineTenantMappingSchema)
+registry.register('EngineTenancyConfiguration', EngineTenancyConfigurationSchema)
+registry.register('EngineTenancyDiagnostics', EngineTenancyDiagnosticsSchema)
+registry.register('ExternalEngineTenantMappingsUpsertRequest', ExternalEngineTenantMappingsUpsertRequestSchema)
+registry.register('ExternalEngineTenantMappingsUpsertResponse', ExternalEngineTenantMappingsUpsertResponseSchema)
 registry.register('EndpointAuthenticationPolicyError', EndpointAuthenticationPolicyErrorSchema)
 registry.register('CreateEngineRequest', CreateEngineRequestSchema)
 registry.register('UpdateEngineRequest', UpdateEngineRequestSchema)

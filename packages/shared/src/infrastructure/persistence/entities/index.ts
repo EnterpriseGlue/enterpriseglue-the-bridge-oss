@@ -33,6 +33,7 @@ export { EngineDeploymentArtifact } from './EngineDeploymentArtifact.js';
 export { EngineHealth } from './EngineHealth.js';
 export { EngineMember } from './EngineMember.js';
 export { EngineProjectAccess } from './EngineProjectAccess.js';
+export { EngineTenantMapping } from './EngineTenantMapping.js';
 export { EngineSet } from './EngineSet.js';
 export { EngineSetMaterialization } from './EngineSetMaterialization.js';
 export { EnvironmentTag } from './EnvironmentTag.js';

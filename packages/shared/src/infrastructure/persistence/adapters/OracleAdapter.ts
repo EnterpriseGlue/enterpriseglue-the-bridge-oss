@@ -14,7 +14,7 @@ import {
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
+  Engine, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
@@ -29,7 +29,7 @@ const entities = [
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
   GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
+  Engine, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];

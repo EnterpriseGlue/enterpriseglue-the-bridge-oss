@@ -1000,6 +1000,11 @@ r.post('/engines-api/engines', engineLimiter, requireAuth, engineRegistrationLim
     environmentTagId: req.body.environmentTagId || null,
     environmentLocked: false,
     runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
+    tenancyMode: 'dedicated',
+    tenantMappingStrategy: null,
+    tenantMappingVersion: 0,
+    tenantResolutionStatus: tenantId ? 'ready' : 'migration_required',
+    lastTenantReconciledAt: null,
     deploymentIntegration: req.body.deploymentIntegration || 'enterpriseglue_proxy',
     metadataDiscoveryEnabled: req.body.metadataDiscoveryEnabled ?? true,
     deploymentDiscoveryEnabled: req.body.deploymentDiscoveryEnabled ?? true,
@@ -1186,6 +1191,11 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     delegateId: null,
     environmentLocked: false,
     tenantId,
+    tenancyMode: 'dedicated',
+    tenantMappingStrategy: null,
+    tenantMappingVersion: 0,
+    tenantResolutionStatus: tenantId ? 'ready' : 'migration_required',
+    lastTenantReconciledAt: null,
     createdAt: now,
   }
   await engineService.createEngineWithGovernanceAssignments(created, dataSource)

@@ -11,6 +11,8 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_engines_lifecycle_status', ['lifecycleStatus'])
 @Index('idx_engines_capability_status', ['capabilityStatus'])
 @Index('idx_engines_source_ref', ['sourceRef'])
+@Index('idx_engines_tenancy_mode', ['tenancyMode'])
+@Index('idx_engines_tenant_resolution_status', ['tenantResolutionStatus'])
 @Index('uq_engines_config_key_identity', ['configKeyIdentity'], { unique: true })
 export class Engine extends AppBaseEntity {
   @Column({ type: 'text' })
@@ -100,6 +102,22 @@ export class Engine extends AppBaseEntity {
   /** Distributed engines remain engine-wide; central engines opt into resource-aware filtering. */
   @Column({ name: 'runtime_access_scope', type: 'text', default: 'engine_wide' })
   runtimeAccessScope!: string;
+
+  /** Dedicated engines have one tenant; shared engines require explicit resource mappings. */
+  @Column({ name: 'tenancy_mode', type: 'text', default: 'dedicated' })
+  tenancyMode!: string;
+
+  @Column({ name: 'tenant_mapping_strategy', type: 'text', nullable: true })
+  tenantMappingStrategy!: string | null;
+
+  @Column({ name: 'tenant_mapping_version', type: 'integer', default: 0 })
+  tenantMappingVersion!: number;
+
+  @Column({ name: 'tenant_resolution_status', type: 'text', default: 'migration_required' })
+  tenantResolutionStatus!: string;
+
+  @Column({ name: 'last_tenant_reconciled_at', type: 'bigint', nullable: true })
+  lastTenantReconciledAt!: number | null;
 
   @Column({ name: 'deployment_integration', type: 'text', default: 'enterpriseglue_proxy' })
   deploymentIntegration!: string;

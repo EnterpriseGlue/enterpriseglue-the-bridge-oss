@@ -36,7 +36,16 @@ describe('runtimeResourceInventoryService', () => {
     }]);
     expect(result).toEqual({ created: 1, updated: 0 });
     expect(resourceRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
-      engineId: 'engine-1', tenantId: 'tenant-a', runtimeTenantId: '', resourceKey: 'payments-order', labelsJson: '{"domain":"payments"}', lineageJson: '{"projectId":"project-1"}',
+      engineId: 'engine-1',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      tenantMappingId: null,
+      tenantMappingVersion: 0,
+      tenantResolutionDetailsJson: '{"code":"dedicated_engine_tenant"}',
+      runtimeTenantId: '',
+      resourceKey: 'payments-order',
+      labelsJson: '{"domain":"payments"}',
+      lineageJson: '{"projectId":"project-1"}',
     }));
   });
 

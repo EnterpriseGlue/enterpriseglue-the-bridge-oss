@@ -17,6 +17,8 @@ import { DropRoleAssignmentResourceAliases1700000000094 as DbDropRoleAssignmentR
 import { DropRoleAssignmentResourceAliases1700000000094 as PersistenceDropRoleAssignmentResourceAliasesMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000094-drop-role-assignment-resource-aliases.js';
 import { DropRoleAssignmentUserAlias1700000000095 as DbDropRoleAssignmentUserAliasMigration } from '@enterpriseglue/shared/db/migrations/1700000000095-drop-role-assignment-user-alias.js';
 import { DropRoleAssignmentUserAlias1700000000095 as PersistenceDropRoleAssignmentUserAliasMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000095-drop-role-assignment-user-alias.js';
+import { AddEngineTenancyFoundation1700000000096 as DbEngineTenancyFoundationMigration } from '@enterpriseglue/shared/db/migrations/1700000000096-add-engine-tenancy-foundation.js';
+import { AddEngineTenancyFoundation1700000000096 as PersistenceEngineTenancyFoundationMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000096-add-engine-tenancy-foundation.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
@@ -29,5 +31,6 @@ describe('persistence migration bridges', () => {
     expect(PersistenceDropRoleAssignmentSourceMappingAliasMigration).toBe(DbDropRoleAssignmentSourceMappingAliasMigration);
     expect(PersistenceDropRoleAssignmentResourceAliasesMigration).toBe(DbDropRoleAssignmentResourceAliasesMigration);
     expect(PersistenceDropRoleAssignmentUserAliasMigration).toBe(DbDropRoleAssignmentUserAliasMigration);
+    expect(PersistenceEngineTenancyFoundationMigration).toBe(DbEngineTenancyFoundationMigration);
   });
 });

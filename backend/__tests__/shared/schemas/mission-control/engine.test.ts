@@ -6,6 +6,11 @@ import {
   EndpointAuthenticationPolicyMessages,
   EngineSchema,
   EngineConnectionHealthResponseSchema,
+  EngineTenancyConfigurationSchema,
+  EngineTenantMappingSchema,
+  EngineTenantReferenceSchema,
+  ExternalEngineTenantMappingsUpsertRequestSchema,
+  ExternalEngineTenantMappingsUpsertResponseSchema,
   ExternalEngineRegistrationRequestSchema,
   UpdateEngineRequestSchema,
 } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
@@ -146,6 +151,105 @@ describe('EngineSchema', () => {
         code: 'VALIDATION_ERROR',
       })).toEqual({ error, code: 'VALIDATION_ERROR' });
     }
+  });
+
+  it('defines one strict dedicated/shared tenancy contract before provisioning exposes it', () => {
+    expect(EngineTenancyConfigurationSchema.parse({
+      mode: 'dedicated',
+      tenantRef: { type: 'request_context' },
+    })).toEqual({
+      mode: 'dedicated',
+      tenantRef: { type: 'request_context' },
+    });
+    expect(EngineTenancyConfigurationSchema.parse({
+      mode: 'shared',
+      mappingStrategy: 'engine_tenant_id',
+    })).toEqual({
+      mode: 'shared',
+      mappingStrategy: 'engine_tenant_id',
+      unmappedPolicy: 'deny',
+    });
+    expect(EngineTenancyConfigurationSchema.safeParse({
+      mode: 'shared',
+      mappingStrategy: 'engine_tenant_id',
+      unmappedPolicy: 'default_tenant',
+    }).success).toBe(false);
+    expect(EngineTenancyConfigurationSchema.safeParse({
+      mode: 'dedicated',
+      mappingStrategy: 'explicit',
+    }).success).toBe(false);
+  });
+
+  it('accepts only explicit tenant-reference kinds and stable lowercase keys', () => {
+    for (const reference of [
+      { type: 'request_context' },
+      { type: 'default' },
+      { type: 'key', key: 'tenant.team-a' },
+      { type: 'id', id: 'tenant-default' },
+    ]) {
+      expect(EngineTenantReferenceSchema.safeParse(reference).success).toBe(true);
+    }
+    expect(EngineTenantReferenceSchema.safeParse({ type: 'key', key: 'Team A' }).success).toBe(false);
+    expect(EngineTenantReferenceSchema.safeParse({ type: 'id', id: '' }).success).toBe(false);
+    expect(EngineTenantReferenceSchema.safeParse({ type: 'slug', slug: 'default' }).success).toBe(false);
+  });
+
+  it('bounds atomic external mapping batches and publishes sanitized results', () => {
+    const request = ExternalEngineTenantMappingsUpsertRequestSchema.parse({
+      mappings: [{
+        externalTenantId: 'native-team-a',
+        tenantRef: { type: 'key', key: 'tenant.team-a' },
+        strategy: 'engine_tenant_id',
+        sourceRef: 'external-system:hr:tenant:native-team-a',
+      }],
+    });
+    expect(request).toMatchObject({ atomic: true, dryRun: false });
+
+    const response = ExternalEngineTenantMappingsUpsertResponseSchema.parse({
+      engineId: 'engine-1',
+      externalId: 'central-1',
+      dryRun: true,
+      mappingVersion: 3,
+      created: 1,
+      updated: 0,
+      deactivated: 0,
+      unchanged: 0,
+      results: [{ index: 0, status: 'created', mappingId: 'mapping-1', code: null }],
+      diagnostics: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'engine_tenant_id',
+        mappingVersion: 3,
+        resolutionStatus: 'ready',
+        lastReconciledAt: null,
+      },
+    });
+    expect(response.diagnostics).toMatchObject({
+      mappedResourceCount: 0,
+      unmappedResourceCount: 0,
+      conflictingResourceCount: 0,
+    });
+    expect(ExternalEngineTenantMappingsUpsertRequestSchema.safeParse({ mappings: [] }).success).toBe(false);
+  });
+
+  it('describes persisted mapping provenance without accepting unknown fields', () => {
+    const mapping = {
+      id: 'mapping-1',
+      engineId: 'engine-1',
+      externalTenantId: 'native-team-a',
+      enterpriseTenantId: 'tenant-a',
+      strategy: 'engine_tenant_id',
+      source: 'external',
+      sourceRef: 'external-system:hr:tenant:native-team-a',
+      ownershipMode: 'external_managed',
+      sourceHash: null,
+      lastAppliedAt: null,
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    expect(EngineTenantMappingSchema.parse(mapping)).toEqual(mapping);
+    expect(EngineTenantMappingSchema.safeParse({ ...mapping, accessToken: 'secret' }).success).toBe(false);
   });
 
   it('rejects undeclared sidecar transport fields instead of accepting downstream credentials', () => {

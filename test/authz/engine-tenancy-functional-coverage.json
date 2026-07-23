@@ -1,0 +1,90 @@
+[
+  {
+    "id": "TEN-MODEL-001",
+    "requirement": "Engine topology and tenant resolution state are persisted independently from runtime access scope.",
+    "source": "Engine Tenancy Data Model / Engine Record",
+    "dimensions": ["dedicated", "shared", "migration"],
+    "expected": "explicit persistence metadata",
+    "testFile": "backend/__tests__/shared/db/canonicalAuthzSchemaInvariants.test.ts",
+    "testName": "persists explicit engine topology and fail-closed runtime tenant resolution metadata",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-MODEL-002",
+    "requirement": "Shared-engine mapping and source identities are portable and unique.",
+    "source": "Engine Tenancy Data Model / Shared-Engine Tenant Mapping",
+    "dimensions": ["engine_tenant_id", "deployment_target", "explicit"],
+    "expected": "unique mapping and source identities",
+    "testFile": "backend/__tests__/shared/db/canonicalAuthzSchemaInvariants.test.ts",
+    "testName": "persists explicit engine topology and fail-closed runtime tenant resolution metadata",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-MODEL-003",
+    "requirement": "Runtime inventory persists mapping version and sanitized fail-closed resolution state.",
+    "source": "Engine Tenancy Data Model / Runtime-Resource Resolution",
+    "dimensions": ["resolved", "unmapped", "conflict", "stale"],
+    "expected": "resolution evidence is persisted",
+    "testFile": "backend/__tests__/shared/db/canonicalAuthzSchemaInvariants.test.ts",
+    "testName": "persists explicit engine topology and fail-closed runtime tenant resolution metadata",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-MODEL-004",
+    "requirement": "The mapping entity is registered in every supported database adapter.",
+    "source": "Engine Tenancy Data Model / Database Portability",
+    "dimensions": ["postgres", "mysql", "mssql", "oracle", "spanner"],
+    "expected": "all adapter registries contain EngineTenantMapping",
+    "testFile": "backend/__tests__/shared/db/adapterEntityRegistry.test.ts",
+    "testName": "registers every canonical authorization, identity, config, and runtime entity in every adapter",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-API-001",
+    "requirement": "Dedicated and shared topology use one strict canonical schema family registered in OpenAPI.",
+    "source": "Engine Tenancy Data Model / Canonical Contracts",
+    "dimensions": ["dedicated", "shared", "manual", "external", "config"],
+    "expected": "strict canonical schemas",
+    "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+    "testName": "defines one strict dedicated/shared tenancy contract before provisioning exposes it",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-API-002",
+    "requirement": "External mapping batches are bounded, atomic, version-aware, dry-runnable, and sanitized.",
+    "source": "Engine Tenancy Data Model / Canonical Contracts",
+    "dimensions": ["external", "dry_run", "atomic", "optimistic_concurrency"],
+    "expected": "bounded request and sanitized response",
+    "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+    "testName": "bounds atomic external mapping batches and publishes sanitized results",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-RUNTIME-001",
+    "requirement": "Dedicated resource observations persist explicit resolved state and sanitized lineage.",
+    "source": "Engine Tenancy Data Model / Current Provisioning Behavior",
+    "dimensions": ["dedicated", "resolved", "unmapped"],
+    "expected": "resolved with tenant; unmapped without tenant",
+    "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+    "testName": "persists only sanitized runtime metadata and normalizes no runtime tenant to an empty key",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  },
+  {
+    "id": "TEN-DOCS-001",
+    "requirement": "Every implemented engine-tenancy requirement has linked executable evidence and Markdown documentation.",
+    "source": "Engine Tenancy Data Model / Functional Coverage",
+    "dimensions": ["developer_docs", "user_docs", "test_evidence"],
+    "expected": "manifest links resolve and requirement ids are documented",
+    "testFile": "scripts/engine-tenancy-functional-coverage.test.mjs",
+    "testName": "validates every engine tenancy functional coverage entry",
+    "documentation": "docs/reference/engine-tenancy-data-model.md",
+    "ciJob": "test:engine-tenancy:foundation"
+  }
+]

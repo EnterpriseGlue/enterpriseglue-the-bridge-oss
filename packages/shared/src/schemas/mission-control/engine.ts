@@ -10,6 +10,124 @@ export type EngineConnectionMode = z.infer<typeof EngineConnectionModeSchema>;
 export const EngineCapabilityStatusSchema = z.enum(['unknown', 'in_sync', 'mismatch']);
 export type EngineCapabilityStatus = z.infer<typeof EngineCapabilityStatusSchema>;
 
+export const EngineTenancyModeSchema = z.enum(['dedicated', 'shared']);
+export const EngineTenantMappingStrategySchema = z.enum(['engine_tenant_id', 'deployment_target', 'explicit']);
+export const EngineTenantResolutionStatusSchema = z.enum(['ready', 'incomplete', 'conflict', 'migration_required']);
+export const RuntimeResourceTenantResolutionStatusSchema = z.enum(['resolved', 'unmapped', 'conflict', 'stale']);
+export const EngineTenantMappingSourceSchema = z.enum(['manual', 'api', 'external', 'config', 'system']);
+export const EngineTenantMappingOwnershipModeSchema = z.enum([
+  'manual',
+  'config_warn',
+  'config_locked',
+  'external_managed',
+]);
+
+/**
+ * A tenant reference declares how a trusted service must resolve tenancy. An
+ * id reference is still subject to caller authorization; parsing it is never
+ * sufficient authorization to use it.
+ */
+export const EngineTenantReferenceSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('request_context') }).strict(),
+  z.object({ type: z.literal('default') }).strict(),
+  z.object({
+    type: z.literal('key'),
+    key: z.string().min(1).max(160).regex(
+      /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/,
+      'Use a stable lowercase tenant key',
+    ),
+  }).strict(),
+  z.object({ type: z.literal('id'), id: z.string().min(1).max(255) }).strict(),
+]);
+
+const DedicatedEngineTenancyConfigurationSchema = z.object({
+  mode: z.literal('dedicated'),
+  tenantRef: EngineTenantReferenceSchema.optional(),
+}).strict();
+
+const SharedEngineTenancyConfigurationSchema = z.object({
+  mode: z.literal('shared'),
+  mappingStrategy: EngineTenantMappingStrategySchema,
+  unmappedPolicy: z.literal('deny').default('deny'),
+}).strict();
+
+export const EngineTenancyConfigurationSchema = z.discriminatedUnion('mode', [
+  DedicatedEngineTenancyConfigurationSchema,
+  SharedEngineTenancyConfigurationSchema,
+]);
+
+export const EngineTenancyDiagnosticsSchema = z.object({
+  mode: EngineTenancyModeSchema,
+  tenantId: z.string().nullable(),
+  mappingStrategy: EngineTenantMappingStrategySchema.nullable(),
+  mappingVersion: z.number().int().nonnegative(),
+  resolutionStatus: EngineTenantResolutionStatusSchema,
+  lastReconciledAt: z.number().nullable(),
+  mappedResourceCount: z.number().int().nonnegative().default(0),
+  unmappedResourceCount: z.number().int().nonnegative().default(0),
+  conflictingResourceCount: z.number().int().nonnegative().default(0),
+}).strict();
+
+export const EngineTenantMappingSchema = z.object({
+  id: z.string(),
+  engineId: z.string(),
+  externalTenantId: z.string(),
+  enterpriseTenantId: z.string(),
+  strategy: EngineTenantMappingStrategySchema,
+  source: EngineTenantMappingSourceSchema,
+  sourceRef: z.string(),
+  ownershipMode: EngineTenantMappingOwnershipModeSchema,
+  sourceHash: z.string().nullable(),
+  lastAppliedAt: z.number().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+}).strict();
+
+export const ExternalEngineTenantMappingUpsertSchema = z.object({
+  externalTenantId: z.string().max(255).default(''),
+  tenantRef: EngineTenantReferenceSchema,
+  strategy: EngineTenantMappingStrategySchema,
+  sourceRef: z.string().min(1).max(500),
+  active: z.boolean().default(true),
+}).strict();
+
+export const ExternalEngineTenantMappingsUpsertRequestSchema = z.object({
+  expectedMappingVersion: z.number().int().nonnegative().optional(),
+  dryRun: z.boolean().default(false),
+  atomic: z.literal(true).default(true),
+  mappings: z.array(ExternalEngineTenantMappingUpsertSchema).min(1).max(500),
+}).strict();
+
+export const ExternalEngineTenantMappingUpsertResultSchema = z.object({
+  index: z.number().int().nonnegative(),
+  status: z.enum(['created', 'updated', 'deactivated', 'noop', 'rejected']),
+  mappingId: z.string().nullable(),
+  code: z.string().nullable(),
+}).strict();
+
+export const ExternalEngineTenantMappingsUpsertResponseSchema = z.object({
+  engineId: z.string(),
+  externalId: z.string(),
+  dryRun: z.boolean(),
+  mappingVersion: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  deactivated: z.number().int().nonnegative(),
+  unchanged: z.number().int().nonnegative(),
+  results: z.array(ExternalEngineTenantMappingUpsertResultSchema),
+  diagnostics: EngineTenancyDiagnosticsSchema,
+}).strict();
+
+export type EngineTenancyMode = z.infer<typeof EngineTenancyModeSchema>;
+export type EngineTenantMappingStrategy = z.infer<typeof EngineTenantMappingStrategySchema>;
+export type EngineTenantReference = z.infer<typeof EngineTenantReferenceSchema>;
+export type EngineTenancyConfiguration = z.infer<typeof EngineTenancyConfigurationSchema>;
+export type EngineTenancyDiagnostics = z.infer<typeof EngineTenancyDiagnosticsSchema>;
+export type EngineTenantMapping = z.infer<typeof EngineTenantMappingSchema>;
+export type ExternalEngineTenantMappingsUpsertRequest = z.input<typeof ExternalEngineTenantMappingsUpsertRequestSchema>;
+export type ExternalEngineTenantMappingsUpsertResponse = z.infer<typeof ExternalEngineTenantMappingsUpsertResponseSchema>;
+
 export const EndpointAuthenticationPolicyMessages = [
   'Credentialless endpoint authentication is allowed only for customer-sidecar engines',
   'Credentialless customer-sidecar endpoints are disabled by platform policy',
@@ -216,6 +334,12 @@ export const EngineSchemaRaw = z.object({
   capabilityStatus: EngineCapabilityStatusSchema.or(z.string()).nullable().optional(),
   capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema.optional(),
   runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).optional(),
+  tenancyMode: EngineTenancyModeSchema.optional(),
+  tenantId: z.string().nullable().optional(),
+  tenantMappingStrategy: EngineTenantMappingStrategySchema.nullable().optional(),
+  tenantMappingVersion: z.number().int().nonnegative().optional(),
+  tenantResolutionStatus: EngineTenantResolutionStatusSchema.optional(),
+  lastTenantReconciledAt: z.number().nullable().optional(),
   deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).optional(),
   metadataDiscoveryEnabled: z.boolean().optional(),
   deploymentDiscoveryEnabled: z.boolean().optional(),
@@ -266,6 +390,12 @@ export const EngineSchema = EngineSchemaRaw.transform((e) => ({
   capabilityStatus: nullToUndefined(e.capabilityStatus ?? null),
   capabilityDiagnostics: e.capabilityDiagnostics,
   runtimeAccessScope: e.runtimeAccessScope || 'engine_wide',
+  tenancyMode: e.tenancyMode || 'dedicated',
+  tenantId: e.tenantId ?? null,
+  tenantMappingStrategy: e.tenantMappingStrategy ?? null,
+  tenantMappingVersion: e.tenantMappingVersion ?? 0,
+  tenantResolutionStatus: e.tenantResolutionStatus || (e.tenantId ? 'ready' : 'migration_required'),
+  lastTenantReconciledAt: e.lastTenantReconciledAt ?? null,
   deploymentIntegration: e.deploymentIntegration || 'enterpriseglue_proxy',
   metadataDiscoveryEnabled: e.metadataDiscoveryEnabled !== false,
   deploymentDiscoveryEnabled: e.deploymentDiscoveryEnabled !== false,
@@ -320,6 +450,11 @@ export const AccessibleEngineSummarySchema = z.object({
   capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema.optional(),
   capabilities: EngineCapabilitiesSchema.optional(),
   runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']).optional(),
+  tenancyMode: EngineTenancyModeSchema.optional(),
+  tenantMappingStrategy: EngineTenantMappingStrategySchema.nullable().optional(),
+  tenantMappingVersion: z.number().int().nonnegative().optional(),
+  tenantResolutionStatus: EngineTenantResolutionStatusSchema.optional(),
+  lastTenantReconciledAt: z.number().nullable().optional(),
   deploymentIntegration: z.enum(['enterpriseglue_proxy', 'direct_engine']).optional(),
   metadataDiscoveryEnabled: z.boolean().optional(),
   deploymentDiscoveryEnabled: z.boolean().optional(),
@@ -372,6 +507,12 @@ export const EngineInsertSchema = z.object({
   reportedCapabilities: ExternalEngineCapabilitiesSchema.nullable().optional(),
   capabilityStatus: EngineCapabilityStatusSchema.optional(),
   capabilityDiagnostics: ExternalEngineCapabilityDiagnosticsSchema.optional(),
+  tenancyMode: EngineTenancyModeSchema.optional(),
+  tenantId: z.string().nullable().optional(),
+  tenantMappingStrategy: EngineTenantMappingStrategySchema.nullable().optional(),
+  tenantMappingVersion: z.number().int().nonnegative().optional(),
+  tenantResolutionStatus: EngineTenantResolutionStatusSchema.optional(),
+  lastTenantReconciledAt: z.number().nullable().optional(),
   active: z.boolean().optional(),
   version: z.string().optional(),
   createdAt: z.number().optional(),

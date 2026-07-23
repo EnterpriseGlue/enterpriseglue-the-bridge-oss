@@ -1018,6 +1018,10 @@ export const EffectiveAccessEvaluateResponseSchema = z.object({
 export const RuntimeResourceSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable(),
+  tenantResolutionStatus: z.enum(['resolved', 'unmapped', 'conflict', 'stale']).default('unmapped'),
+  tenantMappingId: z.string().nullable().default(null),
+  tenantMappingVersion: z.number().int().nonnegative().default(0),
+  tenantResolutionDetailsJson: z.string().default('{}'),
   engineId: z.string(),
   resourceKind: RuntimeResourceKindSchema,
   resourceKey: z.string(),

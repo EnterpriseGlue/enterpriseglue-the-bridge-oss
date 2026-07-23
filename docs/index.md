@@ -35,6 +35,7 @@ Audience: Developers and architects.
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
+- [Engine Tenancy Data Model](reference/engine-tenancy-data-model.md)
 - [Non-Postgres Database Setup](how-to/database-non-postgres.md)
 
 ## Operations

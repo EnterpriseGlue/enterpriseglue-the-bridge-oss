@@ -89,7 +89,14 @@ class RuntimeResourceInventoryService {
       const source = observation.source || 'engine_discovery';
       const preservesExistingLineage = source === 'engine_discovery' && Boolean(existing);
       const values = {
-        tenantId: tenantId || null, engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId,
+        tenantId: tenantId || null,
+        tenantResolutionStatus: tenantId ? 'resolved' : 'unmapped',
+        tenantMappingId: null,
+        tenantMappingVersion: 0,
+        tenantResolutionDetailsJson: stableJson({
+          code: tenantId ? 'dedicated_engine_tenant' : 'tenant_context_missing',
+        }),
+        engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId,
         engineResourceId: observation.engineResourceId || existing?.engineResourceId || null,
         deploymentId: observation.deploymentId || existing?.deploymentId || null,
         projectId: observation.projectId || (preservesExistingLineage ? existing?.projectId : null) || null,

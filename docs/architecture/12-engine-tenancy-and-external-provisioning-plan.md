@@ -666,29 +666,29 @@ checkboxes are closed.
 
 ### Phase 0: contract decisions
 
-- [ ] Confirm `dedicated` and `shared` as canonical API values.
-- [ ] Confirm the first supported shared mapping strategies.
+- [x] Confirm `dedicated` and `shared` as canonical API values.
+- [x] Confirm the first supported shared mapping strategies.
 - [ ] Define tenant-safe permission classification and initial tenant roles.
-- [ ] Define stable tenant references for config and external APIs.
-- [ ] Decide external mapping batch limits and atomicity.
+- [x] Define stable tenant references for config and external APIs.
+- [x] Decide external mapping batch limits and atomicity.
 - [ ] Add architecture decision records for default fallback and shared-engine fail-closed behavior.
 - [ ] Create the functional coverage manifest, assign every normative requirement a
   stable ID, and add the zero-uncovered-requirements CI validator.
 
 ### Phase 1: persistence and migration
 
-- [ ] Add engine topology/diagnostic fields.
-- [ ] Add tenant mapping entity/table.
-- [ ] Add runtime-resource tenant-resolution fields.
-- [ ] Register entities in every database adapter.
-- [ ] Add portable migrations and schema invariants.
+- [x] Add engine topology/diagnostic fields.
+- [x] Add tenant mapping entity/table.
+- [x] Add runtime-resource tenant-resolution fields.
+- [x] Register entities in every database adapter.
+- [x] Add portable migrations and schema invariants.
 - [ ] Implement classification preview and migration evidence report.
 
 ### Phase 2: shared contracts
 
-- [ ] Add canonical tenancy and mapping schemas.
+- [x] Add canonical tenancy and mapping schemas.
 - [ ] Extend create/update/external registration requests.
-- [ ] Extend sanitized responses and OpenAPI.
+- [x] Extend sanitized responses and OpenAPI.
 - [ ] Extend configuration-bundle schemas.
 - [ ] Add stable API error schemas.
 - [ ] Add schema compatibility tests for omitted dedicated mode.

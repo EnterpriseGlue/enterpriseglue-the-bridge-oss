@@ -14,6 +14,7 @@ const REQUIRED_CANONICAL_ENTITIES = [
   'AuthzGroupMembership',
   'IdentityEntitlementMapping',
   'ExternalIdentity',
+  'EngineTenantMapping',
   'EngineSet',
   'RuntimeResourceSet',
   'RuntimeResource',

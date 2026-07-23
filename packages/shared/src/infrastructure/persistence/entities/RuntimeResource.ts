@@ -12,6 +12,10 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_runtime_resources_active', ['engineId', 'isActive'])
 export class RuntimeResource extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
+  @Column({ name: 'tenant_resolution_status', type: 'text', default: 'unmapped' }) tenantResolutionStatus!: string;
+  @Column({ name: 'tenant_mapping_id', type: 'text', nullable: true }) tenantMappingId!: string | null;
+  @Column({ name: 'tenant_mapping_version', type: 'integer', default: 0 }) tenantMappingVersion!: number;
+  @Column({ name: 'tenant_resolution_details_json', type: 'text', default: '{}' }) tenantResolutionDetailsJson!: string;
   @Column({ name: 'engine_id', type: 'text' }) engineId!: string;
   @Column({ name: 'resource_kind', type: 'text' }) resourceKind!: string;
   @Column({ name: 'resource_key', type: 'text' }) resourceKey!: string;

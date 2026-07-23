@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { UserSummarySchema } from './project-member.js';
-import { EngineAuthTypeSchema, EngineConnectionModeSchema } from '../mission-control/engine.js';
+import {
+  EngineAuthTypeSchema,
+  EngineConnectionModeSchema,
+  EngineTenancyModeSchema,
+  EngineTenantMappingStrategySchema,
+  EngineTenantResolutionStatusSchema,
+} from '../mission-control/engine.js';
 
 // Engine roles
 export const EngineRoleSchema = z.enum(['owner', 'delegate', 'operator', 'deployer', 'custom']);
@@ -118,6 +124,12 @@ export const EngineWithDetailsSchema = z.object({
     authType: z.string().nullable().optional(),
     connectionMode: EngineConnectionModeSchema,
     runtimeAccessScope: EngineRuntimeAccessScopeSchema,
+    tenancyMode: EngineTenancyModeSchema.default('dedicated'),
+    tenantId: z.string().nullable().default(null),
+    tenantMappingStrategy: EngineTenantMappingStrategySchema.nullable().default(null),
+    tenantMappingVersion: z.number().int().nonnegative().default(0),
+    tenantResolutionStatus: EngineTenantResolutionStatusSchema.default('migration_required'),
+    lastTenantReconciledAt: z.number().nullable().default(null),
     deploymentIntegration: EngineDeploymentIntegrationSchema,
     endpointAuthentication: EngineEndpointAuthenticationSummarySchema,
     governance: EngineGovernanceMetadataSchema,

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getMetadataArgsStorage } from 'typeorm';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { DeploymentReceipt } from '@enterpriseglue/shared/infrastructure/persistence/entities/DeploymentReceipt.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
@@ -19,6 +21,7 @@ import { AddRuntimeResourceInventory1700000000055 } from '@enterpriseglue/shared
 import { AddDeploymentHistoryLineage1700000000058 } from '@enterpriseglue/shared/db/migrations/1700000000058-add-deployment-history-lineage.js';
 import { RequireCanonicalRoleAssignmentShape1700000000084 } from '@enterpriseglue/shared/db/migrations/1700000000084-require-canonical-role-assignment-shape.js';
 import { AddRoleAssignmentSourceRefIndex1700000000085 } from '@enterpriseglue/shared/db/migrations/1700000000085-add-role-assignment-source-ref-index.js';
+import { AddEngineTenancyFoundation1700000000096 } from '@enterpriseglue/shared/db/migrations/1700000000096-add-engine-tenancy-foundation.js';
 import { externalIdentityKey } from '@enterpriseglue/shared/services/platform-admin/ExternalIdentityService.js';
 
 function column(target: Function, propertyName: string) {
@@ -193,6 +196,71 @@ describe('canonical authorization persistence schema invariants', () => {
     ]));
     expect(tables[2].uniques).toEqual(expect.arrayContaining([
       expect.objectContaining({ columnNames: ['runtime_resource_set_id', 'runtime_resource_id'] }),
+    ]));
+  });
+
+  it('persists explicit engine topology and fail-closed runtime tenant resolution metadata', async () => {
+    expect(column(Engine, 'tenancyMode')?.options.default).toBe('dedicated');
+    expect(column(Engine, 'tenantMappingStrategy')?.options.nullable).toBe(true);
+    expect(column(Engine, 'tenantMappingVersion')?.options.default).toBe(0);
+    expect(column(Engine, 'tenantResolutionStatus')?.options.default).toBe('migration_required');
+    expect(column(RuntimeResource, 'tenantResolutionStatus')?.options.default).toBe('unmapped');
+    expect(column(RuntimeResource, 'tenantMappingId')?.options.nullable).toBe(true);
+    expect(column(RuntimeResource, 'tenantMappingVersion')?.options.default).toBe(0);
+    expect(column(RuntimeResource, 'tenantResolutionDetailsJson')?.options.default).toBe('{}');
+
+    expect(uniqueColumnSets(EngineTenantMapping)).toEqual(expect.arrayContaining([
+      ['engineId', 'source', 'sourceRef'],
+      ['engineId', 'strategy', 'externalTenantId'],
+    ]));
+    expect(column(EngineTenantMapping, 'externalTenantId')?.options.default).toBe('');
+    expect(column(EngineTenantMapping, 'enterpriseTenantId')?.options.nullable).not.toBe(true);
+    expect(column(EngineTenantMapping, 'sourceRef')?.options.nullable).not.toBe(true);
+
+    const addColumn = vi.fn().mockResolvedValue(undefined);
+    const createIndex = vi.fn().mockResolvedValue(undefined);
+    const createTable = vi.fn().mockResolvedValue(undefined);
+    const query = vi.fn().mockResolvedValue(undefined);
+    const getTable = vi.fn().mockResolvedValue({ indices: [] });
+    const hasTable = vi.fn(async (tableName: string) => tableName !== 'engine_tenant_mappings');
+    await new AddEngineTenancyFoundation1700000000096().up({
+      hasTable,
+      hasColumn: vi.fn().mockResolvedValue(false),
+      addColumn,
+      createIndex,
+      createTable,
+      query,
+      getTable,
+      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+    } as any);
+
+    expect(addColumn.mock.calls.map(([tableName, definition]) => [tableName, definition.name])).toEqual([
+      ['engines', 'tenancy_mode'],
+      ['engines', 'tenant_mapping_strategy'],
+      ['engines', 'tenant_mapping_version'],
+      ['engines', 'tenant_resolution_status'],
+      ['engines', 'last_tenant_reconciled_at'],
+      ['runtime_resources', 'tenant_resolution_status'],
+      ['runtime_resources', 'tenant_mapping_id'],
+      ['runtime_resources', 'tenant_mapping_version'],
+      ['runtime_resources', 'tenant_resolution_details_json'],
+    ]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining(
+      "CASE WHEN tenant_id IS NOT NULL THEN 'ready' ELSE 'migration_required' END",
+    ));
+    expect(query).toHaveBeenCalledWith(expect.stringContaining(
+      "CASE WHEN tenant_id IS NOT NULL THEN 'resolved' ELSE 'unmapped' END",
+    ));
+    expect(createIndex.mock.calls.map(([, index]) => index.name)).toEqual([
+      'idx_engines_tenancy_mode',
+      'idx_engines_tenant_resolution_status',
+      'idx_runtime_resources_tenant_resolution',
+    ]);
+    const mappingTable = createTable.mock.calls[0][0];
+    expect(mappingTable.name).toBe('engine_tenant_mappings');
+    expect(mappingTable.uniques).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnNames: ['engine_id', 'strategy', 'external_tenant_id'] }),
+      expect.objectContaining({ columnNames: ['engine_id', 'source', 'source_ref'] }),
     ]));
   });
 });

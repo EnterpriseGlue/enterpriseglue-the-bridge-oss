@@ -55,4 +55,33 @@ describe('engine registration OpenAPI contracts', () => {
         .toEqual(schemas?.EndpointAuthenticationPolicyError);
     }
   });
+
+  it('publishes canonical engine tenancy, mapping, diagnostics, and batch contracts', () => {
+    const schemas = generateOpenApi().components?.schemas;
+
+    expect(schemas?.EngineTenancyMode).toEqual({
+      type: 'string',
+      enum: ['dedicated', 'shared'],
+    });
+    expect(schemas?.EngineTenantMappingStrategy).toEqual({
+      type: 'string',
+      enum: ['engine_tenant_id', 'deployment_target', 'explicit'],
+    });
+    expect(schemas?.EngineTenancyConfiguration?.oneOf).toHaveLength(2);
+    expect(schemas?.EngineTenancyConfiguration?.oneOf).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        properties: expect.objectContaining({ mode: { type: 'string', enum: ['dedicated'] } }),
+      }),
+      expect.objectContaining({
+        properties: expect.objectContaining({ mode: { type: 'string', enum: ['shared'] } }),
+      }),
+    ]));
+    expect(schemas?.EngineTenancyDiagnostics?.properties).toHaveProperty('resolutionStatus');
+    expect(schemas?.EngineTenantMapping?.properties).not.toHaveProperty('credentials');
+    expect(schemas?.ExternalEngineTenantMappingsUpsertRequest?.properties).toMatchObject({
+      expectedMappingVersion: { type: 'integer', minimum: 0 },
+      atomic: { type: 'boolean', default: true, enum: [true] },
+    });
+    expect(schemas?.ExternalEngineTenantMappingsUpsertResponse?.properties).toHaveProperty('diagnostics');
+  });
 });
