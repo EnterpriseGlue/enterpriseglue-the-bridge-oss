@@ -130,9 +130,20 @@ channels. Journey 8 proves direct-user, group-derived-user, API-client, and
 service-account assignments with both predefined and custom engine roles
 against each channel-provisioned shared engine. The implemented denominator is
 extended by Journey 9's Effective Access source, tenant-lineage, real expiry,
-and exact mapping-version checks. It is therefore nine of fourteen journeys
-and fifteen of thirty required channel executions. Journeys 10–14 stay explicitly missing until their matching
-real-service tests are implemented and qualified on the same clean commit.
+and exact mapping-version checks. Journey 10 then exercises filtered and denied
+process-definition, process-instance, preview-count, mutation, batch, job, task,
+incident, history, and deployment-history paths. Its request ledger proves an
+inventoried but unauthorized sibling definition is denied before the matching
+Camunda detail request is sent. The implemented denominator is therefore ten
+of fourteen journeys and eighteen of thirty required channel executions.
+Journeys 11–14 stay explicitly missing until their matching real-service tests
+are implemented and qualified on the same clean commit.
+
+The Journey 10 fixture exposes a localhost-only mock control endpoint. The
+runner resets its request ledger immediately before the denied detail request
+and reads the ledger afterward. Health and control requests are excluded from
+the ledger. This is transport evidence for the exact denied resource path, not
+an assertion that unrelated, concurrent dashboard polling never occurs.
 
 Journey 2 creates a reveal-once disposable API client, first proves the
 machine principal is denied without its registrar role, then executes create,

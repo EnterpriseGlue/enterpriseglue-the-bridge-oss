@@ -705,6 +705,37 @@ describe('requireAction project resource resolvers', () => {
     });
   });
 
+  it('denies an inventoried shared sibling before contacting the engine', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue({
+      id: 'runtime-resource-sibling',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'sibling',
+      runtimeTenantId: 'runtime-b',
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-visible',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: 'runtime-a',
+    }]);
+
+    const response = await request(app)
+      .get(`/runtime-definitions/sibling-definition?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).not.toHaveBeenCalled();
+    expect(permissionService.hasPermission).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves a shared definition through explicit inventory without an active tenant', async () => {
     engineFindOne.mockResolvedValue({
       id: engineId,
@@ -773,6 +804,31 @@ describe('requireAction project resource resolvers', () => {
       type: 'engine_runtime_resource',
       id: 'runtime-resource-1',
     });
+  });
+
+  it('denies an older shared definition when the engine cannot provide authorization lineage', async () => {
+    engineFindOne.mockResolvedValue({
+      id: engineId,
+      tenantId: null,
+      tenancyMode: 'shared',
+      runtimeAccessScope: 'resource_aware',
+    });
+    runtimeResourceFindOne.mockResolvedValue(null);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'runtime-resource-1',
+      tenantId: 'tenant-a',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments',
+      runtimeTenantId: 'runtime-a',
+    }]);
+    camundaGet.mockResolvedValue({ id: 'definition-without-lineage' });
+
+    const response = await request(app)
+      .get(`/runtime-definitions/definition-without-lineage?engineId=${engineId}&tenantId=tenant-a`);
+
+    expect(response.status).toBe(403);
+    expect(camundaGet).toHaveBeenCalledTimes(1);
   });
 
   it('authorizes one exact shared definition key without engine discovery transport', async () => {
@@ -862,7 +918,7 @@ describe('requireAction project resource resolvers', () => {
     expect(camundaGet).not.toHaveBeenCalled();
   });
 
-  it('fails closed when a historical shared definition has no stable authorization key', async () => {
+  it('fails closed without transport when a historical shared definition is no longer visible', async () => {
     engineFindOne.mockResolvedValue({
       id: engineId,
       tenantId: null,
@@ -892,7 +948,7 @@ describe('requireAction project resource resolvers', () => {
       .get(`/runtime-definitions/definition-v1?engineId=${engineId}&tenantId=tenant-a`);
 
     expect(response.status).toBe(403);
-    expect(camundaGet).toHaveBeenCalledTimes(1);
+    expect(camundaGet).not.toHaveBeenCalled();
   });
 
   it('authorizes historical shared no-tenant lineage without treating null as an enterprise tenant', async () => {

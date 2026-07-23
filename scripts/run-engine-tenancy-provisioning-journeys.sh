@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
 api_url="${ENGINE_TENANCY_API_URL:-http://localhost:8787}"
+mock_control_url="${CAMUNDA_MOCK_CONTROL_URL:-http://localhost:${CAMUNDA_MOCK_HOST_PORT:-59080}}"
 ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
 env_file="${ENGINE_TENANCY_LOCAL_ENV_FILE:-.local/docker/env/docker.env}"
 
@@ -19,8 +20,8 @@ try {
 NODE
 }
 
-if ! is_local_url "$base_url" || ! is_local_url "$api_url"; then
-  echo "[engine-tenancy-provisioning] Browser and API URLs must target localhost, loopback, or a .local host." >&2
+if ! is_local_url "$base_url" || ! is_local_url "$api_url" || ! is_local_url "$mock_control_url"; then
+  echo "[engine-tenancy-provisioning] Browser, API, and mock-control URLs must target localhost, loopback, or a .local host." >&2
   exit 2
 fi
 
@@ -44,6 +45,11 @@ if ! curl --fail --silent --show-error --max-time 5 "$api_url/ready" >/dev/null;
   exit 2
 fi
 
+if ! curl --fail --silent --show-error --max-time 5 "$mock_control_url/health" >/dev/null; then
+  echo "[engine-tenancy-provisioning] Mock-engine control endpoint is unavailable at $mock_control_url/health." >&2
+  exit 2
+fi
+
 if ! curl --fail --silent --show-error --max-time 5 --cacert "$ca_file" "$base_url/login" >/dev/null; then
   echo "[engine-tenancy-provisioning] TLS frontend is unavailable at $base_url/login." >&2
   exit 2
@@ -62,6 +68,7 @@ export E2E_SEED_USER=true
 export E2E_DIRECT_DB_CLEANUP=true
 export ENGINE_TENANCY_LOCAL_EVIDENCE=true
 export ENGINE_TENANCY_PROVISIONING_EVIDENCE=true
+export CAMUNDA_MOCK_CONTROL_URL="$mock_control_url"
 export PLAYWRIGHT_BASE_URL="$base_url"
 export PLAYWRIGHT_LOCAL_CA_FILE="$ca_file"
 export PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true

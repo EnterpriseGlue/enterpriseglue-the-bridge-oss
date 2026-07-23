@@ -7,6 +7,8 @@ services:
     image: node:24-alpine
     working_dir: /mock
     command: ["node", "server.mjs"]
+    ports:
+      - "${CAMUNDA_MOCK_HOST_PORT:-59080}:9080"
     environment:
       MOCK_CAMUNDA_USE_ADAPTED_BUNDLE: ${MOCK_CAMUNDA_USE_ADAPTED_BUNDLE:-}
     volumes:

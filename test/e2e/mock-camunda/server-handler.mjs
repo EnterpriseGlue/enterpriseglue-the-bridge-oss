@@ -92,7 +92,7 @@ const partitionedRuntimePathPrefix = '/e2e-shared-engine-rest'
 const standardRuntimePathPrefix = '/engine-rest'
 
 function withPartitionedRuntimeTenant(item) {
-  if (!item || typeof item !== 'object' || Array.isArray(item) || !('tenantId' in item)) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
     return item
   }
   const identity = String(
@@ -118,6 +118,13 @@ function withPartitionedRuntimeTenants(value) {
 }
 
 export function createMockCamundaHandler() {
+  const requestLedger = new Map()
+
+  function recordRequest(method, pathname) {
+    const key = `${method} ${pathname}`
+    requestLedger.set(key, (requestLedger.get(key) || 0) + 1)
+  }
+
   return async function mockCamundaHandler(req, res) {
     try {
       const requestedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
@@ -134,6 +141,24 @@ export function createMockCamundaHandler() {
         sendJson(res, 200, { ok: true })
         return
       }
+
+      if (req.method === 'POST' && pathname === '/__e2e/requests/reset') {
+        requestLedger.clear()
+        sendNoContent(res)
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/__e2e/requests') {
+        sendJson(res, 200, {
+          total: Array.from(requestLedger.values()).reduce((sum, count) => sum + count, 0),
+          requests: Array.from(requestLedger.entries())
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([request, count]) => ({ request, count })),
+        })
+        return
+      }
+
+      recordRequest(req.method || 'GET', pathname)
 
       if (req.method === 'GET' && pathname === '/engine-rest/process-definition') {
         const definitions = filterProcessDefinitions(searchParams)
@@ -181,7 +206,12 @@ export function createMockCamundaHandler() {
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/process-instance') {
-        sendJson(res, 200, filterRuntimeInstances(searchParams))
+        const instances = filterRuntimeInstances(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(instances) : instances,
+        )
         return
       }
 
@@ -209,12 +239,17 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown process instance: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/history/process-instance') {
-        sendJson(res, 200, filterHistoricProcessInstances(searchParams))
+        const instances = filterHistoricProcessInstances(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(instances) : instances,
+        )
         return
       }
 
@@ -225,7 +260,7 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown historic process instance: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 
@@ -265,13 +300,64 @@ export function createMockCamundaHandler() {
         return
       }
 
+      if (req.method === 'GET' && pathname === '/engine-rest/task') {
+        const runtimeTasks = [
+          {
+            id: 'task-review-primary',
+            name: 'Review Invoice',
+            assignee: 'demo.reviewer',
+            created: '2026-03-09T10:00:02.000Z',
+            executionId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            processInstanceId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            processDefinitionId: 'invoice-process:3:mock-process-definition',
+            processDefinitionKey: 'invoice-process',
+            taskDefinitionKey: 'Activity_Review',
+            suspended: false,
+            tenantId: null,
+          },
+          {
+            id: 'task-sequential-review',
+            name: 'Review Line Item',
+            assignee: 'sequential.approver.3',
+            created: '2026-03-09T11:04:04.000Z',
+            executionId: 'Execution_seq_review_3',
+            processInstanceId: '11111111-2222-4333-8444-555555555555',
+            processDefinitionId: 'invoice-sequential-review:1:mock-process-definition',
+            processDefinitionKey: 'invoice-sequential-review',
+            taskDefinitionKey: 'Activity_SequentialReview',
+            suspended: false,
+            tenantId: null,
+          },
+        ]
+        const processDefinitionKey = searchParams.get('processDefinitionKey')
+        const filtered = processDefinitionKey
+          ? runtimeTasks.filter((task) => task.processDefinitionKey === processDefinitionKey)
+          : runtimeTasks
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(filtered) : filtered,
+        )
+        return
+      }
+
       if (req.method === 'GET' && pathname === '/engine-rest/incident') {
-        sendJson(res, 200, filterIncidents(searchParams))
+        const incidents = filterIncidents(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(incidents) : incidents,
+        )
         return
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/job') {
-        sendJson(res, 200, filterJobs(searchParams))
+        const jobs = filterJobs(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(jobs) : jobs,
+        )
         return
       }
 

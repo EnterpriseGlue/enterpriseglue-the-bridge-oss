@@ -156,12 +156,20 @@ registered through the external API, or applied from a configuration bundle:
    created it and confirm its mappings and inventory no longer authorize
    access.
 
-The repository's localhost-only Journeys 4–7 automation executes this
+The repository's localhost-only Journeys 4–10 automation executes this
 sequence through the manual, external, and configuration provisioning
 lifecycles against the real backend, PostgreSQL database, authorization
 evaluator, and a Docker-hosted Camunda-compatible endpoint. Passing these
 journeys proves the channel behavior is aligned; it does not replace the full
 14-journey, 30-channel release gate.
+
+Journeys 8 and 9 add predefined/custom roles for human and machine principals
+and verify the Effective Access source, tenant lineage, expiry, and mapping
+version. Journey 10 uses the resulting least-privilege role to verify that
+Mission Control returns only the mapped definition and its instances, tasks,
+and history. It also verifies safe denial for unbounded counts and query-based
+batches, allows an exact authorized mutation, and rejects an unauthorized
+sibling definition before sending that detail request to the engine.
 
 ### Manage Topology and Mappings in the UI
 

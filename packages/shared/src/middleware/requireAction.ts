@@ -1225,10 +1225,12 @@ export function requireRuntimeDefinitionAction(actionId: string, options: Requir
               }, tenantId),
               select: ['id', 'tenantId', 'tenantResolutionStatus', 'resourceKey', 'runtimeTenantId'],
             });
-            runtimeResource = direct && visibleResources!.some((candidate) => candidate.id === direct.id)
-              ? direct
-              : null;
-            if (!runtimeResource) {
+            if (direct) {
+              if (!visibleResources!.some((candidate) => candidate.id === direct.id)) {
+                throw Errors.forbidden('Runtime definition is not present in the authorization inventory');
+              }
+              runtimeResource = direct;
+            } else {
               const definition = await camundaGet<Record<string, unknown>>(
                 engineId,
                 `/${options.definitionPath}/${encodeURIComponent(definitionId)}`

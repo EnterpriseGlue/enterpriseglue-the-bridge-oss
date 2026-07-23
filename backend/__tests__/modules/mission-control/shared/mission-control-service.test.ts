@@ -12,6 +12,7 @@ let getProcessInstanceVariables: typeof import('../../../../../packages/backend-
 let getProcessInstanceVariableHistory: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariableHistory;
 let getProcessInstanceExecutionDetails: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceExecutionDetails;
 let listProcessDefinitions: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').listProcessDefinitions;
+let listProcessInstancesDetailed: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').listProcessInstancesDetailed;
 let resolveProcessDefinition: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').resolveProcessDefinition;
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
@@ -36,6 +37,7 @@ describe('mission-control-service', () => {
       getProcessInstanceVariableHistory,
       getProcessInstanceExecutionDetails,
       listProcessDefinitions,
+      listProcessInstancesDetailed,
       resolveProcessDefinition,
     } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js'));
   });
@@ -71,6 +73,41 @@ describe('mission-control-service', () => {
       key: 'invoice',
       tenantIdIn: ['runtime-a'],
       maxResults: 10,
+    });
+  });
+
+  it('preserves runtime tenant lineage while normalizing process-instance rows', async () => {
+    vi.mocked(camundaGet)
+      .mockResolvedValueOnce([{
+        id: 'instance-1',
+        definitionId: 'invoice:3:definition-1',
+        tenantId: 'runtime-blue',
+        suspended: false,
+      }] as any)
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    const result = await listProcessInstancesDetailed('engine-1', {
+      active: 'true',
+      processDefinitionKey: 'invoice',
+      tenantIdIn: ['runtime-blue'],
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'instance-1',
+        processDefinitionKey: 'invoice',
+        tenantId: 'runtime-blue',
+        state: 'ACTIVE',
+      }),
+    ]);
+    expect(camundaGet).toHaveBeenNthCalledWith(1, 'engine-1', '/process-instance', {
+      active: true,
+      suspended: false,
+      processDefinitionKey: 'invoice',
+      tenantIdIn: ['runtime-blue'],
+      withoutTenantId: undefined,
+      maxResults: undefined,
     });
   });
 

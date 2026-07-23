@@ -199,6 +199,9 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     activityId,
     startedAfter,
     startedBefore,
+    tenantIdIn,
+    withoutTenantId,
+    maxResults,
   } = query as {
     processDefinitionKey?: string
     processDefinitionId?: string
@@ -211,6 +214,9 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     activityId?: string
     startedAfter?: string
     startedBefore?: string
+    tenantIdIn?: string[]
+    withoutTenantId?: boolean
+    maxResults?: number
   }
 
   const wantActive = active === 'true' || active === '1'
@@ -229,11 +235,17 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     endTime: string | null
     state: 'ACTIVE' | 'SUSPENDED' | 'COMPLETED' | 'CANCELED' | 'INCIDENT'
     hasIncident?: boolean
+    tenantId?: string | null
   }> = []
   const seen = new Set<string>()
 
   async function pushRuntime(params: Record<string, any>) {
-    const runtime = await camundaGet<any[]>(engineId, '/process-instance', params)
+    const runtime = await camundaGet<any[]>(engineId, '/process-instance', {
+      ...params,
+      tenantIdIn,
+      withoutTenantId,
+      maxResults,
+    })
     for (const r of runtime) {
       if (seen.has(r.id)) continue
       seen.add(r.id)
@@ -249,6 +261,7 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
         startTime: null,
         endTime: null,
         state: r.suspended ? 'SUSPENDED' : 'ACTIVE',
+        tenantId: typeof r.tenantId === 'string' ? r.tenantId : null,
       })
     }
   }
@@ -314,7 +327,12 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
   }
 
   if (wantCompleted || wantCanceled) {
-    const histParams: Record<string, any> = { finished: true }
+    const histParams: Record<string, any> = {
+      finished: true,
+      tenantIdIn,
+      withoutTenantId,
+      maxResults,
+    }
     if (processDefinitionKey) histParams.processDefinitionKey = processDefinitionKey
     if (processDefinitionId) histParams.processDefinitionId = processDefinitionId
     if (superProcessInstanceId) histParams.superProcessInstanceId = superProcessInstanceId
@@ -397,6 +415,7 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
           startTime: h.startTime || null,
           endTime: h.endTime || null,
           state: isCanceled ? 'CANCELED' : 'COMPLETED',
+          tenantId: typeof h.tenantId === 'string' ? h.tenantId : null,
         })
       }
     }

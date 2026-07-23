@@ -17,9 +17,9 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The real-service provisioning suite now passes Journeys 1–9, including all
-three required channels of Journeys 7–9: nine of fourteen journeys and
-fifteen of thirty required channel executions. It covers the manual UI, a least-privilege
+The real-service provisioning suite now passes Journeys 1–10, including all
+three required channels of Journeys 7–10: ten of fourteen journeys and
+eighteen of thirty required channel executions. It covers the manual UI, a least-privilege
 external API client, and authoritative configuration bundles against the same
 local HTTP service, PostgreSQL database, authorization evaluator, and
 Camunda-compatible Docker endpoint. The provisioning release artifact remains
@@ -110,15 +110,15 @@ meaning of 100% functional coverage are documented in
 | Provisioning | 117 |
 | Mappings and configuration ownership | 248 |
 | Authorization and custom roles | 329 |
-| Runtime enforcement | 348 |
+| Runtime enforcement | 354 |
 | Classification and transitions | 151 |
 | Operational metrics | 46 |
 | Documentation and traceability | 52 |
-| **Focused-lane total** | **1,336** |
+| **Focused-lane total** | **1,342** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
-| Real-service provisioning channel executions | **15** |
+| Real-service provisioning channel executions | **18** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -305,7 +305,7 @@ release qualification. The remaining gates are:
   MySQL, SQL Server, Oracle, and Spanner;
 - complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
   evidence for all new browser workflows;
-- implement Journeys 10–14, then execute all 14 supported UI, external API, and
+- implement Journeys 11–14, then execute all 14 supported UI, external API, and
   configuration provisioning journeys (30 required channel executions)
   against persistent local services and record stable errors for unsupported
   combinations;

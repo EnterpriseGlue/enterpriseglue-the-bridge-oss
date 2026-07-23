@@ -4,6 +4,7 @@ import {
   test,
   type APIRequestContext,
   type APIResponse,
+  type BrowserContext,
   type Page,
 } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
@@ -29,9 +30,11 @@ function isLocalUrl(value: string): boolean {
 
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 const apiUrl = process.env.ENGINE_TENANCY_API_URL || 'http://localhost:8787';
+const mockCamundaControlUrl = process.env.CAMUNDA_MOCK_CONTROL_URL || 'http://localhost:59080';
 const enabled = process.env.ENGINE_TENANCY_PROVISIONING_EVIDENCE === 'true'
   && isLocalUrl(baseUrl)
   && isLocalUrl(apiUrl)
+  && isLocalUrl(mockCamundaControlUrl)
   && hasE2ECredentials();
 
 function git(args: string[]): string {
@@ -48,14 +51,18 @@ async function responseJson<T>(response: APIResponse, operation: string): Promis
   return body as T;
 }
 
-async function login(page: Page): Promise<void> {
-  const { email, password } = getE2ECredentials();
-  if (!email || !password) throw new Error('Disposable local test credentials are unavailable');
+async function loginAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+}
+
+async function login(page: Page): Promise<void> {
+  const { email, password } = getE2ECredentials();
+  if (!email || !password) throw new Error('Disposable local test credentials are unavailable');
+  await loginAs(page, email, password);
 }
 
 async function csrfToken(page: Page): Promise<string> {
@@ -82,6 +89,7 @@ async function provePrincipalRoleAssignmentMatrix(input: {
   csrf: string;
   engineId: string;
   runtimeResource: Record<string, unknown>;
+  deniedRuntimeResource: Record<string, unknown>;
   channel: ProvisioningJourneyChannel;
   suffix: string;
   commit: string;
@@ -92,6 +100,7 @@ async function provePrincipalRoleAssignmentMatrix(input: {
     csrf,
     engineId,
     runtimeResource,
+    deniedRuntimeResource,
     channel,
     suffix,
     commit,
@@ -105,6 +114,8 @@ async function provePrincipalRoleAssignmentMatrix(input: {
   let roleId: string | null = null;
   let apiClientId: string | null = null;
   let serviceAccountId: string | null = null;
+  let restrictedContext: BrowserContext | null = null;
+  let mockControl: APIRequestContext | null = null;
   const assignmentIds: string[] = [];
 
   try {
@@ -113,7 +124,11 @@ async function provePrincipalRoleAssignmentMatrix(input: {
         name: `Journey 8 engine reader ${channel} ${suffix}`,
         description: `Disposable ${channel} principal matrix role`,
         scope: 'engine',
-        permissionIds: ['engine:instance:view'],
+        permissionIds: [
+          'engine:instance:view',
+          'engine:process:modify',
+          'engine:deploy:view',
+        ],
       })),
       `create Journey 8 ${channel} custom role`,
     );
@@ -267,7 +282,7 @@ async function provePrincipalRoleAssignmentMatrix(input: {
     expect(tenantMappingId).not.toBe('undefined');
     expect(tenantMappingVersion).toBeGreaterThan(0);
 
-    const expiresAt = Date.now() + 60_000;
+    const expiresAt = Date.now() + 300_000;
     const expiringAssignment = await responseJson<{ id: string; warnings?: string[] }>(
       await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
         principalType: 'user',
@@ -331,6 +346,149 @@ async function provePrincipalRoleAssignmentMatrix(input: {
         }),
       }),
     ]));
+
+    expect(resourceKind).toBe('process_definition');
+    const allowedDefinitionId = String(runtimeResource.engineResourceId);
+    const deniedDefinitionId = String(deniedRuntimeResource.engineResourceId);
+    const deniedResourceKind = String(deniedRuntimeResource.resourceKind);
+    const deniedResourceKey = String(deniedRuntimeResource.resourceKey);
+    expect(allowedDefinitionId).not.toBe('undefined');
+    expect(deniedDefinitionId).not.toBe('undefined');
+    expect(deniedResourceKind).toBe('process_definition');
+    expect(deniedResourceKey).not.toBe(resourceKey);
+
+    const browser = page.context().browser();
+    if (!browser) throw new Error('Journey 10 requires a browser-backed Playwright page');
+    restrictedContext = await browser.newContext({
+      baseURL: baseUrl,
+      ignoreHTTPSErrors: true,
+    });
+    const restrictedPage = await restrictedContext.newPage();
+    await loginAs(restrictedPage, fixture.email!, fixture.password!);
+    const restrictedCsrf = await csrfToken(restrictedPage);
+    mockControl = await playwrightRequest.newContext({
+      baseURL: mockCamundaControlUrl,
+    });
+
+    const definitions = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/process-definitions?engineId=${encodeURIComponent(engineId)}`,
+      ),
+      `list Journey 10 ${channel} filtered definitions`,
+    );
+    expect(definitions.map((definition) => definition.key)).toEqual([resourceKey]);
+
+    const processInstances = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/process-instances?engineId=${encodeURIComponent(engineId)}&active=true`,
+      ),
+      `list Journey 10 ${channel} filtered process instances`,
+    );
+    expect(processInstances.length).toBeGreaterThan(0);
+    expect(new Set(processInstances.map((instance) => instance.processDefinitionKey))).toEqual(
+      new Set([resourceKey]),
+    );
+    const allowedInstanceId = String(processInstances[0].id);
+
+    const previewCount = await restrictedPage.request.post(
+      '/mission-control-api/process-instances/preview-count',
+      mutationOptions(restrictedCsrf, { engineId }),
+    );
+    expect(previewCount.status()).toBe(403);
+    expect(await previewCount.json()).toEqual(expect.objectContaining({
+      error: expect.stringContaining('Resource-aware process-instance preview counts are not supported'),
+    }));
+
+    const allowedDetail = await responseJson<Record<string, unknown>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/process-definitions/${encodeURIComponent(allowedDefinitionId)}?engineId=${encodeURIComponent(engineId)}`,
+      ),
+      `read Journey 10 ${channel} authorized definition`,
+    );
+    expect(allowedDetail.key).toBe(resourceKey);
+
+    const resetLedger = await mockControl.post('/__e2e/requests/reset');
+    expect(resetLedger.status()).toBe(204);
+    const deniedDetail = await restrictedPage.request.get(
+      `/mission-control-api/process-definitions/${encodeURIComponent(deniedDefinitionId)}?engineId=${encodeURIComponent(engineId)}`,
+    );
+    expect(deniedDetail.status()).toBe(403);
+    const deniedLedger = await responseJson<{
+      total: number;
+      requests: Array<{ request: string; count: number }>;
+    }>(
+      await mockControl.get('/__e2e/requests'),
+      `read Journey 10 ${channel} denied-request ledger`,
+    );
+    const deniedUpstreamRequest =
+      `GET /engine-rest/process-definition/${encodeURIComponent(deniedDefinitionId)}`;
+    expect(deniedLedger.requests).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ request: deniedUpstreamRequest }),
+    ]));
+
+    const mutation = await restrictedPage.request.put(
+      `/mission-control-api/process-instances/${encodeURIComponent(allowedInstanceId)}/suspend`,
+      mutationOptions(restrictedCsrf, { engineId }),
+    );
+    expect(mutation.status()).toBe(204);
+
+    const deniedBatch = await restrictedPage.request.post(
+      '/mission-control-api/batches/process-instances/suspend',
+      mutationOptions(restrictedCsrf, {
+        engineId,
+        processInstanceQuery: { processDefinitionKey: resourceKey },
+      }),
+    );
+    expect(deniedBatch.status()).toBe(403);
+    expect(await deniedBatch.json()).toEqual(expect.objectContaining({
+      error: expect.stringContaining('require explicit processInstanceIds'),
+    }));
+
+    const jobs = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/jobs?engineId=${encodeURIComponent(engineId)}`,
+      ),
+      `list Journey 10 ${channel} filtered jobs`,
+    );
+    expect(jobs).toEqual([]);
+
+    const tasks = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/tasks?engineId=${encodeURIComponent(engineId)}`,
+      ),
+      `list Journey 10 ${channel} filtered tasks`,
+    );
+    expect(tasks.length).toBeGreaterThan(0);
+    expect(new Set(tasks.map((task) => task.processDefinitionKey))).toEqual(
+      new Set([resourceKey]),
+    );
+
+    const incidents = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/process-instances/${encodeURIComponent(allowedInstanceId)}/incidents?engineId=${encodeURIComponent(engineId)}`,
+      ),
+      `list Journey 10 ${channel} authorized incidents`,
+    );
+    expect(incidents).toEqual([]);
+
+    const history = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/mission-control-api/history/process-instances?engineId=${encodeURIComponent(engineId)}`,
+      ),
+      `list Journey 10 ${channel} filtered history`,
+    );
+    expect(history.length).toBeGreaterThan(0);
+    expect(new Set(history.map((instance) => instance.processDefinitionKey))).toEqual(
+      new Set([resourceKey]),
+    );
+
+    const deploymentHistory = await responseJson<Array<Record<string, unknown>>>(
+      await restrictedPage.request.get(
+        `/engines-api/engines/${encodeURIComponent(engineId)}/deployment-history`,
+      ),
+      `list Journey 10 ${channel} authorized deployment history`,
+    );
+    expect(deploymentHistory).toEqual([]);
 
     const removeExpiringAssignment = await page.request.delete(
       `/api/authz/role-assignments/${encodeURIComponent(expiringAssignment.id)}`,
@@ -443,7 +601,46 @@ async function provePrincipalRoleAssignmentMatrix(input: {
         },
       }, null, 2)}\n`,
     );
+    await writeFile(
+      path.join(observationDirectory, `journey-10-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 10,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'list',
+          'count',
+          'detail',
+          'mutation',
+          'batch',
+          'job',
+          'task',
+          'incident',
+          'history',
+          'deployment',
+          'no-upstream-call-after-denial',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
   } finally {
+    await mockControl?.dispose();
+    await restrictedContext?.close();
     for (const assignmentId of assignmentIds.reverse()) {
       const response = await page.request.delete(
         `/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`,
@@ -1504,7 +1701,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
         csrf: token,
         engineId: sharedEngineId,
         runtimeResource: mappedResources.find(
-          (resource) => resource.runtimeTenantId === 'e2e-runtime-blue',
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-blue'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-process',
+        )!,
+        deniedRuntimeResource: mappedResources.find(
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-green'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-sequential-review',
         )!,
         channel: 'manual-ui',
         suffix,
@@ -1852,7 +2058,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
         csrf: token,
         engineId: sharedEngineId,
         runtimeResource: mappedResources.find(
-          (resource) => resource.runtimeTenantId === 'e2e-runtime-blue',
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-blue'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-process',
+        )!,
+        deniedRuntimeResource: mappedResources.find(
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-green'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-sequential-review',
         )!,
         channel: 'external-api',
         suffix,
@@ -2380,7 +2595,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
         csrf: token,
         engineId: sharedEngineId,
         runtimeResource: mappedResources.find(
-          (resource) => resource.runtimeTenantId === 'e2e-runtime-blue',
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-blue'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-process',
+        )!,
+        deniedRuntimeResource: mappedResources.find(
+          (resource) =>
+            resource.runtimeTenantId === 'e2e-runtime-green'
+            && resource.resourceKind === 'process_definition'
+            && resource.resourceKey === 'invoice-sequential-review',
         )!,
         channel: 'configuration-bundle',
         suffix,
