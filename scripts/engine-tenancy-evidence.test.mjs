@@ -75,6 +75,17 @@ test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(releaseIndexWriter, /sameCommit/);
   assert.match(releaseIndexWriter, /releaseCommitQualified === true/);
   assert.match(releaseIndexWriter, /passedGateCount === gateDefinitions\.length/);
+  for (const matrixContract of [
+    'constraint-derived-authorization-state-space',
+    'canonicalInputHash',
+    'classifiedCanonicalValueCount',
+    'executedApplicableCellCount',
+    'executedInvalidityWitnessCount',
+    'unknownCells',
+    'unexpectedCells',
+  ]) {
+    assert.match(releaseIndexWriter, new RegExp(matrixContract));
+  }
   assert.match(releaseIndexWriter, /README\.md/);
   assert.match(releaseIndexWriter, /process\.exitCode = 1/);
 });

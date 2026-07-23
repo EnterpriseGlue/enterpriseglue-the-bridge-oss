@@ -435,6 +435,37 @@ Success means:
 - unresolved shared resources deny; and
 - a denied runtime request does not reach the upstream engine.
 
+### Production Enablement Checklist
+
+Complete this checklist for each engine before granting normal user access:
+
+1. Confirm a decentralized engine is `dedicated`, has exactly one persisted
+   owning tenant, and does not depend on default-tenant fallback after creation.
+2. Confirm a centralized engine is `shared` and `resource_aware`, every intended
+   runtime resource has exactly one active mapping, and unresolved, conflicting,
+   or stale counts are zero.
+3. Assign the smallest predefined or custom role required. Test the same role
+   through each principal type you intend to use: direct user, group-derived
+   user, API client, or service account.
+4. In Effective Access, verify one allowed object at every scope you use:
+   tenant, project, engine, Engine Set, runtime resource, or Runtime Resource
+   Set. Then verify a sibling-tenant and an unresolved shared resource are
+   denied.
+5. Exercise the actual work the role permits—a read, mutation, deployment, task,
+   job, incident, or history action as applicable—and confirm a prohibited
+   action remains unavailable.
+6. Revoke the test assignment or group membership. Confirm an already open tab,
+   a second stale tab, refresh, direct URL, and browser back/forward navigation
+   cannot restore the permission.
+7. Retain the transition preview, mapping version, Effective Access explanation,
+   audit event, and rollback record. Do not enable the engine if any expected
+   denial reaches the upstream engine.
+
+For a decentralized installation, perform the checklist against its one
+persisted default tenant. For a centralized installation, repeat the shared
+resource checks for two tenants with intentionally disjoint mappings. The
+default tenant must not make either tenant's unmapped resources visible.
+
 ## Safe Changes and Rollback
 
 Normal engine update endpoints cannot change topology, dedicated tenant, or

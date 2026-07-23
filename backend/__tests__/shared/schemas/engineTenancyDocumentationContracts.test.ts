@@ -191,4 +191,49 @@ describe('engine tenancy documentation contracts', () => {
         .toContain(documentPath.replace(/^docs\//, ''));
     }
   });
+
+  it('keeps the executable 100 percent coverage contract aligned across developer and user Markdown', () => {
+    const plan = readFileSync(
+      resolve(repoRoot, 'docs/architecture/12-engine-tenancy-and-external-provisioning-plan.md'),
+      'utf8',
+    );
+    const testingGuide = readFileSync(
+      resolve(repoRoot, 'docs/development/testing-engine-tenancy-and-access-control.md'),
+      'utf8',
+    );
+    const userGuide = readFileSync(
+      resolve(repoRoot, 'docs/how-to/configure-engine-tenancy.md'),
+      'utf8',
+    );
+    const reviewChecklist = readFileSync(
+      resolve(repoRoot, 'docs/development/engine-tenancy-documentation-review-checklist.md'),
+      'utf8',
+    );
+
+    for (const requiredContract of [
+      'Exhaustive authorization state-space',
+      'applicability registry',
+      'independent expectation model',
+      'unknown, missing, skipped, quarantined',
+      'Documentation tests',
+      'End-to-End Definition of Done',
+    ]) {
+      expect(plan).toContain(requiredContract);
+    }
+    for (const requiredContract of [
+      'constraint-generated',
+      'stable invalidity ID',
+      'executed applicable cells / applicable cells = 100%',
+      'missing = skipped = quarantined = unknown = unexpected = 0',
+    ]) {
+      expect(testingGuide).toContain(requiredContract);
+    }
+    expect(userGuide).toContain('### Production Enablement Checklist');
+    expect(userGuide).toContain('decentralized installation');
+    expect(userGuide).toContain('centralized installation');
+    expect(reviewChecklist).toContain(
+      '../how-to/configure-engine-tenancy.md#production-enablement-checklist',
+    );
+    expect(reviewChecklist).toContain('authorization-matrix.json');
+  });
 });

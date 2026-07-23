@@ -62,9 +62,20 @@ const gateDefinitions = [
     label: 'Complete supported authorization matrix',
     path: 'test/results/engine-tenancy-release/authorization-matrix.json',
     passes: (value) => value.status === 'passed'
+      && value.coverageStandard === 'constraint-derived-authorization-state-space'
+      && typeof value.canonicalInputHash === 'string'
+      && value.canonicalInputHash.length > 0
+      && Number(value.canonicalValueCount) > 0
+      && value.classifiedCanonicalValueCount === value.canonicalValueCount
+      && Number(value.applicableCellCount) > 0
+      && value.executedApplicableCellCount === value.applicableCellCount
+      && Number(value.invalidityClassCount) > 0
+      && value.executedInvalidityWitnessCount === value.invalidityClassCount
       && value.missingCells === 0
       && value.skippedCells === 0
-      && value.quarantinedCells === 0,
+      && value.quarantinedCells === 0
+      && value.unknownCells === 0
+      && value.unexpectedCells === 0,
   },
   {
     id: 'databaseMatrix',

@@ -34,6 +34,11 @@ Node/pnpm versions, database adapter, operating system, and command output.
 - manual, external, and configuration ownership/lifecycle are accurate;
 - migration ordering, adapter portability, idempotency, retry, and rollback are
   reproducible;
+- the authorization generator takes all dimensions from canonical production
+  registries, every exclusion has a stable applicability rule and executed
+  witness, and equivalence compression reports its full expansion count;
+- `authorization-matrix.json` reports zero unknown, missing, skipped,
+  quarantined, or unexpected cells;
 - every functional requirement ID resolves to the exact test and documentation
   named in the manifest; and
 - no guide describes an unavailable endpoint or UI action.
@@ -63,7 +68,11 @@ Markdown guides to:
    refresh, direct URL, and browser history cannot restore access;
 7. preview/apply/roll back a topology or mapping change;
 8. rotate a credential reference and decommission an external engine; and
-9. identify the compatibility warning, metrics, and rollback conditions.
+9. complete the
+   [production enablement checklist](../how-to/configure-engine-tenancy.md#production-enablement-checklist)
+   once for a decentralized dedicated engine and once for a centralized shared
+   engine; and
+10. identify the compatibility warning, metrics, and rollback conditions.
 
 Use local placeholder engines and identities. No deployed customer identity
 provider or credential is required.

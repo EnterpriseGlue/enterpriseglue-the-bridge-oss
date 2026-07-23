@@ -30,6 +30,14 @@ inventory to OpenAPI, the canonical error enum, the transition policy, and the
 normative requirement registry in the architecture plan. A percentage alone
 cannot satisfy the gate.
 
+The authorization denominator is constraint-generated, not a blind Cartesian
+product and not a manually selected sample. The generator must classify every
+canonical permission, action, role, principal, secured resource type, scope,
+topology, runtime mode, tenant relationship, assignment/resource state, and
+permission source. Supported combinations become executable behavior cells.
+Unsupported combinations become named invalidity classes with an executed
+rejection witness. Nothing may be silently pruned.
+
 ## Required Release-Candidate Evidence
 
 `TEN-AUTHZ-013` runs targeted source mutations and must kill tenant-filter
@@ -86,7 +94,7 @@ The full release-qualification backlog, execution order, rollback conditions,
 and exit conditions are in phase 9 of
 the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).
 Local PostgreSQL and three-browser access evidence must not be used to close
-the remaining five-database, clean/upgrade, complete Cartesian-matrix,
+the remaining five-database, clean/upgrade, complete authorization-state-space,
 provisioning-journey, accessibility, or independent documentation-review
 gates.
 
@@ -229,7 +237,39 @@ classification/transition policy, operational metrics, API-client and
 service-account services, the policy service, and API-client middleware. It
 does not claim 100% source coverage for unrelated monorepo files.
 
-## Required Authorization Matrix
+## Required Authorization State-Space
+
+Implement the remaining generated coverage in this order:
+
+1. read dimensions only from production registries and store their hashes and
+   counts;
+2. classify each tuple with a versioned applicability rule—`supported` or a
+   stable invalidity ID and reason;
+3. derive the expected decision from a declarative model that does not call the
+   production evaluator;
+4. execute every supported cell and at least one witness for every invalidity
+   class at the correct unit, PostgreSQL integration, HTTP, or browser layer;
+5. expand any equivalence-compressed cell back to its represented canonical
+   tuples and prove that the rule is behavior-preserving; and
+6. retain `authorization-matrix.json` from the exact clean commit.
+
+The artifact is complete only when:
+
+```text
+classified canonical values / canonical values = 100%
+executed applicable cells / applicable cells = 100%
+executed invalidity witnesses / invalidity classes = 100%
+covered action, permission, role, resource and dimension values / canonical values = 100%
+missing = skipped = quarantined = unknown = unexpected = 0
+```
+
+Custom roles do not require executing the raw powerset of independent
+permissions. They do require every tenant-safe permission individually at every
+supported scope, every prohibited permission rejection, every predefined role,
+every cross-policy interaction, and a generator proof of independent union
+behavior. Direct/group inheritance, users/machine principals, scope narrowing,
+tenant isolation, future/expiry/revocation, edits, role deletion, and stale
+sessions remain mandatory.
 
 The focused matrix proves:
 

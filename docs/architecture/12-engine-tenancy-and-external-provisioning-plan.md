@@ -637,6 +637,23 @@ slice must update its affected Markdown pages in the same pull request as the sc
 API, UI, or enforcement change. Documentation must not describe a capability as
 available until its validation and enforcement paths have shipped.
 
+Use this change matrix for every remaining work package:
+
+| Changed contract | Developer/architecture Markdown | User/operator Markdown | Executable documentation evidence |
+| --- | --- | --- | --- |
+| Zod schema, OpenAPI operation, typed client, or stable error | API reference, data model, architecture plan, and testing guide | External-provisioning/configuration guide and troubleshooting guidance | Schema-tagged JSON/YAML, OpenAPI-bound `curl`, operation/error inventory, and link tests |
+| Database entity, migration, invariant, or adapter behavior | Database architecture, migration notes, upgrade matrix, and test report | Upgrade and migration runbooks with preview, retry, rollback, and cleanup | Clean/upgrade schema fingerprints and every supported adapter result |
+| Permission, role, scope, inheritance, or evaluator behavior | Authorization architecture, generated-matrix rules, and coverage manifest | Configuration guide, Effective Access procedure, and security guidance | Canonical-registry closure, valid cells, invalidity witnesses, audit, and no-transport assertions |
+| Topology, mapping, reconciliation, or runtime filtering | Tenancy plan, API/data-model reference, and testing guide | Dedicated/shared configuration, diagnostics, migration, and external provisioning | UI/API/config journeys plus list, detail, mutation, batch, and active-session denial |
+| UI workflow or operator-visible state | Browser test procedure and functional report | Step-by-step task guide, success state, failure recovery, and accessibility behavior | Three-browser journey, keyboard/name checks, announcement, contrast, zoom/reflow, and reduced motion |
+| Metrics, logging, audit, compatibility, or deprecation | Operational contract, compatibility policy, release evidence, and test report | Deployment, monitoring, troubleshooting, upgrade, and release notes | Sanitization checks, compatibility-window evidence, alerts, rollback trigger, and reviewer record |
+
+A work package is not complete until the Markdown describes the shipped behavior,
+the user-visible success and failure paths, and the rollback procedure; every
+machine-readable example passes its production schema; all links and anchors pass;
+and the functional manifest names the exact documentation section and automated
+evidence.
+
 ### Developer and architecture documentation
 
 Update these existing pages:
@@ -843,9 +860,10 @@ below.
   group-derived users, API clients, and service accounts on PostgreSQL.
 - [x] Execute Chromium local-stack provisioning, mapping, fail-closed runtime,
   migration, metrics, cleanup, and active-session revocation journeys.
-- [ ] Generate and execute the complete supported authorization Cartesian
-  matrix described below, including invalid combinations, with zero missing,
-  skipped, or quarantined cells.
+- [ ] Generate and execute the complete constraint-derived authorization
+  state-space described below. Every supported behavior cell and every
+  declared invalidity class must be accounted for, with zero unknown, missing,
+  skipped, quarantined, or unexpected cells.
 - [ ] Execute the clean-install, every supported upgrade baseline, interrupted
   retry, schema-equivalence, service-behavior, rollback, and cleanup suites on
   PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.
@@ -877,7 +895,7 @@ changes.
 | Order | Work package | Required output and success criteria | Stop or rollback condition |
 | --- | --- | --- | --- |
 | 1 | Freeze a clean candidate | Run the manifest, mutation, guarded local enforcement, and three-browser lanes. `requirement-evidence.json`, `mutation-report.json`, `local-enforcement.json`, and `browser-matrix.json` must name the same clean commit. | Any artifact is missing, dirty, stale, sanitized incorrectly, or refers to another commit. |
-| 2 | Complete authorization generation | Generate only valid supported cells from the canonical permission/action registry, plus stable invalidity classes. Execute every applicable principal, scope, topology, runtime mode, source, tenant relationship, lifecycle, and outcome cell. Write `authorization-matrix.json` with zero missing, skipped, quarantined, or unexpected cells. | Any canonical action/resource type is unclassified, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
+| 2 | Complete authorization generation | Build the canonical dimension and applicability registries, then generate every supported behavior cell and every invalidity class. Execute every applicable principal, scope, topology, runtime mode, source, tenant relationship, lifecycle, resource state, action, and outcome. Write `authorization-matrix.json` with zero unknown, missing, skipped, quarantined, or unexpected cells. | Any canonical action/resource type is unclassified, an exclusion has no stable rule and executed witness, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
 | 3 | Qualify all database adapters | For PostgreSQL, MySQL, SQL Server, Oracle, and Spanner, run clean install, every supported upgrade baseline, interruption/retry, schema equivalence, service behavior, rollback, and cleanup. Write one `database-matrix.json` containing versions, schema fingerprints, and per-stage results. | Schema or behavior differs, retry is not idempotent, rollback loses explanatory metadata, or cleanup leaves owned rows. |
 | 4 | Complete real-service provisioning journeys | Execute all 14 journeys through the local HTTP service and persistent database for manual UI, external API, and configuration channels where supported. Unsupported combinations must return their documented stable error. Write `provisioning-journeys.json` with 14 passed and zero missing journeys. | A channel silently changes topology/ownership, a retry duplicates state, a deny leaks data, or decommissioned access can reappear. |
 | 5 | Finish browser accessibility | Add automated/manual evidence for error announcement, contrast, 200% zoom/reflow, and reduced motion. Re-run Chromium, Firefox, and WebKit after every browser-flow change. | A keyboard/screen-reader workflow cannot complete, content becomes unavailable at zoom, or stale authorization returns after any navigation/session path. |
@@ -896,6 +914,26 @@ normative requirement, supported operation, decision branch, state transition,
 stable error, and documented user journey has at least one automated test that
 proves its expected result. It does not mean claiming that every unrelated line in
 the repository is executed.
+
+The release index must calculate, retain, and require all of these ratios:
+
+| Coverage set | Numerator | Denominator | Passing threshold |
+| --- | --- | --- | ---: |
+| Requirements | passing requirement IDs | normative registry IDs | 100% |
+| Public contracts | passing operation and stable-error contracts | canonical OpenAPI operations and stable errors | 100% |
+| State transitions | passing valid transitions and invalidity witnesses | canonical transitions and invalidity rules | 100% |
+| Authorization | executed passing behavior cells and invalidity witnesses | all constraint-generated applicable cells and declared invalidity classes | 100% |
+| Provisioning journeys | passing supported-channel journeys and documented unsupported results | canonical 14-journey/channel applicability registry | 100% |
+| Database qualification | passing install/upgrade/retry/service/rollback stages | all stages for all five supported adapters and baselines | 100% |
+| Browser/accessibility | passing functional and accessibility observations | all declared workflows on Chromium, Firefox, and WebKit | 100% |
+| Critical source modules | covered statements, branches, functions, and lines | instrumented elements in each declared critical module | 100% per file |
+| Security mutation | killed required mutants | complete targeted mutation registry | 100% |
+| Documentation | executable examples, valid links, and approved reviews | all documented examples/links plus engineering, security, and operator reviews | 100% |
+
+Any new canonical registry entry expands its denominator immediately and therefore
+fails the gate until it is classified and evidenced. A target declaration, sampled
+pass, aggregate line percentage, equivalence claim without an expansion proof, or
+waiver does not increase a numerator.
 
 Create a machine-readable functional coverage manifest at
 `test/authz/engine-tenancy-functional-coverage.json`. Every entry must contain:
@@ -966,9 +1004,17 @@ batches, unknown fields, malformed identifiers, duplicate mappings, invalid topo
 combinations, and version boundaries. Generated examples must round-trip through
 parse, serialize, OpenAPI validation, and parse again without semantic drift.
 
-### Exhaustive authorization matrix
+### Exhaustive authorization state-space
 
-Generate, rather than hand-maintain, the Cartesian matrix of:
+A blind Cartesian product is neither the coverage denominator nor an acceptable
+shortcut. It would multiply mutually exclusive states, such as shared topology
+with engine-wide runtime access, and repeat behaviorally identical permission
+powersets billions of times. Instead, generate the finite authorization
+state-space from the canonical registries and explicit applicability rules.
+This is still exhaustive functional coverage: nothing may disappear from the
+input registries or be excluded without a named, tested rule.
+
+The generator must consume:
 
 - principal: user, group-derived user, API client, and service account;
 - assignment scope: platform, tenant, project, dedicated engine, shared runtime
@@ -989,14 +1035,60 @@ Generate, rather than hand-maintain, the Cartesian matrix of:
   deleted, and re-created with a new stable identifier;
 - action sensitivity: read, mutate, administer, credential/secret, and destructive.
 
-Invalid combinations must be asserted as rejected rather than omitted. Each valid
-cell must assert the decision, filtered result set, Effective Access explanation,
-audit event, and whether the upstream engine was called. Pairwise reduction is not
-permitted for security boundaries; every supported matrix cell must execute.
+The implementation must have four machine-readable inputs:
 
-Custom-role tests must cover every tenant-safe permission individually, all allowed
-combinations, rejection of platform-only and secret permissions, group inheritance,
-scope narrowing, expiry, revocation, edit invalidation, and role deletion.
+1. a **dimension registry** populated from the production permission, action,
+   resource-type, principal-type, role, topology, transition, and stable-error
+   registries;
+2. an **applicability registry** that gives each invalid tuple a stable rule ID,
+   reason, expected stable error or deny reason, and at least one executed witness;
+3. an **independent expectation model** that derives allow, deny, filtering,
+   Effective Access, audit, and no-upstream-call expectations without invoking the
+   production evaluator; and
+4. an **execution registry** that maps each generated cell or invalidity witness to
+   an executable unit, database integration, HTTP, or browser test.
+
+Every generated valid cell must assert the decision, filtered result set, Effective
+Access explanation, audit event, and whether the upstream engine was called when
+those observations apply. Invalid combinations must be rejected by a named rule;
+they cannot be silently filtered out. Equivalence compression is allowed only for
+mathematically redundant tuples and must retain the expansion count and rule that
+proves why the tuples have identical behavior. Pairwise-only sampling is not
+permitted across security boundaries.
+
+Custom-role coverage must prove:
+
+- every tenant-safe permission individually at every supported scope;
+- every platform-only, credential, secret, and otherwise prohibited permission is
+  rejected at tenant scope;
+- every predefined role and every custom-role composition that crosses distinct
+  policy classes or introduces a permission interaction;
+- the union behavior of independent permissions, with a generator proof that
+  adding an independent permission cannot remove a grant or widen its scope;
+- direct and group inheritance, scope narrowing, same/sibling/unrelated tenant
+  behavior, future/expiry/revocation, edit invalidation, role deletion, and
+  stale-session invalidation; and
+- parity for users, API clients, and service accounts wherever that principal type
+  is supported.
+
+The authorization evidence artifact must report:
+
+- `coverageStandard: "constraint-derived-authorization-state-space"` and a
+  non-empty `canonicalInputHash`;
+- `canonicalValueCount` and equal `classifiedCanonicalValueCount`;
+- `rawTupleCount`, `applicableCellCount`, equal
+  `executedApplicableCellCount`, and `equivalenceExpandedCellCount`;
+- `invalidityClassCount` and equal `executedInvalidityWitnessCount`;
+- `missingCells`, `skippedCells`, `quarantinedCells`, `unknownCells`, and
+  `unexpectedCells`, all equal to zero;
+- coverage by every dimension value, action, permission, role, secured resource
+  type, and invalidity rule;
+- deterministic seed and shard information; and
+- exact clean commit and sanitization status.
+
+`authorization-matrix.json` passes only when every canonical value is classified,
+every applicable cell and invalidity witness executes, and all missing, skipped,
+quarantined, unknown, and unexpected counts are zero.
 
 ### Dedicated engine
 

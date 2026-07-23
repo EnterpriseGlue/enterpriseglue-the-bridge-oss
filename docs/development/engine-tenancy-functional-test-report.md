@@ -64,8 +64,9 @@ The focused lanes cover:
   configuration channels;
 - mapping create/update/disable, ownership, versioning, reconciliation, and
   fail-closed runtime inventory;
-- every predefined role, every canonical permission, custom-role
-  compositions, users, group-derived users, API clients, and service accounts;
+- every predefined role and canonical permission in the focused classifier
+  contracts, plus database-backed custom-role compositions for users,
+  group-derived users, API clients, and service accounts;
 - tenant, project, engine, Engine Set, every registered runtime-resource type,
   and Runtime Resource Set boundaries;
 - Mission Control collections, details, referenced details, starts,
@@ -100,8 +101,8 @@ meaning of 100% functional coverage are documented in
 | Runtime enforcement | 348 |
 | Classification and transitions | 151 |
 | Operational metrics | 46 |
-| Documentation and traceability | 43 |
-| **Focused-lane total** | **1,312** |
+| Documentation and traceability | 52 |
+| **Focused-lane total** | **1,321** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
@@ -250,8 +251,10 @@ PostgreSQL/Chromium topology-enforcement slice and the three-browser
 fine-grained session-state slice. They do not yet close full cross-platform
 release qualification. The remaining gates are:
 
-- generate and execute the complete supported authorization Cartesian matrix
-  with zero missing, skipped, or quarantined cells;
+- generate and execute the complete constraint-derived authorization
+  state-space, including every supported behavior cell and every named
+  invalidity witness, with zero unknown, missing, skipped, quarantined, or
+  unexpected cells;
 - retain clean-install, every supported upgrade-baseline, interrupted-retry,
   schema-equivalence, service, rollback, and cleanup results for PostgreSQL,
   MySQL, SQL Server, Oracle, and Spanner;
