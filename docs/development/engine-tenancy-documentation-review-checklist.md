@@ -96,6 +96,9 @@ After approval, retain
 - `status: "passed"` and `releaseCommitQualified: true`;
 - `reviews.engineering.status`, `reviews.security.status`, and
   `reviews.independentOperator.status`, each set to `approved`;
+- `unresolvedHighRiskFindings: 0`;
+- non-zero `executableExamples.total` and `markdownLinks.total`, with each
+  matching its corresponding `passed` count;
 - reviewer identity, review date, and tenant-safe evidence location for each
   review; and
 - a sanitization declaration confirming that no credentials, tokens, private

@@ -86,9 +86,28 @@ pnpm run test:engine-tenancy:release-evidence
 ```
 
 That command deliberately fails until traceability, local enforcement,
-mutation, browser, authorization-matrix, five-database, 14-journey, source
-coverage, and documentation-review artifacts all pass for the same clean
-commit.
+mutation, three-browser functional, browser-accessibility,
+authorization-matrix, five-database, 14-journey, source-coverage,
+documentation-review, and compatibility-window artifacts all pass for the
+same clean commit.
+
+The detailed artifacts are fail-closed as well:
+
+- `browser-accessibility.json` must cover error announcements, contrast,
+  200% zoom/reflow, and reduced motion across Chromium, Firefox, and WebKit;
+- every database entry in `database-matrix.json` must name its database
+  version and schema fingerprint and pass clean install, every upgrade
+  baseline, interrupted retry, schema equivalence, service behavior, rollback,
+  and cleanup;
+- every one of the 14 `provisioning-journeys.json` entries must execute at
+  least one supported channel and account for every other channel with a
+  passing execution or its documented stable error;
+- `documentation-review.json` must include zero unresolved high-risk findings
+  and complete executable-example and Markdown-link results in addition to the
+  three approvals; and
+- `compatibility-window.json` must prove warning behavior is tested and either
+  remains retained with no removal proposed, or was removed only after the
+  window closed and replacement documentation shipped.
 
 The full release-qualification backlog, execution order, rollback conditions,
 and exit conditions are in phase 9 of

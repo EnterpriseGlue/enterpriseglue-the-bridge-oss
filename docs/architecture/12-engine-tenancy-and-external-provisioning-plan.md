@@ -881,9 +881,10 @@ below.
   HTTP service and persistent database for every supported channel, recording
   documented stable errors for unsupported channel/action combinations.
 - [x] Produce one fail-closed release evidence index that links the exact manifest,
-  generated matrices, source coverage, mutation, database, browser,
-  documentation, migration, retry, rollback, and cleanup artifacts; missing,
-  dirty, or different-commit evidence remains visibly incomplete.
+  generated matrices, source coverage, mutation, database, functional browser,
+  browser accessibility, documentation, compatibility-window, migration,
+  retry, rollback, and cleanup artifacts; missing, dirty, or different-commit
+  evidence remains visibly incomplete.
 - [ ] Complete independent Markdown documentation review by engineering,
   security, and an operator using only the published procedures.
 - [ ] Close the external API omission-warning compatibility window before

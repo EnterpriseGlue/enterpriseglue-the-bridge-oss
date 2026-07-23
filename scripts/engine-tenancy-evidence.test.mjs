@@ -64,11 +64,13 @@ test('builds a fail-closed same-commit release evidence index', () => {
     'localEnforcement',
     'mutation',
     'browserMatrix',
+    'browserAccessibility',
     'authorizationMatrix',
     'databaseMatrix',
     'provisioningJourneys',
     'sourceCoverage',
     'documentationReview',
+    'compatibilityWindow',
   ]) {
     assert.match(releaseIndexWriter, new RegExp(`id: '${gate}'`));
   }
@@ -85,6 +87,18 @@ test('builds a fail-closed same-commit release evidence index', () => {
     'unexpectedCells',
   ]) {
     assert.match(releaseIndexWriter, new RegExp(matrixContract));
+  }
+  for (const completeReleaseContract of [
+    'requiredDatabaseStages',
+    'upgrade_baselines',
+    'requiredAccessibilityChecks',
+    'passedWorkflowCount',
+    'supportedChannelExecutions',
+    'unresolvedHighRiskFindings',
+    'compatibilityStatePasses',
+    'warningBehaviorTestsPassed',
+  ]) {
+    assert.match(releaseIndexWriter, new RegExp(completeReleaseContract));
   }
   assert.match(releaseIndexWriter, /README\.md/);
   assert.match(releaseIndexWriter, /process\.exitCode = 1/);

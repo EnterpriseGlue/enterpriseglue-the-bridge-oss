@@ -23,6 +23,54 @@ function command(commandName, args) {
 
 const commit = command('git', ['rev-parse', 'HEAD']);
 const trackedChanges = command('git', ['status', '--porcelain', '--untracked-files=no']);
+const requiredDatabases = ['postgres', 'mysql', 'mssql', 'oracle', 'spanner'];
+const requiredDatabaseStages = [
+  'clean_install',
+  'upgrade_baselines',
+  'interrupted_retry',
+  'schema_equivalence',
+  'service_behavior',
+  'rollback',
+  'cleanup',
+];
+const requiredBrowsers = ['chromium', 'firefox', 'webkit'];
+const requiredAccessibilityChecks = [
+  'error_announcement',
+  'contrast',
+  'zoom_200_reflow',
+  'reduced_motion',
+];
+
+function databaseTargetPasses(value, database) {
+  const target = value.results?.[database];
+  return typeof target?.databaseVersion === 'string'
+    && target.databaseVersion.length > 0
+    && typeof target.schemaFingerprint === 'string'
+    && target.schemaFingerprint.length > 0
+    && requiredDatabaseStages.every((stage) => target.stages?.[stage]?.status === 'passed')
+    && Number(target.stages?.upgrade_baselines?.total) > 0
+    && target.stages.upgrade_baselines.passed === target.stages.upgrade_baselines.total;
+}
+
+function provisioningJourneyPasses(journey) {
+  return Number.isInteger(journey?.id)
+    && journey.status === 'passed'
+    && Number(journey.supportedChannelExecutions) > 0
+    && journey.missingChannelResults === 0
+    && journey.unexpectedChannelResults === 0;
+}
+
+function compatibilityStatePasses(value) {
+  if (value.warningBehaviorTestsPassed !== true) return false;
+  if (value.warningBehavior === 'retained') {
+    return value.removalProposed === false;
+  }
+  if (value.warningBehavior === 'removed') {
+    return value.windowClosed === true
+      && value.replacementDocumentationPublished === true;
+  }
+  return false;
+}
 
 const gateDefinitions = [
   {
@@ -54,8 +102,21 @@ const gateDefinitions = [
     path: 'test/results/engine-tenancy-release/browser-matrix.json',
     passes: (value) => value.status === 'passed'
       && value.totalPassingExecutions === 27
-      && ['chromium', 'firefox', 'webkit']
+      && requiredBrowsers
         .every((browser) => value.verifiedTargets?.browsers?.includes(browser)),
+  },
+  {
+    id: 'browserAccessibility',
+    label: 'Browser accessibility workflows',
+    path: 'test/results/engine-tenancy-release/browser-accessibility.json',
+    passes: (value) => value.status === 'passed'
+      && Number(value.workflowCount) > 0
+      && value.passedWorkflowCount === value.workflowCount
+      && value.missingChecks === 0
+      && requiredBrowsers
+        .every((browser) => value.verifiedTargets?.browsers?.includes(browser))
+      && requiredAccessibilityChecks
+        .every((check) => value.verifiedChecks?.includes(check)),
   },
   {
     id: 'authorizationMatrix',
@@ -82,8 +143,9 @@ const gateDefinitions = [
     label: 'Five-adapter install, upgrade, retry, service, and rollback matrix',
     path: 'test/results/engine-tenancy-release/database-matrix.json',
     passes: (value) => value.status === 'passed'
-      && ['postgres', 'mysql', 'mssql', 'oracle', 'spanner']
-        .every((database) => value.verifiedTargets?.databases?.includes(database)),
+      && requiredDatabases
+        .every((database) => value.verifiedTargets?.databases?.includes(database))
+      && requiredDatabases.every((database) => databaseTargetPasses(value, database)),
   },
   {
     id: 'provisioningJourneys',
@@ -91,7 +153,12 @@ const gateDefinitions = [
     path: 'test/results/engine-tenancy-release/provisioning-journeys.json',
     passes: (value) => value.status === 'passed'
       && value.passedJourneys === 14
-      && value.missingJourneys === 0,
+      && value.missingJourneys === 0
+      && value.unexpectedChannelResults === 0
+      && Array.isArray(value.journeys)
+      && value.journeys.length === 14
+      && new Set(value.journeys.map((journey) => journey.id)).size === 14
+      && value.journeys.every(provisioningJourneyPasses),
   },
   {
     id: 'sourceCoverage',
@@ -107,7 +174,19 @@ const gateDefinitions = [
     path: 'test/results/engine-tenancy-release/documentation-review.json',
     passes: (value) => value.status === 'passed'
       && ['engineering', 'security', 'independentOperator']
-        .every((review) => value.reviews?.[review]?.status === 'approved'),
+        .every((review) => value.reviews?.[review]?.status === 'approved')
+      && value.unresolvedHighRiskFindings === 0
+      && Number(value.executableExamples?.total) > 0
+      && value.executableExamples.passed === value.executableExamples.total
+      && Number(value.markdownLinks?.total) > 0
+      && value.markdownLinks.passed === value.markdownLinks.total,
+  },
+  {
+    id: 'compatibilityWindow',
+    label: 'External omission-warning compatibility',
+    path: 'test/results/engine-tenancy-release/compatibility-window.json',
+    passes: (value) => value.status === 'passed'
+      && compatibilityStatePasses(value),
   },
 ];
 

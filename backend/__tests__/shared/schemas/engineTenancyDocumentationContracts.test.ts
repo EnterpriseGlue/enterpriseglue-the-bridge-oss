@@ -225,6 +225,8 @@ describe('engine tenancy documentation contracts', () => {
       'stable invalidity ID',
       'executed applicable cells / applicable cells = 100%',
       'missing = skipped = quarantined = unknown = unexpected = 0',
+      'browser-accessibility.json',
+      'compatibility-window.json',
     ]) {
       expect(testingGuide).toContain(requiredContract);
     }
