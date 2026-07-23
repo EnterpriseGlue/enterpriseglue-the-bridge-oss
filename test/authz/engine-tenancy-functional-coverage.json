@@ -3525,6 +3525,64 @@
       "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-015"
     },
     {
+      "id": "TEN-AUTHZ-016",
+      "requirement": "A machine-readable authorization state-space foundation stays synchronized with every canonical principal, resource, permission scope, role scope, action operation, and action risk without claiming release completion.",
+      "source": "Engine Tenancy Plan / Exhaustive authorization state-space",
+      "dimensions": [
+        "authorization_state_space",
+        "canonical_registry",
+        "applicability_rule",
+        "execution_family",
+        "fail_closed"
+      ],
+      "expected": "canonical registry parity, executable rule witnesses, and an explicit non-release-eligible status",
+      "testFile": "backend/__tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
+      "testName": "mirrors every canonical production dimension without a hand-maintained count",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:state-space-foundation",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide",
+          "resource_aware"
+        ],
+        "principals": [
+          "user",
+          "group-derived-user",
+          "api-client",
+          "service-account"
+        ],
+        "tenantRelationships": [
+          "same-tenant",
+          "sibling-tenant",
+          "cross-tenant",
+          "missing-context",
+          "conflicting-context",
+          "deleted-tenant"
+        ],
+        "resourceTypes": [
+          "tenant",
+          "project",
+          "engine",
+          "engine-set",
+          "runtime-resource",
+          "runtime-resource-set",
+          "deployment-target"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Required Authorization State-Space",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-016"
+    },
+    {
       "id": "TEN-DOCS-007",
       "requirement": "Validated functional coverage emits a sanitized retained evidence artifact with commit, schema, toolchain, target, waiver, and exact requirement traceability metadata.",
       "source": "Engine Tenancy Plan / Coverage Reporting",

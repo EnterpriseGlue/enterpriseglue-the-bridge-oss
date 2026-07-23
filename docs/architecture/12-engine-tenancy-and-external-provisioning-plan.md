@@ -71,7 +71,7 @@ until the following evidence is retained:
 
 | Qualification gate | Current evidence | Exit condition |
 | --- | --- | --- |
-| Requirement traceability | 77 registered requirements; 16 public operations; 11 stable errors; four valid and one invalid transition class; zero waivers | Manifest validator and every linked CI lane pass on the release commit |
+| Requirement traceability | 78 registered requirements; 16 public operations; 11 stable errors; four valid and one invalid transition class; zero waivers | Manifest validator and every linked CI lane pass on the release commit |
 | Security mutation | Nine targeted mutants killed, including every required tenancy fault class | Mutation report retained by CI with zero survivors |
 | Human principals and custom roles | PostgreSQL-backed direct-user, group-derived-user, scoped custom-role, and randomized model tests pass | Generated matrix contains zero missing or skipped supported cells |
 | Machine principals | PostgreSQL-backed API-client and service-account custom-role, expiry, rotation, and revocation tests pass | Same generated matrix and HTTP journeys pass for both machine-principal types |
@@ -99,7 +99,7 @@ fails the coverage gate.
 | --- | --- |
 | `TEN-API` | `TEN-API-001`, `TEN-API-002`, `TEN-API-003`, `TEN-API-004`, `TEN-API-005`, `TEN-API-006`, `TEN-API-007`, `TEN-API-008`, `TEN-API-009`, `TEN-API-010`, `TEN-API-011`, `TEN-API-012`, `TEN-API-013`, `TEN-API-014` |
 | `TEN-AUDIT` | `TEN-AUDIT-001`, `TEN-AUDIT-002` |
-| `TEN-AUTHZ` | `TEN-AUTHZ-001`, `TEN-AUTHZ-002`, `TEN-AUTHZ-003`, `TEN-AUTHZ-004`, `TEN-AUTHZ-005`, `TEN-AUTHZ-006`, `TEN-AUTHZ-007`, `TEN-AUTHZ-008`, `TEN-AUTHZ-009`, `TEN-AUTHZ-010`, `TEN-AUTHZ-011`, `TEN-AUTHZ-012`, `TEN-AUTHZ-013`, `TEN-AUTHZ-014`, `TEN-AUTHZ-015` |
+| `TEN-AUTHZ` | `TEN-AUTHZ-001`, `TEN-AUTHZ-002`, `TEN-AUTHZ-003`, `TEN-AUTHZ-004`, `TEN-AUTHZ-005`, `TEN-AUTHZ-006`, `TEN-AUTHZ-007`, `TEN-AUTHZ-008`, `TEN-AUTHZ-009`, `TEN-AUTHZ-010`, `TEN-AUTHZ-011`, `TEN-AUTHZ-012`, `TEN-AUTHZ-013`, `TEN-AUTHZ-014`, `TEN-AUTHZ-015`, `TEN-AUTHZ-016` |
 | `TEN-CONFIG` | `TEN-CONFIG-001`, `TEN-CONFIG-002`, `TEN-CONFIG-003`, `TEN-CONFIG-004`, `TEN-CONFIG-005`, `TEN-CONFIG-006`, `TEN-CONFIG-007`, `TEN-CONFIG-008`, `TEN-CONFIG-009` |
 | `TEN-DEDICATED` | `TEN-DEDICATED-001` |
 | `TEN-DOCS` | `TEN-DOCS-001`, `TEN-DOCS-002`, `TEN-DOCS-003`, `TEN-DOCS-004`, `TEN-DOCS-005`, `TEN-DOCS-006`, `TEN-DOCS-007` |
@@ -858,6 +858,10 @@ below.
   functions, and lines.
 - [x] Execute database-backed custom-role matrices for direct users,
   group-derived users, API clients, and service accounts on PostgreSQL.
+- [x] Publish and validate the machine-readable authorization state-space
+  foundation against every canonical principal type, resource type, permission
+  scope, role scope, action operation, and action risk. Keep it explicitly
+  non-release-eligible until every generated execution obligation is closed.
 - [x] Execute Chromium local-stack provisioning, mapping, fail-closed runtime,
   migration, metrics, cleanup, and active-session revocation journeys.
 - [ ] Generate and execute the complete constraint-derived authorization

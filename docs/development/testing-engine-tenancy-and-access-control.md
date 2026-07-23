@@ -239,6 +239,20 @@ does not claim 100% source coverage for unrelated monorepo files.
 
 ## Required Authorization State-Space
 
+`TEN-AUTHZ-016` is the fail-closed foundation for this gate. Run it with:
+
+```bash
+pnpm run test:authz:state-space-foundation
+```
+
+It compares `test/authz/authorization-state-space-contract.json` with the
+production principal, resource, permission, role, action-operation, and
+action-risk registries; verifies that every named invalidity rule and current
+execution family points to a real test; and asserts that the foundation remains
+explicitly non-release-eligible. Adding a canonical value without updating the
+contract fails this lane. The foundation does not produce or substitute for
+the final `authorization-matrix.json`.
+
 Implement the remaining generated coverage in this order:
 
 1. read dimensions only from production registries and store their hashes and

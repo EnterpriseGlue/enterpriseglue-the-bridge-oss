@@ -17,7 +17,7 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The version-2 machine-readable manifest provides 100% traceability for its 77
+The version-2 machine-readable manifest provides 100% traceability for its 78
 registered engine-tenancy requirements: every requirement has an exact
 automated test, expected outcome, Markdown reference, executable CI lane,
 explicit coverage dimensions, and retained evidence location. It also
@@ -82,8 +82,11 @@ The focused lanes cover:
 
 The pull-request authorization gate also executes the database-backed custom
 role and randomized direct/group matrix, API-client/service-account parity,
-and the targeted mutation guard. The latest local mutation execution killed
-all nine mutants, including all five mandatory tenancy fault classes.
+the canonical authorization state-space foundation, and the targeted mutation
+guard. The foundation is deliberately marked non-release-eligible until its
+remaining generated execution obligations are closed. The latest local
+mutation execution killed all nine mutants, including all five mandatory
+tenancy fault classes.
 
 The authoritative list is
 `test/authz/engine-tenancy-functional-coverage.json`. The commands and exact
@@ -97,12 +100,12 @@ meaning of 100% functional coverage are documented in
 | Foundation | 45 |
 | Provisioning | 117 |
 | Mappings and configuration ownership | 248 |
-| Authorization and custom roles | 314 |
+| Authorization and custom roles | 327 |
 | Runtime enforcement | 348 |
 | Classification and transitions | 151 |
 | Operational metrics | 46 |
 | Documentation and traceability | 52 |
-| **Focused-lane total** | **1,321** |
+| **Focused-lane total** | **1,334** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
