@@ -134,9 +134,16 @@ and exact mapping-version checks. Journey 10 then exercises filtered and denied
 process-definition, process-instance, preview-count, mutation, batch, job, task,
 incident, history, and deployment-history paths. Its request ledger proves an
 inventoried but unauthorized sibling definition is denied before the matching
-Camunda detail request is sent. The implemented denominator is therefore ten
-of fourteen journeys and eighteen of thirty required channel executions.
-Journeys 11–14 stay explicitly missing until their matching real-service tests
+Camunda detail request is sent. Journey 11 preserves an already-authenticated
+browser page and a separate
+cookie-authenticated HTTP request context. It proves both receive immediate
+`403` responses after role-assignment revocation, regain only the exact
+restored grant, lose access again when the source-owned runtime-tenant mapping
+is deactivated through the current provisioning channel, and regain access
+only after that mapping is restored and inventory is reconciled. The
+implemented denominator is therefore eleven of fourteen journeys and
+twenty-one of thirty required channel executions. Journeys 12–14 stay
+explicitly missing until their matching real-service tests
 are implemented and qualified on the same clean commit.
 
 The Journey 10 fixture exposes a localhost-only mock control endpoint. The

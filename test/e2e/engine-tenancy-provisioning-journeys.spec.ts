@@ -94,6 +94,10 @@ async function provePrincipalRoleAssignmentMatrix(input: {
   suffix: string;
   commit: string;
   sourceState: string;
+  setRuntimeTenantMappingActive: (input: {
+    runtimeTenantId: string;
+    active: boolean;
+  }) => Promise<void>;
 }): Promise<void> {
   const {
     page,
@@ -105,6 +109,7 @@ async function provePrincipalRoleAssignmentMatrix(input: {
     suffix,
     commit,
     sourceState,
+    setRuntimeTenantMappingActive,
   } = input;
   const fixture = getE2EFineGrainedFixture();
   expect(fixture.scopedUserId, 'Journey 8 requires the seeded direct user').toBeTruthy();
@@ -115,6 +120,7 @@ async function provePrincipalRoleAssignmentMatrix(input: {
   let apiClientId: string | null = null;
   let serviceAccountId: string | null = null;
   let restrictedContext: BrowserContext | null = null;
+  let activeApiSession: APIRequestContext | null = null;
   let mockControl: APIRequestContext | null = null;
   const assignmentIds: string[] = [];
 
@@ -490,12 +496,124 @@ async function provePrincipalRoleAssignmentMatrix(input: {
     );
     expect(deploymentHistory).toEqual([]);
 
+    activeApiSession = await playwrightRequest.newContext({
+      baseURL: baseUrl,
+      ignoreHTTPSErrors: true,
+      storageState: await restrictedContext.storageState(),
+    });
+    const definitionsPath =
+      `/mission-control-api/process-definitions?engineId=${encodeURIComponent(engineId)}`;
+    const browserDefinitionKeys = async (): Promise<{
+      status: number;
+      keys: string[];
+    }> => restrictedPage.evaluate(async (url) => {
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+      const body = await response.json().catch(() => []);
+      return {
+        status: response.status,
+        keys: Array.isArray(body)
+          ? body.map((definition: { key?: unknown }) => String(definition.key))
+          : [],
+      };
+    }, definitionsPath);
+    const apiDefinitionKeys = async (): Promise<{
+      status: number;
+      keys: string[];
+    }> => {
+      const response = await activeApiSession!.get(definitionsPath);
+      const body = await response.json().catch(() => []);
+      return {
+        status: response.status(),
+        keys: Array.isArray(body)
+          ? body.map((definition: { key?: unknown }) => String(definition.key))
+          : [],
+      };
+    };
+
+    expect(await browserDefinitionKeys()).toEqual({
+      status: 200,
+      keys: [resourceKey],
+    });
+    expect(await apiDefinitionKeys()).toEqual({
+      status: 200,
+      keys: [resourceKey],
+    });
+
     const removeExpiringAssignment = await page.request.delete(
       `/api/authz/role-assignments/${encodeURIComponent(expiringAssignment.id)}`,
       mutationOptions(csrf),
     );
     expect(removeExpiringAssignment.status()).toBe(204);
     assignmentIds.splice(assignmentIds.indexOf(expiringAssignment.id), 1);
+
+    expect(await browserDefinitionKeys()).toEqual({ status: 403, keys: [] });
+    expect(await apiDefinitionKeys()).toEqual({ status: 403, keys: [] });
+
+    const restoredAssignment = await responseJson<{ id: string; warnings?: string[] }>(
+      await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        roleId,
+        resourceType: 'engine_runtime_resource',
+        resourceId: runtimeResourceId,
+        expiresAt,
+      })),
+      `restore Journey 11 ${channel} runtime role`,
+    );
+    assignmentIds.push(restoredAssignment.id);
+    expect(restoredAssignment.warnings ?? []).toEqual([]);
+    expect(await browserDefinitionKeys()).toEqual({
+      status: 200,
+      keys: [resourceKey],
+    });
+    expect(await apiDefinitionKeys()).toEqual({
+      status: 200,
+      keys: [resourceKey],
+    });
+
+    await setRuntimeTenantMappingActive({
+      runtimeTenantId,
+      active: false,
+    });
+    await responseJson(
+      await page.request.post(
+        `/engines-api/engines/${encodeURIComponent(engineId)}/runtime-resources/reconcile`,
+        mutationOptions(csrf),
+      ),
+      `reconcile Journey 11 ${channel} removed mapping`,
+    );
+    expect(await browserDefinitionKeys()).toEqual({ status: 403, keys: [] });
+    expect(await apiDefinitionKeys()).toEqual({ status: 403, keys: [] });
+
+    await setRuntimeTenantMappingActive({
+      runtimeTenantId,
+      active: true,
+    });
+    await responseJson(
+      await page.request.post(
+        `/engines-api/engines/${encodeURIComponent(engineId)}/runtime-resources/reconcile`,
+        mutationOptions(csrf),
+      ),
+      `reconcile Journey 11 ${channel} restored mapping`,
+    );
+    expect(await browserDefinitionKeys()).toEqual({
+      status: 200,
+      keys: [resourceKey],
+    });
+    expect(await apiDefinitionKeys()).toEqual({
+      status: 200,
+      keys: [resourceKey],
+    });
+
+    const removeRestoredAssignment = await page.request.delete(
+      `/api/authz/role-assignments/${encodeURIComponent(restoredAssignment.id)}`,
+      mutationOptions(csrf),
+    );
+    expect(removeRestoredAssignment.status()).toBe(204);
+    assignmentIds.splice(assignmentIds.indexOf(restoredAssignment.id), 1);
 
     const expiredAssignment = await responseJson<{ id: string }>(
       await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
@@ -638,8 +756,40 @@ async function provePrincipalRoleAssignmentMatrix(input: {
         },
       }, null, 2)}\n`,
     );
+    await writeFile(
+      path.join(observationDirectory, `journey-11-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 11,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'active-browser-session',
+          'active-api-session',
+          'assignment-revocation',
+          'mapping-removal',
+          'cache-invalidation',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
   } finally {
     await mockControl?.dispose();
+    await activeApiSession?.dispose();
     await restrictedContext?.close();
     for (const assignmentId of assignmentIds.reverse()) {
       const response = await page.request.delete(
@@ -1696,6 +1846,41 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      const setManualRuntimeTenantMappingActive = async ({
+        runtimeTenantId,
+        active,
+      }: {
+        runtimeTenantId: string;
+        active: boolean;
+      }): Promise<void> => {
+        const result = await responseJson<{
+          dryRun: boolean;
+          mappingVersion: number;
+        }>(
+          await page.request.put(
+            `/engines-api/engines/${encodeURIComponent(sharedEngineId)}/tenant-mappings`,
+            mutationOptions(token, {
+              expectedMappingVersion,
+              atomic: true,
+              dryRun: false,
+              mappings: [{
+                externalTenantId: runtimeTenantId,
+                tenantRef: { type: 'default' },
+                strategy: 'engine_tenant_id',
+                sourceRef: `manual:journey-07:${runtimeTenantId}:${suffix}`,
+                active,
+              }],
+            }),
+          ),
+          `${active ? 'restore' : 'remove'} Journey 11 manual runtime mapping`,
+        );
+        expect(result).toMatchObject({
+          dryRun: false,
+          mappingVersion: expectedMappingVersion + 1,
+        });
+        expectedMappingVersion = result.mappingVersion;
+      };
+
       await provePrincipalRoleAssignmentMatrix({
         page,
         csrf: token,
@@ -1716,6 +1901,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         suffix,
         commit,
         sourceState,
+        setRuntimeTenantMappingActive: setManualRuntimeTenantMappingActive,
       });
 
       await editModal.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -2053,6 +2239,41 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      let currentMappingVersion = mappingApply.mappingVersion;
+      const setExternalRuntimeTenantMappingActive = async ({
+        runtimeTenantId,
+        active,
+      }: {
+        runtimeTenantId: string;
+        active: boolean;
+      }): Promise<void> => {
+        const result = await responseJson<{
+          dryRun: boolean;
+          mappingVersion: number;
+        }>(
+          await externalApi!.put(mappingPath, {
+            data: {
+              expectedMappingVersion: currentMappingVersion,
+              atomic: true,
+              dryRun: false,
+              mappings: [{
+                externalTenantId: runtimeTenantId,
+                tenantRef: { type: 'default' },
+                strategy: 'engine_tenant_id',
+                sourceRef: `external:journey-07:${runtimeTenantId}:${suffix}`,
+                active,
+              }],
+            },
+          }),
+          `${active ? 'restore' : 'remove'} Journey 11 external runtime mapping`,
+        );
+        expect(result).toMatchObject({
+          dryRun: false,
+          mappingVersion: currentMappingVersion + 1,
+        });
+        currentMappingVersion = result.mappingVersion;
+      };
+
       await provePrincipalRoleAssignmentMatrix({
         page,
         csrf: token,
@@ -2073,6 +2294,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         suffix,
         commit,
         sourceState,
+        setRuntimeTenantMappingActive: setExternalRuntimeTenantMappingActive,
       });
 
       const sharedDecommission = await responseJson<{
@@ -2590,6 +2812,41 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      let mappingChangeSequence = 0;
+      const setConfigRuntimeTenantMappingActive = async ({
+        runtimeTenantId,
+        active,
+      }: {
+        runtimeTenantId: string;
+        active: boolean;
+      }): Promise<void> => {
+        mappingChangeSequence += 1;
+        const engineTenantMappings = mappedEnvelope.files[
+          './engine-tenant-mappings.json'
+        ].engineTenantMappings.map((mapping) => ({
+          ...mapping,
+          active: mapping.externalTenantId === runtimeTenantId ? active : mapping.active,
+        }));
+        const result = await applyBundle(
+          {
+            bundle: mappedEnvelope.bundle,
+            files: {
+              './engines.json': mappedEnvelope.files['./engines.json'],
+              './engine-tenant-mappings.json': { engineTenantMappings },
+            },
+          },
+          `journey-11-config-mapping-${mappingChangeSequence}-${suffix}`,
+          `${active ? 'restore' : 'remove'} Journey 11 configuration runtime mapping`,
+        );
+        expect(result.changes).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            objectType: 'engine_tenant_mapping',
+            key: mappingKeys.blue,
+            operation: 'update',
+          }),
+        ]));
+      };
+
       await provePrincipalRoleAssignmentMatrix({
         page,
         csrf: token,
@@ -2610,6 +2867,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         suffix,
         commit,
         sourceState,
+        setRuntimeTenantMappingActive: setConfigRuntimeTenantMappingActive,
       });
 
       const exported = await responseJson<{

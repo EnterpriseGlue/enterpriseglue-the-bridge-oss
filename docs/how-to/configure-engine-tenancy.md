@@ -156,7 +156,7 @@ registered through the external API, or applied from a configuration bundle:
    created it and confirm its mappings and inventory no longer authorize
    access.
 
-The repository's localhost-only Journeys 4–10 automation executes this
+The repository's localhost-only Journeys 4–11 automation executes this
 sequence through the manual, external, and configuration provisioning
 lifecycles against the real backend, PostgreSQL database, authorization
 evaluator, and a Docker-hosted Camunda-compatible endpoint. Passing these
@@ -170,6 +170,15 @@ Mission Control returns only the mapped definition and its instances, tasks,
 and history. It also verifies safe denial for unbounded counts and query-based
 batches, allows an exact authorized mutation, and rejects an unauthorized
 sibling definition before sending that detail request to the engine.
+
+Journey 11 proves that operators do not need to end user sessions to make
+revocation effective. In an already-open browser and an already-authenticated
+HTTP session, deleting the exact runtime assignment produces an immediate
+`403`. Restoring the assignment restores only its mapped resource. Deactivating
+that resource's tenant mapping through its owning manual, external, or
+configuration channel immediately removes access again; restoring the mapping
+and reconciling inventory restores access. If access survives either removal,
+treat it as a security defect rather than advising the user to log out.
 
 ### Manage Topology and Mappings in the UI
 
