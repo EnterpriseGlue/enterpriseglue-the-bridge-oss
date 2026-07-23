@@ -17,9 +17,9 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
-The real-service provisioning suite now passes Journeys 1–7, including all
-three required channels of Journey 7: seven of fourteen journeys and nine of
-thirty required channel executions. It covers the manual UI, a least-privilege
+The real-service provisioning suite now passes Journeys 1–8, including all
+three required channels of Journeys 7 and 8: eight of fourteen journeys and
+twelve of thirty required channel executions. It covers the manual UI, a least-privilege
 external API client, and authoritative configuration bundles against the same
 local HTTP service, PostgreSQL database, authorization evaluator, and
 Camunda-compatible Docker endpoint. The provisioning release artifact remains
@@ -118,7 +118,7 @@ meaning of 100% functional coverage are documented in
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
-| Real-service provisioning channel executions | **9** |
+| Real-service provisioning channel executions | **12** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -177,6 +177,11 @@ Journey 7 repeats runtime-resource resolution through all three channels:
 dedicated resources inherit their engine tenant, unresolved shared resources
 remain quarantined, and two explicit runtime-tenant mappings make the shared
 inventory ready without widening generic runtime engine discovery.
+Journey 8 repeats the principal/role matrix on each channel-provisioned shared
+engine: direct users, groups, API clients, and service accounts are persisted
+through canonical assignments; both predefined and custom engine roles are
+covered; and the live Effective Access evaluator proves direct and
+group-derived sources.
 
 ## Defects Found and Fixed
 
@@ -284,7 +289,7 @@ release qualification. The remaining gates are:
   MySQL, SQL Server, Oracle, and Spanner;
 - complete error-announcement, contrast, 200% zoom/reflow, and reduced-motion
   evidence for all new browser workflows;
-- implement Journeys 8–14, then execute all 14 supported UI, external API, and
+- implement Journeys 9–14, then execute all 14 supported UI, external API, and
   configuration provisioning journeys (30 required channel executions)
   against persistent local services and record stable errors for unsupported
   combinations;

@@ -61,6 +61,7 @@ export function getE2EFineGrainedFixture() {
     groupEmail: data.groupScopedEmail,
     groupPassword: data.groupScopedPassword,
     groupScopedUserId: data.groupScopedUserId,
+    groupScopedGroupId: data.groupScopedGroupId,
     groupScopedEngineId: data.groupScopedEngineId,
     groupScopedEngineName: data.groupScopedEngineName,
     groupScopedMembershipId: data.groupScopedMembershipId,

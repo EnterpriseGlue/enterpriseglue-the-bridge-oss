@@ -599,6 +599,7 @@ export default async function globalSetup() {
       runtimeSiblingDefinitionId,
       scopedSourceRef,
       groupScopedUserId,
+      groupScopedGroupId,
       groupScopedEmail,
       groupScopedPassword,
       groupScopedEngineId,

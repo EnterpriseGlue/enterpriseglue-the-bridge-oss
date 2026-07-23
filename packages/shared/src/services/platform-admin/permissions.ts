@@ -1555,12 +1555,14 @@ export interface GrantPermissionInput {
 }
 
 function slugifyRoleName(name: string): string {
-  return name
+  const slug = name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'role';
+    .slice(0, 48)
+    .replace(/-+$/g, '');
+  return slug || 'role';
 }
 
 async function recordAuthzAudit(

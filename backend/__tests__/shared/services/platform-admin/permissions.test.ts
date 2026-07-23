@@ -1339,6 +1339,41 @@ describe('permissionService', () => {
     ]);
   });
 
+  it('keeps generated custom role keys valid when a long name is truncated at punctuation', async () => {
+    const roleInsert = vi.fn().mockResolvedValue(undefined);
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRole) return { insert: roleInsert };
+        if (entity === RbacRolePermission) {
+          return {
+            delete: vi.fn().mockResolvedValue(undefined),
+            insert: vi.fn().mockResolvedValue(undefined),
+          };
+        }
+        if (entity === AuditLog) return { insert: vi.fn().mockResolvedValue(undefined) };
+        throw new Error('Unexpected repository');
+      },
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      transaction: async (callback: any) => callback(manager),
+      getRepository: (entity: unknown) => {
+        if (entity === RbacPermission) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await permissionService.createCustomRole({
+      name: 'Journey 8 engine reader manual-ui 1753350000000-abcdef',
+      scope: 'engine',
+      permissionIds: [EnginePermissions.INSTANCE_VIEW],
+      createdById: 'admin-1',
+    });
+
+    expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({
+      key: expect.stringMatching(/^custom\.engine\.[a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]{8}$/),
+    }));
+  });
+
   it('records stable provenance for config-managed custom roles', async () => {
     const roleInsert = vi.fn().mockResolvedValue(undefined);
     const permissionDelete = vi.fn().mockResolvedValue(undefined);

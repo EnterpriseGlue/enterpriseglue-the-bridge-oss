@@ -126,10 +126,12 @@ external API lifecycle described below. Journey 3 proves the dedicated
 configuration-bundle round trip. Journeys 4–6 prove the matching shared-engine
 lifecycle through the manual UI, external API, and configuration bundle.
 Journey 7 proves runtime-resource tenant resolution through all three required
-channels. The implemented denominator is therefore seven of fourteen journeys
-and nine of thirty required channel executions. Journeys 8–14 stay explicitly
-missing until their matching real-service tests are implemented and qualified
-on the same clean commit.
+channels. Journey 8 proves direct-user, group-derived-user, API-client, and
+service-account assignments with both predefined and custom engine roles
+against each channel-provisioned shared engine. The implemented denominator is
+therefore eight of fourteen journeys and twelve of thirty required channel
+executions. Journeys 9–14 stay explicitly missing until their matching
+real-service tests are implemented and qualified on the same clean commit.
 
 Journey 2 creates a reveal-once disposable API client, first proves the
 machine principal is denied without its registrar role, then executes create,
@@ -192,6 +194,17 @@ assignment. All engine reads, authorization decisions, reconciliation,
 mapping, and cleanup still pass through the real HTTP services and canonical
 authorization evaluator; the fixture row and disposable role are removed in
 teardown.
+
+Journey 8 creates a disposable custom engine role and reveal-once API-client
+and service-account credentials for each channel. It assigns the custom role
+to a direct user and API client, assigns the predefined Engine Operator role
+to a group and service account, verifies all four canonical assignment rows,
+and exercises Effective Access for the direct and group-derived users. The
+machine credentials remain separate from browser-session authentication; their
+HTTP deployment, rotation, expiry, and revocation behavior is covered by the
+machine-principal lane and will be repeated in the relevant later journeys.
+All Journey 8 assignments, credentials, and roles are removed or archived
+before the channel removes its engine.
 
 The journey runner succeeds when every currently implemented journey passes,
 but keeps the assembled artifact visibly incomplete while any of the 14

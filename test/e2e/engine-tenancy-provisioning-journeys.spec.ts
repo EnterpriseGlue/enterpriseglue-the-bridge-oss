@@ -12,7 +12,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Pool } from 'pg';
 import { canonicalRoleAssignmentKey } from '../../packages/shared/src/authz/role-assignment-identity';
-import { getE2ECredentials, hasE2ECredentials } from './utils/credentials';
+import {
+  getE2ECredentials,
+  getE2EFineGrainedFixture,
+  hasE2ECredentials,
+} from './utils/credentials';
 
 function isLocalUrl(value: string): boolean {
   try {
@@ -66,6 +70,245 @@ function mutationOptions(token: string, data?: unknown) {
     headers: { 'X-CSRF-Token': token },
     ...(data === undefined ? {} : { data }),
   };
+}
+
+type ProvisioningJourneyChannel =
+  | 'manual-ui'
+  | 'external-api'
+  | 'configuration-bundle';
+
+async function provePrincipalRoleAssignmentMatrix(input: {
+  page: Page;
+  csrf: string;
+  engineId: string;
+  channel: ProvisioningJourneyChannel;
+  suffix: string;
+  commit: string;
+  sourceState: string;
+}): Promise<void> {
+  const { page, csrf, engineId, channel, suffix, commit, sourceState } = input;
+  const fixture = getE2EFineGrainedFixture();
+  expect(fixture.scopedUserId, 'Journey 8 requires the seeded direct user').toBeTruthy();
+  expect(fixture.groupScopedUserId, 'Journey 8 requires the seeded group member').toBeTruthy();
+  expect(fixture.groupScopedGroupId, 'Journey 8 requires the seeded authorization group').toBeTruthy();
+
+  let roleId: string | null = null;
+  let apiClientId: string | null = null;
+  let serviceAccountId: string | null = null;
+  const assignmentIds: string[] = [];
+
+  try {
+    const customRole = await responseJson<{ id: string }>(
+      await page.request.post('/api/authz/roles', mutationOptions(csrf, {
+        name: `Journey 8 engine reader ${channel} ${suffix}`,
+        description: `Disposable ${channel} principal matrix role`,
+        scope: 'engine',
+        permissionIds: ['engine:instance:view'],
+      })),
+      `create Journey 8 ${channel} custom role`,
+    );
+    roleId = customRole.id;
+
+    const apiClient = await responseJson<{
+      client: { id: string; tokenPrefix: string; scopes: string[] };
+      token: string;
+    }>(
+      await page.request.post('/api/authz/api-clients', mutationOptions(csrf, {
+        name: `e2e-j08-client-${channel}-${suffix}`,
+        scopes: ['deployment:execute'],
+      })),
+      `create Journey 8 ${channel} API client`,
+    );
+    apiClientId = apiClient.client.id;
+    expect(apiClient.token).toBeTruthy();
+    expect(apiClient.client.tokenPrefix).toBeTruthy();
+    expect(apiClient.client.scopes).toEqual(['deployment:execute']);
+
+    const serviceAccount = await responseJson<{
+      account: { id: string; tokenPrefix: string; scopes: string[] };
+      token: string;
+    }>(
+      await page.request.post('/api/authz/service-accounts', mutationOptions(csrf, {
+        name: `e2e-j08-service-${channel}-${suffix}`,
+        description: `Disposable ${channel} principal matrix account`,
+        scopes: ['deployment:execute'],
+      })),
+      `create Journey 8 ${channel} service account`,
+    );
+    serviceAccountId = serviceAccount.account.id;
+    expect(serviceAccount.token).toBeTruthy();
+    expect(serviceAccount.account.tokenPrefix).toBeTruthy();
+    expect(serviceAccount.account.scopes).toEqual(['deployment:execute']);
+
+    const assignments = [
+      {
+        principalType: 'user',
+        principalId: fixture.scopedUserId!,
+        roleId,
+      },
+      {
+        principalType: 'group',
+        principalId: fixture.groupScopedGroupId!,
+        roleId: 'system.engine.operator',
+      },
+      {
+        principalType: 'api_client',
+        principalId: apiClientId,
+        roleId,
+      },
+      {
+        principalType: 'service_account',
+        principalId: serviceAccountId,
+        roleId: 'system.engine.operator',
+      },
+    ] as const;
+
+    for (const assignment of assignments) {
+      const created = await responseJson<{ id: string; warnings?: string[] }>(
+        await page.request.post('/api/authz/role-assignments', mutationOptions(csrf, {
+          ...assignment,
+          resourceType: 'engine',
+          resourceId: engineId,
+        })),
+        `assign Journey 8 ${channel} ${assignment.principalType} role`,
+      );
+      assignmentIds.push(created.id);
+      expect(created.warnings ?? []).toEqual([]);
+    }
+
+    const directEvaluation = await responseJson<{
+      allowed: boolean;
+      sources: Array<Record<string, unknown>>;
+    }>(
+      await page.request.post('/api/authz/evaluate', mutationOptions(csrf, {
+        userId: fixture.scopedUserId,
+        permission: 'engine:instance:view',
+        resourceType: 'engine',
+        resourceId: engineId,
+      })),
+      `evaluate Journey 8 ${channel} direct-user custom role`,
+    );
+    expect(directEvaluation.allowed).toBe(true);
+    expect(directEvaluation.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        principalType: 'user',
+        principalId: fixture.scopedUserId,
+        roleId,
+        scopeType: 'engine',
+        scopeId: engineId,
+      }),
+    ]));
+
+    const groupEvaluation = await responseJson<{
+      allowed: boolean;
+      sources: Array<Record<string, unknown>>;
+    }>(
+      await page.request.post('/api/authz/evaluate', mutationOptions(csrf, {
+        userId: fixture.groupScopedUserId,
+        permission: 'engine:instance:view',
+        resourceType: 'engine',
+        resourceId: engineId,
+      })),
+      `evaluate Journey 8 ${channel} group predefined role`,
+    );
+    expect(groupEvaluation.allowed).toBe(true);
+    expect(groupEvaluation.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        principalType: 'group',
+        principalId: fixture.groupScopedGroupId,
+        roleId: 'system.engine.operator',
+        scopeType: 'engine',
+        scopeId: engineId,
+      }),
+    ]));
+
+    const persistedAssignments = await responseJson<Array<Record<string, unknown>>>(
+      await page.request.get(
+        `/api/authz/role-assignments?resourceType=engine&resourceId=${encodeURIComponent(engineId)}`,
+      ),
+      `list Journey 8 ${channel} persisted assignments`,
+    );
+    for (const assignment of assignments) {
+      expect(persistedAssignments).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          principalType: assignment.principalType,
+          principalId: assignment.principalId,
+          roleId: assignment.roleId,
+          resourceType: 'engine',
+          resourceId: engineId,
+          scopeType: 'engine',
+          scopeId: engineId,
+        }),
+      ]));
+    }
+
+    const observationDirectory = path.join(
+      process.cwd(),
+      'test/results/engine-tenancy-provisioning-observations',
+    );
+    await mkdir(observationDirectory, { recursive: true });
+    await writeFile(
+      path.join(observationDirectory, `journey-08-${channel}.json`),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        journeyId: 8,
+        channel,
+        status: 'passed',
+        commit,
+        sourceState,
+        releaseCommitQualified: sourceState === 'clean',
+        localhostOnly: true,
+        realHttpService: true,
+        persistentDatabase: true,
+        authorizationEvaluator: true,
+        userInterface: channel === 'manual-ui',
+        assertions: [
+          'user',
+          'group',
+          'api-client',
+          'service-account',
+          'predefined-role',
+          'custom-role',
+        ],
+        sanitization: {
+          containsCredentials: false,
+          containsTokens: false,
+          containsPrivateEndpoints: false,
+          containsRawIdentityClaims: false,
+          containsCustomerIdentifiers: false,
+        },
+      }, null, 2)}\n`,
+    );
+  } finally {
+    for (const assignmentId of assignmentIds.reverse()) {
+      const response = await page.request.delete(
+        `/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+    if (serviceAccountId) {
+      const response = await page.request.delete(
+        `/api/authz/service-accounts/${encodeURIComponent(serviceAccountId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+    if (apiClientId) {
+      const response = await page.request.delete(
+        `/api/authz/api-clients/${encodeURIComponent(apiClientId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+    if (roleId) {
+      const response = await page.request.delete(
+        `/api/authz/roles/${encodeURIComponent(roleId)}`,
+        mutationOptions(csrf),
+      );
+      expect([204, 404]).toContain(response.status());
+    }
+  }
 }
 
 test.describe('Engine tenancy provisioning journeys', () => {
@@ -1092,6 +1335,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
         new Set(['resolved']),
       );
 
+      await provePrincipalRoleAssignmentMatrix({
+        page,
+        csrf: token,
+        engineId: sharedEngineId,
+        channel: 'manual-ui',
+        suffix,
+        commit,
+        sourceState,
+      });
+
       await editModal.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(editModal).not.toBeVisible();
       const mappedSharedRow = page.getByRole('row').filter({ hasText: sharedName });
@@ -1426,6 +1679,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
       expect(new Set(mappedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
         new Set(['resolved']),
       );
+
+      await provePrincipalRoleAssignmentMatrix({
+        page,
+        csrf: token,
+        engineId: sharedEngineId,
+        channel: 'external-api',
+        suffix,
+        commit,
+        sourceState,
+      });
 
       const sharedDecommission = await responseJson<{
         decommissioned: boolean;
@@ -1941,6 +2204,16 @@ test.describe('Engine tenancy provisioning journeys', () => {
       expect(new Set(mappedResources.map((resource) => resource.tenantResolutionStatus))).toEqual(
         new Set(['resolved']),
       );
+
+      await provePrincipalRoleAssignmentMatrix({
+        page,
+        csrf: token,
+        engineId: sharedEngineId,
+        channel: 'configuration-bundle',
+        suffix,
+        commit,
+        sourceState,
+      });
 
       const exported = await responseJson<{
         bundle: Record<string, unknown>;
