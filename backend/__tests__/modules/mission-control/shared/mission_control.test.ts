@@ -115,7 +115,7 @@ describe('mission-control shared mission_control routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
 
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    (getDataSource as unknown as Mock).mockReset().mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Engine) {
           return {
@@ -130,7 +130,9 @@ describe('mission-control shared mission_control routes', () => {
       },
     });
 
-    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+    (camundaGet as unknown as Mock).mockReset();
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockReset().mockResolvedValue([]);
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockImplementation(async (permission: string) =>
       permission.startsWith('engine:')
     );
   });
