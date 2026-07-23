@@ -682,7 +682,7 @@ checkboxes are closed.
 - [x] Add runtime-resource tenant-resolution fields.
 - [x] Register entities in every database adapter.
 - [x] Add portable migrations and schema invariants.
-- [ ] Implement classification preview and migration evidence report.
+- [x] Implement classification preview and migration evidence report.
 
 ### Phase 2: shared contracts
 
@@ -706,7 +706,7 @@ checkboxes are closed.
 
 - [x] Update manual create/update services and routes.
 - [x] Update external engine upsert and field ownership.
-- [ ] Add topology preview/apply APIs.
+- [x] Add topology preview/apply APIs.
 - [x] Add mapping list/upsert APIs.
 - [x] Update config preview/diff/apply/export for engine topology.
 - [ ] Add configuration-owned mapping rows and drift reconciliation.

@@ -38,6 +38,7 @@ pnpm run test:engine-tenancy:foundation
 pnpm run test:engine-tenancy:provisioning
 pnpm run test:engine-tenancy:mappings
 pnpm run test:engine-tenancy:authorization
+pnpm run test:engine-tenancy:transitions
 ```
 
 The authorization lane:
@@ -48,6 +49,17 @@ The authorization lane:
 3. executes tenant-role inheritance, runtime visibility, route, schema, config
    apply/diff/export, and Effective Access tests; and
 4. executes the Access Control tenant-scope UI tests.
+
+The transition lane:
+
+1. validates the functional-coverage manifest;
+2. holds the pure classification and topology-transition policy modules to
+   100% statements, branches, functions, and lines;
+3. tests every valid transition and equivalent/invalid proposals;
+4. tests expiry, stale hashes, missing acknowledgements, optimistic
+   concurrency, transaction-side invalidation, source ownership, and audits;
+   and
+5. checks routes, action inventory, canonical schemas, and OpenAPI together.
 
 Run package type checks after any contract change:
 
@@ -71,6 +83,9 @@ The focused matrix proves:
 | Configuration | tenant role/assignment preview, diff, apply, export | unsafe tenant-role permission |
 | Effective Access | sanitized mapping lineage | raw claims, credentials, or foreign inventory |
 | UI | Current tenant for every supported principal | no raw tenant-ID field |
+| Classification | explicit dedicated/shared and safe engine-wide default proposal | ambiguous resource-aware and invalid topology |
+| Topology transition | all four supported transitions | unchanged proposal, stale/expired hash, missing acknowledgement, source-owner bypass |
+| Transition apply | atomic state change, quarantine/resolution, materialization invalidation, reconciliation | optimistic concurrency failure rolls back before dependent writes |
 
 Any new canonical permission must make the classifier test fail until it is
 explicitly reviewed as tenant-safe or prohibited.

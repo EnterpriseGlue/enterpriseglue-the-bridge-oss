@@ -8,7 +8,8 @@ and security reviewers.
 
 Status: Manual and external create/update tenancy contracts, tenant mapping
 administration, diagnostics, and runtime reconciliation are implemented.
-Topology transition APIs and configuration-owned mapping rows remain planned.
+Classification and topology transition APIs are implemented. Configuration-owned
+mapping rows remain planned.
 
 ## Request Contract
 
@@ -125,6 +126,113 @@ Manual update omission preserves existing topology; external upsert omission
 reasserts the compatibility-dedicated contract and cannot overwrite a shared
 engine.
 
+## Classification and Transition API
+
+Platform engine administrators can inventory migration state without changing
+it:
+
+```text
+GET /engines-api/engines/tenancy/classification-report
+```
+
+The report returns only sanitized engine topology and recommendations. An
+unowned `engine_wide` engine can be proposed for the configured default tenant.
+An unowned `resource_aware` engine requires human review; it is not inferred as
+shared.
+
+Preview a manual transition:
+
+```http
+POST /engines-api/engines/{id}/tenancy/preview
+Content-Type: application/json
+
+{
+  "tenancy": {
+    "mode": "shared",
+    "mappingStrategy": "engine_tenant_id",
+    "unmappedPolicy": "deny"
+  }
+}
+```
+
+The response reports aggregate affected objects and visibility changes, for
+example:
+
+```json
+{
+  "engineId": "engine-1",
+  "kind": "dedicated_to_shared",
+  "current": {
+    "mode": "dedicated",
+    "tenantId": "tenant-a",
+    "mappingStrategy": null,
+    "mappingVersion": 0,
+    "resolutionStatus": "ready",
+    "runtimeAccessScope": "engine_wide"
+  },
+  "proposed": {
+    "mode": "shared",
+    "tenantId": null,
+    "mappingStrategy": "engine_tenant_id",
+    "mappingVersion": 1,
+    "resolutionStatus": "incomplete",
+    "runtimeAccessScope": "resource_aware"
+  },
+  "effects": {
+    "roleAssignments": 2,
+    "tenantMappings": 0,
+    "runtimeResources": 12,
+    "engineSetMemberships": 1,
+    "deploymentTargets": 2,
+    "deploymentReceipts": 8,
+    "visibility": {
+      "becomeVisible": 0,
+      "becomeHidden": 12,
+      "becomeUnmapped": 12,
+      "becomeConflicting": 0
+    }
+  },
+  "requiredAcknowledgements": [
+    "acknowledge_topology_change",
+    "acknowledge_resource_quarantine",
+    "acknowledge_access_change"
+  ],
+  "previewHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "previewExpiresAt": 1900000000000
+}
+```
+
+Apply the reviewed transition before expiration:
+
+```http
+POST /engines-api/engines/{id}/tenancy/apply
+Content-Type: application/json
+
+{
+  "tenancy": {
+    "mode": "shared",
+    "mappingStrategy": "engine_tenant_id",
+    "unmappedPolicy": "deny"
+  },
+  "previewHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "previewExpiresAt": 1900000000000,
+  "acknowledgements": [
+    "acknowledge_topology_change",
+    "acknowledge_resource_quarantine",
+    "acknowledge_access_change"
+  ]
+}
+```
+
+Apply recomputes the fingerprint inside its transaction. Any engine,
+assignment, mapping, inventory, Engine Set, deployment-target, or receipt
+change invalidates the preview. Successful apply invalidates materializations
+and schedules runtime reconciliation.
+
+Manual preview/apply requires engine edit access. External-owned topology and
+configuration-locked topology must be changed through their owning source;
+manual routes reject them.
+
 ## Enterprise Resolver Extension
 
 An enterprise backend plugin may implement:
@@ -156,6 +264,9 @@ are registered.
 | 400 | `ENGINE_SHARED_REQUIRES_RESOURCE_AWARE` | Shared topology was paired with engine-wide authorization | Correct request |
 | 403 | `ENGINE_TENANT_REFERENCE_FORBIDDEN` | Reference was denied or cannot be proven locally | Obtain access or configure resolver |
 | 409 | `ENGINE_TENANCY_TRANSITION_REQUIRED` | Ordinary update would change topology, tenant, or mapping strategy | Use transition workflow when available |
+| 409 | `ENGINE_TENANCY_PREVIEW_STALE` | Engine or affected state changed after preview | Create and review a new preview |
+| 409 | `ENGINE_TENANCY_PREVIEW_EXPIRED` | Five-minute preview window elapsed | Create and review a new preview |
+| 400 | `ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED` | One or more preview acknowledgements were omitted | Submit every ID returned by the new preview |
 | 409 | `ENGINE_TENANT_MAPPING_VERSION_CONFLICT` | Mapping version changed after the caller read it | Refresh diagnostics/mappings and retry |
 | 409 | `ENGINE_TENANCY_CONFLICT` | Mapping identity, source ownership, strategy, or resolution is inconsistent | Correct the batch or ownership conflict |
 
@@ -188,8 +299,11 @@ Errors are sanitized and do not reveal whether another tenant exists.
 
 Run `pnpm run test:engine-tenancy:provisioning` for provisioning and
 `pnpm run test:engine-tenancy:mappings` for mapping, runtime, configuration,
-authorization-registry, schema, and OpenAPI contracts. Both validate the
-machine-readable functional coverage manifest.
+authorization-registry, schema, and OpenAPI contracts. Run
+`pnpm run test:engine-tenancy:transitions` for the complete transition matrix,
+classification, concurrency, route, schema, OpenAPI, audit, and 100% critical
+policy coverage. Every lane validates the machine-readable functional coverage
+manifest.
 
 See [Engine Tenancy Data Model](./engine-tenancy-data-model.md) for persistence
 and [Provision Engines Externally](../how-to/provision-engines-externally.md)

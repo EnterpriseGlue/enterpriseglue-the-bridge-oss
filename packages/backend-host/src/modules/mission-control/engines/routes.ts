@@ -30,6 +30,7 @@ import {
 } from '@enterpriseglue/shared/services/platform-admin/index.js'
 import { engineTenancyProvisioningService } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyProvisioningService.js'
 import { engineTenantMappingService } from '@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js'
+import { engineTenancyTransitionService } from '@enterpriseglue/shared/services/platform-admin/EngineTenancyTransitionService.js'
 import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js'
 import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
 import { EnginePermissions, ExternalEngineSystemPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
@@ -43,6 +44,11 @@ import {
   AccessibleEngineSummarySchema,
   CreateEngineRequestSchema,
   EngineConnectionHealthResponseSchema,
+  EngineTenancyClassificationReportSchema,
+  EngineTenancyTransitionApplyRequestSchema,
+  EngineTenancyTransitionApplyResponseSchema,
+  EngineTenancyTransitionPreviewRequestSchema,
+  EngineTenancyTransitionPreviewResponseSchema,
   EndpointAuthenticationPolicyMessages,
   EngineRuntimeQueryCapabilitiesSchema,
   EngineTenantMappingSchema,
@@ -229,6 +235,7 @@ const DEFAULT_EXTERNAL_ENGINE_FIELD_OWNERSHIP: EngineFieldOwnership = {
   labels: 'external',
   auth: 'external',
   version: 'external',
+  tenancy: 'external',
   display: 'manual',
   environment: 'manual',
 }
@@ -254,6 +261,7 @@ const ENGINE_UPDATE_FIELD_GROUPS: Record<string, string> = {
   deploymentDiscoveryEnabled: 'metadata',
   reconciliationIntervalSeconds: 'metadata',
   pipelineReceiptEnabled: 'metadata',
+  tenancy: 'tenancy',
 }
 
 const EXTERNAL_PAYLOAD_FIELD_BY_REQUEST_FIELD: Record<string, string> = {
@@ -1625,8 +1633,96 @@ r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, va
   res.json(ProjectEngineTargetSchema.array().parse(targets))
 }))
 
+r.get('/engines-api/engines/tenancy/classification-report', engineLimiter, requireAuth, requireAction('engine.tenancy.classification.read', { resourceResolver: 'platform.self' }), asyncHandler(async (_req: Request, res: Response) => {
+  res.json(EngineTenancyClassificationReportSchema.parse(
+    await engineTenancyTransitionService.classificationReport(),
+  ))
+}))
+
 r.get('/engines-api/engines/:id/tenancy/diagnostics', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id' }), asyncHandler(async (req: Request, res: Response) => {
   res.json(await engineTenantMappingService.getDiagnostics(String(req.params.id)))
+}))
+
+r.post('/engines-api/engines/:id/tenancy/preview', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), engineRegistrationJsonPayloadLimit, validateBody(EngineTenancyTransitionPreviewRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine) throw Errors.notFound('Engine')
+  const externallyOwned = getExternalOwnedUpdateFields(engine, { tenancy: req.body.tenancy })
+  if (externallyOwned.length > 0) {
+    throw Errors.validation('Externally managed engine topology can only be changed by its owning source')
+  }
+  const configLocked = getConfigLockedUpdateFields(engine, { tenancy: req.body.tenancy })
+  if (configLocked.length > 0) {
+    throw Errors.forbidden('Configuration-managed engine topology can only be changed by its owning bundle')
+  }
+  const result = await engineTenancyTransitionService.preview(engineId, req.body, {
+    requestTenantId: req.tenant?.tenantId || null,
+    principalType: 'user',
+    principalId: req.user!.userId,
+    resolver: engineTenantReferenceResolver(req),
+  })
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.user!.userId,
+    action: 'engine.tenancy.transition.preview',
+    resourceType: 'engine',
+    resourceId: engineId,
+    details: {
+      kind: result.kind,
+      previewHash: result.previewHash,
+      previewExpiresAt: result.previewExpiresAt,
+      requiredAcknowledgements: result.requiredAcknowledgements,
+      current: result.current,
+      proposed: result.proposed,
+      effects: result.effects,
+    },
+  })
+  res.json(EngineTenancyTransitionPreviewResponseSchema.parse(result))
+}))
+
+r.post('/engines-api/engines/:id/tenancy/apply', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), engineRegistrationJsonPayloadLimit, validateBody(EngineTenancyTransitionApplyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine) throw Errors.notFound('Engine')
+  const externallyOwned = getExternalOwnedUpdateFields(engine, { tenancy: req.body.tenancy })
+  if (externallyOwned.length > 0) {
+    throw Errors.validation('Externally managed engine topology can only be changed by its owning source')
+  }
+  const configLocked = getConfigLockedUpdateFields(engine, { tenancy: req.body.tenancy })
+  if (configLocked.length > 0) {
+    throw Errors.forbidden('Configuration-managed engine topology can only be changed by its owning bundle')
+  }
+  const result = await engineTenancyTransitionService.apply(engineId, req.body, {
+    requestTenantId: req.tenant?.tenantId || null,
+    principalType: 'user',
+    principalId: req.user!.userId,
+    resolver: engineTenantReferenceResolver(req),
+  })
+  if (result.transition.proposed.mode === 'dedicated') {
+    await refreshEngineSetMaterializationsForEngine(engineId, result.transition.proposed.tenantId)
+    await refreshRuntimeResourceSetMaterializationsForEngine(engineId, result.transition.proposed.tenantId)
+  }
+  scheduleRuntimeInventoryReconciliation(engineId, result.transition.proposed.tenantId, {
+    runtimeAccessScope: result.transition.proposed.runtimeAccessScope,
+    metadataDiscoveryEnabled: engine.metadataDiscoveryEnabled,
+    deploymentDiscoveryEnabled: engine.deploymentDiscoveryEnabled !== false,
+  })
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.user!.userId,
+    action: 'engine.tenancy.transition.apply',
+    resourceType: 'engine',
+    resourceId: engineId,
+    details: {
+      kind: result.transition.kind,
+      previewHash: result.previewHash,
+      acknowledgements: req.body.acknowledgements,
+      current: result.transition.current,
+      proposed: result.transition.proposed,
+      effects: result.transition.effects,
+    },
+  })
+  res.json(EngineTenancyTransitionApplyResponseSchema.parse(result))
 }))
 
 r.get('/engines-api/engines/:id/tenant-mappings', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.inventory.update', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.ENGINE_EDIT] }), asyncHandler(async (req: Request, res: Response) => {

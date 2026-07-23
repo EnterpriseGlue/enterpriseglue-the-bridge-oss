@@ -60,6 +60,9 @@ export const EngineTenancyErrorCodeSchema = z.enum([
   'ENGINE_TENANCY_UNRESOLVED',
   'ENGINE_TENANCY_CONFLICT',
   'ENGINE_TENANCY_TRANSITION_REQUIRED',
+  'ENGINE_TENANCY_PREVIEW_STALE',
+  'ENGINE_TENANCY_PREVIEW_EXPIRED',
+  'ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED',
   'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
   'ENGINE_TENANT_MAPPING_NOT_FOUND',
   'ENGINE_TENANT_MAPPING_VERSION_CONFLICT',
@@ -83,6 +86,102 @@ export const EngineTenancyDiagnosticsSchema = z.object({
   mappedResourceCount: z.number().int().nonnegative().default(0),
   unmappedResourceCount: z.number().int().nonnegative().default(0),
   conflictingResourceCount: z.number().int().nonnegative().default(0),
+}).strict();
+
+export const EngineTenancyTopologyStateSchema = z.object({
+  mode: EngineTenancyModeSchema,
+  tenantId: z.string().nullable(),
+  mappingStrategy: EngineTenantMappingStrategySchema.nullable(),
+  mappingVersion: z.number().int().nonnegative(),
+  resolutionStatus: EngineTenantResolutionStatusSchema,
+  runtimeAccessScope: z.enum(['engine_wide', 'resource_aware']),
+}).strict();
+
+export const EngineTenancyTransitionAcknowledgementSchema = z.enum([
+  'acknowledge_topology_change',
+  'acknowledge_mapping_deactivation',
+  'acknowledge_resource_quarantine',
+  'acknowledge_access_change',
+]);
+
+export const EngineTenancyTransitionKindSchema = z.enum([
+  'dedicated_to_shared',
+  'shared_to_dedicated',
+  'shared_strategy_change',
+  'dedicated_tenant_move',
+]);
+
+export const EngineTenancyTransitionEffectsSchema = z.object({
+  roleAssignments: z.number().int().nonnegative(),
+  tenantMappings: z.number().int().nonnegative(),
+  runtimeResources: z.number().int().nonnegative(),
+  engineSetMemberships: z.number().int().nonnegative(),
+  deploymentTargets: z.number().int().nonnegative(),
+  deploymentReceipts: z.number().int().nonnegative(),
+  visibility: z.object({
+    becomeVisible: z.number().int().nonnegative(),
+    becomeHidden: z.number().int().nonnegative(),
+    becomeUnmapped: z.number().int().nonnegative(),
+    becomeConflicting: z.number().int().nonnegative(),
+  }).strict(),
+}).strict();
+
+export const EngineTenancyTransitionPreviewRequestSchema = z.object({
+  tenancy: EngineTenancyConfigurationSchema,
+}).strict();
+
+export const EngineTenancyTransitionPreviewResponseSchema = z.object({
+  engineId: z.string(),
+  kind: EngineTenancyTransitionKindSchema,
+  current: EngineTenancyTopologyStateSchema,
+  proposed: EngineTenancyTopologyStateSchema,
+  effects: EngineTenancyTransitionEffectsSchema,
+  requiredAcknowledgements: z.array(EngineTenancyTransitionAcknowledgementSchema),
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  previewExpiresAt: z.number().int().positive(),
+}).strict();
+
+export const EngineTenancyTransitionApplyRequestSchema = z.object({
+  tenancy: EngineTenancyConfigurationSchema,
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  previewExpiresAt: z.number().int().positive(),
+  acknowledgements: z.array(EngineTenancyTransitionAcknowledgementSchema),
+}).strict();
+
+export const EngineTenancyTransitionApplyResponseSchema = z.object({
+  applied: z.literal(true),
+  appliedAt: z.number().int().positive(),
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  transition: EngineTenancyTransitionPreviewResponseSchema,
+}).strict();
+
+export const EngineTenancyClassificationStatusSchema = z.enum([
+  'classified',
+  'ready_for_apply',
+  'requires_review',
+  'conflict',
+]);
+
+export const EngineTenancyClassificationRowSchema = z.object({
+  engineId: z.string(),
+  engineName: z.string(),
+  status: EngineTenancyClassificationStatusSchema,
+  reason: z.string(),
+  current: EngineTenancyTopologyStateSchema,
+  proposed: EngineTenancyConfigurationSchema.nullable(),
+}).strict();
+
+export const EngineTenancyClassificationReportSchema = z.object({
+  generatedAt: z.number().int().positive(),
+  defaultTenantId: z.string(),
+  totals: z.object({
+    engines: z.number().int().nonnegative(),
+    classified: z.number().int().nonnegative(),
+    readyForApply: z.number().int().nonnegative(),
+    requiresReview: z.number().int().nonnegative(),
+    conflicts: z.number().int().nonnegative(),
+  }).strict(),
+  rows: z.array(EngineTenancyClassificationRowSchema),
 }).strict();
 
 export const EngineTenantMappingSchema = z.object({
@@ -144,6 +243,16 @@ export type EngineTenantReference = z.infer<typeof EngineTenantReferenceSchema>;
 export type EngineTenancyConfiguration = z.infer<typeof EngineTenancyConfigurationSchema>;
 export type EngineTenancyErrorCode = z.infer<typeof EngineTenancyErrorCodeSchema>;
 export type EngineTenancyDiagnostics = z.infer<typeof EngineTenancyDiagnosticsSchema>;
+export type EngineTenancyTopologyState = z.infer<typeof EngineTenancyTopologyStateSchema>;
+export type EngineTenancyTransitionAcknowledgement = z.infer<typeof EngineTenancyTransitionAcknowledgementSchema>;
+export type EngineTenancyTransitionKind = z.infer<typeof EngineTenancyTransitionKindSchema>;
+export type EngineTenancyTransitionEffects = z.infer<typeof EngineTenancyTransitionEffectsSchema>;
+export type EngineTenancyTransitionPreviewRequest = z.input<typeof EngineTenancyTransitionPreviewRequestSchema>;
+export type EngineTenancyTransitionPreviewResponse = z.infer<typeof EngineTenancyTransitionPreviewResponseSchema>;
+export type EngineTenancyTransitionApplyRequest = z.input<typeof EngineTenancyTransitionApplyRequestSchema>;
+export type EngineTenancyTransitionApplyResponse = z.infer<typeof EngineTenancyTransitionApplyResponseSchema>;
+export type EngineTenancyClassificationRow = z.infer<typeof EngineTenancyClassificationRowSchema>;
+export type EngineTenancyClassificationReport = z.infer<typeof EngineTenancyClassificationReportSchema>;
 export type EngineTenantMapping = z.infer<typeof EngineTenantMappingSchema>;
 export type ExternalEngineTenantMappingsUpsertRequest = z.input<typeof ExternalEngineTenantMappingsUpsertRequestSchema>;
 export type ExternalEngineTenantMappingsUpsertResponse = z.infer<typeof ExternalEngineTenantMappingsUpsertResponseSchema>;

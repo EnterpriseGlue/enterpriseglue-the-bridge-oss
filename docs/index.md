@@ -26,6 +26,7 @@ Audience: Developers and architects.
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
 - [Configure Dedicated and Shared Engine Tenancy](how-to/configure-engine-tenancy.md)
+- [Migrate Existing Engines to Explicit Tenancy](how-to/migrate-existing-engines-to-explicit-tenancy.md)
 
 ## Architecture
 - [Architecture Overview](architecture/00-architecture-overview.md)

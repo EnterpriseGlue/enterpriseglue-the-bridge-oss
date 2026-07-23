@@ -11,7 +11,8 @@ enforcement, and configuration-bundle topology parity are implemented. Shared
 resources remain fail closed until exactly one current mapping resolves them.
 Tenant-role classification, same-tenant inheritance, configuration round-trip,
 Access Control assignment scope, and Effective Access mapping lineage are also
-implemented. Topology transitions, configuration-owned tenant mappings, and
+implemented. Existing-engine classification and topology transition
+preview/apply are implemented. Configuration-owned tenant mappings and
 engine-topology UI controls remain gated.
 
 ## Boundaries
@@ -228,6 +229,75 @@ access, and fail-closed `incomplete` status. A normal config apply reports a
 conflict instead of changing an existing engine's topology. Configuration-owned
 mapping rows are a later phase and must not be inferred from topology alone.
 
+## Classification and Topology Transitions
+
+`TEN-MIGRATION-001`: the operator classification report is available at:
+
+```text
+GET /engines-api/engines/tenancy/classification-report
+```
+
+The report is observe-only. It classifies explicit valid dedicated and shared
+engines, proposes the configured default tenant only for an unowned
+`engine_wide` engine, and marks an unowned `resource_aware` engine
+`requires_review`. Runtime access scope alone is never treated as evidence that
+an engine is shared. Invalid persisted topology is reported as `conflict`.
+
+Topology changes use:
+
+```text
+POST /engines-api/engines/{id}/tenancy/preview
+POST /engines-api/engines/{id}/tenancy/apply
+```
+
+`TEN-MIGRATION-002`: the transition planner covers all supported state changes:
+
+| Current | Proposed | Transition |
+| --- | --- | --- |
+| Dedicated tenant A | Shared with a mapping strategy | `dedicated_to_shared` |
+| Shared | Dedicated tenant A | `shared_to_dedicated` |
+| Shared strategy A | Shared strategy B | `shared_strategy_change` |
+| Dedicated tenant A | Dedicated tenant B | `dedicated_tenant_move` |
+
+An equivalent declaration is not a transition. Ordinary engine updates still
+return `ENGINE_TENANCY_TRANSITION_REQUIRED` for changes in this table.
+
+`TEN-MIGRATION-003`: preview returns current and proposed state; affected role
+assignments, mappings, runtime resources, Engine Set memberships, deployment
+targets, and receipts; visibility/quarantine counts; required acknowledgement
+IDs; a SHA-256 state fingerprint; and a five-minute expiration. Apply requires
+the same tenancy proposal, hash, expiration, and every acknowledgement. Expired
+or changed evidence returns `ENGINE_TENANCY_PREVIEW_EXPIRED` or
+`ENGINE_TENANCY_PREVIEW_STALE`.
+
+`TEN-MIGRATION-004`: apply uses one database transaction. It changes the engine
+topology, deactivates obsolete shared mappings, resets runtime resolution to the
+new fail-closed state, and invalidates Engine Set and Runtime Resource Set
+materializations. A
+dedicated-to-shared or shared-strategy transition quarantines active runtime
+resources as unmapped until reconciliation proves current mappings. A
+shared-to-dedicated or dedicated-tenant move resolves active inventory to the
+new dedicated tenant.
+
+`TEN-MIGRATION-005`: apply uses an optimistic engine-state predicate. A
+concurrent engine update aborts and rolls back the whole transaction before
+dependent resource, mapping, or materialization changes are written.
+
+`TEN-API-010`: classification, preview, and apply use the canonical schemas in
+OpenAPI and the action registry. Manual transitions require engine edit
+permission.
+
+`TEN-API-011`: topology owned by an external system or a configuration-locked
+bundle cannot be changed through the manual route.
+
+`TEN-CONFIG-003`: a `config_warn` engine may use the manual transition workflow,
+but successful apply records `driftStatus = manual_override`. The next bundle
+preview must therefore expose the topology drift instead of silently accepting
+it.
+
+`TEN-AUDIT-002`: preview and successful apply write sanitized audit records
+with the transition kind, hash, acknowledgements, states, and aggregate effects.
+
 ## Tenant Role Boundary and Inheritance
 
 A tenant role is a reusable set of tenant-safe project and runtime permissions.
@@ -294,8 +364,9 @@ fails when an entry has a duplicate or invalid identifier, missing test file or
 test name, missing Markdown page, or a documentation page that does not cite
 the requirement identifier.
 
-The provisioning policy and mapping service modules are each held to 100%
-statements, branches, functions, and lines. The mapping gate also exercises
+The provisioning policy, mapping service, tenant-role policy, topology
+transition policy, and migration classification policy are held to 100%
+statements, branches, functions, and lines. The focused gates also exercise
 inventory, route, authorization registry, configuration, schema, and OpenAPI
 suites. This is 100% coverage of the implemented functional requirement IDs,
 not a claim that every unrelated repository line has 100% code coverage.

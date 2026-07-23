@@ -66,6 +66,14 @@ const {
   EngineTenantMappingSchema,
   EngineTenancyConfigurationSchema,
   EngineTenancyDiagnosticsSchema,
+  EngineTenancyTopologyStateSchema,
+  EngineTenancyTransitionAcknowledgementSchema,
+  EngineTenancyTransitionEffectsSchema,
+  EngineTenancyTransitionPreviewRequestSchema,
+  EngineTenancyTransitionPreviewResponseSchema,
+  EngineTenancyTransitionApplyRequestSchema,
+  EngineTenancyTransitionApplyResponseSchema,
+  EngineTenancyClassificationReportSchema,
   EngineTenancyErrorCodeSchema,
   EngineTenancyErrorResponseSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
@@ -957,6 +965,14 @@ registry.register('EngineTenantReference', EngineTenantReferenceSchema)
 registry.register('EngineTenantMapping', EngineTenantMappingSchema)
 registry.register('EngineTenancyConfiguration', EngineTenancyConfigurationSchema)
 registry.register('EngineTenancyDiagnostics', EngineTenancyDiagnosticsSchema)
+registry.register('EngineTenancyTopologyState', EngineTenancyTopologyStateSchema)
+registry.register('EngineTenancyTransitionAcknowledgement', EngineTenancyTransitionAcknowledgementSchema)
+registry.register('EngineTenancyTransitionEffects', EngineTenancyTransitionEffectsSchema)
+registry.register('EngineTenancyTransitionPreviewRequest', EngineTenancyTransitionPreviewRequestSchema)
+registry.register('EngineTenancyTransitionPreviewResponse', EngineTenancyTransitionPreviewResponseSchema)
+registry.register('EngineTenancyTransitionApplyRequest', EngineTenancyTransitionApplyRequestSchema)
+registry.register('EngineTenancyTransitionApplyResponse', EngineTenancyTransitionApplyResponseSchema)
+registry.register('EngineTenancyClassificationReport', EngineTenancyClassificationReportSchema)
 registry.register('EngineTenancyErrorCode', EngineTenancyErrorCodeSchema)
 registry.register('EngineTenancyErrorResponse', EngineTenancyErrorResponseSchema)
 registry.register('ExternalEngineTenantMappingsUpsertRequest', ExternalEngineTenantMappingsUpsertRequestSchema)
@@ -1164,12 +1180,55 @@ registry.registerPath({
 
 registry.registerPath({
   method: 'get',
+  path: '/engines-api/engines/tenancy/classification-report',
+  ...authzExtension('engine.tenancy.classification.read', 'GET', '/engines-api/engines/tenancy/classification-report'),
+  responses: {
+    200: { description: 'Sanitized existing-engine tenancy classification and migration evidence report', content: { 'application/json': { schema: EngineTenancyClassificationReportSchema } } },
+    403: { description: 'Platform engine administration permission is required' },
+  },
+})
+
+registry.registerPath({
+  method: 'get',
   path: '/engines-api/engines/{id}/tenancy/diagnostics',
   ...authzExtension('engine.inventory.read', 'GET', '/engines-api/engines/{id}/tenancy/diagnostics'),
   request: { params: z.object({ id: z.string() }) },
   responses: {
     200: { description: 'Sanitized engine tenancy diagnostics', content: { 'application/json': { schema: EngineTenancyDiagnosticsSchema } } },
     404: { description: 'Engine not found' },
+  },
+})
+
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/tenancy/preview',
+  ...authzExtension('engine.inventory.update', 'POST', '/engines-api/engines/{id}/tenancy/preview'),
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: EngineTenancyTransitionPreviewRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Topology transition impact preview', content: { 'application/json': { schema: EngineTenancyTransitionPreviewResponseSchema } } },
+    400: { description: 'The proposed topology is invalid or unchanged', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    403: { description: 'The caller or source cannot change this topology', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    404: { description: 'Engine not found' },
+  },
+})
+
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/tenancy/apply',
+  ...authzExtension('engine.inventory.update', 'POST', '/engines-api/engines/{id}/tenancy/apply'),
+  request: {
+    params: z.object({ id: z.string() }),
+    body: { content: { 'application/json': { schema: EngineTenancyTransitionApplyRequestSchema } } },
+  },
+  responses: {
+    200: { description: 'Topology transition applied atomically', content: { 'application/json': { schema: EngineTenancyTransitionApplyResponseSchema } } },
+    400: { description: 'Required acknowledgement is missing', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    403: { description: 'The caller or source cannot change this topology', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    404: { description: 'Engine not found' },
+    409: { description: 'The transition preview is stale or expired', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
   },
 })
 

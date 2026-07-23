@@ -82,8 +82,26 @@ describe('engine registration OpenAPI contracts', () => {
     ]));
     expect(schemas?.EngineTenancyDiagnostics?.properties).toHaveProperty('resolutionStatus');
     expect(schemas?.EngineTenancyErrorCode?.enum).toContain('ENGINE_TENANCY_TRANSITION_REQUIRED');
+    expect(schemas?.EngineTenancyErrorCode?.enum).toEqual(expect.arrayContaining([
+      'ENGINE_TENANCY_PREVIEW_STALE',
+      'ENGINE_TENANCY_PREVIEW_EXPIRED',
+      'ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED',
+    ]));
     expect(schemas?.EngineTenancyErrorResponse?.properties).not.toHaveProperty('details');
     expect(schemas?.EngineTenantMapping?.properties).not.toHaveProperty('credentials');
+    expect(schemas?.EngineTenancyTransitionPreviewResponse?.properties).toMatchObject({
+      effects: expect.any(Object),
+      requiredAcknowledgements: expect.any(Object),
+      previewHash: expect.any(Object),
+      previewExpiresAt: expect.any(Object),
+    });
+    expect(schemas?.EngineTenancyTransitionApplyRequest?.required).toEqual(expect.arrayContaining([
+      'tenancy',
+      'previewHash',
+      'previewExpiresAt',
+      'acknowledgements',
+    ]));
+    expect(schemas?.EngineTenancyClassificationReport?.properties).toHaveProperty('rows');
     for (const schemaName of [
       'CreateEngineRequest',
       'UpdateEngineRequest',
@@ -109,6 +127,12 @@ describe('engine registration OpenAPI contracts', () => {
     expect(paths?.['/engines-api/external/engines']?.post?.responses?.['409']).toBeDefined();
 
     expect(document.paths?.['/engines-api/engines/{id}/tenancy/diagnostics']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/tenancy/classification-report']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenancy/preview']?.post?.requestBody)
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenancy/apply']?.post?.responses?.['409'])
       .toBeDefined();
     expect(document.paths?.['/engines-api/engines/{id}/tenant-mappings']?.get?.responses?.['200'])
       .toBeDefined();

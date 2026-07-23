@@ -8,9 +8,10 @@ and operators.
 
 Status: Dedicated/shared provisioning, mapping administration, runtime
 quarantine, tenant roles, configuration bundles, and Effective Access lineage
-are implemented. Topology transition preview/apply and engine-topology form
-controls are still gated; create engines through the published API or a
-configuration bundle until those controls ship.
+are implemented. Topology classification and guarded transition preview/apply
+are implemented through the API. Engine-topology form controls are still
+gated; create or transition engines through the published API or use a
+configuration bundle for supported create/update operations.
 
 ## Choose the Topology
 
@@ -179,16 +180,27 @@ Normal engine update endpoints cannot change topology, dedicated tenant, or
 shared mapping strategy. They return
 `ENGINE_TENANCY_TRANSITION_REQUIRED`.
 
-Until transition preview/apply is released, replace or migrate an engine only
-through the documented operator process. Do not edit topology columns directly.
+Use the transition preview endpoint, review every affected count, copy every
+required acknowledgement ID, and apply the exact hash before its five-minute
+expiration. Create a new preview if any engine, mapping, assignment, runtime
+resource, Engine Set, deployment target, or receipt changes.
+
+Changing a dedicated engine to shared, or changing a shared mapping strategy,
+quarantines active runtime resources until mapping and reconciliation succeed.
+Do not apply until you have the intended mapping batch and a rollback record.
 For a mapping change, retain the previous batch and version, apply with
 optimistic concurrency, reconcile, and restore the prior batch if resources
-become unexpectedly hidden.
+become unexpectedly hidden. Do not edit topology columns directly.
+
+See
+[Migrate Existing Engines to Explicit Tenancy](./migrate-existing-engines-to-explicit-tenancy.md)
+for the complete evidence and rollback procedure.
 
 ## Related Documentation
 
 - [Engine Tenancy Data Model](../reference/engine-tenancy-data-model.md)
 - [Engine Tenancy and Provisioning API](../reference/engine-tenancy-and-provisioning-api.md)
 - [Provision Engines Externally](./provision-engines-externally.md)
+- [Migrate Existing Engines to Explicit Tenancy](./migrate-existing-engines-to-explicit-tenancy.md)
 - [Configure Authorization, Identity, and Engines](./configure-authorization-and-engines.md)
 - [Engine Tenancy End-to-End Plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md)

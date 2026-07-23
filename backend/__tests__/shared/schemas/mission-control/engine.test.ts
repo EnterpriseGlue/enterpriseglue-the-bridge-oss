@@ -8,6 +8,8 @@ import {
   EngineConnectionHealthResponseSchema,
   EngineTenancyConfigurationSchema,
   EngineTenancyErrorResponseSchema,
+  EngineTenancyTransitionApplyRequestSchema,
+  EngineTenancyTransitionPreviewResponseSchema,
   EngineTenantMappingSchema,
   EngineTenantReferenceSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
@@ -224,6 +226,66 @@ describe('EngineSchema', () => {
     expect(EngineTenancyErrorResponseSchema.safeParse({
       error: 'internal details',
       code: 'UNKNOWN_INTERNAL_ERROR',
+    }).success).toBe(false);
+  });
+
+  it('requires an expiring preview hash and explicit acknowledgements for topology apply', () => {
+    const transition = {
+      engineId: 'engine-1',
+      kind: 'dedicated_to_shared',
+      current: {
+        mode: 'dedicated',
+        tenantId: 'tenant-a',
+        mappingStrategy: null,
+        mappingVersion: 0,
+        resolutionStatus: 'ready',
+        runtimeAccessScope: 'engine_wide',
+      },
+      proposed: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'explicit',
+        mappingVersion: 1,
+        resolutionStatus: 'incomplete',
+        runtimeAccessScope: 'resource_aware',
+      },
+      effects: {
+        roleAssignments: 0,
+        tenantMappings: 0,
+        runtimeResources: 1,
+        engineSetMemberships: 0,
+        deploymentTargets: 0,
+        deploymentReceipts: 0,
+        visibility: {
+          becomeVisible: 0,
+          becomeHidden: 1,
+          becomeUnmapped: 1,
+          becomeConflicting: 0,
+        },
+      },
+      requiredAcknowledgements: [
+        'acknowledge_topology_change',
+        'acknowledge_resource_quarantine',
+        'acknowledge_access_change',
+      ],
+      previewHash: 'a'.repeat(64),
+      previewExpiresAt: 300_000,
+    };
+    expect(EngineTenancyTransitionPreviewResponseSchema.parse(transition)).toEqual(transition);
+    expect(EngineTenancyTransitionApplyRequestSchema.parse({
+      tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+      previewHash: transition.previewHash,
+      previewExpiresAt: transition.previewExpiresAt,
+      acknowledgements: transition.requiredAcknowledgements,
+    })).toMatchObject({
+      tenancy: { mode: 'shared', mappingStrategy: 'explicit', unmappedPolicy: 'deny' },
+      acknowledgements: transition.requiredAcknowledgements,
+    });
+    expect(EngineTenancyTransitionApplyRequestSchema.safeParse({
+      tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+      previewHash: 'not-a-hash',
+      previewExpiresAt: transition.previewExpiresAt,
+      acknowledgements: [],
     }).success).toBe(false);
   });
 

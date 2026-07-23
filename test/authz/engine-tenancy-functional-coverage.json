@@ -328,5 +328,104 @@
     "testName": "inherits a tenant role to a resolved shared runtime resource without accepting broad shared-engine scopes",
     "documentation": "docs/reference/engine-tenancy-data-model.md",
     "ciJob": "test:engine-tenancy:authorization"
+  },
+  {
+    "id": "TEN-MIGRATION-001",
+    "requirement": "Existing engines are classified conservatively and resource-aware access alone never infers shared topology or default-tenant ownership.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["classified", "ready_for_apply", "requires_review", "conflict"],
+    "expected": "observe-only report with no ambiguous inference",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+    "testName": "builds a complete operator classification report without changing data",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-MIGRATION-002",
+    "requirement": "The planner covers dedicated-to-shared, shared-to-dedicated, shared-strategy, and dedicated-tenant transitions while rejecting equivalent topology.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["dedicated_to_shared", "shared_to_dedicated", "shared_strategy_change", "dedicated_tenant_move", "no_change"],
+    "expected": "complete valid and invalid transition matrix",
+    "testFile": "backend/__tests__/shared/engine-tenancy/transitionPolicy.test.ts",
+    "testName": "classifies every supported transition and rejects equivalent topology",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-MIGRATION-003",
+    "requirement": "Apply rejects expired or stale previews and any missing acknowledgement returned by preview.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["expiration", "fingerprint", "stale", "acknowledgement"],
+    "expected": "stable fail-closed transition errors",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+    "testName": "rejects missing engines, equivalent topology, expired, stale, and unacknowledged apply requests",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-MIGRATION-004",
+    "requirement": "Topology apply atomically changes engine state, resets runtime resolution, deactivates obsolete mappings, and invalidates topology-dependent materializations.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["transaction", "quarantine", "mapping_deactivation", "materialization_invalidation"],
+    "expected": "one atomic fail-closed topology mutation",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+    "testName": "atomically applies a dedicated-to-shared transition and invalidates materializations",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-MIGRATION-005",
+    "requirement": "A concurrent engine update aborts transition apply before dependent mapping, resource, or materialization writes.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["optimistic_concurrency", "rollback", "stale"],
+    "expected": "ENGINE_TENANCY_PREVIEW_STALE with no dependent writes",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+    "testName": "rolls back when the engine changes during optimistic apply",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-API-010",
+    "requirement": "Classification and topology preview/apply schemas and operations are published in OpenAPI and the authorization action registry.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["schema", "openapi", "action_registry", "route_inventory"],
+    "expected": "canonical public contract parity",
+    "testFile": "backend/__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts",
+    "testName": "publishes canonical engine tenancy, mapping, diagnostics, and batch contracts",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-API-011",
+    "requirement": "Manual topology transition rejects external-owned and configuration-locked engine topology.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["manual", "external_owned", "config_locked", "ownership"],
+    "expected": "manual source-owner bypass is denied",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "keeps source-owned topology out of the manual transition workflow",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-AUDIT-002",
+    "requirement": "Topology preview and apply emit sanitized audit records with transition kind, fingerprint, acknowledgements, and aggregate effects.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["preview", "apply", "audit", "sanitized"],
+    "expected": "both transition audit actions are persisted",
+    "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+    "testName": "previews and atomically applies an acknowledged topology transition",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
+  },
+  {
+    "id": "TEN-CONFIG-003",
+    "requirement": "A config-warn engine can be transitioned manually only by recording manual topology drift for the next bundle preview.",
+    "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+    "dimensions": ["config_warn", "manual_transition", "drift"],
+    "expected": "driftStatus becomes manual_override",
+    "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+    "testName": "marks an allowed config-warn transition as manual topology drift",
+    "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+    "ciJob": "test:engine-tenancy:transitions"
   }
 ]

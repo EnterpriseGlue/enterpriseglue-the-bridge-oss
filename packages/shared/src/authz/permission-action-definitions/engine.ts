@@ -178,6 +178,28 @@ export const ENGINE_AUTHZ_ACTIONS = [
       ],
     },
   {
+      actionId: 'engine.tenancy.classification.read',
+      permissionId: 'platform:engine:create',
+      resourceType: 'platform',
+      operation: 'read',
+      risk: 'high',
+      audit: false,
+      category: 'Engine Inventory',
+      description: 'Read the cross-engine tenancy migration classification report.',
+      ui: [{ surfaceId: 'engines.tenancy.classification', behavior: 'hide' }],
+      routes: [
+        {
+          method: 'GET',
+          route: '/engines-api/engines/tenancy/classification-report',
+          resourceResolver: 'platform.self',
+          additionalChecks: [
+            'report contains sanitized topology state and migration recommendations only',
+            'ambiguous resource-aware engines are never inferred as shared or default-tenant dedicated',
+          ],
+        },
+      ],
+    },
+  {
       actionId: 'engine.external-registration.upsert',
       permissionId: 'platform:engine-registration:manage',
       resourceType: 'platform',
@@ -267,6 +289,26 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/engines-api/engines/{id}/runtime-resources/reconcile',
           resourceResolver: 'engine.byId',
           additionalChecks: ['runs idempotent runtime and deployment metadata discovery with Runtime Resource Set rematerialization'],
+        },
+        {
+          method: 'POST',
+          route: '/engines-api/engines/{id}/tenancy/preview',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engine:edit is required',
+            'externally and configuration-owned topology cannot be changed manually',
+            'preview is bounded, expiring, and fingerprinted over affected state',
+          ],
+        },
+        {
+          method: 'POST',
+          route: '/engines-api/engines/{id}/tenancy/apply',
+          resourceResolver: 'engine.byId',
+          additionalChecks: [
+            'engine:edit is required',
+            'matching unexpired preview hash and every required acknowledgement are mandatory',
+            'engine, mappings, runtime inventory, and materialization invalidation are applied atomically',
+          ],
         },
         {
           method: 'GET',

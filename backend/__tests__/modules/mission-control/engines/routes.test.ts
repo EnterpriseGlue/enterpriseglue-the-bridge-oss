@@ -35,6 +35,11 @@ const engineTenantMappingServiceMock = vi.hoisted(() => ({
   getDiagnostics: vi.fn(),
   upsert: vi.fn(),
 }));
+const engineTenancyTransitionServiceMock = vi.hoisted(() => ({
+  preview: vi.fn(),
+  apply: vi.fn(),
+  classificationReport: vi.fn(),
+}));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -50,6 +55,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/SecretResolver.js', () =
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js', () => ({
   engineTenantMappingService: engineTenantMappingServiceMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenancyTransitionService.js', () => ({
+  engineTenancyTransitionService: engineTenancyTransitionServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -193,6 +202,9 @@ describe('mission-control engines routes', () => {
     engineTenantMappingServiceMock.list.mockReset();
     engineTenantMappingServiceMock.getDiagnostics.mockReset();
     engineTenantMappingServiceMock.upsert.mockReset();
+    engineTenancyTransitionServiceMock.preview.mockReset();
+    engineTenancyTransitionServiceMock.apply.mockReset();
+    engineTenancyTransitionServiceMock.classificationReport.mockReset();
     (engineService as any).listEngines.mockReset();
     (engineService as any).getEngine.mockReset();
     (engineService as any).hasEngineAccess.mockReset();
@@ -261,6 +273,32 @@ describe('mission-control engines routes', () => {
       mappedResourceCount: 0,
       unmappedResourceCount: 0,
       conflictingResourceCount: 0,
+    });
+    engineTenancyTransitionServiceMock.classificationReport.mockResolvedValue({
+      generatedAt: 10,
+      defaultTenantId: 'tenant-default',
+      totals: {
+        engines: 1,
+        classified: 1,
+        readyForApply: 0,
+        requiresReview: 0,
+        conflicts: 0,
+      },
+      rows: [{
+        engineId: 'e1',
+        engineName: 'Engine 1',
+        status: 'classified',
+        reason: 'Dedicated engine has a concrete owning tenant.',
+        current: {
+          mode: 'dedicated',
+          tenantId: 'tenant-default',
+          mappingStrategy: null,
+          mappingVersion: 0,
+          resolutionStatus: 'ready',
+          runtimeAccessScope: 'engine_wide',
+        },
+        proposed: null,
+      }],
     });
     fetchMock.mockReset();
     (engineService as any).hasEngineAccess.mockResolvedValue(true);
@@ -1899,6 +1937,169 @@ describe('mission-control engines routes', () => {
       ownershipMode: 'manual',
       request: expect.objectContaining({ dryRun: true }),
     }));
+  });
+
+  it('publishes the operator tenancy classification report through platform authorization', async () => {
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'platform:engine:create'
+    );
+
+    const response = await request(app)
+      .get('/engines-api/engines/tenancy/classification-report');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      defaultTenantId: 'tenant-default',
+      totals: { engines: 1, classified: 1 },
+      rows: [{ engineId: 'e1', status: 'classified' }],
+    });
+    expect(engineTenancyTransitionServiceMock.classificationReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('previews and atomically applies an acknowledged topology transition', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const auditInsert = vi.fn().mockResolvedValue({});
+    const transition = {
+      engineId: 'e1',
+      kind: 'dedicated_to_shared',
+      current: {
+        mode: 'dedicated',
+        tenantId: 'tenant-default',
+        mappingStrategy: null,
+        mappingVersion: 0,
+        resolutionStatus: 'ready',
+        runtimeAccessScope: 'engine_wide',
+      },
+      proposed: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'engine_tenant_id',
+        mappingVersion: 1,
+        resolutionStatus: 'incomplete',
+        runtimeAccessScope: 'resource_aware',
+      },
+      effects: {
+        roleAssignments: 1,
+        tenantMappings: 0,
+        runtimeResources: 1,
+        engineSetMemberships: 1,
+        deploymentTargets: 1,
+        deploymentReceipts: 1,
+        visibility: {
+          becomeVisible: 0,
+          becomeHidden: 1,
+          becomeUnmapped: 1,
+          becomeConflicting: 0,
+        },
+      },
+      requiredAcknowledgements: [
+        'acknowledge_topology_change',
+        'acknowledge_resource_quarantine',
+        'acknowledge_access_change',
+      ],
+      previewHash: 'a'.repeat(64),
+      previewExpiresAt: 300_000,
+    };
+    engineTenancyTransitionServiceMock.preview.mockResolvedValue(transition);
+    engineTenancyTransitionServiceMock.apply.mockResolvedValue({
+      applied: true,
+      appliedAt: 2_000,
+      previewHash: transition.previewHash,
+      transition,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'AuditLog'
+        ? { insert: auditInsert }
+        : {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'e1',
+              registrationSource: 'user',
+              ownershipMode: 'manual',
+              managementMode: 'manual',
+              metadataDiscoveryEnabled: true,
+              deploymentDiscoveryEnabled: true,
+              tenantId: 'tenant-default',
+            }),
+          },
+    });
+
+    const preview = await request(app)
+      .post('/engines-api/engines/e1/tenancy/preview')
+      .send({ tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' } });
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({
+      kind: 'dedicated_to_shared',
+      previewHash: transition.previewHash,
+    });
+    expect(engineTenancyTransitionServiceMock.preview).toHaveBeenCalledWith(
+      'e1',
+      { tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id', unmappedPolicy: 'deny' } },
+      expect.objectContaining({
+        requestTenantId: null,
+        principalType: 'user',
+        principalId: 'user-1',
+      }),
+    );
+
+    const applied = await request(app)
+      .post('/engines-api/engines/e1/tenancy/apply')
+      .send({
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        previewHash: transition.previewHash,
+        previewExpiresAt: transition.previewExpiresAt,
+        acknowledgements: transition.requiredAcknowledgements,
+      });
+    expect(applied.status).toBe(200);
+    expect(applied.body).toMatchObject({ applied: true, previewHash: transition.previewHash });
+    expect(engineTenancyTransitionServiceMock.apply).toHaveBeenCalledWith(
+      'e1',
+      expect.objectContaining({
+        previewHash: transition.previewHash,
+        acknowledgements: transition.requiredAcknowledgements,
+      }),
+      expect.objectContaining({ principalType: 'user', principalId: 'user-1' }),
+    );
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(
+      'e1',
+      null,
+      {
+        runtimeMetadataDiscoveryEnabled: true,
+        deploymentDiscoveryEnabled: true,
+      },
+    );
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'engine.tenancy.transition.preview',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'engine.tenancy.transition.apply',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+  });
+
+  it('keeps source-owned topology out of the manual transition workflow', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'e1',
+          registrationSource: 'external_api',
+          managementMode: 'external_managed',
+          fieldOwnershipJson: '{}',
+          tenantId: null,
+        }),
+      }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines/e1/tenancy/preview')
+      .send({ tenancy: { mode: 'shared', mappingStrategy: 'explicit' } });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('owning source');
+    expect(engineTenancyTransitionServiceMock.preview).not.toHaveBeenCalled();
   });
 
   it('atomically provisions tenant mappings through the external engine identity', async () => {
