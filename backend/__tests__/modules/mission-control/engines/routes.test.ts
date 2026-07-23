@@ -356,6 +356,11 @@ describe('mission-control engines routes', () => {
           name: 'Engine 1',
           createdAt: '1700000000000',
           updatedAt: '1700000000001',
+          lastAppliedAt: '1700000000002',
+          lastExternalSyncAt: '1700000000003',
+          lastTenantReconciledAt: '1700000000004',
+          lastMetadataReconciledAt: '1700000000005',
+          externalUpdatedAt: '1700000000006',
         }]),
       }),
     });
@@ -367,6 +372,11 @@ describe('mission-control engines routes', () => {
       id: 'e1',
       createdAt: 1700000000000,
       updatedAt: 1700000000001,
+      lastAppliedAt: 1700000000002,
+      lastExternalSyncAt: 1700000000003,
+      lastTenantReconciledAt: 1700000000004,
+      lastMetadataReconciledAt: 1700000000005,
+      externalUpdatedAt: 1700000000006,
     });
   });
 

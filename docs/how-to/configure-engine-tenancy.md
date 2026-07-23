@@ -63,6 +63,12 @@ After creation, confirm that:
 - tenant resolution is `ready`; and
 - no compatibility-created engine has a null tenant.
 
+For a complete lifecycle check, reopen the engine from the Engines table,
+change a non-topology field such as its display name, save it, reconcile its
+runtime inventory, and delete the disposable engine. The local automated
+operator journey performs these same UI and HTTP steps and verifies that the
+updated values survive a fresh service read before deletion.
+
 The default tenant is a provisioning fallback, not an authorization wildcard.
 Once the engine exists, every request must match its persisted tenant.
 

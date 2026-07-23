@@ -17,6 +17,7 @@ const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-ev
 const compatibilityRunner = readFileSync(new URL('./run-engine-tenancy-compatibility-evidence.mjs', import.meta.url), 'utf8');
 const documentationReviewRunner = readFileSync(new URL('./run-engine-tenancy-documentation-review-evidence.mjs', import.meta.url), 'utf8');
 const provisioningEvidenceWriter = readFileSync(new URL('./write-engine-tenancy-provisioning-evidence.mjs', import.meta.url), 'utf8');
+const provisioningJourneyRunner = readFileSync(new URL('./run-engine-tenancy-provisioning-journeys.sh', import.meta.url), 'utf8');
 const provisioningJourneyRegistry = JSON.parse(readFileSync(
   new URL('../test/authz/engine-tenancy-provisioning-journeys.json', import.meta.url),
   'utf8',
@@ -124,6 +125,10 @@ test('assembles provisioning evidence only from exact real-service observations'
     packageJson.scripts['test:engine-tenancy:provisioning-evidence'],
     /write-engine-tenancy-provisioning-evidence\.mjs/,
   );
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:provisioning-journeys:local'],
+    /run-engine-tenancy-provisioning-journeys\.sh/,
+  );
   assert.equal(provisioningJourneyRegistry.journeys.length, 14);
   for (const requiredField of [
     'realHttpService',
@@ -138,6 +143,9 @@ test('assembles provisioning evidence only from exact real-service observations'
   }
   assert.match(provisioningEvidenceWriter, /\? 'passed'\s*: 'incomplete'/);
   assert.match(provisioningEvidenceWriter, /Provisioning-journey evidence must be assembled from a clean worktree/);
+  assert.match(provisioningJourneyRunner, /ENGINE_TENANCY_PROVISIONING_EVIDENCE=true/);
+  assert.match(provisioningJourneyRunner, /PLAYWRIGHT_BROWSERS=chromium/);
+  assert.match(provisioningJourneyRunner, /POSTGRES_HOST=127\.0\.0\.1/);
   assert.doesNotMatch(
     provisioningEvidenceWriter,
     /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/,

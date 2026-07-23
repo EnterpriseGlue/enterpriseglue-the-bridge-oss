@@ -682,6 +682,11 @@ function serializeEngine<T extends { labelsJson?: string | null; fieldOwnershipJ
     ...rest,
     ...('createdAt' in timestamps && timestamps.createdAt != null ? { createdAt: Number(timestamps.createdAt) } : {}),
     ...('updatedAt' in timestamps && timestamps.updatedAt != null ? { updatedAt: Number(timestamps.updatedAt) } : {}),
+    ...('lastAppliedAt' in timestamps && timestamps.lastAppliedAt != null ? { lastAppliedAt: Number(timestamps.lastAppliedAt) } : {}),
+    ...('lastExternalSyncAt' in timestamps && timestamps.lastExternalSyncAt != null ? { lastExternalSyncAt: Number(timestamps.lastExternalSyncAt) } : {}),
+    ...('lastTenantReconciledAt' in timestamps && timestamps.lastTenantReconciledAt != null ? { lastTenantReconciledAt: Number(timestamps.lastTenantReconciledAt) } : {}),
+    ...('lastMetadataReconciledAt' in timestamps && timestamps.lastMetadataReconciledAt != null ? { lastMetadataReconciledAt: Number(timestamps.lastMetadataReconciledAt) } : {}),
+    ...('externalUpdatedAt' in timestamps && timestamps.externalUpdatedAt != null ? { externalUpdatedAt: Number(timestamps.externalUpdatedAt) } : {}),
     // Credentials are write-only. A caller can manage a replacement without
     // receiving ciphertext, legacy data, or an external secret reference.
     passwordEnc: null,

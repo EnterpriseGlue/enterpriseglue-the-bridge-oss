@@ -111,6 +111,20 @@ cross-cutting and must execute through manual UI, external API, and
 configuration-bundle provisioning. This distinction is encoded in the
 registry, rather than inferred by the evidence writer.
 
+Run the currently implemented real localhost journeys with:
+
+```bash
+pnpm run test:engine-tenancy:provisioning-journeys:local
+```
+
+The runner refuses non-local URLs and dirty tracked source, seeds only the
+disposable local PostgreSQL database, executes Chromium against the Docker
+frontend/backend, and then assembles the registry artifact. Journey 1 proves
+create, inspect, update, reconciliation, persisted state, and removal through
+the manual UI and authenticated HTTP service. Remaining journey/channel
+observations stay explicitly missing until their matching real-service tests
+are implemented.
+
 That command deliberately fails until traceability, local enforcement,
 mutation, three-browser functional, browser-accessibility,
 authorization-matrix, five-database, 14-journey, source-coverage,
