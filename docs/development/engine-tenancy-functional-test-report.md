@@ -377,21 +377,20 @@ Pull requests run the same `test:engine-tenancy:enforcement` journey against
 disposable PostgreSQL/browser services. CI retains the result directory for
 14 days for every browser lane.
 
-## Acceptance and Remaining Release Gates
+## Acceptance and Compatibility Follow-up
 
-The implementation and automated evidence close the local
-PostgreSQL/Chromium topology-enforcement slice, the three-browser
-fine-grained session-state and accessibility slices, and the complete
-five-adapter database slice. They do not yet close the release-governance
-qualification. The remaining gates are:
+The implementation and release qualification at
+`b7514d76e7a885fe710350d9f3275fb857d552a2` are complete: the local
+PostgreSQL/Chromium topology-enforcement slice, three-browser fine-grained
+session-state and accessibility slices, complete five-adapter database slice,
+and all same-commit release-evidence gates pass. Engineering, security, and
+independent-operator reviews are retained against the release commit, with each
+reviewer recorded as `human` or `delegated-agent`.
 
-- populate every required slot in the implemented release evidence index with
-  passing same-clean-commit artifacts;
-- obtain engineering, security, and independent-operator sign-off on the
-  [documentation review checklist](./engine-tenancy-documentation-review-checklist.md),
-  with each designated reviewer recorded as `human` or `delegated-agent`; and
-- retain omitted-tenancy compatibility until its published external API
-  deprecation window formally closes.
+The only follow-up is intentional compatibility retention: keep omitted-tenancy
+provisioning until the published external API deprecation window formally
+closes. Do not remove the warning/counter branch merely because local evidence
+passes.
 
 None of these open gates permits null tenant state to authorize an existing
 engine or an unresolved shared resource. Phase 9 of the

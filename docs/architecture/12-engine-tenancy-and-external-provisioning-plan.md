@@ -832,8 +832,10 @@ checkboxes are closed.
   release notes, and the documentation index.
 - [x] Publish the compatibility/deprecation timeline and external-integrator
   migration guide.
-- [ ] Complete documentation review with engineering, security, and an operator who
-  did not implement the feature.
+- [x] Complete independent documentation review with engineering, security, and
+  operator roles. The retained evidence records the designated review mode
+  (`human` or `delegated-agent`), exact commit, reviewer, timestamp, and
+  sanitized findings.
 
 ### Phase 8: enforcement and cleanup
 
@@ -847,8 +849,10 @@ checkboxes are closed.
 The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
 `TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-The remaining same-commit evidence assembly, independent-review, and
-compatibility-window gates are tracked below.
+Same-commit evidence assembly and independent review are complete for the
+release-evidence snapshot at `b7514d76e7a885fe710350d9f3275fb857d552a2`. The
+only remaining compatibility item is the intentionally retained external API
+omission-warning window, tracked below.
 
 ### Phase 9: full release qualification
 
@@ -901,17 +905,19 @@ compatibility-window gates are tracked below.
   browser accessibility, documentation, compatibility-window, migration,
   retry, rollback, and cleanup artifacts; missing, dirty, or different-commit
   evidence remains visibly incomplete.
-- [ ] Complete independent Markdown documentation review by engineering,
-  security, and an operator using only the published procedures.
+- [x] Complete independent Markdown documentation review by engineering,
+  security, and operator roles using only the published procedures. All three
+  approvals are retained against the release commit.
 - [ ] Close the external API omission-warning compatibility window before
   removing that warning behavior.
 
-### Remaining end-to-end execution sequence
+### Completed end-to-end release sequence and compatibility handoff
 
-Run the remaining work in this order. Each work package must update production
-code, schemas/OpenAPI, the functional manifest, developer documentation, user
-documentation, tests, and retained evidence together when its contract
-changes.
+The release sequence below was completed for the release-evidence snapshot at
+`b7514d76e7a885fe710350d9f3275fb857d552a2`. Any future
+compatibility-removal change must again update production code,
+schemas/OpenAPI, the functional manifest, developer documentation, user
+documentation, tests, and retained evidence together.
 
 | Order | Work package | Required output and success criteria | Stop or rollback condition |
 | --- | --- | --- | --- |

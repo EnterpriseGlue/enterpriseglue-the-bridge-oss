@@ -3332,7 +3332,7 @@
           "observe"
         ]
       },
-      "documentationExample": "Acceptance and Remaining Release Gates",
+      "documentationExample": "Acceptance and Compatibility Follow-up",
       "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-006"
     },
     {

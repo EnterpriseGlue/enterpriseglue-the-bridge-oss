@@ -8,7 +8,7 @@ automation that already use them.
 | --- | --- | --- |
 | `pnpm run test:identity:contract` | normalization, mapping, provider, replay, and migration services | none |
 | `pnpm run test:identity:routes` | authentication and Platform Admin HTTP routes | none |
-| `pnpm run test:identity:matrix` | OIDC/SAML/LDAP normalized-identity compatibility matrix | none |
+| `pnpm run test:identity:matrix` | OIDC/SAML/LDAP normalized-identity and entitlement-to-group parity matrix: authenticated, group, role, and allowlisted attribute mappings must create the same internal memberships; OAuth scopes are normalized but rejected as human access mappings | none |
 | `pnpm run test:identity:protocol` | loopback OIDC and SAML transport fixtures plus mock contracts | none |
 | `pnpm run test:identity:ui` | provider and mapping administration screens | none |
 | `pnpm run test:identity:local` | all of the preceding local-only lanes | none |
