@@ -66,7 +66,8 @@ The runner starts one isolated target at a time:
 | Spanner | `gcr.io/cloud-spanner-emulator/emulator:1.5.30` | 59010 |
 
 All images run as `linux/amd64`, matching the hosted qualification runner and
-remaining deterministic on Apple Silicon through Docker emulation.
+remaining deterministic on Apple Silicon through Docker emulation. Image pulls
+retry automatically when a registry connection fails transiently.
 
 The authoritative target list, platforms, ports, stages, baselines, required
 columns, and required indexes live in

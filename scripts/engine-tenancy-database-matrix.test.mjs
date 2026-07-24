@@ -67,6 +67,7 @@ test('runs every database in an isolated disposable localhost container', () => 
   }
   assert.match(runner, /127\.0\.0\.1/);
   assert.match(runner, /removeContainer/);
+  assert.match(runner, /docker\(\['pull', '--platform', target\.platform, target\.image\]\)/);
   assert.match(runner, /database-observations/);
   assert.match(runner, /schemaFingerprints\.size === 1/);
   assert.match(runner, /Database-matrix evidence must be run from a clean worktree/);

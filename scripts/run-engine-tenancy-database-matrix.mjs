@@ -318,8 +318,11 @@ async function qualify(database) {
   removeContainer(database);
   rmSync(observationPath, { force: true });
   console.log(`[database-matrix] starting ${database} (${target.image})`);
-  docker(dockerRunArguments(database));
   try {
+    await retry(`${database} container image`, async () => {
+      docker(['pull', '--platform', target.platform, target.image]);
+    }, database === 'oracle' ? 900000 : 300000);
+    docker(dockerRunArguments(database));
     await prepareDatabase(database);
     const result = spawnSync('node', [
       'backend/test/integration/engine-tenancy-database-qualification.mjs',
