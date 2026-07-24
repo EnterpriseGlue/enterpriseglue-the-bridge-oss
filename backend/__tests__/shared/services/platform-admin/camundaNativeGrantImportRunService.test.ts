@@ -116,11 +116,14 @@ describe('CamundaNativeGrantImportRunService', () => {
 
     const drafted = await service.setDraft({ id: ' run-1 ', draftHash: 'B'.repeat(64), approverId: ' approver-1 ', now });
     const applied = await service.markApplied({ id: 'run-1', configBundleApplyRunId: 'apply-run-1' });
+    const rolledBack = await service.markRolledBack({ id: 'run-1', configBundleApplyRunId: 'rollback-run-1', now: now + 1 });
 
     expect(drafted).toMatchObject({ status: 'draft_generated', draftHash: 'b'.repeat(64) });
     expect(repository.update).toHaveBeenCalledWith({ id: 'run-1' }, expect.objectContaining({ approvedById: 'approver-1', approvedAt: now }));
     expect(applied).toMatchObject({ status: 'applied' });
-    expect(repository.update).toHaveBeenLastCalledWith({ id: 'run-1' }, expect.objectContaining({ appliedConfigBundleRunId: 'apply-run-1' }));
+    expect(repository.update).toHaveBeenCalledWith({ id: 'run-1' }, expect.objectContaining({ appliedConfigBundleRunId: 'apply-run-1' }));
+    expect(rolledBack).toMatchObject({ status: 'rolled_back', rollbackConfigBundleRunId: 'rollback-run-1', rolledBackAt: now + 1 });
+    expect(repository.update).toHaveBeenLastCalledWith({ id: 'run-1' }, expect.objectContaining({ rollbackConfigBundleRunId: 'rollback-run-1', rolledBackAt: now + 1 }));
   });
 
   it('retains a reviewed draft only in the encrypted detail snapshot and binds it to its engine', async () => {
@@ -172,7 +175,7 @@ describe('CamundaNativeGrantImportRunService', () => {
 
   it('fails closed for incomplete, invalid, or absent evidence and removes only expired encrypted detail', async () => {
     const repository = setup();
-    repository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce({ encryptedDetailedSnapshot: null });
+    repository.findOne.mockResolvedValue(null);
     const service = new CamundaNativeGrantImportRunService();
 
     await expect(service.createPreview({ engineId: '', sourceKind: 'live_api', inputHash: hash, mappingCatalogVersion: 'v1', inventoryTruncated: false, classifications: [] })).rejects.toThrow('Engine id is required');
@@ -185,8 +188,11 @@ describe('CamundaNativeGrantImportRunService', () => {
     await expect(service.setDraft({ id: 'run-1', draftHash: hash, approverId: '' })).rejects.toThrow('Import run id');
     await expect(service.markApplied({ id: '', configBundleApplyRunId: 'apply-1' })).rejects.toThrow('Import run id');
     await expect(service.markApplied({ id: 'run-1', configBundleApplyRunId: '' })).rejects.toThrow('Import run id');
+    await expect(service.markRolledBack({ id: '', configBundleApplyRunId: 'apply-1' })).rejects.toThrow('Import run id');
+    await expect(service.markRolledBack({ id: 'run-1', configBundleApplyRunId: '' })).rejects.toThrow('Import run id');
     expect(await service.setDraft({ id: 'missing', draftHash: hash, approverId: 'operator' })).toBeNull();
     expect(await service.markApplied({ id: 'missing', configBundleApplyRunId: 'apply-1' })).toBeNull();
+    expect(await service.markRolledBack({ id: 'missing', configBundleApplyRunId: 'apply-1' })).toBeNull();
     expect(await service.getDetailedSnapshot('missing')).toBeNull();
 
     repository.update.mockResolvedValueOnce({ affected: 0 });

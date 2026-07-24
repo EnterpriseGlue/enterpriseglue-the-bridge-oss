@@ -78,6 +78,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/authz/config-bundles/import-zip', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/import-url', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/diff', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback/preview', resourceResolver: 'platform.self' },
       ],
     },
   {
@@ -93,6 +94,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       routes: [
         { method: 'POST', route: '/api/authz/config-bundles/apply', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback', resourceResolver: 'platform.self' },
       ],
     },
   {

@@ -95,6 +95,9 @@ function summaryFor(run: CamundaNativeGrantImportRun): CamundaNativeGrantImportR
     normalizedCounts: parseObject(run.normalizedCountsJson),
     classifications: parseClassifications(run.classificationsJson),
     draftHash: run.draftHash,
+    appliedConfigBundleRunId: run.appliedConfigBundleRunId || null,
+    rollbackConfigBundleRunId: run.rollbackConfigBundleRunId || null,
+    rolledBackAt: run.rolledBackAt == null ? null : Number(run.rolledBackAt),
     detailedSnapshotAvailable: Boolean(run.encryptedDetailedSnapshot) && (run.detailedSnapshotExpiresAt === null || run.detailedSnapshotExpiresAt > Date.now()),
     detailedSnapshotExpiresAt: run.detailedSnapshotExpiresAt,
     createdAt: Number(run.createdAt),
@@ -151,6 +154,8 @@ export class CamundaNativeGrantImportRunService {
       approvedById: null,
       approvedAt: null,
       appliedConfigBundleRunId: null,
+      rollbackConfigBundleRunId: null,
+      rolledBackAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -233,6 +238,19 @@ export class CamundaNativeGrantImportRunService {
     const run = await repository.findOne({ where: { id } });
     if (!run) return null;
     const values = { status: 'applied' as const, appliedConfigBundleRunId: configBundleApplyRunId, updatedAt: input.now ?? Date.now() };
+    await repository.update({ id }, values);
+    return summaryFor({ ...run, ...values } as CamundaNativeGrantImportRun);
+  }
+
+  async markRolledBack(input: { id: string; configBundleApplyRunId: string; now?: number }): Promise<CamundaNativeGrantImportRunSummary | null> {
+    const id = input.id.trim();
+    const configBundleApplyRunId = input.configBundleApplyRunId.trim();
+    if (!id || !configBundleApplyRunId) throw new Error('Import run id and rollback config-bundle apply run id are required');
+    const repository = (await getDataSource()).getRepository(CamundaNativeGrantImportRun);
+    const run = await repository.findOne({ where: { id } });
+    if (!run) return null;
+    const now = input.now ?? Date.now();
+    const values = { status: 'rolled_back' as const, rollbackConfigBundleRunId: configBundleApplyRunId, rolledBackAt: now, updatedAt: now };
     await repository.update({ id }, values);
     return summaryFor({ ...run, ...values } as CamundaNativeGrantImportRun);
   }

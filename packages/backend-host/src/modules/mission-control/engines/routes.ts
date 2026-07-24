@@ -40,6 +40,8 @@ import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabil
 import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl, validateBpmnEngineEndpointUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js'
+import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js'
+import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
 import { isEngineVisibleInTenancyContext } from '@enterpriseglue/shared/engine-tenancy/visibility.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
@@ -103,6 +105,63 @@ const nativeGrantApplyBodySchema = z.object({
   expectedDraftHash: z.string().regex(/^[a-f0-9]{64}$/),
   acknowledgements: z.array(z.string().min(1).max(255)).max(100).optional(),
 }).strict()
+const nativeGrantRollbackPreviewBodySchema = z.object({}).strict()
+const nativeGrantRollbackBodySchema = z.object({
+  expectedRollbackHash: z.string().regex(/^[a-f0-9]{64}$/),
+  acknowledgements: z.array(z.string().min(1).max(255)).max(100),
+}).strict()
+
+/**
+ * Native-grant imports deliberately start from an empty, dedicated additive
+ * bundle. That makes rollback precise: an authoritative empty version of the
+ * same bundle can retire only records created by this import sourceRef.
+ */
+function assertDedicatedNativeGrantMigrationBase(base: unknown): void {
+  if (!base || typeof base !== 'object' || Array.isArray(base)) throw Errors.validation('Native-grant migration base must be an object')
+  const value = base as { bundle?: unknown; files?: unknown }
+  if (!value.bundle || typeof value.bundle !== 'object' || Array.isArray(value.bundle) || !value.files || typeof value.files !== 'object' || Array.isArray(value.files)) {
+    throw Errors.validation('Native-grant migration base must contain bundle and files objects')
+  }
+  const bundle = value.bundle as { metadata?: { key?: unknown }; mode?: unknown; imports?: unknown }
+  const files = value.files as Record<string, unknown>
+  const imports = bundle.imports
+  if (
+    bundle.mode !== 'additive'
+    || typeof bundle.metadata?.key !== 'string'
+    || !/^migration\.camunda-native-[a-z0-9][a-z0-9.-]*$/.test(bundle.metadata.key)
+    || !Array.isArray(imports)
+    || imports.length !== 1
+    || imports[0] !== './groups.json'
+    || Object.keys(files).length !== 1
+    || !files['./groups.json']
+    || typeof files['./groups.json'] !== 'object'
+    || Array.isArray(files['./groups.json'])
+    || !Array.isArray((files['./groups.json'] as { groups?: unknown }).groups)
+    || (files['./groups.json'] as { groups: unknown[] }).groups.length !== 0
+  ) {
+    throw Errors.validation('Native-grant migration requires a new empty additive migration bundle with only ./groups.json')
+  }
+}
+
+function nativeGrantRollbackConfiguration(draft: { bundle: unknown; files: Record<string, unknown> }): { bundle: unknown; files: Record<string, unknown> } {
+  if (!draft.bundle || typeof draft.bundle !== 'object' || Array.isArray(draft.bundle)) throw Errors.validation('Reviewed native-grant draft is invalid')
+  const bundle = structuredClone(draft.bundle) as { imports?: unknown; mode?: unknown }
+  const imports = bundle.imports
+  const properties: Record<string, string> = {
+    './groups.json': 'groups',
+    './roles.json': 'roles',
+    './runtime-resource-sets.json': 'runtimeResourceSets',
+    './assignments.json': 'assignments',
+  }
+  if (!Array.isArray(imports) || imports.length !== 4 || imports.some((path) => typeof path !== 'string' || !properties[path])) {
+    throw Errors.validation('Reviewed native-grant draft has an unsafe rollback shape')
+  }
+  bundle.mode = 'authoritative'
+  return {
+    bundle,
+    files: Object.fromEntries((imports as string[]).map((path) => [path, { [properties[path]]: [] }])),
+  }
+}
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
 const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
 const engineFieldOwnerSchema = z.enum(['manual', 'external'])
@@ -1730,10 +1789,18 @@ r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/draft', en
   const detail = await camundaNativeGrantImportRunService.getDetailedSnapshot(run.id)
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw Errors.notFound('Camunda native-grant import detail')
   const classifications = CamundaNativeGrantClassificationSchema.array().parse((detail as Record<string, unknown>).classifications)
+  assertDedicatedNativeGrantMigrationBase(req.body.base)
+  if (req.body.groupMappings.some((mapping: { target: { mode: string } }) => mapping.target.mode !== 'new')) {
+    throw Errors.validation('Initial native-grant migration drafts create new EnterpriseGlue groups; map existing groups through a separately reviewed configuration bundle')
+  }
   const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: run.engineId } })
   if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
-  const engineReferenceMode = engine.configKey ? 'configured' as const : 'existing_registered' as const
-  const engineKey = engine.configKey || camundaNativeGrantExternalEngineKey(engine.id)
+  // A native-grant migration never changes connection/topology ownership, even
+  // when the engine also appears in another configuration bundle. Always use
+  // the narrowly scoped existing-engine reference rather than requiring a
+  // customer to reconstruct or re-add the engine configuration.
+  const engineReferenceMode = 'existing_registered' as const
+  const engineKey = camundaNativeGrantExternalEngineKey(engine.id)
   const draft = camundaNativeGrantDraftService.generate({
     base: req.body.base,
     engineKey,
@@ -1809,6 +1876,76 @@ r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/apply', en
       reconciliation: result.reconciliation,
     },
   })
+  res.json({ run: updatedRun, result })
+}))
+
+r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/rollback/preview', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(nativeGrantImportRunIdParamSchema), requireAction('platform.camunda-native-grants.draft', { resourceResolver: 'platform.self' }), requireAction('platform.camunda-native-grants.sensitive.read', { resourceResolver: 'platform.self' }), requireAction('platform.config-bundles.preview', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(nativeGrantRollbackPreviewBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const run = await camundaNativeGrantImportRunService.getSummary(String(req.params.runId))
+  if (!run || run.engineId !== String(req.params.id) || (run.tenantId || null) !== (req.tenant?.tenantId || null)) throw Errors.notFound('Camunda native-grant import run')
+  if (run.status !== 'applied') throw Errors.validation('Only an applied native-grant migration can be rolled back')
+  const draft = await camundaNativeGrantImportRunService.getGeneratedDraft(run.id)
+  if (!draft || !run.draftHash || draft.canonicalHash !== run.draftHash) throw Errors.validation('The reviewed native-grant draft is unavailable for rollback')
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: run.engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
+  if (draft.engineReference.engineId !== engine.id) throw Errors.validation('The reviewed migration draft is bound to a different engine')
+  const rollback = nativeGrantRollbackConfiguration(draft)
+  const settings = await platformSettingsService.get()
+  const policy = {
+    ...settings,
+    tenantReferenceResolver: engineTenantReferenceResolver(req),
+    tenantReferencePrincipalType: 'user' as const,
+    tenantReferencePrincipalId: req.user!.userId,
+    ...(draft.engineReference.mode === 'existing_registered'
+      ? { externalEngineReferences: [{ key: draft.engineReference.key, engineId: engine.id }] }
+      : {}),
+  }
+  const compilation = configBundlePreviewService.compile(rollback, policy)
+  if (!compilation.preview.valid || !compilation.preview.canonicalHash) throw Errors.validation('Generated native-grant rollback configuration is invalid')
+  const diff = await configBundleDiffService.diff(rollback, req.tenant?.tenantId || null, policy)
+  if (!diff.valid) throw Errors.validation('Generated native-grant rollback diff is invalid')
+  await logAudit({ tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.camunda_native_grants.rollback.preview', resourceType: 'engine', resourceId: engine.id, details: { importRunId: run.id, rollbackHash: compilation.preview.canonicalHash, requiredAcknowledgementCount: diff.requiredAcknowledgements.length, changeCount: diff.changes.length } })
+  res.json({ rollback: { canonicalHash: compilation.preview.canonicalHash, requiredAcknowledgements: diff.requiredAcknowledgements, changes: diff.changes, warnings: diff.warnings } })
+}))
+
+r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/rollback', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(nativeGrantImportRunIdParamSchema), requireAction('platform.camunda-native-grants.draft', { resourceResolver: 'platform.self' }), requireAction('platform.camunda-native-grants.sensitive.read', { resourceResolver: 'platform.self' }), requireAction('platform.config-bundles.apply', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(nativeGrantRollbackBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const run = await camundaNativeGrantImportRunService.getSummary(String(req.params.runId))
+  if (!run || run.engineId !== String(req.params.id) || (run.tenantId || null) !== (req.tenant?.tenantId || null)) throw Errors.notFound('Camunda native-grant import run')
+  if (run.status !== 'applied') throw Errors.validation('Only an applied native-grant migration can be rolled back')
+  const draft = await camundaNativeGrantImportRunService.getGeneratedDraft(run.id)
+  if (!draft || !run.draftHash || draft.canonicalHash !== run.draftHash) throw Errors.validation('The reviewed native-grant draft is unavailable for rollback')
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: run.engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
+  if (draft.engineReference.engineId !== engine.id) throw Errors.validation('The reviewed migration draft is bound to a different engine')
+  const rollback = nativeGrantRollbackConfiguration(draft)
+  const settings = await platformSettingsService.get()
+  const policy = {
+    ...settings,
+    tenantReferenceResolver: engineTenantReferenceResolver(req),
+    tenantReferencePrincipalType: 'user' as const,
+    tenantReferencePrincipalId: req.user!.userId,
+    ...(draft.engineReference.mode === 'existing_registered'
+      ? { externalEngineReferences: [{ key: draft.engineReference.key, engineId: engine.id }] }
+      : {}),
+  }
+  const compilation = configBundlePreviewService.compile(rollback, policy)
+  if (!compilation.preview.valid || !compilation.preview.canonicalHash || compilation.preview.canonicalHash !== req.body.expectedRollbackHash) {
+    throw Errors.validation('The submitted rollback hash does not match the reviewed native-grant rollback configuration')
+  }
+  const result = await configBundleApplyService.apply({
+    bundle: rollback.bundle,
+    files: rollback.files,
+    expectedPreviewHash: compilation.preview.canonicalHash,
+    expectedTenantScope: req.tenant?.tenantId || 'platform',
+    acknowledgements: req.body.acknowledgements,
+    idempotencyKey: `camunda-native-grant-rollback:${run.id}:${compilation.preview.canonicalHash}`,
+    identityReconciliationMode: 'none',
+    tenantId: req.tenant?.tenantId || null,
+    actorId: req.user!.userId,
+  }, policy)
+  if (!result.applyRunId) throw Errors.validation('Configuration rollback did not create an auditable apply run')
+  const updatedRun = await camundaNativeGrantImportRunService.markRolledBack({ id: run.id, configBundleApplyRunId: result.applyRunId })
+  if (!updatedRun) throw Errors.notFound('Camunda native-grant import run')
+  await logAudit({ tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.camunda_native_grants.rollback.apply', resourceType: 'engine', resourceId: engine.id, details: { importRunId: run.id, rollbackHash: compilation.preview.canonicalHash, configBundleApplyRunId: result.applyRunId, created: result.created, updated: result.updated, archived: result.archived } })
   res.json({ run: updatedRun, result })
 }))
 

@@ -50,10 +50,12 @@ const nativeGrantMigrationMock = vi.hoisted(() => ({
   setDraft: vi.fn(),
   getGeneratedDraft: vi.fn(),
   markApplied: vi.fn(),
+  markRolledBack: vi.fn(),
   generate: vi.fn(),
   externalEngineKey: vi.fn((engineId: string) => `external.camunda-native-${engineId}`),
 }));
 const configBundleApplyMock = vi.hoisted(() => ({ apply: vi.fn() }));
+const configBundleRollbackMock = vi.hoisted(() => ({ compile: vi.fn(), diff: vi.fn() }));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -84,6 +86,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImport
     createPreview: nativeGrantMigrationMock.createPreview, getSummary: nativeGrantMigrationMock.getSummary,
     getDetailedSnapshot: nativeGrantMigrationMock.getDetailedSnapshot, setDraft: nativeGrantMigrationMock.setDraft,
     getGeneratedDraft: nativeGrantMigrationMock.getGeneratedDraft, markApplied: nativeGrantMigrationMock.markApplied,
+    markRolledBack: nativeGrantMigrationMock.markRolledBack,
   },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js', () => ({
@@ -92,6 +95,12 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftS
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
   configBundleApplyService: { apply: configBundleApplyMock.apply },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js', () => ({
+  configBundlePreviewService: { compile: configBundleRollbackMock.compile },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js', () => ({
+  configBundleDiffService: { diff: configBundleRollbackMock.diff },
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -251,9 +260,12 @@ describe('mission-control engines routes', () => {
     nativeGrantMigrationMock.setDraft.mockReset();
     nativeGrantMigrationMock.getGeneratedDraft.mockReset();
     nativeGrantMigrationMock.markApplied.mockReset();
+    nativeGrantMigrationMock.markRolledBack.mockReset();
     nativeGrantMigrationMock.generate.mockReset();
     nativeGrantMigrationMock.externalEngineKey.mockImplementation((engineId: string) => `external.camunda-native-${engineId}`);
     configBundleApplyMock.apply.mockReset();
+    configBundleRollbackMock.compile.mockReset();
+    configBundleRollbackMock.diff.mockReset();
     (engineService as any).listEngines.mockReset();
     (engineService as any).getEngine.mockReset();
     (engineService as any).hasEngineAccess.mockReset();
@@ -626,7 +638,7 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
     const runtimeRepo = { find: vi.fn().mockResolvedValue([{ resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '', isActive: true, tenantResolutionStatus: 'resolved' }]) };
-    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : entity === RuntimeResource ? runtimeRepo : {} });
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : entity === RuntimeResource ? runtimeRepo : { insert: vi.fn().mockResolvedValue(undefined) } });
     nativeGrantMigrationMock.fromCustomerExport.mockReturnValue({ inventoryHash: 'a'.repeat(64), truncated: false, authorizations: [{ id: 'native-1' }] });
     nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] });
     nativeGrantMigrationMock.createPreview.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', sourceKind: 'customer_export', inputHash: 'a'.repeat(64), normalizedCounts: { total: 1 }, classifications: [], status: 'previewed' });
@@ -647,7 +659,7 @@ describe('mission-control engines routes', () => {
   it('generates a migration draft for a UI-created engine without requiring it to be re-added through configuration', async () => {
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', configKey: null, registrationSource: 'user' };
-    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine) }) });
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) }) });
     const classification = { sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] };
     nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed' });
     nativeGrantMigrationMock.getDetailedSnapshot.mockResolvedValue({ classifications: [classification] });
@@ -655,7 +667,14 @@ describe('mission-control engines routes', () => {
     nativeGrantMigrationMock.setDraft.mockResolvedValue({ id: 'run-1', status: 'draft_generated', draftHash: 'a'.repeat(64) });
 
     const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
-      base: { bundle: {}, files: {} },
+      base: {
+        bundle: {
+          apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
+          metadata: { key: 'migration.camunda-native-run-1', owner: 'camunda-native-grant-migration' },
+          tenantKey: 'default', mode: 'additive', settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' }, imports: ['./groups.json'],
+        },
+        files: { './groups.json': { groups: [] } },
+      },
       groupMappings: [{ nativeGroupId: 'sensitive-native-group', target: { mode: 'new', key: 'group.imported-operators', name: 'Imported operators' } }],
     });
 
@@ -672,7 +691,7 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     const draftHash = 'b'.repeat(64);
     const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', configKey: null, registrationSource: 'user' };
-    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine) }) });
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) }) });
     nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'draft_generated', draftHash });
     nativeGrantMigrationMock.getGeneratedDraft.mockResolvedValue({
       bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: draftHash,
@@ -689,6 +708,43 @@ describe('mission-control engines routes', () => {
       expectedPreviewHash: draftHash, idempotencyKey: `camunda-native-grant:run-1:${draftHash}`, identityReconciliationMode: 'none',
     }), expect.objectContaining({ externalEngineReferences: [{ key: 'external.camunda-native-e1', engineId: 'e1' }] }));
     expect(nativeGrantMigrationMock.markApplied).toHaveBeenCalledWith({ id: 'run-1', configBundleApplyRunId: 'config-apply-1' });
+  });
+
+  it('previews and rolls back only the dedicated migration bundle after explicit archive acknowledgements', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const draftHash = 'b'.repeat(64);
+    const rollbackHash = 'c'.repeat(64);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) }) });
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'applied', draftHash });
+    nativeGrantMigrationMock.getGeneratedDraft.mockResolvedValue({
+      bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'migration.camunda-native-run-1', owner: 'migration' }, tenantKey: 'default', mode: 'additive', settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' }, imports: ['./groups.json', './roles.json', './runtime-resource-sets.json', './assignments.json'] },
+      files: { './groups.json': { groups: [{ key: 'group.imported', name: 'Imported' }] }, './roles.json': { roles: [] }, './runtime-resource-sets.json': { runtimeResourceSets: [] }, './assignments.json': { assignments: [] } },
+      canonicalHash: draftHash, engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' }, generated: { groupCount: 1, roleCount: 0, runtimeResourceSetCount: 0, assignmentCount: 0 }, manualWorkAuthorizationIds: [],
+    });
+    configBundleRollbackMock.compile.mockReturnValue({ preview: { valid: true, canonicalHash: rollbackHash } });
+    configBundleRollbackMock.diff.mockResolvedValue({ valid: true, requiredAcknowledgements: ['config.authoritative_archive:group:group.imported'], changes: [{ objectType: 'group', key: 'group.imported', operation: 'archive' }], warnings: [] });
+
+    const preview = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback/preview').send({});
+    expect(preview.status).toBe(200);
+    expect(preview.body.rollback).toMatchObject({ canonicalHash: rollbackHash, requiredAcknowledgements: ['config.authoritative_archive:group:group.imported'] });
+
+    configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-rollback-1', canonicalHash: rollbackHash, created: 0, updated: 0, archived: 4, reconciliation: { status: 'completed' } });
+    nativeGrantMigrationMock.markRolledBack.mockResolvedValue({ id: 'run-1', status: 'rolled_back', draftHash, rollbackConfigBundleRunId: 'config-rollback-1' });
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback').send({
+      expectedRollbackHash: rollbackHash,
+      acknowledgements: ['config.authoritative_archive:group:group.imported'],
+    });
+
+    expect(response.status).toBe(200);
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      expectedPreviewHash: rollbackHash,
+      acknowledgements: ['config.authoritative_archive:group:group.imported'],
+      idempotencyKey: `camunda-native-grant-rollback:run-1:${rollbackHash}`,
+    }), expect.objectContaining({
+      externalEngineReferences: [{ key: 'external.camunda-native-e1', engineId: 'e1' }],
+    }));
+    expect(nativeGrantMigrationMock.markRolledBack).toHaveBeenCalledWith({ id: 'run-1', configBundleApplyRunId: 'config-rollback-1' });
   });
 
   it('returns engine credential state but never the stored secret in engine detail', async () => {

@@ -52,16 +52,26 @@ task grant. Its pagination test verifies that no fixture route accepts a native
 authorization write, so local translation tests do not need customer data or
 an IdP connection.
 
-For exact supported grants, the foundation can now produce a deterministic
-additive configuration-bundle draft from an existing bundle that already
-contains the registered Camunda 7 engine. It adds only explicitly selected
-EnterpriseGlue groups, a least-privileged engine read role, exact Runtime
-Resource Sets, and scoped group assignments. It preserves
+For exact supported grants, the implementation produces a deterministic,
+dedicated additive configuration-bundle draft. It references the already
+registered engine by a controlled internal reference rather than copying its
+connection, tenancy, or ownership into `engines.json`; this applies equally to
+engines first added through the UI, API, or another config bundle. It adds only
+new selected EnterpriseGlue groups, a least-privileged engine read role, exact
+Runtime Resource Sets, and scoped group assignments. It preserves
 `enterpriseglue_authoritative`, cannot replace a resource-specific grant with
-an engine-wide one, and refuses missing group mappings, unconfigured engines,
-unknown action mappings, duplicate generated keys, or an invalid resulting
-bundle. Broad, user-specific, revoke/global, unsupported, and blocked records
-remain outside that draft as manual work.
+an engine-wide one, and refuses missing mappings, unknown action mappings,
+duplicate generated keys, or an invalid resulting bundle. Broad, user-specific,
+revoke/global, unsupported, and blocked records remain outside that draft as
+manual work.
+
+The reviewed encrypted draft is now applied by a dedicated engine route that
+requires configuration-bundle apply permission, verifies the stored hash,
+uses an idempotency receipt, and writes the resulting apply-run id back to the
+sanitized import record. A rollback preview creates an authoritative empty
+version of the same dedicated migration bundle; after normal archive
+acknowledgements it retires only records owned by that import bundle. Neither
+apply nor rollback writes to Camunda or changes the engine registration.
 
 ## Summary of the Agreed Model
 
@@ -153,18 +163,18 @@ engine with successful connection and runtime-inventory discovery.
    authorizations and the relevant process/decision/tenant inventory.
 2. **Classify** — show supported, approval-required, and unsupported items;
    do not make any changes.
-3. **Map** — map a Camunda group to an existing or new EnterpriseGlue internal
-   group, and select an EnterpriseGlue role/template for each supported grant
-   family.
-4. **Preview** — generate a deterministic configuration draft containing
-   groups, roles, Runtime Resource Sets, and assignments. Show the existing
-   hash-bound diff and Effective Access impact before any apply.
-5. **Approve and apply** — the administrator acknowledges all broad or
-   incomplete mappings and applies through the normal config preview/apply
-   safeguards.
-6. **Verify** — compare selected known user/group/resource allow/deny cases,
-   retain a sanitized result, and direct the operator to restrict or retain
-   direct Cockpit/API access intentionally.
+3. **Map** — with the separate sensitive-detail permission, map a Camunda
+   group to a new EnterpriseGlue internal group in a dedicated migration
+   bundle. Existing-group reuse remains a separately reviewed config change in
+   the initial safe UI flow.
+4. **Preview** — generate and persist a deterministic configuration draft
+   containing groups, roles, Runtime Resource Sets, and assignments.
+5. **Approve and apply** — configuration-bundle apply permission is required;
+   the server applies only the reviewed stored hash and records its receipt.
+6. **Verify** — compare selected known user/group/resource allow/deny cases in
+   Effective Access and retain the sanitized result.
+7. **Rollback when needed** — preview the import-owned records to archive,
+   acknowledge the authoritative removals, then apply the hash-bound rollback.
 
 The UI must state clearly that the import **does not alter Camunda grants** and
 that future changes must be made in EnterpriseGlue after the cutover.
@@ -266,10 +276,11 @@ a hidden second persistence path. It contains stable keys for:
   selectors; and
 - group role assignments at the resulting resource-set or engine scope.
 
-The draft carries `source = camunda_native_import` and an opaque import-run
-reference for traceability. Existing source-ownership rules still apply: an
-import cannot overwrite manual, API, SSO, or config-owned records without the
-normal conflict/acknowledgement path.
+The resulting rows use the ordinary `config_bundle:<migration-key>` source
+reference; the import-run record links to the configuration apply receipt and
+keeps raw source detail encrypted. A dedicated migration key makes rollback
+ownership exact. Existing source-ownership rules still apply: an import cannot
+overwrite manual, API, SSO, or unrelated config-owned records.
 
 ### Endpoints
 
@@ -278,15 +289,19 @@ Use an engine-scoped, explicit workflow:
 ```text
 POST /engines-api/engines/:id/camunda-native-grants/imports/preview
 GET  /engines-api/engines/:id/camunda-native-grants/imports/:runId
+GET  /engines-api/engines/:id/camunda-native-grants/imports/:runId/detail
 POST /engines-api/engines/:id/camunda-native-grants/imports/:runId/draft
+POST /engines-api/engines/:id/camunda-native-grants/imports/:runId/apply
+POST /engines-api/engines/:id/camunda-native-grants/imports/:runId/rollback/preview
+POST /engines-api/engines/:id/camunda-native-grants/imports/:runId/rollback
 ```
 
-The preview receives only safe options such as source kind and selected
-identity mappings. It returns a bounded classified inventory, manual-work
-items, config draft, preview hash, expiry, and required acknowledgements. The
-draft is then passed through the existing configuration preview/apply APIs;
-there is no endpoint that applies native grants directly to EnterpriseGlue
-without the standard configuration safeguards.
+The preview receives only safe source options. It returns a bounded classified
+inventory and expiry. The sensitive detail route is separately permission-gated.
+The draft and apply routes retain and apply the exact generated configuration;
+they do not accept a browser-supplied replacement configuration. Rollback has
+its own no-change preview and applies only the returned rollback hash with the
+normal authoritative-archive acknowledgements.
 
 Add dedicated permissions for preview, sensitive-preview view, draft creation,
 and audit/history read. These must be separated from ordinary engine edit and
@@ -345,8 +360,8 @@ without modifying either Camunda or EnterpriseGlue authorization.
 
 - Implement the versioned Camunda-resource/permission to EnterpriseGlue-action
   catalogue with unit-tested, least-privileged templates.
-- Build identity/group mapping UI, existing/new group selection, role selection,
-  exact process/decision selectors, and broad-grant acknowledgements.
+- Build the protected group mapping UI, dedicated new-group bundle flow, role
+  selection, exact process/decision selectors, and broad-grant acknowledgements.
 - Generate deterministic config-bundle drafts and submit them to existing
   preview/diff/Effective Access services.
 - Detect ownership conflicts and require a normal config conflict resolution;
@@ -357,15 +372,17 @@ hash and can be fully reviewed before apply.
 
 ### 4. Controlled apply, verification, and rollback
 
-- Apply only through the normal hash-bound configuration path.
+- Apply only through the hash-bound stored configuration path and record the
+  resulting configuration apply receipt on the import run.
 - Before apply, require a current engine topology/scope preview when the draft
   needs `resource_aware` access; transition/scope changes are a separate
   acknowledged operation.
 - Add a comparison runner for selected representative cases: expected native
   result, imported EnterpriseGlue result, and post-apply Effective Access.
-- Retain an export of created records and produce a reverse config draft for
-  rollback. Rollback removes only import-owned records and never touches
-  pre-existing manual/config/SSO/API records or native Camunda grants.
+- Generate a reverse authoritative config preview from the dedicated migration
+  bundle. Rollback removes only import-owned records and never touches
+  pre-existing manual/config/SSO/API records, the engine row, or native
+  Camunda grants.
 
 **Done when:** the customer can preview, apply, verify, and reverse an import
 without losing existing Camunda access or broadening EnterpriseGlue access.
@@ -461,10 +478,11 @@ Stop and do not apply when any of the following is true:
 baseline; or
 - the customer has not decided how direct Cockpit/API access is governed.
 
-Rollback uses the generated reverse config draft and re-runs Effective Access
-checks. It removes only records created by the import. It does not delete or
-modify native Camunda grants, historical customer access, engine credentials,
-engine registration, tenant mappings, or unrelated EnterpriseGlue records.
+Rollback uses the generated reverse config preview, explicit archive
+acknowledgements, and re-runs Effective Access checks. It removes only records
+created by the import. It does not delete or modify native Camunda grants,
+historical customer access, engine credentials, engine registration, tenant
+mappings, or unrelated EnterpriseGlue records.
 
 ## Follow-up Decisions
 
@@ -484,4 +502,6 @@ support, and end-to-end safety evidence designed before any setting accepts it.
 - [JSON-Driven Authorization and Engine Registration Plan](11-json-driven-authz-and-engine-registration.md)
 - [Centralized and Decentralized Engine Tenancy Implementation Plan](12-engine-tenancy-and-external-provisioning-plan.md)
 - [Configure Authorization, Identity, and Engines](../how-to/configure-authorization-and-engines.md)
+- [Migrate Camunda 7 Native Grants](../how-to/migrate-camunda7-native-grants.md)
+- [Camunda 7 Native-Grant Migration API](../reference/camunda7-native-grant-migration-api.md)
 - [Configure Dedicated and Shared Engine Tenancy](../how-to/configure-engine-tenancy.md)

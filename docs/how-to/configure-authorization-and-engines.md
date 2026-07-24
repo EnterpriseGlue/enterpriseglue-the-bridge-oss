@@ -58,6 +58,8 @@ Use Platform Settings and Access Control for interactive administration:
 - Project Targets: eligible project-engine relationships and deployment modes.
 - Effective Access: decision explanation and remediation links.
 - Configuration: bundle preview, apply, history, drift, and export.
+- Camunda 7 engines: sanitized native-grant inventory, protected mapping,
+  hash-bound import apply, and import-owned rollback.
 
 UI and JSON changes use the same source ownership rules. A config-owned field is not silently overwritten by a manual UI edit.
 
@@ -223,6 +225,20 @@ Every engine record requires:
 `metadataDiscoveryEnabled: false` removes the engine from scheduled discovery but does not prevent an administrator from running an explicit manual reconciliation. `pipelineReceiptEnabled: false` rejects the direct-pipeline receipt endpoint for that engine. The receipt switch is relevant only to `direct_engine` deployment integration; EnterpriseGlue-proxy deployments do not use pipeline receipts.
 
 Engine registration never grants human access. Visibility comes from effective scoped permissions.
+
+### Migrate Existing Camunda 7 Grants
+
+For an engine with existing Camunda 7 authorizations, use the dedicated
+**Migrate existing Camunda grants** panel rather than copying grants into an
+engine configuration or enabling an engine-native authority mode. The first
+safe workflow creates new EnterpriseGlue groups and resource-scoped access in
+a dedicated additive bundle, while preserving the existing engine row. It
+reads `GET /authorization` only and never changes Camunda grants.
+
+Use [Migrate Camunda 7 Native Grants](./migrate-camunda7-native-grants.md)
+for prerequisites, Effective Access verification, rollback acknowledgements,
+and stop conditions. The API contract and sensitive-detail boundary are in
+[Camunda 7 Native-Grant Migration API](../reference/camunda7-native-grant-migration-api.md).
 
 Mission Control and Dashboard engine lists include an engine only when the backend returns at least one authorized runtime resource or an engine-wide runtime read permission. Project deployment dropdowns additionally require project permission, engine deploy permission, an active project-engine target, mode eligibility, lifecycle/capability checks, and policies.
 

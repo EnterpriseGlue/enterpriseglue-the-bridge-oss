@@ -1,0 +1,21 @@
+{
+  "apiVersion": "enterpriseglue.ai/camunda7-native-authorizations/v1",
+  "authorizations": [
+    {
+      "id": "eg-fixture-auth-process-reader",
+      "type": 1,
+      "permissions": ["READ"],
+      "groupId": "eg-fixture-operators",
+      "resourceType": 6,
+      "resourceId": "eg-fixture-invoice"
+    },
+    {
+      "id": "eg-fixture-auth-decision-reader",
+      "type": 1,
+      "permissions": ["READ"],
+      "groupId": "eg-fixture-auditors",
+      "resourceType": 10,
+      "resourceId": "eg-fixture-credit-check"
+    }
+  ]
+}

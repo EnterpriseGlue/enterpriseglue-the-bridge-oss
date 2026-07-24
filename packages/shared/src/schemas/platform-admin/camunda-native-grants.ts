@@ -82,7 +82,7 @@ export const CamundaNativeGrantSanitizedClassificationSchema = z.object({
   mappedActionIds: z.array(z.string().min(1).max(255)),
 }).strict();
 
-export const CamundaNativeGrantImportRunStatusSchema = z.enum(['previewed', 'draft_generated', 'applied', 'failed']);
+export const CamundaNativeGrantImportRunStatusSchema = z.enum(['previewed', 'draft_generated', 'applied', 'rolled_back', 'failed']);
 export const CamundaNativeGrantImportRunSummarySchema = z.object({
   id: z.string().min(1).max(255),
   engineId: z.string().min(1).max(255),
@@ -95,6 +95,9 @@ export const CamundaNativeGrantImportRunSummarySchema = z.object({
   normalizedCounts: z.record(z.string(), z.number().int().nonnegative()),
   classifications: z.array(CamundaNativeGrantSanitizedClassificationSchema),
   draftHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  appliedConfigBundleRunId: z.string().min(1).max(255).nullable(),
+  rollbackConfigBundleRunId: z.string().min(1).max(255).nullable(),
+  rolledBackAt: z.number().int().nullable(),
   detailedSnapshotAvailable: z.boolean(),
   detailedSnapshotExpiresAt: z.number().int().nullable(),
   createdAt: z.number().int(),

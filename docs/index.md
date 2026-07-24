@@ -29,6 +29,7 @@ Audience: Developers and architects.
 - [Diagnose Engine Tenant Resolution](how-to/diagnose-engine-tenant-resolution.md)
 - [Migrate Existing Engines to Explicit Tenancy](how-to/migrate-existing-engines-to-explicit-tenancy.md)
 - [Upgrade to Explicit Engine Tenancy](how-to/upgrade-engine-tenancy.md)
+- [Migrate Camunda 7 Native Grants](how-to/migrate-camunda7-native-grants.md)
 
 ## Architecture
 - [Architecture Overview](architecture/00-architecture-overview.md)
@@ -50,7 +51,9 @@ Audience: Developers and architects.
 - [Qualify Engine Tenancy on Every Supported Database](development/engine-tenancy-database-qualification.md)
 - [Engine Tenancy Functional Test Report](development/engine-tenancy-functional-test-report.md)
 - [Engine Tenancy Documentation Review Checklist](development/engine-tenancy-documentation-review-checklist.md)
+- [Develop and Test Camunda 7 Native-Grant Migration](development/camunda7-native-grant-migration.md)
 - [Non-Postgres Database Setup](how-to/database-non-postgres.md)
+- [Camunda 7 Native-Grant Migration API](reference/camunda7-native-grant-migration-api.md)
 
 ## Operations
 - [Observability and Logs](reference/observability-logs.md)
