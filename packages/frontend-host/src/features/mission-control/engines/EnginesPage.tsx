@@ -35,6 +35,7 @@ import { EngineAccessError, isEngineAccessError } from '../shared/components/Eng
 import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
 import EngineTenancyPanel from './components/EngineTenancyPanel'
+import CamundaNativeGrantMigrationPanel from './components/CamundaNativeGrantMigrationPanel'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
@@ -2056,6 +2057,7 @@ export default function Engines() {
                   : 'Engine edit permission is required to change topology or tenant mappings.'}
           />
         )}
+        {editing?.type === 'camunda7' && <CamundaNativeGrantMigrationPanel engineId={editing.id} />}
         {editing && engineDetailSections.includes('access') && (
           <EngineAccessSection
             assignments={accessAssignmentsQ.data || []}
