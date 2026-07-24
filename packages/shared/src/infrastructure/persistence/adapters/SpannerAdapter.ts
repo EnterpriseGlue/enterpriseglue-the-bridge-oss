@@ -102,7 +102,10 @@ export class SpannerAdapter implements DatabaseAdapter {
 
       if (column.options.type === 'text') {
         column.options.type = 'string';
-        if (column.options.length == null) {
+        if (targetName === 'CamundaNativeGrantImportRun'
+          && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
+          column.options.length = 'max';
+        } else if (column.options.length == null) {
           column.options.length = needsKeyLength ? 191 : 4096;
         }
         continue;

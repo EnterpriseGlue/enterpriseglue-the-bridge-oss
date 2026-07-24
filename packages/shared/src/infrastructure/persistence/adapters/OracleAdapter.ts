@@ -150,9 +150,9 @@ export class OracleAdapter implements DatabaseAdapter {
       }
 
       if (column.options.type === 'text') {
-        if (String(column.options.length).toLowerCase() === 'max') {
+        if (targetName === 'CamundaNativeGrantImportRun'
+          && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
           column.options.type = 'clob';
-          delete column.options.length;
           continue;
         }
         column.options.type = 'varchar2';

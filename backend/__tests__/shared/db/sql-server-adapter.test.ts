@@ -89,6 +89,16 @@ describe('SqlServerAdapter metadata normalization', () => {
     expect(groupDescriptionColumn?.options.length).toBe(4000);
   });
 
+  it('uses NVARCHAR(MAX) for bounded native-grant evidence instead of truncating it to display-text length', () => {
+    new SqlServerAdapter();
+    const metadata = getMetadataArgsStorage();
+    for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
+      const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === 'CamundaNativeGrantImportRun'
+        && candidate.propertyName === propertyName);
+      expect(column?.options).toMatchObject({ type: 'nvarchar', length: 'MAX' });
+    }
+  });
+
   it('filters nullable unique keys so multiple absent values remain valid', () => {
     new SqlServerAdapter();
 

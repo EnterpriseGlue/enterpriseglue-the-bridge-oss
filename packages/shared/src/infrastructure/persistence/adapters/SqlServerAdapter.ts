@@ -113,6 +113,13 @@ export class SqlServerAdapter implements DatabaseAdapter {
 
       if (column.options.type !== 'text') continue;
 
+      if (targetName === 'CamundaNativeGrantImportRun'
+        && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
+        column.options.type = 'nvarchar';
+        column.options.length = 'MAX';
+        continue;
+      }
+
       const needsKeyLength =
         column.options.default != null
         || Boolean(column.options.primary)

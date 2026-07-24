@@ -77,17 +77,17 @@ export class MySQLAdapter implements DatabaseAdapter {
 
     for (const column of metadata.columns) {
       if (column.options.type !== 'text') continue;
-
-      if (String(column.options.length).toLowerCase() === 'max') {
+      const targetName = this.getTargetName(column.target);
+      const isNativeGrantEvidence = targetName === 'CamundaNativeGrantImportRun'
+        && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName);
+      if (isNativeGrantEvidence) {
         // Native-grant evidence is explicitly capped by its service, but can
         // exceed MySQL TEXT's 64 KiB limit. LONGTEXT avoids driver-side
         // narrowing while keeping the column out of all indexes.
         column.options.type = 'longtext';
-        delete column.options.length;
         continue;
       }
 
-      const targetName = this.getTargetName(column.target);
       const key = `${targetName}:${column.propertyName}`;
       const needsVarchar =
         column.options.default != null
