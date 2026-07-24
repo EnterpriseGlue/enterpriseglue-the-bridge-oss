@@ -16,6 +16,7 @@ const REQUIRED_CANONICAL_ENTITIES = [
   'IdentityReconciliationCheckpoint',
   'DeploymentReceipt',
   'ConfigBundleApplyRun',
+  'CamundaNativeGrantImportRun',
   'ConfigBundleIdentityReplayTask',
   'ConfigBundleRuntimeReconciliationTask',
   'AuthzGroup',

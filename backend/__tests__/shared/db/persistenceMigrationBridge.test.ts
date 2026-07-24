@@ -21,6 +21,8 @@ import { AddEngineTenancyFoundation1700000000096 as DbEngineTenancyFoundationMig
 import { AddEngineTenancyFoundation1700000000096 as PersistenceEngineTenancyFoundationMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000096-add-engine-tenancy-foundation.js';
 import { AddEngineTenantMappingReference1700000000097 as DbEngineTenantMappingReferenceMigration } from '@enterpriseglue/shared/db/migrations/1700000000097-add-engine-tenant-mapping-reference.js';
 import { AddEngineTenantMappingReference1700000000097 as PersistenceEngineTenantMappingReferenceMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000097-add-engine-tenant-mapping-reference.js';
+import { AddCamundaNativeGrantImportRuns1700000000098 as DbCamundaNativeGrantImportRunsMigration } from '@enterpriseglue/shared/db/migrations/1700000000098-add-camunda-native-grant-import-runs.js';
+import { AddCamundaNativeGrantImportRuns1700000000098 as PersistenceCamundaNativeGrantImportRunsMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000098-add-camunda-native-grant-import-runs.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
@@ -35,5 +37,6 @@ describe('persistence migration bridges', () => {
     expect(PersistenceDropRoleAssignmentUserAliasMigration).toBe(DbDropRoleAssignmentUserAliasMigration);
     expect(PersistenceEngineTenancyFoundationMigration).toBe(DbEngineTenancyFoundationMigration);
     expect(PersistenceEngineTenantMappingReferenceMigration).toBe(DbEngineTenantMappingReferenceMigration);
+    expect(PersistenceCamundaNativeGrantImportRunsMigration).toBe(DbCamundaNativeGrantImportRunsMigration);
   });
 });

@@ -37,6 +37,14 @@ unmapped permissions, missing resources, and unresolved/ambiguous inventory
 are retained as manual or blocked items. No native authorization is written,
 and this slice does not introduce a runtime authority mode.
 
+The foundation also persists an import-run receipt across all supported
+database adapters. Ordinary history stores only the source hash, normalized
+counts, mapped-action IDs, and opaque source/group/resource references. The
+optional detailed native snapshot is encrypted, permission-gated by the later
+API/UI workflow, and automatically eligible for removal after a maximum of
+30 days; expiry removes that encrypted detail but retains the sanitized audit
+receipt and any resulting configuration-bundle apply reference.
+
 ## Summary of the Agreed Model
 
 ### Engine registration and tenancy

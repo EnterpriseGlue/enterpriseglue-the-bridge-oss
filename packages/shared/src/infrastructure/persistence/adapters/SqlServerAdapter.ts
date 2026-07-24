@@ -12,7 +12,7 @@ import {
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
-  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
   Engine, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
@@ -27,7 +27,7 @@ const entities = [
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
   RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
-  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
   Engine, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,

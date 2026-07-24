@@ -21,6 +21,7 @@ export { Batch } from './Batch.js';
 export { Branch } from './Branch.js';
 export { Comment } from './Comment.js';
 export { ConfigBundleApplyRun } from './ConfigBundleApplyRun.js';
+export { CamundaNativeGrantImportRun } from './CamundaNativeGrantImportRun.js';
 export { ConfigBundleIdentityReplayTask } from './ConfigBundleIdentityReplayTask.js';
 export { ConfigBundleRuntimeReconciliationTask } from './ConfigBundleRuntimeReconciliationTask.js';
 export { Commit } from './Commit.js';

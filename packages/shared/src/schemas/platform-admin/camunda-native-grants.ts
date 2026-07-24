@@ -68,6 +68,39 @@ export const CamundaNativeGrantClassificationSchema = z.object({
   mappedActionIds: z.array(z.string().min(1).max(255)),
 }).strict();
 
+/** Safe to retain and return to ordinary migration-history readers. */
+export const CamundaNativeGrantSanitizedClassificationSchema = z.object({
+  sourceAuthorizationRef: z.string().regex(/^camunda-auth-[a-f0-9]{24}$/),
+  disposition: CamundaNativeGrantDispositionSchema,
+  reasonCodes: z.array(CamundaNativeGrantReasonCodeSchema).min(1),
+  principalType: z.enum(['group', 'user', 'global']),
+  /** An opaque correlation reference, never a native group name. */
+  groupReference: z.string().regex(/^camunda-group-[a-f0-9]{24}$/).nullable(),
+  resourceKind: CamundaNativeGrantResourceKindSchema.nullable(),
+  /** An opaque correlation reference, never a native resource key. */
+  resourceReference: z.string().regex(/^camunda-resource-[a-f0-9]{24}$/).nullable(),
+  mappedActionIds: z.array(z.string().min(1).max(255)),
+}).strict();
+
+export const CamundaNativeGrantImportRunStatusSchema = z.enum(['previewed', 'draft_generated', 'applied', 'failed']);
+export const CamundaNativeGrantImportRunSummarySchema = z.object({
+  id: z.string().min(1).max(255),
+  engineId: z.string().min(1).max(255),
+  tenantId: z.string().min(1).max(255).nullable(),
+  sourceKind: CamundaNativeGrantSourceKindSchema,
+  status: CamundaNativeGrantImportRunStatusSchema,
+  inputHash: z.string().regex(/^[a-f0-9]{64}$/),
+  mappingCatalogVersion: z.string().min(1).max(128),
+  inventoryTruncated: z.boolean(),
+  normalizedCounts: z.record(z.string(), z.number().int().nonnegative()),
+  classifications: z.array(CamundaNativeGrantSanitizedClassificationSchema),
+  draftHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  detailedSnapshotAvailable: z.boolean(),
+  detailedSnapshotExpiresAt: z.number().int().nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+}).strict();
+
 export type CamundaNativeAuthorization = z.infer<typeof CamundaNativeAuthorizationSchema>;
 export type CamundaNativeAuthorizationExport = z.infer<typeof CamundaNativeAuthorizationExportSchema>;
 export type CamundaNativeGrantSourceKind = z.infer<typeof CamundaNativeGrantSourceKindSchema>;
@@ -76,3 +109,6 @@ export type CamundaNativeGrantDisposition = z.infer<typeof CamundaNativeGrantDis
 export type CamundaNativeGrantReasonCode = z.infer<typeof CamundaNativeGrantReasonCodeSchema>;
 export type CamundaNativeGrantRuntimeResource = z.infer<typeof CamundaNativeGrantRuntimeResourceSchema>;
 export type CamundaNativeGrantClassification = z.infer<typeof CamundaNativeGrantClassificationSchema>;
+export type CamundaNativeGrantSanitizedClassification = z.infer<typeof CamundaNativeGrantSanitizedClassificationSchema>;
+export type CamundaNativeGrantImportRunStatus = z.infer<typeof CamundaNativeGrantImportRunStatusSchema>;
+export type CamundaNativeGrantImportRunSummary = z.infer<typeof CamundaNativeGrantImportRunSummarySchema>;
