@@ -532,10 +532,12 @@ default tenant do not increment the compatibility counter.
 ## Functional Coverage
 
 `TEN-DOCS-001`: implemented requirements are recorded in
-`test/authz/engine-tenancy-functional-coverage.json`. The foundation CI lane
+`test/authz/engine-tenancy-functional-coverage.json`. The manifest CI lane
 fails when an entry has a duplicate or invalid identifier, missing test file or
 test name, missing Markdown page, or a documentation page that does not cite
-the requirement identifier.
+the requirement identifier. `TEN-AUTHZ-016` additionally generates the
+constraint-derived authorization matrix and fails if any canonical value,
+applicable behavior cell, invalidity witness, or equivalence proof is missing.
 
 The provisioning policy, mapping service, tenant-role policy, Mission Control
 authorization middleware, runtime-resource filter, topology transition policy,

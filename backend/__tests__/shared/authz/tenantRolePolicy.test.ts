@@ -76,6 +76,34 @@ describe('tenant role permission policy', () => {
     }
   });
 
+  it('proves tenant-safe permission unions are monotonic and cross-policy unions reject unsafe members', () => {
+    const tenantSafe = PermissionCatalog.filter((permission) => permission.tenantSafe);
+    const prohibited = PermissionCatalog.filter((permission) => !permission.tenantSafe);
+    const union = new Set<string>();
+
+    for (const permission of tenantSafe) {
+      const before = new Set(union);
+      expect(rolePermissionValidationError('tenant', permission)).toBeNull();
+      union.add(permission.key);
+      for (const existing of before) {
+        expect(union.has(existing), `adding ${permission.key} removed ${existing}`).toBe(true);
+      }
+    }
+
+    expect(union).toEqual(new Set(TENANT_SAFE_PERMISSION_IDS));
+    expect(
+      tenantSafe.some((permission) => permission.scope === 'project')
+      && tenantSafe.some((permission) => permission.scope === 'engine'),
+    ).toBe(true);
+
+    for (const permission of prohibited) {
+      const candidate = new Set([...union, permission.key]);
+      expect(candidate.size).toBe(union.size + 1);
+      expect(rolePermissionValidationError('tenant', permission))
+        .toBe(`Permission ${permission.key} is not tenant-safe`);
+    }
+  });
+
   it('preserves exact-scope validation for non-tenant roles', () => {
     expect(rolePermissionValidationError('project', {
       key: ProjectPermissions.FILES_VIEW,

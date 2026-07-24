@@ -73,8 +73,8 @@ until the following evidence is retained:
 | --- | --- | --- |
 | Requirement traceability | 79 registered requirements; 16 public operations; 11 stable errors; four valid and one invalid transition class; zero waivers | Manifest validator and every linked CI lane pass on the release commit |
 | Security mutation | Nine targeted mutants killed, including every required tenancy fault class | Mutation report retained by CI with zero survivors |
-| Human principals and custom roles | PostgreSQL-backed direct-user, group-derived-user, scoped custom-role, and randomized model tests pass | Generated matrix contains zero missing or skipped supported cells |
-| Machine principals | PostgreSQL-backed API-client and service-account custom-role, expiry, rotation, and revocation tests pass | Same generated matrix and HTTP journeys pass for both machine-principal types |
+| Human principals and custom roles | The constraint-derived matrix classifies all user/group, role/source, scope, lifecycle, tenant, topology, and resource-state cells; PostgreSQL direct/group/custom-role tests pass | Same-clean-commit matrix reports 100% execution and zero gap counters |
+| Machine principals | The same matrix covers API clients and service accounts; PostgreSQL custom-role, expiry, rotation, and revocation tests pass | Same-clean-commit matrix and HTTP journeys pass for both machine-principal types |
 | Local running installation | Guarded PostgreSQL/Chromium enforcement proves owned legacy classification, dedicated defaulting, shared fail-closed mapping, reconciliation, metrics, and cleanup | Repeatable clean-install and supported upgrade-baseline artifacts pass |
 | Provisioning channels | All 14 journeys pass locally, including all three Journey 7–14 channels: 14/14 journeys and 30/30 required channel executions | `provisioning-journeys.json` reports 14/14 journeys and 30/30 channel executions from one clean commit |
 | Browser targets | The guarded local runner passes 27 authorization executions plus 12 database-free accessibility executions across Chromium, Firefox, and WebKit, including error announcements, contrast, 200% reflow, and reduced motion | Both browser artifacts are retained from the same clean release commit |
@@ -844,8 +844,8 @@ checkboxes are closed.
 The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
 `TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-The remaining cross-database, generated-matrix, clean/upgrade,
-independent-review, and compatibility-window gates are tracked below.
+The remaining cross-database clean/upgrade, independent-review, and
+compatibility-window gates are tracked below.
 
 ### Phase 9: full release qualification
 
@@ -863,12 +863,11 @@ independent-review, and compatibility-window gates are tracked below.
 - [x] Execute database-backed custom-role matrices for direct users,
   group-derived users, API clients, and service accounts on PostgreSQL.
 - [x] Publish and validate the machine-readable authorization state-space
-  foundation against every canonical principal type, resource type, permission
-  scope, role scope, action operation, and action risk. Keep it explicitly
-  non-release-eligible until every generated execution obligation is closed.
+  against every canonical principal type, resource type, permission scope,
+  role scope, action operation, and action risk.
 - [x] Execute Chromium local-stack provisioning, mapping, fail-closed runtime,
   migration, metrics, cleanup, and active-session revocation journeys.
-- [ ] Generate and execute the complete constraint-derived authorization
+- [x] Generate and execute the complete constraint-derived authorization
   state-space described below. Every supported behavior cell and every
   declared invalidity class must be accounted for, with zero unknown, missing,
   skipped, quarantined, or unexpected cells.
@@ -912,7 +911,7 @@ changes.
 | Order | Work package | Required output and success criteria | Stop or rollback condition |
 | --- | --- | --- | --- |
 | 1 | Freeze a clean candidate | Run the manifest, mutation, guarded local enforcement, and three-browser lanes. `requirement-evidence.json`, `mutation-report.json`, `local-enforcement.json`, and `browser-matrix.json` must name the same clean commit. | Any artifact is missing, dirty, stale, sanitized incorrectly, or refers to another commit. |
-| 2 | Complete authorization generation | Build the canonical dimension and applicability registries, then generate every supported behavior cell and every invalidity class. Execute every applicable principal, scope, topology, runtime mode, source, tenant relationship, lifecycle, resource state, action, and outcome. Write `authorization-matrix.json` with zero unknown, missing, skipped, quarantined, or unexpected cells. | Any canonical action/resource type is unclassified, an exclusion has no stable rule and executed witness, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
+| 2 | Complete authorization generation | Completed locally. The canonical dimension/applicability registries generate 105,840 compressed cells, execute 52,560 applicable behavior cells plus 318 canonical structural cells, retain 12 invalidity witnesses, and prove expansion to 52,297,200 applicable raw tuples. `authorization-matrix.json` must retain zero unknown, missing, skipped, quarantined, or unexpected cells from one clean commit. | Any canonical action/resource type is unclassified, an exclusion has no stable rule and executed witness, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
 | 3 | Qualify all database adapters | For PostgreSQL, MySQL, SQL Server, Oracle, and Spanner, run clean install, every supported upgrade baseline, interruption/retry, schema equivalence, service behavior, rollback, and cleanup. Write one `database-matrix.json` containing versions, schema fingerprints, and per-stage results. | Schema or behavior differs, retry is not idempotent, rollback loses explanatory metadata, or cleanup leaves owned rows. |
 | 4 | Complete real-service provisioning journeys | Execute all 14 journeys through the local HTTP service and persistent database for manual UI, external API, and configuration channels where supported. Unsupported combinations must return their documented stable error. Write `provisioning-journeys.json` with 14/14 journeys, 30/30 required channel executions, and zero invalid or unexpected observations. Journeys 1–14 are implemented and passing locally. Journey 10 proves list/count/detail/mutation/batch/job/task/incident/history/deployment enforcement and records that a denied inventoried sibling makes no matching downstream engine call. Journey 11 keeps browser and HTTP sessions open while assignment revocation and mapping deactivation take effect immediately, then restores the exact mapping to prove cache invalidation. Journey 12 proves preview, acknowledgement, stale-preview conflict, apply, immediate shared-topology quarantine, and reverse transition for manual, hybrid-external/manual-tenancy-owner, and `config_warn` engines. Journey 13 rotates credentials twice through every owner, proves persisted values change without plaintext storage, preserves tenant ownership, and verifies public redaction; configuration diffing treats an opaque secret-reference change as an engine update. Journey 14 retires direct assignments, mappings, inventory, set materializations, runtime sets, and deployment targets, denies cached browser/API sessions immediately, preserves inactive history for external/config owners, and proves owner-channel recreation receives a new stable engine ID. Retain all observations on the same clean commit. | A channel silently changes topology/ownership, a retry duplicates state, a deny leaks data, or decommissioned access can reappear. |
 | 5 | Finish browser accessibility | Add automated/manual evidence for error announcement, contrast, 200% zoom/reflow, and reduced motion. Re-run Chromium, Firefox, and WebKit after every browser-flow change. | A keyboard/screen-reader workflow cannot complete, content becomes unavailable at zoom, or stale authorization returns after any navigation/session path. |
@@ -1108,10 +1107,14 @@ every applicable cell and invalidity witness executes, and all missing, skipped,
 quarantined, unknown, and unexpected counts are zero.
 
 The repository provides `pnpm run test:authz:state-space-evidence` as the
-fail-closed bridge from the foundation to that final artifact. It executes the
-current unit and guarded PostgreSQL layers and writes the exact remaining
-behavior classes as `missingBehaviorClasses`. While any remain, the artifact
-must stay `incomplete` and must not qualify a release commit.
+fail-closed evidence runner. It executes the canonical contracts, independent
+expectation model, production-facing unit tests, guarded PostgreSQL model,
+three-browser stale-session matrix, and localhost decommission/recreation
+journeys. It classifies 105,840 compressed cross-boundary cells, executes
+52,560 applicable behavior cells plus 318 canonical action/permission/role
+cells, records 12 invalidity witnesses, and proves expansion to 52,297,200
+applicable raw tuples. The artifact qualifies only from an unchanged clean
+commit with all five gap counters equal to zero.
 
 ### Dedicated engine
 

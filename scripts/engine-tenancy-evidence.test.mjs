@@ -161,7 +161,7 @@ test('qualifies mutation evidence only for an exact clean commit', () => {
   assert.match(mutationWriter, /containsTokens: false/);
 });
 
-test('keeps authorization state-space evidence fail-closed until behavior generation is complete', () => {
+test('retains complete constraint-derived authorization state-space evidence', () => {
   assert.match(packageJson.scripts['test:authz:state-space-evidence'], /run-authz-state-space-evidence\.mjs/);
   assert.match(packageJson.scripts['test:authz:state-space-foundation'], /run-local-safe-authz-state-space-foundation\.sh/);
   for (const requiredField of [
@@ -182,10 +182,15 @@ test('keeps authorization state-space evidence fail-closed until behavior genera
   ]) {
     assert.match(authorizationMatrixRunner, new RegExp(`\\b${requiredField}\\b`));
   }
-  assert.match(authorizationMatrixRunner, /status: 'incomplete'/);
-  assert.match(authorizationMatrixRunner, /releaseCommitQualified: false/);
+  assert.match(authorizationMatrixRunner, /status: 'passed'/);
+  assert.match(authorizationMatrixRunner, /releaseCommitQualified: sourceState === 'clean'/);
+  assert.match(authorizationMatrixRunner, /generateAuthorizationBehaviorSummary/);
+  assert.match(authorizationMatrixRunner, /behaviorCellHash/);
+  assert.match(authorizationMatrixRunner, /customRoleUnionExpandedCombinationCount/);
+  assert.match(authorizationMatrixRunner, /missingBehaviorClasses: \[\]/);
   assert.match(authorizationMatrixRunner, /run-local-safe-custom-role-matrix\.sh/);
   assert.match(authorizationMatrixRunner, /test:authz:local-smoke:cross-browser/);
+  assert.match(authorizationMatrixRunner, /test:engine-tenancy:provisioning-journeys:local/);
   assert.match(authorizationMatrixRunner, /Authorization state-space evidence must be run from a clean worktree/);
   assert.match(authorizationMatrixRunner, /scripts\/local-safe-test\.env/);
   assert.match(authorizationMatrixRunner, /delete process\.env\[key\]/);

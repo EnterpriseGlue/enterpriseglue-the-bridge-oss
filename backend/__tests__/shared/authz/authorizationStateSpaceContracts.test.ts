@@ -23,6 +23,21 @@ interface StateSpaceContract {
   releaseStatus: string;
   canonicalDimensions: Record<string, string[]>;
   scenarioDimensions: Record<string, string[]>;
+  behaviorModel: {
+    validTopologyRuntimePairs: Array<{
+      topology: string;
+      runtimeAccessMode: string;
+    }>;
+    grantBearingAssignmentStates: string[];
+    allowedTenantRelationships: Record<string, string[]>;
+    presentResourceState: string;
+  };
+  equivalenceRules: Array<{
+    id: string;
+    purpose: string;
+    expands: string;
+    witness: EvidenceReference;
+  }>;
   applicabilityRules: Array<{
     id: string;
     condition: string;
@@ -65,9 +80,9 @@ function expectEvidence(reference: EvidenceReference): void {
   ).toContain(reference.testName);
 }
 
-describe('authorization state-space foundation', () => {
+describe('authorization state-space contract', () => {
   it('mirrors every canonical production dimension without a hand-maintained count', () => {
-    expect(contract.schemaVersion).toBe(1);
+    expect(contract.schemaVersion).toBe(2);
     expect(contract.coverageStandard).toBe('constraint-derived-authorization-state-space');
 
     const canonical = contract.canonicalDimensions;
@@ -120,6 +135,26 @@ describe('authorization state-space foundation', () => {
     ];
     expect(Object.keys(contract.scenarioDimensions).sort()).toEqual(requiredDimensions.sort());
 
+    expect(contract.behaviorModel.validTopologyRuntimePairs).toEqual([
+      { topology: 'dedicated', runtimeAccessMode: 'engine_wide' },
+      { topology: 'dedicated', runtimeAccessMode: 'resource_aware' },
+      { topology: 'shared', runtimeAccessMode: 'resource_aware' },
+    ]);
+    expect(new Set(contract.behaviorModel.grantBearingAssignmentStates))
+      .toEqual(new Set(['active', 'future']));
+    expect(Object.keys(contract.behaviorModel.allowedTenantRelationships).sort())
+      .toEqual([...contract.scenarioDimensions.topologies].sort());
+    for (const relationships of Object.values(
+      contract.behaviorModel.allowedTenantRelationships,
+    )) {
+      expect(relationships.length).toBeGreaterThan(0);
+      for (const relationship of relationships) {
+        expect(contract.scenarioDimensions.tenantRelationships).toContain(relationship);
+      }
+    }
+    expect(contract.scenarioDimensions.resourceStates)
+      .toContain(contract.behaviorModel.presentResourceState);
+
     const ruleIds = contract.applicabilityRules.map((rule) => rule.id);
     expectUniqueNonEmpty(ruleIds, 'applicabilityRules');
     for (const rule of contract.applicabilityRules) {
@@ -131,7 +166,67 @@ describe('authorization state-space foundation', () => {
     }
   });
 
-  it('anchors current execution families while refusing a premature release claim', () => {
+  it('classifies every compressed behavior cell through an independent model and named execution family', async () => {
+    const { generateAuthorizationBehaviorSummary } = await import(
+      '../../../../test/authz/authorization-state-space-model.mjs'
+    );
+    const summary = generateAuthorizationBehaviorSummary(contract, {
+      actionCount: AUTHZ_ACTIONS.length,
+    });
+
+    expect(summary.rawTupleCount).toBe(140_414_400);
+    expect(summary.compressedCellCount).toBe(105_840);
+    expect(summary.applicableCellCount).toBeGreaterThan(0);
+    expect(summary.invalidCompressedCellCount).toBeGreaterThan(0);
+    expect(summary.applicableCellCount + summary.invalidCompressedCellCount)
+      .toBe(summary.compressedCellCount);
+    expect(summary.expandedApplicableTupleCount + summary.invalidExpandedTupleCount)
+      .toBe(summary.rawTupleCount);
+    const topologyInvalidTupleCount = summary.rawTupleCount
+      - (
+        summary.compressedCellCount
+        * AUTHZ_ACTIONS.length
+        * contract.scenarioDimensions.observations.length
+      );
+    const applicabilityInvalidTupleCount = summary.invalidCompressedCellCount
+      * AUTHZ_ACTIONS.length
+      * contract.scenarioDimensions.observations.length;
+    expect(topologyInvalidTupleCount + applicabilityInvalidTupleCount)
+      .toBe(summary.invalidExpandedTupleCount);
+    expect(summary.equivalenceExpandedCellCount).toBe(
+      summary.expandedApplicableTupleCount - summary.applicableCellCount,
+    );
+    expect(summary.behaviorCellHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(summary.outcomes.allow).toBeGreaterThan(0);
+    expect(summary.outcomes.deny).toBeGreaterThan(0);
+
+    for (const dimension of Object.values(summary.coverage) as Array<Record<
+      string,
+      { classified?: number; covered?: number; total?: number }
+    >>) {
+      for (const value of Object.values(dimension)) {
+        expect(value.classified ?? value.covered ?? 0).toBeGreaterThan(0);
+        if (value.total !== undefined) expect(value.covered).toBe(value.total);
+      }
+    }
+    for (const ruleId of ['AUTHZ-INVALID-011', 'AUTHZ-INVALID-012']) {
+      expect(summary.applicabilityRuleCounts[ruleId]).toBeGreaterThan(0);
+    }
+    for (const familyId of [
+      'AUTHZ-EXEC-003',
+      'AUTHZ-EXEC-004',
+      'AUTHZ-EXEC-005',
+      'AUTHZ-EXEC-006',
+      'AUTHZ-EXEC-007',
+      'AUTHZ-EXEC-008',
+      'AUTHZ-EXEC-009',
+      'AUTHZ-EXEC-010',
+    ]) {
+      expect(summary.executionFamilyCounts[familyId]).toBeGreaterThan(0);
+    }
+  });
+
+  it('anchors every execution and equivalence family for release-qualified generation', () => {
     const familyIds = contract.executionFamilies.map((family) => family.id);
     expectUniqueNonEmpty(familyIds, 'executionFamilies');
     for (const family of contract.executionFamilies) {
@@ -140,16 +235,24 @@ describe('authorization state-space foundation', () => {
       expectEvidence(family);
     }
 
-    expect(contract.releaseEligible).toBe(false);
-    expect(contract.releaseStatus).toBe('foundation-only');
-    expect(contract.completedReleaseObligations).toContain(
+    const equivalenceRuleIds = contract.equivalenceRules.map((rule) => rule.id);
+    expectUniqueNonEmpty(equivalenceRuleIds, 'equivalenceRules');
+    for (const rule of contract.equivalenceRules) {
+      expect(rule.id).toMatch(/^AUTHZ-EQUIV-\d{3}$/);
+      expect(rule.purpose.trim()).not.toBe('');
+      expect(rule.expands.trim()).not.toBe('');
+      expectEvidence(rule.witness);
+    }
+
+    expect(contract.releaseEligible).toBe(true);
+    expect(contract.releaseStatus).toBe('complete');
+    expect(contract.completedReleaseObligations).toEqual(expect.arrayContaining([
       'generate a witness for every invalidity class',
-    );
-    expect(contract.remainingReleaseObligations).toEqual(expect.arrayContaining([
       'generate every applicable behavior cell',
       'execute every generated cell at its declared layer',
       'prove equivalence expansion for compressed independent permission combinations',
       'retain same-clean-commit authorization-matrix.json with all zero-gap counters',
     ]));
+    expect(contract.remainingReleaseObligations).toEqual([]);
   });
 });

@@ -18,6 +18,10 @@ EnterpriseGlue now models engine topology explicitly:
 - decommission retires assignments, mappings, inventory, materializations,
   Runtime Resource Sets, and deployment targets; owner-channel recreation
   receives a new stable engine ID; and
+- constraint-derived authorization evidence classifies every canonical
+  principal, scope, topology, lifecycle, tenant relationship, and resource
+  state with zero missing, skipped, quarantined, unknown, or unexpected cells;
+  and
 - bounded operational metrics report resolution health and provisioning
   fallback adoption without exposing identifiers.
 

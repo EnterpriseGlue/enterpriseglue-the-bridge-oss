@@ -300,9 +300,8 @@ The full release-qualification backlog, execution order, rollback conditions,
 and exit conditions are in phase 9 of
 the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).
 Local PostgreSQL and three-browser access evidence must not be used to close
-the remaining five-database, clean/upgrade, complete authorization-state-space,
-provisioning-journey, accessibility, or independent documentation-review
-gates.
+the remaining five-database clean/upgrade or independent
+documentation-review gates.
 
 ## Prerequisites
 
@@ -445,7 +444,8 @@ does not claim 100% source coverage for unrelated monorepo files.
 
 ## Required Authorization State-Space
 
-`TEN-AUTHZ-016` is the fail-closed foundation for this gate. Run it with:
+`TEN-AUTHZ-016` is the fail-closed contract for this gate. Run its fast
+registry/model validation with:
 
 ```bash
 pnpm run test:authz:state-space-foundation
@@ -453,11 +453,11 @@ pnpm run test:authz:state-space-foundation
 
 It compares `test/authz/authorization-state-space-contract.json` with the
 production principal, resource, permission, role, action-operation, and
-action-risk registries; verifies that every named invalidity rule and current
-execution family points to a real test; and asserts that the foundation remains
-explicitly non-release-eligible. Adding a canonical value without updating the
-contract fails this lane. The foundation does not produce or substitute for
-the final `authorization-matrix.json`.
+action-risk registries; verifies that every named invalidity, equivalence, and
+execution rule points to a real test; and regenerates the independent
+cross-boundary model. Adding a canonical value without classifying it fails
+this lane. This fast contract does not substitute for the full retained
+artifact.
 
 Generate the current executable state-space report with:
 
@@ -465,17 +465,14 @@ Generate the current executable state-space report with:
 pnpm run test:authz:state-space-evidence
 ```
 
-The runner builds the shared registries, executes the canonical/invalidity
+The runner builds the shared registries and executes the canonical/invalidity
 contracts, generated action/route contracts, permission and role contracts,
-and the guarded PostgreSQL principal/scope/model matrix. It refuses a dirty
-worktree and writes `test/results/engine-tenancy-release/authorization-matrix.json`.
-Until all behavioral generation and equivalence obligations below are
-implemented, the artifact deliberately reports `status: "incomplete"`,
-`releaseCommitQualified: false`, and an exact non-zero `missingCells` count.
-Do not hand-edit those fields or treat registry-only coverage as functional
-release evidence.
+guarded PostgreSQL principal/scope/model matrix, three-browser stale-session
+journey, and localhost decommission/recreation journey. It refuses a dirty
+worktree and writes
+`test/results/engine-tenancy-release/authorization-matrix.json`.
 
-Implement the remaining generated coverage in this order:
+The implemented generation follows this order:
 
 1. read dimensions only from production registries and store their hashes and
    counts;
@@ -488,6 +485,14 @@ Implement the remaining generated coverage in this order:
 5. expand any equivalence-compressed cell back to its represented canonical
    tuples and prove that the rule is behavior-preserving; and
 6. retain `authorization-matrix.json` from the exact clean commit.
+
+The current denominator is 140,414,400 raw tuples. Named applicability rules
+reduce this to 52,560 compressed applicable behavior cells; 318 canonical
+action, permission, and role cells are executed separately. The artifact
+proves expansion to 52,297,200 applicable raw tuples, records 12 invalidity
+classes, and keeps all missing, skipped, quarantined, unknown, and unexpected
+counters at zero. The full runner is required for release evidence; a
+registry-only pass is not enough.
 
 The artifact is complete only when:
 

@@ -91,11 +91,13 @@ The focused lanes cover:
 
 The pull-request authorization gate also executes the database-backed custom
 role and randomized direct/group matrix, API-client/service-account parity,
-the canonical authorization state-space foundation, and the targeted mutation
-guard. The foundation is deliberately marked non-release-eligible until its
-remaining generated execution obligations are closed. The latest local
-mutation execution killed all nine mutants, including all five mandatory
-tenancy fault classes.
+the complete constraint-derived authorization state space, and the targeted
+mutation guard. The state-space generator classifies 105,840 compressed cells,
+executes 52,560 applicable behavior cells plus 318 canonical structural cells,
+retains 12 invalidity witnesses, and proves 52,244,640 behavior-preserving
+action/observation expansions with zero gaps. The latest local mutation
+execution killed all nine mutants, including all five mandatory tenancy fault
+classes.
 
 The authoritative list is
 `test/authz/engine-tenancy-functional-coverage.json`. The commands and exact
@@ -109,12 +111,12 @@ meaning of 100% functional coverage are documented in
 | Foundation | 45 |
 | Provisioning | 118 |
 | Mappings and configuration ownership | 250 |
-| Authorization and custom roles | 324 |
+| Authorization and custom roles | 326 |
 | Runtime enforcement | 354 |
 | Classification and transitions | 152 |
 | Operational metrics | 45 |
 | Documentation and traceability | 43 |
-| **Focused-lane total** | **1,331** |
+| **Focused-lane total** | **1,333** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
@@ -297,10 +299,6 @@ fine-grained session-state slice, and the three-browser accessibility slice.
 They do not yet close full cross-platform release qualification. The remaining
 gates are:
 
-- generate and execute the complete constraint-derived authorization
-  state-space, including every supported behavior cell and every named
-  invalidity witness, with zero unknown, missing, skipped, quarantined, or
-  unexpected cells;
 - retain clean-install, every supported upgrade-baseline, interrupted-retry,
   schema-equivalence, service, rollback, and cleanup results for PostgreSQL,
   MySQL, SQL Server, Oracle, and Spanner;

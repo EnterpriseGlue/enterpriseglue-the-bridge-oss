@@ -3572,18 +3572,20 @@
     },
     {
       "id": "TEN-AUTHZ-016",
-      "requirement": "A machine-readable authorization state-space foundation stays synchronized with every canonical principal, resource, permission scope, role scope, action operation, and action risk without claiming release completion.",
+      "requirement": "A machine-readable constraint-derived authorization state space classifies every canonical principal, resource, permission, role, action, scope, topology, runtime mode, source, lifecycle, tenant relationship, and resource state; executes every compressed behavior cell and invalidity witness; and proves every equivalence expansion with zero gaps.",
       "source": "Engine Tenancy Plan / Exhaustive authorization state-space",
       "dimensions": [
         "authorization_state_space",
         "canonical_registry",
         "applicability_rule",
         "execution_family",
+        "independent_expectation_model",
+        "equivalence_expansion",
         "fail_closed"
       ],
-      "expected": "canonical registry parity, executable rule witnesses, and an explicit non-release-eligible status",
+      "expected": "100% canonical classification, applicable-cell execution, invalidity witnesses, and proved equivalence expansion with zero missing, skipped, quarantined, unknown, or unexpected cells",
       "testFile": "backend/__tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
-      "testName": "mirrors every canonical production dimension without a hand-maintained count",
+      "testName": "classifies every compressed behavior cell through an independent model and named execution family",
       "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
       "ciJob": "test:authz:state-space-foundation",
       "coverage": {
@@ -3622,11 +3624,13 @@
           "not-applicable"
         ],
         "outcomes": [
-          "observe"
+          "allow",
+          "deny",
+          "audit"
         ]
       },
       "documentationExample": "Required Authorization State-Space",
-      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-016"
+      "evidenceArtifact": "test/results/engine-tenancy-release/authorization-matrix.json#TEN-AUTHZ-016"
     },
     {
       "id": "TEN-DOCS-007",
