@@ -129,6 +129,7 @@ test('builds a fail-closed same-commit release evidence index', () => {
     'unresolvedHighRiskFindings',
     'approvedCommit',
     'reviewer',
+    'reviewMode',
     'reviewedAt',
     'evidenceLocation',
     'containsCredentials',
@@ -275,6 +276,7 @@ test('automates documentation checks without self-approving independent reviews'
   assert.match(documentationReviewRunner, /scripts\/local-safe-test\.env/);
   assert.match(documentationReviewRecorder, /Documentation approval must be recorded from a clean worktree/);
   assert.match(documentationReviewRecorder, /--reviewer/);
+  assert.match(documentationReviewRecorder, /--review-mode/);
   assert.match(documentationReviewRecorder, /--evidence/);
   assert.match(documentationReviewRecorder, /approvedCommit: commit/);
   assert.match(documentationReviewRecorder, /test\/results\/engine-tenancy-review/);

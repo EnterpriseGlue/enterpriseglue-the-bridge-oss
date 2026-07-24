@@ -56,10 +56,13 @@ The complete functional denominator is explicit:
 | Targeted security mutants | 9/9 |
 | Declared critical source modules | 100% statements, branches, functions, and lines per file |
 
-Human engineering, security, and operator review is a release-governance gate,
-not an automated functional cell. The temporary omission-warning compatibility
-path is a passing retained-warning gate until its published window closes; its
-future removal is not counted as present functionality.
+Independent engineering, security, and operator review is a release-governance
+gate, not an automated functional cell. Release policy may designate a human
+reviewer or a delegated automated review agent; retained evidence records that
+mode and keeps it distinct from feature implementation. The temporary
+omission-warning compatibility path is a passing retained-warning gate until
+its published window closes; its future removal is not counted as present
+functionality.
 
 ## Required Release-Candidate Evidence
 
@@ -332,8 +335,8 @@ The detailed artifacts are fail-closed as well:
   and every other channel must be accounted for by its declared exclusion;
 - `documentation-review.json` must include zero unresolved high-risk findings
   and complete executable-example and Markdown-link results in addition to the
-  three approvals. Every approval must name the exact commit, reviewer, ISO
-  timestamp, and an existing sanitized Markdown record under
+  three approvals. Every approval must name the exact commit, reviewer,
+  reviewer mode, ISO timestamp, and an existing sanitized Markdown record under
   `test/results/engine-tenancy-review/`; and
 - `compatibility-window.json` must prove warning behavior is tested and either
   remains retained with no removal proposed, or was removed only after the
@@ -361,6 +364,9 @@ pnpm run test:engine-tenancy:documentation-review-evidence
 Engineering, security, and an independent operator then follow the
 [documentation review checklist](./engine-tenancy-documentation-review-checklist.md)
 and use `record:engine-tenancy:documentation-review` to retain their approvals.
+Each designated independent reviewer is recorded as either `human` or
+`delegated-agent`; a delegated agent must be separate from the feature
+implementation agent.
 The generator preserves valid same-commit approvals, while the release index
 rejects stale approvals, missing evidence files, incomplete reviewer metadata,
 or hand-authored `approved` flags that do not satisfy the complete contract.

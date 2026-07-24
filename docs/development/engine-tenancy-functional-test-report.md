@@ -388,8 +388,8 @@ qualification. The remaining gates are:
 - populate every required slot in the implemented release evidence index with
   passing same-clean-commit artifacts;
 - obtain engineering, security, and independent-operator sign-off on the
-  [documentation review checklist](./engine-tenancy-documentation-review-checklist.md);
-  and
+  [documentation review checklist](./engine-tenancy-documentation-review-checklist.md),
+  with each designated reviewer recorded as `human` or `delegated-agent`; and
 - retain omitted-tenancy compatibility until its published external API
   deprecation window formally closes.
 

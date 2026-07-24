@@ -6,6 +6,11 @@ export const DOCUMENTATION_REVIEW_ROLES = [
   'independentOperator',
 ];
 
+export const DOCUMENTATION_REVIEW_MODES = [
+  'human',
+  'delegated-agent',
+];
+
 const SAFE_EVIDENCE_PREFIX = 'test/results/engine-tenancy-review/';
 const SANITIZATION_FIELDS = [
   'containsCredentials',
@@ -27,6 +32,13 @@ export function normalizeDocumentationReviewRole(value) {
   );
 }
 
+export function normalizeDocumentationReviewMode(value) {
+  if (DOCUMENTATION_REVIEW_MODES.includes(value)) return value;
+  throw new Error(
+    `Unknown review mode "${value}". Expected human or delegated-agent.`,
+  );
+}
+
 export function isSafeDocumentationReviewEvidencePath(value) {
   if (!isNonEmptyString(value) || path.isAbsolute(value)) return false;
   const normalized = path.posix.normalize(value.replaceAll('\\', '/'));
@@ -40,6 +52,7 @@ export function pendingDocumentationReview() {
     status: 'pending',
     approvedCommit: null,
     reviewer: null,
+    reviewMode: null,
     reviewedAt: null,
     evidenceLocation: null,
   };
@@ -54,6 +67,7 @@ export function documentationReviewApprovalPasses(
     review?.status !== 'approved'
     || review.approvedCommit !== commit
     || !isNonEmptyString(review.reviewer)
+    || !DOCUMENTATION_REVIEW_MODES.includes(review.reviewMode)
     || !isNonEmptyString(review.reviewedAt)
     || Number.isNaN(Date.parse(review.reviewedAt))
     || !isSafeDocumentationReviewEvidencePath(review.evidenceLocation)

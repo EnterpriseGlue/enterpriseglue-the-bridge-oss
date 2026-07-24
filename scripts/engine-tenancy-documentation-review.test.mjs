@@ -7,6 +7,7 @@ import {
   documentationReviewEvidencePasses,
   finalizeDocumentationReviewEvidence,
   isSafeDocumentationReviewEvidencePath,
+  normalizeDocumentationReviewMode,
   normalizeDocumentationReviewRole,
   pendingDocumentationReview,
   preserveDocumentationReviews,
@@ -18,6 +19,7 @@ const approved = {
   status: 'approved',
   approvedCommit: commit,
   reviewer: 'Engineering Reviewer',
+  reviewMode: 'delegated-agent',
   reviewedAt: '2026-07-24T01:00:00.000Z',
   evidenceLocation: evidencePath,
 };
@@ -56,6 +58,12 @@ test('normalizes only the three independent documentation review roles', () => {
   assert.throws(() => normalizeDocumentationReviewRole('implementer'));
 });
 
+test('records whether an independent reviewer is human or a delegated agent', () => {
+  assert.equal(normalizeDocumentationReviewMode('human'), 'human');
+  assert.equal(normalizeDocumentationReviewMode('delegated-agent'), 'delegated-agent');
+  assert.throws(() => normalizeDocumentationReviewMode('automation'));
+});
+
 test('accepts only repository-local sanitized review evidence paths', () => {
   assert.equal(isSafeDocumentationReviewEvidencePath(evidencePath), true);
   assert.equal(isSafeDocumentationReviewEvidencePath('/tmp/review.md'), false);
@@ -80,6 +88,14 @@ test('requires reviewer identity, exact commit, date, and retained evidence', ()
   assert.equal(
     documentationReviewApprovalPasses(
       { ...approved, reviewer: '' },
+      commit,
+      evidenceExists,
+    ),
+    false,
+  );
+  assert.equal(
+    documentationReviewApprovalPasses(
+      { ...approved, reviewMode: 'automation' },
       commit,
       evidenceExists,
     ),
@@ -112,7 +128,7 @@ test('preserves valid same-commit approvals and drops stale or incomplete ones',
   assert.deepEqual(changedCommit.engineering, pendingDocumentationReview());
 });
 
-test('qualifies documentation only after all automated and human evidence passes', () => {
+test('qualifies documentation only after all automated and independent review evidence passes', () => {
   const evidence = completeEvidence();
   assert.equal(documentationReviewAutomationPasses(evidence, commit), true);
   assert.equal(

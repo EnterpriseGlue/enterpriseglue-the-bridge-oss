@@ -10,8 +10,11 @@ managers.
 
 `tenancy` is optional on manual and external engine creation for compatibility.
 Omission creates a dedicated engine in authenticated request context or the
-canonical local default tenant and returns
-`ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`.
+canonical local default tenant. Only `POST /engines-api/external/engines`
+returns `ENGINE_TENANCY_DEFAULTED_TO_DEDICATED` in
+`diagnostics.tenancyWarnings`; manual UI and `POST /engines-api/engines`
+creation return the normal engine representation, so they should send explicit
+tenancy rather than relying on a response warning.
 
 This compatibility path:
 

@@ -141,7 +141,7 @@ const evidenceExists = (value) => {
   return existsSync(absolutePath) && statSync(absolutePath).isFile();
 };
 const evidence = finalizeDocumentationReviewEvidence({
-  schemaVersion: 1,
+  schemaVersion: 2,
   evidenceKind: 'engine-tenancy-documentation-review',
   generatedAt: new Date().toISOString(),
   commit: endCommit,
@@ -171,7 +171,7 @@ const evidence = finalizeDocumentationReviewEvidence({
     checklist: 'docs/development/engine-tenancy-documentation-review-checklist.md',
     requiredReviews: ['engineering', 'security', 'independentOperator'],
     successCriteria:
-      'Each reviewer independently executes the checklist against this exact commit, resolves every high-risk finding, and records approved status in the retained artifact.',
+      'Each designated independent human reviewer or delegated review agent executes the checklist against this exact commit, resolves every high-risk finding, and records its review mode and approved status in the retained artifact.',
     rollbackCondition:
       'Any undocumented prerequisite, contract mismatch, unsafe example, broken recovery path, or unresolved security finding keeps the gate incomplete.',
   },

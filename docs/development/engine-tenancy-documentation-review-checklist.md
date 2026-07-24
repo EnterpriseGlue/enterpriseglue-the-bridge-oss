@@ -55,8 +55,8 @@ Node/pnpm versions, database adapter, operating system, and command output.
 
 ## Independent Operator Review
 
-An operator who did not implement the feature must use only the published
-Markdown guides to:
+A designated independent operator reviewer must use only the published Markdown
+guides to:
 
 1. provision one dedicated engine through UI, API, and configuration;
 2. provision one shared engine and two disjoint tenant mappings through the
@@ -77,13 +77,25 @@ Markdown guides to:
 Use local placeholder engines and identities. No deployed customer identity
 provider or credential is required.
 
+## Reviewer Independence and Mode
+
+Each review role may be fulfilled by either a human reviewer or a delegated
+automated review agent when the release policy explicitly permits it. The
+reviewer must be independent of the feature implementation agent and must
+perform the role-specific procedure against the exact candidate commit. A
+delegated agent is not represented as a human: its retained note and approval
+record must identify it as `delegated-agent`, name its assigned role, and state
+the commands and observations it made. This maintains accountable, reproducible
+review evidence while allowing the designated release policy to choose the
+review mode.
+
 ## Acceptance Record
 
-| Review | Reviewer | Commit | Evidence location | Result/date |
-| --- | --- | --- | --- | --- |
-| Engineering | Pending | Pending | Pending | Pending |
-| Security | Pending | Pending | Pending | Pending |
-| Independent operator | Pending | Pending | Pending | Pending |
+| Review | Reviewer | Mode | Commit | Evidence location | Result/date |
+| --- | --- | --- | --- | --- | --- |
+| Engineering | Pending | Pending | Pending | Pending | Pending |
+| Security | Pending | Pending | Pending | Pending | Pending |
+| Independent operator | Pending | Pending | Pending | Pending | Pending |
 
 Release approval requires all three rows, zero unresolved high-risk findings,
 and an expiring waiver for any non-security documentation defect. A failed
@@ -98,15 +110,15 @@ pnpm run test:engine-tenancy:documentation-review-evidence
 This executes the documentation contracts and validates every internal file
 link in all tracked `docs/**/*.md` files. The generated artifact deliberately
 keeps engineering, security, and independent-operator reviews `pending`; the
-automation cannot approve its own documentation. Each reviewer must execute
-this checklist against the exact artifact commit before those statuses can be
-changed to `approved`.
+automation cannot approve its own documentation. Each designated independent
+reviewer or agent must execute this checklist against the exact artifact commit
+before those statuses can be changed to `approved`.
 
 Each reviewer writes sanitized Markdown notes under
 `test/results/engine-tenancy-review/`. The notes must identify the commands and
 procedures executed, actual results, findings and resolutions, reviewer
-identity, review time, and exact commit. Do not include credentials, tokens,
-private endpoints, raw claims, or customer identifiers.
+identity, review mode, review time, and exact commit. Do not include
+credentials, tokens, private endpoints, raw claims, or customer identifiers.
 
 Record each approval with the guarded recorder; do not edit the JSON artifact
 by hand:
@@ -115,26 +127,29 @@ by hand:
 pnpm run record:engine-tenancy:documentation-review -- \
   --review engineering \
   --reviewer "Engineering reviewer identity" \
+  --review-mode delegated-agent \
   --evidence test/results/engine-tenancy-review/engineering.md
 
 pnpm run record:engine-tenancy:documentation-review -- \
   --review security \
   --reviewer "Security reviewer identity" \
+  --review-mode delegated-agent \
   --evidence test/results/engine-tenancy-review/security.md
 
 pnpm run record:engine-tenancy:documentation-review -- \
   --review independent-operator \
   --reviewer "Independent operator identity" \
+  --review-mode delegated-agent \
   --evidence test/results/engine-tenancy-review/independent-operator.md
 ```
 
 The recorder refuses a dirty worktree, stale or failed automated evidence,
-unknown review roles, missing reviewer identity, invalid time, unsafe or
-missing evidence paths, and any artifact with unresolved high-risk findings.
-It records the exact current commit, reviewer, ISO timestamp, and evidence
-location. Regenerating automated documentation evidence on the same unchanged
-commit preserves valid approvals and drops stale, incomplete, or missing
-approval evidence.
+unknown review roles or modes, missing reviewer identity, invalid time, unsafe
+or missing evidence paths, and any artifact with unresolved high-risk findings.
+It records the exact current commit, reviewer, review mode, ISO timestamp, and
+evidence location. Regenerating automated documentation evidence on the same
+unchanged commit preserves valid approvals and drops stale, incomplete, or
+missing approval evidence.
 
 After approval, retain
 `test/results/engine-tenancy-release/documentation-review.json` with:
@@ -146,15 +161,15 @@ After approval, retain
 - `unresolvedHighRiskFindings: 0`;
 - non-zero `executableExamples.total` and `markdownLinks.total`, with each
   matching its corresponding `passed` count;
-- reviewer identity, review date, and tenant-safe evidence location for each
-  review; and
+- reviewer identity, review mode, review date, and tenant-safe evidence
+  location for each review; and
 - a sanitization declaration confirming that no credentials, tokens, private
   endpoints, raw claims, or customer identifiers are present.
 
 The release evidence index rejects a missing, dirty, different-commit, or
 partially approved review artifact. It also rejects an approval whose
-`approvedCommit` differs, whose reviewer/date/evidence fields are incomplete,
-whose evidence is missing, or whose evidence location is outside
+`approvedCommit` differs, whose reviewer/mode/date/evidence fields are
+incomplete, whose evidence is missing, or whose evidence location is outside
 `test/results/engine-tenancy-review/`.
 
 ## Related Documentation

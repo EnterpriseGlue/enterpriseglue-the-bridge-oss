@@ -12,6 +12,7 @@ import path from 'node:path';
 import {
   finalizeDocumentationReviewEvidence,
   isSafeDocumentationReviewEvidencePath,
+  normalizeDocumentationReviewMode,
   normalizeDocumentationReviewRole,
 } from './lib/engine-tenancy-documentation-review.mjs';
 
@@ -42,10 +43,16 @@ function parseArguments(argv) {
     }
     values[flag] = value;
   }
-  const allowed = new Set(['--review', '--reviewer', '--evidence', '--reviewed-at']);
+  const allowed = new Set([
+    '--review',
+    '--reviewer',
+    '--review-mode',
+    '--evidence',
+    '--reviewed-at',
+  ]);
   const unknown = Object.keys(values).find((flag) => !allowed.has(flag));
   if (unknown) throw new Error(`Unknown option: ${unknown}`);
-  for (const required of ['--review', '--reviewer', '--evidence']) {
+  for (const required of ['--review', '--reviewer', '--review-mode', '--evidence']) {
     if (!values[required]?.trim()) throw new Error(`Missing required option: ${required}`);
   }
   return values;
@@ -54,6 +61,7 @@ function parseArguments(argv) {
 const args = parseArguments(process.argv.slice(2));
 const role = normalizeDocumentationReviewRole(args['--review']);
 const reviewer = args['--reviewer'].trim();
+const reviewMode = normalizeDocumentationReviewMode(args['--review-mode']);
 const evidenceLocation = args['--evidence'].replaceAll('\\', '/');
 const reviewedAt = args['--reviewed-at'] ?? new Date().toISOString();
 
@@ -108,6 +116,7 @@ evidence.reviews = {
     status: 'approved',
     approvedCommit: commit,
     reviewer,
+    reviewMode,
     reviewedAt: new Date(reviewedAt).toISOString(),
     evidenceLocation,
   },
@@ -126,6 +135,6 @@ renameSync(temporaryPath, artifactPath);
 const approved = Object.values(finalized.reviews)
   .filter((review) => review.status === 'approved').length;
 console.log(
-  `[engine-tenancy-documentation-review] recorded ${role} approval for ${commit}; ` +
+  `[engine-tenancy-documentation-review] recorded ${reviewMode} ${role} approval for ${commit}; ` +
   `${approved}/3 approvals complete`,
 );

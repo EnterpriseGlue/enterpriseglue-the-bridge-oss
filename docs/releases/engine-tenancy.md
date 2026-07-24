@@ -32,9 +32,11 @@ EnterpriseGlue now models engine topology explicitly:
 ## Compatibility
 
 Existing callers may temporarily omit `tenancy`; the engine is created as
-dedicated and returns `ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`. Update all
-callers to send explicit tenancy. This warning is not permission to treat a
-null tenant as default, and shared engines never use the fallback.
+dedicated. External provisioning responses return
+`ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`; manual UI and manual API creation use
+the normal engine response, so update all callers to send explicit tenancy.
+This warning is not permission to treat a null tenant as default, and shared
+engines never use the fallback.
 
 The earliest removal conditions are documented in
 [Engine Tenancy Compatibility and Deprecation](../reference/engine-tenancy-compatibility-and-deprecation.md).

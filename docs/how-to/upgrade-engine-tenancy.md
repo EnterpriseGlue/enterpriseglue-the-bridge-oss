@@ -123,9 +123,12 @@ immediate revocation.
 ## Compatibility Window
 
 Omitted tenancy continues to create a dedicated engine during the compatibility
-window and emits `ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`. Treat a non-zero or
-rising fallback metric as unfinished client migration. The fallback applies
-only during provisioning; it cannot authorize a null engine or shared resource.
+window. The external registration response emits
+`ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`; manual UI and manual API creation
+return the normal engine representation, so make their tenancy explicit rather
+than waiting for a response warning. Treat a non-zero or rising fallback metric
+as unfinished client migration. The fallback applies only during provisioning;
+it cannot authorize a null engine or shared resource.
 
 See
 [Engine Tenancy Compatibility and Deprecation](../reference/engine-tenancy-compatibility-and-deprecation.md)
