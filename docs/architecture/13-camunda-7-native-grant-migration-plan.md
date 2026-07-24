@@ -45,6 +45,17 @@ API/UI workflow, and automatically eligible for removal after a maximum of
 30 days; expiry removes that encrypted detail but retains the sanitized audit
 receipt and any resulting configuration-bundle apply reference.
 
+For exact supported grants, the foundation can now produce a deterministic
+additive configuration-bundle draft from an existing bundle that already
+contains the registered Camunda 7 engine. It adds only explicitly selected
+EnterpriseGlue groups, a least-privileged engine read role, exact Runtime
+Resource Sets, and scoped group assignments. It preserves
+`enterpriseglue_authoritative`, cannot replace a resource-specific grant with
+an engine-wide one, and refuses missing group mappings, unconfigured engines,
+unknown action mappings, duplicate generated keys, or an invalid resulting
+bundle. Broad, user-specific, revoke/global, unsupported, and blocked records
+remain outside that draft as manual work.
+
 ## Summary of the Agreed Model
 
 ### Engine registration and tenancy
