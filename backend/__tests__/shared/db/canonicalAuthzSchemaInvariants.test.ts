@@ -44,6 +44,14 @@ function uniqueColumnSets(target: Function): string[][] {
     .sort((left, right) => left.join(',').localeCompare(right.join(',')));
 }
 
+function indexColumnSets(target: Function): string[][] {
+  return getMetadataArgsStorage().indices
+    .filter((candidate) => candidate.target === target)
+    .flatMap((candidate) => Array.isArray(candidate.columns) ? [candidate.columns] : [])
+    .map((columns) => columns.filter((entry): entry is string => typeof entry === 'string'))
+    .sort((left, right) => left.join(',').localeCompare(right.join(',')));
+}
+
 describe('canonical authorization persistence schema invariants', () => {
   it('keeps the legacy platform-role column non-privileged by database default', () => {
     expect(column(User, 'platformRole')?.options.default).toBe('user');
@@ -60,6 +68,12 @@ describe('canonical authorization persistence schema invariants', () => {
   it('requires canonical assignment shape only after a fail-closed backfill', () => {
     expect(new RequireCanonicalRoleAssignmentShape1700000000084().name).toBe('RequireCanonicalRoleAssignmentShape1700000000084');
     expect(new AddRoleAssignmentSourceRefIndex1700000000085().name).toBe('AddRoleAssignmentSourceRefIndex1700000000085');
+  });
+
+  it('declares the canonical role-assignment source index only once', () => {
+    const sourceIndexes = indexColumnSets(RbacRoleAssignment)
+      .filter((columns) => columns.join(',') === 'source,sourceRef');
+    expect(sourceIndexes).toEqual([['source', 'sourceRef']]);
   });
 
   it('scopes custom role key uniqueness by canonical tenant identity', () => {
@@ -209,6 +223,10 @@ describe('canonical authorization persistence schema invariants', () => {
     expect(column(RuntimeResource, 'tenantMappingId')?.options.nullable).toBe(true);
     expect(column(RuntimeResource, 'tenantMappingVersion')?.options.default).toBe(0);
     expect(column(RuntimeResource, 'tenantResolutionDetailsJson')?.options.default).toBe('{}');
+    expect(indexColumnSets(RuntimeResource)).toContainEqual([
+      'engineId',
+      'tenantResolutionStatus',
+    ]);
 
     expect(uniqueColumnSets(EngineTenantMapping)).toEqual(expect.arrayContaining([
       ['engineId', 'source', 'sourceRef'],
@@ -233,7 +251,10 @@ describe('canonical authorization persistence schema invariants', () => {
       createTable,
       query,
       getTable,
-      connection: { getMetadata: () => { throw new Error('metadata unavailable'); } },
+      connection: {
+        getMetadata: () => { throw new Error('metadata unavailable'); },
+        driver: { escape: (name: string) => `"${name}"` },
+      },
     } as any);
 
     expect(addColumn.mock.calls.map(([tableName, definition]) => [tableName, definition.name])).toEqual([
@@ -248,10 +269,10 @@ describe('canonical authorization persistence schema invariants', () => {
       ['runtime_resources', 'tenant_resolution_details_json'],
     ]);
     expect(query).toHaveBeenCalledWith(expect.stringContaining(
-      "CASE WHEN tenant_id IS NOT NULL THEN 'ready' ELSE 'migration_required' END",
+      `CASE WHEN "tenant_id" IS NOT NULL THEN 'ready' ELSE 'migration_required' END`,
     ));
     expect(query).toHaveBeenCalledWith(expect.stringContaining(
-      "CASE WHEN tenant_id IS NOT NULL THEN 'resolved' ELSE 'unmapped' END",
+      `CASE WHEN "tenant_id" IS NOT NULL THEN 'resolved' ELSE 'unmapped' END`,
     ));
     expect(createIndex.mock.calls.map(([, index]) => index.name)).toEqual([
       'idx_engines_tenancy_mode',

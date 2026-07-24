@@ -65,9 +65,9 @@ runtime guards, transport-denial proof, bounded operational metrics, published
 guides, and executable documentation contracts are implemented.
 
 Release qualification is not the same as implementation completion. The local
-PostgreSQL topology journey, three-browser fine-grained access matrix, and
-focused contract lanes are green, but the full end-to-end goal remains open
-until the following evidence is retained:
+PostgreSQL topology journey, three-browser fine-grained access matrix,
+five-adapter database qualification, and focused contract lanes are green, but
+the full end-to-end goal remains open until the following evidence is retained:
 
 | Qualification gate | Current evidence | Exit condition |
 | --- | --- | --- |
@@ -78,7 +78,7 @@ until the following evidence is retained:
 | Local running installation | Guarded PostgreSQL/Chromium enforcement proves owned legacy classification, dedicated defaulting, shared fail-closed mapping, reconciliation, metrics, and cleanup | Repeatable clean-install and supported upgrade-baseline artifacts pass |
 | Provisioning channels | All 14 journeys pass locally, including all three Journey 7–14 channels: 14/14 journeys and 30/30 required channel executions | `provisioning-journeys.json` reports 14/14 journeys and 30/30 channel executions from one clean commit |
 | Browser targets | The guarded local runner passes 27 authorization executions plus 12 database-free accessibility executions across Chromium, Firefox, and WebKit, including error announcements, contrast, 200% reflow, and reduced motion | Both browser artifacts are retained from the same clean release commit |
-| Database targets | Portable migration/schema and adapter-registration contracts cover PostgreSQL, MySQL, SQL Server, Oracle, and Spanner; PostgreSQL has live evidence | Clean-install, upgrade, retry, schema-equivalence, service, and rollback evidence passes on all five adapters |
+| Database targets | The disposable local matrix passes all 35 stage cells and all ten upgrade-baseline observations on PostgreSQL 18.4, MySQL 8.4.10, SQL Server 16.0.4265.3, Oracle 21.0.0.0.0, and Spanner emulator 1.5.30, with one logical-schema fingerprint | `database-matrix.json` retains the complete result from the same unchanged clean release commit |
 | Documentation | Developer, user, operator, API, migration, compatibility, test, review, and release-evidence Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
 | Compatibility | Null-owned authorization fallback is removed; omitted new-provisioning tenancy remains warned and defaulted | Published deprecation window closes before omission warnings are removed |
 
@@ -683,7 +683,10 @@ Create these Markdown references:
   invariants, ownership, mapping versions, quarantine, and audit events;
 - `docs/development/testing-engine-tenancy-and-access-control.md`, covering local
   prerequisites, fixtures, commands, matrix generation, browser tests, database
-  variants, coverage artifacts, failure diagnosis, and test-data cleanup.
+  variants, coverage artifacts, failure diagnosis, and test-data cleanup;
+- `docs/development/engine-tenancy-database-qualification.md`, covering the
+  exact five-adapter denominator, disposable Docker setup, supported baselines,
+  success criteria, evidence, failure diagnosis, cleanup, and release handoff.
 
 The developer documentation must include:
 
@@ -844,7 +847,7 @@ checkboxes are closed.
 The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
 `TEN-RUNTIME-007`, `TEN-AUTHZ-008` through `TEN-AUTHZ-012`, and the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-The remaining cross-database clean/upgrade, independent-review, and
+The remaining same-commit evidence assembly, independent-review, and
 compatibility-window gates are tracked below.
 
 ### Phase 9: full release qualification
@@ -871,9 +874,11 @@ compatibility-window gates are tracked below.
   state-space described below. Every supported behavior cell and every
   declared invalidity class must be accounted for, with zero unknown, missing,
   skipped, quarantined, or unexpected cells.
-- [ ] Execute the clean-install, every supported upgrade baseline, interrupted
+- [x] Execute the clean-install, every supported upgrade baseline, interrupted
   retry, schema-equivalence, service-behavior, rollback, and cleanup suites on
-  PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.
+  PostgreSQL, MySQL, SQL Server, Oracle, and Spanner. The complete local run
+  passes 35/35 stage cells and 10/10 upgrade-baseline observations and produces
+  one equivalent logical-schema fingerprint.
 - [x] Retain passing Chromium, Firefox, and WebKit results for the same clean
   commit for direct URL, stale-tab, multi-tab, refresh, history restoration,
   keyboard/accessibility names, and active-session revocation cases.
@@ -911,8 +916,8 @@ changes.
 | Order | Work package | Required output and success criteria | Stop or rollback condition |
 | --- | --- | --- | --- |
 | 1 | Freeze a clean candidate | Run the manifest, mutation, guarded local enforcement, and three-browser lanes. `requirement-evidence.json`, `mutation-report.json`, `local-enforcement.json`, and `browser-matrix.json` must name the same clean commit. | Any artifact is missing, dirty, stale, sanitized incorrectly, or refers to another commit. |
-| 2 | Complete authorization generation | Completed locally. The canonical dimension/applicability registries generate 105,840 compressed cells, execute 52,560 applicable behavior cells plus 318 canonical structural cells, retain 12 invalidity witnesses, and prove expansion to 52,297,200 applicable raw tuples. `authorization-matrix.json` must retain zero unknown, missing, skipped, quarantined, or unexpected cells from one clean commit. | Any canonical action/resource type is unclassified, an exclusion has no stable rule and executed witness, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
-| 3 | Qualify all database adapters | For PostgreSQL, MySQL, SQL Server, Oracle, and Spanner, run clean install, every supported upgrade baseline, interruption/retry, schema equivalence, service behavior, rollback, and cleanup. Write one `database-matrix.json` containing versions, schema fingerprints, and per-stage results. | Schema or behavior differs, retry is not idempotent, rollback loses explanatory metadata, or cleanup leaves owned rows. |
+| 2 | Complete authorization generation | Completed locally. The canonical dimension/applicability registries generate 105,840 compressed cells, execute 52,560 applicable behavior cells plus 318 canonical structural cells, retain 12 invalidity witnesses, and prove 52,244,640 behavior-preserving action/observation expansions. `authorization-matrix.json` must retain zero unknown, missing, skipped, quarantined, or unexpected cells from one clean commit. | Any canonical action/resource type is unclassified, an exclusion has no stable rule and executed witness, a deny reaches engine transport, or a generated expectation disagrees with the independent model. |
+| 3 | Qualify all database adapters | Completed locally. PostgreSQL, MySQL, SQL Server, Oracle, and Spanner pass clean install, both supported upgrade baselines, interruption/retry, schema equivalence, service behavior, rollback, and cleanup: 35/35 stage cells, 10/10 baseline observations, and one logical-schema fingerprint. The exact runbook and stop conditions are in [Qualify Engine Tenancy on Every Supported Database](../development/engine-tenancy-database-qualification.md). | Schema or behavior differs, retry is not idempotent, rollback loses explanatory metadata, cleanup leaves owned rows, or `database-matrix.json` is partial, dirty, stale, or from another commit. |
 | 4 | Complete real-service provisioning journeys | Execute all 14 journeys through the local HTTP service and persistent database for manual UI, external API, and configuration channels where supported. Unsupported combinations must return their documented stable error. Write `provisioning-journeys.json` with 14/14 journeys, 30/30 required channel executions, and zero invalid or unexpected observations. Journeys 1–14 are implemented and passing locally. Journey 10 proves list/count/detail/mutation/batch/job/task/incident/history/deployment enforcement and records that a denied inventoried sibling makes no matching downstream engine call. Journey 11 keeps browser and HTTP sessions open while assignment revocation and mapping deactivation take effect immediately, then restores the exact mapping to prove cache invalidation. Journey 12 proves preview, acknowledgement, stale-preview conflict, apply, immediate shared-topology quarantine, and reverse transition for manual, hybrid-external/manual-tenancy-owner, and `config_warn` engines. Journey 13 rotates credentials twice through every owner, proves persisted values change without plaintext storage, preserves tenant ownership, and verifies public redaction; configuration diffing treats an opaque secret-reference change as an engine update. Journey 14 retires direct assignments, mappings, inventory, set materializations, runtime sets, and deployment targets, denies cached browser/API sessions immediately, preserves inactive history for external/config owners, and proves owner-channel recreation receives a new stable engine ID. Retain all observations on the same clean commit. | A channel silently changes topology/ownership, a retry duplicates state, a deny leaks data, or decommissioned access can reappear. |
 | 5 | Finish browser accessibility | Add automated/manual evidence for error announcement, contrast, 200% zoom/reflow, and reduced motion. Re-run Chromium, Firefox, and WebKit after every browser-flow change. | A keyboard/screen-reader workflow cannot complete, content becomes unavailable at zoom, or stale authorization returns after any navigation/session path. |
 | 6 | Complete documentation review | Engineering, security, and an independent operator execute the published Markdown only, record findings, and approve the exact commit in `documentation-review.json`. | A guide needs undocumented knowledge, an example disagrees with runtime/OpenAPI, or any security finding remains unresolved. |
@@ -940,7 +945,7 @@ The release index must calculate, retain, and require all of these ratios:
 | State transitions | passing valid transitions and invalidity witnesses | canonical transitions and invalidity rules | 100% |
 | Authorization | executed passing behavior cells and invalidity witnesses | all constraint-generated applicable cells and declared invalidity classes | 100% |
 | Provisioning journeys | passing supported-channel journeys and documented unsupported results | canonical 14-journey/channel applicability registry | 100% |
-| Database qualification | passing install/upgrade/retry/service/rollback stages | all stages for all five supported adapters and baselines | 100% |
+| Database qualification | 35 passing adapter/stage cells, 10 passing adapter/baseline observations, one equivalent fingerprint | seven stages × five supported adapters, two baselines × five adapters, and one schema-equivalence set | 100% |
 | Browser/accessibility | passing functional and accessibility observations | all declared workflows on Chromium, Firefox, and WebKit | 100% |
 | Critical source modules | covered statements, branches, functions, and lines | instrumented elements in each declared critical module | 100% per file |
 | Security mutation | killed required mutants | complete targeted mutation registry | 100% |
@@ -1112,8 +1117,8 @@ expectation model, production-facing unit tests, guarded PostgreSQL model,
 three-browser stale-session matrix, and localhost decommission/recreation
 journeys. It classifies 105,840 compressed cross-boundary cells, executes
 52,560 applicable behavior cells plus 318 canonical action/permission/role
-cells, records 12 invalidity witnesses, and proves expansion to 52,297,200
-applicable raw tuples. The artifact qualifies only from an unchanged clean
+cells, records 12 invalidity witnesses, and proves 52,244,640
+behavior-preserving action/observation expansions. The artifact qualifies only from an unchanged clean
 commit with all five gap counters equal to zero.
 
 ### Dedicated engine

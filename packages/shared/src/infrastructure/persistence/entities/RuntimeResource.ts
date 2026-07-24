@@ -10,6 +10,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_runtime_resources_engine_kind', ['engineId', 'resourceKind'])
 @Index('idx_runtime_resources_project', ['projectId'])
 @Index('idx_runtime_resources_active', ['engineId', 'isActive'])
+@Index('idx_runtime_resources_tenant_resolution', ['engineId', 'tenantResolutionStatus'])
 export class RuntimeResource extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ name: 'tenant_resolution_status', type: 'text', default: 'unmapped' }) tenantResolutionStatus!: string;

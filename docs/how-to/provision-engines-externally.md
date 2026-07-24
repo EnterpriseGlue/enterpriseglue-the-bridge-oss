@@ -9,6 +9,13 @@ Status: Dedicated/shared registration and atomic shared tenant mapping are
 implemented. Shared runtime resources remain unavailable until reconciliation
 resolves each resource to exactly one tenant.
 
+These contracts have the same persisted engine-tenancy behavior on
+PostgreSQL, MySQL, SQL Server, Oracle, and Spanner. The supported adapter
+matrix covers clean install, both upgrade baselines, retry, schema
+equivalence, the real mapping transaction, rollback, and cleanup. See the
+[database qualification runbook](../development/engine-tenancy-database-qualification.md)
+for its exact scope and evidence.
+
 ## Before You Start
 
 Use an API-client token with engine registration scope and permission for the

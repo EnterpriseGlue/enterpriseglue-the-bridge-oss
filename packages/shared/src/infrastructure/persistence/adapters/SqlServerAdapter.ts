@@ -84,6 +84,24 @@ export class SqlServerAdapter implements DatabaseAdapter {
       }
     }
 
+    for (const index of metadata.indices) {
+      if (!index.unique || !Array.isArray(index.columns)) continue;
+      const nullableColumnNames = index.columns
+        .filter((propertyName): propertyName is string => typeof propertyName === 'string')
+        .map((propertyName) => metadata.columns.find((column) =>
+          column.target === index.target && column.propertyName === propertyName))
+        .filter((column) => column?.options.nullable === true)
+        .map((column) => String(column?.options.name || column?.propertyName));
+      if (nullableColumnNames.length > 0) {
+        // SQL Server otherwise permits only one NULL in a unique index.
+        // Filter nullable natural keys so their semantics match the other
+        // supported adapters: uniqueness applies only to present values.
+        index.where = nullableColumnNames
+          .map((columnName) => `[${columnName.split(']').join(']]')}] IS NOT NULL`)
+          .join(' AND ');
+      }
+    }
+
     for (const column of metadata.columns) {
       const targetName = this.getTargetName(column.target);
       const key = `${targetName}:${column.propertyName}`;
@@ -95,18 +113,20 @@ export class SqlServerAdapter implements DatabaseAdapter {
 
       if (column.options.type !== 'text') continue;
 
-      const needsNvarchar =
+      const needsKeyLength =
         column.options.default != null
         || Boolean(column.options.primary)
         || Boolean(column.options.unique)
         || indexedColumns.has(key)
         || uniqueConstraintColumns.has(key);
 
-      if (!needsNvarchar) continue;
-
+      // SQL Server's legacy TEXT type cannot participate in equality
+      // comparisons. TypeORM's portable upsert uses comparisons for changed
+      // values, including descriptive fields, so every shared text column
+      // must use NVARCHAR.
       column.options.type = 'nvarchar';
       if (column.options.length == null) {
-        column.options.length = 191;
+        column.options.length = needsKeyLength ? 191 : 4000;
       }
     }
   }

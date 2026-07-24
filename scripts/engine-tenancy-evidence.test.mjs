@@ -16,6 +16,11 @@ const accessibilityRunner = readFileSync(new URL('./run-authz-accessibility-matr
 const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-evidence.mjs', import.meta.url), 'utf8');
 const compatibilityRunner = readFileSync(new URL('./run-engine-tenancy-compatibility-evidence.mjs', import.meta.url), 'utf8');
 const documentationReviewRunner = readFileSync(new URL('./run-engine-tenancy-documentation-review-evidence.mjs', import.meta.url), 'utf8');
+const databaseMatrixRunner = readFileSync(new URL('./run-engine-tenancy-database-matrix.mjs', import.meta.url), 'utf8');
+const databaseMatrixContract = JSON.parse(readFileSync(
+  new URL('../test/database/engine-tenancy-database-matrix-contract.json', import.meta.url),
+  'utf8',
+));
 const provisioningEvidenceWriter = readFileSync(new URL('./write-engine-tenancy-provisioning-evidence.mjs', import.meta.url), 'utf8');
 const provisioningJourneyRunner = readFileSync(new URL('./run-engine-tenancy-provisioning-journeys.sh', import.meta.url), 'utf8');
 const provisioningJourneyRegistry = JSON.parse(readFileSync(
@@ -242,6 +247,35 @@ test('automates documentation checks without self-approving independent reviews'
   assert.match(documentationReviewRunner, /Documentation-review evidence must be run from a clean worktree/);
   assert.match(documentationReviewRunner, /scripts\/local-safe-test\.env/);
   assert.doesNotMatch(documentationReviewRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
+});
+
+test('requires real five-adapter database qualification evidence', () => {
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:database-matrix'],
+    /run-engine-tenancy-database-matrix\.mjs/,
+  );
+  assert.deepEqual(
+    Object.keys(databaseMatrixContract.databases),
+    ['postgres', 'mysql', 'mssql', 'oracle', 'spanner'],
+  );
+  assert.deepEqual(databaseMatrixContract.requiredStages, [
+    'clean_install',
+    'upgrade_baselines',
+    'interrupted_retry',
+    'schema_equivalence',
+    'service_behavior',
+    'rollback',
+    'cleanup',
+  ]);
+  assert.equal(databaseMatrixContract.upgradeBaselines.length, 2);
+  assert.match(databaseMatrixRunner, /schemaFingerprints\.size === 1/);
+  assert.match(databaseMatrixRunner, /releaseCommitQualified: status === 'passed' && sourceState === 'clean'/);
+  assert.match(databaseMatrixRunner, /Database-matrix evidence must be run from a clean worktree/);
+  assert.match(databaseMatrixRunner, /backend\/test\/integration\/engine-tenancy-database-qualification\.mjs/);
+  assert.doesNotMatch(
+    databaseMatrixRunner,
+    /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/,
+  );
 });
 
 test('retains literal 100 percent source coverage for every security-critical module lane', () => {

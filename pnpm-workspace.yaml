@@ -50,3 +50,4 @@ allowBuilds:
   inferno: true
   msw: true
   oracledb: true
+  protobufjs: true

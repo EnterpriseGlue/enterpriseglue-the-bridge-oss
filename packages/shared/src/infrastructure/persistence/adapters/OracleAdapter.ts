@@ -34,6 +34,9 @@ const entities = [
   EngineDeployment, EngineDeploymentArtifact,
 ];
 
+const ORACLE_EMPTY_RUNTIME_TENANT = '__enterpriseglue_default_tenant__';
+const ORACLE_EMPTY_EXTERNAL_TENANT = '__enterpriseglue_empty__';
+
 /**
  * Oracle Database Adapter
  * Implements database-specific operations for Oracle
@@ -118,6 +121,33 @@ export class OracleAdapter implements DatabaseAdapter {
         Boolean(column.options.unique) ||
         indexedColumns.has(key) ||
         uniqueConstraintColumns.has(key);
+
+      if (targetName === 'RuntimeResource' && column.propertyName === 'runtimeTenantId') {
+        // Oracle stores an empty string as NULL. Keep the public/runtime model's
+        // canonical empty value while persisting a non-null sentinel so the
+        // cross-database uniqueness contract remains enforceable.
+        column.options.default = ORACLE_EMPTY_RUNTIME_TENANT;
+        column.options.transformer = {
+          to(value: unknown) {
+            return value === '' ? ORACLE_EMPTY_RUNTIME_TENANT : value;
+          },
+          from(value: unknown) {
+            return value === ORACLE_EMPTY_RUNTIME_TENANT || value == null ? '' : value;
+          },
+        };
+      }
+
+      if (targetName === 'EngineTenantMapping' && column.propertyName === 'externalTenantId') {
+        column.options.default = ORACLE_EMPTY_EXTERNAL_TENANT;
+        column.options.transformer = {
+          to(value: unknown) {
+            return value === '' ? ORACLE_EMPTY_EXTERNAL_TENANT : value;
+          },
+          from(value: unknown) {
+            return value === ORACLE_EMPTY_EXTERNAL_TENANT || value == null ? '' : value;
+          },
+        };
+      }
 
       if (column.options.type === 'text') {
         column.options.type = 'varchar2';

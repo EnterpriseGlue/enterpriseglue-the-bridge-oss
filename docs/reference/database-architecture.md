@@ -28,6 +28,17 @@ Configured via `DATABASE_TYPE`:
 - Cross-database invariants are enforced through entities, shared schemas,
   services, portable migrations, and adapter tests rather than relying only on
   database-specific check constraints.
+- Indexed and unique string fields use bounded portable lengths. Document
+  payloads use adapter-appropriate large-text storage.
+- Nullable unique SQL Server and Spanner indexes use filtered/null-filtered
+  semantics, so multiple absent optional values do not collide.
+- Oracle stores the logical empty runtime-tenant and external-tenant keys with
+  non-empty internal sentinels because Oracle treats an empty string as null.
+  Entity transformers keep this storage detail out of the service and API
+  contracts.
+- Spanner uses explicit migration-history identifiers, native boolean and
+  `INT64` types, and staged nullable/backfill/not-null changes for required
+  columns.
 
 ## Engine Tenancy Persistence
 
@@ -77,6 +88,12 @@ entities, invariants, lifecycle, and current rollout status.
   `packages/shared/src/db/migrations`; persistence-path files re-export them.
 - Migration tests must cover a clean install, idempotent retry, upgrade
   classification, and equivalent canonical metadata for every adapter.
+- An empty database synchronizes the current canonical schema and records the
+  migration baseline. Existing databases continue through ordered migrations.
+  This prevents a new installation from replaying historical migrations
+  against a schema that already contains their final state.
+- Release qualification runs seven engine-tenancy lifecycle stages on all five
+  supported adapters and both supported upgrade baselines.
 
 ## Adapter Layer
 
@@ -88,3 +105,4 @@ Database-specific adapters live under
 - [Shared Database README](../../packages/shared/src/db/README.md)
 - [Database Migrations Guide](../../backend/docs/DATABASE-MIGRATIONS.md)
 - [Engine Tenancy Data Model](./engine-tenancy-data-model.md)
+- [Five-Database Engine Tenancy Qualification](../development/engine-tenancy-database-qualification.md)

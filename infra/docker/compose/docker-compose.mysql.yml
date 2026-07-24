@@ -7,7 +7,6 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
-    command: ["mysqld", "--default-authentication-plugin=mysql_native_password"]
     ports:
       - "${MYSQL_HOST_PORT:-3306}:3306"
     volumes:

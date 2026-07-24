@@ -1,11 +1,11 @@
-import { DataSourceOptions } from 'typeorm';
+import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
@@ -20,7 +20,7 @@ import {
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, Notification,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
   EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
@@ -50,6 +50,81 @@ export class SpannerAdapter implements DatabaseAdapter {
     this.logging = config.nodeEnv === 'development';
 
     this.checkDriverAvailability();
+    this.normalizeColumnsForSpanner();
+  }
+
+  private normalizeColumnsForSpanner(): void {
+    const metadata = getMetadataArgsStorage();
+    const indexedColumns = new Set<string>();
+    const uniqueConstraintColumns = new Set<string>();
+
+    for (const table of metadata.tables) {
+      table.schema = undefined;
+    }
+
+    for (const unique of metadata.uniques) {
+      if (!Array.isArray(unique.columns)) continue;
+      const targetName = this.getTargetName(unique.target);
+      for (const columnName of unique.columns) {
+        if (typeof columnName === 'string') {
+          uniqueConstraintColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const index of metadata.indices) {
+      if (!Array.isArray(index.columns)) continue;
+      const targetName = this.getTargetName(index.target);
+      for (const columnName of index.columns) {
+        if (typeof columnName === 'string') {
+          indexedColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+
+      if (index.unique) {
+        index.nullFiltered = index.columns.some((propertyName) =>
+          typeof propertyName === 'string'
+          && metadata.columns.some((column) =>
+            column.target === index.target
+            && column.propertyName === propertyName
+            && column.options.nullable === true));
+      }
+    }
+
+    for (const column of metadata.columns) {
+      const targetName = this.getTargetName(column.target);
+      const key = `${targetName}:${column.propertyName}`;
+      const needsKeyLength =
+        Boolean(column.options.primary)
+        || Boolean(column.options.unique)
+        || indexedColumns.has(key)
+        || uniqueConstraintColumns.has(key);
+
+      if (column.options.type === 'text') {
+        column.options.type = 'string';
+        if (column.options.length == null) {
+          column.options.length = needsKeyLength ? 191 : 4096;
+        }
+        continue;
+      }
+
+      if (column.options.type === 'boolean') {
+        column.options.type = 'bool';
+        continue;
+      }
+
+      if (
+        column.options.type === 'bigint'
+        || column.options.type === 'integer'
+        || column.options.type === 'int'
+      ) {
+        column.options.type = 'int64';
+      }
+    }
+  }
+
+  private getTargetName(target: string | Function): string {
+    return typeof target === 'function' ? target.name : String(target);
   }
 
   private checkDriverAvailability(): void {

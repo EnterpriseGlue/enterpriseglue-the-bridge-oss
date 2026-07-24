@@ -38,6 +38,29 @@ permission source. Supported combinations become executable behavior cells.
 Unsupported combinations become named invalidity classes with an executed
 rejection witness. Nothing may be silently pruned.
 
+The complete functional denominator is explicit:
+
+| Evidence family | Complete denominator |
+| --- | ---: |
+| Normative requirements | 79/79 |
+| Authorization behavior and structural cells | 52,878/52,878 |
+| Authorization invalidity witnesses | 12/12 |
+| Behavior-preserving authorization expansions | 52,244,640 |
+| Provisioning journeys | 14/14 |
+| Provisioning channel executions | 30/30 |
+| Database lifecycle stages | 35/35 |
+| Database upgrade-baseline observations | 10/10 |
+| Database logical-schema equivalence | 1 fingerprint |
+| Functional browser executions | 27/27 |
+| Browser accessibility executions | 12/12 |
+| Targeted security mutants | 9/9 |
+| Declared critical source modules | 100% statements, branches, functions, and lines per file |
+
+Human engineering, security, and operator review is a release-governance gate,
+not an automated functional cell. The temporary omission-warning compatibility
+path is a passing retained-warning gate until its published window closes; its
+future removal is not counted as present functionality.
+
 ## Required Release-Candidate Evidence
 
 `TEN-AUTHZ-013` runs targeted source mutations and must kill tenant-filter
@@ -86,6 +109,31 @@ The command writes both
 ```bash
 pnpm run test:engine-tenancy:release-evidence
 ```
+
+### Database qualification evidence
+
+Run the real five-adapter matrix from an unchanged clean commit:
+
+```bash
+pnpm run test:engine-tenancy:database-matrix
+```
+
+It uses disposable localhost Docker containers and no deployed database or
+customer credentials. PostgreSQL, MySQL, SQL Server, Oracle, and the Spanner
+emulator must each pass clean install, both supported upgrade baselines,
+interrupted retry, schema equivalence, the real mapping-service transaction,
+rollback, and cleanup.
+
+The database denominator is exactly 35 adapter/stage cells, ten
+adapter/baseline observations, and one logical-schema equivalence set. A
+focused target or dirty-worktree run is useful for diagnosis but never counts
+as release evidence. Full prerequisites, versions, development commands,
+success criteria, failure conditions, cleanup, and handoff are in
+[Qualify Engine Tenancy on Every Supported Database](./engine-tenancy-database-qualification.md).
+
+This lane qualifies the engine-tenancy migration and service lifecycle. It
+does not claim coverage of unrelated application seed catalogs or unrelated
+monorepo database behavior.
 
 ### Provisioning journey evidence
 
@@ -299,9 +347,9 @@ documented breaking-release and observation-window evidence.
 The full release-qualification backlog, execution order, rollback conditions,
 and exit conditions are in phase 9 of
 the [centralized/decentralized engine-tenancy implementation plan](../architecture/12-engine-tenancy-and-external-provisioning-plan.md).
-Local PostgreSQL and three-browser access evidence must not be used to close
-the remaining five-database clean/upgrade or independent
-documentation-review gates.
+The complete five-database artifact and every other release artifact must name
+the same clean commit. Independent documentation review remains a separate
+gate.
 
 ## Prerequisites
 
@@ -309,7 +357,8 @@ documentation-review gates.
 - dependencies installed from the workspace lockfile;
 - no production identity-provider or customer credentials;
 - PostgreSQL only for integration/browser lanes that explicitly start the local
-  service; the focused contract lanes use isolated mocks.
+  service; the focused contract lanes use isolated mocks; and
+- Docker with the five fixed localhost ports available for the database matrix.
 
 Do not reuse production tenant IDs, URLs, tokens, or secrets in fixtures.
 
@@ -489,10 +538,10 @@ The implemented generation follows this order:
 The current denominator is 140,414,400 raw tuples. Named applicability rules
 reduce this to 52,560 compressed applicable behavior cells; 318 canonical
 action, permission, and role cells are executed separately. The artifact
-proves expansion to 52,297,200 applicable raw tuples, records 12 invalidity
-classes, and keeps all missing, skipped, quarantined, unknown, and unexpected
-counters at zero. The full runner is required for release evidence; a
-registry-only pass is not enough.
+proves 52,244,640 behavior-preserving action/observation expansions, records
+12 invalidity classes, and keeps all missing, skipped, quarantined, unknown,
+and unexpected counters at zero. The full runner is required for release
+evidence; a registry-only pass is not enough.
 
 The artifact is complete only when:
 

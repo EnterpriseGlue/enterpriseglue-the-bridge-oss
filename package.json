@@ -81,6 +81,8 @@
     "test:engine-tenancy:release-evidence": "node scripts/write-engine-tenancy-release-index.mjs --require-complete",
     "test:engine-tenancy:compatibility-evidence": "node scripts/run-engine-tenancy-compatibility-evidence.mjs",
     "test:engine-tenancy:documentation-review-evidence": "node scripts/run-engine-tenancy-documentation-review-evidence.mjs",
+    "test:engine-tenancy:database-contract": "node --test scripts/engine-tenancy-database-matrix.test.mjs",
+    "test:engine-tenancy:database-matrix": "pnpm run test:engine-tenancy:database-contract && node scripts/run-engine-tenancy-database-matrix.mjs",
     "test:engine-tenancy:provisioning-journey-contract": "node --test scripts/engine-tenancy-provisioning-journeys.test.mjs",
     "test:engine-tenancy:provisioning-evidence": "pnpm run test:engine-tenancy:provisioning-journey-contract && node scripts/write-engine-tenancy-provisioning-evidence.mjs",
     "test:engine-tenancy:provisioning-journeys:local": "./scripts/run-engine-tenancy-provisioning-journeys.sh",
@@ -161,7 +163,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@google-cloud/spanner": "^8.0.0",
     "@playwright/test": "^1.59.1",
+    "mssql": "^12.0.0",
+    "mysql2": "^3.14.0",
     "pg": "^8.11.3"
   },
   "overrides": {

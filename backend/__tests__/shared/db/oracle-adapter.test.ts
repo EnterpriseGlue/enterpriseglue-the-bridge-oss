@@ -23,6 +23,7 @@ type ColumnSnapshot = {
   precision: any;
   scale: any;
   transformer: any;
+  default: any;
 };
 
 type TableSnapshot = {
@@ -33,6 +34,7 @@ type TableSnapshot = {
 describe('OracleAdapter metadata normalization', () => {
   let columnSnapshots: ColumnSnapshot[] = [];
   let tableSnapshots: TableSnapshot[] = [];
+  let indexSnapshots: any[] = [];
 
   beforeEach(() => {
     const metadata = getMetadataArgsStorage();
@@ -43,8 +45,10 @@ describe('OracleAdapter metadata normalization', () => {
       precision: column.options.precision,
       scale: column.options.scale,
       transformer: column.options.transformer,
+      default: column.options.default,
     }));
     tableSnapshots = metadata.tables.map((table) => ({ table, schema: table.schema }));
+    indexSnapshots = [...metadata.indices];
   });
 
   afterEach(() => {
@@ -54,11 +58,15 @@ describe('OracleAdapter metadata normalization', () => {
       snapshot.column.options.precision = snapshot.precision;
       snapshot.column.options.scale = snapshot.scale;
       snapshot.column.options.transformer = snapshot.transformer;
+      snapshot.column.options.default = snapshot.default;
     }
 
     for (const snapshot of tableSnapshots) {
       snapshot.table.schema = snapshot.schema;
     }
+
+    const metadata = getMetadataArgsStorage();
+    metadata.indices.splice(0, metadata.indices.length, ...indexSnapshots);
   });
 
   it('maps shared main schema entities to configured Oracle schema', () => {
@@ -127,5 +135,39 @@ describe('OracleAdapter metadata normalization', () => {
     expect(createdAtColumn?.options.type).toBe('number');
     expect(createdAtColumn?.options.precision).toBe(19);
     expect(createdAtColumn?.options.scale).toBe(0);
+  });
+
+  it('round-trips the logical empty runtime tenant through an Oracle-safe sentinel', () => {
+    new OracleAdapter();
+
+    const runtimeTenantColumn = getMetadataArgsStorage().columns.find(
+      (column) => (column.target as any)?.name === 'RuntimeResource'
+        && column.propertyName === 'runtimeTenantId',
+    );
+    const transformer = Array.isArray(runtimeTenantColumn?.options.transformer)
+      ? runtimeTenantColumn?.options.transformer[0]
+      : runtimeTenantColumn?.options.transformer;
+
+    expect(runtimeTenantColumn?.options.default).toBe('__enterpriseglue_default_tenant__');
+    expect(transformer?.to('')).toBe('__enterpriseglue_default_tenant__');
+    expect(transformer?.from('__enterpriseglue_default_tenant__')).toBe('');
+    expect(transformer?.to('runtime-tenant-a')).toBe('runtime-tenant-a');
+    expect(transformer?.from('runtime-tenant-a')).toBe('runtime-tenant-a');
+  });
+
+  it('round-trips an empty external tenant mapping through an Oracle-safe sentinel', () => {
+    new OracleAdapter();
+
+    const externalTenantColumn = getMetadataArgsStorage().columns.find(
+      (column) => (column.target as any)?.name === 'EngineTenantMapping'
+        && column.propertyName === 'externalTenantId',
+    );
+    const transformer = Array.isArray(externalTenantColumn?.options.transformer)
+      ? externalTenantColumn?.options.transformer[0]
+      : externalTenantColumn?.options.transformer;
+
+    expect(externalTenantColumn?.options.default).toBe('__enterpriseglue_empty__');
+    expect(transformer?.to('')).toBe('__enterpriseglue_empty__');
+    expect(transformer?.from('__enterpriseglue_empty__')).toBe('');
   });
 });

@@ -1,4 +1,4 @@
-import { In, IsNull, QueryRunner, TableColumn, TableIndex } from 'typeorm';
+import { In, IsNull, QueryRunner, Table, TableColumn, TableIndex } from 'typeorm';
 import type { DataSource } from 'typeorm';
 import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from '../infrastructure/persistence/entities/EnvironmentTag.js';
@@ -381,6 +381,54 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
   }
 }
 
+async function recordFreshMigrationBaseline(
+  dataSource: DataSource,
+  queryRunner: QueryRunner,
+  dbType: ReturnType<typeof adapter.getDatabaseType>,
+): Promise<void> {
+  if (dbType !== 'spanner') {
+    await dataSource.runMigrations({ fake: true });
+    return;
+  }
+
+  // TypeORM's Spanner migration table declares an auto-generated numeric ID,
+  // but Spanner has no auto-increment columns. Record the baseline through the
+  // native mutation API with explicit deterministic IDs.
+  const migrationsTableName = dataSource.options.migrationsTableName || 'migrations';
+  if (!(await queryRunner.hasTable(migrationsTableName))) {
+    await queryRunner.createTable(new Table({
+      name: migrationsTableName,
+      columns: [
+        { name: 'id', type: 'int64', isPrimary: true },
+        { name: 'timestamp', type: 'int64' },
+        { name: 'name', type: 'string', length: 'max' },
+      ],
+    }));
+  }
+
+  const migrations = dataSource.migrations
+    .map((migration) => {
+      const name = migration.name || migration.constructor.name;
+      const timestamp = Number(name.slice(-13));
+      if (!Number.isSafeInteger(timestamp)) {
+        throw new Error(`Spanner migration "${name}" does not end with a safe 13-digit timestamp`);
+      }
+      return { name, timestamp };
+    })
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .map((migration, index) => ({
+      id: index + 1,
+      timestamp: migration.timestamp,
+      name: migration.name,
+    }));
+
+  const spannerDatabase = (dataSource.driver as any).instanceDatabase;
+  if (!spannerDatabase) {
+    throw new Error('Spanner database handle is unavailable while recording the migration baseline');
+  }
+  await spannerDatabase.table(migrationsTableName).insert(migrations);
+}
+
 /**
  * Run database migrations using TypeORM
  * Database-agnostic implementation supporting PostgreSQL, Oracle, MySQL, SQL Server, Spanner
@@ -408,6 +456,7 @@ export async function runMigrations() {
   try {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
+    let initializedFreshSchema = false;
 
     const queryRunner = dataSource.createQueryRunner();
     try {
@@ -440,11 +489,40 @@ export async function runMigrations() {
         }
       }
 
+      let hadCanonicalTableBeforeBootstrap =
+        missingTables.length < coreBootstrapEntities.length;
+      if (
+        !hadCanonicalTableBeforeBootstrap
+        && dataSource.entityMetadatas?.length
+      ) {
+        const coreTablePaths = new Set(
+          coreBootstrapEntities.map((entity) => dataSource.getMetadata(entity).tablePath),
+        );
+        for (const metadata of dataSource.entityMetadatas) {
+          if (
+            !coreTablePaths.has(metadata.tablePath)
+            && await queryRunner.hasTable(metadata.tablePath)
+          ) {
+            hadCanonicalTableBeforeBootstrap = true;
+            break;
+          }
+        }
+      }
+
       if (missingTables.length > 0) {
         console.log(
           `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
         );
         await dataSource.synchronize();
+        if (!hadCanonicalTableBeforeBootstrap) {
+          // A fully empty database was created directly from the current
+          // entity model. Historical migrations are already represented in
+          // that schema and must be recorded without replaying legacy-only
+          // transformations against it.
+          await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
+          initializedFreshSchema = true;
+          console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
+        }
       }
 
     } finally {
@@ -452,10 +530,12 @@ export async function runMigrations() {
     }
 
     // Run pending migrations
-    const pendingMigrations = await dataSource.showMigrations();
-    if (pendingMigrations) {
-      console.log('  Running pending migrations...');
-      await dataSource.runMigrations();
+    if (!initializedFreshSchema) {
+      const pendingMigrations = await dataSource.showMigrations();
+      if (pendingMigrations) {
+        console.log('  Running pending migrations...');
+        await dataSource.runMigrations();
+      }
     }
 
     const integrityRunner = dataSource.createQueryRunner();

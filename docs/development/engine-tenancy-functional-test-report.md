@@ -17,6 +17,13 @@ Firefox, and WebKit: 27 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
+The engine-tenancy database matrix passes PostgreSQL 18.4, MySQL 8.4.10, SQL
+Server 16.0.4265.3, Oracle 21.0.0.0.0, and Spanner emulator 1.5.30. All 35
+adapter/stage cells and all ten adapter/upgrade-baseline observations pass.
+Clean install and both upgrade paths converge on one logical-schema
+fingerprint:
+`95a8dc5b0d4d97026587e2e41b63ef3536cc5abe681a3d944c5111de69ae753e`.
+
 The real-service provisioning suite now passes Journeys 1–14, including all
 three required channels of Journeys 7–14: fourteen of fourteen journeys and
 thirty of thirty required channel executions. It covers the manual UI, a least-privilege
@@ -52,7 +59,7 @@ readiness metrics, and cleanup through the real browser and HTTP stack.
 | Item | Evidence |
 | --- | --- |
 | Deployment | Local Docker stack |
-| Database | PostgreSQL, schema migrations through `0097` |
+| Databases | PostgreSQL, MySQL, SQL Server, Oracle, and Spanner disposable qualification targets; PostgreSQL for the live HTTP/browser stack |
 | Frontend | Local TLS endpoint |
 | Backend | Local readiness and metrics endpoints |
 | Browser | Chromium for topology enforcement; Chromium, Firefox, and WebKit for the 27-execution fine-grained access matrix |
@@ -121,6 +128,9 @@ meaning of 100% functional coverage are documented in
 | Live browser enforcement | **1** |
 | Fine-grained access browser matrix | **27** |
 | Real-service provisioning channel executions | **30** |
+| Database lifecycle stage cells | **35** |
+| Database upgrade-baseline observations | **10** |
+| Equivalent logical-schema fingerprints | **1** |
 
 The shared package build and backend/frontend type checks also passed. The
 targeted provisioning, mapping, tenant-role policy, classification/transition,
@@ -247,6 +257,25 @@ state. Playwright now clears only `test/results/playwright`, so it cannot erase
 manifest, mutation, browser, or release-index artifacts produced by another
 lane.
 
+The five-adapter qualification exposed and fixed portability defects that
+contract-only checks could not:
+
+- a completely empty database could replay historical migrations after
+  synchronizing the current schema;
+- MySQL 8.4 rejected an obsolete authentication flag and large-text defaults;
+- SQL Server required bounded Unicode string types and filtered unique indexes
+  for nullable keys;
+- Oracle required portable numeric types, quoted identifiers, removal of a
+  duplicate index, and non-empty storage sentinels for logical empty strings;
+- Spanner required native types, explicit migration-history IDs,
+  null-filtered nullable uniqueness, and staged nullable/backfill/not-null
+  migration operations; and
+- runtime-resource resolution and role-assignment indexes had drifted from
+  the canonical logical schema.
+
+Adapter and migration tests now retain these constraints, and the live matrix
+proves the resulting service behavior rather than only inspecting source.
+
 ## Reproduce and Retain Evidence
 
 With the local Docker deployment healthy:
@@ -276,6 +305,18 @@ pnpm run test:authz:local-smoke:cross-browser
 
 It writes `browser-matrix.json` only after all 27 executions pass.
 
+Run the disposable five-database qualification from a clean commit with:
+
+```bash
+pnpm run test:engine-tenancy:database-matrix
+```
+
+It writes `database-matrix.json` only as release-qualified when all five
+targets, all 35 stage cells, all ten baseline observations, and one equivalent
+logical schema pass. See
+[Qualify Engine Tenancy on Every Supported Database](./engine-tenancy-database-qualification.md)
+for prerequisites, focused diagnosis, cleanup, and rollback conditions.
+
 Generate the fail-closed evidence summary with:
 
 ```bash
@@ -295,13 +336,10 @@ disposable PostgreSQL/browser services. CI retains the result directory for
 
 The implementation and automated evidence close the local
 PostgreSQL/Chromium topology-enforcement slice, the three-browser
-fine-grained session-state slice, and the three-browser accessibility slice.
-They do not yet close full cross-platform release qualification. The remaining
-gates are:
+fine-grained session-state and accessibility slices, and the complete
+five-adapter database slice. They do not yet close the release-governance
+qualification. The remaining gates are:
 
-- retain clean-install, every supported upgrade-baseline, interrupted-retry,
-  schema-equivalence, service, rollback, and cleanup results for PostgreSQL,
-  MySQL, SQL Server, Oracle, and Spanner;
 - populate every required slot in the implemented release evidence index with
   passing same-clean-commit artifacts;
 - obtain engineering, security, and independent-operator sign-off on the

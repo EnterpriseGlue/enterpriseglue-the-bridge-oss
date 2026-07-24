@@ -23,7 +23,11 @@ EnterpriseGlue now models engine topology explicitly:
   state with zero missing, skipped, quarantined, unknown, or unexpected cells;
   and
 - bounded operational metrics report resolution health and provisioning
-  fallback adoption without exposing identifiers.
+  fallback adoption without exposing identifiers; and
+- the same engine-tenancy migration and mapping contract passes all 35
+  lifecycle stage cells and all ten upgrade-baseline observations across
+  PostgreSQL, MySQL, SQL Server, Oracle, and Spanner with one equivalent
+  logical-schema fingerprint.
 
 ## Compatibility
 
@@ -42,6 +46,9 @@ The earliest removal conditions are documented in
 3. Configure mappings before exposing a shared engine to tenant users.
 4. Monitor aggregate resolution and fallback metrics.
 5. Run the focused engine-tenancy test lanes and retain the evidence bundle.
+6. Run the
+   [five-database qualification](../development/engine-tenancy-database-qualification.md)
+   from the exact clean release commit.
 
 ## Security Impact
 

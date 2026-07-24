@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "engine-tenancy-database-matrix-contract",
+  "databases": {
+    "postgres": {
+      "image": "postgres:18-alpine",
+      "port": 56432,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "mysql": {
+      "image": "mysql:8.4",
+      "port": 53306,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "mssql": {
+      "image": "mcr.microsoft.com/mssql/server:2022-latest",
+      "port": 51433,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "oracle": {
+      "image": "gvenzl/oracle-xe:21-slim-faststart",
+      "port": 51521,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "spanner": {
+      "image": "gcr.io/cloud-spanner-emulator/emulator:1.5.30",
+      "port": 59010,
+      "platform": "linux/amd64",
+      "versionSource": "container_image"
+    }
+  },
+  "upgradeBaselines": [
+    {
+      "id": "pre_engine_tenancy",
+      "description": "Existing engines and runtime inventory immediately before the engine-tenancy foundation migration."
+    },
+    {
+      "id": "engine_tenancy_foundation_v1",
+      "description": "Foundation schema before the tenant-reference round-trip migration."
+    }
+  ],
+  "requiredStages": [
+    "clean_install",
+    "upgrade_baselines",
+    "interrupted_retry",
+    "schema_equivalence",
+    "service_behavior",
+    "rollback",
+    "cleanup"
+  ],
+  "requiredTables": {
+    "engines": [
+      "tenancy_mode",
+      "tenant_mapping_strategy",
+      "tenant_mapping_version",
+      "tenant_resolution_status",
+      "last_tenant_reconciled_at"
+    ],
+    "engine_tenant_mappings": [
+      "engine_id",
+      "external_tenant_id",
+      "enterprise_tenant_id",
+      "tenant_reference_json",
+      "strategy",
+      "source",
+      "source_ref",
+      "ownership_mode",
+      "is_active"
+    ],
+    "runtime_resources": [
+      "tenant_id",
+      "tenant_resolution_status",
+      "tenant_mapping_id",
+      "tenant_mapping_version",
+      "tenant_resolution_details_json",
+      "engine_id",
+      "resource_kind",
+      "resource_key",
+      "runtime_tenant_id"
+    ]
+  },
+  "requiredIndexes": {
+    "engines": [
+      "idx_engines_tenancy_mode",
+      "idx_engines_tenant_resolution_status"
+    ],
+    "engine_tenant_mappings": [
+      "idx_engine_tenant_mappings_engine_active",
+      "idx_engine_tenant_mappings_enterprise_tenant"
+    ],
+    "runtime_resources": [
+      "idx_runtime_resources_tenant_resolution"
+    ]
+  }
+}

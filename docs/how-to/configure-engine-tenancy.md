@@ -14,6 +14,14 @@ rows. Mission Control collection, detail, and mutation guards enforce resolved
 shared mappings even for broad engine grants. The real browser/HTTP enforcement
 journey is covered by `TEN-RUNTIME-007`.
 
+The same dedicated/shared persistence behavior is qualified on PostgreSQL,
+MySQL, SQL Server, Oracle, and Spanner. Database choice does not change the
+tenant fallback or shared-resource quarantine rules. Operators can review the
+supported target procedure in
+[Non-Postgres Database Setup](./database-non-postgres.md); developers and
+release reviewers use the
+[five-database qualification](../development/engine-tenancy-database-qualification.md).
+
 ## Choose the Topology
 
 Choose **dedicated** when one engine belongs to one EnterpriseGlue tenant. This

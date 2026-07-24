@@ -4,6 +4,14 @@ import { describe, expect, it } from 'vitest';
 
 const ADAPTERS = ['Postgres', 'MySQL', 'SqlServer', 'Oracle', 'Spanner'];
 const REQUIRED_CANONICAL_ENTITIES = [
+  'ApiClient',
+  'ServiceAccount',
+  'RbacPermission',
+  'RbacRole',
+  'RbacRoleAssignment',
+  'RbacRolePermission',
+  'AuthzPolicy',
+  'AuthzAuditLog',
   'IdentityProvider',
   'IdentityReconciliationCheckpoint',
   'DeploymentReceipt',

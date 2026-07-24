@@ -46,6 +46,7 @@ Audience: Developers and architects.
 - [Engine Tenancy Compatibility and Deprecation](reference/engine-tenancy-compatibility-and-deprecation.md)
 - [Provision Engines Externally](how-to/provision-engines-externally.md)
 - [Test Engine Tenancy and Fine-Grained Access Control](development/testing-engine-tenancy-and-access-control.md)
+- [Qualify Engine Tenancy on Every Supported Database](development/engine-tenancy-database-qualification.md)
 - [Engine Tenancy Functional Test Report](development/engine-tenancy-functional-test-report.md)
 - [Engine Tenancy Documentation Review Checklist](development/engine-tenancy-documentation-review-checklist.md)
 - [Non-Postgres Database Setup](how-to/database-non-postgres.md)
