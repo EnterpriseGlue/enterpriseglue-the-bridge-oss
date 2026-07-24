@@ -383,6 +383,7 @@ Run the layers in this order:
 
 ```bash
 pnpm run test:engine-tenancy:foundation
+pnpm run test:engine-tenancy:engine-routes
 pnpm run test:engine-tenancy:provisioning
 pnpm run test:engine-tenancy:mappings
 pnpm run test:engine-tenancy:authorization
@@ -400,6 +401,14 @@ pnpm run test:engine-tenancy:enforcement
 
 For the complete guarded local-Docker journey, use
 `test:engine-tenancy:local-evidence` as described below.
+
+The standalone engine-route lane deliberately runs all engine administration
+and external-provisioning HTTP tests with one worker and deterministic shuffled
+test order (`seed 1729`). Provisioning, mapping, transition, compatibility, and
+source-coverage workflows invoke this lane separately from schema suites. Every
+shared route mock is restored before each case. This makes authorization and
+repository isolation explicit and prevents a passing result from depending on
+source order or another test file's module state.
 
 The authorization lane:
 

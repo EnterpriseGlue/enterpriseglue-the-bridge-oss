@@ -248,6 +248,7 @@ test('retains omission warnings until the documented removal window closes', () 
   assert.match(compatibilityRunner, /warningBehavior: 'retained'/);
   assert.match(compatibilityRunner, /removalProposed: false/);
   assert.match(compatibilityRunner, /ENGINE_TENANCY_DEFAULTED_TO_DEDICATED/);
+  assert.match(compatibilityRunner, /test:engine-tenancy:engine-routes/);
   assert.match(compatibilityRunner, /Compatibility-window evidence must be run from a clean worktree/);
   assert.match(compatibilityRunner, /scripts\/local-safe-test\.env/);
   assert.doesNotMatch(compatibilityRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
@@ -304,6 +305,14 @@ test('requires real five-adapter database qualification evidence', () => {
 
 test('retains literal 100 percent source coverage for every security-critical module lane', () => {
   assert.match(packageJson.scripts['test:engine-tenancy:source-coverage'], /run-engine-tenancy-source-coverage\.mjs/);
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:engine-routes'],
+    /mission-control\/engines\/routes\.test\.ts/,
+  );
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:engine-routes'],
+    /--sequence\.shuffle\.tests --sequence\.seed=1729/,
+  );
   for (const script of [
     'test:engine-tenancy:provisioning',
     'test:engine-tenancy:mappings',
@@ -316,6 +325,16 @@ test('retains literal 100 percent source coverage for every security-critical mo
     'test:authz:api-client-middleware-coverage',
   ]) {
     assert.match(sourceCoverageRunner, new RegExp(`script: '${script}'`));
+  }
+  for (const script of [
+    'test:engine-tenancy:provisioning',
+    'test:engine-tenancy:mappings',
+    'test:engine-tenancy:transitions',
+  ]) {
+    assert.match(
+      packageJson.scripts[script],
+      /pnpm run test:engine-tenancy:engine-routes/,
+    );
   }
   assert.match(sourceCoverageRunner, /lines: 100/);
   assert.match(sourceCoverageRunner, /statements: 100/);

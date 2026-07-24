@@ -44,18 +44,31 @@ if (startChanges && !allowDirty) {
   throw new Error('Compatibility-window evidence must be run from a clean worktree');
 }
 
-const testFiles = [
+const routeTestFile = '__tests__/modules/mission-control/engines/routes.test.ts';
+const contractTestFiles = [
   '__tests__/shared/services/platform-admin/engineTenancyProvisioningService.test.ts',
-  '__tests__/modules/mission-control/engines/routes.test.ts',
   '__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts',
 ];
-const result = spawnSync('pnpm', [
+const routeResult = spawnSync('pnpm', [
+  'run',
+  'test:engine-tenancy:engine-routes',
+], {
+  cwd: root,
+  env: safeEnvironment,
+  stdio: 'inherit',
+});
+if (routeResult.error) throw routeResult.error;
+if ((routeResult.status ?? 1) !== 0) {
+  throw new Error('Engine-tenancy compatibility route tests failed');
+}
+
+const contractResult = spawnSync('pnpm', [
   '--dir',
   'backend',
   'exec',
   'vitest',
   'run',
-  ...testFiles,
+  ...contractTestFiles,
   '--config',
   'vitest.config.ts',
   '--maxWorkers=1',
@@ -66,8 +79,8 @@ const result = spawnSync('pnpm', [
   env: safeEnvironment,
   stdio: 'inherit',
 });
-if (result.error) throw result.error;
-if ((result.status ?? 1) !== 0) {
+if (contractResult.error) throw contractResult.error;
+if ((contractResult.status ?? 1) !== 0) {
   throw new Error('Engine-tenancy compatibility warning tests failed');
 }
 
@@ -101,7 +114,8 @@ const evidence = {
     'HTTP responses expose only the stable warning code',
     'OpenAPI documents the stable warning code',
   ],
-  tests: testFiles.map((testFile) => ({ testFile: `backend/${testFile}`, status: 'passed' })),
+  tests: [routeTestFile, ...contractTestFiles]
+    .map((testFile) => ({ testFile: `backend/${testFile}`, status: 'passed' })),
   documentation: [
     'docs/reference/engine-tenancy-compatibility-and-deprecation.md',
     'docs/how-to/upgrade-engine-tenancy.md',

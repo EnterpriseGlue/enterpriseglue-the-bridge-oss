@@ -301,6 +301,15 @@ and the retained state-space runner executes the 146 request-authorization
 tests in deterministic shuffled order. This makes mock isolation part of the
 release evidence instead of relying on source-file order.
 
+A later aggregate source-coverage rerun exposed the equivalent risk in the
+engine administration HTTP suite: the large route file could inherit a
+one-shot engine service mock when combined with schema files, causing an
+incorrect authorization result or a closed test socket. The route setup now
+restores the decommission and Engine Set materialization mocks as well as the
+other dependencies. Provisioning, mapping, transition, compatibility, and
+source-coverage workflows execute all 67 route cases in their own one-worker
+process with deterministic shuffled order (`seed 1729`).
+
 ## Reproduce and Retain Evidence
 
 With the local Docker deployment healthy:

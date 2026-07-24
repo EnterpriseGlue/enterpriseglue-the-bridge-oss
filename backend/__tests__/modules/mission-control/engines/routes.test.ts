@@ -214,7 +214,9 @@ describe('mission-control engines routes', () => {
     (engineService as any).hasEngineAccess.mockReset();
     (engineService as any).getUserEngines.mockReset();
     (engineService as any).getEngineRole.mockReset();
+    (engineService as any).decommissionEngine.mockReset();
     (engineService as any).createEngineWithGovernanceAssignments.mockReset();
+    (engineSetService as any).materializeEngineSetsForEngine.mockReset();
     (projectEngineTargetService as any).listTargets.mockReset();
     (projectEngineTargetService as any).createTarget.mockReset();
     (projectEngineTargetService as any).getTarget.mockReset();
@@ -239,6 +241,8 @@ describe('mission-control engines routes', () => {
     (engineService as any).listEngines.mockResolvedValue([]);
     (engineService as any).getEngine.mockResolvedValue({ id: 'e1', name: 'Engine 1' });
     (engineService as any).getUserEngines.mockResolvedValue([{ engine: { id: 'e1', name: 'Engine 1' }, role: 'admin' }]);
+    (engineService as any).decommissionEngine.mockResolvedValue(undefined);
+    (engineSetService as any).materializeEngineSetsForEngine.mockResolvedValue(undefined);
     (projectEngineTargetService as any).listTargets.mockResolvedValue([]);
     (projectEngineTargetService as any).createTarget.mockResolvedValue({ id: 'target-1' });
     (projectEngineTargetService as any).getTarget.mockResolvedValue({

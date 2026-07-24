@@ -152,6 +152,30 @@ remaining release gate also requires tenant assignment, Effective Access, and
 runtime-path evidence from the implementation plan; mapping readiness alone
 does not prove the complete authorization rollout.
 
+## Validate Access Before Handover
+
+Do not hand a new engine to tenant users based only on a successful registration
+response. Complete this checklist for the dedicated or shared engine:
+
+1. Confirm the engine shows the intended `dedicated` or `shared` topology.
+2. For a dedicated engine, confirm its owning tenant is persisted. For a shared
+   engine, confirm every active runtime resource is resolved and the unmapped
+   and conflicting counts are zero.
+3. Assign the intended predefined or custom role and inspect Effective Access
+   for its source, tenant, resource scope, and expiry.
+4. Sign in as a representative tenant user and verify an allowed list and detail
+   path, then verify a sibling-tenant direct URL is denied.
+5. Revoke the assignment or deactivate a mapping while that session is open.
+   Refresh and use browser back/forward navigation; access must disappear
+   immediately.
+6. Retain the sanitized diagnostics, audit event, and test result with the
+   rollout record. Never retain tokens, credential values, private engine URLs,
+   raw identity claims, or customer identifiers in test evidence.
+
+Stop the rollout and restore the last known mapping/assignment configuration if
+a resource has no single resolved tenant, Effective Access disagrees with the
+intended role, a denied path reaches the engine, or revocation is not immediate.
+
 ## Update and Retry
 
 The endpoint is an upsert keyed by `externalId`. Retrying the same equivalent
