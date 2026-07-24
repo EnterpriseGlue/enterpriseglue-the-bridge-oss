@@ -10,3 +10,4 @@ export * from './identity.js';
 export * from './authz.js';
 export * from './invitation.js';
 export * from './git-provider.js';
+export * from './camunda-native-grants.js';

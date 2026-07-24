@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-24
 
-Status: Approved direction; implementation pending.
+Status: Approved direction; implementation in progress.
 
 ## Decision
 
@@ -19,6 +19,23 @@ backstop/mirroring project writes to Camunda.
 This is intentionally a migration tool, not a second permanent permission
 editor. It solves the customer adoption problem without making EnterpriseGlue
 depend on Camunda's user/group/grant model at runtime.
+
+## Implemented Foundation
+
+The first implementation slice provides the versioned, bounded native-grant
+input/export contract and a Camunda 7-only inventory adapter. The live adapter
+uses paginated `GET /authorization` requests exclusively and performs a
+one-record completeness probe when it reaches its 5,000-record ceiling; a
+truncated inventory cannot become an approved draft.
+
+The initial mapping catalogue is deliberately narrow and versioned as
+`camunda7-v1-read-only`: an exact, active, unambiguous group `READ` grant on a
+process-definition or decision-definition with resolved runtime inventory is
+the only automatically proposed candidate. Broad `*` grants require explicit
+approval. User grants, global grants, revokes, unsupported resources,
+unmapped permissions, missing resources, and unresolved/ambiguous inventory
+are retained as manual or blocked items. No native authorization is written,
+and this slice does not introduce a runtime authority mode.
 
 ## Summary of the Agreed Model
 
