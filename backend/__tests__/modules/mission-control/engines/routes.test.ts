@@ -233,11 +233,6 @@ describe('mission-control engines routes', () => {
   let app: express.Application;
 
   beforeEach(() => {
-    app = express();
-    app.disable('x-powered-by');
-    app.use(express.json());
-    app.use(enginesRouter);
-    app.use(errorHandler);
     vi.clearAllMocks();
     apiClientAuthMock.authenticateToken.mockReset();
     permissionServiceMock.hasPermission.mockReset();
@@ -384,6 +379,11 @@ describe('mission-control engines routes', () => {
         findOneBy: vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }),
       }),
     });
+    app = express();
+    app.disable('x-powered-by');
+    app.use(express.json());
+    app.use(enginesRouter);
+    app.use(errorHandler);
   });
 
   it('returns list of engines', async () => {
