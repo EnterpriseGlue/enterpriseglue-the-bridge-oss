@@ -43,9 +43,9 @@ The complete functional denominator is explicit:
 | Evidence family | Complete denominator |
 | --- | ---: |
 | Normative requirements | 79/79 |
-| Authorization behavior and structural cells | 52,878/52,878 |
+| Authorization behavior and structural cells | 52,886/52,886 |
 | Authorization invalidity witnesses | 12/12 |
-| Behavior-preserving authorization expansions | 52,244,640 |
+| Behavior-preserving authorization expansions | 53,295,840 |
 | Provisioning journeys | 14/14 |
 | Provisioning channel executions | 30/30 |
 | Database lifecycle stages | 35/35 |
@@ -554,6 +554,21 @@ Generate the current executable state-space report with:
 pnpm run test:authz:state-space-evidence
 ```
 
+For a machine that may run Docker and non-browser tests but is not authorized
+to drive the authenticated browser flows, use:
+
+```bash
+pnpm run test:authz:state-space-local-evidence
+```
+
+This runs the same local build, registry, invalidity, request-authorization,
+and PostgreSQL matrix lanes, but writes the separate
+`test/results/engine-tenancy-release/authorization-matrix.local.json` with
+status `incomplete` and `releaseStatus` `local-evidence-only`. It names the
+deferred browser acceptance lanes and is intentionally ignored by the release
+index. It is useful diagnostic evidence, never a substitute for the full
+command.
+
 The runner builds the shared registries and executes the canonical/invalidity
 contracts, generated action/route contracts, permission and role contracts,
 guarded PostgreSQL principal/scope/model matrix, three-browser stale-session
@@ -575,10 +590,10 @@ The implemented generation follows this order:
    tuples and prove that the rule is behavior-preserving; and
 6. retain `authorization-matrix.json` from the exact clean commit.
 
-The current denominator is 140,414,400 raw tuples. Named applicability rules
-reduce this to 52,560 compressed applicable behavior cells; 318 canonical
+The current denominator is 143,236,800 raw tuples. Named applicability rules
+reduce this to 52,560 compressed applicable behavior cells; 326 canonical
 action, permission, and role cells are executed separately. The artifact
-proves 52,244,640 behavior-preserving action/observation expansions, records
+proves 53,295,840 behavior-preserving action/observation expansions, records
 12 invalidity classes, and keeps all missing, skipped, quarantined, unknown,
 and unexpected counters at zero. The full runner is required for release
 evidence; a registry-only pass is not enough.

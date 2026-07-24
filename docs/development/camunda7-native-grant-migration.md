@@ -192,6 +192,12 @@ customer grants for this qualification.
 
    Retain their current-clean artifacts: browser matrix, provisioning journey,
    accessibility matrix, and authorization state-space matrix.
+
+   When the executor is intentionally restricted to non-browser checks, run
+   `pnpm run test:authz:state-space-local-evidence` first. It writes the
+   separate `authorization-matrix.local.json` receipt and explicitly remains
+   incomplete until the four browser/customer-acceptance commands above run;
+   it cannot satisfy the release gate or justify a compatibility cutover.
 5. Preview rollback, confirm that every changed object is owned by the exact
    migration source reference, acknowledge only the returned archive set, and
    apply the exact rollback hash. Record the rollback preview hash and receipt

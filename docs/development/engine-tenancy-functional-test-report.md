@@ -100,8 +100,8 @@ The pull-request authorization gate also executes the database-backed custom
 role and randomized direct/group matrix, API-client/service-account parity,
 the complete constraint-derived authorization state space, and the targeted
 mutation guard. The state-space generator classifies 105,840 compressed cells,
-executes 52,560 applicable behavior cells plus 318 canonical structural cells,
-retains 12 invalidity witnesses, and proves 52,244,640 behavior-preserving
+executes 52,560 applicable behavior cells plus 326 canonical structural cells,
+retains 12 invalidity witnesses, and proves 53,295,840 behavior-preserving
 action/observation expansions with zero gaps. The latest local mutation
 execution killed all nine mutants, including all five mandatory tenancy fault
 classes.

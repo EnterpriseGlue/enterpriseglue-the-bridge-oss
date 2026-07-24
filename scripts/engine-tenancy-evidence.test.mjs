@@ -82,6 +82,7 @@ test('keeps transient Playwright output separate from retained release evidence'
 test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(packageJson.scripts['test:engine-tenancy:evidence-index'], /write-engine-tenancy-release-index\.mjs/);
   assert.match(packageJson.scripts['test:engine-tenancy:release-evidence'], /--require-complete/);
+  assert.match(packageJson.scripts['test:authz:state-space-local-evidence'], /--local-only/);
   for (const gate of [
     'traceability',
     'localEnforcement',
@@ -209,8 +210,10 @@ test('retains complete constraint-derived authorization state-space evidence', (
   ]) {
     assert.match(authorizationMatrixRunner, new RegExp(`\\b${requiredField}\\b`));
   }
-  assert.match(authorizationMatrixRunner, /status: 'passed'/);
-  assert.match(authorizationMatrixRunner, /releaseCommitQualified: sourceState === 'clean'/);
+  assert.match(authorizationMatrixRunner, /status: localOnly \? 'incomplete' : 'passed'/);
+  assert.match(authorizationMatrixRunner, /releaseCommitQualified: !localOnly && sourceState === 'clean'/);
+  assert.match(authorizationMatrixRunner, /authorization-matrix\.local\.json/);
+  assert.match(authorizationMatrixRunner, /deferredAcceptanceLanes/);
   assert.match(authorizationMatrixRunner, /generateAuthorizationBehaviorSummary/);
   assert.match(authorizationMatrixRunner, /behaviorCellHash/);
   assert.match(authorizationMatrixRunner, /customRoleUnionExpandedCombinationCount/);

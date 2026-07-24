@@ -7,10 +7,14 @@ import path from 'node:path';
 
 const root = process.cwd();
 const outputDirectory = path.join(root, 'test/results/engine-tenancy-release');
-const outputPath = path.join(outputDirectory, 'authorization-matrix.json');
 const contractPath = path.join(root, 'test/authz/authorization-state-space-contract.json');
 const contract = JSON.parse(readFileSync(contractPath, 'utf8'));
 const allowDirty = process.argv.includes('--allow-dirty');
+const localOnly = process.argv.includes('--local-only');
+const outputPath = path.join(
+  outputDirectory,
+  localOnly ? 'authorization-matrix.local.json' : 'authorization-matrix.json',
+);
 const safeEnvironment = { ...process.env };
 
 for (const key of [
@@ -167,7 +171,19 @@ const lanes = [
     args: ['run', 'test:engine-tenancy:provisioning-journeys:local'],
   },
 ];
-const laneResults = lanes.map(runLane);
+const deferredLanes = localOnly
+  ? lanes.filter((lane) => lane.layer.startsWith('browser'))
+  : [];
+const lanesToRun = localOnly
+  ? lanes.filter((lane) => !lane.layer.startsWith('browser'))
+  : lanes;
+if (localOnly) {
+  console.log(
+    `[authz-state-space] local-only mode excludes ${deferredLanes.length} browser acceptance lane(s); ` +
+    'the retained result is not release-qualified.',
+  );
+}
+const laneResults = lanesToRun.map(runLane);
 
 const {
   AUTHZ_ACTIONS,
@@ -238,12 +254,20 @@ const evidence = {
   schemaVersion: 2,
   evidenceKind: 'authorization-state-space',
   coverageStandard: contract.coverageStandard,
-  status: 'passed',
-  releaseStatus: sourceState === 'clean' ? 'release-qualified' : 'development-pass',
+  status: localOnly ? 'incomplete' : 'passed',
+  releaseStatus: localOnly
+    ? 'local-evidence-only'
+    : sourceState === 'clean' ? 'release-qualified' : 'development-pass',
   generatedAt: new Date().toISOString(),
   commit: endCommit,
   sourceState,
-  releaseCommitQualified: sourceState === 'clean',
+  releaseCommitQualified: !localOnly && sourceState === 'clean',
+  executionScope: localOnly ? 'local-non-browser' : 'complete',
+  deferredAcceptanceLanes: deferredLanes.map((lane) => ({
+    id: lane.id,
+    layer: lane.layer,
+    reason: 'requires the separate authenticated browser/customer-acceptance environment',
+  })),
   canonicalInputHash,
   deterministicSeed: 'authorization-state-space-v1',
   shard: { index: 1, total: 1 },
@@ -366,8 +390,9 @@ const evidence = {
   },
   lanes: laneResults,
   missingBehaviorClasses: [],
-  rule:
-    'Every compressed behavior cell is classified by a named rule, mapped to a passing production-facing execution family, and expanded only through a proved action, observation, or independent-permission equivalence.',
+  rule: localOnly
+    ? 'This local-only artifact proves the non-browser state-space lanes. It does not qualify a release or replace the deferred authenticated browser/customer-acceptance lanes.'
+    : 'Every compressed behavior cell is classified by a named rule, mapped to a passing production-facing execution family, and expanded only through a proved action, observation, or independent-permission equivalence.',
   sanitization: {
     containsCredentials: false,
     containsTokens: false,
