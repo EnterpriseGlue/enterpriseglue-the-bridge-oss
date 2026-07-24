@@ -19,6 +19,10 @@ const documentationReviewRunner = readFileSync(new URL('./run-engine-tenancy-doc
 const documentationReviewRecorder = readFileSync(new URL('./record-engine-tenancy-documentation-review.mjs', import.meta.url), 'utf8');
 const documentationReviewContract = readFileSync(new URL('./lib/engine-tenancy-documentation-review.mjs', import.meta.url), 'utf8');
 const databaseMatrixRunner = readFileSync(new URL('./run-engine-tenancy-database-matrix.mjs', import.meta.url), 'utf8');
+const randomizedAuthorizationModel = readFileSync(
+  new URL('../backend/test/integration/authorization-model-randomized.test.ts', import.meta.url),
+  'utf8',
+);
 const databaseMatrixContract = JSON.parse(readFileSync(
   new URL('../test/database/engine-tenancy-database-matrix-contract.json', import.meta.url),
   'utf8',
@@ -216,6 +220,8 @@ test('retains complete constraint-derived authorization state-space evidence', (
   assert.match(authorizationMatrixRunner, /request-authorization-order-independence/);
   assert.match(authorizationMatrixRunner, /--sequence\.shuffle\.tests/);
   assert.match(authorizationMatrixRunner, /--sequence\.seed=1729/);
+  assert.match(randomizedAuthorizationModel, /databaseModelTimeoutMs = 15_000/);
+  assert.match(randomizedAuthorizationModel, /}, databaseModelTimeoutMs\);/);
   assert.match(authorizationMatrixRunner, /Authorization state-space evidence must be run from a clean worktree/);
   assert.match(authorizationMatrixRunner, /scripts\/local-safe-test\.env/);
   assert.match(authorizationMatrixRunner, /delete process\.env\[key\]/);

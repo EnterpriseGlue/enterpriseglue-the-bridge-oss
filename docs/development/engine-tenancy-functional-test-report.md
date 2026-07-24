@@ -310,6 +310,13 @@ other dependencies. Provisioning, mapping, transition, compatibility, and
 source-coverage workflows execute all 67 route cases in their own one-worker
 process with deterministic shuffled order (`seed 1729`).
 
+The final clean-commit rerun also showed that the real PostgreSQL randomized
+authorization model could complete just beyond Vitest's generic five-second
+unit-test timeout on a loaded host. That exact integration case now has a
+bounded 15-second timeout; the scenario count, assertions, database work, and
+cleanup are unchanged. Repeated local executions retain all 24 generated
+states rather than reducing the functional denominator to avoid timing load.
+
 ## Reproduce and Retain Evidence
 
 With the local Docker deployment healthy:

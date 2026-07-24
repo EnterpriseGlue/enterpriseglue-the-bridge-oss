@@ -28,6 +28,7 @@ const tenantId = `tenant-${prefix}`;
 const roleKeyPrefix = `custom.model${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
 const modelGroupKey = `${prefix}-group`;
 const scenarios = 24;
+const databaseModelTimeoutMs = 15_000;
 
 type Scope = 'platform' | 'project' | 'engine' | 'engine_set' | 'engine_runtime_resource' | 'engine_runtime_resource_set';
 type Principal = 'direct' | 'group';
@@ -261,5 +262,5 @@ describe('randomized authorization model (database)', () => {
         await dataSource.getRepository(RbacRoleAssignment).delete({ id: In(assignments.map((assignment) => assignment.id)) });
       }
     }
-  });
+  }, databaseModelTimeoutMs);
 });
