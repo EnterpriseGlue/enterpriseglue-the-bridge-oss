@@ -1,6 +1,6 @@
 # JSON-Driven Authorization and Engine Registration Plan
 
-Last updated: 2026-07-12
+Last updated: 2026-07-24
 
 ## Purpose
 
@@ -17,6 +17,11 @@ This document defines the target design and implementation plan for customer-man
 The dedicated-versus-shared tenant topology, tenant mapping, and external engine
 provisioning follow-up is specified in
 [Centralized and Decentralized Engine Tenancy Implementation Plan](12-engine-tenancy-and-external-provisioning-plan.md).
+
+The approved migration path for a customer with existing Camunda 7 native
+grants is a read-only inventory and approved import into EnterpriseGlue
+configuration, not enabling native authority. It is specified in
+[Camunda 7 Native Grant Migration Plan](13-camunda-7-native-grant-migration-plan.md).
 
 The design keeps the runtime authorization model simple:
 

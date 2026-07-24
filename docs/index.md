@@ -36,6 +36,7 @@ Audience: Developers and architects.
 - [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
 - [JSON-Driven Authorization and Engine Registration](architecture/11-json-driven-authz-and-engine-registration.md)
 - [Centralized and Decentralized Engine Tenancy Implementation Plan](architecture/12-engine-tenancy-and-external-provisioning-plan.md)
+- [Camunda 7 Native Grant Migration Plan](architecture/13-camunda-7-native-grant-migration-plan.md)
 - [ADR 0001: Limit Default Tenant Fallback to Provisioning](architecture/decisions/0001-default-tenant-provisioning-fallback.md)
 - [ADR 0002: Fail Closed for Shared-Engine Tenant Resolution](architecture/decisions/0002-shared-engine-fail-closed-resolution.md)
 
