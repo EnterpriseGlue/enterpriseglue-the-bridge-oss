@@ -40,6 +40,16 @@ const engineTenancyTransitionServiceMock = vi.hoisted(() => ({
   apply: vi.fn(),
   classificationReport: vi.fn(),
 }));
+const nativeGrantMigrationMock = vi.hoisted(() => ({
+  fromCustomerExport: vi.fn(),
+  listLive: vi.fn(),
+  classify: vi.fn(),
+  createPreview: vi.fn(),
+  getSummary: vi.fn(),
+  getDetailedSnapshot: vi.fn(),
+  setDraft: vi.fn(),
+  generate: vi.fn(),
+}));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -59,6 +69,20 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingServi
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenancyTransitionService.js', () => ({
   engineTenancyTransitionService: engineTenancyTransitionServiceMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js', () => ({
+  camundaNativeGrantInventoryService: { fromCustomerExport: nativeGrantMigrationMock.fromCustomerExport, listLive: nativeGrantMigrationMock.listLive },
+  classifyCamundaNativeGrant: nativeGrantMigrationMock.classify,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js', () => ({
+  camundaNativeGrantImportRunService: {
+    createPreview: nativeGrantMigrationMock.createPreview, getSummary: nativeGrantMigrationMock.getSummary,
+    getDetailedSnapshot: nativeGrantMigrationMock.getDetailedSnapshot, setDraft: nativeGrantMigrationMock.setDraft,
+  },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js', () => ({
+  camundaNativeGrantDraftService: { generate: nativeGrantMigrationMock.generate },
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -574,6 +598,28 @@ describe('mission-control engines routes', () => {
     expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('e1', 'tenant-default');
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
       resourceType: 'engine', resourceId: 'e1',
+    }));
+  });
+
+  it('creates a sanitized, read-only Camunda native-grant preview and never returns native identities', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([{ resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '', isActive: true, tenantResolutionStatus: 'resolved' }]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : entity === RuntimeResource ? runtimeRepo : {} });
+    nativeGrantMigrationMock.fromCustomerExport.mockReturnValue({ inventoryHash: 'a'.repeat(64), truncated: false, authorizations: [{ id: 'native-1' }] });
+    nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] });
+    nativeGrantMigrationMock.createPreview.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', sourceKind: 'customer_export', inputHash: 'a'.repeat(64), normalizedCounts: { total: 1 }, classifications: [], status: 'previewed' });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
+      sourceKind: 'customer_export', customerExport: { apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1', authorizations: [{ id: 'native-1', type: 1, permissions: ['READ'], groupId: 'sensitive-native-group', resourceType: 6, resourceId: 'payments' }] },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ run: expect.objectContaining({ id: 'run-1', classifications: [] }) });
+    expect(JSON.stringify(response.body)).not.toContain('sensitive-native-group');
+    expect(nativeGrantMigrationMock.listLive).not.toHaveBeenCalled();
+    expect(nativeGrantMigrationMock.createPreview).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', sourceKind: 'customer_export', detailedSnapshot: expect.objectContaining({ authorizations: [{ id: 'native-1' }] }),
     }));
   });
 
