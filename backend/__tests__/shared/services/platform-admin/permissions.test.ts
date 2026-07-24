@@ -1187,6 +1187,10 @@ describe('permissionService', () => {
     const catalog = await permissionService.getPermissionCatalog();
 
     expect(catalog.some((permission) => permission.key === PlatformPermissions.AUTHZ_CHECK)).toBe(true);
+    expect(catalog.some((permission) => permission.key === PlatformPermissions.CAMUNDA_NATIVE_GRANTS_PREVIEW)).toBe(true);
+    expect(catalog.some((permission) => permission.key === PlatformPermissions.CAMUNDA_NATIVE_GRANTS_SENSITIVE_VIEW)).toBe(true);
+    expect(catalog.some((permission) => permission.key === PlatformPermissions.CAMUNDA_NATIVE_GRANTS_DRAFT)).toBe(true);
+    expect(catalog.some((permission) => permission.key === PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW)).toBe(true);
     expect(catalog.some((permission) => permission.key === PlatformPermissions.USERS_CREATE)).toBe(true);
     expect(catalog.some((permission) => permission.key === PlatformPermissions.USERS_UNLOCK)).toBe(true);
     expect(catalog.some((permission) => permission.key === ProjectPermissions.FILES_VIEW)).toBe(true);
@@ -1452,6 +1456,9 @@ describe('permissionService', () => {
         PlatformPermissions.CONFIG_BUNDLES_PREVIEW,
         PlatformPermissions.CONFIG_BUNDLES_APPLY,
         PlatformPermissions.CONFIG_BUNDLES_EXPORT,
+        PlatformPermissions.CAMUNDA_NATIVE_GRANTS_PREVIEW,
+        PlatformPermissions.CAMUNDA_NATIVE_GRANTS_DRAFT,
+        PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW,
         PlatformPermissions.AUDIT_VIEW,
       ],
     });
@@ -1462,6 +1469,7 @@ describe('permissionService', () => {
         PlatformPermissions.AUTHZ_ROLES_VIEW,
         PlatformPermissions.AUTHZ_CHECK,
         PlatformPermissions.AUDIT_VIEW,
+        PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW,
       ],
     });
     expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_USER_ADMIN)?.permissions).toEqual([
