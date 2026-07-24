@@ -293,6 +293,14 @@ Markdown review record. The generator preserves only valid same-commit
 approvals, and the release gate rejects missing, stale, incomplete, or
 unsubstantiated approvals.
 
+The same audit rerun exposed an order-sensitive authorization-test harness:
+deployment and data-source one-shot mocks could survive into a neighboring
+test, producing contradictory allow/deny results without a production-code
+change. The affected suites now reset every shared authorization dependency,
+and the retained state-space runner executes the 146 request-authorization
+tests in deterministic shuffled order. This makes mock isolation part of the
+release evidence instead of relying on source-file order.
+
 ## Reproduce and Retain Evidence
 
 With the local Docker deployment healthy:

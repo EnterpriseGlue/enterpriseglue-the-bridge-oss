@@ -76,6 +76,14 @@ const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet }));
 
 describe('getRuntimeResourceActionDecision', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getDataSource as unknown as Mock).mockReset();
+    (permissionService.hasPermission as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue(false);
+  });
+
   it('allows a broad engine grant without resolving runtime inventory', async () => {
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
 
@@ -144,6 +152,17 @@ describe('getRuntimeResourceActionDecision', () => {
 });
 
 describe('requireRuntimeCollectionAction', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getDataSource as unknown as Mock).mockReset();
+    (permissionService.hasPermission as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue([]);
+  });
+
   it('rejects an unauthenticated runtime collection request before resolving any resource', async () => {
     const next = vi.fn();
 
@@ -527,6 +546,11 @@ describe('requireAction project resource resolvers', () => {
     });
     app.use(errorHandler);
     vi.clearAllMocks();
+    (deploymentEligibilityService.evaluate as unknown as Mock).mockReset();
+    (engineAccessService.grantAccess as unknown as Mock)
+      .mockReset()
+      .mockResolvedValue(undefined);
+    updateBpmnEngineRequestContext.mockReset();
     (permissionService.getVisibleRuntimeResources as unknown as Mock).mockReset().mockResolvedValue([]);
     (policyService.evaluateGate as unknown as Mock)
       .mockReset()
@@ -565,7 +589,7 @@ describe('requireAction project resource resolvers', () => {
     );
     (permissionService.getKnownEngineIdsForUser as unknown as Mock).mockReset().mockResolvedValue([engineId]);
     (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockReset().mockResolvedValue([projectId]);
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    (getDataSource as unknown as Mock).mockReset().mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Project) return { findOne: projectFindOne, find: projectFind };
         if (entity === Engine) return { find: engineFind, findOne: engineFindOne, findOneBy: engineFindOne };

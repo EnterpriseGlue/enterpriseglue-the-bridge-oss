@@ -403,6 +403,10 @@ For the complete guarded local-Docker journey, use
 
 The authorization lane:
 
+- runs the request-authorization suite with deterministic shuffled test order
+  (`seed 1729`) so one-shot data-source, permission, deployment-eligibility,
+  and access-grant mocks cannot make the evidence depend on source order;
+
 1. validates the functional-coverage manifest;
 2. enforces 100% source coverage on
    `packages/shared/src/authz/tenant-role-policy.ts`;
