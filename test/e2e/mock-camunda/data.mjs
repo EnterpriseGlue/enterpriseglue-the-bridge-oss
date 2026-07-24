@@ -53,17 +53,25 @@ const processDefinitions = [
 
 /**
  * Synthetic Camunda 7 Authorization REST fixture catalogue. It deliberately
- * covers every importer disposition without containing customer identities:
- * exact group candidates, broad grants, direct users, revokes, and unsupported
- * task grants. The mock exposes this data through GET /authorization only.
+ * covers every supported conversion and importer disposition without containing
+ * customer identities: exact process/decision group candidates, broad grants,
+ * direct users, global and revoke rows, unsupported resources, unsupported
+ * permissions, missing principals/resources, and absent runtime resources. The
+ * mock exposes this data through GET /authorization only.
  */
 const nativeAuthorizations = [
   { id: 'synthetic-grant-process-read', type: 1, permissions: ['READ'], groupId: 'synthetic-operations', resourceType: 6, resourceId: 'invoice-process' },
   { id: 'synthetic-grant-decision-read', type: 1, permissions: ['READ'], groupId: 'synthetic-risk', resourceType: 10, resourceId: 'invoice-risk' },
   { id: 'synthetic-grant-process-broad', type: 1, permissions: ['READ'], groupId: 'synthetic-auditors', resourceType: 6, resourceId: '*' },
+  { id: 'synthetic-grant-decision-broad', type: 1, permissions: ['READ'], groupId: 'synthetic-decision-auditors', resourceType: 10, resourceId: '*' },
   { id: 'synthetic-user-grant', type: 1, permissions: ['READ'], userId: 'synthetic-user-001', resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-global-grant', type: 0, permissions: ['READ'], resourceType: 6, resourceId: 'invoice-process' },
   { id: 'synthetic-group-revoke', type: 2, permissions: ['READ'], groupId: 'synthetic-denied', resourceType: 6, resourceId: 'invoice-process' },
   { id: 'synthetic-task-grant', type: 1, permissions: ['READ'], groupId: 'synthetic-task-team', resourceType: 7, resourceId: '*' },
+  { id: 'synthetic-process-create', type: 1, permissions: ['CREATE'], groupId: 'synthetic-creators', resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-missing-group', type: 1, permissions: ['READ'], resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-missing-resource-id', type: 1, permissions: ['READ'], groupId: 'synthetic-unscoped', resourceType: 6 },
+  { id: 'synthetic-missing-runtime-resource', type: 1, permissions: ['READ'], groupId: 'synthetic-missing-resource', resourceType: 6, resourceId: 'not-in-runtime-inventory' },
 ]
 
 function filterNativeAuthorizations(searchParams) {

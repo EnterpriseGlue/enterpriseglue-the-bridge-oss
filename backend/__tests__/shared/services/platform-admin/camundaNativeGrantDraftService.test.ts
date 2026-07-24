@@ -120,6 +120,19 @@ describe('CamundaNativeGrantDraftService', () => {
     expect((result.files as Record<string, any>)['./runtime-resource-sets.json'].runtimeResourceSets[0]).not.toHaveProperty('runtimeTenantId');
   });
 
+  it('unions compatible native rows into one least-privileged resource assignment', () => {
+    const service = new CamundaNativeGrantDraftService();
+    const result = service.generate({
+      base,
+      engineKey: 'engine.camunda7',
+      classifications: [proposed, { ...proposed, sourceAuthorizationId: 'native-duplicate' }],
+      groupMappings: [{ nativeGroupId: 'C7-native-sensitive-ops', target: { mode: 'new', key: 'group.imported-operations', name: 'Imported operations' } }],
+    });
+
+    expect(result.generated).toEqual({ groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 });
+    expect((result.files as Record<string, any>)['./assignments.json'].assignments).toHaveLength(1);
+  });
+
   it('rejects malformed source configuration and non-convertible generated content instead of producing a partial draft', () => {
     const service = new CamundaNativeGrantDraftService();
     const mapping = [{ nativeGroupId: 'C7-native-sensitive-ops', target: { mode: 'new' as const, key: 'group.imported-operations', name: 'Imported operations', description: 'Reviewed mapping' } }];
@@ -140,7 +153,7 @@ describe('CamundaNativeGrantDraftService', () => {
     const roleKey = `custom.camunda-native-${opaque('engine.camunda7')}-runtime-read`;
     const resourcePart = opaque('process_definition\u0000payments-order\u0000runtime-payments');
     const setKey = `runtime.camunda-native-${opaque('engine.camunda7')}-process_definition-${resourcePart}`;
-    const assignmentKey = `assignment.camunda-native-${opaque('native-a')}-${resourcePart}`;
+    const assignmentKey = `assignment.camunda-native-${opaque(`group.imported-operations\u0000${roleKey}\u0000${setKey}`)}-${resourcePart}`;
     const mapping = [{ nativeGroupId: 'C7-native-sensitive-ops', target: { mode: 'new' as const, key: 'group.imported-operations', name: 'Imported operations' } }];
     expect(() => service.generate({
       base: { ...base, files: { ...base.files, './roles.json': { roles: [{ key: roleKey, name: 'Existing', scope: 'engine', permissions: ['engine:instance:view'] }] } } },

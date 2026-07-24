@@ -224,8 +224,8 @@ tenant mapping, permission mapping, or ownership decision is a stop condition.
 | Group grant on an exact process-definition key | Existing/new EnterpriseGlue group, role, process Runtime Resource Set | Proposed for review |
 | Group grant on an exact decision-definition key | Existing/new EnterpriseGlue group, role, decision Runtime Resource Set | Proposed for review |
 | Grant whose key has one resolved runtime tenant | Add that runtime tenant constraint to the candidate set | Proposed for review |
-| Group grant on `*`/all resources | Broad engine-scoped role only | Requires a distinct broad-access acknowledgement |
-| Multiple compatible native grants for one group/key | One candidate group/set with the union of selected mapped actions | Proposed for review |
+| Group grant on `*`/all resources | No automatic v1 equivalent | Visible as `approval_required`; it is not included in the initial exact-resource draft |
+| Multiple compatible native grants for one group/key | One candidate group/set/assignment with the union of selected mapped actions | Proposed for review |
 | User-specific grant | Explicit EnterpriseGlue identity-link mapping required | Manual mapping required |
 | Global grant, revoke, or precedence-dependent result | No automatic equivalent | Inventory only; manual policy decision required |
 | Task, process-instance, deployment, batch, filter, application, or administration grant | No automatic v1 equivalent | Inventory only; manual policy decision required |
@@ -464,6 +464,26 @@ Acceptance is not a blanket claim that every possible Camunda authorization is
 converted. It is complete when **100% of the supported translation matrix is
 covered**, every unsupported source record is visible and requires an explicit
 outcome, and no import can create broader access than its approved preview.
+
+### Current executable baseline
+
+The checked-in `test/e2e/mock-camunda` fixture is the versioned synthetic
+baseline for the currently supported `camunda7-v1-read-only` catalogue. Its
+HTTP integration test proves paginated `GET /authorization` discovery and
+covers both exact supported mappings, both broad acknowledgement cases, and
+the visible manual/blocked dispositions for direct-user, global, revoke,
+unsupported-resource, unsupported-permission, missing-principal,
+missing-resource-id, and missing-runtime-resource rows. The backend
+`CamundaNativeGrantDraftService` test additionally proves duplicate compatible
+records collapse to one resource assignment. The local-safe PostgreSQL
+integration test additionally applies that generated draft to an existing
+engine, drains Runtime Resource Set materialization, verifies a
+provider-synchronized member allow plus sibling/non-member denies through
+Effective Access, and performs an authoritative import-owned rollback.
+Shared-engine unresolved and ambiguous tenant cases remain covered by the
+classifier/tenancy contract suite. The authenticated-browser and real Camunda
+container scenarios above remain release qualification work; they must not be
+represented as already executed by this synthetic baseline.
 
 ## Rollback and Stop Conditions
 

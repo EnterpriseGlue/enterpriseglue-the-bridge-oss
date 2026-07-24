@@ -69,6 +69,7 @@ Run the focused migration suite:
 pnpm --filter shared run build
 pnpm --dir backend exec vitest run \
   __tests__/shared/services/platform-admin/camundaNativeGrantInventoryService.test.ts \
+  __tests__/shared/services/platform-admin/camundaNativeGrantFixtureIntegration.test.ts \
   __tests__/shared/services/platform-admin/camundaNativeGrantDraftService.test.ts \
   __tests__/shared/services/platform-admin/camundaNativeGrantImportRunService.test.ts \
   __tests__/shared/services/platform-admin/configBundlePreviewService.test.ts \
@@ -77,6 +78,7 @@ pnpm --dir backend exec vitest run \
   __tests__/modules/mission-control/engines/routes.test.ts \
   --config vitest.config.ts --maxWorkers=1 --no-file-parallelism
 node --test test/e2e/mock-camunda/native-grants.test.mjs
+bash ./scripts/run-local-safe-native-grant-migration.sh
 pnpm --dir frontend exec vitest run \
   __tests__/src/features/mission-control/engines/components/CamundaNativeGrantMigrationPanel.test.tsx
 pnpm --filter frontend-host run build
@@ -85,7 +87,18 @@ pnpm --filter frontend-host run build
 Then run `pnpm run test:action-registry` and the applicable five-adapter
 database qualification before a release. The synthetic fixture is in
 `test/e2e/mock-camunda`; it includes exact supported grants plus broad, user,
-revoke, and unsupported cases. Do not replace it with customer grants.
+global, revoke, unsupported-permission/resource, missing-principal,
+missing-resource-id, and missing-runtime-resource cases. Its HTTP-backed
+integration test asserts the inventory uses `GET /authorization` only. Do not
+replace it with customer grants.
+
+The local Docker integration test creates a synthetic existing engine and
+runtime resources, applies the generated configuration, drains the normal
+Runtime Resource Set materialization task, adds an SSO-source membership to
+the configuration-owned group, proves target allow/sibling deny Effective
+Access, then performs a hash-bound authoritative rollback. It cleans all
+synthetic rows after completion. It intentionally does not use the manual
+membership API, because source-managed groups reject manual edits.
 
 ## Effective Access verification
 

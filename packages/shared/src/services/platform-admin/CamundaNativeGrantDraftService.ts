@@ -142,6 +142,8 @@ export class CamundaNativeGrantDraftService {
     const existingSetKeys = keySet(runtimeResourceSets);
     const generatedSetKeys = new Set<string>();
     const assignmentKeys = keySet(assignments);
+    const generatedAssignmentKeys = new Set<string>();
+    const generatedAssignmentIdentities = new Set<string>();
     for (const classification of convertible) {
       if (!classification.principal.groupId || !classification.resourceKind || !classification.resourceId || classification.resourceId === '*') {
         throw new Error(`Proposed authorization ${classification.sourceAuthorizationId} is missing an exact group resource target`);
@@ -150,8 +152,9 @@ export class CamundaNativeGrantDraftService {
       const targetGroupKey = mapping.target.key;
       const resourcePart = opaqueKeyPart(`${classification.resourceKind}\u0000${classification.resourceId}\u0000${classification.runtimeTenantId || ''}`);
       const runtimeResourceSetKey = `runtime.camunda-native-${opaqueKeyPart(engineKey)}-${classification.resourceKind}-${resourcePart}`;
-      const assignmentKey = `assignment.camunda-native-${opaqueKeyPart(classification.sourceAuthorizationId)}-${resourcePart}`;
-      if (existingSetKeys.has(runtimeResourceSetKey) || assignmentKeys.has(assignmentKey)) throw new Error('Generated migration keys collide with existing configuration');
+      const assignmentIdentity = `${targetGroupKey}\u0000${roleKey}\u0000${runtimeResourceSetKey}`;
+      const assignmentKey = `assignment.camunda-native-${opaqueKeyPart(assignmentIdentity)}-${resourcePart}`;
+      if (existingSetKeys.has(runtimeResourceSetKey) || (!generatedAssignmentIdentities.has(assignmentIdentity) && assignmentKeys.has(assignmentKey))) throw new Error('Generated migration keys collide with existing configuration');
       if (!generatedSetKeys.has(runtimeResourceSetKey)) {
         runtimeResourceSets.push({
           key: runtimeResourceSetKey,
@@ -165,14 +168,18 @@ export class CamundaNativeGrantDraftService {
         });
         generatedSetKeys.add(runtimeResourceSetKey);
       }
-      assignments.push({
-        key: assignmentKey,
-        principal: { type: 'group', key: targetGroupKey },
-        roleKey,
-        scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey },
-        ownershipMode: 'config_locked',
-      });
-      assignmentKeys.add(assignmentKey);
+      if (!generatedAssignmentIdentities.has(assignmentIdentity)) {
+        assignments.push({
+          key: assignmentKey,
+          principal: { type: 'group', key: targetGroupKey },
+          roleKey,
+          scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey },
+          ownershipMode: 'config_locked',
+        });
+        assignmentKeys.add(assignmentKey);
+        generatedAssignmentKeys.add(assignmentKey);
+        generatedAssignmentIdentities.add(assignmentIdentity);
+      }
     }
 
     const compiled = configBundlePreviewService.compile({ bundle, files }, {
@@ -193,7 +200,7 @@ export class CamundaNativeGrantDraftService {
         groupCount: [...groupMappings.values()].filter((mapping) => mapping.target.mode === 'new').length,
         roleCount: convertible.length > 0 ? 1 : 0,
         runtimeResourceSetCount: generatedSetKeys.size,
-        assignmentCount: convertible.length,
+        assignmentCount: generatedAssignmentKeys.size,
       },
       manualWorkAuthorizationIds,
     };
