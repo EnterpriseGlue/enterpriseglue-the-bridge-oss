@@ -64,6 +64,59 @@ describe('runtimeResourceInventoryService', () => {
     }));
   });
 
+  it('converges when concurrent reconciliation wins the runtime identity insert', async () => {
+    const { resourceRepo } = setup();
+    resourceRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'concurrent-resource',
+        engineResourceId: 'winner-definition',
+        deploymentId: 'winner-deployment',
+        projectId: 'winner-project',
+        fileId: 'winner-file',
+        version: 1,
+        labelsJson: '{"winner":"label"}',
+        lineageJson: '{"receiptId":"winner-receipt"}',
+        source: 'deployment_receipt',
+        sourceRef: 'winner-receipt',
+      });
+    resourceRepo.insert.mockRejectedValueOnce(new Error('unique identity conflict'));
+
+    const result = await runtimeResourceInventoryService.observe('engine-1', 'tenant-a', [{
+      resourceKind: 'process_definition',
+      resourceKey: 'payments-order',
+      engineResourceId: 'observed-definition',
+      version: 2,
+    }]);
+
+    expect(result).toEqual({ created: 0, updated: 1 });
+    expect(resourceRepo.update).toHaveBeenCalledWith(
+      { id: 'concurrent-resource' },
+      expect.objectContaining({
+        engineResourceId: 'observed-definition',
+        deploymentId: 'winner-deployment',
+        projectId: 'winner-project',
+        fileId: 'winner-file',
+        version: 2,
+        labelsJson: '{"winner":"label"}',
+        lineageJson: '{"receiptId":"winner-receipt"}',
+        source: 'deployment_receipt',
+        sourceRef: 'winner-receipt',
+      }),
+    );
+  });
+
+  it('does not hide an insert failure when no concurrent runtime row exists', async () => {
+    const { resourceRepo } = setup();
+    resourceRepo.findOne.mockResolvedValue(null);
+    resourceRepo.insert.mockRejectedValueOnce(new Error('database unavailable'));
+
+    await expect(runtimeResourceInventoryService.observe('engine-1', 'tenant-a', [{
+      resourceKind: 'process_definition',
+      resourceKey: 'payments-order',
+    }])).rejects.toThrow('database unavailable');
+  });
+
   it('materializes a prefix selector and removes stale members without granting access itself', async () => {
     const { resourceRepo, setRepo, materializationRepo } = setup();
     setRepo.findOne.mockResolvedValue({ id: 'set-1', tenantId: 'tenant-a', engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: JSON.stringify({ mode: 'prefix', prefix: 'payments-' }), isArchived: false });

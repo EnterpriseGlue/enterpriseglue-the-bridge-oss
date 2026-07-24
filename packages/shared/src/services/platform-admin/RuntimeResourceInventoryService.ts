@@ -94,11 +94,13 @@ class RuntimeResourceInventoryService {
       const resourceKey = observation.resourceKey.trim();
       if (!resourceKey) throw new Error('Runtime resource key is required');
       const runtimeTenantId = observation.runtimeTenantId?.trim() || '';
-      const existing = await repo.findOne({ where: { engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId } });
-      // Discovery confirms the engine's current state but must never erase
-      // richer pipeline/proxy project and file lineage already recorded here.
-      const source = observation.source || 'engine_discovery';
-      const preservesExistingLineage = source === 'engine_discovery' && Boolean(existing);
+      const identity = {
+        engineId,
+        resourceKind: observation.resourceKind,
+        resourceKey,
+        runtimeTenantId,
+      };
+      const existing = await repo.findOne({ where: identity });
       const mappingKey = engine.tenantMappingStrategy === 'deployment_target'
         ? observation.projectId || ''
         : runtimeTenantId;
@@ -115,28 +117,50 @@ class RuntimeResourceInventoryService {
       const tenantResolutionCode = engine.tenancyMode === 'shared'
         ? matchingMappings.length > 1 ? 'multiple_active_mappings' : matchingMappings.length === 1 ? 'shared_engine_mapping' : 'tenant_mapping_not_found'
         : resolvedTenantId ? 'dedicated_engine_tenant' : 'tenant_context_missing';
-      const values = {
-        tenantId: resolvedTenantId,
-        tenantResolutionStatus,
-        tenantMappingId: matchingMappings.length === 1 ? matchingMappings[0].id : null,
-        tenantMappingVersion: engine.tenancyMode === 'shared' ? Number(engine.tenantMappingVersion || 0) : 0,
-        tenantResolutionDetailsJson: stableJson({
-          code: tenantResolutionCode,
-        }),
-        engineId, resourceKind: observation.resourceKind, resourceKey, runtimeTenantId,
-        engineResourceId: observation.engineResourceId || existing?.engineResourceId || null,
-        deploymentId: observation.deploymentId || existing?.deploymentId || null,
-        projectId: observation.projectId || (preservesExistingLineage ? existing?.projectId : null) || null,
-        fileId: observation.fileId || (preservesExistingLineage ? existing?.fileId : null) || null,
-        version: observation.version ?? existing?.version ?? null,
-        labelsJson: stableJson({ ...(preservesExistingLineage ? parseObject(existing?.labelsJson) : {}), ...(observation.labels || {}) }),
-        lineageJson: stableJson(preservesExistingLineage ? parseObject(existing?.lineageJson) : (observation.lineage || {})),
-        source: preservesExistingLineage ? existing!.source : source,
-        sourceRef: preservesExistingLineage ? existing!.sourceRef : (observation.sourceRef || null),
-        observedAt: now, isActive: true, updatedAt: now,
+      const valuesFor = (current: RuntimeResource | null) => {
+        // Discovery confirms the engine's current state but must never erase
+        // richer pipeline/proxy project and file lineage already recorded here.
+        const source = observation.source || 'engine_discovery';
+        const preservesExistingLineage = source === 'engine_discovery' && Boolean(current);
+        return {
+          tenantId: resolvedTenantId,
+          tenantResolutionStatus,
+          tenantMappingId: matchingMappings.length === 1 ? matchingMappings[0].id : null,
+          tenantMappingVersion: engine.tenancyMode === 'shared' ? Number(engine.tenantMappingVersion || 0) : 0,
+          tenantResolutionDetailsJson: stableJson({
+            code: tenantResolutionCode,
+          }),
+          ...identity,
+          engineResourceId: observation.engineResourceId || current?.engineResourceId || null,
+          deploymentId: observation.deploymentId || current?.deploymentId || null,
+          projectId: observation.projectId || (preservesExistingLineage ? current?.projectId : null) || null,
+          fileId: observation.fileId || (preservesExistingLineage ? current?.fileId : null) || null,
+          version: observation.version ?? current?.version ?? null,
+          labelsJson: stableJson({ ...(preservesExistingLineage ? parseObject(current?.labelsJson) : {}), ...(observation.labels || {}) }),
+          lineageJson: stableJson(preservesExistingLineage ? parseObject(current?.lineageJson) : (observation.lineage || {})),
+          source: preservesExistingLineage ? current!.source : source,
+          sourceRef: preservesExistingLineage ? current!.sourceRef : (observation.sourceRef || null),
+          observedAt: now, isActive: true, updatedAt: now,
+        };
       };
-      if (existing) { await repo.update({ id: existing.id }, values); updated += 1; }
-      else { await repo.insert({ id: generateId(), ...values, createdAt: now }); created += 1; }
+      if (existing) {
+        await repo.update({ id: existing.id }, valuesFor(existing));
+        updated += 1;
+      } else {
+        try {
+          await repo.insert({ id: generateId(), ...valuesFor(null), createdAt: now });
+          created += 1;
+        } catch (error) {
+          // An automatic reconciliation and an operator-triggered
+          // reconciliation may observe the same new resource concurrently.
+          // The unique identity chooses the winner; the loser refreshes that
+          // committed row instead of surfacing a transient 500.
+          const concurrent = await repo.findOne({ where: identity });
+          if (!concurrent) throw error;
+          await repo.update({ id: concurrent.id }, valuesFor(concurrent));
+          updated += 1;
+        }
+      }
     }
     if (engine.tenancyMode === 'shared') {
       const activeResources = await repo.find({ where: { engineId, isActive: true } });

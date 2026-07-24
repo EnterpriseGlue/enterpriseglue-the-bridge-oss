@@ -276,6 +276,14 @@ contract-only checks could not:
 Adapter and migration tests now retain these constraints, and the live matrix
 proves the resulting service behavior rather than only inspecting source.
 
+The clean-commit browser rerun also exposed a real reconciliation race:
+automatic metadata discovery and an operator-triggered reconciliation could
+both observe a new runtime identity before either insert completed. The unique
+constraint correctly selected one row, but the losing request returned a
+transient `500`. Inventory observation now refetches and updates the committed
+winner while preserving richer receipt lineage. Focused tests cover both this
+convergence path and propagation of unrelated database failures.
+
 ## Reproduce and Retain Evidence
 
 With the local Docker deployment healthy:
