@@ -284,6 +284,15 @@ transient `500`. Inventory observation now refetches and updates the committed
 winner while preserving richer receipt lineage. Focused tests cover both this
 convergence path and propagation of unrelated database failures.
 
+The completion audit also found that documentation approvals were not durable:
+regenerating the automated artifact reset every review to `pending`, while the
+release index accepted approval flags without proving reviewer identity,
+approval commit, time, or retained findings. A guarded approval recorder now
+requires clean same-commit automated evidence and an existing sanitized
+Markdown review record. The generator preserves only valid same-commit
+approvals, and the release gate rejects missing, stale, incomplete, or
+unsubstantiated approvals.
+
 ## Reproduce and Retain Evidence
 
 With the local Docker deployment healthy:

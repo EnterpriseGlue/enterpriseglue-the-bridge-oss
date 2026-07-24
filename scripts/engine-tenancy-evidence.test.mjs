@@ -16,6 +16,8 @@ const accessibilityRunner = readFileSync(new URL('./run-authz-accessibility-matr
 const accessibilityWriter = readFileSync(new URL('./write-authz-accessibility-evidence.mjs', import.meta.url), 'utf8');
 const compatibilityRunner = readFileSync(new URL('./run-engine-tenancy-compatibility-evidence.mjs', import.meta.url), 'utf8');
 const documentationReviewRunner = readFileSync(new URL('./run-engine-tenancy-documentation-review-evidence.mjs', import.meta.url), 'utf8');
+const documentationReviewRecorder = readFileSync(new URL('./record-engine-tenancy-documentation-review.mjs', import.meta.url), 'utf8');
+const documentationReviewContract = readFileSync(new URL('./lib/engine-tenancy-documentation-review.mjs', import.meta.url), 'utf8');
 const databaseMatrixRunner = readFileSync(new URL('./run-engine-tenancy-database-matrix.mjs', import.meta.url), 'utf8');
 const databaseMatrixContract = JSON.parse(readFileSync(
   new URL('../test/database/engine-tenancy-database-matrix-contract.json', import.meta.url),
@@ -111,12 +113,24 @@ test('builds a fail-closed same-commit release evidence index', () => {
     'requiredAccessibilityChecks',
     'passedWorkflowCount',
     'supportedChannelExecutions',
-    'unresolvedHighRiskFindings',
     'compatibilityStatePasses',
     'warningBehaviorTestsPassed',
   ]) {
     assert.match(releaseIndexWriter, new RegExp(completeReleaseContract));
   }
+  for (const reviewContract of [
+    'unresolvedHighRiskFindings',
+    'approvedCommit',
+    'reviewer',
+    'reviewedAt',
+    'evidenceLocation',
+    'containsCredentials',
+    'containsTokens',
+  ]) {
+    assert.match(documentationReviewContract, new RegExp(reviewContract));
+  }
+  assert.match(releaseIndexWriter, /documentationReviewEvidencePasses/);
+  assert.match(releaseIndexWriter, /documentationReviewEvidenceFileExists/);
   assert.match(releaseIndexWriter, /README\.md/);
   assert.match(releaseIndexWriter, /process\.exitCode = 1/);
 });
@@ -238,14 +252,21 @@ test('retains omission warnings until the documented removal window closes', () 
 
 test('automates documentation checks without self-approving independent reviews', () => {
   assert.match(packageJson.scripts['test:engine-tenancy:documentation-review-evidence'], /run-engine-tenancy-documentation-review-evidence\.mjs/);
+  assert.match(packageJson.scripts['record:engine-tenancy:documentation-review'], /record-engine-tenancy-documentation-review\.mjs/);
   assert.match(documentationReviewRunner, /test:engine-tenancy:documentation/);
   assert.match(documentationReviewRunner, /git', \['ls-files', 'docs\/\*\*\/\*\.md'/);
-  assert.match(documentationReviewRunner, /engineering: \{ status: 'pending'/);
-  assert.match(documentationReviewRunner, /security: \{ status: 'pending'/);
-  assert.match(documentationReviewRunner, /independentOperator: \{ status: 'pending'/);
-  assert.match(documentationReviewRunner, /status: 'incomplete'/);
+  assert.match(documentationReviewRunner, /preserveDocumentationReviews/);
+  assert.match(documentationReviewRunner, /finalizeDocumentationReviewEvidence/);
+  assert.doesNotMatch(documentationReviewRunner, /status: 'approved'/);
   assert.match(documentationReviewRunner, /Documentation-review evidence must be run from a clean worktree/);
   assert.match(documentationReviewRunner, /scripts\/local-safe-test\.env/);
+  assert.match(documentationReviewRecorder, /Documentation approval must be recorded from a clean worktree/);
+  assert.match(documentationReviewRecorder, /--reviewer/);
+  assert.match(documentationReviewRecorder, /--evidence/);
+  assert.match(documentationReviewRecorder, /approvedCommit: commit/);
+  assert.match(documentationReviewRecorder, /test\/results\/engine-tenancy-review/);
+  assert.match(documentationReviewContract, /pendingDocumentationReview/);
+  assert.match(documentationReviewContract, /documentationReviewApprovalPasses/);
   assert.doesNotMatch(documentationReviewRunner, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 

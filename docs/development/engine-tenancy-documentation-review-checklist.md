@@ -102,6 +102,40 @@ automation cannot approve its own documentation. Each reviewer must execute
 this checklist against the exact artifact commit before those statuses can be
 changed to `approved`.
 
+Each reviewer writes sanitized Markdown notes under
+`test/results/engine-tenancy-review/`. The notes must identify the commands and
+procedures executed, actual results, findings and resolutions, reviewer
+identity, review time, and exact commit. Do not include credentials, tokens,
+private endpoints, raw claims, or customer identifiers.
+
+Record each approval with the guarded recorder; do not edit the JSON artifact
+by hand:
+
+```bash
+pnpm run record:engine-tenancy:documentation-review -- \
+  --review engineering \
+  --reviewer "Engineering reviewer identity" \
+  --evidence test/results/engine-tenancy-review/engineering.md
+
+pnpm run record:engine-tenancy:documentation-review -- \
+  --review security \
+  --reviewer "Security reviewer identity" \
+  --evidence test/results/engine-tenancy-review/security.md
+
+pnpm run record:engine-tenancy:documentation-review -- \
+  --review independent-operator \
+  --reviewer "Independent operator identity" \
+  --evidence test/results/engine-tenancy-review/independent-operator.md
+```
+
+The recorder refuses a dirty worktree, stale or failed automated evidence,
+unknown review roles, missing reviewer identity, invalid time, unsafe or
+missing evidence paths, and any artifact with unresolved high-risk findings.
+It records the exact current commit, reviewer, ISO timestamp, and evidence
+location. Regenerating automated documentation evidence on the same unchanged
+commit preserves valid approvals and drops stale, incomplete, or missing
+approval evidence.
+
 After approval, retain
 `test/results/engine-tenancy-release/documentation-review.json` with:
 
@@ -118,7 +152,10 @@ After approval, retain
   endpoints, raw claims, or customer identifiers are present.
 
 The release evidence index rejects a missing, dirty, different-commit, or
-partially approved review artifact.
+partially approved review artifact. It also rejects an approval whose
+`approvedCommit` differs, whose reviewer/date/evidence fields are incomplete,
+whose evidence is missing, or whose evidence location is outside
+`test/results/engine-tenancy-review/`.
 
 ## Related Documentation
 

@@ -1,8 +1,19 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
+import {
+  finalizeDocumentationReviewEvidence,
+  isSafeDocumentationReviewEvidencePath,
+  preserveDocumentationReviews,
+} from './lib/engine-tenancy-documentation-review.mjs';
 
 const root = process.cwd();
 const outputDirectory = path.join(root, 'test/results/engine-tenancy-release');
@@ -116,20 +127,27 @@ if (startCommit !== endCommit || (!allowDirty && endChanges)) {
 }
 
 const automatedChecksPassed = broken.length === 0;
-const evidence = {
+let existingEvidence = null;
+if (existsSync(outputPath)) {
+  try {
+    existingEvidence = JSON.parse(readFileSync(outputPath, 'utf8'));
+  } catch {
+    existingEvidence = null;
+  }
+}
+const evidenceExists = (value) => {
+  if (!isSafeDocumentationReviewEvidencePath(value)) return false;
+  const absolutePath = path.resolve(root, value);
+  return existsSync(absolutePath) && statSync(absolutePath).isFile();
+};
+const evidence = finalizeDocumentationReviewEvidence({
   schemaVersion: 1,
   evidenceKind: 'engine-tenancy-documentation-review',
-  status: 'incomplete',
   generatedAt: new Date().toISOString(),
   commit: endCommit,
   sourceState: endChanges ? 'dirty-development-run' : 'clean',
-  releaseCommitQualified: false,
   automatedChecksPassed,
-  reviews: {
-    engineering: { status: 'pending', approvedCommit: null },
-    security: { status: 'pending', approvedCommit: null },
-    independentOperator: { status: 'pending', approvedCommit: null },
-  },
+  reviews: preserveDocumentationReviews(existingEvidence, endCommit, evidenceExists),
   unresolvedHighRiskFindings: 0,
   executableExamples: {
     total: 5,
@@ -164,14 +182,17 @@ const evidence = {
     containsRawIdentityClaims: false,
     containsCustomerIdentifiers: false,
   },
-};
+}, evidenceExists);
 
 mkdirSync(outputDirectory, { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
+const approvedReviewCount = Object.values(evidence.reviews)
+  .filter((review) => review.status === 'approved').length;
 console.log(
   `[engine-tenancy-documentation-review] ${evidence.executableExamples.passed}/` +
   `${evidence.executableExamples.total} executable lanes; ${evidence.markdownLinks.passed}/` +
-  `${evidence.markdownLinks.total} internal links; three approvals pending: ${path.relative(root, outputPath)}`,
+  `${evidence.markdownLinks.total} internal links; ${approvedReviewCount}/3 approvals complete: ` +
+  `${path.relative(root, outputPath)}`,
 );
 if (!automatedChecksPassed) {
   process.exitCode = 1;

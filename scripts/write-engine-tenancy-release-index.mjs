@@ -5,9 +5,14 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
+import {
+  documentationReviewEvidencePasses,
+  isSafeDocumentationReviewEvidencePath,
+} from './lib/engine-tenancy-documentation-review.mjs';
 
 const root = process.cwd();
 const releaseDirectory = path.join(root, 'test/results/engine-tenancy-release');
@@ -70,6 +75,12 @@ function compatibilityStatePasses(value) {
       && value.replacementDocumentationPublished === true;
   }
   return false;
+}
+
+function documentationReviewEvidenceFileExists(value) {
+  if (!isSafeDocumentationReviewEvidencePath(value)) return false;
+  const absolutePath = path.resolve(root, value);
+  return existsSync(absolutePath) && statSync(absolutePath).isFile();
 }
 
 const gateDefinitions = [
@@ -173,13 +184,11 @@ const gateDefinitions = [
     label: 'Engineering, security, and independent-operator documentation review',
     path: 'test/results/engine-tenancy-release/documentation-review.json',
     passes: (value) => value.status === 'passed'
-      && ['engineering', 'security', 'independentOperator']
-        .every((review) => value.reviews?.[review]?.status === 'approved')
-      && value.unresolvedHighRiskFindings === 0
-      && Number(value.executableExamples?.total) > 0
-      && value.executableExamples.passed === value.executableExamples.total
-      && Number(value.markdownLinks?.total) > 0
-      && value.markdownLinks.passed === value.markdownLinks.total,
+      && documentationReviewEvidencePasses(
+        value,
+        commit,
+        documentationReviewEvidenceFileExists,
+      ),
   },
   {
     id: 'compatibilityWindow',

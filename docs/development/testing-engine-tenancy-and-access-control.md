@@ -326,7 +326,9 @@ The detailed artifacts are fail-closed as well:
   and every other channel must be accounted for by its declared exclusion;
 - `documentation-review.json` must include zero unresolved high-risk findings
   and complete executable-example and Markdown-link results in addition to the
-  three approvals; and
+  three approvals. Every approval must name the exact commit, reviewer, ISO
+  timestamp, and an existing sanitized Markdown record under
+  `test/results/engine-tenancy-review/`; and
 - `compatibility-window.json` must prove warning behavior is tested and either
   remains retained with no removal proposed, or was removed only after the
   window closed and replacement documentation shipped.
@@ -343,6 +345,19 @@ provisioning, HTTP response, and OpenAPI warning tests under the local-safe
 environment. The artifact passes while the warning is retained and
 `removalProposed` is false; removing the fallback requires the separately
 documented breaking-release and observation-window evidence.
+
+Generate the automated documentation evidence with:
+
+```bash
+pnpm run test:engine-tenancy:documentation-review-evidence
+```
+
+Engineering, security, and an independent operator then follow the
+[documentation review checklist](./engine-tenancy-documentation-review-checklist.md)
+and use `record:engine-tenancy:documentation-review` to retain their approvals.
+The generator preserves valid same-commit approvals, while the release index
+rejects stale approvals, missing evidence files, incomplete reviewer metadata,
+or hand-authored `approved` flags that do not satisfy the complete contract.
 
 The full release-qualification backlog, execution order, rollback conditions,
 and exit conditions are in phase 9 of
