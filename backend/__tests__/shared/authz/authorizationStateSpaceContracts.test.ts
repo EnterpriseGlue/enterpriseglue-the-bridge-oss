@@ -174,7 +174,9 @@ describe('authorization state-space contract', () => {
       actionCount: AUTHZ_ACTIONS.length,
     });
 
-    expect(summary.rawTupleCount).toBe(140_414_400);
+    // Four native-grant migration actions extend the canonical action catalog;
+    // the independent tensor still covers every generated action combination.
+    expect(summary.rawTupleCount).toBe(143_236_800);
     expect(summary.compressedCellCount).toBe(105_840);
     expect(summary.applicableCellCount).toBeGreaterThan(0);
     expect(summary.invalidCompressedCellCount).toBeGreaterThan(0);
