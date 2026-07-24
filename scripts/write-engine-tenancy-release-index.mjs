@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import {
+  documentationReviewEvidencePending,
   documentationReviewEvidencePasses,
   isSafeDocumentationReviewEvidencePath,
 } from './lib/engine-tenancy-documentation-review.mjs';
@@ -227,9 +228,26 @@ function readGate(definition) {
   const sameCommit = value.commit === commit;
   const clean = definition.clean
     ? definition.clean(value)
+    : value.sourceState === 'clean';
+  const releaseCommitQualified = definition.clean
+    ? clean
     : value.releaseCommitQualified === true;
   const passed = definition.passes(value);
-  const status = passed && sameCommit && clean ? 'passed' : 'stale_or_failed';
+  const pendingApproval = definition.id === 'documentationReview'
+    && documentationReviewEvidencePending(
+      value,
+      commit,
+      documentationReviewEvidenceFileExists,
+    );
+  const status = passed && sameCommit && clean && releaseCommitQualified
+    ? 'passed'
+    : !sameCommit
+      ? 'stale'
+      : !clean
+        ? 'dirty'
+        : pendingApproval
+          ? 'pending_approval'
+          : 'failed';
   return {
     id: definition.id,
     label: definition.label,
@@ -238,13 +256,18 @@ function readGate(definition) {
     artifactCommit: value.commit || null,
     sameCommit,
     cleanSourceState: clean,
+    releaseCommitQualified,
     reason: status === 'passed'
       ? null
-      : !passed
-        ? 'artifact assertions are not fully passing'
-        : !sameCommit
+      : status === 'pending_approval'
+        ? 'automated checks pass; independent approvals are pending'
+        : status === 'stale'
           ? 'artifact was produced for another commit'
-          : 'artifact was produced from a dirty worktree',
+          : status === 'dirty'
+            ? 'artifact was produced from a dirty worktree'
+            : !passed
+              ? 'artifact assertions are not fully passing'
+              : 'artifact is not release-commit qualified',
   };
 }
 
@@ -285,7 +308,8 @@ const markdown = [
   '',
   'A target named in the manifest is not considered tested until its separate',
   'execution artifact passes on the same clean commit. Missing, stale, failed,',
-  'skipped, quarantined, or waived evidence keeps this index incomplete.',
+  'dirty, pending-approval, skipped, quarantined, or waived evidence keeps',
+  'this index incomplete.',
   '',
 ].join('\n');
 writeFileSync(markdownPath, markdown);

@@ -928,6 +928,11 @@ artifact is missing or stale. It becomes a release gate only with
 `--require-complete`; declared targets, historical passes, and time-limited
 waivers never count as executed coverage.
 
+The index reports a clean same-commit documentation baseline awaiting human
+review as `pending_approval`. It does not misclassify that state as stale,
+dirty, or a failed automated check, and it still keeps the strict release gate
+closed until all three retained approvals pass.
+
 ## Complete Functional Coverage Standard
 
 For this plan, **100% functional coverage** has a concrete, auditable meaning: every

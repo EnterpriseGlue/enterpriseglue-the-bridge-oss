@@ -362,6 +362,10 @@ same clean commit. The final
 `pnpm run test:engine-tenancy:release-evidence` command exits non-zero while
 any required gate is missing, stale, dirty, or failed.
 
+The index distinguishes a clean automated documentation baseline awaiting
+independent sign-off as `pending_approval`; it does not call that artifact
+stale or dirty. This more precise handoff status remains release-blocking.
+
 Pull requests run the same `test:engine-tenancy:enforcement` journey against
 disposable PostgreSQL/browser services. CI retains the result directory for
 14 days for every browser lane.

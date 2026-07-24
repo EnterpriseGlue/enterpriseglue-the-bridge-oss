@@ -94,7 +94,10 @@ test('builds a fail-closed same-commit release evidence index', () => {
     assert.match(releaseIndexWriter, new RegExp(`id: '${gate}'`));
   }
   assert.match(releaseIndexWriter, /sameCommit/);
-  assert.match(releaseIndexWriter, /releaseCommitQualified === true/);
+  assert.match(releaseIndexWriter, /value\.sourceState === 'clean'/);
+  assert.match(releaseIndexWriter, /releaseCommitQualified/);
+  assert.match(releaseIndexWriter, /pending_approval/);
+  assert.match(releaseIndexWriter, /documentationReviewEvidencePending/);
   assert.match(releaseIndexWriter, /passedGateCount === gateDefinitions\.length/);
   for (const matrixContract of [
     'constraint-derived-authorization-state-space',

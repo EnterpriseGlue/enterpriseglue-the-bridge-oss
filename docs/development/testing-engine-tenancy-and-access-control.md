@@ -110,6 +110,12 @@ The command writes both
 pnpm run test:engine-tenancy:release-evidence
 ```
 
+A documentation artifact with all automated checks passing but one or more
+independent reviews outstanding appears as `pending_approval`. This is a
+truthful external-handoff state, not a technical pass: the strict release
+command continues to fail until engineering, security, and independent
+operator evidence is recorded for the exact commit.
+
 ### Database qualification evidence
 
 Run the real five-adapter matrix from an unchanged clean commit:

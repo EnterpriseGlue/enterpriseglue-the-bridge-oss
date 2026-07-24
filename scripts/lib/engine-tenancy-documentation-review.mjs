@@ -88,6 +88,16 @@ export function documentationReviewEvidencePasses(
   commit,
   evidenceExists = () => true,
 ) {
+  return documentationReviewAutomationPasses(evidence, commit)
+    && DOCUMENTATION_REVIEW_ROLES.every((role) =>
+      documentationReviewApprovalPasses(
+        evidence.reviews?.[role],
+        commit,
+        evidenceExists,
+      ));
+}
+
+export function documentationReviewAutomationPasses(evidence, commit) {
   return evidence?.commit === commit
     && evidence.sourceState === 'clean'
     && evidence.automatedChecksPassed === true
@@ -96,13 +106,19 @@ export function documentationReviewEvidencePasses(
     && evidence.executableExamples.passed === evidence.executableExamples.total
     && Number(evidence.markdownLinks?.total) > 0
     && evidence.markdownLinks.passed === evidence.markdownLinks.total
-    && DOCUMENTATION_REVIEW_ROLES.every((role) =>
-      documentationReviewApprovalPasses(
-        evidence.reviews?.[role],
-        commit,
-        evidenceExists,
-      ))
     && SANITIZATION_FIELDS.every((field) => evidence.sanitization?.[field] === false);
+}
+
+export function documentationReviewEvidencePending(
+  evidence,
+  commit,
+  evidenceExists = () => true,
+) {
+  if (!documentationReviewAutomationPasses(evidence, commit)) return false;
+  const reviews = DOCUMENTATION_REVIEW_ROLES.map((role) => evidence.reviews?.[role]);
+  return reviews.some((review) => review?.status === 'pending')
+    && reviews.every((review) => review?.status === 'pending'
+      || documentationReviewApprovalPasses(review, commit, evidenceExists));
 }
 
 export function finalizeDocumentationReviewEvidence(

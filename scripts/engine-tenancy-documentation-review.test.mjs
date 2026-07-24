@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   documentationReviewApprovalPasses,
+  documentationReviewAutomationPasses,
+  documentationReviewEvidencePending,
   documentationReviewEvidencePasses,
   finalizeDocumentationReviewEvidence,
   isSafeDocumentationReviewEvidencePath,
@@ -112,6 +114,7 @@ test('preserves valid same-commit approvals and drops stale or incomplete ones',
 
 test('qualifies documentation only after all automated and human evidence passes', () => {
   const evidence = completeEvidence();
+  assert.equal(documentationReviewAutomationPasses(evidence, commit), true);
   assert.equal(
     documentationReviewEvidencePasses(evidence, commit, evidenceExists),
     true,
@@ -124,6 +127,10 @@ test('qualifies documentation only after all automated and human evidence passes
   const missingSecurity = completeEvidence();
   missingSecurity.reviews.security = pendingDocumentationReview();
   assert.equal(
+    documentationReviewEvidencePending(missingSecurity, commit, evidenceExists),
+    true,
+  );
+  assert.equal(
     documentationReviewEvidencePasses(missingSecurity, commit, evidenceExists),
     false,
   );
@@ -134,6 +141,10 @@ test('qualifies documentation only after all automated and human evidence passes
 
   const unsafe = completeEvidence();
   unsafe.sanitization.containsTokens = true;
+  assert.equal(
+    documentationReviewEvidencePending(unsafe, commit, evidenceExists),
+    false,
+  );
   assert.equal(
     documentationReviewEvidencePasses(unsafe, commit, evidenceExists),
     false,
