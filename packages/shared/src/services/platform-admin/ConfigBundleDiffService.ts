@@ -314,6 +314,31 @@ class ConfigBundleDiffService {
     const enginesByConfigKey = new Map(tenantEngines
       .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
       .map((engine) => [engine.configKey!, engine]));
+    // External engine references are supplied only by controlled migration
+    // endpoints. They deliberately do not turn a UI/API-registered engine
+    // into a configuration-owned one; they only let a Runtime Resource Set
+    // bind to that already-existing engine.
+    const externalEnginesByKey = new Map<string, Engine>();
+    const invalidExternalEngineKeys = new Set<string>();
+    const externalReferences = policy?.externalEngineReferences || [];
+    for (const reference of externalReferences) {
+      const key = reference.key?.trim();
+      const engineId = reference.engineId?.trim();
+      if (!key || !engineId || externalEnginesByKey.has(key) || enginesByConfigKey.has(key)) {
+        if (key) invalidExternalEngineKeys.add(key);
+        continue;
+      }
+      const engine = engines.find((candidate) => candidate.id === engineId);
+      const engineTenantMatches = Boolean(engine) && (
+        (engine!.tenancyMode === 'shared' && !engine!.tenantId)
+        || (engine!.tenancyMode === 'dedicated' && Boolean(engine!.tenantId) && (!normalizedTenantId || engine!.tenantId === normalizedTenantId))
+      );
+      if (!engine || engine.lifecycleStatus === 'decommissioned' || !engineTenantMatches) {
+        invalidExternalEngineKeys.add(key);
+        continue;
+      }
+      externalEnginesByKey.set(key, engine);
+    }
     const tenantEngineSets = engineSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
     const engineSetsByKey = new Map(tenantEngineSets.map((set) => [set.key, set]));
     const tenantRuntimeResourceSets = runtimeResourceSets.filter((set) => (set.tenantId || null) === normalizedTenantId);
@@ -594,7 +619,7 @@ class ConfigBundleDiffService {
 
     for (const set of desiredRuntimeResourceSets) {
       const existing = runtimeResourceSetsByKey.get(set.key);
-      const engine = enginesByConfigKey.get(set.engineRef.engineKey);
+      const engine = enginesByConfigKey.get(set.engineRef.engineKey) || externalEnginesByKey.get(set.engineRef.engineKey);
       const runtimeResourceChanges = engine
         ? runtimeResourceChangeSummary(
           runtimeResourcesByEngineAndKind.get(`${engine.id}:${set.resourceKind}`) || [],
@@ -604,7 +629,18 @@ class ConfigBundleDiffService {
           set.runtimeTenantId,
         )
         : undefined;
-      if (!existing) {
+      const stagedConfiguredEngine = desiredEngineByKey.has(set.engineRef.engineKey);
+      if (!engine && !stagedConfiguredEngine) {
+        changes.push({
+          objectType: 'runtime_resource_set',
+          key: set.key,
+          operation: 'conflict',
+          currentId: existing?.id,
+          reason: invalidExternalEngineKeys.has(set.engineRef.engineKey)
+            ? 'Runtime Resource Set references an invalid or inaccessible existing-engine migration reference'
+            : 'Runtime Resource Set references an unresolved configured engine',
+        });
+      } else if (!existing) {
         changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'create', reason: 'No persisted Runtime Resource Set uses this tenant-scoped key', ...(runtimeResourceChanges ? { runtimeResourceChanges } : {}) });
       } else if (existing.source !== CONFIG_SOURCE || existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'runtime_resource_set', key: set.key, operation: 'conflict', currentId: existing.id, reason: 'Existing Runtime Resource Set is not owned by this configuration bundle' });

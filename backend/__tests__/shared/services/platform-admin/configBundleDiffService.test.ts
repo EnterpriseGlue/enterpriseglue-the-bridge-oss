@@ -562,6 +562,46 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
+  it('binds a Runtime Resource Set to a verified existing engine without treating that engine as config-owned', async () => {
+    mockDataSource([], [], [], [{
+      id: 'engine-ui-1', tenantId: 'tenant-a', tenancyMode: 'dedicated', lifecycleStatus: 'active',
+      configKey: null, registrationSource: 'user', sourceRef: null,
+    }]);
+    const input = {
+      bundle: { ...bundle, imports: ['./runtime-resource-sets.json'] },
+      files: {
+        './runtime-resource-sets.json': {
+          runtimeResourceSets: [{
+            key: 'runtime.imported-payments', name: 'Imported payments',
+            engineRef: { engineKey: 'external.camunda-native-1234' },
+            resourceKind: 'process_definition', selector: { mode: 'keys', keys: ['payments-order'] },
+          }],
+        },
+      },
+    };
+    const policy = {
+      credentiallessCustomerSidecarsEnabled: false,
+      externalEngineReferences: [{ key: 'external.camunda-native-1234', engineId: 'engine-ui-1' }],
+    };
+
+    const result = await configBundleDiffService.diff(input, 'tenant-a', policy);
+    expect(result).toMatchObject({ valid: true });
+    expect(result.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'runtime_resource_set', key: 'runtime.imported-payments', operation: 'create' }),
+    ]));
+    expect(result.changes).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'engine' }),
+    ]));
+
+    const rebound = await configBundleDiffService.diff(input, 'tenant-a', {
+      ...policy,
+      externalEngineReferences: [{ key: 'external.camunda-native-1234', engineId: 'other-engine' }],
+    });
+    expect(rebound.changes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ objectType: 'runtime_resource_set', operation: 'conflict', reason: expect.stringContaining('invalid or inaccessible') }),
+    ]));
+  });
+
   it('detects a Runtime Resource Set ownership-mode change', async () => {
     mockDataSource([], [], [], [
       { id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' },

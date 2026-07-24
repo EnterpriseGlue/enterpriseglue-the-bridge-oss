@@ -48,8 +48,12 @@ const nativeGrantMigrationMock = vi.hoisted(() => ({
   getSummary: vi.fn(),
   getDetailedSnapshot: vi.fn(),
   setDraft: vi.fn(),
+  getGeneratedDraft: vi.fn(),
+  markApplied: vi.fn(),
   generate: vi.fn(),
+  externalEngineKey: vi.fn((engineId: string) => `external.camunda-native-${engineId}`),
 }));
+const configBundleApplyMock = vi.hoisted(() => ({ apply: vi.fn() }));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -79,10 +83,15 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImport
   camundaNativeGrantImportRunService: {
     createPreview: nativeGrantMigrationMock.createPreview, getSummary: nativeGrantMigrationMock.getSummary,
     getDetailedSnapshot: nativeGrantMigrationMock.getDetailedSnapshot, setDraft: nativeGrantMigrationMock.setDraft,
+    getGeneratedDraft: nativeGrantMigrationMock.getGeneratedDraft, markApplied: nativeGrantMigrationMock.markApplied,
   },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js', () => ({
   camundaNativeGrantDraftService: { generate: nativeGrantMigrationMock.generate },
+  camundaNativeGrantExternalEngineKey: nativeGrantMigrationMock.externalEngineKey,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
+  configBundleApplyService: { apply: configBundleApplyMock.apply },
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
@@ -233,6 +242,18 @@ describe('mission-control engines routes', () => {
     engineTenancyTransitionServiceMock.preview.mockReset();
     engineTenancyTransitionServiceMock.apply.mockReset();
     engineTenancyTransitionServiceMock.classificationReport.mockReset();
+    nativeGrantMigrationMock.fromCustomerExport.mockReset();
+    nativeGrantMigrationMock.listLive.mockReset();
+    nativeGrantMigrationMock.classify.mockReset();
+    nativeGrantMigrationMock.createPreview.mockReset();
+    nativeGrantMigrationMock.getSummary.mockReset();
+    nativeGrantMigrationMock.getDetailedSnapshot.mockReset();
+    nativeGrantMigrationMock.setDraft.mockReset();
+    nativeGrantMigrationMock.getGeneratedDraft.mockReset();
+    nativeGrantMigrationMock.markApplied.mockReset();
+    nativeGrantMigrationMock.generate.mockReset();
+    nativeGrantMigrationMock.externalEngineKey.mockImplementation((engineId: string) => `external.camunda-native-${engineId}`);
+    configBundleApplyMock.apply.mockReset();
     (engineService as any).listEngines.mockReset();
     (engineService as any).getEngine.mockReset();
     (engineService as any).hasEngineAccess.mockReset();
@@ -621,6 +642,53 @@ describe('mission-control engines routes', () => {
     expect(nativeGrantMigrationMock.createPreview).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'e1', sourceKind: 'customer_export', detailedSnapshot: expect.objectContaining({ authorizations: [{ id: 'native-1' }] }),
     }));
+  });
+
+  it('generates a migration draft for a UI-created engine without requiring it to be re-added through configuration', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', configKey: null, registrationSource: 'user' };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine) }) });
+    const classification = { sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] };
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed' });
+    nativeGrantMigrationMock.getDetailedSnapshot.mockResolvedValue({ classifications: [classification] });
+    nativeGrantMigrationMock.generate.mockReturnValue({ bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: 'a'.repeat(64), generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 }, manualWorkAuthorizationIds: [] });
+    nativeGrantMigrationMock.setDraft.mockResolvedValue({ id: 'run-1', status: 'draft_generated', draftHash: 'a'.repeat(64) });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
+      base: { bundle: {}, files: {} },
+      groupMappings: [{ nativeGroupId: 'sensitive-native-group', target: { mode: 'new', key: 'group.imported-operators', name: 'Imported operators' } }],
+    });
+
+    expect(response.status).toBe(200);
+    expect(nativeGrantMigrationMock.generate).toHaveBeenCalledWith(expect.objectContaining({
+      engineKey: 'external.camunda-native-e1', engineReferenceMode: 'existing_registered',
+    }));
+    expect(nativeGrantMigrationMock.setDraft).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' } }),
+    }));
+  });
+
+  it('applies only the persisted reviewed migration draft and records the configuration apply receipt', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const draftHash = 'b'.repeat(64);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', configKey: null, registrationSource: 'user' };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine) }) });
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'draft_generated', draftHash });
+    nativeGrantMigrationMock.getGeneratedDraft.mockResolvedValue({
+      bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: draftHash,
+      engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' },
+      generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 }, manualWorkAuthorizationIds: [],
+    });
+    configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-apply-1', canonicalHash: draftHash, created: 4, updated: 0, archived: 0, reconciliation: { status: 'completed' } });
+    nativeGrantMigrationMock.markApplied.mockResolvedValue({ id: 'run-1', status: 'applied', draftHash });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
+
+    expect(response.status).toBe(200);
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      expectedPreviewHash: draftHash, idempotencyKey: `camunda-native-grant:run-1:${draftHash}`, identityReconciliationMode: 'none',
+    }), expect.objectContaining({ externalEngineReferences: [{ key: 'external.camunda-native-e1', engineId: 'e1' }] }));
+    expect(nativeGrantMigrationMock.markApplied).toHaveBeenCalledWith({ id: 'run-1', configBundleApplyRunId: 'config-apply-1' });
   });
 
   it('returns engine credential state but never the stored secret in engine detail', async () => {

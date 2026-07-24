@@ -7,9 +7,15 @@ type GroupMapping =
   | { nativeGroupId: string; target: { mode: 'new'; key: string; name: string; description?: string } };
 
 export interface GenerateCamundaNativeGrantDraftInput {
-  /** A validated existing configuration bundle/export containing the target engine. */
+  /** A validated existing configuration bundle/export to extend additively. */
   base: ConfigBundlePreviewInput;
   engineKey: string;
+  /**
+   * A UI/API-registered engine may be referenced for Runtime Resource Sets
+   * without being copied into the configuration bundle. The apply endpoint
+   * binds this key to the import run's engine id; it never changes that engine.
+   */
+  engineReferenceMode?: 'configured' | 'existing_registered';
   classifications: CamundaNativeGrantClassification[];
   groupMappings: GroupMapping[];
 }
@@ -30,6 +36,13 @@ const ACTION_PERMISSION: Record<string, string> = {
 
 function opaqueKeyPart(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 16);
+}
+
+/** Stable opaque key used only inside a native-grant migration draft. */
+export function camundaNativeGrantExternalEngineKey(engineId: string): string {
+  const normalized = engineId.trim();
+  if (!normalized) throw new Error('Engine id is required');
+  return `external.camunda-native-${opaqueKeyPart(normalized)}`;
 }
 
 function requireObject(value: unknown, name: string): Record<string, unknown> {
@@ -73,9 +86,12 @@ export class CamundaNativeGrantDraftService {
     manifest.imports = [...new Set(imports)].sort();
 
     const engineKey = input.engineKey.trim();
-    if (!engineKey) throw new Error('Engine config key is required');
-    const configuredEngines = entries(files, './engines.json', 'engines');
-    if (!configuredEngines.some((engine) => engine.key === engineKey && engine.type === 'camunda7')) {
+    if (!engineKey) throw new Error('Engine reference key is required');
+    const engineReferenceMode = input.engineReferenceMode || 'configured';
+    const configuredEngines = engineReferenceMode === 'configured'
+      ? entries(files, './engines.json', 'engines')
+      : [];
+    if (engineReferenceMode === 'configured' && !configuredEngines.some((engine) => engine.key === engineKey && engine.type === 'camunda7')) {
       throw new Error('The base configuration must contain the target Camunda 7 engine');
     }
 
@@ -159,7 +175,12 @@ export class CamundaNativeGrantDraftService {
       assignmentKeys.add(assignmentKey);
     }
 
-    const compiled = configBundlePreviewService.compile({ bundle, files });
+    const compiled = configBundlePreviewService.compile({ bundle, files }, {
+      credentiallessCustomerSidecarsEnabled: false,
+      ...(engineReferenceMode === 'existing_registered'
+        ? { externalEngineReferences: [{ key: engineKey }] }
+        : {}),
+    });
     if (!compiled.preview.valid || !compiled.preview.canonicalHash) {
       const detail = compiled.preview.errors.map((error) => `${error.path}: ${error.message}`).join('; ');
       throw new Error(`Generated Camunda native-grant draft is invalid: ${detail}`);

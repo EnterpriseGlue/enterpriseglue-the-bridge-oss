@@ -215,7 +215,7 @@ describe('authorization route inventory validation', () => {
       },
       {
         actionId: 'platform.config-bundles.apply', permissionId: 'platform:config-bundles:apply', operation: 'manage', risk: 'high', audit: true,
-        routes: [['POST', '/api/authz/config-bundles/apply']],
+        routes: [['POST', '/api/authz/config-bundles/apply'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply']],
       },
       {
         actionId: 'platform.config-bundles.export', permissionId: 'platform:config-bundles:export', operation: 'read', risk: 'medium', audit: true,

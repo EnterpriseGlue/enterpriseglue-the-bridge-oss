@@ -215,6 +215,45 @@ describe('configBundlePreviewService', () => {
     ]));
   });
 
+  it('permits an internal existing-engine reference only for a Runtime Resource Set', () => {
+    const input = {
+      bundle: {
+        ...bundle,
+        imports: ['./runtime-resource-sets.json'],
+      },
+      files: {
+        './runtime-resource-sets.json': {
+          runtimeResourceSets: [{
+            key: 'runtime.imported-orders',
+            name: 'Imported orders',
+            engineRef: { engineKey: 'external.camunda-native-1234' },
+            resourceKind: 'process_definition',
+            selector: { mode: 'keys', keys: ['orders'] },
+          }],
+        },
+      },
+    };
+
+    expect(configBundlePreviewService.preview(input)).toMatchObject({ valid: false });
+    expect(configBundlePreviewService.preview(input, {
+      credentiallessCustomerSidecarsEnabled: false,
+      externalEngineReferences: [{ key: 'external.camunda-native-1234' }],
+    })).toMatchObject({ valid: true });
+
+    const directAssignment = configBundlePreviewService.preview({
+      bundle: { ...bundle, imports: ['./roles.json', './groups.json', './assignments.json'] },
+      files: {
+        './roles.json': { roles: [{ key: 'custom.engine.reader', name: 'Reader', scope: 'engine', permissions: ['engine:instance:view'] }] },
+        './groups.json': { groups: [{ key: 'group.reader', name: 'Reader' }] },
+        './assignments.json': { assignments: [{ key: 'assignment.reader', principal: { type: 'group', key: 'group.reader' }, roleKey: 'custom.engine.reader', scope: { type: 'engine', engineKey: 'external.camunda-native-1234' } }] },
+      },
+    }, {
+      credentiallessCustomerSidecarsEnabled: false,
+      externalEngineReferences: [{ key: 'external.camunda-native-1234' }],
+    });
+    expect(directAssignment).toMatchObject({ valid: false });
+  });
+
   it('rejects a permission whose scope does not match its custom role', () => {
     const result = configBundlePreviewService.preview({
       bundle: { ...bundle, imports: ['./roles.json'] },

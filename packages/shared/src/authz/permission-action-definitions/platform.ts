@@ -92,6 +92,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       ui: [{ surfaceId: 'admin.configuration-bundles.apply', behavior: 'disable' }],
       routes: [
         { method: 'POST', route: '/api/authz/config-bundles/apply', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply', resourceResolver: 'platform.self' },
       ],
     },
   {

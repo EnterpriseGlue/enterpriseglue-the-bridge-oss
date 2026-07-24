@@ -39,7 +39,9 @@ import { EnginePermissions, ExternalEngineSystemPermissions, PlatformPermissions
 import { ENGINE_OPERATION_CAPABILITIES, getEngineCapabilities, withEngineCapabilities } from '@enterpriseglue/shared/services/bpmn-engine-capabilities.js'
 import { describeBpmnEngineTransport, fetchBpmnEngineEndpoint, resolveBpmnEngineRequestUrl, validateBpmnEngineEndpointUrl } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { secretResolver } from '@enterpriseglue/shared/services/platform-admin/SecretResolver.js'
+import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js'
 import { config } from '@enterpriseglue/shared/config/index.js'
+import { isEngineVisibleInTenancyContext } from '@enterpriseglue/shared/engine-tenancy/visibility.js'
 import { logAudit } from '@enterpriseglue/shared/services/audit.js'
 import { logger } from '@enterpriseglue/shared/utils/logger.js'
 import {
@@ -71,7 +73,7 @@ import { ProjectEngineTargetSchema, RuntimeResourceSchema } from '@enterpriseglu
 import { CamundaNativeAuthorizationExportSchema, CamundaNativeGrantClassificationSchema } from '@enterpriseglue/shared/schemas/platform-admin/camunda-native-grants.js'
 import { camundaNativeGrantInventoryService, classifyCamundaNativeGrant } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js'
 import { camundaNativeGrantImportRunService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js'
-import { camundaNativeGrantDraftService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js'
+import { camundaNativeGrantDraftService, camundaNativeGrantExternalEngineKey } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
@@ -96,6 +98,10 @@ const nativeGrantDraftBodySchema = z.object({
     z.object({ nativeGroupId: z.string().min(1).max(255), target: z.object({ mode: z.literal('existing'), key: z.string().min(3).max(160) }).strict() }).strict(),
     z.object({ nativeGroupId: z.string().min(1).max(255), target: z.object({ mode: z.literal('new'), key: z.string().min(3).max(160), name: z.string().min(1).max(255), description: z.string().max(2000).optional() }).strict() }).strict(),
   ])).max(5_000),
+}).strict()
+const nativeGrantApplyBodySchema = z.object({
+  expectedDraftHash: z.string().regex(/^[a-f0-9]{64}$/),
+  acknowledgements: z.array(z.string().min(1).max(255)).max(100).optional(),
 }).strict()
 const engineManagementModeSchema = z.enum(['external_managed', 'hybrid'])
 const engineLifecycleStatusSchema = z.enum(['active', 'disabled', 'stale', 'decommissioned'])
@@ -1672,6 +1678,7 @@ r.post('/engines-api/engines/:id/camunda-native-grants/imports/preview', engineL
   const engineId = String(req.params.id)
   const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } })
   if (!engine) throw Errors.notFound('Engine')
+  if (!isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
   if (engine.type !== 'camunda7') throw Errors.validation('Camunda native-grant migration is available only for Camunda 7 engines')
   const inventory = req.body.sourceKind === 'live_api'
     ? await camundaNativeGrantInventoryService.listLive(engineId)
@@ -1724,11 +1731,85 @@ r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/draft', en
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw Errors.notFound('Camunda native-grant import detail')
   const classifications = CamundaNativeGrantClassificationSchema.array().parse((detail as Record<string, unknown>).classifications)
   const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: run.engineId } })
-  if (!engine?.configKey) throw Errors.validation('The target engine must have a stable configuration key before a native-grant draft can be generated')
-  const draft = camundaNativeGrantDraftService.generate({ base: req.body.base, engineKey: engine.configKey, classifications, groupMappings: req.body.groupMappings })
-  const updatedRun = await camundaNativeGrantImportRunService.setDraft({ id: run.id, draftHash: draft.canonicalHash, approverId: req.user!.userId })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
+  const engineReferenceMode = engine.configKey ? 'configured' as const : 'existing_registered' as const
+  const engineKey = engine.configKey || camundaNativeGrantExternalEngineKey(engine.id)
+  const draft = camundaNativeGrantDraftService.generate({
+    base: req.body.base,
+    engineKey,
+    engineReferenceMode,
+    classifications,
+    groupMappings: req.body.groupMappings,
+  })
+  const updatedRun = await camundaNativeGrantImportRunService.setDraft({
+    id: run.id,
+    draftHash: draft.canonicalHash,
+    approverId: req.user!.userId,
+    draft: {
+      ...draft,
+      engineReference: { key: engineKey, engineId: engine.id, mode: engineReferenceMode },
+    },
+  })
+  if (!updatedRun) throw Errors.notFound('Camunda native-grant import run')
   await logAudit({ tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.camunda_native_grants.draft', resourceType: 'engine', resourceId: run.engineId, details: { importRunId: run.id, draftHash: draft.canonicalHash, generated: draft.generated, manualWorkCount: draft.manualWorkAuthorizationIds.length } })
   res.json({ run: updatedRun, draft })
+}))
+
+r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/apply', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(nativeGrantImportRunIdParamSchema), requireAction('platform.camunda-native-grants.draft', { resourceResolver: 'platform.self' }), requireAction('platform.camunda-native-grants.sensitive.read', { resourceResolver: 'platform.self' }), requireAction('platform.config-bundles.apply', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(nativeGrantApplyBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const run = await camundaNativeGrantImportRunService.getSummary(String(req.params.runId))
+  if (!run || run.engineId !== String(req.params.id) || (run.tenantId || null) !== (req.tenant?.tenantId || null)) throw Errors.notFound('Camunda native-grant import run')
+  if (!['draft_generated', 'applied'].includes(run.status) || !run.draftHash || run.draftHash !== req.body.expectedDraftHash) {
+    throw Errors.validation('The submitted draft hash does not match an approved native-grant migration draft')
+  }
+  const draft = await camundaNativeGrantImportRunService.getGeneratedDraft(run.id)
+  if (!draft || draft.canonicalHash !== run.draftHash || draft.canonicalHash !== req.body.expectedDraftHash) {
+    throw Errors.validation('The reviewed native-grant draft is unavailable or no longer matches its import receipt')
+  }
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: run.engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null) || engine.type !== 'camunda7') throw Errors.notFound('Engine')
+  if (draft.engineReference.engineId !== engine.id) throw Errors.validation('The reviewed migration draft is bound to a different engine')
+
+  const settings = await platformSettingsService.get()
+  const policy = {
+    ...settings,
+    tenantReferenceResolver: engineTenantReferenceResolver(req),
+    tenantReferencePrincipalType: 'user' as const,
+    tenantReferencePrincipalId: req.user!.userId,
+    ...(draft.engineReference.mode === 'existing_registered'
+      ? { externalEngineReferences: [{ key: draft.engineReference.key, engineId: engine.id }] }
+      : {}),
+  }
+  const result = await configBundleApplyService.apply({
+    bundle: draft.bundle,
+    files: draft.files,
+    expectedPreviewHash: run.draftHash,
+    expectedTenantScope: req.tenant?.tenantId || 'platform',
+    acknowledgements: req.body.acknowledgements || [],
+    idempotencyKey: `camunda-native-grant:${run.id}:${run.draftHash}`,
+    identityReconciliationMode: 'none',
+    tenantId: req.tenant?.tenantId || null,
+    actorId: req.user!.userId,
+  }, policy)
+  if (!result.applyRunId) throw Errors.validation('Configuration apply did not create an auditable apply run')
+  const updatedRun = await camundaNativeGrantImportRunService.markApplied({ id: run.id, configBundleApplyRunId: result.applyRunId })
+  if (!updatedRun) throw Errors.notFound('Camunda native-grant import run')
+  await logAudit({
+    tenantId: req.tenant?.tenantId || undefined,
+    userId: req.user!.userId,
+    action: 'engine.camunda_native_grants.apply',
+    resourceType: 'engine',
+    resourceId: engine.id,
+    details: {
+      importRunId: run.id,
+      draftHash: run.draftHash,
+      configBundleApplyRunId: result.applyRunId,
+      created: result.created,
+      updated: result.updated,
+      archived: result.archived,
+      reconciliation: result.reconciliation,
+    },
+  })
+  res.json({ run: updatedRun, result })
 }))
 
 r.get('/engines-api/engines/:id/project-targets', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('engine.project-access.requests.read', { resourceResolver: 'engine.byId', resourceIdFrom: 'params', resourceIdKey: 'id', acceptedPermissions: [EnginePermissions.PROJECT_ACCESS_VIEW, EnginePermissions.MEMBERS_MANAGE] }), asyncHandler(async (req: Request, res: Response) => {

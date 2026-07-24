@@ -123,6 +123,34 @@ describe('CamundaNativeGrantImportRunService', () => {
     expect(repository.update).toHaveBeenLastCalledWith({ id: 'run-1' }, expect.objectContaining({ appliedConfigBundleRunId: 'apply-run-1' }));
   });
 
+  it('retains a reviewed draft only in the encrypted detail snapshot and binds it to its engine', async () => {
+    const repository = setup();
+    const now = Date.now();
+    const run = {
+      id: 'run-1', engineId: 'engine-1', tenantId: null, sourceKind: 'live_api', status: 'previewed', inputHash: hash,
+      mappingCatalogVersion: 'camunda7-v1-read-only', inventoryTruncated: false,
+      normalizedCountsJson: '{"total":0,"proposed":0,"approval_required":0,"manual_required":0,"blocked":0}', classificationsJson: '[]',
+      encryptedDetailedSnapshot: 'encrypted:{"authorizations":[{"groupId":"native-sensitive"}]}', detailedSnapshotExpiresAt: now + 1_000,
+      draftHash: null, createdAt: now, updatedAt: now,
+    };
+    repository.findOne.mockResolvedValue(run);
+    const service = new CamundaNativeGrantImportRunService();
+    const draft = {
+      bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: hash,
+      engineReference: { key: 'external.camunda-native-1234', engineId: 'engine-1', mode: 'existing_registered' as const },
+      generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 },
+      manualWorkAuthorizationIds: ['native-auth-1'],
+    };
+
+    await service.setDraft({ id: 'run-1', draftHash: hash, approverId: 'approver-1', draft, now });
+    const stored = repository.update.mock.calls[0][1].encryptedDetailedSnapshot;
+    expect(stored).toContain('native-sensitive');
+    expect(stored).toContain('external.camunda-native-1234');
+
+    repository.findOne.mockResolvedValue({ ...run, encryptedDetailedSnapshot: stored, draftHash: hash });
+    expect(await service.getGeneratedDraft('run-1', now)).toEqual(draft);
+  });
+
   it('retains every disposition as opaque counts without requiring a detailed snapshot', async () => {
     const repository = setup();
     const result = await new CamundaNativeGrantImportRunService().createPreview({

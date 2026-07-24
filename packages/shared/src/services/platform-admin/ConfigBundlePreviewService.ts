@@ -25,11 +25,24 @@ const FILE_SCHEMAS: Record<string, z.ZodType> = {
 };
 
 export interface ConfigBundlePreviewInput { bundle: unknown; files: Record<string, unknown>; }
+/**
+ * An internal-only reference to an already registered engine.  It is used by
+ * narrowly scoped migration workflows that add authorization objects to an
+ * engine without importing, changing, or taking ownership of that engine's
+ * connection configuration.
+ */
+export interface ConfigBundleExternalEngineReference {
+  key: string;
+  /** Required by persisted-state diff/apply; preview-only callers need only the key. */
+  engineId?: string;
+}
 export interface ConfigBundlePolicyContext {
   credentiallessCustomerSidecarsEnabled: boolean;
   tenantReferenceResolver?: EngineTenantReferenceResolver | null;
   tenantReferencePrincipalType?: EngineTenancyPrincipalType;
   tenantReferencePrincipalId?: string | null;
+  /** Not accepted from public configuration payloads. See ConfigBundleExternalEngineReference. */
+  externalEngineReferences?: ConfigBundleExternalEngineReference[];
 }
 export interface ConfigBundleValidationIssue {
   path: string;
@@ -133,7 +146,16 @@ function validateEndpointAuthenticationPolicy(
  * its references against persisted records. This phase deliberately does not
  * touch the database or attempt connectivity/secret resolution.
  */
-function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): RawValidationIssue[] {
+function externalEngineKeys(policy: ConfigBundlePolicyContext): Set<string> {
+  return new Set((policy.externalEngineReferences || [])
+    .map((reference) => reference.key?.trim())
+    .filter((key): key is string => Boolean(key)));
+}
+
+function validateCrossFileReferences(
+  normalizedFiles: Record<string, unknown>,
+  policy: ConfigBundlePolicyContext,
+): RawValidationIssue[] {
   const errors: RawValidationIssue[] = [];
   const roles = fileEntries(normalizedFiles, './roles.json', 'roles');
   const groups = fileEntries(normalizedFiles, './groups.json', 'groups');
@@ -149,6 +171,7 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   const roleKeys = new Set([...SystemRoleDefinitions.map((role) => role.key), ...roles.map((role) => role.key)]);
   const groupKeys = new Set(groups.map((group) => group.key));
   const engineKeys = new Set(engines.map((engine) => engine.key));
+  const externallyReferencedEngineKeys = externalEngineKeys(policy);
   const engineSetKeys = new Set(engineSets.map((engineSet) => engineSet.key));
   const runtimeResourceSetKeys = new Set(runtimeResourceSets.map((set) => set.key));
   const permissionsByKey = new Map(PermissionCatalog.map((permission) => [permission.key, permission]));
@@ -183,7 +206,11 @@ function validateCrossFileReferences(normalizedFiles: Record<string, unknown>): 
   });
 
   runtimeResourceSets.forEach((set, index) => {
-    if (!engineKeys.has(set.engineRef.engineKey)) {
+    // Existing-engine references are intentionally accepted only here. This
+    // permits a migration to scope authorization to a pre-existing engine,
+    // but never lets a bundle silently change its tenancy, deployment target,
+    // Engine Set membership, or connection settings.
+    if (!engineKeys.has(set.engineRef.engineKey) && !externallyReferencedEngineKeys.has(set.engineRef.engineKey)) {
       errors.push({ path: `./runtime-resource-sets.json.runtimeResourceSets.${index}.engineRef.engineKey`, message: `Unknown engine key: ${set.engineRef.engineKey}` });
     }
   });
@@ -332,7 +359,7 @@ class ConfigBundlePreviewService {
     let expandedRolePermissions: Record<string, string[]> | undefined;
     let roleTemplateBaselines: ConfigBundlePreview['roleTemplateBaselines'];
     if (errors.length === 0) {
-      errors.push(...validateCrossFileReferences(normalizedFiles));
+      errors.push(...validateCrossFileReferences(normalizedFiles, policy));
       errors.push(...validateEndpointAuthenticationPolicy(normalizedFiles, policy));
       if (errors.length === 0) {
         const expanded = expandRoleTemplates(normalizedFiles);

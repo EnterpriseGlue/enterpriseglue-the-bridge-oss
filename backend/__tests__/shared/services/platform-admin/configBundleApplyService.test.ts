@@ -1266,6 +1266,37 @@ describe('configBundleApplyService', () => {
     }));
   });
 
+  it('applies a migration Runtime Resource Set to an existing UI-registered engine without changing the engine', async () => {
+    const { engineRepo, engineInsert, runtimeResourceSetRepo } = setupDataSource();
+    engineRepo.find.mockResolvedValue([{
+      id: 'engine-ui-1', tenantId: 'tenant-a', tenancyMode: 'dedicated', lifecycleStatus: 'active',
+      configKey: null, registrationSource: 'user', sourceRef: null,
+    }]);
+    const runtimeBundle = { ...bundle, imports: ['./runtime-resource-sets.json'] };
+    const runtimeFiles = {
+      './runtime-resource-sets.json': { runtimeResourceSets: [{
+        key: 'runtime.imported-payments', name: 'Imported payments',
+        engineRef: { engineKey: 'external.camunda-native-1234' },
+        resourceKind: 'process_definition', selector: { mode: 'keys', keys: ['payments-order'] },
+      }] },
+    };
+    const policy = {
+      credentiallessCustomerSidecarsEnabled: false,
+      externalEngineReferences: [{ key: 'external.camunda-native-1234', engineId: 'engine-ui-1' }],
+    };
+    const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles }, policy);
+
+    const result = await configBundleApplyService.apply({
+      bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1',
+    }, policy);
+
+    expect(result.created).toBe(1);
+    expect(engineInsert).not.toHaveBeenCalled();
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'runtime.imported-payments', engineId: 'engine-ui-1', source: 'config', sourceRef: 'config_bundle:acme.authz',
+    }));
+  });
+
   it('applies every supported resource family with staged references in one bundle', async () => {
     const {
       roleInsert, groupInsert, engineInsert, roleRepo, groupRepo, engineRepo, engineSetRepo,

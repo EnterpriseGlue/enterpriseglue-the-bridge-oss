@@ -32,6 +32,16 @@ export interface CreateCamundaNativeGrantImportRunInput {
   snapshotRetentionMs?: number;
 }
 
+/** Encrypted alongside the source snapshot; never included in run summaries. */
+export interface CamundaNativeGrantStoredDraft {
+  bundle: unknown;
+  files: Record<string, unknown>;
+  canonicalHash: string;
+  engineReference: { key: string; engineId: string; mode: 'configured' | 'existing_registered' };
+  generated: { groupCount: number; roleCount: number; runtimeResourceSetCount: number; assignmentCount: number };
+  manualWorkAuthorizationIds: string[];
+}
+
 function opaqueReference(prefix: string, value: string): string {
   return `${prefix}-${createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 24)}`;
 }
@@ -162,7 +172,7 @@ export class CamundaNativeGrantImportRunService {
     return JSON.parse(decrypt(run.encryptedDetailedSnapshot));
   }
 
-  async setDraft(input: { id: string; draftHash: string; approverId: string; now?: number }): Promise<CamundaNativeGrantImportRunSummary | null> {
+  async setDraft(input: { id: string; draftHash: string; approverId: string; draft?: CamundaNativeGrantStoredDraft; now?: number }): Promise<CamundaNativeGrantImportRunSummary | null> {
     const id = input.id.trim();
     const approverId = input.approverId.trim();
     if (!id || !approverId) throw new Error('Import run id and approver id are required');
@@ -170,9 +180,49 @@ export class CamundaNativeGrantImportRunService {
     const run = await repository.findOne({ where: { id } });
     if (!run) return null;
     const now = input.now ?? Date.now();
-    const values = { status: 'draft_generated' as const, draftHash: assertHash(input.draftHash, 'Draft hash'), approvedById: approverId, approvedAt: now, updatedAt: now };
+    const draftHash = assertHash(input.draftHash, 'Draft hash');
+    let encryptedDetailedSnapshot: string | undefined;
+    if (input.draft) {
+      if (!run.encryptedDetailedSnapshot || (run.detailedSnapshotExpiresAt !== null && run.detailedSnapshotExpiresAt <= now)) {
+        throw new Error('Native-grant detail is unavailable; create a new preview before generating a draft');
+      }
+      if (input.draft.canonicalHash !== draftHash || !input.draft.engineReference?.key || !input.draft.engineReference?.engineId) {
+        throw new Error('Generated draft evidence is invalid');
+      }
+      const detail = JSON.parse(decrypt(run.encryptedDetailedSnapshot));
+      if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw new Error('Native-grant detail is invalid');
+      encryptedDetailedSnapshot = encrypt(JSON.stringify({
+        ...(detail as Record<string, unknown>),
+        generatedDraft: input.draft,
+      }));
+    }
+    const values = {
+      status: 'draft_generated' as const,
+      draftHash,
+      approvedById: approverId,
+      approvedAt: now,
+      ...(encryptedDetailedSnapshot ? { encryptedDetailedSnapshot } : {}),
+      updatedAt: now,
+    };
     await repository.update({ id }, values);
     return summaryFor({ ...run, ...values } as CamundaNativeGrantImportRun);
+  }
+
+  /** Caller must enforce sensitive-preview and apply permissions before use. */
+  async getGeneratedDraft(id: string, now = Date.now()): Promise<CamundaNativeGrantStoredDraft | null> {
+    const detail = await this.getDetailedSnapshot(id, now);
+    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+    const draft = (detail as Record<string, unknown>).generatedDraft;
+    if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
+    const value = draft as Partial<CamundaNativeGrantStoredDraft>;
+    if (
+      !value.files || typeof value.files !== 'object' || Array.isArray(value.files)
+      || typeof value.canonicalHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.canonicalHash)
+      || !value.engineReference || typeof value.engineReference.key !== 'string' || typeof value.engineReference.engineId !== 'string'
+      || !['configured', 'existing_registered'].includes(value.engineReference.mode || '')
+      || !value.generated || !Array.isArray(value.manualWorkAuthorizationIds)
+    ) return null;
+    return value as CamundaNativeGrantStoredDraft;
   }
 
   async markApplied(input: { id: string; configBundleApplyRunId: string; now?: number }): Promise<CamundaNativeGrantImportRunSummary | null> {

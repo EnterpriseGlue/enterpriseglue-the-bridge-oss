@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { CamundaNativeGrantDraftService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js';
+import { camundaNativeGrantExternalEngineKey, CamundaNativeGrantDraftService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js';
 
 const base = {
   bundle: {
@@ -74,6 +74,28 @@ describe('CamundaNativeGrantDraftService', () => {
     })).toThrow('missing an exact group resource target');
   });
 
+  it('can bind a draft to an existing UI-registered engine without copying that engine into the bundle', () => {
+    const service = new CamundaNativeGrantDraftService();
+    const engineKey = camundaNativeGrantExternalEngineKey('engine-added-in-ui');
+    const result = service.generate({
+      base: {
+        bundle: { ...base.bundle, imports: [] },
+        files: {},
+      },
+      engineKey,
+      engineReferenceMode: 'existing_registered',
+      classifications: [proposed],
+      groupMappings: [{ nativeGroupId: 'C7-native-sensitive-ops', target: { mode: 'new', key: 'group.imported-operations', name: 'Imported operations' } }],
+    });
+
+    const files = result.files as Record<string, any>;
+    expect(files['./engines.json']).toBeUndefined();
+    expect(files['./runtime-resource-sets.json'].runtimeResourceSets[0].engineRef).toEqual({ engineKey });
+    expect(result.bundle).toMatchObject({ settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' } });
+    expect(camundaNativeGrantExternalEngineKey('engine-added-in-ui')).toBe(engineKey);
+    expect(camundaNativeGrantExternalEngineKey('engine-added-in-ui')).not.toContain('engine-added-in-ui');
+  });
+
   it('does not silently use an existing group or configuration object without an explicit compatible mapping', () => {
     const service = new CamundaNativeGrantDraftService();
     expect(() => service.generate({
@@ -110,7 +132,7 @@ describe('CamundaNativeGrantDraftService', () => {
     expect(() => service.generate({
       base: { ...base, bundle: { ...base.bundle, metadata: { key: 'migration.camunda-native' } } }, engineKey: 'engine.camunda7', classifications: [], groupMappings: [],
     })).toThrow('Generated Camunda native-grant draft is invalid');
-    expect(() => service.generate({ base, engineKey: '   ', classifications: [], groupMappings: [] })).toThrow('Engine config key is required');
+    expect(() => service.generate({ base, engineKey: '   ', classifications: [], groupMappings: [] })).toThrow('Engine reference key is required');
   });
 
   it('rejects deterministic key collisions and still creates a valid no-op draft for manual-only input', () => {

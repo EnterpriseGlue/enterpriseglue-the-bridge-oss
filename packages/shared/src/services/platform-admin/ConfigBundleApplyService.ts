@@ -81,6 +81,31 @@ function canonicalEngineKeyIdentity(tenantId: string | null, key: string): strin
   return `${tenantId || 'platform'}:${key}`;
 }
 
+function resolvedEngineReferences(
+  engines: Engine[],
+  tenantId: string | null,
+  policy?: ConfigBundlePolicyContext,
+): Map<string, Engine> {
+  const byKey = new Map(engines
+    .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
+    .map((engine) => [engine.configKey!, engine]));
+  for (const reference of policy?.externalEngineReferences || []) {
+    const key = reference.key?.trim();
+    const engineId = reference.engineId?.trim();
+    if (!key || !engineId || byKey.has(key)) fail('Existing-engine migration reference is invalid or conflicts with a configured engine key', 409);
+    const engine = engines.find((candidate) => candidate.id === engineId);
+    const tenantMatches = Boolean(engine) && (
+      (engine!.tenancyMode === 'shared' && !engine!.tenantId)
+      || (engine!.tenancyMode === 'dedicated' && Boolean(engine!.tenantId) && (!tenantId || engine!.tenantId === tenantId))
+    );
+    if (!engine || engine.lifecycleStatus === 'decommissioned' || !tenantMatches) {
+      fail('Existing-engine migration reference is no longer available to this tenant', 409);
+    }
+    byKey.set(key, engine);
+  }
+  return byKey;
+}
+
 function runtimeResourceSetKeyIdentity(tenantId: string | null, key: string): string {
   return `${tenantId || 'platform'}:${key}`;
 }
@@ -507,9 +532,7 @@ class ConfigBundleApplyService {
           const desired = desiredRuntimeResourceSets.get(change.key);
           const sourceHash = desired ? objectFingerprint('runtime_resource_set', desired.key, desired) : objectFingerprint('runtime_resource_set', change.key, { archived: true });
           const engineRows = await engineRepo.find();
-          const engineByConfigKey = new Map(engineRows
-            .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
-            .map((engine) => [engine.configKey!, engine]));
+          const engineByConfigKey = resolvedEngineReferences(engineRows, tenantId, policy);
           const engine = desired ? engineByConfigKey.get(desired.engineRef.engineKey) : null;
           if (desired && !engine) fail(`Runtime Resource Set ${desired.key} references an unresolved engine`, 422);
           if (change.operation === 'create' && desired && engine) {
@@ -584,9 +607,7 @@ class ConfigBundleApplyService {
       ]);
       const roleByKey = new Map(roles.map((role) => [role.key, role]));
       const groupByKey = new Map(groups.map((group) => [group.key, group]));
-      const engineByKey = new Map(engines
-        .filter((engine) => engine.configKey && engine.lifecycleStatus !== 'decommissioned')
-        .map((engine) => [engine.configKey!, engine]));
+      const engineByKey = resolvedEngineReferences(engines, tenantId, policy);
       const engineSetByKey = new Map(engineSets.map((set) => [set.key, set]));
       const runtimeResourceSetByKey = new Map(runtimeResourceSets.map((set) => [set.key, set]));
       const sourceRef = `config_bundle:${manifest.metadata.key}`;
