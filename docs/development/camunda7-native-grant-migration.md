@@ -110,7 +110,7 @@ synthetic rows after completion. It intentionally does not use the manual
 membership API, because source-managed groups reject manual edits.
 
 `test:camunda7-native-grant-container` is an opt-in, disposable Docker
-contract against `camunda/camunda-bpm-platform`. It seeds only synthetic groups
+contract against the pinned `camunda/camunda-bpm-platform` image digest. It seeds only synthetic groups
 and authorization records through Camunda's documented REST endpoints, reads
 the real paginated `/authorization` endpoint through the production inventory
 service, and proves exact process-definition (`6`) and decision-definition
@@ -122,6 +122,10 @@ Camunda-only operational response fields such as `removalTime` and
 `rootProcessInstanceId` are discarded at the trusted live API boundary before
 canonical hashing and classification; the customer-export schema remains
 strict and does not accept those extra fields.
+
+To exercise a different supported Camunda 7 image intentionally, set
+`EG_CAMUNDA7_IMAGE` for the command and retain its image digest and result with
+the migration evidence. Do not replace the default pin with `latest`.
 
 ## Effective Access verification
 

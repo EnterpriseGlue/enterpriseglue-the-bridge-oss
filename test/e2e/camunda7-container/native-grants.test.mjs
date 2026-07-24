@@ -8,7 +8,10 @@ import {
 } from '../../../packages/shared/dist/services/platform-admin/CamundaNativeGrantInventoryService.js';
 
 const execFileAsync = promisify(execFile);
-const image = process.env.EG_CAMUNDA7_IMAGE || 'camunda/camunda-bpm-platform:latest';
+// Pin the fixture image so the REST compatibility claim is reproducible. A
+// caller may override it to qualify a supported customer Camunda 7 release.
+const image = process.env.EG_CAMUNDA7_IMAGE
+  || 'camunda/camunda-bpm-platform@sha256:bcc5bb0542df5895f4f9bbd1eed31d0c4273ab25c6c5c144693b494e81411d1c';
 const enabled = process.env.EG_RUN_CAMUNDA7_CONTAINER_TESTS === '1';
 
 function sleep(milliseconds) {
