@@ -61,6 +61,14 @@ migration bridge, adapter registry evidence, and tests. Never put source
 identifiers in `normalizedCountsJson`, `classificationsJson`, generic audit
 details, browser telemetry, or ordinary API responses.
 
+The five-adapter database lane is part of the required migration evidence. It
+executes the exact receipt migrations against disposable PostgreSQL, MySQL,
+SQL Server, Oracle, and Spanner targets. It specifically proves portable text,
+boolean, integer, indexes, add/remove/retry behavior, and transactional
+rollback of a synthetic receipt. Run it from a clean commit using
+`pnpm run test:engine-tenancy:database-matrix`; a one-adapter
+`--allow-dirty` run is diagnostic only.
+
 ## Local test commands
 
 Run the focused migration suite:

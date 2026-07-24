@@ -17,9 +17,16 @@ import {
 import {
   AddEngineTenantMappingReference1700000000097,
 } from '@enterpriseglue/shared/db/migrations/1700000000097-add-engine-tenant-mapping-reference.js';
+import {
+  AddCamundaNativeGrantImportRuns1700000000098,
+} from '@enterpriseglue/shared/db/migrations/1700000000098-add-camunda-native-grant-import-runs.js';
+import {
+  AddCamundaNativeGrantRollbackReceipt1700000000099,
+} from '@enterpriseglue/shared/db/migrations/1700000000099-add-camunda-native-grant-rollback-receipt.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
 import {
   engineTenantMappingService,
 } from '@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js';
@@ -62,6 +69,7 @@ const ids = {
   serviceEngine: `${runId}-service-engine`,
   serviceResource: `${runId}-service-resource`,
   rollbackMapping: `${runId}-rollback-mapping`,
+  rollbackImportRun: `${runId}-rollback-import-run`,
 };
 
 function normalizeName(value) {
@@ -115,6 +123,7 @@ async function logicalSchema(queryRunner, dataSource) {
       await tableDetails(queryRunner, dataSource, Engine, 'engines'),
       await tableDetails(queryRunner, dataSource, EngineTenantMapping, 'engine_tenant_mappings'),
       await tableDetails(queryRunner, dataSource, RuntimeResource, 'runtime_resources'),
+      await tableDetails(queryRunner, dataSource, CamundaNativeGrantImportRun, 'camunda_native_grant_import_runs'),
     ],
   };
   value.tables.sort((left, right) => left.table.localeCompare(right.table));
@@ -219,7 +228,24 @@ async function seedLegacyRows(dataSource) {
 async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerprint) {
   const foundation = new AddEngineTenancyFoundation1700000000096();
   const reference = new AddEngineTenantMappingReference1700000000097();
+  const importRuns = new AddCamundaNativeGrantImportRuns1700000000098();
+  const rollbackReceipt = new AddCamundaNativeGrantRollbackReceipt1700000000099();
   await seedLegacyRows(dataSource);
+
+  // Simulate an upgrade from immediately before the native-grant importer,
+  // including the idempotent receipt-column follow-up migration.
+  await rollbackReceipt.down(queryRunner);
+  await importRuns.down(queryRunner);
+  await assertColumn(queryRunner, dataSource, CamundaNativeGrantImportRun, 'rollback_config_bundle_run_id', false);
+  await importRuns.up(queryRunner);
+  await rollbackReceipt.up(queryRunner);
+  await assertColumn(queryRunner, dataSource, CamundaNativeGrantImportRun, 'rollback_config_bundle_run_id', true);
+  await assertColumn(queryRunner, dataSource, CamundaNativeGrantImportRun, 'rolled_back_at', true);
+  assert.equal(
+    fingerprint(await logicalSchema(queryRunner, dataSource)),
+    expectedFingerprint,
+    `${database}: native-grant receipt upgrade schema differs from clean install`,
+  );
 
   await reference.down(queryRunner);
   await assertColumn(queryRunner, dataSource, EngineTenantMapping, 'tenant_reference_json', false);
@@ -262,6 +288,8 @@ async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerpr
 async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerprint) {
   const foundation = new AddEngineTenancyFoundation1700000000096();
   const reference = new AddEngineTenantMappingReference1700000000097();
+  const importRuns = new AddCamundaNativeGrantImportRuns1700000000098();
+  const rollbackReceipt = new AddCamundaNativeGrantRollbackReceipt1700000000099();
   const engines = await queryRunner.getTable(metadataPath(dataSource, Engine));
   const resources = await queryRunner.getTable(metadataPath(dataSource, RuntimeResource));
   const engineIndex = engines?.indices.find((candidate) =>
@@ -270,11 +298,17 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
     normalizeName(candidate.name) === 'idx_runtime_resources_tenant_resolution');
   if (engineIndex) await queryRunner.dropIndex(metadataPath(dataSource, Engine), engineIndex);
   if (resourceIndex) await queryRunner.dropIndex(metadataPath(dataSource, RuntimeResource), resourceIndex);
+  await rollbackReceipt.down(queryRunner);
+  await importRuns.down(queryRunner);
 
   await foundation.up(queryRunner);
   await reference.up(queryRunner);
+  await importRuns.up(queryRunner);
+  await rollbackReceipt.up(queryRunner);
   await foundation.up(queryRunner);
   await reference.up(queryRunner);
+  await importRuns.up(queryRunner);
+  await rollbackReceipt.up(queryRunner);
   assert.equal(
     fingerprint(await logicalSchema(queryRunner, dataSource)),
     expectedFingerprint,
@@ -402,12 +436,38 @@ async function qualifyRollback(dataSource) {
           updatedAt: now,
         },
       );
+      await manager.getRepository(CamundaNativeGrantImportRun).insert({
+        id: ids.rollbackImportRun,
+        engineId: ids.serviceEngine,
+        tenantId: 'tenant-default',
+        sourceKind: 'live_api',
+        status: 'previewed',
+        inputHash: '0'.repeat(64),
+        mappingCatalogVersion: 'database-qualification',
+        inventoryTruncated: false,
+        normalizedCountsJson: '{}',
+        classificationsJson: '[]',
+        encryptedDetailedSnapshot: null,
+        detailedSnapshotExpiresAt: null,
+        draftHash: null,
+        createdById: null,
+        approvedById: null,
+        approvedAt: null,
+        appliedConfigBundleRunId: null,
+        rollbackConfigBundleRunId: null,
+        rolledBackAt: null,
+        createdAt: now,
+        updatedAt: now,
+      });
       throw marker;
     }),
     (error) => error === marker,
   );
   assert.equal(await dataSource.getRepository(EngineTenantMapping).countBy({
     id: ids.rollbackMapping,
+  }), 0);
+  assert.equal(await dataSource.getRepository(CamundaNativeGrantImportRun).countBy({
+    id: ids.rollbackImportRun,
   }), 0);
   const after = await dataSource.getRepository(RuntimeResource).findOneByOrFail({
     id: ids.serviceResource,
@@ -420,6 +480,7 @@ async function qualifyRollback(dataSource) {
     retainedMetadata: true,
     assertions: [
       'failed mapping write leaves no row',
+      'failed native-grant receipt write leaves no row',
       'tenant resolution and diagnostic metadata remain unchanged',
     ],
   };

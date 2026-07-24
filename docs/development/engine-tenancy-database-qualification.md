@@ -34,6 +34,13 @@ The supported baselines are the schema immediately before the engine-tenancy
 foundation migration and the foundation schema immediately before the portable
 tenant-reference migration.
 
+The same contract also qualifies the Camunda 7 native-grant import receipt:
+migrations `0098` and `0099` create, remove, recreate, and retry its opaque
+receipt and rollback-receipt columns on every adapter. The rollback transaction
+deliberately writes a synthetic receipt and then fails, proving that no partial
+migration evidence survives. It uses no customer grants, identifiers, or
+credentials.
+
 ## Prerequisites
 
 - Docker is running and can pull Linux containers.
@@ -125,7 +132,9 @@ endpoints, raw identity claims, or customer identifiers.
 The worker uses the canonical `runMigrations` path and the real
 `EngineTenantMappingService` transaction. It proves the engine-tenancy schema
 and service lifecycle against each adapter, including a deliberate failed
-transaction and an idempotent retry.
+transaction and an idempotent retry. It also verifies the native-grant receipt
+schema is equivalent after a clean install, both applicable upgrade paths, and
+the `0098`/`0099` add/remove/retry sequence.
 
 The lane intentionally does not run unrelated application seed catalogs.
 Those have their own ownership and qualification scope. Therefore,

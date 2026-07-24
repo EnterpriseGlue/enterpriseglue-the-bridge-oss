@@ -42,8 +42,13 @@ test('declares the exact five-adapter, two-baseline, seven-stage denominator', (
   assert.ok(contract.requiredTables.engines.includes('tenancy_mode'));
   assert.ok(contract.requiredTables.engine_tenant_mappings.includes('tenant_reference_json'));
   assert.ok(contract.requiredTables.runtime_resources.includes('tenant_resolution_details_json'));
+  assert.ok(contract.requiredTables.camunda_native_grant_import_runs.includes('rollback_config_bundle_run_id'));
+  assert.ok(contract.requiredTables.camunda_native_grant_import_runs.includes('rolled_back_at'));
   assert.ok(contract.requiredIndexes.runtime_resources.includes(
     'idx_runtime_resources_tenant_resolution',
+  ));
+  assert.ok(contract.requiredIndexes.camunda_native_grant_import_runs.includes(
+    'idx_camunda_native_grant_import_status_updated',
   ));
 });
 
@@ -93,6 +98,9 @@ test('executes every stage against the real adapter and service transaction', ()
   assert.match(worker, /expectedMappingVersion: 0/);
   assert.match(worker, /expectedMappingVersion: 1/);
   assert.match(worker, /tenantResolutionDetailsJson/);
+  assert.match(worker, /AddCamundaNativeGrantImportRuns1700000000098/);
+  assert.match(worker, /AddCamundaNativeGrantRollbackReceipt1700000000099/);
+  assert.match(worker, /rollbackConfigBundleRunId/);
   assert.match(worker, /ownedRowsRemaining: 0/);
   assert.match(worker, /cleanInstallEqualsAllUpgradePaths: true/);
   assert.match(worker, /assert\.rejects/);
