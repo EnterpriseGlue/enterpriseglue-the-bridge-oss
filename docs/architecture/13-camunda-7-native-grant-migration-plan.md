@@ -483,7 +483,14 @@ Effective Access, and performs an authoritative import-owned rollback.
 Shared-engine unresolved and ambiguous tenant cases remain covered by the
 classifier/tenancy contract suite. The authenticated-browser and real Camunda
 container scenarios above remain release qualification work; they must not be
-represented as already executed by this synthetic baseline.
+represented as already executed by this synthetic baseline. The disposable
+`test:camunda7-native-grant-container` contract now separately exercises the
+real Camunda 7 REST service with synthetic API-seeded process-definition (`6`)
+and decision-definition (`10`) `READ` grants. It proves the production
+read-only inventory accepts Camunda's operational response fields only by
+projecting them out before canonical hashing/classification, and never writes
+while reading. It does not replace an authenticated EnterpriseGlue browser
+acceptance journey or customer cutover evidence.
 
 ## Rollback and Stop Conditions
 

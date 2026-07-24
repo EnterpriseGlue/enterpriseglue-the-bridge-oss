@@ -27,6 +27,7 @@
     "test:unit": "pnpm --filter webmodeler-backend run test:unit && pnpm --filter webmodeler-frontend run test:unit",
     "test:integration": "pnpm --filter webmodeler-backend run test:integration",
     "test:e2e": "playwright test --config test/e2e/playwright.config.ts",
+    "test:camunda7-native-grant-container": "pnpm --filter shared run build && EG_RUN_CAMUNDA7_CONTAINER_TESTS=1 node --test test/e2e/camunda7-container/native-grants.test.mjs",
     "test:e2e:smoke": "playwright test --config test/e2e/playwright.config.ts --grep @smoke",
     "test:e2e:smoke:mission-control": "playwright test --config test/e2e/playwright.config.ts --grep @mission-control",
     "test:e2e:identity-lifecycle": "./scripts/run-identity-browser-test.sh",

@@ -86,6 +86,7 @@ pnpm --dir backend exec vitest run \
   __tests__/modules/mission-control/engines/routes.test.ts \
   --config vitest.config.ts --maxWorkers=1 --no-file-parallelism
 node --test test/e2e/mock-camunda/native-grants.test.mjs
+pnpm run test:camunda7-native-grant-container
 bash ./scripts/run-local-safe-native-grant-migration.sh
 pnpm --dir frontend exec vitest run \
   __tests__/src/features/mission-control/engines/components/CamundaNativeGrantMigrationPanel.test.tsx
@@ -107,6 +108,20 @@ the configuration-owned group, proves target allow/sibling deny Effective
 Access, then performs a hash-bound authoritative rollback. It cleans all
 synthetic rows after completion. It intentionally does not use the manual
 membership API, because source-managed groups reject manual edits.
+
+`test:camunda7-native-grant-container` is an opt-in, disposable Docker
+contract against `camunda/camunda-bpm-platform`. It seeds only synthetic groups
+and authorization records through Camunda's documented REST endpoints, reads
+the real paginated `/authorization` endpoint through the production inventory
+service, and proves exact process-definition (`6`) and decision-definition
+(`10`) `READ` grants classify as proposed. It asserts that the inventory path
+uses only `GET`; its setup writes are isolated to the container and the
+container is removed even on failure. Use the mock fixture for fast complete
+classification coverage and this lane for real-Camunda REST compatibility.
+Camunda-only operational response fields such as `removalTime` and
+`rootProcessInstanceId` are discarded at the trusted live API boundary before
+canonical hashing and classification; the customer-export schema remains
+strict and does not accept those extra fields.
 
 ## Effective Access verification
 

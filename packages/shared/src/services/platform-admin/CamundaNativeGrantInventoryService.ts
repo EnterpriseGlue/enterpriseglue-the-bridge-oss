@@ -56,6 +56,30 @@ export interface ClassifyCamundaNativeGrantOptions {
   requireResolvedTenant?: boolean;
 }
 
+/**
+ * Camunda's live REST representation can add operational fields (for example
+ * removal-time metadata) that are not authorization inputs. Accept those only
+ * at the trusted live-transport boundary, then project the narrow canonical
+ * authorization shape used for hashing, classification, export, and storage.
+ * Customer exports remain strictly versioned through
+ * CamundaNativeAuthorizationExportSchema.
+ */
+const CamundaNativeLiveAuthorizationSchema = CamundaNativeAuthorizationSchema
+  .passthrough()
+  .transform((authorization) => ({
+    id: authorization.id,
+    type: authorization.type,
+    permissions: authorization.permissions,
+    userId: authorization.userId,
+    groupId: authorization.groupId,
+    resourceType: authorization.resourceType,
+    resourceId: authorization.resourceId,
+  }));
+
+function parseLiveAuthorizationPage(value: unknown): CamundaNativeAuthorization[] {
+  return CamundaNativeLiveAuthorizationSchema.array().parse(value);
+}
+
 function stableJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -189,7 +213,7 @@ export class CamundaNativeGrantInventoryService {
     while (collected.length < maxRecords) {
       const maxResults = Math.min(pageSize, maxRecords - collected.length);
       const rawPage = await this.readPage(engineId, { firstResult, maxResults });
-      const page = CamundaNativeAuthorizationSchema.array().parse(rawPage);
+      const page = parseLiveAuthorizationPage(rawPage);
       if (page.length > maxResults) throw new Error('Camunda authorization page exceeded requested limit');
       collected.push(...page);
       firstResult += page.length;
@@ -198,7 +222,7 @@ export class CamundaNativeGrantInventoryService {
 
     let truncated = false;
     if (collected.length >= maxRecords) {
-      const next = CamundaNativeAuthorizationSchema.array().parse(await this.readPage(engineId, { firstResult, maxResults: 1 }));
+      const next = parseLiveAuthorizationPage(await this.readPage(engineId, { firstResult, maxResults: 1 }));
       truncated = next.length > 0;
     }
     const authorizations = canonicalAuthorizations(collected);

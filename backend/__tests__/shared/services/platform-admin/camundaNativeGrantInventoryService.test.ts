@@ -60,6 +60,24 @@ describe('CamundaNativeGrantInventoryService', () => {
     expect(() => service.fromCustomerExport({ apiVersion: 'v1', authorizations: [] } as never)).toThrow();
   });
 
+  it('projects operational Camunda live-response fields without relaxing strict customer exports', async () => {
+    const authorization = {
+      id: 'live-a', type: 1, permissions: ['READ'], groupId: 'ops', resourceType: 6, resourceId: 'payments-order',
+      removalTime: null, rootProcessInstanceId: null,
+    };
+    const result = await new CamundaNativeGrantInventoryService(vi.fn().mockResolvedValue([authorization]))
+      .listLive('engine-1');
+
+    expect(result.authorizations).toEqual([{
+      id: 'live-a', type: 1, permissions: ['READ'], groupId: 'ops', resourceType: 6, resourceId: 'payments-order',
+      userId: undefined,
+    }]);
+    expect(() => new CamundaNativeGrantInventoryService(vi.fn()).fromCustomerExport({
+      apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1',
+      authorizations: [authorization],
+    })).toThrow(/unrecognized/i);
+  });
+
   it('uses the audited Camunda GET client when no reader is injected', async () => {
     camundaGet.mockResolvedValueOnce([]);
 
