@@ -15,7 +15,10 @@ identifiers.
 
 For an offline source, use `customer_export` with the versioned schema shown in
 [the sanitized example](camunda7-native-grant-export.example.json). The server
-rejects a truncated inventory. Response: `{ "run": { ...sanitized receipt } }`.
+rejects a truncated inventory or any snapshot/classification record that cannot
+fit within the cross-adapter secure-evidence limit. Those validation failures
+write no import row; split the scope and make a new read-only preview. Response:
+`{ "run": { ...sanitized receipt } }`.
 
 ## Protected detail and draft
 

@@ -492,6 +492,20 @@ projecting them out before canonical hashing/classification, and never writes
 while reading. It does not replace an authenticated EnterpriseGlue browser
 acceptance journey or customer cutover evidence.
 
+### Release-gate status and executable external handoff
+
+The synthetic fixture, local PostgreSQL migration/rollback integration,
+digest-pinned real-Camunda REST contract, focused backend/frontend tests, and
+five-adapter physical schema matrix are local release evidence. The remaining
+external gate is intentionally explicit rather than assumed: a browser-capable
+local Docker environment must execute the authenticated preview/draft/apply,
+Effective Access allow-and-deny, protected-route, accessibility, and
+hash-bound rollback journey using only synthetic identities and grants. The
+exact prerequisites, commands, retained artifacts, success criteria, and stop
+conditions are maintained in the [developer handoff](../development/camunda7-native-grant-migration.md#browser-and-customer-acceptance-handoff).
+No runtime authority-mode change or compatibility removal is permitted before
+that evidence exists.
+
 ## Rollback and Stop Conditions
 
 Stop and do not apply when any of the following is true:

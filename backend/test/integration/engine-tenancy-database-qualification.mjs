@@ -23,6 +23,9 @@ import {
 import {
   AddCamundaNativeGrantRollbackReceipt1700000000099,
 } from '@enterpriseglue/shared/db/migrations/1700000000099-add-camunda-native-grant-rollback-receipt.js';
+import {
+  WidenCamundaNativeGrantEvidence1700000000100,
+} from '@enterpriseglue/shared/db/migrations/1700000000100-widen-camunda-native-grant-evidence.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -230,6 +233,7 @@ async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerpr
   const reference = new AddEngineTenantMappingReference1700000000097();
   const importRuns = new AddCamundaNativeGrantImportRuns1700000000098();
   const rollbackReceipt = new AddCamundaNativeGrantRollbackReceipt1700000000099();
+  const widenEvidence = new WidenCamundaNativeGrantEvidence1700000000100();
   await seedLegacyRows(dataSource);
 
   // Simulate an upgrade from immediately before the native-grant importer,
@@ -239,6 +243,7 @@ async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerpr
   await assertColumn(queryRunner, dataSource, CamundaNativeGrantImportRun, 'rollback_config_bundle_run_id', false);
   await importRuns.up(queryRunner);
   await rollbackReceipt.up(queryRunner);
+  await widenEvidence.up(queryRunner);
   await assertColumn(queryRunner, dataSource, CamundaNativeGrantImportRun, 'rollback_config_bundle_run_id', true);
   await assertColumn(queryRunner, dataSource, CamundaNativeGrantImportRun, 'rolled_back_at', true);
   assert.equal(
@@ -290,6 +295,7 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   const reference = new AddEngineTenantMappingReference1700000000097();
   const importRuns = new AddCamundaNativeGrantImportRuns1700000000098();
   const rollbackReceipt = new AddCamundaNativeGrantRollbackReceipt1700000000099();
+  const widenEvidence = new WidenCamundaNativeGrantEvidence1700000000100();
   const engines = await queryRunner.getTable(metadataPath(dataSource, Engine));
   const resources = await queryRunner.getTable(metadataPath(dataSource, RuntimeResource));
   const engineIndex = engines?.indices.find((candidate) =>
@@ -305,10 +311,12 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   await reference.up(queryRunner);
   await importRuns.up(queryRunner);
   await rollbackReceipt.up(queryRunner);
+  await widenEvidence.up(queryRunner);
   await foundation.up(queryRunner);
   await reference.up(queryRunner);
   await importRuns.up(queryRunner);
   await rollbackReceipt.up(queryRunner);
+  await widenEvidence.up(queryRunner);
   assert.equal(
     fingerprint(await logicalSchema(queryRunner, dataSource)),
     expectedFingerprint,

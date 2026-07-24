@@ -150,6 +150,11 @@ export class OracleAdapter implements DatabaseAdapter {
       }
 
       if (column.options.type === 'text') {
+        if (String(column.options.length).toLowerCase() === 'max') {
+          column.options.type = 'clob';
+          delete column.options.length;
+          continue;
+        }
         column.options.type = 'varchar2';
         if (column.options.length == null) {
           column.options.length = isPrimaryOrIndexedOrUnique ? 191 : 4000;

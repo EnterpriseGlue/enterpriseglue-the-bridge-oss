@@ -16,6 +16,21 @@ import {
 
 export const DEFAULT_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS = DEFAULT_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS;
+/**
+ * The common safe limit is below Cloud Spanner STRING(MAX)'s 2.5 MiB limit.
+ * It applies after encryption, so every supported database either accepts a
+ * run or rejects it before any partial evidence is persisted.
+ */
+export const MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES = 2 * 1024 * 1024;
+export const MAX_CAMUNDA_NATIVE_GRANT_CLASSIFICATIONS_BYTES = 2 * 1024 * 1024;
+
+/** A bounded import that cannot be retained safely is always rejected before persistence. */
+export class CamundaNativeGrantEvidenceLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CamundaNativeGrantEvidenceLimitError';
+  }
+}
 
 export interface CreateCamundaNativeGrantImportRunInput {
   engineId: string;
@@ -115,6 +130,25 @@ function optionalId(value?: string | null): string | null {
   return value?.trim() || null;
 }
 
+function byteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8');
+}
+
+function assertWithinLimit(value: string, limit: number, label: string): string {
+  if (byteLength(value) > limit) {
+    throw new CamundaNativeGrantEvidenceLimitError(`${label} exceeds the cross-database secure evidence limit; narrow the migration scope before retrying`);
+  }
+  return value;
+}
+
+function encryptEvidence(value: unknown): string {
+  return assertWithinLimit(
+    encrypt(JSON.stringify(value)),
+    MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES,
+    'Encrypted native-grant evidence',
+  );
+}
+
 /**
  * Persists opaque migration evidence. This service does not make authorization
  * decisions, does not call Camunda, and does not expose a native snapshot.
@@ -134,7 +168,12 @@ export class CamundaNativeGrantImportRunService {
 
     const classifications = input.classifications.map(sanitizeClassification)
       .sort((left, right) => left.sourceAuthorizationRef.localeCompare(right.sourceAuthorizationRef));
-    const detailedSnapshot = input.detailedSnapshot === undefined ? null : encrypt(JSON.stringify(input.detailedSnapshot));
+    const classificationsJson = assertWithinLimit(
+      JSON.stringify(classifications),
+      MAX_CAMUNDA_NATIVE_GRANT_CLASSIFICATIONS_BYTES,
+      'Native-grant classification evidence',
+    );
+    const detailedSnapshot = input.detailedSnapshot === undefined ? null : encryptEvidence(input.detailedSnapshot);
     const expiresAt = detailedSnapshot ? now + snapshotRetentionMs : null;
     const run = {
       id: generateId(),
@@ -146,7 +185,7 @@ export class CamundaNativeGrantImportRunService {
       mappingCatalogVersion,
       inventoryTruncated: false,
       normalizedCountsJson: JSON.stringify(countsFor(classifications)),
-      classificationsJson: JSON.stringify(classifications),
+      classificationsJson,
       encryptedDetailedSnapshot: detailedSnapshot,
       detailedSnapshotExpiresAt: expiresAt,
       draftHash: null,
@@ -196,10 +235,10 @@ export class CamundaNativeGrantImportRunService {
       }
       const detail = JSON.parse(decrypt(run.encryptedDetailedSnapshot));
       if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw new Error('Native-grant detail is invalid');
-      encryptedDetailedSnapshot = encrypt(JSON.stringify({
+      encryptedDetailedSnapshot = encryptEvidence({
         ...(detail as Record<string, unknown>),
         generatedDraft: input.draft,
-      }));
+      });
     }
     const values = {
       status: 'draft_generated' as const,

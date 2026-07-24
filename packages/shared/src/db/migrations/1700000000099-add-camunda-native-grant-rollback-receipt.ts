@@ -2,7 +2,7 @@ import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 function portableText(queryRunner: QueryRunner): { type: string; length?: string } {
-  const database = queryRunner.connection.options?.type || 'postgres';
+  const database = queryRunner.connection?.options?.type || 'postgres';
   if (database === 'mysql') return { type: 'text' };
   if (database === 'mssql') return { type: 'nvarchar', length: '4000' };
   if (database === 'oracle') return { type: 'varchar2', length: '4000' };
@@ -11,7 +11,7 @@ function portableText(queryRunner: QueryRunner): { type: string; length?: string
 }
 
 function portableBigint(queryRunner: QueryRunner): { type: string; precision?: number; scale?: number } {
-  const database = queryRunner.connection.options?.type || 'postgres';
+  const database = queryRunner.connection?.options?.type || 'postgres';
   if (database === 'oracle') return { type: 'number', precision: 19, scale: 0 };
   if (database === 'spanner') return { type: 'int64' };
   return { type: 'bigint' };
@@ -19,7 +19,8 @@ function portableBigint(queryRunner: QueryRunner): { type: string; precision?: n
 
 function tablePath(queryRunner: QueryRunner): string {
   try {
-    return queryRunner.connection.getMetadata('CamundaNativeGrantImportRun').tablePath;
+    return queryRunner.connection?.getMetadata('CamundaNativeGrantImportRun').tablePath
+      || 'camunda_native_grant_import_runs';
   } catch {
     return 'camunda_native_grant_import_runs';
   }

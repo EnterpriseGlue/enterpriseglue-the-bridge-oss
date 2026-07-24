@@ -53,8 +53,20 @@ baseline preservation are redesigned and tested.
 maximum encrypted detail snapshot. It links the forward and rollback
 configuration-apply run ids. The persistence entity is registered for
 PostgreSQL, MySQL, SQL Server, Oracle, and Spanner through the canonical
-adapter registry; migrations `0098` and `0099` create the import receipt and
-rollback receipt columns.
+adapter registry; migrations `0098`, `0099`, and `0100` create the import
+receipt, rollback receipt columns, and a safe widening path for old receipt
+rows. The encrypted snapshot and sanitized classification record use each
+adapter's unbounded document type, while the service enforces a 2 MiB encrypted
+evidence and classification limit before it writes anything. A limit rejection
+is a validation result: split the migration into smaller scopes and rerun the
+read-only preview. It is never a truncated or partially persisted import.
+
+The backend starts the encrypted-detail retention purge by default and then
+runs it hourly. `CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_PURGE_INTERVAL_MS`
+may increase or decrease the positive cadence; an empty, zero, or invalid value
+falls back to the safe hourly cadence rather than disabling retention. The purge
+removes only expired ciphertext and retains sanitized counts, opaque references,
+and apply/rollback receipts.
 
 Any change to its columns must update the entity, source migration, persistence
 migration bridge, adapter registry evidence, and tests. Never put source
@@ -135,3 +147,65 @@ representative user into each imported EnterpriseGlue group and test both the
 target resource allow and a sibling-resource deny using Effective Access and
 the protected Mission Control route. For shared engines also test resolved,
 unmapped, and conflicting runtime-tenant rows.
+
+## Browser and customer-acceptance handoff
+
+The following is the executable final gate that cannot be substituted by unit,
+container, or API-only evidence. It requires a browser runner permitted to
+reach the local Docker frontend and backend, plus an authenticated
+EnterpriseGlue administrator session. Do not use customer identities or
+customer grants for this qualification.
+
+### Required inputs
+
+- A clean release commit, the local Docker EnterpriseGlue stack, and the
+  pinned Camunda image used by `pnpm run test:camunda7-native-grant-container`.
+- One synthetic registered Camunda 7 engine and active discovered runtime
+  resources: at least one mapped process definition, one mapped decision
+  definition, and one sibling resource with no grant.
+- Two synthetic EnterpriseGlue identities: a member of each imported group and
+  a non-member. Create membership only through the configured identity-source
+  synchronization path, not the manual group-membership API.
+- For a shared engine, one each of resolved, unmapped, and conflicting runtime
+  tenant rows. For a dedicated engine, record the default-tenant result.
+
+### Procedure and retained evidence
+
+1. Run `pnpm run test:camunda7-native-grant-container` and retain the pinned
+   image digest plus its passing result.
+2. In Mission Control, create the preview from the synthetic source, inspect
+   every manual/blocked disposition, map only supported groups, generate the
+   draft, and apply its exact returned hash. Record sanitized preview counts,
+   input hash, draft hash, and configuration apply receipt id.
+3. Synchronize the synthetic member through the configured provider path. In
+   Effective Access and the protected process/decision routes, prove target
+   allow and sibling/non-member deny for every mapped resource type. Record the
+   explained decision and protected-route response without raw group ids.
+4. Run the guarded browser and accessibility lanes:
+
+   ```bash
+   pnpm run test:authz:local-smoke:cross-browser
+   pnpm run test:engine-tenancy:provisioning-journeys:local
+   pnpm run test:authz:accessibility:cross-browser
+   pnpm run test:authz:state-space-evidence
+   ```
+
+   Retain their current-clean artifacts: browser matrix, provisioning journey,
+   accessibility matrix, and authorization state-space matrix.
+5. Preview rollback, confirm that every changed object is owned by the exact
+   migration source reference, acknowledge only the returned archive set, and
+   apply the exact rollback hash. Record the rollback preview hash and receipt
+   id. Re-run the same allow/deny cases and confirm the imported allow has been
+   removed while the engine registration, tenant mapping, and unrelated records
+   remain unchanged.
+
+Success requires all supported groups/resources to have an allow and a sibling
+or non-member deny, every unsupported source row to remain manual or blocked,
+no native Camunda write during inventory, a current-clean artifact for every
+lane above, and the rollback result described in step 5. Stop and roll back if
+a preview is truncated, a receipt/hash changes, a shared tenant is unresolved,
+an unexpected object is proposed for archive, a protected-route deny becomes
+an allow, or the browser evidence cannot be captured. The browser, state-space,
+and customer-acceptance checklist items stay open until those artifacts exist;
+do not remove compatibility or change the runtime model based on local-only
+evidence.

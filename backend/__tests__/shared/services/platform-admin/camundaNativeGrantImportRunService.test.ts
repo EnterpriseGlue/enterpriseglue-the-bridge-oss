@@ -11,8 +11,11 @@ vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({ encrypt, decry
 vi.mock('@enterpriseglue/shared/utils/id.js', () => ({ generateId }));
 
 import {
+  CamundaNativeGrantEvidenceLimitError,
   CamundaNativeGrantImportRunService,
   DEFAULT_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS,
+  MAX_CAMUNDA_NATIVE_GRANT_CLASSIFICATIONS_BYTES,
+  MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES,
 } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js';
 import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
 
@@ -200,6 +203,39 @@ describe('CamundaNativeGrantImportRunService', () => {
     expect(repository.update).toHaveBeenLastCalledWith(expect.objectContaining({ detailedSnapshotExpiresAt: expect.anything(), encryptedDetailedSnapshot: expect.anything() }), {
       encryptedDetailedSnapshot: null, updatedAt: 1234,
     });
+  });
+
+  it('rejects oversized classifications, source snapshots, and generated drafts before persistence', async () => {
+    const repository = setup();
+    const service = new CamundaNativeGrantImportRunService();
+    const oversizedActions = Array.from({ length: 10_000 }, (_, index) => `action-${index}-${'x'.repeat(230)}`);
+    await expect(service.createPreview({
+      engineId: 'engine-1', sourceKind: 'live_api', inputHash: hash, mappingCatalogVersion: 'v1', inventoryTruncated: false,
+      classifications: [{ ...baseClassification, mappedActionIds: oversizedActions }],
+    })).rejects.toBeInstanceOf(CamundaNativeGrantEvidenceLimitError);
+    await expect(service.createPreview({
+      engineId: 'engine-1', sourceKind: 'live_api', inputHash: hash, mappingCatalogVersion: 'v1', inventoryTruncated: false,
+      classifications: [], detailedSnapshot: { raw: 'x'.repeat(MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES) },
+    })).rejects.toBeInstanceOf(CamundaNativeGrantEvidenceLimitError);
+    expect(repository.insert).not.toHaveBeenCalled();
+
+    const now = Date.now();
+    repository.findOne.mockResolvedValue({
+      id: 'run-1', engineId: 'engine-1', tenantId: null, sourceKind: 'live_api', status: 'previewed', inputHash: hash,
+      mappingCatalogVersion: 'v1', inventoryTruncated: false, normalizedCountsJson: '{}', classificationsJson: '[]',
+      encryptedDetailedSnapshot: 'encrypted:{}', detailedSnapshotExpiresAt: now + 1_000,
+      draftHash: null, createdAt: now, updatedAt: now,
+    });
+    await expect(service.setDraft({
+      id: 'run-1', draftHash: hash, approverId: 'operator', now,
+      draft: {
+        bundle: {}, files: { 'large.json': 'x'.repeat(MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES) }, canonicalHash: hash,
+        engineReference: { key: 'native-engine', engineId: 'engine-1', mode: 'existing_registered' },
+        generated: { groupCount: 0, roleCount: 0, runtimeResourceSetCount: 0, assignmentCount: 0 }, manualWorkAuthorizationIds: [],
+      },
+    })).rejects.toBeInstanceOf(CamundaNativeGrantEvidenceLimitError);
+    expect(repository.update).not.toHaveBeenCalled();
+    expect(MAX_CAMUNDA_NATIVE_GRANT_CLASSIFICATIONS_BYTES).toBeLessThanOrEqual(MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES);
   });
 
   it('degrades malformed count JSON to an empty record while retaining opaque classifications', async () => {

@@ -41,6 +41,7 @@ const engineTenancyTransitionServiceMock = vi.hoisted(() => ({
   classificationReport: vi.fn(),
 }));
 const nativeGrantMigrationMock = vi.hoisted(() => ({
+  evidenceLimitError: class CamundaNativeGrantEvidenceLimitError extends Error {},
   fromCustomerExport: vi.fn(),
   listLive: vi.fn(),
   classify: vi.fn(),
@@ -82,6 +83,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInvent
   classifyCamundaNativeGrant: nativeGrantMigrationMock.classify,
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js', () => ({
+  CamundaNativeGrantEvidenceLimitError: nativeGrantMigrationMock.evidenceLimitError,
   camundaNativeGrantImportRunService: {
     createPreview: nativeGrantMigrationMock.createPreview, getSummary: nativeGrantMigrationMock.getSummary,
     getDetailedSnapshot: nativeGrantMigrationMock.getDetailedSnapshot, setDraft: nativeGrantMigrationMock.setDraft,
@@ -654,6 +656,23 @@ describe('mission-control engines routes', () => {
     expect(nativeGrantMigrationMock.createPreview).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'e1', sourceKind: 'customer_export', detailedSnapshot: expect.objectContaining({ authorizations: [{ id: 'native-1' }] }),
     }));
+  });
+
+  it('returns a validation response when secure migration evidence would exceed the portable persistence limit', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : entity === RuntimeResource ? runtimeRepo : {} });
+    nativeGrantMigrationMock.fromCustomerExport.mockReturnValue({ inventoryHash: 'a'.repeat(64), truncated: false, authorizations: [{ id: 'native-1' }] });
+    nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'blocked', reasonCodes: ['unsupported_resource_type'], principal: { type: 'global' }, resourceKind: null, resourceId: null, runtimeTenantId: null, mappedActionIds: [] });
+    nativeGrantMigrationMock.createPreview.mockRejectedValue(new nativeGrantMigrationMock.evidenceLimitError('Encrypted native-grant evidence exceeds the cross-database secure evidence limit; narrow the migration scope before retrying'));
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
+      sourceKind: 'customer_export', customerExport: { apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1', authorizations: [{ id: 'native-1', type: 1, permissions: ['READ'], resourceType: 0 }] },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('narrow the migration scope');
   });
 
   it('generates a migration draft for a UI-created engine without requiring it to be re-added through configuration', async () => {

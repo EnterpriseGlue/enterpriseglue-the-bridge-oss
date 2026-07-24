@@ -52,6 +52,11 @@ grants, unsupported resource types, and missing/ambiguous inventory outside
 the draft. Resolve those items as explicit manual policy work; do not treat a
 successful import as evidence that they were converted.
 
+If the UI reports that secure migration evidence is too large, no import row or
+draft was written. Split the affected grants into smaller scopes, make a new
+read-only preview for each scope, and review their sanitized receipts
+separately. Never retry by broadening a group or resource selector.
+
 ## Rollback
 
 While the encrypted detailed snapshot remains available (maximum 30 days), an
@@ -72,6 +77,10 @@ Sets, and assignments created by that migration bundle. It does not:
 Save the original apply and rollback receipt ids with the change record. If the
 encrypted snapshot has expired, create a fresh read-only preview and compare
 the retained sanitized receipt before deciding on a manual remediation.
+
+EnterpriseGlue removes expired encrypted detail automatically. The ordinary
+sanitized receipt and the apply/rollback ids remain available for audit; do not
+expect expired native group or resource identifiers to be recoverable.
 
 ## Stop conditions
 

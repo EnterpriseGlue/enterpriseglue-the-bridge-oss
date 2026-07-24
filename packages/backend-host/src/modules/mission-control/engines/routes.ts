@@ -74,7 +74,7 @@ import { EngineMetadataReconciliationResultSchema } from '@enterpriseglue/shared
 import { ProjectEngineTargetSchema, RuntimeResourceSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
 import { CamundaNativeAuthorizationExportSchema, CamundaNativeGrantClassificationSchema } from '@enterpriseglue/shared/schemas/platform-admin/camunda-native-grants.js'
 import { camundaNativeGrantInventoryService, classifyCamundaNativeGrant } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js'
-import { camundaNativeGrantImportRunService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js'
+import { CamundaNativeGrantEvidenceLimitError, camundaNativeGrantImportRunService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js'
 import { camundaNativeGrantDraftService, camundaNativeGrantExternalEngineKey } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
@@ -1754,17 +1754,23 @@ r.post('/engines-api/engines/:id/camunda-native-grants/imports/preview', engineL
     })),
     requireResolvedTenant: engine.tenancyMode === 'shared',
   }))
-  const run = await camundaNativeGrantImportRunService.createPreview({
-    engineId,
-    tenantId: req.tenant?.tenantId || null,
-    sourceKind: req.body.sourceKind,
-    inputHash: inventory.inventoryHash,
-    mappingCatalogVersion: 'camunda7-v1-read-only',
-    inventoryTruncated: false,
-    classifications,
-    detailedSnapshot: { version: 1, authorizations: inventory.authorizations, classifications },
-    actorId: req.user!.userId,
-  })
+  let run
+  try {
+    run = await camundaNativeGrantImportRunService.createPreview({
+      engineId,
+      tenantId: req.tenant?.tenantId || null,
+      sourceKind: req.body.sourceKind,
+      inputHash: inventory.inventoryHash,
+      mappingCatalogVersion: 'camunda7-v1-read-only',
+      inventoryTruncated: false,
+      classifications,
+      detailedSnapshot: { version: 1, authorizations: inventory.authorizations, classifications },
+      actorId: req.user!.userId,
+    })
+  } catch (error) {
+    if (error instanceof CamundaNativeGrantEvidenceLimitError) throw Errors.validation(error.message)
+    throw error
+  }
   await logAudit({ tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.camunda_native_grants.preview', resourceType: 'engine', resourceId: engineId, details: { importRunId: run.id, sourceKind: run.sourceKind, inputHash: run.inputHash, normalizedCounts: run.normalizedCounts } })
   res.status(201).json({ run })
 }))
@@ -1808,15 +1814,21 @@ r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/draft', en
     classifications,
     groupMappings: req.body.groupMappings,
   })
-  const updatedRun = await camundaNativeGrantImportRunService.setDraft({
-    id: run.id,
-    draftHash: draft.canonicalHash,
-    approverId: req.user!.userId,
-    draft: {
-      ...draft,
-      engineReference: { key: engineKey, engineId: engine.id, mode: engineReferenceMode },
-    },
-  })
+  let updatedRun
+  try {
+    updatedRun = await camundaNativeGrantImportRunService.setDraft({
+      id: run.id,
+      draftHash: draft.canonicalHash,
+      approverId: req.user!.userId,
+      draft: {
+        ...draft,
+        engineReference: { key: engineKey, engineId: engine.id, mode: engineReferenceMode },
+      },
+    })
+  } catch (error) {
+    if (error instanceof CamundaNativeGrantEvidenceLimitError) throw Errors.validation(error.message)
+    throw error
+  }
   if (!updatedRun) throw Errors.notFound('Camunda native-grant import run')
   await logAudit({ tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.camunda_native_grants.draft', resourceType: 'engine', resourceId: run.engineId, details: { importRunId: run.id, draftHash: draft.canonicalHash, generated: draft.generated, manualWorkCount: draft.manualWorkAuthorizationIds.length } })
   res.json({ run: updatedRun, draft })

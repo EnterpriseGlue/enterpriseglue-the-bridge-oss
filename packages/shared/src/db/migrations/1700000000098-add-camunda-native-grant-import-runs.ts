@@ -5,7 +5,7 @@ function portableText(
   queryRunner: QueryRunner,
   length: 'key' | 'document' = 'document',
 ): { type: string; length?: string } {
-  const database = queryRunner.connection.options?.type || 'postgres';
+  const database = queryRunner.connection?.options?.type || 'postgres';
   if (database === 'mysql') {
     return length === 'key'
       ? { type: 'varchar', length: '191' }
@@ -17,8 +17,24 @@ function portableText(
   return { type: 'text' };
 }
 
+/**
+ * Bounded migration evidence can still be substantially larger than an
+ * ordinary display field. Keep it out of indexes and use each adapter's
+ * unbounded text type. The service applies a stricter cross-adapter byte cap
+ * before writing, so this is defence in depth rather than an invitation to
+ * retain arbitrary payloads.
+ */
+function portableLargeDocumentText(queryRunner: QueryRunner): { type: string; length?: string } {
+  const database = queryRunner.connection?.options?.type || 'postgres';
+  if (database === 'mysql') return { type: 'longtext' };
+  if (database === 'mssql') return { type: 'nvarchar', length: 'MAX' };
+  if (database === 'oracle') return { type: 'clob' };
+  if (database === 'spanner') return { type: 'string', length: 'max' };
+  return { type: 'text' };
+}
+
 function portableBoolean(queryRunner: QueryRunner): { type: string; default: boolean | number } {
-  const database = queryRunner.connection.options?.type || 'postgres';
+  const database = queryRunner.connection?.options?.type || 'postgres';
   if (database === 'mssql') return { type: 'bit', default: 0 };
   if (database === 'oracle') return { type: 'number', default: 0 };
   if (database === 'spanner') return { type: 'bool', default: false };
@@ -26,7 +42,7 @@ function portableBoolean(queryRunner: QueryRunner): { type: string; default: boo
 }
 
 function portableBigint(queryRunner: QueryRunner): { type: string; precision?: number; scale?: number } {
-  const database = queryRunner.connection.options?.type || 'postgres';
+  const database = queryRunner.connection?.options?.type || 'postgres';
   if (database === 'oracle') return { type: 'number', precision: 19, scale: 0 };
   if (database === 'spanner') return { type: 'int64' };
   return { type: 'bigint' };
@@ -34,7 +50,8 @@ function portableBigint(queryRunner: QueryRunner): { type: string; precision?: n
 
 function tablePath(queryRunner: QueryRunner): string {
   try {
-    return queryRunner.connection.getMetadata('CamundaNativeGrantImportRun').tablePath;
+    return queryRunner.connection?.getMetadata('CamundaNativeGrantImportRun').tablePath
+      || 'camunda_native_grant_import_runs';
   } catch {
     return 'camunda_native_grant_import_runs';
   }
@@ -49,6 +66,7 @@ export class AddCamundaNativeGrantImportRuns1700000000098 implements MigrationIn
     if (await queryRunner.hasTable(tableName)) return;
     const keyText = portableText(queryRunner, 'key');
     const documentText = portableText(queryRunner, 'document');
+    const largeDocumentText = portableLargeDocumentText(queryRunner);
     const boolean = portableBoolean(queryRunner);
     const bigint = portableBigint(queryRunner);
     await queryRunner.createTable(new Table({
@@ -63,8 +81,8 @@ export class AddCamundaNativeGrantImportRuns1700000000098 implements MigrationIn
         { name: 'mapping_catalog_version', ...documentText },
         { name: 'inventory_truncated', ...boolean },
         { name: 'normalized_counts_json', ...documentText },
-        { name: 'classifications_json', ...documentText },
-        { name: 'encrypted_detailed_snapshot', ...documentText, isNullable: true },
+        { name: 'classifications_json', ...largeDocumentText },
+        { name: 'encrypted_detailed_snapshot', ...largeDocumentText, isNullable: true },
         { name: 'detailed_snapshot_expires_at', ...bigint, isNullable: true },
         { name: 'draft_hash', ...documentText, isNullable: true },
         { name: 'created_by_id', ...documentText, isNullable: true },

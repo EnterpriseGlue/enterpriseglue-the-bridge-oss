@@ -11,6 +11,7 @@ import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPolle
 import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
 import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configBundleIdentityReplayPoller.js';
 import { startConfigBundleRuntimeReconciliationPollerIfEnabled } from './poller/configBundleRuntimeReconciliationPoller.js';
+import { startCamundaNativeGrantSnapshotRetentionPoller } from './poller/camundaNativeGrantSnapshotRetentionPoller.js';
 import { getConfigBootstrapStatus, runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
 import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import {
@@ -137,6 +138,7 @@ export async function startServer() {
   void startRuntimeInventoryPollerIfEnabled();
   void startConfigBundleIdentityReplayPollerIfEnabled();
   void startConfigBundleRuntimeReconciliationPollerIfEnabled();
+  void startCamundaNativeGrantSnapshotRetentionPoller();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));

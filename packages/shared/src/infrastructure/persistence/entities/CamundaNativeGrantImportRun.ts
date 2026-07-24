@@ -19,8 +19,10 @@ export class CamundaNativeGrantImportRun extends AppBaseEntity {
   @Column({ name: 'mapping_catalog_version', type: 'text' }) mappingCatalogVersion!: string;
   @Column({ name: 'inventory_truncated', type: 'boolean', default: false }) inventoryTruncated!: boolean;
   @Column({ name: 'normalized_counts_json', type: 'text' }) normalizedCountsJson!: string;
-  @Column({ name: 'classifications_json', type: 'text' }) classificationsJson!: string;
-  @Column({ name: 'encrypted_detailed_snapshot', type: 'text', nullable: true }) encryptedDetailedSnapshot!: string | null;
+  // Adapters map `length: max` to their safe unbounded text type. Values are
+  // separately capped by CamundaNativeGrantImportRunService before persistence.
+  @Column({ name: 'classifications_json', type: 'text', length: 'max' }) classificationsJson!: string;
+  @Column({ name: 'encrypted_detailed_snapshot', type: 'text', length: 'max', nullable: true }) encryptedDetailedSnapshot!: string | null;
   @Column({ name: 'detailed_snapshot_expires_at', type: 'bigint', nullable: true }) detailedSnapshotExpiresAt!: number | null;
   @Column({ name: 'draft_hash', type: 'text', nullable: true }) draftHash!: string | null;
   @Column({ name: 'created_by_id', type: 'text', nullable: true }) createdById!: string | null;
