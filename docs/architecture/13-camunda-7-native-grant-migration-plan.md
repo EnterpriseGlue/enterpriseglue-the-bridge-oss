@@ -45,6 +45,13 @@ API/UI workflow, and automatically eligible for removal after a maximum of
 30 days; expiry removes that encrypted detail but retains the sanitized audit
 receipt and any resulting configuration-bundle apply reference.
 
+The local `test/e2e/mock-camunda` fixture now exposes a synthetic Camunda 7
+`GET /authorization` catalogue, including exact process/decision group grants,
+an acknowledged broad grant, a direct-user grant, a revoke, and an unsupported
+task grant. Its pagination test verifies that no fixture route accepts a native
+authorization write, so local translation tests do not need customer data or
+an IdP connection.
+
 For exact supported grants, the foundation can now produce a deterministic
 additive configuration-bundle draft from an existing bundle that already
 contains the registered Camunda 7 engine. It adds only explicitly selected

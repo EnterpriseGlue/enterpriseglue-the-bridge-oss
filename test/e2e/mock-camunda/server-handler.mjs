@@ -14,6 +14,7 @@ import {
   decisionInputs,
   decisionOutputs,
   filterProcessDefinitions,
+  filterNativeAuthorizations,
   filterRuntimeInstances,
   filterHistoricProcessInstances,
   filterHistoricActivityInstances,
@@ -167,6 +168,11 @@ export function createMockCamundaHandler() {
           200,
           partitionRuntimeTenants ? withPartitionedRuntimeTenants(definitions) : definitions,
         )
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/engine-rest/authorization') {
+        sendJson(res, 200, filterNativeAuthorizations(searchParams))
         return
       }
 

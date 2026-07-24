@@ -353,6 +353,12 @@ export const sequentialInstanceId = source.sequentialInstanceId
 export const parallelInstanceId = source.parallelInstanceId
 export const loopInstanceId = source.loopInstanceId
 export const processDefinitions = source.processDefinitions
+export const nativeAuthorizations = source.nativeAuthorizations || []
+export const filterNativeAuthorizations = source.filterNativeAuthorizations || ((searchParams) => {
+  const firstResult = Math.max(Number(searchParams.get('firstResult') || 0), 0)
+  const maxResults = Math.max(Number(searchParams.get('maxResults') || nativeAuthorizations.length), 0)
+  return nativeAuthorizations.slice(firstResult, firstResult + maxResults)
+})
 export const processDefinitionsById = source.processDefinitionsById
 export const runtimeInstances = source.runtimeInstances
 export const runtimeInstancesById = source.runtimeInstancesById
