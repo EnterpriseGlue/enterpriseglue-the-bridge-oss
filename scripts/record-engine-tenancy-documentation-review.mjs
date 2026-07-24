@@ -14,6 +14,7 @@ import {
   isSafeDocumentationReviewEvidencePath,
   normalizeDocumentationReviewMode,
   normalizeDocumentationReviewRole,
+  parseDocumentationReviewArguments,
 } from './lib/engine-tenancy-documentation-review.mjs';
 
 const root = process.cwd();
@@ -30,35 +31,7 @@ function command(commandName, args) {
   }).trim();
 }
 
-function parseArguments(argv) {
-  const values = {};
-  for (let index = 0; index < argv.length; index += 2) {
-    const flag = argv[index];
-    const value = argv[index + 1];
-    if (!flag?.startsWith('--') || value === undefined) {
-      throw new Error('Every review option must use --name value syntax.');
-    }
-    if (values[flag] !== undefined) {
-      throw new Error(`Duplicate option: ${flag}`);
-    }
-    values[flag] = value;
-  }
-  const allowed = new Set([
-    '--review',
-    '--reviewer',
-    '--review-mode',
-    '--evidence',
-    '--reviewed-at',
-  ]);
-  const unknown = Object.keys(values).find((flag) => !allowed.has(flag));
-  if (unknown) throw new Error(`Unknown option: ${unknown}`);
-  for (const required of ['--review', '--reviewer', '--review-mode', '--evidence']) {
-    if (!values[required]?.trim()) throw new Error(`Missing required option: ${required}`);
-  }
-  return values;
-}
-
-const args = parseArguments(process.argv.slice(2));
+const args = parseDocumentationReviewArguments(process.argv.slice(2));
 const role = normalizeDocumentationReviewRole(args['--review']);
 const reviewer = args['--reviewer'].trim();
 const reviewMode = normalizeDocumentationReviewMode(args['--review-mode']);

@@ -10,6 +10,7 @@ import {
   normalizeDocumentationReviewMode,
   normalizeDocumentationReviewRole,
   pendingDocumentationReview,
+  parseDocumentationReviewArguments,
   preserveDocumentationReviews,
 } from './lib/engine-tenancy-documentation-review.mjs';
 
@@ -62,6 +63,25 @@ test('records whether an independent reviewer is human or a delegated agent', ()
   assert.equal(normalizeDocumentationReviewMode('human'), 'human');
   assert.equal(normalizeDocumentationReviewMode('delegated-agent'), 'delegated-agent');
   assert.throws(() => normalizeDocumentationReviewMode('automation'));
+});
+
+test('accepts the documented pnpm option separator for guarded approvals', () => {
+  const argumentsWithSeparator = [
+    '--',
+    '--review', 'engineering',
+    '--reviewer', 'Delegated reviewer',
+    '--review-mode', 'delegated-agent',
+    '--evidence', evidencePath,
+  ];
+  assert.deepEqual(parseDocumentationReviewArguments(argumentsWithSeparator), {
+    '--review': 'engineering',
+    '--reviewer': 'Delegated reviewer',
+    '--review-mode': 'delegated-agent',
+    '--evidence': evidencePath,
+  });
+  assert.throws(() => parseDocumentationReviewArguments([
+    '--review', 'engineering', '--reviewer', 'Reviewer',
+  ]));
 });
 
 test('accepts only repository-local sanitized review evidence paths', () => {

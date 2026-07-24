@@ -24,6 +24,35 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+export function parseDocumentationReviewArguments(argv) {
+  const argumentsWithoutSeparator = argv[0] === '--' ? argv.slice(1) : argv;
+  const values = {};
+  for (let index = 0; index < argumentsWithoutSeparator.length; index += 2) {
+    const flag = argumentsWithoutSeparator[index];
+    const value = argumentsWithoutSeparator[index + 1];
+    if (!flag?.startsWith('--') || value === undefined) {
+      throw new Error('Every review option must use --name value syntax.');
+    }
+    if (values[flag] !== undefined) {
+      throw new Error(`Duplicate option: ${flag}`);
+    }
+    values[flag] = value;
+  }
+  const allowed = new Set([
+    '--review',
+    '--reviewer',
+    '--review-mode',
+    '--evidence',
+    '--reviewed-at',
+  ]);
+  const unknown = Object.keys(values).find((flag) => !allowed.has(flag));
+  if (unknown) throw new Error(`Unknown option: ${unknown}`);
+  for (const required of ['--review', '--reviewer', '--review-mode', '--evidence']) {
+    if (!values[required]?.trim()) throw new Error(`Missing required option: ${required}`);
+  }
+  return values;
+}
+
 export function normalizeDocumentationReviewRole(value) {
   if (value === 'independent-operator') return 'independentOperator';
   if (DOCUMENTATION_REVIEW_ROLES.includes(value)) return value;

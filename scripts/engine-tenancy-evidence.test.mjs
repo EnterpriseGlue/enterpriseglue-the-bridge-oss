@@ -277,6 +277,7 @@ test('automates documentation checks without self-approving independent reviews'
   assert.match(documentationReviewRecorder, /Documentation approval must be recorded from a clean worktree/);
   assert.match(documentationReviewRecorder, /--reviewer/);
   assert.match(documentationReviewRecorder, /--review-mode/);
+  assert.match(documentationReviewContract, /parseDocumentationReviewArguments/);
   assert.match(documentationReviewRecorder, /--evidence/);
   assert.match(documentationReviewRecorder, /approvedCommit: commit/);
   assert.match(documentationReviewRecorder, /test\/results\/engine-tenancy-review/);
