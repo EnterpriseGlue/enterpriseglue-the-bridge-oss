@@ -279,6 +279,8 @@ sample, target groups, target roles, direct-access posture, and success cases.
 - Add a validated customer-export format for installations where enumeration is
   unavailable.
 - Add redaction/retention policy and migration audit events.
+- Create the disposable synthetic Camunda 7 native-grant fixture catalogue
+  described below. It is a required test asset, not an optional demo.
 
 **Done when:** no raw native payload can be applied or logged, and every
 adapter/API limitation has a visible, stable diagnostic.
@@ -353,15 +355,50 @@ The implementation must add focused, executable coverage in addition to the
 existing engine-tenancy, runtime-resource, identity, database-adapter, and
 cross-browser suites.
 
+### Synthetic Camunda 7 Native-Grant Fixture Catalogue
+
+Create a local, disposable Camunda 7 service with native authorization enabled
+and seed it only through Camunda's supported authorization/identity APIs. The
+fixture must never query or write Camunda system tables directly, and it must
+not contain a customer export, customer identifier, production process name,
+credential, or tenant identifier.
+
+The generator creates deterministic synthetic identities, groups, runtime
+tenants, process-definition keys, decision-definition keys, and authorization
+records. It also produces a matching sanitized export fixture so both the live
+API and customer-export import paths use the same semantic test matrix.
+
+| Fixture family | Required synthetic cases |
+| --- | --- |
+| Supported group grants | Exact process-definition and decision-definition grants; read/start/operate/history-style permission candidates; multiple compatible grants for one group/key; separate groups with disjoint resources |
+| Runtime tenancy | One resolved tenant per resource; no-tenant resource; two tenant partitions; unmapped tenant; conflicting tenant; dedicated engine with resource-aware access |
+| Broad grants | `*`/all-resource group grant that stays blocked until an explicit broad-access acknowledgement is supplied |
+| Non-convertible grants | Global grant, revoke, precedence-dependent combination, direct user grant, task/process-instance/deployment/batch/filter/application/administration resource, native tenant-administration grant, and unknown resource/permission |
+| Identity mapping | Exact group map; missing group; ambiguous group; explicit user identity link; OIDC/SAML/LDAP-normalized memberships that land in the imported EnterpriseGlue group |
+| Transport and source | Paginated native authorization inventory; duplicate/altered export rows; malformed export; unsupported adapter/version; unavailable native enumeration; expired/stale preview; read-only endpoint with a no-native-write assertion |
+
+The fixture names should be intentionally obvious and non-customer-specific,
+for example `eg-fixture-finance-operators`, `eg-fixture-invoice`, and
+`eg-fixture-tenant-a`. The test harness destroys the Camunda container and its
+volume after every run, checks that no generated credentials appear in retained
+test artifacts, and uses ignored local secret references where a password is
+unavoidable.
+
+For every supported fixture, retain an expected outcome containing the native
+grant classification, proposed EnterpriseGlue group/role/resource-set draft,
+required acknowledgement, and allowed/denied Effective Access cases. The
+fixture is therefore both synthetic data and an executable translation
+specification.
+
 | Area | Required coverage |
 | --- | --- |
-| Native input | Camunda 7 pagination, duplicate rows, malformed records, unsupported engine/version, customer export validation, input hashing, and no-write guarantee |
+| Native input | Synthetic Camunda 7 pagination, duplicate rows, malformed records, unsupported engine/version, customer export validation, input hashing, and no-write guarantee |
 | Translation | Every supported resource/permission mapping, exact key match, missing/inactive inventory, dedicated/resource-aware/shared topology, resolved/unmapped/conflicting tenant, broad `*`, global/revoke/user/manual cases |
 | Identity | Group map, explicit user identity-link map, ambiguous/missing identity, and OIDC/SAML/LDAP-derived EnterpriseGlue group memberships |
 | Authorization | Imported allowed and denied cases on definitions, decisions, instances, tasks, jobs, external tasks, history, mutations, batches, and migrations; native denial must not broaden EnterpriseGlue access |
 | Safety | No default-tenant inference for shared engines, no secrets/PII in logs or ordinary responses, source ownership conflict, stale/altered preview, expiry, retry, rollback, and no native Camunda write |
 | Interfaces | Schema/OpenAPI/API contract tests, config draft/preview/apply, Effective Access explanation, permission gates, and browser accessibility/UI tests |
-| Integration | Disposable local Camunda 7 with representative authorizations plus an authenticated EnterpriseGlue scenario; selected customer test-environment evidence before production use |
+| Integration | Disposable local Camunda 7 seeded from the synthetic native-grant fixture catalogue, plus an authenticated EnterpriseGlue scenario; selected customer test-environment evidence before production use |
 
 Acceptance is not a blanket claim that every possible Camunda authorization is
 converted. It is complete when **100% of the supported translation matrix is
