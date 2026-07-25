@@ -340,6 +340,31 @@ export default async function globalSetup() {
   const { canonicalRoleAssignmentKey } = await import('../../../packages/shared/src/authz/role-assignment-identity.ts');
   const operatorRoleId = 'system.engine.operator';
 
+  // The primary synthetic engine is shared by the native-grant browser lane.
+  // Give its disposable administrator an explicit scoped role rather than
+  // relying on owner fallback, so the test verifies the same guarded engine
+  // routes that a real migration operator uses.
+  const primaryEngineAssignmentKey = canonicalRoleAssignmentKey({
+    tenantId: 'tenant-default',
+    principalType: 'user',
+    principalId: userId,
+    roleId: operatorRoleId,
+    scopeType: 'engine',
+    scopeId: engineId,
+    source: 'system',
+    sourceRef: membershipSourceRef,
+  });
+  await pool.query(
+    `INSERT INTO ${schema}.role_assignments
+      (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+       source, source_ref, assignment_key, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [
+      randomUUID(), 'tenant-default', 'user', userId, operatorRoleId, 'engine', engineId,
+      'system', membershipSourceRef, primaryEngineAssignmentKey, now, now,
+    ]
+  );
+
   // The quarantined migration engine intentionally has no tenant mapping. Give
   // the disposable browser administrator one explicit, import-owned operator
   // assignment so it can discover the engine without relying on legacy owner
