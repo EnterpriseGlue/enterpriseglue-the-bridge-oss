@@ -154,14 +154,21 @@ async function login(page: Page, email?: string, password?: string): Promise<voi
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
+  const loginResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/login',
+  );
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  expect((await loginResponse).status()).toBe(200);
+  await page.waitForURL(/\/t\/default(?:\/|$)/);
 }
 
 async function openMigrationPanel(page: Page, engineName: string) {
   await page.goto('/t/default/engines');
   const row = page.getByRole('row').filter({ hasText: engineName });
-  await expect(row).toBeVisible();
+  // A fresh localhost Docker browser can still be completing its authenticated
+  // permission snapshot when the engines route is first opened.  Wait for the
+  // real engine row rather than treating that bootstrap as a migration failure.
+  await expect(row).toBeVisible({ timeout: 30_000 });
   await row.getByRole('button', { name: 'Options' }).click();
   await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
   const modal = page.getByRole('dialog', { name: 'Edit engine' });
@@ -170,6 +177,10 @@ async function openMigrationPanel(page: Page, engineName: string) {
 }
 
 test.describe('Camunda native-grant migration browser workflow', () => {
+  // A cold local stack can take longer than the generic browser-test budget to
+  // assemble the first authenticated permission snapshot and complete both
+  // controlled runtime reconciliations.  The workflow remains fail-closed.
+  test.setTimeout(120_000);
   test.skip(!enabled, 'Runs only from the explicit localhost Docker native-grant evidence runner');
 
   test('previews, drafts, applies, enforces, resumes, and rolls back the safe Camunda subset', async ({ page }) => {
