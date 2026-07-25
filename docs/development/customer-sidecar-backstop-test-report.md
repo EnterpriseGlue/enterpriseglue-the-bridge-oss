@@ -1,0 +1,31 @@
+# Customer-sidecar mirrored-backstop test report
+
+This report records the executable coverage for the
+`mirrored_engine_backstop` behavior when a Camunda 7-compatible Operaton engine
+is registered through a customer-owned sidecar. It covers the implemented
+feature boundary; it is not a claim of 100% line coverage for the entire
+EnterpriseGlue repository.
+
+Run the full local lane with:
+
+```bash
+pnpm run test:sidecar-backstop
+```
+
+| Area | What is verified | Evidence |
+| --- | --- | --- |
+| Engine eligibility | Active Camunda 7 and Operaton engines are accepted; unsupported/inactive engines remain rejected. Direct and `customer_sidecar` connection modes share the encrypted mapping boundary. | `engineBackstopGroupMappingService.test.ts` |
+| Transport selection | Preview receipts persist `customerSidecarTransport`; apply selects the sidecar client only when that receipt capability is set. Direct receipts select the direct client. | `engineBackstopSyncService.test.ts` |
+| Bounded native API | The adapter can create only exact group `READ` grants and read/delete only an ID-addressed authorization. A native 404 becomes an absent owned grant. | `engineBackstopSyncService.test.ts` |
+| Proxy request contract | Sidecar calls carry the sanitized engine and operation metadata class `engine.native_authorization.backstop`; no downstream engine `Authorization` header is sent for credentialless sidecars. | `bpmn-engine-client.test.ts` |
+| Config lifecycle | Config-bundle preview, diff, and apply accept customer-sidecar Operaton mappings, resolve the native group reference only during apply, and redact its value from audit/diff output. | `configBundlePreviewService.test.ts`, `configBundleDiffService.test.ts`, `configBundleApplyService.test.ts` |
+| Operator UI | Direct and customer-sidecar panels support mapping, preview, hash-bound apply, and acknowledged rollback. The sidecar panel explains the customer-managed downstream authentication boundary. | `EngineBackstopPanel.test.tsx` |
+| API, persistence, redaction | Portable receipt/mapping persistence, action-guarded API routes, secret preflight/export, ownership-only rollback, and tracked-ID drift behavior remain covered in the focused backstop lane. | `pnpm run test:engine-backstop` |
+| Real Operaton lifecycle | A disposable Docker Operaton engine behind a bounded local sidecar completes preview, apply, drift check, and rollback. It observes only create/read/delete authorization calls. | `test:operaton-sidecar-backstop-container` |
+| Fail-closed rejection | A sidecar 403 on native authorization creation fails the run and proves no direct-adapter fallback occurs. | `test:operaton-sidecar-backstop-container` |
+| Documentation contract | Configuration documentation schemas and deployment contract remain valid. | `pnpm run test:documentation-contracts` |
+
+The Docker fixture temporarily permits loopback HTTP only inside its disposable
+test process. Production endpoint allow-listing, HTTPS, and customer-sidecar
+readiness requirements remain enforced as documented in the customer-sidecar
+runbook.

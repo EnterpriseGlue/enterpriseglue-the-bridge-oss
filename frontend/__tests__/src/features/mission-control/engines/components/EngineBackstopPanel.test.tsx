@@ -55,7 +55,7 @@ function renderPanel(connectionMode: 'direct' | 'customer_sidecar' = 'direct') {
 describe('EngineBackstopPanel', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('stores a write-only mapping, applies only the preview hash, and rolls back only after acknowledgement', async () => {
+  it.each(['direct', 'customer_sidecar'] as const)('stores a write-only mapping, applies only the preview hash, and rolls back only after acknowledgement over %s transport', async (connectionMode) => {
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url.endsWith('/backstop/status')) {
         return {
@@ -86,7 +86,7 @@ describe('EngineBackstopPanel', () => {
       throw new Error(`Unexpected POST ${url}`)
     })
 
-    renderPanel()
+    renderPanel(connectionMode)
     expect(await screen.findByText('Native authorization backstop')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('EnterpriseGlue group ID'), { target: { value: 'group-ops' } })
     fireEvent.change(screen.getByLabelText('Engine group ID (write-only)'), { target: { value: 'camunda-operators' } })

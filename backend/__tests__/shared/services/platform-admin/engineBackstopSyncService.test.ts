@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CamundaCompatibleBackstopNativeClient, CustomerSidecarBackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
-import { camundaDelete, camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import { BpmnEngineOperationError, camundaDelete, camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
-  BpmnEngineOperationError: class BpmnEngineOperationError extends Error {},
+  BpmnEngineOperationError: class BpmnEngineOperationError extends Error {
+    details: Record<string, unknown>;
+    constructor(input: { details?: Record<string, unknown>; status?: number } = {}) {
+      super('mock engine operation failed');
+      this.details = input.details || (input.status === undefined ? {} : { engineStatus: input.status });
+    }
+  },
   camundaGet: vi.fn(),
   camundaPost: vi.fn(),
   camundaDelete: vi.fn(),
@@ -99,23 +105,26 @@ describe('EngineBackstopSyncService', () => {
     expect(directNativeClient.createAuthorization).not.toHaveBeenCalled();
   });
 
-  it('records customer-sidecar transport capability on a newly created preview', async () => {
-    const previewRun = run({ id: 'sidecar-preview' });
+  it.each([
+    ['direct', 'direct', { nativeAuthorizationWrite: true, directTrustedEndpoint: true, customerSidecarTransport: false }],
+    ['customer-sidecar', 'customer_sidecar', { nativeAuthorizationWrite: true, directTrustedEndpoint: false, customerSidecarTransport: true }],
+  ] as const)('records %s transport capability on a newly created preview', async (_caseName, connectionMode, expectedCapability) => {
+    const previewRun = run({ id: `${connectionMode}-preview` });
     const createPreview = vi.fn(async (input) => ({ ...previewRun, capability: input.capability }));
     const service = new EngineBackstopSyncService({
       runService: { createPreview, getSummary: vi.fn(), getDetailedSnapshot: vi.fn(), listForEngine: vi.fn(), updateRun: vi.fn() } as any,
       taskService: { enqueue: vi.fn(), runNext: vi.fn() } as any,
       projectionBuilder: async () => ({
-        engine: { id: 'engine-sidecar', type: 'operaton', lifecycleStatus: 'active', connectionMode: 'customer_sidecar' } as any,
+        engine: { id: 'engine-preview', type: 'operaton', lifecycleStatus: 'active', connectionMode } as any,
         tenantId: 'tenant-a', projection: projection(), sourceHash, desiredHash,
         capability: { nativeAuthorizationWrite: true },
       }),
     });
 
-    await service.preview({ engineId: 'engine-sidecar', tenantId: 'tenant-a' });
+    await service.preview({ engineId: 'engine-preview', tenantId: 'tenant-a' });
 
     expect(createPreview).toHaveBeenCalledWith(expect.objectContaining({
-      capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: false, customerSidecarTransport: true },
+      capability: expectedCapability,
     }));
   });
 
@@ -263,5 +272,13 @@ describe('CamundaCompatibleBackstopNativeClient', () => {
     expect(camundaPost).toHaveBeenCalledWith('engine-sidecar', '/authorization/create', {
       type: 1, permissions: ['READ'], groupId: 'operators', resourceType: 6, resourceId: 'payments',
     });
+  });
+
+  it('treats only a compatible-engine 404 as absent when checking an owned authorization', async () => {
+    vi.mocked(camundaGet).mockRejectedValue(new BpmnEngineOperationError({ method: 'GET', path: '/authorization/missing-authorization', status: 404 }) as never);
+    const client = new CustomerSidecarBackstopNativeClient();
+
+    await expect(client.readAuthorization('engine-sidecar', 'missing-authorization')).resolves.toBeNull();
+    expect(camundaGet).toHaveBeenCalledWith('engine-sidecar', '/authorization/missing-authorization');
   });
 });
