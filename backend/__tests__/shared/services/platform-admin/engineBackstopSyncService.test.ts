@@ -96,6 +96,43 @@ describe('EngineBackstopSyncService', () => {
     expect(state.nativeClient.deleteAuthorization).toHaveBeenCalledWith('engine-1', 'owned-stale');
     expect(state.nativeClient.deleteAuthorization).not.toHaveBeenCalledWith('engine-1', expect.stringContaining('customer'));
   });
+
+  it('rolls back only native authorization IDs recorded by the successful backstop run', async () => {
+    const sourceRun = run({ id: 'source-run', status: 'succeeded', resultHash: 'c'.repeat(64) });
+    const rollbackRun = run({ id: 'rollback-run', status: 'previewed', rollbackOfRunId: null });
+    const runs = new Map<string, any>([[sourceRun.id, sourceRun], [rollbackRun.id, rollbackRun]]);
+    const details = new Map<string, any>([
+      [sourceRun.id, { version: 1, projection: projection(), ownedGrants: [{ id: 'owned-1', nativeGroupId: 'camunda-operators', camundaResourceType: 6, resourceKey: 'payments' }] }],
+    ]);
+    const runService = {
+      createPreview: vi.fn(async () => rollbackRun),
+      getSummary: vi.fn(async (id) => runs.get(id) || null),
+      getDetailedSnapshot: vi.fn(async (id) => details.get(id) || null),
+      listForEngine: vi.fn(async () => [...runs.values()]),
+      updateRun: vi.fn(async ({ id, detailedSnapshot, ...values }) => {
+        const target = runs.get(id);
+        Object.assign(target, values);
+        if (detailedSnapshot !== undefined) details.set(id, detailedSnapshot);
+        return target;
+      }),
+    };
+    const nativeClient = { createAuthorization: vi.fn(), deleteAuthorization: vi.fn(async () => undefined) };
+    const taskService = {
+      enqueue: vi.fn(async () => ({ id: 'task-rollback' })),
+      runNext: vi.fn(async (execute) => {
+        await execute({ id: 'task-rollback', engineId: 'engine-1', tenantId: 'tenant-a', runId: 'rollback-run', sourceHash, operation: 'rollback' });
+        return { taskId: 'task-rollback', runId: 'rollback-run', operation: 'rollback', status: 'completed', attempts: 0, nextAttemptAt: null, lastError: null };
+      }),
+    };
+    const service = new EngineBackstopSyncService({ runService: runService as any, taskService: taskService as any, nativeClient });
+
+    const result = await service.rollback({ engineId: 'engine-1', tenantId: 'tenant-a', runId: 'source-run', request: { acknowledgeOwnedGrantDeletion: true } });
+    expect(nativeClient.createAuthorization).not.toHaveBeenCalled();
+    expect(nativeClient.deleteAuthorization).toHaveBeenCalledTimes(1);
+    expect(nativeClient.deleteAuthorization).toHaveBeenCalledWith('engine-1', 'owned-1');
+    expect(result.run).toMatchObject({ id: 'rollback-run', status: 'rolled_back', rollbackOfRunId: 'source-run' });
+    expect(sourceRun.status).toBe('rolled_back');
+  });
 });
 
 describe('Camunda7BackstopNativeClient', () => {

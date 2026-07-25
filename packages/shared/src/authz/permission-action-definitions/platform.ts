@@ -225,7 +225,10 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       category: 'Mirrored Engine Backstop',
       description: 'Apply an acknowledged, hash-bound mirrored-engine backstop synchronization.',
       ui: [{ surfaceId: 'mission-control.engines.backstop.apply', behavior: 'disable' }],
-      routes: [{ method: 'POST', route: '/engines-api/engines/{id}/backstop/sync/{runId}/apply', resourceResolver: 'platform.self' }],
+      routes: [
+        { method: 'POST', route: '/engines-api/engines/{id}/backstop/sync/{runId}/apply', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/engines-api/engines/{id}/backstop/sync/{runId}/rollback', resourceResolver: 'platform.self' },
+      ],
     },
   {
       actionId: 'platform.authz.assignments.read',

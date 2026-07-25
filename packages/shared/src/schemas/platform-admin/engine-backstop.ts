@@ -160,6 +160,10 @@ export const EngineBackstopSyncApplyRequestSchema = z.object({
   acknowledgeDirectIdentityBoundary: z.literal(true),
 }).strict();
 
+export const EngineBackstopSyncRollbackRequestSchema = z.object({
+  acknowledgeOwnedGrantDeletion: z.literal(true),
+}).strict();
+
 export type EngineBackstopGroupMappingInput = z.infer<typeof EngineBackstopGroupMappingInputSchema>;
 export type EngineBackstopGroupMappingSummary = z.infer<typeof EngineBackstopGroupMappingSummarySchema>;
 export type EngineBackstopGroupMappingWrite = z.infer<typeof EngineBackstopGroupMappingWriteSchema>;
@@ -175,3 +179,4 @@ export type EngineBackstopSyncRunStatus = z.infer<typeof EngineBackstopSyncRunSt
 export type EngineBackstopSyncRunSummary = z.infer<typeof EngineBackstopSyncRunSummarySchema>;
 export type EngineBackstopSyncRunHistory = z.infer<typeof EngineBackstopSyncRunHistorySchema>;
 export type EngineBackstopSyncApplyRequest = z.infer<typeof EngineBackstopSyncApplyRequestSchema>;
+export type EngineBackstopSyncRollbackRequest = z.infer<typeof EngineBackstopSyncRollbackRequestSchema>;

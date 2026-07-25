@@ -1,0 +1,110 @@
+# Enable a Mirrored Camunda 7 Authorization Backstop
+
+`mirrored_engine_backstop` adds a narrow, native Camunda 7 protection layer
+for intentional direct Camunda access. EnterpriseGlue remains the permission
+editor and the final authorization decision point for EnterpriseGlue routes.
+
+Use this only when direct Camunda users are already authenticated by Camunda
+or its identity provider and their Camunda group memberships are meaningful.
+EnterpriseGlue does not create those native users or memberships.
+
+## Prerequisites
+
+- The engine is an active, direct-connection Camunda 7 engine. Customer-sidecar
+  engines are intentionally excluded in this release.
+- Runtime inventory is current and every resource that will be mirrored has an
+  exact, resolved tenant. Shared engines must be synchronized one tenant at a
+  time.
+- An EnterpriseGlue authorization group has been assigned a role containing
+  `engine:instance:view` at an exact runtime resource or runtime-resource-set
+  scope.
+- The native Camunda group already contains the intended direct users.
+- The configured engine service identity may call Camunda's authorization
+  create and id-specific delete REST endpoints.
+
+## Workflow
+
+1. Create an opaque group mapping. The native group value is accepted only on
+   write and is encrypted; later list responses show only a stable opaque
+   reference.
+
+   ```http
+   POST /engines-api/engines/{engineId}/backstop/mappings
+   {
+     "mappings": [{
+       "authzGroupId": "<enterpriseglue-group-id>",
+       "nativeGroupId": "<camunda-group-id>",
+       "isActive": true
+     }]
+   }
+   ```
+
+2. Create a preview.
+
+   ```http
+   POST /engines-api/engines/{engineId}/backstop/sync/preview
+   {}
+   ```
+
+   Review its proposed, manual-required, and blocked counts. A proposal is
+   limited to an exact mapped group `READ` authorization for a process
+   definition (Camunda type `6`) or decision definition (type `10`). Do not
+   apply a preview with unexpected manual or blocked entries.
+
+3. Apply the exact reviewed hash and acknowledge the native identity boundary.
+
+   ```http
+   POST /engines-api/engines/{engineId}/backstop/sync/{runId}/apply
+   {
+     "desiredHash": "<hash from preview>",
+     "acknowledgeDirectIdentityBoundary": true
+   }
+   ```
+
+   EnterpriseGlue re-resolves the authorization sources immediately before the
+   Camunda call. If groups, roles, assignments, resources, tenancy, or the
+   desired projection changed, it rejects the apply and requires a new preview.
+
+4. Verify the sanitized status and, for a suitably authorized operator, the
+   short-lived detail receipt.
+
+   ```text
+   GET /engines-api/engines/{engineId}/backstop/status
+   GET /engines-api/engines/{engineId}/backstop/sync/{runId}
+   GET /engines-api/engines/{engineId}/backstop/sync/{runId}/detail
+   ```
+
+5. After at least one synchronization succeeds, an administrator may set the
+   global runtime authorization mode to `mirrored_engine_backstop`. The setting
+   rejects enabling before that evidence exists. Existing and unsynchronized
+   engines continue with `enterpriseglue_authoritative` behavior.
+
+## Rollback
+
+Rollback requires a successful run with retained encrypted ownership evidence.
+It deletes only authorization IDs that EnterpriseGlue recorded as created by
+that run. It never searches for, edits, or deletes matching customer-created
+Camunda authorizations.
+
+```http
+POST /engines-api/engines/{engineId}/backstop/sync/{runId}/rollback
+{
+  "acknowledgeOwnedGrantDeletion": true
+}
+```
+
+If the ownership evidence has expired, the operation stops. Do not replace it
+with a wildcard or manually inferred delete; investigate the native grants and
+recreate an explicit reviewed mapping instead.
+
+## What is intentionally not mirrored
+
+- user, API-client, and service-account assignments;
+- engine-wide, wildcard, global, revoke, or policy-only scopes;
+- task, process-instance, deployment, administration, and tenant-administration
+  native authorizations;
+- native users, native memberships, native grant import, or a second native
+  grant editor.
+
+Those entries appear as manual-required or blocked in preview evidence and do
+not widen a native authorization.

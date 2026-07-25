@@ -171,19 +171,20 @@ new preview is required; no broad native delete is permitted.
 
 ## Delivery Slices and Acceptance
 
-1. **Contracts and classifier** — mode enum, group-mapping and sanitized run
-   schemas, exact reverse projection, unsupported fail-closed cases, OpenAPI,
-   actions, and documentation.
-2. **Durable synchronization** — portable entities/migrations, encrypted
-   ownership receipt, deterministic preview/apply/rollback service, leases,
-   retry, source/hash conflict handling, and five-adapter tests.
-3. **Camunda adapter and operations** — hardened create/delete/read calls,
-   capability checks, drift/status, audit redaction, operator runbook, and
-   synthetic mocked + disposable real-Camunda contract.
-4. **Product workflow** — configuration import/apply, Mission Control UI,
-   Effective Access explanation link, browser accessibility, direct-user
-   Camunda verification using synthetic group membership, and clean-commit
-   release evidence.
+1. **Contracts and classifier** — completed for the supported exact group
+   `READ` subset: mode enum, schemas, reverse projection, OpenAPI, actions,
+   permissions, and fail-closed matrix.
+2. **Durable synchronization** — completed for preview/apply/rollback:
+   portable entities/migrations, encrypted ownership receipt, leases/retry,
+   source/hash conflict handling, and five-adapter tests.
+3. **Camunda adapter and operations** — create/delete, audit redaction,
+   operator/developer runbooks, mocked contract, and disposable real-Camunda
+   REST contract are complete. Read-only tracked-ID drift check is the next
+   operation slice.
+4. **Product workflow** — the guarded API is complete. Configuration-bundle
+   secret-reference input, Mission Control UI, Effective Access link,
+   browser accessibility, and direct-user identity-provider certification
+   remain planned work; see `15-authorization-program-status.md`.
 
 Acceptance requires 100% coverage of the supported reverse-projection matrix;
 an explicit disposition for every unsupported source shape; native create,

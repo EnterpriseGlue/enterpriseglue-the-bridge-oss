@@ -10,9 +10,11 @@ import { Errors } from '../../middleware/errorHandler.js';
 import {
   EngineBackstopProjectionSchema,
   EngineBackstopSyncApplyRequestSchema,
+  EngineBackstopSyncRollbackRequestSchema,
   type EngineBackstopProjection,
   type EngineBackstopProjectionCandidate,
   type EngineBackstopSyncApplyRequest,
+  type EngineBackstopSyncRollbackRequest,
   type EngineBackstopSyncRunSummary,
 } from '../../schemas/platform-admin/engine-backstop.js';
 import { hash } from '../encryption.js';
@@ -193,7 +195,36 @@ export class EngineBackstopSyncService {
     return { run: updated, task };
   }
 
+  async rollback(input: { engineId: string; tenantId?: string | null; runId: string; request: EngineBackstopSyncRollbackRequest; actorId?: string | null }): Promise<{ run: EngineBackstopSyncRunSummary; task: EngineBackstopSyncTaskResult | null }> {
+    EngineBackstopSyncRollbackRequestSchema.parse(input.request);
+    const sourceRun = await this.runService.getSummary(input.runId);
+    const tenantId = normalizeTenant(input.tenantId);
+    if (!sourceRun || sourceRun.engineId !== input.engineId.trim() || sourceRun.tenantId !== tenantId) throw Errors.notFound('Backstop sync run');
+    if (sourceRun.status !== 'succeeded') {
+      throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'Only a successful backstop synchronization with retained owned-grant evidence may be rolled back');
+    }
+    const sourceDetail = await this.runService.getDetailedSnapshot(sourceRun.id);
+    if (!sourceDetail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The owned-grant receipt expired; no broad native delete is permitted');
+    const projection = projectionFromDetail(sourceDetail);
+    const rollbackRun = await this.runService.createPreview({
+      engineId: sourceRun.engineId, tenantId: sourceRun.tenantId, sourceHash: sourceRun.sourceHash, desiredHash: sourceRun.desiredHash,
+      projection, capability: sourceRun.capability, actorId: input.actorId || null,
+    });
+    await this.runService.updateRun({
+      id: rollbackRun.id,
+      status: 'queued',
+      rollbackOfRunId: sourceRun.id,
+      detailedSnapshot: { version: 1, rollbackOfRunId: sourceRun.id, ownedGrants: parseOwnedGrants(sourceDetail) },
+    });
+    await this.taskService.enqueue({ engineId: rollbackRun.engineId, tenantId: rollbackRun.tenantId, runId: rollbackRun.id, sourceHash: rollbackRun.sourceHash, operation: 'rollback' });
+    const task = await this.taskService.runNext((task) => this.executeTask(task), { runId: rollbackRun.id });
+    const updated = await this.runService.getSummary(rollbackRun.id);
+    if (!updated) throw Errors.notFound('Backstop rollback run');
+    return { run: updated, task };
+  }
+
   private async executeTask(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string; operation: 'apply' | 'rollback' | 'drift_check' }): Promise<Record<string, unknown>> {
+    if (task.operation === 'rollback') return this.executeRollback(task);
     if (task.operation !== 'apply') throw new Error(`Unsupported backstop task operation: ${task.operation}`);
     const run = await this.runService.getSummary(task.runId);
     if (!run) throw new Error('Backstop sync run was not found');
@@ -236,6 +267,25 @@ export class EngineBackstopSyncService {
       });
       if (!completed) throw new Error('Backstop sync run disappeared during apply');
       return { createdCount: owned.length - retained.length, retainedCount: retained.length, deletedCount: priorOwned.length - retained.length, resultHash };
+    } catch (error) {
+      await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
+      throw error;
+    }
+  }
+
+  private async executeRollback(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string }): Promise<Record<string, unknown>> {
+    const rollbackRun = await this.runService.getSummary(task.runId);
+    if (!rollbackRun || !rollbackRun.rollbackOfRunId) throw new Error('Backstop rollback run is invalid');
+    try {
+      const detail = await this.runService.getDetailedSnapshot(rollbackRun.id);
+      const ownedGrants = parseOwnedGrants(detail);
+      if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The rollback receipt expired; no broad native delete is permitted');
+      await this.runService.updateRun({ id: rollbackRun.id, status: 'running', detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
+      for (const grant of ownedGrants) await this.nativeClient.deleteAuthorization(rollbackRun.engineId, grant.id);
+      const resultHash = hash(stableJson(ownedGrants.map((grant) => grant.id).sort()));
+      await this.runService.updateRun({ id: rollbackRun.id, status: 'rolled_back', resultHash, completed: true, detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
+      await this.runService.updateRun({ id: rollbackRun.rollbackOfRunId, status: 'rolled_back', completed: true });
+      return { deletedCount: ownedGrants.length, resultHash };
     } catch (error) {
       await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
       throw error;

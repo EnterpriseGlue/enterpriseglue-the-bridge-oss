@@ -76,7 +76,7 @@ import { CamundaNativeAuthorizationExportSchema, CamundaNativeGrantClassificatio
 import { camundaNativeGrantInventoryService, classifyCamundaNativeGrant } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js'
 import { CamundaNativeGrantEvidenceLimitError, camundaNativeGrantImportRunService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js'
 import { camundaNativeGrantDraftService, camundaNativeGrantExternalEngineKey } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js'
-import { EngineBackstopGroupMappingWriteRequestSchema, EngineBackstopGroupMappingWriteResponseSchema, EngineBackstopSyncApplyRequestSchema, EngineBackstopSyncRunHistorySchema, EngineBackstopSyncRunSummarySchema } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js'
+import { EngineBackstopGroupMappingWriteRequestSchema, EngineBackstopGroupMappingWriteResponseSchema, EngineBackstopSyncApplyRequestSchema, EngineBackstopSyncRollbackRequestSchema, EngineBackstopSyncRunHistorySchema, EngineBackstopSyncRunSummarySchema } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js'
 import { engineBackstopGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopGroupMappingService.js'
 import { EngineBackstopEvidenceLimitError, engineBackstopSyncRunService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncRunService.js'
 import { engineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js'
@@ -1867,6 +1867,16 @@ r.post('/engines-api/engines/:id/backstop/sync/:runId/apply', engineLimiter, req
   if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
   const result = await engineBackstopSyncService.apply({ engineId, tenantId, runId: String(req.params.runId), request: req.body, actorId: req.user!.userId })
   await logAudit({ tenantId: tenantId || undefined, userId: req.user!.userId, action: 'engine.backstop.apply', resourceType: 'engine', resourceId: engineId, details: { runId: result.run.id, status: result.run.status, desiredHash: result.run.desiredHash, taskStatus: result.task?.status || null } })
+  res.json(result)
+}))
+
+r.post('/engines-api/engines/:id/backstop/sync/:runId/rollback', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(backstopSyncRunIdParamSchema), requireAction('platform.engine-backstop.apply', { resourceResolver: 'platform.self' }), requireAction('platform.engine-backstop.sensitive.read', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(EngineBackstopSyncRollbackRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
+  const result = await engineBackstopSyncService.rollback({ engineId, tenantId, runId: String(req.params.runId), request: req.body, actorId: req.user!.userId })
+  await logAudit({ tenantId: tenantId || undefined, userId: req.user!.userId, action: 'engine.backstop.rollback', resourceType: 'engine', resourceId: engineId, details: { runId: result.run.id, rollbackOfRunId: result.run.rollbackOfRunId, status: result.run.status, taskStatus: result.task?.status || null } })
   res.json(result)
 }))
 
