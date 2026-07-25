@@ -1,5 +1,6 @@
 import {
   processDefinitionsById,
+  deployments,
   runtimeInstancesById,
   historicProcessInstancesById,
   processInstanceVariables,
@@ -167,6 +168,15 @@ export function createMockCamundaHandler() {
           res,
           200,
           partitionRuntimeTenants ? withPartitionedRuntimeTenants(definitions) : definitions,
+        )
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/engine-rest/deployment') {
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(deployments) : deployments,
         )
         return
       }

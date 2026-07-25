@@ -33,3 +33,19 @@ test('synthetic Camunda authorization fixture paginates every supported and fail
     assert.equal(authorizations.filter((item) => !item.groupId && !item.userId).length, 2);
   });
 });
+
+test('synthetic Camunda deployment fixture derives stable deployment metadata from runtime definitions', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/engine-rest/deployment`);
+    assert.equal(response.status, 200);
+    const deployments = await response.json();
+    assert.deepEqual(deployments.map((item) => item.id), [
+      'mock-deployment-primary',
+      'mock-deployment-sequential',
+      'mock-deployment-parallel',
+      'mock-deployment-loop',
+    ]);
+    assert.ok(deployments.every((item) => item.source === 'enterpriseglue-e2e'));
+    assert.ok(deployments.every((item) => item.deploymentTime === '2026-03-01T00:00:00.000Z'));
+  });
+});

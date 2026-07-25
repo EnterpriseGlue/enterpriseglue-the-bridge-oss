@@ -310,6 +310,34 @@ export default async function globalSetup() {
 
   const { canonicalRoleAssignmentKey } = await import('../../../packages/shared/src/authz/role-assignment-identity.ts');
   const operatorRoleId = 'system.engine.operator';
+
+  // The quarantined migration engine intentionally has no tenant mapping. Give
+  // the disposable browser administrator one explicit, import-owned operator
+  // assignment so it can discover the engine without relying on legacy owner
+  // behavior or widening access to the other seeded engines.
+  if (migrationEngineId) {
+    const migrationAssignmentKey = canonicalRoleAssignmentKey({
+      tenantId: null,
+      principalType: 'user',
+      principalId: userId,
+      roleId: operatorRoleId,
+      scopeType: 'engine',
+      scopeId: migrationEngineId,
+      source: 'system',
+      sourceRef: membershipSourceRef,
+    });
+    await pool.query(
+      `INSERT INTO ${schema}.role_assignments
+        (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+         source, source_ref, assignment_key, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        randomUUID(), null, 'user', userId, operatorRoleId, 'engine', migrationEngineId,
+        'system', membershipSourceRef, migrationAssignmentKey, now, now,
+      ]
+    );
+  }
+
   let scopedEngineAssignmentId = '';
   const scopedEngineAssignmentExpiresAt = now + 60 * 60 * 1000;
   for (const assignmentEngineId of [scopedEngineId, crossTenantEngineId]) {

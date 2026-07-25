@@ -92,6 +92,60 @@ async function fetchJson<T>(
   return data as T;
 }
 
+/**
+ * Native-grant browser evidence creates a dedicated config bundle whose key is
+ * intentionally not part of the generic e2e key prefix.  Remove only records
+ * bound to the known synthetic engine (or an orphaned engine left by a prior
+ * interrupted local run), and remove dependent rows before their imported
+ * parents so this works with databases that enforce foreign keys.
+ */
+async function cleanupNativeGrantMigrationArtifacts(pool: import('pg').Pool, schema: string, engineId: string) {
+  const runRows = await pool.query(
+    `SELECT applied_config_bundle_run_id, rollback_config_bundle_run_id FROM ${schema}.camunda_native_grant_import_runs WHERE engine_id = $1 OR NOT EXISTS (SELECT 1 FROM ${schema}.engines AS engine WHERE engine.id = camunda_native_grant_import_runs.engine_id)`,
+    [engineId]
+  );
+  const applyRunIds = [...new Set(runRows.rows.flatMap((row: { applied_config_bundle_run_id?: string | null; rollback_config_bundle_run_id?: string | null }) => [
+    row.applied_config_bundle_run_id,
+    row.rollback_config_bundle_run_id,
+  ].filter((value): value is string => Boolean(value))))];
+  const bundleKeys = applyRunIds.length > 0
+    ? (await pool.query(`SELECT bundle_key FROM ${schema}.config_bundle_apply_runs WHERE id = ANY($1::text[])`, [applyRunIds])).rows
+      .map((row: { bundle_key: string }) => row.bundle_key)
+    : [];
+  const sourceRefs = bundleKeys.map((bundleKey: string) => `config_bundle:${bundleKey}`);
+
+  if (sourceRefs.length > 0) {
+    const [roleRows, groupRows, resourceSetRows] = await Promise.all([
+      pool.query(`SELECT id FROM ${schema}.roles WHERE source_ref = ANY($1::text[])`, [sourceRefs]),
+      pool.query(`SELECT id FROM ${schema}.authz_groups WHERE source_ref = ANY($1::text[])`, [sourceRefs]),
+      pool.query(`SELECT id FROM ${schema}.runtime_resource_sets WHERE source_ref = ANY($1::text[])`, [sourceRefs]),
+    ]);
+    const roleIds = roleRows.rows.map((row: { id: string }) => row.id);
+    const groupIds = groupRows.rows.map((row: { id: string }) => row.id);
+    const resourceSetIds = resourceSetRows.rows.map((row: { id: string }) => row.id);
+
+    await pool.query(`DELETE FROM ${schema}.config_role_assignment_overrides WHERE source_ref = ANY($1::text[])`, [sourceRefs]);
+    await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = ANY($1::text[]) OR group_id = ANY($2::text[])`, [sourceRefs, groupIds]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE source_ref = ANY($1::text[]) OR role_id = ANY($2::text[])`, [sourceRefs, roleIds]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resource_set_materializations WHERE runtime_resource_set_id = ANY($1::text[])`, [resourceSetIds]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resource_sets WHERE id = ANY($1::text[])`, [resourceSetIds]);
+    await pool.query(`DELETE FROM ${schema}.role_permissions WHERE role_id = ANY($1::text[])`, [roleIds]);
+    await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [roleIds]);
+    await pool.query(`DELETE FROM ${schema}.authz_groups WHERE id = ANY($1::text[])`, [groupIds]);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle' AND resource_id = ANY($1::text[])`, [bundleKeys]);
+  }
+
+  if (applyRunIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.config_bundle_identity_replay_tasks WHERE apply_run_id = ANY($1::text[])`, [applyRunIds]);
+    await pool.query(`DELETE FROM ${schema}.config_bundle_runtime_reconciliation_tasks WHERE apply_run_id = ANY($1::text[])`, [applyRunIds]);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle_apply_run' AND resource_id = ANY($1::text[])`, [applyRunIds]);
+  }
+  await pool.query(`DELETE FROM ${schema}.camunda_native_grant_import_runs WHERE engine_id = $1 OR NOT EXISTS (SELECT 1 FROM ${schema}.engines AS engine WHERE engine.id = camunda_native_grant_import_runs.engine_id)`, [engineId]);
+  if (applyRunIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.config_bundle_apply_runs WHERE id = ANY($1::text[])`, [applyRunIds]);
+  }
+}
+
 async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null, membershipSourceRef?: string | null) {
   const pgModule = await import('pg');
   const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
@@ -166,6 +220,12 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   );
 
   if (engineId) {
+    await cleanupNativeGrantMigrationArtifacts(pool, schema, engineId);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'engine' AND resource_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.engine_tenant_mappings WHERE engine_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.external_engine_registrations WHERE engine_id = $1`, [engineId]);
     await pool.query(`DELETE FROM ${schema}.engines WHERE id = $1`, [engineId]);
   }
 
@@ -206,6 +266,9 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   );
   const staleEngineIds = staleEngineIdsResult.rows.map((row: { id: string }) => row.id);
   if (staleEngineIds.length > 0) {
+    for (const staleEngineId of staleEngineIds) {
+      await cleanupNativeGrantMigrationArtifacts(pool, schema, staleEngineId);
+    }
     await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'engine' AND resource_id = ANY($1::text[])`, [staleEngineIds]);
     await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id = ANY($1::text[])`, [staleEngineIds]);
     await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
