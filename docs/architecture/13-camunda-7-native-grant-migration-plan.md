@@ -2,8 +2,9 @@
 
 Last updated: 2026-07-24
 
-Status: Implemented and locally release-qualified; customer adoption remains
-an operational change-management activity, not a product-release blocker.
+Status: Implemented; local release qualification is determined only by the
+current clean-commit release-evidence index. Customer adoption remains an
+operational change-management activity, not a product-release blocker.
 
 ## Decision
 
@@ -77,13 +78,15 @@ apply nor rollback writes to Camunda or changes the engine registration.
 The local release gate includes an authenticated Chromium workflow against the
 Docker frontend/backend, PostgreSQL, and the synthetic Camunda fixture. It
 exercises read-only inventory, sanitized preview then protected mapping,
-hash-bound draft/apply, source-managed membership, target allow/sibling deny
-through the protected Mission Control route, reload/resume, and hash-bound
-rollback followed by denial. The runner invokes the same durable runtime
-reconciliation service used by the backend worker because the ordinary local
-stack does not run that poller continuously. Its sanitized same-commit receipt
-is required by the release-evidence index. This provides product evidence
-without customer identities, customer grants, or a deployed customer IdP.
+hash-bound draft/apply, production identity-source synchronization of a
+synthetic group claim, process and decision target allows plus sibling deny
+through Effective Access and protected Mission Control routes, reload/resume,
+and hash-bound rollback followed by denial. The runner invokes the same durable
+runtime reconciliation service used by the backend worker because the ordinary
+local stack does not run that poller continuously. Its sanitized same-commit
+receipt is required by the release-evidence index. This provides product
+evidence without customer identities, customer grants, or a deployed customer
+IdP.
 
 ## Summary of the Agreed Model
 

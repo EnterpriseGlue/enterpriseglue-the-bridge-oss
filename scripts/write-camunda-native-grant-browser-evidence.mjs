@@ -31,13 +31,21 @@ const requiredAssertions = [
   'read_only_native_inventory',
   'sanitized_preview_then_protected_mapping',
   'hash_bound_draft_and_apply',
-  'sso_membership_effective_access_allow_and_sibling_deny',
+  'identity_source_sync_effective_access_process_and_decision_allow_sibling_deny',
   'history_resume_and_hash_bound_rollback',
   'rollback_restores_denial',
 ];
 const assertionSet = new Set(observation.assertions || []);
+const requiredSanitizationFields = [
+  'containsCredentials',
+  'containsTokens',
+  'containsPrivateEndpoints',
+  'containsRawIdentityClaims',
+  'containsCustomerIdentifiers',
+];
 const safeSanitization = observation.sanitization
-  && Object.values(observation.sanitization).every((value) => value === false);
+  && Object.keys(observation.sanitization).length === requiredSanitizationFields.length
+  && requiredSanitizationFields.every((field) => observation.sanitization[field] === false);
 const valid = observation.schemaVersion === 1
   && observation.status === 'passed'
   && observation.commit === commit
@@ -77,7 +85,7 @@ const evidence = {
     containsRawIdentityClaims: false,
     containsCustomerIdentifiers: false,
   },
-  runnerGuarantee: 'Evidence is emitted only after the authenticated UI workflow, protected route enforcement, source-managed membership, and rollback all pass on an exact clean local commit.',
+  runnerGuarantee: 'Evidence is emitted only after the authenticated UI workflow, production identity-source synchronization, process and decision Effective Access enforcement, protected routes, and rollback all pass on an exact clean local commit.',
 };
 
 if (!valid) {

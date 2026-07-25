@@ -78,6 +78,18 @@ function compatibilityStatePasses(value) {
   return false;
 }
 
+function nativeGrantSanitizationPasses(value) {
+  const fields = [
+    'containsCredentials',
+    'containsTokens',
+    'containsPrivateEndpoints',
+    'containsRawIdentityClaims',
+    'containsCustomerIdentifiers',
+  ];
+  return fields.every((field) => value.sanitization?.[field] === false)
+    && Object.keys(value.sanitization || {}).length === fields.length;
+}
+
 function documentationReviewEvidenceFileExists(value) {
   if (!isSafeDocumentationReviewEvidencePath(value)) return false;
   const absolutePath = path.resolve(root, value);
@@ -140,7 +152,8 @@ const gateDefinitions = [
       && value.verifiedTargets?.deployment === 'localhost-docker'
       && Array.isArray(value.assertions)
       && value.assertions.length === 6
-      && value.assertions.every((assertion) => assertion.status === 'passed'),
+      && value.assertions.every((assertion) => assertion.status === 'passed')
+      && nativeGrantSanitizationPasses(value),
   },
   {
     id: 'authorizationMatrix',

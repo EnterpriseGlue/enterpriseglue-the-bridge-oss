@@ -114,7 +114,37 @@ async function fetchJson<T>(
  * interrupted local run), and remove dependent rows before their imported
  * parents so this works with databases that enforce foreign keys.
  */
+async function cleanupNativeGrantIdentitySourceArtifacts(pool: import('pg').Pool, schema: string) {
+  const marker = 'e2e-native-browser-identity-source';
+  const providerRows = await pool.query(
+    `SELECT id FROM ${schema}.identity_providers WHERE source_ref = $1`,
+    [marker],
+  );
+  const providerIds = providerRows.rows.map((row: { id: string }) => row.id);
+  if (providerIds.length === 0) return;
+
+  const mappingRows = await pool.query(
+    `SELECT id, provider_id FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`,
+    [providerIds],
+  );
+  const membershipRefs = mappingRows.rows.flatMap((row: { id: string; provider_id: string }) => [
+    `identity_provider:${row.provider_id}:mapping:${row.id}`,
+    `identity_mapping:${row.id}`,
+  ]);
+  if (membershipRefs.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.authz_group_memberships WHERE source = 'identity_provider' AND source_ref = ANY($1::text[])`,
+      [membershipRefs],
+    );
+  }
+  await pool.query(`DELETE FROM ${schema}.external_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.sso_normalized_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_providers WHERE id = ANY($1::text[])`, [providerIds]);
+}
+
 async function cleanupNativeGrantMigrationArtifacts(pool: import('pg').Pool, schema: string, engineId: string) {
+  await cleanupNativeGrantIdentitySourceArtifacts(pool, schema);
   const runRows = await pool.query(
     `SELECT applied_config_bundle_run_id, rollback_config_bundle_run_id FROM ${schema}.camunda_native_grant_import_runs WHERE engine_id = $1 OR NOT EXISTS (SELECT 1 FROM ${schema}.engines AS engine WHERE engine.id = camunda_native_grant_import_runs.engine_id)`,
     [engineId]

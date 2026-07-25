@@ -61,10 +61,92 @@ function drainLocalRuntimeReconciliation(applyRunId: string): void {
   ], { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+interface IdentitySourceSynchronizationResult {
+  providerId: string;
+  mappingIds: string[];
+  groupMembershipsCreated: number;
+  groupMembershipsRemoved: number;
+}
+
+/**
+ * The local Docker stack intentionally has no external directory.  This still
+ * exercises the production identity-source path by creating a claims-only
+ * synthetic provider and mappings, then reconciling an allowlisted group claim
+ * through SsoNormalizedIdentityService.  It must never use the manual group
+ * membership API or a direct membership-row insertion.
+ */
+function synchronizeSyntheticIdentitySource(input: {
+  tenantId: string;
+  userId: string;
+  email: string;
+  groupKeys: string[];
+}): IdentitySourceSynchronizationResult {
+  const providerKey = `e2e-native-browser-${randomUUID()}`;
+  const entitlement = 'e2e-native-grant-browser-member';
+  const payload = {
+    ...input,
+    providerKey,
+    entitlement,
+    providerSubject: `synthetic-subject:${providerKey}`,
+  };
+  const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+  const worker = [
+    `const input = JSON.parse(Buffer.from(${JSON.stringify(encodedPayload)}, 'base64').toString('utf8'));`,
+    "const { identityProviderService } = await import('./packages/shared/dist/services/platform-admin/IdentityProviderService.js');",
+    "const { identityEntitlementMappingService } = await import('./packages/shared/dist/services/platform-admin/IdentityEntitlementMappingService.js');",
+    "const { ssoNormalizedIdentityService } = await import('./packages/shared/dist/services/platform-admin/SsoNormalizedIdentityService.js');",
+    "const provider = await identityProviderService.upsert({ tenantId: input.tenantId, key: input.providerKey, protocol: 'oidc', isEnabled: false, authenticationMode: 'claims_only', configuration: { issuerUrl: 'https://identity.example.invalid', clientId: 'e2e-native-grant-browser' }, sync: { connectorCapability: 'claim_only' }, ownershipMode: 'manual', sourceRef: 'e2e-native-browser-identity-source' });",
+    "const mappings = []; for (const groupKey of input.groupKeys) mappings.push(await identityEntitlementMappingService.create({ providerKey: input.providerKey, targetGroupKey: groupKey, entitlementType: 'group', externalId: input.entitlement, matchOperator: 'exact', syncMode: 'authoritative' }, input.tenantId));",
+    "const result = await ssoNormalizedIdentityService.upsertIdentity({ tenantId: input.tenantId, providerId: provider.id, providerType: 'oidc', providerSubject: input.providerSubject, subjectClaim: 'sub', userId: input.userId, email: input.email, claims: { groups: [input.entitlement] } });",
+    "process.stdout.write(JSON.stringify({ providerId: provider.id, mappingIds: mappings.map((mapping) => mapping.id), groupMembershipsCreated: result.groupMembershipsCreated, groupMembershipsRemoved: result.groupMembershipsRemoved }));",
+  ].join(' ');
+  const encodedWorker = Buffer.from(worker, 'utf8').toString('base64');
+  const output = execFileSync('docker', [
+    'compose', '--project-directory', '.', '--env-file', '.local/docker/env/docker.env',
+    '-f', 'infra/docker/compose/docker-compose.yml', 'exec', '-T', 'backend',
+    'sh', '-lc', `cd /repo && node --input-type=module -e "$(printf '%s' ${encodedWorker} | base64 -d)"`,
+  ], { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const resultLine = output.trim().split(/\r?\n/).reverse().find((line) => line.trim().startsWith('{'));
+  if (!resultLine) throw new Error('Identity-source reconciliation did not return a JSON receipt');
+  return JSON.parse(resultLine) as IdentitySourceSynchronizationResult;
+}
+
 async function responseJson<T>(response: APIResponse, operation: string): Promise<T> {
   const body = await response.json().catch(() => null);
   expect(response.ok(), `${operation} failed (${response.status()}): ${JSON.stringify(body)}`).toBe(true);
   return body as T;
+}
+
+async function csrfToken(page: Page): Promise<string> {
+  const token = await responseJson<{ csrfToken: string }>(
+    await page.request.get('/api/csrf-token'),
+    'obtain Effective Access CSRF token',
+  );
+  expect(token.csrfToken).toBeTruthy();
+  return token.csrfToken;
+}
+
+function mutationOptions(token: string, data: unknown) {
+  return { headers: { 'X-CSRF-Token': token }, data };
+}
+
+async function evaluateRuntimeAccess(
+  page: Page,
+  token: string,
+  userId: string,
+  engineId: string,
+  resourceKind: 'process_definition' | 'decision_definition',
+  resourceKey: string,
+) {
+  return responseJson<{ allowed: boolean; sources: Array<Record<string, unknown>> }>(
+    await page.request.post('/api/authz/evaluate', mutationOptions(token, {
+      userId,
+      permission: 'engine:instance:view',
+      resourceType: 'engine_runtime_resource',
+      runtimeResource: { engineId, resourceKind, resourceKey, runtimeTenantId: '' },
+    })),
+    `evaluate ${resourceKind} Effective Access`,
+  );
 }
 
 async function login(page: Page, email?: string, password?: string): Promise<void> {
@@ -176,21 +258,26 @@ test.describe('Camunda native-grant migration browser workflow', () => {
       await expect(modal.getByText('Migration draft applied')).toBeVisible();
       drainLocalRuntimeReconciliation(appliedPayload.result!.applyRunId!);
 
-      const groupRows = await pool.query<{ id: string }>(
-        'SELECT id FROM authz_groups WHERE source_ref = $1 AND is_archived = false ORDER BY id',
+      const groupRows = await pool.query<{ id: string; key: string }>(
+        'SELECT id, key FROM authz_groups WHERE source_ref = $1 AND is_archived = false ORDER BY key',
         [`config_bundle:${bundleKey}`],
       );
       expect(groupRows.rows).toHaveLength(2);
-      const membershipSourceRef = `e2e-native-browser:${randomUUID()}`;
-      const now = Date.now();
-      for (const group of groupRows.rows) {
-        await pool.query(
-          `INSERT INTO authz_group_memberships
-            (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [randomUUID(), 'tenant-default', group.id, fixture.runtimeScopedUserId, 'sso', membershipSourceRef, null, null, now, now],
-        );
-      }
+      const identitySynchronization = synchronizeSyntheticIdentitySource({
+        tenantId: 'tenant-default',
+        userId: fixture.runtimeScopedUserId!,
+        email: fixture.runtimeScopedEmail!,
+        groupKeys: groupRows.rows.map((group) => group.key),
+      });
+      expect(identitySynchronization.mappingIds).toHaveLength(groupRows.rows.length);
+      expect(identitySynchronization.groupMembershipsCreated).toBe(groupRows.rows.length);
+      expect(identitySynchronization.groupMembershipsRemoved).toBe(0);
+      const synchronizedMemberships = await pool.query<{ source: string }>(
+        `SELECT source FROM authz_group_memberships
+         WHERE user_id = $1 AND group_id = ANY($2::text[]) AND source = 'identity_provider'`,
+        [fixture.runtimeScopedUserId, groupRows.rows.map((group) => group.id)],
+      );
+      expect(synchronizedMemberships.rows).toHaveLength(groupRows.rows.length);
 
       const browser = page.context().browser();
       if (!browser) throw new Error('Native-grant evidence requires a browser-backed Playwright page');
@@ -203,6 +290,38 @@ test.describe('Camunda native-grant migration browser workflow', () => {
         'list imported member process definitions',
       );
       expect(allowedDefinitions.map((definition) => definition.key)).toEqual(['invoice-process']);
+      const decisionDefinitionsPath = `/mission-control-api/decision-definitions?engineId=${encodeURIComponent(engineId)}`;
+      const allowedDecisionDefinitions = await responseJson<Array<{ key: string }>>(
+        await memberPage.request.get(decisionDefinitionsPath),
+        'list imported member decision definitions',
+      );
+      expect(allowedDecisionDefinitions.map((definition) => definition.key)).toEqual(['invoice-risk']);
+
+      const effectiveAccessToken = await csrfToken(page);
+      await expect(evaluateRuntimeAccess(
+        page,
+        effectiveAccessToken,
+        fixture.runtimeScopedUserId!,
+        engineId,
+        'process_definition',
+        'invoice-process',
+      )).resolves.toMatchObject({ allowed: true });
+      await expect(evaluateRuntimeAccess(
+        page,
+        effectiveAccessToken,
+        fixture.runtimeScopedUserId!,
+        engineId,
+        'decision_definition',
+        'invoice-risk',
+      )).resolves.toMatchObject({ allowed: true });
+      await expect(evaluateRuntimeAccess(
+        page,
+        effectiveAccessToken,
+        fixture.runtimeScopedUserId!,
+        engineId,
+        'process_definition',
+        'invoice-sequential-review',
+      )).resolves.toMatchObject({ allowed: false, sources: [] });
 
       await page.reload();
       modal = await openMigrationPanel(page, engine.name);
@@ -219,6 +338,16 @@ test.describe('Camunda native-grant migration browser workflow', () => {
 
       const afterRollback = await memberPage.request.get(definitionsPath);
       expect(afterRollback.status()).toBe(403);
+      const afterRollbackDecision = await memberPage.request.get(decisionDefinitionsPath);
+      expect(afterRollbackDecision.status()).toBe(403);
+      await expect(evaluateRuntimeAccess(
+        page,
+        effectiveAccessToken,
+        fixture.runtimeScopedUserId!,
+        engineId,
+        'process_definition',
+        'invoice-process',
+      )).resolves.toMatchObject({ allowed: false, sources: [] });
 
       const observationDirectory = path.join(process.cwd(), 'test/results/camunda-native-grant-browser-observations');
       await mkdir(observationDirectory, { recursive: true });
@@ -237,7 +366,7 @@ test.describe('Camunda native-grant migration browser workflow', () => {
           'read_only_native_inventory',
           'sanitized_preview_then_protected_mapping',
           'hash_bound_draft_and_apply',
-          'sso_membership_effective_access_allow_and_sibling_deny',
+          'identity_source_sync_effective_access_process_and_decision_allow_sibling_deny',
           'history_resume_and_hash_bound_rollback',
           'rollback_restores_denial',
         ],

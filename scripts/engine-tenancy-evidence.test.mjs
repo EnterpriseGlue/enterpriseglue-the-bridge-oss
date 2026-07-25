@@ -153,7 +153,7 @@ test('retains a local authenticated Camunda native-grant browser workflow as a r
     'read_only_native_inventory',
     'sanitized_preview_then_protected_mapping',
     'hash_bound_draft_and_apply',
-    'sso_membership_effective_access_allow_and_sibling_deny',
+    'identity_source_sync_effective_access_process_and_decision_allow_sibling_deny',
     'history_resume_and_hash_bound_rollback',
     'rollback_restores_denial',
     'releaseCommitQualified',

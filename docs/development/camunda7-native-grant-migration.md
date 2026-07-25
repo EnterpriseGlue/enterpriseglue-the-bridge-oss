@@ -133,19 +133,23 @@ replace it with customer grants.
 
 The local Docker integration test creates a synthetic existing engine and
 runtime resources, applies the generated configuration, drains the normal
-Runtime Resource Set materialization task, adds an SSO-source membership to
-the configuration-owned group, proves target allow/sibling deny Effective
-Access, then performs a hash-bound authoritative rollback. It cleans all
-synthetic rows after completion. It intentionally does not use the manual
-membership API, because source-managed groups reject manual edits.
+Runtime Resource Set materialization task, creates a claims-only synthetic
+identity provider and entitlement mappings, and reconciles an allowlisted
+group claim through the production normalized-identity service. It then proves
+process and decision target allows plus sibling deny through Effective Access
+and protected Mission Control routes, before performing a hash-bound
+authoritative rollback. It cleans all synthetic rows after completion. It
+intentionally does not use the manual membership API or directly insert a
+membership, because source-managed groups reject manual edits.
 
 `test:camunda-native-grant-browser-evidence` is the retained authenticated UI
 gate. From a clean worktree, it uses the existing localhost Docker frontend,
 backend, PostgreSQL database, and synthetic Camunda mock to seed a dedicated,
 resource-aware engine. It drives the actual panel through read-only preview,
-protected mapping, hash-bound draft/apply, a source-managed synthetic SSO
-membership, protected-route allow/sibling deny, history resume, and
-hash-bound rollback/denial. It checks that the mock receives only `GET`
+protected mapping, hash-bound draft/apply, production identity-source
+reconciliation of a synthetic group claim, process and decision allow plus
+sibling deny through Effective Access and protected routes, history resume,
+and hash-bound rollback/denial. It checks that the mock receives only `GET`
 requests during inventory. The runner calls the normal durable runtime
 reconciliation service inside the local backend container after the UI apply;
 the standard local stack deliberately leaves that background poller disabled.
