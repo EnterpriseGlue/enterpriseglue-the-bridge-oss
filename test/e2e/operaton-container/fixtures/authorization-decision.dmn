@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
+  xmlns:operaton="http://operaton.org/schema/1.0/dmn"
+  xmlns:dmndi="https://www.omg.org/spec/DMN/20191111/DMNDI/"
+  xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/"
+  xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/"
+  id="Definitions_AuthorizationDecisionFixture"
+  name="AuthorizationDecisionFixture"
+  namespace="https://enterpriseglue.test/authorization-fixture">
+  <decision id="egdecision" name="EnterpriseGlue authorization decision fixture" operaton:historyTimeToLive="180">
+    <decisionTable id="DecisionTable_1" hitPolicy="UNIQUE">
+      <input id="Input_1">
+        <inputExpression id="InputExpression_1" typeRef="string"><text>input</text></inputExpression>
+      </input>
+      <output id="Output_1" name="result" typeRef="string" />
+      <rule id="DecisionRule_1">
+        <inputEntry id="UnaryTests_1"><text>"allowed"</text></inputEntry>
+        <outputEntry id="LiteralExpression_1"><text>"approved"</text></outputEntry>
+      </rule>
+    </decisionTable>
+  </decision>
+</definitions>

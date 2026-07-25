@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import test from 'node:test';
 import { promisify } from 'node:util';
@@ -47,10 +48,19 @@ async function waitForOperaton(baseUrl) {
   throw new Error(`Operaton did not become ready: ${lastError?.message || 'timeout'}`);
 }
 
-async function startOperaton() {
+async function startOperaton({ authorizationEnforced = false } = {}) {
   const name = `eg-operaton-sidecar-backstop-${process.pid}-${Date.now().toString(36)}`;
   await removeContainer(name);
-  await docker(['run', '--detach', '--rm', '--name', name, '--publish', '127.0.0.1::8080', image]);
+  const args = ['run', '--detach', '--rm', '--name', name, '--publish', '127.0.0.1::8080'];
+  if (authorizationEnforced) {
+    args.push(
+      '--env', 'OPERATON_BPM_AUTHORIZATION_ENABLED=true',
+      '--env', 'OPERATON_BPM_RUN_AUTH_ENABLED=true',
+      '--env', 'OPERATON_BPM_RUN_EXAMPLE_ENABLED=false',
+    );
+  }
+  args.push(image);
+  await docker(args);
   try {
     const { stdout } = await docker(['port', name, '8080/tcp']);
     const endpoint = stdout.trim().split('\n')[0];
@@ -74,7 +84,37 @@ async function postJson(baseUrl, path, body) {
   return text ? JSON.parse(text) : null;
 }
 
-async function startCustomerSidecar(engineBaseUrl, { rejectNativeWrites = false } = {}) {
+function basicAuthorization(userId, password) {
+  return `Basic ${Buffer.from(`${userId}:${password}`).toString('base64')}`;
+}
+
+async function authenticatedRequest(baseUrl, path, authorization, { method = 'GET', body, form } = {}) {
+  const headers = { authorization };
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  const response = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers,
+    body: form || (body === undefined ? undefined : JSON.stringify(body)),
+  });
+  const text = await response.text();
+  return { response, text, value: text ? JSON.parse(text) : null };
+}
+
+async function adminRequest(baseUrl, path, options = {}) {
+  const result = await authenticatedRequest(baseUrl, path, basicAuthorization('demo', 'demo'), options);
+  if (!result.response.ok) throw new Error(`Operaton admin request ${options.method || 'GET'} ${path} failed with ${result.response.status}: ${result.text.slice(0, 500)}`);
+  return result.value;
+}
+
+async function deployFixture(baseUrl, filename, deploymentName) {
+  const source = await readFile(new URL(`./fixtures/${filename}`, import.meta.url));
+  const form = new FormData();
+  form.set('deployment-name', deploymentName);
+  form.set(filename, new Blob([source], { type: 'application/xml' }), filename);
+  return adminRequest(baseUrl, '/deployment/create', { method: 'POST', form });
+}
+
+async function startCustomerSidecar(engineBaseUrl, { rejectNativeWrites = false, upstreamAuthorization = null } = {}) {
   const requests = [];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://customer-sidecar.local');
@@ -93,9 +133,11 @@ async function startCustomerSidecar(engineBaseUrl, { rejectNativeWrites = false 
       response.end(JSON.stringify({ error: 'native authorization writes are denied by customer sidecar policy' }));
       return;
     }
+    const upstreamHeaders = body.length > 0 ? { 'content-type': request.headers['content-type'] || 'application/json' } : {};
+    if (upstreamAuthorization) upstreamHeaders.authorization = upstreamAuthorization;
     const upstream = await fetch(`${engineBaseUrl}${url.pathname.slice('/engine-rest'.length)}${url.search}`, {
       method: request.method,
-      headers: body.length > 0 ? { 'content-type': request.headers['content-type'] || 'application/json' } : undefined,
+      headers: Object.keys(upstreamHeaders).length > 0 ? upstreamHeaders : undefined,
       body: body.length > 0 ? body : undefined,
     });
     const upstreamBody = Buffer.from(await upstream.arrayBuffer());
@@ -365,6 +407,102 @@ test('real Operaton lifecycle applies both supported resource types through the 
     assert.equal(rejectingSidecar.requests[0].headers['x-enterpriseglue-operation-class'], 'engine.native_authorization.backstop');
   } finally {
     await rejectingSidecar?.close();
+    await sidecar?.close();
+    await removeContainer(name);
+  }
+});
+
+test('real Operaton enforces sidecar-created grants for group members and denies non-members', {
+  skip: !enabled && 'set EG_RUN_OPERATON_SIDECAR_BACKSTOP_CONTAINER_TESTS=1 to run the disposable Docker contract',
+}, async () => {
+  const { name, baseUrl: operatonBaseUrl } = await startOperaton({ authorizationEnforced: true });
+  let sidecar;
+  try {
+    const groupId = 'egsidecaroperators';
+    const allowedAuthorization = basicAuthorization('egallowed', 'fixturepassword');
+    const deniedAuthorization = basicAuthorization('egdenied', 'fixturepassword');
+
+    await adminRequest(operatonBaseUrl, '/user/create', {
+      method: 'POST',
+      body: {
+        profile: { id: 'egallowed', firstName: 'Allowed', lastName: 'Fixture', email: 'allowed@example.test' },
+        credentials: { password: 'fixturepassword' },
+      },
+    });
+    await adminRequest(operatonBaseUrl, '/user/create', {
+      method: 'POST',
+      body: {
+        profile: { id: 'egdenied', firstName: 'Denied', lastName: 'Fixture', email: 'denied@example.test' },
+        credentials: { password: 'fixturepassword' },
+      },
+    });
+    await adminRequest(operatonBaseUrl, '/group/create', {
+      method: 'POST', body: { id: groupId, name: 'EG Sidecar Fixture Operators', type: 'WORKFLOW' },
+    });
+    await adminRequest(operatonBaseUrl, `/group/${groupId}/members/egallowed`, { method: 'PUT' });
+    await deployFixture(operatonBaseUrl, 'authorization-process.bpmn', 'eg-authorization-process-fixture');
+    await deployFixture(operatonBaseUrl, 'authorization-decision.dmn', 'eg-authorization-decision-fixture');
+
+    sidecar = await startCustomerSidecar(operatonBaseUrl, { upstreamAuthorization: basicAuthorization('demo', 'demo') });
+    const { runService, taskService } = inMemoryRunAndTaskServices();
+    const directCalls = [];
+    const service = new EngineBackstopSyncService({
+      runService,
+      taskService,
+      directNativeClient: {
+        createAuthorization: async () => { directCalls.push('create'); throw new Error('direct adapter must not be used'); },
+        deleteAuthorization: async () => { directCalls.push('delete'); throw new Error('direct adapter must not be used'); },
+        readAuthorization: async () => { directCalls.push('read'); throw new Error('direct adapter must not be used'); },
+      },
+      customerSidecarNativeClient: new CustomerSidecarBackstopNativeClient(customerSidecarTransport(sidecar.baseUrl)),
+      projectionBuilder: async () => ({
+        engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
+        tenantId: 'tenant-sidecar',
+        projection: projection('egprocess', 'egdecision'),
+        sourceHash,
+        desiredHash,
+        capability: { nativeAuthorizationWrite: true },
+      }),
+    });
+    const preview = await service.preview({ engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar' });
+    const applied = await service.apply({
+      engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar', runId: preview.id,
+      request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+    });
+    assert.equal(applied.run.status, 'succeeded');
+
+    const [allowedProcess, allowedDecision, deniedProcess, deniedDecision] = await Promise.all([
+      authenticatedRequest(operatonBaseUrl, '/process-definition/key/egprocess', allowedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision', allowedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/process-definition/key/egprocess', deniedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision', deniedAuthorization),
+    ]);
+    assert.equal(allowedProcess.response.status, 200);
+    assert.equal(allowedDecision.response.status, 200);
+    assert.equal(deniedProcess.response.status, 404);
+    assert.equal(deniedDecision.response.status, 404);
+    assert.equal(allowedProcess.value.key, 'egprocess');
+    assert.equal(allowedDecision.value.key, 'egdecision');
+    assert.deepEqual(sidecar.requests.map((request) => request.method), ['POST', 'POST']);
+    for (const request of sidecar.requests) {
+      assert.equal(request.headers.authorization, undefined, 'EnterpriseGlue must not send a downstream engine credential to the sidecar');
+      assert.equal(request.headers['x-enterpriseglue-operation-class'], 'engine.native_authorization.backstop');
+    }
+
+    const rolledBack = await service.rollback({
+      engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar', runId: applied.run.id,
+      request: { acknowledgeOwnedGrantDeletion: true },
+    });
+    assert.equal(rolledBack.run.status, 'rolled_back');
+    const [afterProcessRollback, afterDecisionRollback] = await Promise.all([
+      authenticatedRequest(operatonBaseUrl, '/process-definition/key/egprocess', allowedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision', allowedAuthorization),
+    ]);
+    assert.equal(afterProcessRollback.response.status, 404);
+    assert.equal(afterDecisionRollback.response.status, 404);
+    assert.deepEqual(directCalls, []);
+    assert.deepEqual(sidecar.requests.map((request) => request.method), ['POST', 'POST', 'DELETE', 'DELETE']);
+  } finally {
     await sidecar?.close();
     await removeContainer(name);
   }
