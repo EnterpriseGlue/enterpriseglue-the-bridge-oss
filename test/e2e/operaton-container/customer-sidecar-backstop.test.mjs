@@ -74,7 +74,7 @@ async function postJson(baseUrl, path, body) {
   return text ? JSON.parse(text) : null;
 }
 
-async function startCustomerSidecar(engineBaseUrl) {
+async function startCustomerSidecar(engineBaseUrl, { rejectNativeWrites = false } = {}) {
   const requests = [];
   const server = createServer(async (request, response) => {
     const url = new URL(request.url || '/', 'http://customer-sidecar.local');
@@ -86,6 +86,11 @@ async function startCustomerSidecar(engineBaseUrl) {
     if (!allowed) {
       response.writeHead(403, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ error: 'native authorization endpoint not allowed by customer sidecar fixture' }));
+      return;
+    }
+    if (rejectNativeWrites && request.method === 'POST') {
+      response.writeHead(403, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'native authorization writes are denied by customer sidecar policy' }));
       return;
     }
     const upstream = await fetch(`${engineBaseUrl}${url.pathname.slice('/engine-rest'.length)}${url.search}`, {
@@ -236,6 +241,7 @@ test('real Operaton lifecycle succeeds through the bounded customer-sidecar back
 }, async () => {
   const { name, baseUrl: operatonBaseUrl } = await startOperaton();
   let sidecar;
+  let rejectingSidecar;
   try {
     const suffix = Date.now().toString(36);
     const groupId = 'egsidecaroperators';
@@ -292,7 +298,38 @@ test('real Operaton lifecycle succeeds through the bounded customer-sidecar back
       assert.equal(request.headers['x-enterpriseglue-engine-id'], 'operaton-sidecar-engine');
       assert.equal(request.headers['x-enterpriseglue-operation-class'], 'engine.native_authorization.backstop');
     }
+
+    rejectingSidecar = await startCustomerSidecar(operatonBaseUrl, { rejectNativeWrites: true });
+    const rejectedDirectCalls = [];
+    const rejectedServices = inMemoryRunAndTaskServices();
+    const rejectedService = new EngineBackstopSyncService({
+      ...rejectedServices,
+      directNativeClient: {
+        createAuthorization: async () => { rejectedDirectCalls.push('create'); throw new Error('direct adapter must not be used'); },
+        deleteAuthorization: async () => { rejectedDirectCalls.push('delete'); throw new Error('direct adapter must not be used'); },
+        readAuthorization: async () => { rejectedDirectCalls.push('read'); throw new Error('direct adapter must not be used'); },
+      },
+      customerSidecarNativeClient: new CustomerSidecarBackstopNativeClient(customerSidecarTransport(rejectingSidecar.baseUrl)),
+      projectionBuilder: async () => ({
+        engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
+        tenantId: 'tenant-sidecar', projection: projection(`${processKey}-rejected`), sourceHash, desiredHash,
+        capability: { nativeAuthorizationWrite: true },
+      }),
+    });
+    const rejectedPreview = await rejectedService.preview({ engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar' });
+    await assert.rejects(
+      rejectedService.apply({
+        engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar', runId: rejectedPreview.id,
+        request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+      }),
+      /Customer sidecar rejected POST \/authorization\/create: 403/,
+    );
+    assert.deepEqual(rejectedDirectCalls, []);
+    assert.equal(rejectingSidecar.requests.length, 1);
+    assert.equal(rejectingSidecar.requests[0].headers.authorization, undefined);
+    assert.equal(rejectingSidecar.requests[0].headers['x-enterpriseglue-operation-class'], 'engine.native_authorization.backstop');
   } finally {
+    await rejectingSidecar?.close();
     await sidecar?.close();
     await removeContainer(name);
   }

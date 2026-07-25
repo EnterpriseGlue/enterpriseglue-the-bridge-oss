@@ -150,7 +150,8 @@ downstream credential, and that the manual native group ID is cleared after
 write and never displayed in a receipt. `pnpm run test:operaton-sidecar-backstop-container` adds a disposable real-Operaton
 contract: preview, apply, tracked-ID drift, and ownership-only rollback pass
 through a bounded local customer-sidecar proxy while asserting no downstream
-engine credential is sent to that proxy.
+engine credential is sent to that proxy. The same fixture proves a sidecar
+native-write rejection fails closed without a direct-engine fallback.
 
 This local lane does not replace direct-identity-provider certification: that
 release gate needs representative direct Camunda 7 and Operaton environments where a real

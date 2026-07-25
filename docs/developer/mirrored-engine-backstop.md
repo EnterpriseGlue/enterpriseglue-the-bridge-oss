@@ -149,6 +149,7 @@ owned-only cleanup, rollback, and missing/altered owned-grant detection without
 requiring customer credentials. The sidecar container test runs preview, apply,
 tracked-ID drift, and ownership-only rollback through a local bounded proxy in
 front of a real Operaton engine, and asserts that no downstream credential is
-sent to the proxy. The test command temporarily permits loopback HTTP only for
-its disposable local fixture; production endpoint policy and HTTPS requirements
-remain unchanged.
+sent to the proxy. It also proves that a sidecar-native-write rejection fails
+closed without selecting the direct adapter. The test command temporarily
+permits loopback HTTP only for its disposable local fixture; production endpoint
+policy and HTTPS requirements remain unchanged.
