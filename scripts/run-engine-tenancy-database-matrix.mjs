@@ -200,15 +200,26 @@ async function prepareMsSql(target) {
     options: { encrypt: false, trustServerCertificate: true },
   };
   await retry('SQL Server', async () => {
-    const pool = await sql.connect(serverConfig);
-    await pool.request().query('SELECT 1 AS ready');
-    await pool.close();
+    // Do not use the module-global connection pool while the server is booting.
+    // A first failed TCP connection leaves that shared pool unusable for later
+    // retries, even once SQL Server has become ready.
+    const pool = new sql.ConnectionPool(serverConfig);
+    try {
+      await pool.connect();
+      await pool.request().query('SELECT 1 AS ready');
+    } finally {
+      await pool.close();
+    }
   }, 300000);
-  const pool = await sql.connect(serverConfig);
-  await pool.request().query(
-    "IF DB_ID(N'enterpriseglue') IS NULL CREATE DATABASE [enterpriseglue]",
-  );
-  await pool.close();
+  const pool = new sql.ConnectionPool(serverConfig);
+  try {
+    await pool.connect();
+    await pool.request().query(
+      "IF DB_ID(N'enterpriseglue') IS NULL CREATE DATABASE [enterpriseglue]",
+    );
+  } finally {
+    await pool.close();
+  }
 }
 
 async function prepareOracle(target) {
