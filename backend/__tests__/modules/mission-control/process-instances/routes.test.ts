@@ -25,10 +25,18 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/pii/PiiRedactionService.js', () => ({
+  piiRedactionService: {
+    redactPayload: vi.fn(async (_req: any, payload: any) => payload),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   EnginePermissions: {
     INSTANCE_VIEW: 'engine:instance:view',
     INSTANCE_DELETE: 'engine:instance:delete',
+    VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+    VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
     VARIABLES_EDIT: 'engine:variables:edit',
     MEMBERS_MANAGE: 'engine:members:manage',
   },
@@ -38,6 +46,13 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   ProjectPermissions: {
     MEMBERS_MANAGE: 'project:members:manage',
+  },
+  SYSTEM_ROLE_IDS: {
+    PROJECT_OWNER: 'system.project.owner',
+    PROJECT_DELEGATE: 'system.project.delegate',
+    PROJECT_DEVELOPER: 'system.project.developer',
+    PROJECT_EDITOR: 'system.project.editor',
+    PROJECT_VIEWER: 'system.project.viewer',
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
@@ -159,6 +174,32 @@ describe('mission-control process-instances routes', () => {
     expect(getProcessInstanceVariables).toHaveBeenCalledWith('engine-1', 'pi1');
   });
 
+  it('returns only safe variable metadata when raw-value access is absent', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    (getProcessInstanceVariables as unknown as Mock).mockResolvedValueOnce({
+      approvalReason: {
+        value: 'Need manager sign-off',
+        type: 'String',
+        valueInfo: { serializationDataFormat: 'application/json' },
+        adapterDiagnostic: { retained: true },
+      },
+    });
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi1/variables')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      approvalReason: { type: 'String', value: null, valueRedacted: true },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('Need manager sign-off');
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:variables:metadata:view', expect.anything());
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:variables:value:view', expect.anything());
+  });
+
   it('deletes process instances through delete permission', async () => {
     const response = await request(app)
       .delete('/mission-control-api/process-instances/pi1')
@@ -189,6 +230,19 @@ describe('mission-control process-instances routes', () => {
     expect(modifyProcessInstanceVariables).toHaveBeenCalledWith('engine-1', 'pi1', {
       variables: { amount: { value: 12 } },
     });
+  });
+
+  it('rejects variable edits when the caller cannot read variable values', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+
+    const response = await request(app)
+      .post('/mission-control-api/process-instances/pi1/variables')
+      .send({ engineId: 'engine-1', modifications: { variables: { amount: { value: 12 } } } });
+
+    expect(response.status).toBe(403);
+    expect(modifyProcessInstanceVariables).not.toHaveBeenCalled();
   });
 
   it('rejects malformed process instance variable updates before calling the engine', async () => {

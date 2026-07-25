@@ -12,6 +12,7 @@ import {
   listUserOperations,
 } from './history-extended-service.js';
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js';
+import { presentHistoricVariables, requireVariableValueFilterAccess } from './variable-visibility.js';
 import {
   HistoricTaskQueryParams,
   HistoricVariableQueryParams,
@@ -49,6 +50,7 @@ r.get('/mission-control-api/history/tasks', requireRuntimeCollectionAction('engi
 // Get historic variable instances
 r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('engine.runtime.history.variables.read', { resourceKind: 'process_definition' }), validateQuery(HistoricVariableQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
+  await requireVariableValueFilterAccess(req);
   const keys = req.authorizedRuntimeResourceKeys;
   const scopes = req.authorizedRuntimeResourceScopes;
   const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
@@ -59,8 +61,7 @@ r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('
       await listHistoricVariables(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey', scopes,
     )))).flat()
     : await listHistoricVariables(engineId, query);
-  const redacted = await piiRedactionService.redactPayload(req, data, 'history');
-  res.json(HistoricVariableInstanceListSchema.parse(redacted));
+  res.json(HistoricVariableInstanceListSchema.parse(await presentHistoricVariables(req, data)));
 }));
 
 // Get historic decision instances

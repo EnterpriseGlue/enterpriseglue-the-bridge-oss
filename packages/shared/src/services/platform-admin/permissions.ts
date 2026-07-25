@@ -41,6 +41,7 @@ import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity
 import type { AuthzPrincipalType, AuthzResourceType } from '../../authz/permission-actions.js';
 import {
   isTenantSafePermission,
+  rolePermissionDependencyError,
   rolePermissionValidationError,
   TENANT_MACHINE_SAFE_PERMISSION_IDS,
   TENANT_SAFE_ENGINE_PERMISSION_IDS,
@@ -50,6 +51,7 @@ import {
 
 export {
   isTenantSafePermission,
+  rolePermissionDependencyError,
   TENANT_MACHINE_SAFE_PERMISSION_IDS,
   TENANT_SAFE_ENGINE_PERMISSION_IDS,
   TENANT_SAFE_PERMISSION_IDS,
@@ -216,6 +218,11 @@ export const EnginePermissions = {
   INSTANCE_DELETE: 'engine:instance:delete',
   INSTANCE_RETRY: 'engine:instance:retry',
   
+  // Runtime data disclosure. Metadata lets an operator diagnose the presence
+  // and type of a variable without receiving its value. Values are a separate
+  // high-risk grant and are also required before a value can be changed.
+  VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+  VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
   VARIABLES_EDIT: 'engine:variables:edit',
 } as const;
 
@@ -701,6 +708,9 @@ export const SYSTEM_ROLE_IDS = {
   ENGINE_OWNER: 'system.engine.owner',
   ENGINE_DELEGATE: 'system.engine.delegate',
   ENGINE_OPERATOR: 'system.engine.operator',
+  ENGINE_RUNTIME_VIEWER: 'system.engine.runtime_viewer',
+  ENGINE_RUNTIME_INVESTIGATOR: 'system.engine.runtime_investigator',
+  ENGINE_VARIABLE_OPERATOR: 'system.engine.variable_operator',
   ENGINE_DEPLOYER: 'system.engine.deployer',
   API_ENGINE_REGISTRAR: 'system.api.engine_registrar',
   API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR: 'system.api.external_engine_system_registrar',
@@ -1147,6 +1157,8 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_VIEW,
     EnginePermissions.INSTANCE_DELETE,
     EnginePermissions.INSTANCE_RETRY,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+    EnginePermissions.VARIABLES_VALUE_VIEW,
     EnginePermissions.VARIABLES_EDIT,
   ],
   delegate: [
@@ -1175,6 +1187,8 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_VIEW,
     EnginePermissions.INSTANCE_DELETE,
     EnginePermissions.INSTANCE_RETRY,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+    EnginePermissions.VARIABLES_VALUE_VIEW,
     EnginePermissions.VARIABLES_EDIT,
   ],
   operator: [
@@ -1187,7 +1201,8 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_VIEW,
     EnginePermissions.INSTANCE_DELETE,
     EnginePermissions.INSTANCE_RETRY,
-    EnginePermissions.VARIABLES_EDIT,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+    EnginePermissions.VARIABLES_VALUE_VIEW,
   ],
   deployer: [
     EnginePermissions.DEPLOY,
@@ -1200,13 +1215,14 @@ export const TenantRolePermissions: Record<'admin' | 'engineOperator' | 'viewer'
     ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
     ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
   ],
-  engineOperator: [...TENANT_SAFE_ENGINE_PERMISSION_IDS],
+  engineOperator: TENANT_SAFE_ENGINE_PERMISSION_IDS.filter((permission) => permission !== EnginePermissions.VARIABLES_EDIT),
   viewer: [
     ProjectPermissions.MEMBERS_VIEW,
     ProjectPermissions.FILES_VIEW,
     ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
     EnginePermissions.DEPLOY_VIEW,
     EnginePermissions.INSTANCE_VIEW,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
   ],
 };
 
@@ -1495,6 +1511,51 @@ export const SystemRoleDefinitions: SystemRoleDefinition[] = [
     permissions: EngineRolePermissions.operator,
   },
   {
+    id: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_VIEWER,
+    key: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_VIEWER,
+    name: 'Runtime Viewer',
+    description: 'View process and task runtime state, including variable names and types, without receiving variable values.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_INVESTIGATOR,
+    key: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_INVESTIGATOR,
+    name: 'Runtime Investigator',
+    description: 'Investigate runtime state and variable values without permission to change them.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_VARIABLE_OPERATOR,
+    key: SYSTEM_ROLE_IDS.ENGINE_VARIABLE_OPERATOR,
+    name: 'Variable Operator',
+    description: 'Inspect and change runtime variables. This role includes value access because blind variable writes are not allowed.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+      EnginePermissions.VARIABLES_EDIT,
+    ],
+  },
+  {
     id: SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
     key: SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
     name: 'Engine Deployer',
@@ -1729,6 +1790,23 @@ class PermissionServiceClass {
         conflictPaths: ['roleId', 'permissionId'],
         skipUpdateIfNoValuesChanged: true,
       });
+    }
+
+    // System roles are immutable templates. Reconcile removed permissions as
+    // well as upserting additions so an upgrade cannot retain a stale grant
+    // (for example the former Engine Operator variable-edit capability).
+    const desiredSystemRolePermissions = new Set(
+      rolePermissionRows.map((row) => `${row.roleId}\u0000${row.permissionId}`),
+    );
+    const existingSystemRolePermissions = await rolePermissionRepo.find({
+      where: { roleId: In(SystemRoleDefinitions.map((role) => role.id)) },
+      select: ['id', 'roleId', 'permissionId'],
+    });
+    const obsoleteSystemRolePermissionIds = existingSystemRolePermissions
+      .filter((row) => !desiredSystemRolePermissions.has(`${row.roleId}\u0000${row.permissionId}`))
+      .map((row) => row.id);
+    if (obsoleteSystemRolePermissionIds.length > 0) {
+      await rolePermissionRepo.delete({ id: In(obsoleteSystemRolePermissionIds) });
     }
   }
 
@@ -2618,6 +2696,9 @@ class PermissionServiceClass {
       const validationError = rolePermissionValidationError(scope, permission);
       if (validationError) throw new Error(validationError);
     }
+
+    const dependencyError = rolePermissionDependencyError(uniquePermissionIds);
+    if (dependencyError) throw new Error(dependencyError);
 
     return uniquePermissionIds;
   }

@@ -341,6 +341,52 @@ describe('configBundlePreviewService', () => {
     ]));
   });
 
+  it('requires metadata and value access for custom variable-editor roles, including copied roles', () => {
+    const direct = configBundlePreviewService.preview({
+      bundle: { ...bundle, imports: ['./roles.json'] },
+      files: {
+        './roles.json': {
+          roles: [{
+            key: 'custom.engine.blind-editor',
+            name: 'Blind editor',
+            scope: 'engine',
+            permissions: ['engine:variables:metadata:view', 'engine:variables:edit'],
+          }],
+        },
+      },
+    });
+    expect(direct).toMatchObject({ valid: false });
+    expect(direct.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: './roles.json.roles.0.permissions',
+        message: 'Permission engine:variables:edit requires engine:variables:value:view',
+      }),
+    ]));
+
+    const copied = configBundlePreviewService.preview({
+      bundle: { ...bundle, imports: ['./roles.json'] },
+      files: {
+        './roles.json': {
+          roles: [{
+            key: 'custom.engine.owner-without-values',
+            name: 'Owner without values',
+            scope: 'engine',
+            copyFromRoleKey: 'system.engine.owner',
+            addPermissions: [],
+            removePermissions: ['engine:variables:value:view'],
+          }],
+        },
+      },
+    });
+    expect(copied).toMatchObject({ valid: false });
+    expect(copied.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: './roles.json.roles.0.permissions',
+        message: 'Permission engine:variables:edit requires engine:variables:value:view',
+      }),
+    ]));
+  });
+
   it('expands same-scope copied custom roles and rejects template cycles', () => {
     const templateBundle = {
       ...bundle,
@@ -406,7 +452,7 @@ describe('configBundlePreviewService', () => {
     const originalPermissions = [...systemRole.permissions];
     const first = configBundlePreviewService.preview(input);
     try {
-      systemRole.permissions = [...originalPermissions, 'engine:variables:edit'];
+      systemRole.permissions = [...originalPermissions, 'engine:variables:metadata:view', 'engine:variables:value:view', 'engine:variables:edit'];
       const changed = configBundlePreviewService.preview(input);
       expect(changed.canonicalHash).not.toBe(first.canonicalHash);
       expect(changed.roleTemplateBaselines?.['custom.engine.deployer-plus'].fingerprint)

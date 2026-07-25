@@ -34,6 +34,8 @@ export const TENANT_SAFE_ENGINE_PERMISSION_IDS = [
   'engine:instance:view',
   'engine:instance:delete',
   'engine:instance:retry',
+  'engine:variables:metadata:view',
+  'engine:variables:value:view',
   'engine:variables:edit',
 ] as const;
 
@@ -63,4 +65,22 @@ export function rolePermissionValidationError(
   return permission.scope === roleScope
     ? null
     : `Permission ${permission.key} does not match ${roleScope} role scope`;
+}
+
+/**
+ * Variable mutation is intentionally not a blind-write capability. A role
+ * that can alter values must also be able to inspect the values it is about to
+ * replace, and a value reader must at least be allowed to see variable
+ * metadata. Keeping this rule next to the scope policy makes manual, API, and
+ * configuration-managed roles converge on the same least-privilege contract.
+ */
+export function rolePermissionDependencyError(permissionIds: readonly string[]): string | null {
+  const permissions = new Set(permissionIds);
+  if (permissions.has('engine:variables:edit') && !permissions.has('engine:variables:value:view')) {
+    return 'Permission engine:variables:edit requires engine:variables:value:view';
+  }
+  if (permissions.has('engine:variables:value:view') && !permissions.has('engine:variables:metadata:view')) {
+    return 'Permission engine:variables:value:view requires engine:variables:metadata:view';
+  }
+  return null;
 }

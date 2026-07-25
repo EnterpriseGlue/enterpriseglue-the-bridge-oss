@@ -147,4 +147,34 @@ describe('VariableModals', () => {
     expect(screen.getByText(/Missing permission engine:instance:view/)).toBeInTheDocument();
     expect(screen.queryByText('100')).not.toBeInTheDocument();
   });
+
+  it('honors server-redacted variable history without relying on a browser permission decision', () => {
+    render(
+      <VariableHistoryModal
+        target={{
+          variableInstanceId: 'var-1',
+          variableName: 'customerReference',
+          scope: 'global',
+          currentType: 'String',
+          currentValue: null,
+          valueRedacted: true,
+        }}
+        entries={[{
+          id: 'detail-1',
+          variableInstanceId: 'var-1',
+          variableName: 'customerReference',
+          value: null,
+          valueRedacted: true,
+          type: 'String',
+        }]}
+        isLoading={false}
+        error={null}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Current value: Restricted/)).toBeInTheDocument();
+    expect(screen.getAllByText('Restricted')).toHaveLength(1);
+    expect(screen.getByText(/Variable value access is required/)).toBeInTheDocument();
+  });
 });

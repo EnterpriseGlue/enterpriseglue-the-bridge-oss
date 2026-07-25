@@ -85,6 +85,39 @@ describe('permissionService', () => {
     expect(result[1]).not.toHaveProperty('shadowedRuntimeAssignmentIds');
   });
 
+  it('reconciles removed system-role permissions during RBAC foundation seeding', async () => {
+    const permissionRepo = { upsert: vi.fn().mockResolvedValue(undefined) };
+    const roleRepo = { upsert: vi.fn().mockResolvedValue(undefined) };
+    const rolePermissionRepo = {
+      upsert: vi.fn().mockResolvedValue(undefined),
+      find: vi.fn().mockResolvedValue([{
+        id: 'stale-variable-edit',
+        roleId: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+        permissionId: EnginePermissions.VARIABLES_EDIT,
+      }]),
+      delete: vi.fn().mockResolvedValue(undefined),
+    };
+    const dataSource = {
+      getRepository: (entity: unknown) => {
+        if (entity === RbacPermission) return permissionRepo;
+        if (entity === RbacRole) return roleRepo;
+        if (entity === RbacRolePermission) return rolePermissionRepo;
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    await permissionService.seedRbacFoundation(dataSource as any, 1234);
+
+    expect(rolePermissionRepo.upsert).toHaveBeenCalled();
+    expect(rolePermissionRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ roleId: expect.anything() }),
+      select: ['id', 'roleId', 'permissionId'],
+    }));
+    expect(rolePermissionRepo.delete).toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.anything(),
+    }));
+  });
+
   it('reads fresh runtime inventory on consecutive visibility evaluations', async () => {
     const find = vi.fn()
       .mockResolvedValueOnce([{ id: 'runtime-a', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'orders', isActive: true }])
@@ -1726,6 +1759,26 @@ describe('permissionService', () => {
       EnginePermissions.MEMBERS_REMOVE,
       EnginePermissions.PROJECT_ACCESS_APPROVE,
     ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_OPERATOR)).toEqual(expect.arrayContaining([
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+    ]));
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_OPERATOR)).not.toContain(EnginePermissions.VARIABLES_EDIT);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_RUNTIME_VIEWER)).toEqual([
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+    ]);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_RUNTIME_INVESTIGATOR)).toEqual([
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+    ]);
+    expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_VARIABLE_OPERATOR)).toEqual([
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+      EnginePermissions.VARIABLES_EDIT,
+    ]);
     expect(permissionsFor(SYSTEM_ROLE_IDS.ENGINE_OWNER)).toEqual(expect.arrayContaining([
       EnginePermissions.DELEGATE_MANAGE,
       EnginePermissions.OWNERSHIP_TRANSFER,

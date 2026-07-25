@@ -576,6 +576,7 @@ export default function ProcessInstanceDetailPage() {
         activityInstanceId: entry.activityInstanceId || null,
         currentType: entry.type || null,
         currentValue: entry.value,
+        valueRedacted: entry.valueRedacted === true,
       }
     }
 
@@ -588,6 +589,7 @@ export default function ProcessInstanceDetailPage() {
         activityInstanceId: null,
         currentType: (meta as any)?.type ?? null,
         currentValue: (meta as any)?.value,
+        valueRedacted: (meta as any)?.valueRedacted === true,
       }
     }
 

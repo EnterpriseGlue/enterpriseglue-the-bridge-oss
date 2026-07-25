@@ -137,6 +137,61 @@ same user belongs to both groups
 
 Avoid creating one external identity mapping per permission. Map stable enterprise teams to internal groups, then manage scoped role assignments separately.
 
+### Control access to Mission Control variable data
+
+Variable data has a separate disclosure boundary from ordinary process and task
+visibility. Grant the smallest of the following engine permissions that matches
+the operational job:
+
+| Permission | Allows | Does not allow |
+| --- | --- | --- |
+| `engine:variables:metadata:view` | Variable names, types, IDs, and lifecycle metadata | Reading, copying, filtering by, or changing a value |
+| `engine:variables:value:view` | Variable values after EnterpriseGlue applies configured PII redaction | Changing a value |
+| `engine:variables:edit` | Creating, replacing, and deleting values | A blind write; it requires both metadata and value permission |
+
+The dependency is enforced consistently by the Role Library, role/assignment
+API, configuration-bundle preview, and backend route guard:
+
+```text
+engine:variables:edit
+  -> engine:variables:value:view
+  -> engine:variables:metadata:view
+```
+
+Use the immutable templates as follows:
+
+| System role | Variable access |
+| --- | --- |
+| Engine Owner / Engine Delegate | Metadata, values, and edits |
+| Engine Operator | Metadata and values; no edits |
+| Runtime Viewer | Metadata only |
+| Runtime Investigator | Metadata and values; no edits |
+| Variable Operator | Metadata, values, and edits |
+| Tenant Viewer | Metadata only in its tenant scope |
+| Tenant Engine Operator | Metadata and values in its tenant-scoped runtime resources; no edits |
+| Tenant Administrator | Metadata, values, and edits in its tenant scope |
+
+For a custom role, include all prerequisites explicitly. A role that omits a
+prerequisite is rejected on creation/update and during configuration preview.
+Existing custom roles are not silently widened: update an existing
+edit-only/custom role intentionally before relying on variable mutation.
+
+The backend, rather than the browser, enforces the no-value outcome. On every
+Mission Control variable read it replaces the value with `null`, sets
+`valueRedacted: true`, and removes engine-specific value metadata (such as
+`valueInfo` and adapter extension payloads) before the response reaches
+EnterpriseGlue. This covers active process and task variables, process-variable
+history, both historic variable collection routes, the variable array returned
+by execution details, and returned variables from task completion. The UI uses
+the server marker to display **Restricted** and disables copy/edit paths.
+
+Configured PII policies remain an additional server-side layer: a user with
+`engine:variables:value:view` still receives the PII-redacted representation,
+not an automatic bypass. Historic `variableValue` searches require an
+engine-wide value grant because a scoped metadata search could otherwise reveal
+whether a secret value exists. Prefer a name/type/process filter for
+metadata-only investigators.
+
 ## Configure Identity Providers
 
 All providers normalize to the same internal envelope:

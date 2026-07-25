@@ -32,10 +32,18 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
+vi.mock('@enterpriseglue/shared/services/pii/PiiRedactionService.js', () => ({
+  piiRedactionService: {
+    redactPayload: vi.fn(async (_req: any, payload: any) => payload),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   EnginePermissions: {
     INSTANCE_VIEW: 'engine:instance:view',
     PROCESS_MODIFY: 'engine:process:modify',
+    VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+    VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
     VARIABLES_EDIT: 'engine:variables:edit',
   },
   PlatformPermissions: {
@@ -44,6 +52,13 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
   },
   ProjectPermissions: {
     MEMBERS_MANAGE: 'project:members:manage',
+  },
+  SYSTEM_ROLE_IDS: {
+    PROJECT_OWNER: 'system.project.owner',
+    PROJECT_DELEGATE: 'system.project.delegate',
+    PROJECT_DEVELOPER: 'system.project.developer',
+    PROJECT_EDITOR: 'system.project.editor',
+    PROJECT_VIEWER: 'system.project.viewer',
   },
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(true),
@@ -219,11 +234,30 @@ describe('mission-control tasks routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toBeDefined();
-    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:variables:metadata:view', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
     expect(getTaskVariablesById).toHaveBeenCalledWith('engine-1', 't1');
+  });
+
+  it('redacts task-variable values at the backend when value access is absent', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    (getTaskVariablesById as unknown as Mock).mockResolvedValueOnce({
+      customerReference: { value: 'customer-42', type: 'String', valueInfo: { serialized: true } },
+    });
+
+    const response = await request(app)
+      .get('/mission-control-api/tasks/t1/variables')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      customerReference: { type: 'String', value: null, valueRedacted: true },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('customer-42');
   });
 
   it('updates task variables through the variables edit action', async () => {
@@ -239,6 +273,19 @@ describe('mission-control tasks routes', () => {
     expect(updateTaskVariablesById).toHaveBeenCalledWith('engine-1', 't1', {
       modifications: { var1: { value: 'updated' } },
     });
+  });
+
+  it('does not permit a blind task-variable update without value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+
+    const response = await request(app)
+      .put('/mission-control-api/tasks/t1/variables')
+      .send({ engineId: 'engine-1', modifications: { var1: { value: 'updated' } } });
+
+    expect(response.status).toBe(403);
+    expect(updateTaskVariablesById).not.toHaveBeenCalled();
   });
 
   it('claims tasks through the assignment action', async () => {
@@ -265,6 +312,23 @@ describe('mission-control tasks routes', () => {
       resourceId: 'engine-1',
     }));
     expect(completeTaskById).toHaveBeenCalledWith('engine-1', 't1', { withVariablesInReturn: true });
+  });
+
+  it('redacts returned task-completion variables without value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    (completeTaskById as unknown as Mock).mockResolvedValueOnce({
+      result: { value: 'approved-for-customer-42', type: 'String' },
+    });
+
+    const response = await request(app)
+      .post('/mission-control-api/tasks/t1/complete')
+      .send({ engineId: 'engine-1', withVariablesInReturn: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ result: { type: 'String', value: null, valueRedacted: true } });
+    expect(JSON.stringify(response.body)).not.toContain('approved-for-customer-42');
   });
 
   it('denies task reads when instance view permission is missing', async () => {

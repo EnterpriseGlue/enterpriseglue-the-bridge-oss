@@ -61,6 +61,8 @@ export const EnginePermission = {
   INSTANCE_VIEW: 'engine:instance:view',
   INSTANCE_DELETE: 'engine:instance:delete',
   INSTANCE_RETRY: 'engine:instance:retry',
+  VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+  VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
   VARIABLES_EDIT: 'engine:variables:edit',
 } as const;
 

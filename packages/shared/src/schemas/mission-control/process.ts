@@ -79,6 +79,8 @@ export const ProcessInstanceVariableSchema = z.object({
   name: z.string().optional(),
   type: z.string(),
   value: z.unknown(),
+  /** True when the caller may inspect metadata but lacks value disclosure. */
+  valueRedacted: z.boolean().optional(),
   valueInfo: z.unknown().optional(),
   processInstanceId: z.string().nullable().optional(),
   executionId: z.string().nullable().optional(),

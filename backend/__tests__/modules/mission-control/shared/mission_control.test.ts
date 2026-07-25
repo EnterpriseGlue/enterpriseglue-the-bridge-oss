@@ -49,6 +49,8 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
     INSTANCE_DELETE: 'engine:instance:delete',
     INSTANCE_RETRY: 'engine:instance:retry',
     PROCESS_MODIFY: 'engine:process:modify',
+    VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+    VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
     MEMBERS_MANAGE: 'engine:members:manage',
   },
   PlatformPermissions: {
@@ -458,6 +460,83 @@ describe('mission-control shared mission_control routes', () => {
     });
   });
 
+  it('removes historic values and extension payloads without value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    vi.mocked(listHistoricVariableInstances).mockResolvedValueOnce([{
+      id: 'var-1', name: 'customerReference', type: 'String', value: 'reference-42',
+      valueInfo: { serializationDataFormat: 'application/json' }, engineExtension: { raw: 'reference-42' },
+    }] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'var-1', name: 'customerReference', type: 'String', value: null, valueRedacted: true }]);
+    expect(JSON.stringify(response.body)).not.toContain('reference-42');
+  });
+
+  it('discloses historic values only for the runtime resources with value access', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'engine-77',
+          tenantId: null,
+          tenancyMode: 'shared',
+          runtimeAccessScope: 'resource_aware',
+        }),
+      }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ permission }: { permission: string }) => {
+      if (permission === 'engine:variables:metadata:view') {
+        return [{ resourceKey: 'payments' }, { resourceKey: 'benefits' }];
+      }
+      if (permission === 'engine:variables:value:view') {
+        return [{ resourceKey: 'payments' }];
+      }
+      return [];
+    });
+    vi.mocked(listHistoricVariableInstances).mockImplementation(async (_engineId, query) => [{
+      id: `var-${query.processDefinitionKey}`,
+      name: 'customerReference',
+      type: 'String',
+      processDefinitionKey: query.processDefinitionKey,
+      value: `${query.processDefinitionKey}-secret`,
+    }] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(response.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ processDefinitionKey: 'payments', value: 'payments-secret' }),
+      expect.objectContaining({ processDefinitionKey: 'benefits', value: null, valueRedacted: true }),
+    ]));
+    expect(JSON.stringify(response.body)).not.toContain('benefits-secret');
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-77',
+      resourceKind: 'process_definition',
+      permission: 'engine:variables:value:view',
+    }));
+  });
+
+  it('does not permit historic variable-value searches without engine-wide value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77', variableValue: 'reference-42' });
+
+    expect(response.status).toBe(403);
+    expect(listHistoricVariableInstances).not.toHaveBeenCalled();
+  });
+
   it('returns variable history for a process instance variable and allows engineId in query', async () => {
     vi.mocked(getProcessInstanceVariableHistory).mockResolvedValueOnce([
       {
@@ -486,7 +565,7 @@ describe('mission-control shared mission_control routes', () => {
         variableName: 'amount',
       }),
     ]);
-    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:variables:metadata:view', expect.objectContaining({
       resourceType: 'engine',
       resourceId: 'engine-77',
     }));
@@ -516,6 +595,27 @@ describe('mission-control shared mission_control routes', () => {
       }),
     });
     expect(getProcessInstanceVariables).toHaveBeenCalledWith('engine-77', 'pi-1');
+  });
+
+  it('redacts process-variable history and execution-detail values without value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    vi.mocked(getProcessInstanceVariableHistory).mockResolvedValueOnce([{
+      id: 'detail-1', variableInstanceId: 'var-1', variableName: 'amount', value: 100, type: 'Integer',
+    }] as any);
+
+    const history = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/variable-history')
+      .query({ engineId: 'engine-77', variableInstanceId: 'var-1' });
+    const details = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/execution-details')
+      .query({ engineId: 'engine-77', activityInstanceId: 'act-inst-1' });
+
+    expect(history.status).toBe(200);
+    expect(history.body).toEqual([{ id: 'detail-1', variableInstanceId: 'var-1', variableName: 'amount', type: 'Integer', value: null, valueRedacted: true }]);
+    expect(details.status).toBe(200);
+    expect(details.body.variables).toEqual([{ id: 'var-1', name: 'approvalReason', type: 'String', value: null, valueRedacted: true }]);
   });
 
   it('serializes activity history through the shared passthrough contract', async () => {

@@ -332,6 +332,22 @@ there fails bootstrap through the normal fail-closed configuration status.
 
 ## Mission Control Runtime Boundary
 
+### Variable-value disclosure boundary
+
+Mission Control variable routes require `engine:variables:metadata:view` to
+return variable identity and type. `engine:variables:value:view` is checked by
+the backend after the route's exact runtime-resource authorization has resolved
+the engine/process scope. If that second check is denied, the response contains
+only safe metadata with `value: null` and `valueRedacted: true`; raw values,
+`valueInfo`, and adapter-specific value payloads are removed before JSON
+serialization.
+
+`engine:variables:edit` is valid only with both metadata and value permissions,
+and the mutation route performs the same value-access check at runtime. The
+historic `variableValue` query filter requires an engine-wide value permission;
+this avoids using a metadata result count as a value-discovery oracle. PII
+redaction is applied even when value access succeeds.
+
 All Mission Control collection, definition, referenced-detail, batch,
 deployment, and migration routes use the canonical runtime-resource guard.
 For a shared engine, a broad engine grant does not enable the engine-wide fast

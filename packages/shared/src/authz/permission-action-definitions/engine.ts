@@ -828,32 +828,32 @@ export const ENGINE_AUTHZ_ACTIONS = [
     },
   {
       actionId: 'engine.runtime.process-instances.variables.read',
-      permissionId: 'engine:instance:view',
+      permissionId: 'engine:variables:metadata:view',
       resourceType: 'engine',
       operation: 'read',
       risk: 'high',
       audit: false,
       category: 'Mission Control Process Instances',
-      description: 'Read runtime variables for a process instance using the current compatibility permission.',
+      description: 'Read runtime-variable metadata for a process instance. Values are returned only with engine:variables:value:view and are otherwise redacted by the backend.',
       ui: [{ surfaceId: 'mission-control.process-instances.variables', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
           method: 'GET',
           route: '/mission-control-api/process-instances/{id}/variables',
           resourceResolver: 'engine.byId',
-          additionalChecks: ['engineId is resolved from query string by action middleware'],
+          additionalChecks: ['engineId is resolved from query string by action middleware', 'variable values require engine:variables:value:view and are never sent when denied'],
         },
       ],
     },
   {
       actionId: 'engine.runtime.process-instances.variable-history.read',
-      permissionId: 'engine:instance:view',
+      permissionId: 'engine:variables:metadata:view',
       resourceType: 'engine',
       operation: 'read',
       risk: 'high',
       audit: false,
       category: 'Mission Control Process Instances',
-      description: 'Read variable history for a process instance variable using the current compatibility permission.',
+      description: 'Read variable-history metadata. Historic values require engine:variables:value:view and are otherwise redacted by the backend.',
       ui: [{ surfaceId: 'mission-control.process-instances.variable-history', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
@@ -862,7 +862,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
           resourceResolver: 'engine.byId',
           additionalChecks: [
             'engineId is resolved from query string by action middleware',
-            'response payload is passed through the PII redaction service',
+            'values require engine:variables:value:view; permitted values are passed through the PII redaction service',
           ],
         },
       ],
@@ -1042,14 +1042,14 @@ export const ENGINE_AUTHZ_ACTIONS = [
       risk: 'high',
       audit: true,
       category: 'Mission Control Process Instances',
-      description: 'Create, update, or delete runtime variables on a process instance.',
+      description: 'Create, update, or delete runtime variables on a process instance. Requires engine:variables:value:view at the same scope.',
       ui: [{ surfaceId: 'mission-control.process-instances.variables.update', behavior: 'disable' }],
       routes: [
         {
           method: 'POST',
           route: '/mission-control-api/process-instances/{id}/variables',
           resourceResolver: 'engine.byId',
-          additionalChecks: ['engineId is resolved from request body by action middleware'],
+          additionalChecks: ['engineId is resolved from request body by action middleware', 'engine:variables:value:view is required at the same scope to prevent blind writes'],
         },
       ],
     },
@@ -1303,20 +1303,20 @@ export const ENGINE_AUTHZ_ACTIONS = [
     },
   {
       actionId: 'engine.runtime.tasks.variables.read',
-      permissionId: 'engine:instance:view',
+      permissionId: 'engine:variables:metadata:view',
       resourceType: 'engine',
       operation: 'read',
       risk: 'high',
       audit: false,
       category: 'Mission Control Tasks',
-      description: 'Read task variables using the current compatibility permission.',
+      description: 'Read task-variable metadata. Values require engine:variables:value:view and are otherwise redacted by the backend.',
       ui: [{ surfaceId: 'mission-control.tasks.variables', behavior: 'redact', coverage: 'api-only' }],
       routes: [
         {
           method: 'GET',
           route: '/mission-control-api/tasks/{id}/variables',
           resourceResolver: 'engine.byId',
-          additionalChecks: ['engineId is resolved from query string by action middleware'],
+          additionalChecks: ['engineId is resolved from query string by action middleware', 'variable values require engine:variables:value:view and are never sent when denied'],
         },
       ],
     },
@@ -1328,14 +1328,14 @@ export const ENGINE_AUTHZ_ACTIONS = [
       risk: 'high',
       audit: true,
       category: 'Mission Control Tasks',
-      description: 'Update task variables.',
+      description: 'Update task variables. Requires engine:variables:value:view at the same scope.',
       ui: [{ surfaceId: 'mission-control.tasks.variables.update', behavior: 'disable', coverage: 'api-only' }],
       routes: [
         {
           method: 'PUT',
           route: '/mission-control-api/tasks/{id}/variables',
           resourceResolver: 'engine.byId',
-          additionalChecks: ['engineId is resolved from request body by action middleware'],
+          additionalChecks: ['engineId is resolved from request body by action middleware', 'engine:variables:value:view is required at the same scope to prevent blind writes'],
         },
       ],
     },
@@ -1587,13 +1587,13 @@ export const ENGINE_AUTHZ_ACTIONS = [
     },
   {
       actionId: 'engine.runtime.history.variables.read',
-      permissionId: 'engine:instance:view',
+      permissionId: 'engine:variables:metadata:view',
       resourceType: 'engine',
       operation: 'read',
       risk: 'high',
       audit: false,
       category: 'Mission Control History',
-      description: 'Read historic variable instances from an engine using the current compatibility permission.',
+      description: 'Read historic-variable metadata. Each value is independently disclosed only when engine:variables:value:view covers its resolved runtime resource.',
       ui: [{ surfaceId: 'mission-control.history.variables', behavior: 'redact', coverage: 'runtime-enforced' }],
       routes: [
         {
@@ -1602,7 +1602,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
           resourceResolver: 'engine.byId',
           additionalChecks: [
             'engineId is resolved from query string by action middleware',
-            'response payload is passed through the PII redaction service',
+            'values require engine:variables:value:view; permitted values are passed through the PII redaction service',
           ],
         },
         {
@@ -1611,7 +1611,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
           resourceResolver: 'engine.byId',
           additionalChecks: [
             'engineId is resolved from query string by action middleware',
-            'response payload is passed through the PII redaction service',
+            'values require engine:variables:value:view; permitted values are passed through the PII redaction service',
           ],
         },
       ],
@@ -2157,6 +2157,19 @@ export const ENGINE_AUTHZ_ACTIONS = [
       ],
     },
   {
+      actionId: 'engine.runtime.variables.value.read',
+      permissionId: 'engine:variables:value:view',
+      resourceType: 'engine',
+      operation: 'read',
+      risk: 'high',
+      audit: false,
+      category: 'Mission Control',
+      description: 'View raw runtime and historic variable values after the backend applies configured PII redaction.',
+      // Concrete variable routes are declared by metadata-read actions so a
+      // caller without this permission receives a safe metadata response.
+      ui: [{ surfaceId: 'mission-control.variables.values', behavior: 'redact', coverage: 'runtime-enforced' }],
+    },
+  {
       actionId: 'engine.variables.update',
       permissionId: 'engine:variables:edit',
       resourceType: 'engine',
@@ -2164,7 +2177,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       risk: 'high',
       audit: true,
       category: 'Mission Control',
-      description: 'Create, update, or delete runtime variables.',
+      description: 'Create, update, or delete runtime variables. Requires engine:variables:value:view at the same scope.',
       // Aggregate reporting action; concrete runtime controls own the mounted UI surfaces.
       ui: [{ surfaceId: 'mission-control.variables.actions', behavior: 'disable', coverage: 'api-only' }],
     },

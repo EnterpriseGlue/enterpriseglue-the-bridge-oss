@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isTenantSafePermission,
+  rolePermissionDependencyError,
   rolePermissionValidationError,
   TENANT_MACHINE_SAFE_PERMISSION_IDS,
   TENANT_SAFE_ENGINE_PERMISSION_IDS,
@@ -27,6 +28,8 @@ describe('tenant role permission policy', () => {
       EnginePermissions.INSTANCE_VIEW,
       EnginePermissions.INSTANCE_DELETE,
       EnginePermissions.INSTANCE_RETRY,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
       EnginePermissions.VARIABLES_EDIT,
     ]));
     expect(TENANT_SAFE_PERMISSION_IDS).toEqual(new Set([
@@ -113,5 +116,24 @@ describe('tenant role permission policy', () => {
       key: ProjectPermissions.FILES_VIEW,
       scope: 'project',
     })).toBe(`Permission ${ProjectPermissions.FILES_VIEW} does not match engine role scope`);
+  });
+
+  it('requires a metadata and value chain for every variable editor role', () => {
+    expect(rolePermissionDependencyError([])).toBeNull();
+    expect(rolePermissionDependencyError([
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+    ])).toBeNull();
+    expect(rolePermissionDependencyError([
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+    ])).toBe('Permission engine:variables:value:view requires engine:variables:metadata:view');
+    expect(rolePermissionDependencyError([
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_EDIT,
+    ])).toBe('Permission engine:variables:edit requires engine:variables:value:view');
+    expect(rolePermissionDependencyError([
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+      EnginePermissions.VARIABLES_EDIT,
+    ])).toBeNull();
   });
 });

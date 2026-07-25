@@ -17,6 +17,10 @@ export function getPermissionImplications(permission: PermissionCatalogEntry): s
   if (key.startsWith('engine:members:') && key !== 'engine:members:view') implications.push('engine:members:view');
   if (key.startsWith('engine:instance:') && key !== 'engine:instance:view') implications.push('engine:instance:view');
   if (key.startsWith('engine:process:')) implications.push('engine:instance:view');
+  if (key === 'engine:variables:value:view') implications.push('engine:variables:metadata:view');
+  if (key === 'engine:variables:edit') {
+    implications.push('engine:variables:metadata:view', 'engine:variables:value:view');
+  }
   if (key === 'engine:deploy') implications.push('engine:deploy:view');
 
   return Array.from(new Set(implications));
@@ -30,7 +34,7 @@ function permissionMatchesQuickFilter(permission: PermissionCatalogEntry, filter
     return key.includes(':create') || key.includes(':edit') || key.includes(':update') || key.includes(':restore') || key.includes(':push') || key.includes(':pull') || key.includes(':connect');
   }
   if (filter === 'operator') {
-    return key.startsWith('engine:process:') || key.startsWith('engine:instance:') || key === 'engine:activate' || key === 'engine:variables:edit';
+    return key.startsWith('engine:process:') || key.startsWith('engine:instance:') || key === 'engine:activate' || key.startsWith('engine:variables:');
   }
   return key.includes(':deploy') || key === 'project:deploy' || key === 'engine:deploy' || key === 'engine:deploy:view';
 }

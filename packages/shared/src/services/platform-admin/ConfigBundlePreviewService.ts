@@ -4,7 +4,7 @@ import {
   ConfigIdentityMappingsFileSchema, ConfigIdentityProvidersFileSchema, ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema, ConfigRuntimeResourceSetsFileSchema, EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
-import { PermissionCatalog, SystemRoleDefinitions } from './permissions.js';
+import { PermissionCatalog, SystemRoleDefinitions, rolePermissionDependencyError } from './permissions.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 import type {
@@ -356,6 +356,16 @@ function expandRoleTemplates(normalizedFiles: Record<string, unknown>): {
   return { errors, expandedRolePermissions: Object.fromEntries(resolved.entries()), roleTemplateBaselines };
 }
 
+function validateExpandedRolePermissionDependencies(
+  normalizedFiles: Record<string, unknown>,
+  expandedRolePermissions: Record<string, string[]>,
+): RawValidationIssue[] {
+  return fileEntries(normalizedFiles, './roles.json', 'roles').flatMap((role, index) => {
+    const error = rolePermissionDependencyError(expandedRolePermissions[role.key] || []);
+    return error ? [{ path: `./roles.json.roles.${index}.permissions`, message: error }] : [];
+  });
+}
+
 class ConfigBundlePreviewService {
   compile(input: ConfigBundlePreviewInput, policy: ConfigBundlePolicyContext = { credentiallessCustomerSidecarsEnabled: false }): ConfigBundleCompilation {
     const parsedBundle = EnterpriseGlueConfigBundleSchema.safeParse(input.bundle);
@@ -380,6 +390,7 @@ class ConfigBundlePreviewService {
       if (errors.length === 0) {
         const expanded = expandRoleTemplates(normalizedFiles);
         errors.push(...expanded.errors);
+        errors.push(...validateExpandedRolePermissionDependencies(normalizedFiles, expanded.expandedRolePermissions));
         expandedRolePermissions = expanded.expandedRolePermissions;
         roleTemplateBaselines = expanded.roleTemplateBaselines;
       }

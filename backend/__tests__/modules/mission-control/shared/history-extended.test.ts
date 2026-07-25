@@ -30,6 +30,8 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   EnginePermissions: {
     INSTANCE_VIEW: 'engine:instance:view',
+    VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+    VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
     MEMBERS_MANAGE: 'engine:members:manage',
   },
   PlatformPermissions: {
@@ -169,6 +171,37 @@ describe('mission-control extended history routes', () => {
     expect(response.body).toEqual([{ id: 'var-1', name: 'customerReference', type: 'String', value: 'secret' }]);
     expect(listHistoricVariables).toHaveBeenCalledWith('engine-1', {});
     expect(piiRedactionService.redactPayload).toHaveBeenCalledWith(expect.anything(), [{ id: 'var-1', name: 'customerReference', type: 'String', value: 'secret' }], 'history');
+  });
+
+  it('returns variable metadata rather than values when value access is absent', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    (listHistoricVariables as unknown as Mock).mockResolvedValueOnce([{
+      id: 'var-1', name: 'customerReference', type: 'String', value: 'secret',
+      valueInfo: { serializationDataFormat: 'application/json' }, engineExtension: { secret: 'secret' },
+    }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variables')
+      .query({ engineId: 'engine-1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'var-1', name: 'customerReference', type: 'String', value: null, valueRedacted: true }]);
+    expect(JSON.stringify(response.body)).not.toContain('secret');
+  });
+
+  it('blocks historic variable-value filters without engine-wide value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variables')
+      .query({ engineId: 'engine-1', variableValue: 'secret' });
+
+    expect(response.status).toBe(403);
+    expect(listHistoricVariables).not.toHaveBeenCalled();
   });
 
   it('keeps extension fields when serializing historic task and variable collections', async () => {

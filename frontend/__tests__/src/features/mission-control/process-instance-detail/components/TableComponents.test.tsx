@@ -159,4 +159,24 @@ describe('TableComponents', () => {
     expect(openVariableEditor).not.toHaveBeenCalled();
     expect(openVariableHistory).not.toHaveBeenCalled();
   });
+
+  it('honors the backend valueRedacted marker even when the caller did not precompute a UI redaction flag', () => {
+    const openVariableEditor = vi.fn();
+
+    render(
+      <GlobalVariablesTable
+        data={{ customerReference: { value: null, type: 'String', valueRedacted: true } }}
+        status="ACTIVE"
+        openVariableEditor={openVariableEditor}
+        canEditVariables
+      />
+    );
+
+    expect(screen.getByText('Restricted')).toBeInTheDocument();
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    expect(editButton).toBeDisabled();
+    expect(editButton).toHaveAttribute('title', 'Variable value access is required');
+    fireEvent.click(editButton);
+    expect(openVariableEditor).not.toHaveBeenCalled();
+  });
 });

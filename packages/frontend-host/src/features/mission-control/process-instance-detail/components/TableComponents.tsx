@@ -49,6 +49,7 @@ export function LocalVariablesTable({
   canViewVariableHistory?: boolean
   variableHistoryUnavailableReason?: string | null
 }) {
+  const valuesRedacted = redactValues || (data || []).some((variable: any) => variable?.valueRedacted === true)
   const copyToClipboard = (text: string) => {
     try {
       void navigator.clipboard?.writeText(text)
@@ -65,7 +66,7 @@ export function LocalVariablesTable({
 
   const rows = (data || []).map((v: any, idx: number) => {
     const type = v?.type || (v?.value !== null && v?.value !== undefined ? typeof v.value : 'Unknown')
-    const value = redactValues ? REDACTED_VALUE : stringifyValue(v?.value)
+    const value = valuesRedacted ? REDACTED_VALUE : stringifyValue(v?.value)
     const activityInstanceId = v?.activityInstanceId || '—'
     return {
       id: String(v?.id || `${v?.name || 'var'}-${activityInstanceId}-${idx}`),
@@ -126,15 +127,16 @@ export function LocalVariablesTable({
                                   scope: 'local',
                                   activityInstanceId: rawVar?.activityInstanceId || null,
                                   currentType: rawVar?.type || row.type,
-                                  currentValue: redactValues ? undefined : rawVar?.value,
+                                  currentValue: valuesRedacted ? undefined : rawVar?.value,
+                                  valueRedacted: valuesRedacted,
                                 })}
                               />
                               <GuardedOverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.name))} />
                               <GuardedOverflowMenuItem
                                 itemText="Copy value"
-                                unavailableReason={redactValues ? valueUnavailableReason || 'Value unavailable' : null}
+                                unavailableReason={valuesRedacted ? valueUnavailableReason || 'Value unavailable' : null}
                                 onClick={() => {
-                                  if (!redactValues) copyToClipboard(valueToCopy)
+                                  if (!valuesRedacted) copyToClipboard(valueToCopy)
                                 }}
                               />
                             </GuardedOverflowMenu>
@@ -183,6 +185,7 @@ export function GlobalVariablesTable({
   canViewVariableHistory?: boolean
   variableHistoryUnavailableReason?: string | null
 }) {
+  const valuesRedacted = redactValues || Object.values(data || {}).some((variable: any) => variable?.valueRedacted === true)
   const copyToClipboard = (text: string) => {
     try {
       void navigator.clipboard?.writeText(text)
@@ -197,7 +200,7 @@ export function GlobalVariablesTable({
   ]
 
   const baseRows = Object.entries(data || {}).map(([k, v]: any) => {
-    const value = redactValues ? REDACTED_VALUE : stringifyValue(v?.value)
+    const value = valuesRedacted ? REDACTED_VALUE : stringifyValue(v?.value)
 
     return {
       id: k,
@@ -211,8 +214,10 @@ export function GlobalVariablesTable({
   const rows = baseRows
 
   const canAttemptEdit = (status === 'ACTIVE' || status === 'SUSPENDED') && !!openVariableEditor
-  const canEdit = canAttemptEdit && canEditVariables && !redactValues
-  const editUnavailableReason = redactValues ? valueUnavailableReason : variableEditUnavailableReason
+  const canEdit = canAttemptEdit && canEditVariables && !valuesRedacted
+  const editUnavailableReason = valuesRedacted
+    ? valueUnavailableReason || 'Variable value access is required'
+    : variableEditUnavailableReason
 
   return (
     <DataTable rows={rows} headers={headers as any} size="xs">
@@ -245,13 +250,19 @@ export function GlobalVariablesTable({
                         const rawVar = (data as any)?.[row.id]
                         const rawValue = rawVar?.value
                         const valueToCopy = stringifyValue(rawValue)
-                        const historyTarget = historyTargetsByName?.[row.id] || {
+                        const configuredHistoryTarget = historyTargetsByName?.[row.id]
+                        const historyTarget = configuredHistoryTarget ? {
+                          ...configuredHistoryTarget,
+                          currentValue: valuesRedacted ? undefined : configuredHistoryTarget.currentValue,
+                          valueRedacted: valuesRedacted || configuredHistoryTarget.valueRedacted === true,
+                        } : {
                           variableInstanceId: null,
                           variableName: row.id,
                           scope: 'global' as const,
                           activityInstanceId: null,
                           currentType: rawVar?.type || row.type,
-                          currentValue: redactValues ? undefined : rawVar?.value,
+                          currentValue: valuesRedacted ? undefined : rawVar?.value,
+                          valueRedacted: valuesRedacted,
                         }
 
                         return (
@@ -278,9 +289,9 @@ export function GlobalVariablesTable({
                               <GuardedOverflowMenuItem itemText="Copy name" onClick={() => copyToClipboard(String(row.id))} />
                               <GuardedOverflowMenuItem
                                 itemText="Copy value"
-                                unavailableReason={redactValues ? valueUnavailableReason || 'Value unavailable' : null}
+                                unavailableReason={valuesRedacted ? valueUnavailableReason || 'Value unavailable' : null}
                                 onClick={() => {
-                                  if (!redactValues) copyToClipboard(valueToCopy)
+                                  if (!valuesRedacted) copyToClipboard(valueToCopy)
                                 }}
                               />
                             </GuardedOverflowMenu>

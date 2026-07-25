@@ -133,7 +133,9 @@ export function VariableHistoryModal({
   if (!target) return null
 
   const readDeniedReason = readDecision && !readDecision.allowed ? readDecision.reason || 'Action unavailable' : null
-  const redactValues = !!readDeniedReason
+  const valuesRedacted = !!readDeniedReason
+    || target.valueRedacted === true
+    || (entries || []).some((entry) => entry.valueRedacted === true)
 
   const headers = [
     { key: 'time', header: 'Time' },
@@ -146,7 +148,7 @@ export function VariableHistoryModal({
   const rows = (entries || []).map((entry, index) => ({
     id: entry.id || `${entry.variableInstanceId}-${index}`,
     time: formatTimestamp(entry.time),
-    value: redactValues ? 'Restricted' : stringifyValue(entry.value),
+    value: valuesRedacted ? 'Restricted' : stringifyValue(entry.value),
     type: entry.type || '—',
     activityInstanceId: entry.activityInstanceId || '—',
     revision: entry.revision ?? '—',
@@ -168,15 +170,15 @@ export function VariableHistoryModal({
         </div>
 
         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
-          Current value: {redactValues ? 'Restricted' : stringifyValue(target.currentValue)}
+          Current value: {valuesRedacted ? 'Restricted' : stringifyValue(target.currentValue)}
         </div>
 
-        {readDeniedReason ? (
+        {valuesRedacted ? (
           <InlineNotification
             lowContrast
             kind="warning"
             title="Variable history redacted"
-            subtitle={readDeniedReason}
+            subtitle={readDeniedReason || 'Variable value access is required to view values.'}
           />
         ) : null}
 

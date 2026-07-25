@@ -37,6 +37,7 @@ export type VariableHistoryTarget = {
   activityInstanceId?: string | null
   currentType?: string | null
   currentValue?: any
+  valueRedacted?: boolean
 }
 
 export type Incident = ProcessInstanceIncident

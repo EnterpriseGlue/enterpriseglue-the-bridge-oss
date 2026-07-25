@@ -15,6 +15,7 @@ import {
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
 import { ProcessInstanceDetailSchema, ProcessInstanceSchema, ProcessInstanceVariablesModifyRequestSchema, RuntimeActivityInstanceTreeSchema, VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import { presentRuntimeVariables, requireVariableValueAccess } from '../shared/variable-visibility.js'
 
 const r = Router()
 
@@ -91,7 +92,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireAuth, requi
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
   const data = await getProcessInstanceVariables(engineId, instanceId)
-  res.json(VariablesSchema.parse(data))
+  res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data)))
 }))
 
 // Get activity instances for a process instance
@@ -116,7 +117,7 @@ r.delete('/mission-control-api/process-instances/:id', requireAuth, requireProce
 }))
 
 // Modify process instance variables
-r.post('/mission-control-api/process-instances/:id/variables', requireAuth, requireProcessInstanceAction('engine.runtime.process-instances.variables.update'), validateBody(ProcessInstanceVariablesModifyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/process-instances/:id/variables', requireAuth, requireProcessInstanceAction('engine.runtime.process-instances.variables.update'), requireVariableValueAccess, validateBody(ProcessInstanceVariablesModifyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const { modifications } = req.body
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)

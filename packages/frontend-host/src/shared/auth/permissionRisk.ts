@@ -28,5 +28,8 @@ export function getPermissionRiskForKey(key: string): PermissionRisk | null {
   ) {
     return { label: 'Sensitive operation', description: 'Can change sensitive platform, engine, or runtime settings.' };
   }
+  if (key.includes(':variables:value:view')) {
+    return { label: 'Sensitive data', description: 'Can disclose runtime variable values. PII policies may redact additional fields.' };
+  }
   return null;
 }
