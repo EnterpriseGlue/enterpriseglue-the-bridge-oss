@@ -14,6 +14,7 @@ const localContainerWebkitRunner = readFileSync(new URL('./run-authz-local-seede
 const accessibilityMatrixRunner = readFileSync(new URL('./run-authz-accessibility-matrix.sh', import.meta.url), 'utf8');
 const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
+const e2eGlobalTeardown = readFileSync(new URL('../test/e2e/setup/global-teardown.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
@@ -191,6 +192,10 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
   assert.match(e2eGlobalSetup, /process\.env\.E2E_SEED_FILE/);
+  assert.match(e2eGlobalSetup, /assertLocalUrl\(API_BASE_URL\)/);
+  assert.match(e2eGlobalSetup, /assertLocalDatabaseTarget\(\)/);
+  assert.match(e2eGlobalTeardown, /assertLocalUrl\(API_BASE_URL\)/);
+  assert.match(e2eGlobalTeardown, /assertLocalDatabaseTarget\(\)/);
 });
 
 test('cross-browser authorization writes sanitized evidence only after all targets pass', () => {
@@ -217,17 +222,25 @@ test('cross-browser authorization writes sanitized evidence only after all targe
   assert.match(browserEvidenceWriter, /back_forward_cache_revalidation/);
 });
 
-test('the macOS WebKit fallback remains a disposable local Docker lane', () => {
+test('the macOS WebKit fallback remains an egress-isolated local Docker lane', () => {
   assert.match(localContainerWebkitRunner, /localhost, loopback, or a \.local host/);
-  assert.match(localContainerWebkitRunner, /--add-host enterpriseglue-webkit\.local:host-gateway/);
-  assert.match(localContainerWebkitRunner, /--network "\$compose_network"/);
+  assert.match(localContainerWebkitRunner, /docker network create --internal/);
+  assert.match(localContainerWebkitRunner, /--network "\$runner_network"/);
+  assert.match(localContainerWebkitRunner, /attach_local_service "\$frontend_tls_container" frontend-tls/);
+  assert.match(localContainerWebkitRunner, /attach_local_service "\$db_container" db/);
+  assert.match(localContainerWebkitRunner, /E2E_LOCAL_COMPOSE_NETWORK=true/);
+  assert.match(localContainerWebkitRunner, /POSTGRES_HOST=db/);
+  assert.match(localContainerWebkitRunner, /--network none/);
+  assert.match(localContainerWebkitRunner, /--network bridge/);
+  assert.match(localContainerWebkitRunner, /COREPACK_HOME/);
+  assert.match(localContainerWebkitRunner, /--offline/);
   assert.match(localContainerWebkitRunner, /E2E_CAMUNDA_BASE_URL=http:\/\/camunda-mock:9080\/engine-rest/);
   assert.match(localContainerWebkitRunner, /E2E_SEED_USER=true/);
   assert.match(localContainerWebkitRunner, /E2E_DIRECT_DB_CLEANUP=true/);
   assert.match(localContainerWebkitRunner, /PLAYWRIGHT_CONTAINER_BROWSER/);
   assert.match(localContainerWebkitRunner, /firefox or webkit/);
   assert.match(localContainerWebkitRunner, /seeded-smoke or accessibility/);
-  assert.match(localContainerWebkitRunner, /mcr\.microsoft\.com\/playwright:v1\.59\.1-jammy/);
+  assert.match(localContainerWebkitRunner, /mcr\.microsoft\.com\/playwright@sha256:8a0360d39d1973be506dd59002904a774f6d697d4946c94063b3fd006461c8ff/);
   assert.match(localContainerWebkitRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
 });
 

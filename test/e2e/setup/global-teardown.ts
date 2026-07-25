@@ -6,16 +6,31 @@ import path from 'node:path';
 const API_BASE_URL = process.env.E2E_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:8787';
 const SEED_FILE = process.env.E2E_SEED_FILE || path.resolve(process.cwd(), 'test/e2e/.seed/user.json');
 
+function isLoopbackOrLocalHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local');
+}
+
+function isIsolatedComposeService(host: string): boolean {
+  return process.env.E2E_LOCAL_COMPOSE_NETWORK === 'true'
+    && ['db', 'frontend-tls'].includes(host);
+}
+
 function assertLocalUrl(url: string): void {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) return;
+    if (isLoopbackOrLocalHost(host) || isIsolatedComposeService(host)) return;
     throw new Error(`E2E teardown refuses to call non-local URL: ${url}`);
   } catch (e) {
     if (e instanceof TypeError) throw new Error(`Invalid API_BASE_URL: ${url}`);
     throw e;
   }
+}
+
+function assertLocalDatabaseTarget(): void {
+  const host = process.env.POSTGRES_HOST || 'localhost';
+  if (isLoopbackOrLocalHost(host) || (process.env.E2E_LOCAL_COMPOSE_NETWORK === 'true' && host === 'db')) return;
+  throw new Error(`E2E teardown refuses to change a non-local database host: ${host}`);
 }
 
 async function loadBackendEnv() {
@@ -339,6 +354,8 @@ export default async function globalTeardown() {
   }
 
   await loadBackendEnv();
+  assertLocalUrl(API_BASE_URL);
+  assertLocalDatabaseTarget();
 
   const raw = await readFile(SEED_FILE, 'utf8');
   const data = JSON.parse(raw) as {

@@ -20,11 +20,26 @@ function authzGroupKeyIdentity(tenantId: string | null | undefined, key: string)
   return `${tenantId || 'platform'}:${key.trim()}`;
 }
 
+function isLoopbackOrLocalHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local');
+}
+
+function isIsolatedComposeService(host: string): boolean {
+  return process.env.E2E_LOCAL_COMPOSE_NETWORK === 'true'
+    && ['db', 'frontend-tls'].includes(host);
+}
+
 function assertLocalUrl(url: string): void {
   const parsed = new URL(url);
   const host = parsed.hostname;
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) return;
+  if (isLoopbackOrLocalHost(host) || isIsolatedComposeService(host)) return;
   throw new Error(`E2E seeded fixtures refuse to change identity-provider state for a non-local URL: ${url}`);
+}
+
+function assertLocalDatabaseTarget(): void {
+  const host = process.env.POSTGRES_HOST || 'localhost';
+  if (isLoopbackOrLocalHost(host) || (process.env.E2E_LOCAL_COMPOSE_NETWORK === 'true' && host === 'db')) return;
+  throw new Error(`E2E seeded fixtures refuse to change a non-local database host: ${host}`);
 }
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -49,6 +64,11 @@ export default async function globalSetup() {
     return;
   }
 
+  // Validate the public target before reading credentials or opening a direct
+  // database connection. The browser runner may use the two named services
+  // only when it has placed itself on an isolated local Compose network.
+  assertLocalUrl(API_BASE_URL);
+
   try {
     const envPath = path.resolve(process.cwd(), 'backend/.env');
     const rawEnv = await readFile(envPath, 'utf8');
@@ -68,6 +88,9 @@ export default async function globalSetup() {
   } catch {
     // ignore if backend/.env is unavailable
   }
+
+  assertLocalUrl(API_BASE_URL);
+  assertLocalDatabaseTarget();
 
   const suffix = Math.random().toString(36).slice(2, 8);
   let adminEmail = process.env.E2E_ADMIN_EMAIL || process.env.ADMIN_EMAIL;

@@ -657,10 +657,16 @@ The command tests Chromium with the host Playwright installation and uses the
 local TLS frontend for WebKit. On macOS it runs Firefox and WebKit in the
 pinned Linux Playwright container by default: current macOS releases can
 reject Playwright's ad-hoc-signed host executables before a test reaches the
-application. The container can reach only the existing local stack through a
-`.local` host alias and joins the local Compose network solely to resolve the
-disposable Camunda mock. It uses fresh synthetic records and direct database
-cleanup. Set `PLAYWRIGHT_FIREFOX_EXECUTION=native` or
+application. The test container receives only an allowlisted PostgreSQL
+connection, the TLS frontend, backend, and disposable Camunda mock on a
+fresh Docker `--internal` network; it has no external egress and its temporary
+network is removed on exit. Its Playwright image is digest-pinned. On a first
+run, a separate bootstrap container may download the lockfile dependencies;
+that bootstrap has no application credentials, mounts source read-only, and
+never joins the application network. The isolated test container then installs
+offline. Seed setup and teardown reject any non-local URL or database host
+before opening a direct connection. It uses fresh synthetic records and direct
+database cleanup. Set `PLAYWRIGHT_FIREFOX_EXECUTION=native` or
 `PLAYWRIGHT_WEBKIT_EXECUTION=native` to require a host runtime; set either to
 `container` to use the container deliberately on another operating system.
 
