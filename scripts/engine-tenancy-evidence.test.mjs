@@ -78,6 +78,7 @@ test('keeps transient Playwright output separate from retained release evidence'
   assert.match(localWriter, /local-enforcement\.json/);
   assert.match(localWriter, /appliedEngineIds\.length !== 1/);
   assert.match(localWriter, /releaseCommitQualified/);
+  assert.match(localRunner, /ENGINE_TENANCY_APPLY_READY=true/);
   assert.doesNotMatch(localWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 

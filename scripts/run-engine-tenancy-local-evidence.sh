@@ -64,6 +64,7 @@ export E2E_API_BASE_URL="$api_url"
 export E2E_SEED_USER=true
 export E2E_DIRECT_DB_CLEANUP=true
 export ENGINE_TENANCY_LOCAL_EVIDENCE=true
+export ENGINE_TENANCY_APPLY_READY=true
 export PLAYWRIGHT_BASE_URL="$base_url"
 export PLAYWRIGHT_LOCAL_CA_FILE="$ca_file"
 export PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true
