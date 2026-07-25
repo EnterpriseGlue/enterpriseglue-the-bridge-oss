@@ -25,6 +25,15 @@ describe('authorization route inventory validation', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('documents bounded Camunda native-grant receipt history with its dedicated read action', () => {
+    const operation = generateOpenApi().paths['/engines-api/engines/{id}/camunda-native-grants/imports'].get;
+
+    expect(operation[AUTHZ_OPENAPI_EXTENSION_KEY]).toMatchObject({
+      actionId: 'platform.camunda-native-grants.history.read',
+    });
+    expect(operation.responses['200'].content['application/json'].schema).toBeDefined();
+  });
+
   it('requires every documented operation to declare an action or explicit exemption', () => {
     const openApi = generateOpenApi();
     delete openApi.paths['/mission-control-api/process-definitions'].get[AUTHZ_OPENAPI_EXTENSION_KEY];

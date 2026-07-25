@@ -104,6 +104,15 @@ export const CamundaNativeGrantImportRunSummarySchema = z.object({
   updatedAt: z.number().int(),
 }).strict();
 
+/**
+ * A bounded, sanitized history response. Native identifiers and encrypted
+ * snapshots are deliberately absent so a history reader cannot recover source
+ * grants merely by enumerating an engine's receipts.
+ */
+export const CamundaNativeGrantImportRunHistorySchema = z.object({
+  runs: z.array(CamundaNativeGrantImportRunSummarySchema).max(100),
+}).strict();
+
 export type CamundaNativeAuthorization = z.infer<typeof CamundaNativeAuthorizationSchema>;
 export type CamundaNativeAuthorizationExport = z.infer<typeof CamundaNativeAuthorizationExportSchema>;
 export type CamundaNativeGrantSourceKind = z.infer<typeof CamundaNativeGrantSourceKindSchema>;
@@ -115,3 +124,4 @@ export type CamundaNativeGrantClassification = z.infer<typeof CamundaNativeGrant
 export type CamundaNativeGrantSanitizedClassification = z.infer<typeof CamundaNativeGrantSanitizedClassificationSchema>;
 export type CamundaNativeGrantImportRunStatus = z.infer<typeof CamundaNativeGrantImportRunStatusSchema>;
 export type CamundaNativeGrantImportRunSummary = z.infer<typeof CamundaNativeGrantImportRunSummarySchema>;
+export type CamundaNativeGrantImportRunHistory = z.infer<typeof CamundaNativeGrantImportRunHistorySchema>;

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Button, Checkbox, InlineLoading, InlineNotification, Tag, TextInput } from '@carbon/react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 
@@ -11,6 +11,9 @@ type PreviewRun = {
   normalizedCounts: Record<string, number>
   detailedSnapshotAvailable: boolean
   draftHash?: string | null
+  appliedConfigBundleRunId?: string | null
+  rollbackConfigBundleRunId?: string | null
+  createdAt?: number
 }
 
 type SensitiveClassification = {
@@ -71,6 +74,11 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
   const [rollback, setRollback] = React.useState<RollbackPreview | null>(null)
   const [rollbackAcknowledged, setRollbackAcknowledged] = React.useState(false)
   const [rolledBack, setRolledBack] = React.useState<ApplyResult | null>(null)
+  const history = useQuery({
+    queryKey: ['camunda-native-grant-history', engineId],
+    queryFn: () => apiClient.get<{ runs: PreviewRun[] }>(`/engines-api/engines/${encodeURIComponent(engineId)}/camunda-native-grants/imports`, undefined, { credentials: 'include' }),
+    retry: false,
+  })
 
   const preview = useMutation({
     mutationFn: () => apiClient.post<{ run: PreviewRun }>(`/engines-api/engines/${encodeURIComponent(engineId)}/camunda-native-grants/imports/preview`, { sourceKind: 'live_api' }, { credentials: 'include' }),
@@ -82,6 +90,7 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
       setRollback(null)
       setRolledBack(null)
       setBundleKey(`migration.camunda-native-${stableKeyPart(response.run.id, 'run')}`)
+      void history.refetch()
     },
   })
   const detail = useMutation({
@@ -122,6 +131,7 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
     onSuccess: (response) => {
       setRun(response.run)
       setApplied(response.result)
+      void history.refetch()
     },
   })
   const previewRollback = useMutation({
@@ -145,6 +155,7 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
       setRun(response.run)
       setRolledBack(response.result)
       setRollback(null)
+      void history.refetch()
     },
   })
 
@@ -156,6 +167,17 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
     setRollback(null)
     setRolledBack(null)
   }
+  const resumeRun = (historyRun: PreviewRun) => {
+    setRun(historyRun)
+    setMappings([])
+    setDraft(null)
+    setApplied(null)
+    setRollback(null)
+    setRollbackAcknowledged(false)
+    setRolledBack(null)
+    setBundleKey(`migration.camunda-native-${stableKeyPart(historyRun.id, 'run')}`)
+  }
+  const canMapProposedGroups = run?.status === 'previewed'
 
   return (
     <section style={{ display: 'grid', gap: 12, borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 16 }}>
@@ -164,6 +186,15 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
         <p style={{ margin: '6px 0 0', color: 'var(--cds-text-secondary)' }}>Reads Camunda 7 authorizations only. EnterpriseGlue remains authoritative; this workflow never changes native grants, engine connection settings, or engine tenancy.</p>
       </div>
       {preview.error && <InlineNotification kind="error" title="Could not create migration preview" subtitle={getUiErrorMessage(preview.error, 'Check the engine connection and migration permission.')} hideCloseButton />}
+      {history.error && <InlineNotification kind="warning" title="Migration history unavailable" subtitle={getUiErrorMessage(history.error, 'You need the separate migration-history permission to resume a prior rollback.')} hideCloseButton />}
+      {!run && history.data?.runs?.length ? <div style={{ display: 'grid', gap: 8 }}>
+        <h4 style={{ margin: 0 }}>Recent sanitized migration receipts</h4>
+        {history.data.runs.map((historyRun) => <div key={historyRun.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Tag type={historyRun.status === 'applied' ? 'green' : historyRun.status === 'rolled_back' ? 'cool-gray' : 'warm-gray'}>{historyRun.status.replace(/_/g, ' ')}</Tag>
+          <span style={{ fontSize: 13, color: 'var(--cds-text-secondary)' }}>Run {historyRun.id}</span>
+          {historyRun.status === 'applied' && <Button size="sm" kind="secondary" onClick={() => resumeRun(historyRun)}>Resume rollback</Button>}
+        </div>)}
+      </div> : null}
       {!run && <Button size="sm" kind="secondary" disabled={preview.isPending} onClick={() => preview.mutate()}>{preview.isPending ? 'Reading grants…' : 'Read native grants'}</Button>}
       {preview.isPending && <InlineLoading description="Reading Camunda authorizations without changing them" />}
       {run && <>
@@ -171,7 +202,7 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {Object.entries(run.normalizedCounts || {}).sort(([a], [b]) => a.localeCompare(b)).map(([key, count]) => <Tag key={key} type={key === 'blocked' ? 'red' : key === 'manual_required' ? 'magenta' : key === 'approval_required' ? 'warm-gray' : 'green'}>{key.replace(/_/g, ' ')}: {count}</Tag>)}
         </div>
-        {!mappings.length && <>
+        {canMapProposedGroups && !mappings.length && <>
           {detail.error && <InlineNotification kind="error" title="Could not reveal proposed group mappings" subtitle={getUiErrorMessage(detail.error, 'You need the sensitive-detail permission, and the 30-day migration snapshot must still be available.')} hideCloseButton />}
           <Button size="sm" kind="secondary" disabled={detail.isPending || !run.detailedSnapshotAvailable} onClick={() => detail.mutate()}>{detail.isPending ? 'Loading protected mappings…' : 'Map proposed groups'}</Button>
         </>}
@@ -195,8 +226,10 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
           {apply.error && <InlineNotification kind="error" title="Could not apply reviewed draft" subtitle={getUiErrorMessage(apply.error, 'The draft, source ownership, tenant scope, or current configuration may have changed. Create a new preview if the evidence expired.')} hideCloseButton />}
           {!applied && <Button size="sm" kind="danger" disabled={apply.isPending} onClick={() => apply.mutate()}>{apply.isPending ? 'Applying reviewed draft…' : 'Apply reviewed draft'}</Button>}
         </div>}
-        {applied && !rolledBack && <div style={{ display: 'grid', gap: 8 }}>
-          <InlineNotification kind="success" title="Migration draft applied" subtitle={`Configuration apply receipt ${applied.applyRunId || 'recorded'}: ${applied.created} created, ${applied.updated} updated, ${applied.archived} archived. Verify an expected member in Effective Access before relying on the new grants.`} hideCloseButton />
+        {(applied || run.status === 'applied') && !rolledBack && <div style={{ display: 'grid', gap: 8 }}>
+          {applied
+            ? <InlineNotification kind="success" title="Migration draft applied" subtitle={`Configuration apply receipt ${applied.applyRunId || 'recorded'}: ${applied.created} created, ${applied.updated} updated, ${applied.archived} archived. Verify an expected member in Effective Access before relying on the new grants.`} hideCloseButton />
+            : <InlineNotification kind="info" title="Applied migration resumed" subtitle={`Configuration apply receipt ${run.appliedConfigBundleRunId || 'recorded'} was loaded from the sanitized history. Preview rollback before removing the import-owned configuration.`} hideCloseButton />}
           {!rollback && <>
             {previewRollback.error && <InlineNotification kind="error" title="Could not preview rollback" subtitle={getUiErrorMessage(previewRollback.error, 'The encrypted draft may have expired or the import is no longer eligible for rollback.')} hideCloseButton />}
             <Button size="sm" kind="secondary" disabled={previewRollback.isPending} onClick={() => previewRollback.mutate()}>{previewRollback.isPending ? 'Previewing rollback…' : 'Preview rollback'}</Button>

@@ -288,6 +288,7 @@ Use an engine-scoped, explicit workflow:
 
 ```text
 POST /engines-api/engines/:id/camunda-native-grants/imports/preview
+GET  /engines-api/engines/:id/camunda-native-grants/imports
 GET  /engines-api/engines/:id/camunda-native-grants/imports/:runId
 GET  /engines-api/engines/:id/camunda-native-grants/imports/:runId/detail
 POST /engines-api/engines/:id/camunda-native-grants/imports/:runId/draft
@@ -297,7 +298,9 @@ POST /engines-api/engines/:id/camunda-native-grants/imports/:runId/rollback
 ```
 
 The preview receives only safe source options. It returns a bounded classified
-inventory and expiry. The sensitive detail route is separately permission-gated.
+inventory and expiry. The collection route returns at most 50 newest-first,
+tenant-scoped sanitized receipts so an applied migration can be safely resumed
+for rollback after a UI reload. The sensitive detail route is separately permission-gated.
 The draft and apply routes retain and apply the exact generated configuration;
 they do not accept a browser-supplied replacement configuration. Rollback has
 its own no-change preview and applies only the returned rollback hash with the

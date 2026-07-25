@@ -32,7 +32,7 @@ const baseClassification = {
 const hash = 'a'.repeat(64);
 
 function setup() {
-  const repository = { insert: vi.fn(), findOne: vi.fn(), update: vi.fn().mockResolvedValue({ affected: 1 }) };
+  const repository = { insert: vi.fn(), find: vi.fn(), findOne: vi.fn(), update: vi.fn().mockResolvedValue({ affected: 1 }) };
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository(entity: unknown) {
       if (entity === CamundaNativeGrantImportRun) return repository;
@@ -103,6 +103,40 @@ describe('CamundaNativeGrantImportRunService', () => {
     expect(JSON.stringify(summary)).not.toContain('secret');
     expect(detail).toEqual({ native: 'secret' });
     expect(expired).toBeNull();
+  });
+
+  it('lists a bounded, tenant-scoped newest-first sanitized history without loading encrypted detail', async () => {
+    const repository = setup();
+    repository.find.mockResolvedValue([
+      {
+        id: 'run-new', engineId: 'engine-1', tenantId: 'tenant-a', sourceKind: 'live_api', status: 'applied', inputHash: hash,
+        mappingCatalogVersion: 'camunda7-v1-read-only', inventoryTruncated: false,
+        normalizedCountsJson: '{"total":1,"proposed":1,"approval_required":0,"manual_required":0,"blocked":0}',
+        classificationsJson: '[{"sourceAuthorizationRef":"camunda-auth-aaaaaaaaaaaaaaaaaaaaaaaa","disposition":"proposed","reasonCodes":["group_grant_process_definition"],"principalType":"group","groupReference":"camunda-group-bbbbbbbbbbbbbbbbbbbbbbbb","resourceKind":"process_definition","resourceReference":"camunda-resource-cccccccccccccccccccccccc","mappedActionIds":["engine.runtime.process-definitions.read"]}]',
+        encryptedDetailedSnapshot: 'encrypted:{"native":"secret"}', detailedSnapshotExpiresAt: Date.now() + 1_000,
+        draftHash: hash, appliedConfigBundleRunId: 'apply-new', rollbackConfigBundleRunId: null, rolledBackAt: null,
+        createdAt: 200, updatedAt: 200,
+      },
+      {
+        id: 'run-old', engineId: 'engine-1', tenantId: 'tenant-a', sourceKind: 'customer_export', status: 'rolled_back', inputHash: hash,
+        mappingCatalogVersion: 'camunda7-v1-read-only', inventoryTruncated: false,
+        normalizedCountsJson: '{"total":0,"proposed":0,"approval_required":0,"manual_required":0,"blocked":0}', classificationsJson: '[]',
+        encryptedDetailedSnapshot: null, detailedSnapshotExpiresAt: null, draftHash: null, appliedConfigBundleRunId: null,
+        rollbackConfigBundleRunId: 'rollback-old', rolledBackAt: 100, createdAt: 100, updatedAt: 100,
+      },
+    ]);
+
+    const runs = await new CamundaNativeGrantImportRunService().listForEngine({ engineId: ' engine-1 ', tenantId: ' tenant-a ' });
+
+    expect(repository.find).toHaveBeenCalledWith({
+      where: { engineId: 'engine-1', tenantId: 'tenant-a' },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: 50,
+    });
+    expect(runs).toHaveLength(2);
+    expect(runs[0]).toMatchObject({ id: 'run-new', status: 'applied', appliedConfigBundleRunId: 'apply-new' });
+    expect(JSON.stringify(runs)).not.toContain('secret');
+    await expect(new CamundaNativeGrantImportRunService().listForEngine({ engineId: 'engine-1', limit: 101 })).rejects.toThrow('History limit');
   });
 
   it('normalizes PostgreSQL BIGINT snapshot expiry values before making retention decisions', async () => {

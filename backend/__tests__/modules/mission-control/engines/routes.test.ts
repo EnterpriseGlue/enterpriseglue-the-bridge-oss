@@ -46,6 +46,7 @@ const nativeGrantMigrationMock = vi.hoisted(() => ({
   listLive: vi.fn(),
   classify: vi.fn(),
   createPreview: vi.fn(),
+  listForEngine: vi.fn(),
   getSummary: vi.fn(),
   getDetailedSnapshot: vi.fn(),
   setDraft: vi.fn(),
@@ -85,7 +86,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInvent
 vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js', () => ({
   CamundaNativeGrantEvidenceLimitError: nativeGrantMigrationMock.evidenceLimitError,
   camundaNativeGrantImportRunService: {
-    createPreview: nativeGrantMigrationMock.createPreview, getSummary: nativeGrantMigrationMock.getSummary,
+    createPreview: nativeGrantMigrationMock.createPreview, listForEngine: nativeGrantMigrationMock.listForEngine, getSummary: nativeGrantMigrationMock.getSummary,
     getDetailedSnapshot: nativeGrantMigrationMock.getDetailedSnapshot, setDraft: nativeGrantMigrationMock.setDraft,
     getGeneratedDraft: nativeGrantMigrationMock.getGeneratedDraft, markApplied: nativeGrantMigrationMock.markApplied,
     markRolledBack: nativeGrantMigrationMock.markRolledBack,
@@ -252,6 +253,7 @@ describe('mission-control engines routes', () => {
     nativeGrantMigrationMock.listLive.mockReset();
     nativeGrantMigrationMock.classify.mockReset();
     nativeGrantMigrationMock.createPreview.mockReset();
+    nativeGrantMigrationMock.listForEngine.mockReset();
     nativeGrantMigrationMock.getSummary.mockReset();
     nativeGrantMigrationMock.getDetailedSnapshot.mockReset();
     nativeGrantMigrationMock.setDraft.mockReset();
@@ -634,6 +636,26 @@ describe('mission-control engines routes', () => {
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
       resourceType: 'engine', resourceId: 'e1',
     }));
+  });
+
+  it('lists only sanitized tenant-scoped native-grant receipts for a visible Camunda 7 engine', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+    nativeGrantMigrationMock.listForEngine.mockResolvedValue([{
+      id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', sourceKind: 'live_api', status: 'applied', inputHash: 'a'.repeat(64),
+      mappingCatalogVersion: 'camunda7-v1-read-only', inventoryTruncated: false,
+      normalizedCounts: { total: 1, proposed: 1, approval_required: 0, manual_required: 0, blocked: 0 }, classifications: [],
+      draftHash: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, appliedConfigBundleRunId: 'apply-1', rollbackConfigBundleRunId: null, rolledBackAt: null, createdAt: 1, updatedAt: 1,
+    }]);
+
+    const response = await request(app).get('/engines-api/engines/e1/camunda-native-grants/imports');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ runs: [expect.objectContaining({ id: 'run-1', appliedConfigBundleRunId: 'apply-1' })] });
+    expect(JSON.stringify(response.body)).not.toContain('sensitive-native-group');
+    expect(nativeGrantMigrationMock.listForEngine).toHaveBeenCalledWith({ engineId: 'e1', tenantId: 'tenant-default' });
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('platform:camunda-native-grants:history-view', expect.anything());
   });
 
   it('creates a sanitized, read-only Camunda native-grant preview and never returns native identities', async () => {

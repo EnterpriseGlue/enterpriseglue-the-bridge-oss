@@ -63,13 +63,19 @@ describe('CamundaNativeGrantMigrationPanel', () => {
       }
       throw new Error(`Unexpected POST ${url}`)
     })
-    vi.mocked(apiClient.get).mockResolvedValue({
-      detail: {
-        classifications: [
-          { sourceAuthorizationId: 'native-1', disposition: 'proposed', principal: { type: 'group', groupId: 'camunda-sensitive-operators' } },
-          { sourceAuthorizationId: 'native-2', disposition: 'manual_required', principal: { type: 'user' } },
-        ],
-      },
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/imports')) return { runs: [] }
+      if (url.endsWith('/detail')) {
+        return {
+          detail: {
+            classifications: [
+              { sourceAuthorizationId: 'native-1', disposition: 'proposed', principal: { type: 'group', groupId: 'camunda-sensitive-operators' } },
+              { sourceAuthorizationId: 'native-2', disposition: 'manual_required', principal: { type: 'user' } },
+            ],
+          },
+        }
+      }
+      throw new Error(`Unexpected GET ${url}`)
     })
 
     renderPanel()
@@ -90,5 +96,46 @@ describe('CamundaNativeGrantMigrationPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Roll back imported configuration/ }))
     expect(await screen.findByText('Imported configuration rolled back')).toBeInTheDocument()
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledTimes(5))
+  })
+
+  it('discovers an applied sanitized receipt after reload and resumes only its rollback path', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/imports')) {
+        return {
+          runs: [{
+            id: 'run-applied-before-reload', status: 'applied', sourceKind: 'live_api', normalizedCounts: { total: 2, proposed: 2 },
+            detailedSnapshotAvailable: false, appliedConfigBundleRunId: 'config-apply-before-reload',
+          }],
+        }
+      }
+      throw new Error(`Unexpected GET ${url}`)
+    })
+    vi.mocked(apiClient.post).mockImplementation(async (url: string, body: any) => {
+      if (url.endsWith('/rollback/preview')) {
+        expect(url).toContain('run-applied-before-reload')
+        expect(body).toEqual({})
+        return { rollback: { canonicalHash: 'c'.repeat(64), requiredAcknowledgements: [], changes: [{ objectType: 'role', key: 'role.imported', operation: 'archive' }] } }
+      }
+      if (url.endsWith('/rollback')) {
+        expect(url).toContain('run-applied-before-reload')
+        expect(body).toEqual({ expectedRollbackHash: 'c'.repeat(64), acknowledgements: [] })
+        return {
+          run: { id: 'run-applied-before-reload', status: 'rolled_back', sourceKind: 'live_api', normalizedCounts: { total: 2, proposed: 2 }, detailedSnapshotAvailable: false },
+          result: { applyRunId: 'config-rollback-after-reload', created: 0, updated: 0, archived: 1 },
+        }
+      }
+      throw new Error(`Unexpected POST ${url}`)
+    })
+
+    renderPanel()
+    expect(await screen.findByText('Recent sanitized migration receipts')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume rollback' }))
+    expect(await screen.findByText('Applied migration resumed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Map proposed groups' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview rollback' }))
+    expect(await screen.findByText('Rollback removes only import-owned configuration')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText(/I understand that this will remove/i))
+    fireEvent.click(screen.getByRole('button', { name: /Roll back imported configuration/ }))
+    expect(await screen.findByText('Imported configuration rolled back')).toBeInTheDocument()
   })
 })

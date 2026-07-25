@@ -47,6 +47,11 @@ engine that was added through the UI or an external registration API.
    non-member for every imported process/decision key. Confirm both an allow
    and a deny before relying on the imported access.
 
+After a page reload, the panel lists the 50 newest sanitized receipts for that
+engine and tenant. Select **Resume rollback** only for an `applied` receipt;
+this loads its stored configuration-apply reference and permits a fresh
+rollback preview. It does not reveal native identifiers or recreate a draft.
+
 The UI intentionally leaves global grants, user grants, revokes, broad `*`
 grants, unsupported resource types, and missing/ambiguous inventory outside
 the draft. Resolve those items as explicit manual policy work; do not treat a

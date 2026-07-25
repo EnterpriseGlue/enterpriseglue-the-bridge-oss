@@ -20,6 +20,22 @@ fit within the cross-adapter secure-evidence limit. Those validation failures
 write no import row; split the scope and make a new read-only preview. Response:
 `{ "run": { ...sanitized receipt } }`.
 
+## Sanitized migration history
+
+`GET /engines-api/engines/{id}/camunda-native-grants/imports`
+
+Requires `platform.camunda-native-grants.history.read`. It returns at most the
+50 newest receipts for that exact engine and tenant, newest first:
+
+```json
+{ "runs": [{ "id": "import-run-id", "status": "applied", "normalizedCounts": { "total": 2 } }] }
+```
+
+This endpoint intentionally returns the same opaque receipt shape as the
+single-run history endpoint. It never returns native group names, native
+resource keys, user identifiers, or encrypted detail. An `applied` receipt can
+be reopened in the UI to preview its hash-bound rollback after a page reload.
+
 ## Protected detail and draft
 
 `GET /engines-api/engines/{id}/camunda-native-grants/imports/{runId}/detail`

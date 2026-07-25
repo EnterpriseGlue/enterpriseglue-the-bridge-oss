@@ -133,7 +133,10 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       category: 'Camunda Native Grant Migration',
       description: 'Read sanitized Camunda native-grant migration receipts.',
       ui: [{ surfaceId: 'mission-control.engines.camunda-native-grants.history', behavior: 'hide' }],
-      routes: [{ method: 'GET', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}', resourceResolver: 'platform.self' }],
+      routes: [
+        { method: 'GET', route: '/engines-api/engines/{id}/camunda-native-grants/imports', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}', resourceResolver: 'platform.self' },
+      ],
     },
   {
       actionId: 'platform.camunda-native-grants.sensitive.read',

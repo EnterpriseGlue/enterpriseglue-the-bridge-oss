@@ -73,6 +73,23 @@ migration bridge, adapter registry evidence, and tests. Never put source
 identifiers in `normalizedCountsJson`, `classificationsJson`, generic audit
 details, browser telemetry, or ordinary API responses.
 
+## Sanitized receipt history and resumed rollback
+
+`GET /engines-api/engines/{id}/camunda-native-grants/imports` is bound to the
+same `platform.camunda-native-grants.history.read` action as a single receipt.
+It returns at most 50 newest-first receipts for the exact engine and tenant and
+validates the `CamundaNativeGrantImportRunHistorySchema` response before it is
+sent. It contains only opaque classifications, counts, hashes, lifecycle state,
+and configuration apply/rollback references; it cannot return encrypted detail
+or a native identifier.
+
+The engine edit panel loads that history after a browser reload. Only an
+`applied` receipt offers **Resume rollback**. Resuming never loads or replaces
+the draft and does not reveal sensitive mappings; it can only request the
+existing hash-bound rollback preview. Keep that UI guard and the server-side
+`applied` lifecycle check together so a historical receipt cannot be used to
+regenerate a draft.
+
 The five-adapter database lane is part of the required migration evidence. It
 executes the exact receipt migrations against disposable PostgreSQL, MySQL,
 SQL Server, Oracle, and Spanner targets. It specifically proves portable text,
@@ -198,7 +215,10 @@ customer grants for this qualification.
    separate `authorization-matrix.local.json` receipt and explicitly remains
    incomplete until the four browser/customer-acceptance commands above run;
    it cannot satisfy the release gate or justify a compatibility cutover.
-5. Preview rollback, confirm that every changed object is owned by the exact
+5. Reload the engine edit panel. Confirm the applied receipt is listed without
+   native identifiers, select **Resume rollback**, and verify it exposes only
+   the rollback path before continuing.
+6. Preview rollback, confirm that every changed object is owned by the exact
    migration source reference, acknowledge only the returned archive set, and
    apply the exact rollback hash. Record the rollback preview hash and receipt
    id. Re-run the same allow/deny cases and confirm the imported allow has been
@@ -208,7 +228,7 @@ customer grants for this qualification.
 Success requires all supported groups/resources to have an allow and a sibling
 or non-member deny, every unsupported source row to remain manual or blocked,
 no native Camunda write during inventory, a current-clean artifact for every
-lane above, and the rollback result described in step 5. Stop and roll back if
+lane above, and the rollback result described in step 6. Stop and roll back if
 a preview is truncated, a receipt/hash changes, a shared tenant is unresolved,
 an unexpected object is proposed for archive, a protected-route deny becomes
 an allow, or the browser evidence cannot be captured. The browser, state-space,

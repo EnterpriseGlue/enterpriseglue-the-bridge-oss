@@ -16,6 +16,8 @@ import {
 
 export const DEFAULT_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS = DEFAULT_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS;
+export const DEFAULT_CAMUNDA_NATIVE_GRANT_HISTORY_LIMIT = 50;
+export const MAX_CAMUNDA_NATIVE_GRANT_HISTORY_LIMIT = 100;
 /**
  * The common safe limit is below Cloud Spanner STRING(MAX)'s 2.5 MiB limit.
  * It applies after encryption, so every supported database either accepts a
@@ -228,6 +230,28 @@ export class CamundaNativeGrantImportRunService {
   async getSummary(id: string): Promise<CamundaNativeGrantImportRunSummary | null> {
     const run = await (await getDataSource()).getRepository(CamundaNativeGrantImportRun).findOne({ where: { id: id.trim() } });
     return run ? summaryFor(run) : null;
+  }
+
+  /**
+   * Returns only bounded, opaque receipts for one engine and tenancy context.
+   * The caller is still responsible for the dedicated history-read permission
+   * and engine visibility check; this method is intentionally unable to return
+   * either the encrypted source snapshot or a native identifier.
+   */
+  async listForEngine(input: { engineId: string; tenantId?: string | null; limit?: number }): Promise<CamundaNativeGrantImportRunSummary[]> {
+    const engineId = input.engineId.trim();
+    if (!engineId) throw new Error('Engine id is required');
+    const tenantId = optionalId(input.tenantId);
+    const limit = input.limit ?? DEFAULT_CAMUNDA_NATIVE_GRANT_HISTORY_LIMIT;
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_CAMUNDA_NATIVE_GRANT_HISTORY_LIMIT) {
+      throw new Error(`History limit must be between 1 and ${MAX_CAMUNDA_NATIVE_GRANT_HISTORY_LIMIT}`);
+    }
+    const runs = await (await getDataSource()).getRepository(CamundaNativeGrantImportRun).find({
+      where: { engineId, tenantId: tenantId === null ? IsNull() : tenantId },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: limit,
+    });
+    return runs.map(summaryFor);
   }
 
   /** Caller must enforce the dedicated sensitive-preview permission before use. */
