@@ -45,6 +45,9 @@ describe('mirrored engine backstop persistence', () => {
       expect.objectContaining({ columnNames: ['engine_id', 'authz_group_id'] }),
       expect.objectContaining({ columnNames: ['engine_id', 'native_group_reference'] }),
     ]));
+    const mappingColumns = new Map(tables[0].columns.map((column: { name: string }) => [column.name, column]));
+    expect(mappingColumns.get('source')).toMatchObject({ default: "'manual'" });
+    expect(mappingColumns.get('ownership_mode')).toMatchObject({ default: "'manual'" });
     expect(tables[1].indices).toEqual(expect.arrayContaining([
       expect.objectContaining({ columnNames: ['engine_id', 'created_at'] }),
       expect.objectContaining({ columnNames: ['detailed_snapshot_expires_at'] }),

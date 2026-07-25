@@ -59,8 +59,11 @@ export class AddEngineBackstopFoundation1700000000101 implements MigrationInterf
         { name: 'id', ...key, isPrimary: true }, { name: 'tenant_id', ...document, isNullable: true },
         { name: 'engine_id', ...key }, { name: 'authz_group_id', ...key },
         { name: 'encrypted_native_group_id', ...document }, { name: 'native_group_reference', ...key },
-        { name: 'source', ...key, default: 'manual' }, { name: 'source_ref', ...key },
-        { name: 'ownership_mode', ...key, default: 'manual' }, { name: 'source_hash', ...document, isNullable: true },
+        // TypeORM treats a string default as a SQL expression. Quote literal
+        // defaults explicitly so PostgreSQL does not interpret `manual` as a
+        // column reference when applying this migration on an existing DB.
+        { name: 'source', ...key, default: "'manual'" }, { name: 'source_ref', ...key },
+        { name: 'ownership_mode', ...key, default: "'manual'" }, { name: 'source_hash', ...document, isNullable: true },
         { name: 'last_applied_at', ...timestamp, isNullable: true }, { name: 'is_active', ...boolean },
         { name: 'created_by_id', ...document, isNullable: true }, { name: 'created_at', ...timestamp }, { name: 'updated_at', ...timestamp },
       ],
