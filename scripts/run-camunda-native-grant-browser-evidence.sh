@@ -59,6 +59,7 @@ export E2E_CAMUNDA_BASE_URL="http://camunda-mock:9080/engine-rest"
 export E2E_SEED_USER=true
 export E2E_DIRECT_DB_CLEANUP=true
 export CAMUNDA_NATIVE_GRANT_BROWSER_EVIDENCE=true
+export CAMUNDA_NATIVE_GRANT_TASK_DRAIN=true
 export CAMUNDA_MOCK_CONTROL_URL="$mock_control_url"
 export PLAYWRIGHT_BASE_URL="$base_url"
 export PLAYWRIGHT_LOCAL_CA_FILE="$ca_file"

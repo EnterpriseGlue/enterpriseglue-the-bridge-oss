@@ -164,6 +164,7 @@ test('retains a local authenticated Camunda native-grant browser workflow as a r
     assert.match(nativeGrantBrowserWriter, new RegExp(requiredField));
   }
   assert.match(nativeGrantBrowserRunner, /CAMUNDA_NATIVE_GRANT_BROWSER_EVIDENCE=true/);
+  assert.match(nativeGrantBrowserRunner, /CAMUNDA_NATIVE_GRANT_TASK_DRAIN=true/);
   assert.match(nativeGrantBrowserRunner, /E2E_CAMUNDA_BASE_URL="http:\/\/camunda-mock:9080\/engine-rest"/);
   assert.match(nativeGrantBrowserRunner, /camunda-native-grant-migration\.spec\.ts/);
   assert.doesNotMatch(nativeGrantBrowserWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);

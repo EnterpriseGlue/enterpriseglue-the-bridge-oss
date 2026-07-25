@@ -40,6 +40,27 @@ function git(args: string[]): string {
   }).trim();
 }
 
+function drainLocalRuntimeReconciliation(applyRunId: string): void {
+  if (process.env.CAMUNDA_NATIVE_GRANT_TASK_DRAIN !== 'true') {
+    throw new Error('Native-grant browser evidence requires the explicit local runtime-task drain');
+  }
+  if (!/^[a-zA-Z0-9-]{8,255}$/.test(applyRunId)) {
+    throw new Error('Native-grant apply receipt has an unsafe runtime-task identifier');
+  }
+  const worker = [
+    `const applyRunId = ${JSON.stringify(applyRunId)};`,
+    "const { configBundleRuntimeReconciliationTaskService } = await import('./packages/shared/src/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.ts');",
+    'const result = await configBundleRuntimeReconciliationTaskService.drainApplyRun({ applyRunId, maxTasks: 100 });',
+    "if (result.status !== 'completed' || result.failedTaskCount !== 0) throw new Error(`runtime reconciliation did not complete: ${JSON.stringify(result)}`);",
+  ].join(' ');
+  const encodedWorker = Buffer.from(worker, 'utf8').toString('base64');
+  execFileSync('docker', [
+    'compose', '--project-directory', '.', '--env-file', '.local/docker/env/docker.env',
+    '-f', 'infra/docker/compose/docker-compose.yml', 'exec', '-T', 'backend',
+    'sh', '-lc', `cd /repo && pnpm exec tsx -e "$(printf '%s' ${encodedWorker} | base64 -d)"`,
+  ], { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
 async function responseJson<T>(response: APIResponse, operation: string): Promise<T> {
   const body = await response.json().catch(() => null);
   expect(response.ok(), `${operation} failed (${response.status()}): ${JSON.stringify(body)}`).toBe(true);
@@ -148,8 +169,12 @@ test.describe('Camunda native-grant migration browser workflow', () => {
         && response.url().endsWith('/apply'),
       );
       await modal.getByRole('button', { name: 'Apply reviewed draft' }).click();
-      expect((await applyResponse).status()).toBe(200);
+      const appliedResponse = await applyResponse;
+      expect(appliedResponse.status()).toBe(200);
+      const appliedPayload = await appliedResponse.json() as { result?: { applyRunId?: string } };
+      expect(appliedPayload.result?.applyRunId).toBeTruthy();
       await expect(modal.getByText('Migration draft applied')).toBeVisible();
+      drainLocalRuntimeReconciliation(appliedPayload.result!.applyRunId!);
 
       const groupRows = await pool.query<{ id: string }>(
         'SELECT id FROM authz_groups WHERE source_ref = $1 AND is_archived = false ORDER BY id',
