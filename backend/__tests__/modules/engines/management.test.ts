@@ -147,7 +147,7 @@ describe('engines management routes', () => {
     if (name === 'Engine') {
       return {
         find: vi.fn().mockResolvedValue([]),
-        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, name: 'Engine One' }),
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }),
       };
     }
     if (name === 'Project') {
@@ -263,7 +263,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -292,7 +292,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -321,7 +321,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -359,7 +359,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -389,7 +389,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -561,7 +561,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -590,7 +590,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -619,7 +619,7 @@ describe('engines management routes', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === User) return userRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 
@@ -673,7 +673,7 @@ describe('engines management routes', () => {
           };
         }
         if ((entity as any)?.name === 'Invitation') return invitationRepo;
-        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }) };
+        return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }) };
       },
     });
 

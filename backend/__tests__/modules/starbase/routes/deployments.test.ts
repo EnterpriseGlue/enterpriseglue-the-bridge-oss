@@ -59,7 +59,7 @@ describe('starbase deployments routes', () => {
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: () => ({
-        findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }),
+        findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared' }),
       }),
     });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);

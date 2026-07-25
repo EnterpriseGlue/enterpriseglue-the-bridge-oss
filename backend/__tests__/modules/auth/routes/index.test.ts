@@ -9,8 +9,9 @@ describe('auth routes index', () => {
     expect(authRoutes).toHaveProperty('passwordRoute');
     expect(authRoutes).toHaveProperty('meRoute');
     expect(authRoutes).toHaveProperty('verifyEmailRoute');
-    expect(authRoutes).toHaveProperty('microsoftRoute');
-    expect(authRoutes).toHaveProperty('samlRoute');
+    expect(authRoutes).toHaveProperty('identityOidcRoute');
+    expect(authRoutes).toHaveProperty('ssoConfigRoute');
+    expect(authRoutes).toHaveProperty('onboardingRoute');
     expect(authRoutes).toHaveProperty('forgotPasswordRoute');
   });
 });

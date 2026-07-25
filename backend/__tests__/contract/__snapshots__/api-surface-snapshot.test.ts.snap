@@ -12,6 +12,10 @@ exports[`Plugin API surface snapshot > backend contract surface matches snapshot
   "query?: Record<string, string>;",
   "export interface NotificationTenantResolver {",
   "resolve(context: NotificationTenantResolveContext): {",
+  "export type EngineTenancyPrincipalType = 'user' | 'api_client' | 'service_account' | 'system';",
+  "export type EngineTenantReference =",
+  "export interface EngineTenantReferenceResolver {",
+  "resolve(input: {",
   "export type EnterpriseAuthzBackendRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';",
   "export interface EnterpriseBackendRouteAuthz {",
   "method: EnterpriseAuthzBackendRouteMethod;",
@@ -78,6 +82,7 @@ exports[`Plugin API surface snapshot > backend contract surface matches snapshot
   "authzRoutes?: EnterpriseBackendRouteAuthz[];",
   "migrateEnterpriseDatabase?: (ctx: EnterpriseBackendContext) => void | Promise<void>;",
   "getNotificationTenantResolver?: (",
+  "getEngineTenantReferenceResolver?: (",
 ]
 `;
 

@@ -54,9 +54,17 @@ describe('configuration bundle runtime boundary', () => {
 
   it('prevents runtime modules from importing bundle compilers or startup file ingress', () => {
     const allowedCompilerBoundaries = [
+      // These services generate or ingest administrator-supplied bundles; they
+      // do not participate in request-time runtime authorization.
+      /^packages\/shared\/src\/services\/platform-admin\/CamundaNativeGrantDraftService\.ts$/,
+      /^packages\/shared\/src\/services\/platform-admin\/ConfigBundleRemoteSourceService\.ts$/,
       /^packages\/shared\/src\/services\/platform-admin\/ConfigBundle(?:Preview|Diff|Apply|Archive|Export|SecretPreflight)Service\.ts$/,
       /^packages\/shared\/src\/services\/platform-admin\/index\.ts$/,
       /^packages\/backend-host\/src\/modules\/platform-admin\/routes\/authz\/config-bundles\.ts$/,
+      // The engine-administration route retains the compatibility migration
+      // endpoints; ordinary Mission Control runtime routes must not import a
+      // bundle compiler or the startup ingress.
+      /^packages\/backend-host\/src\/modules\/mission-control\/engines\/routes\.ts$/,
       /^packages\/backend-host\/src\/services\/configBundleBootstrap\.ts$/,
       /^packages\/backend-host\/src\/services\/configBundleFileIngress\.ts$/,
     ];

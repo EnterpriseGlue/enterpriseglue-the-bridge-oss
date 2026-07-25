@@ -177,7 +177,7 @@ describe('invitation and onboarding routes', () => {
     };
 
     engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }),
+      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }),
     };
 
     (getDataSource as unknown as Mock).mockResolvedValue({

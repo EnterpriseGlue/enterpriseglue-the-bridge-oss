@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+
+vi.unmock('@enterpriseglue/shared/services/platform-admin/PolicyService.js');
+
 import { policyService } from '@enterpriseglue/shared/services/platform-admin/PolicyService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuditLog } from '@enterpriseglue/shared/db/entities/AuditLog.js';

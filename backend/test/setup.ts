@@ -23,3 +23,14 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   isNotificationsRequest: vi.fn().mockReturnValue(false),
   getClientIdentifier: vi.fn().mockReturnValue('test-client-id'),
 }));
+
+// Route suites provide deliberately narrow data-source doubles for the feature
+// under test. Policy enforcement is covered by its dedicated service and
+// middleware suites, so keep generic route tests focused on their declared
+// permission result rather than requiring every fixture to emulate the policy
+// repository as well.
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: {
+    evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
+  },
+}));

@@ -52,7 +52,7 @@ describe('mission-control metrics routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === Engine) {
           return {
-            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null }),
+            findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared' }),
           };
         }
         return {};

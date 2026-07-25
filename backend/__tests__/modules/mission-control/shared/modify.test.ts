@@ -18,6 +18,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-a' };
     next();
   },
 }));
@@ -61,7 +62,9 @@ describe('mission-control shared modify routes', () => {
           return {
             findOne: vi.fn(async ({ where }: any) => ({
               id: String(where?.id || 'engine-77'),
-              tenantId: null,
+              tenantId: 'tenant-a',
+              tenancyMode: 'dedicated',
+              runtimeAccessScope: 'engine_wide',
             })),
           };
         }

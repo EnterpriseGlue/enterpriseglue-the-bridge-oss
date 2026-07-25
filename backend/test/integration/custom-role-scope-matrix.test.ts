@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.unmock('@enterpriseglue/shared/services/platform-admin/PolicyService.js');
+
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
