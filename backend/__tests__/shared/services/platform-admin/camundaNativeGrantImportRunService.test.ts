@@ -18,13 +18,14 @@ import {
   MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES,
 } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js';
 import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
+import type { CamundaNativeGrantClassification } from '@enterpriseglue/shared/schemas/platform-admin/camunda-native-grants.js';
 
-const baseClassification = {
+const baseClassification: CamundaNativeGrantClassification = {
   sourceAuthorizationId: 'native-auth-1',
-  disposition: 'proposed' as const,
-  reasonCodes: ['group_grant_process_definition'] as const,
-  principal: { type: 'group' as const, groupId: 'native-operations' },
-  resourceKind: 'process_definition' as const,
+  disposition: 'proposed',
+  reasonCodes: ['group_grant_process_definition'],
+  principal: { type: 'group', groupId: 'native-operations' },
+  resourceKind: 'process_definition',
   resourceId: 'payments-order',
   runtimeTenantId: 'runtime-payments',
   mappedActionIds: ['engine.runtime.process-definitions.read'],

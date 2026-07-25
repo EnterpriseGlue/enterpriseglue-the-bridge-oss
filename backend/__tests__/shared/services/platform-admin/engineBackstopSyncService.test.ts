@@ -8,6 +8,7 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
+import type { EngineBackstopProjection } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
@@ -27,7 +28,7 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
 const sourceHash = 'a'.repeat(64);
 const desiredHash = 'b'.repeat(64);
 
-function projection(resourceKey = 'payments') {
+function projection(resourceKey = 'payments'): EngineBackstopProjection {
   return {
     classifications: [{
       sourceAssignmentId: 'assignment-1', principalType: 'group', disposition: 'proposed', reasonCodes: ['exact_group_read_projected'],
@@ -75,7 +76,7 @@ function setup(input: { builtProjection?: ReturnType<typeof projection>; sourceH
     readAuthorization: vi.fn(async () => ({ type: 1, permissions: ['READ'], groupId: 'camunda-operators', resourceType: 6, resourceId: 'payments' })),
   };
   const projectionBuilder = vi.fn(async () => ({
-    engine: { id: 'engine-1', type: 'camunda7', lifecycleStatus: 'active' }, tenantId: 'tenant-a',
+    engine: { id: 'engine-1', type: 'camunda7', lifecycleStatus: 'active', connectionMode: 'direct' }, tenantId: 'tenant-a',
     projection: input.builtProjection || projection(), sourceHash: input.sourceHash || sourceHash, desiredHash: input.desiredHash || desiredHash,
     capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: true },
   }));

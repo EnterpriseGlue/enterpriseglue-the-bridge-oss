@@ -7,6 +7,11 @@ import {
   camundaNativeGrantInventoryService,
   classifyCamundaNativeGrant,
 } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js';
+import type {
+  CamundaNativeAuthorization,
+  CamundaNativeGrantDisposition,
+  CamundaNativeGrantReasonCode,
+} from '@enterpriseglue/shared/schemas/platform-admin/camunda-native-grants.js';
 
 const processResource = {
   resourceKind: 'process_definition' as const,
@@ -74,7 +79,9 @@ describe('CamundaNativeGrantInventoryService', () => {
     }]);
     expect(() => new CamundaNativeGrantInventoryService(vi.fn()).fromCustomerExport({
       apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1',
-      authorizations: [authorization],
+      // This is intentionally an untrusted customer export containing live
+      // transport-only fields; runtime validation must reject it.
+      authorizations: [authorization as any],
     })).toThrow(/unrecognized/i);
   });
 
@@ -145,7 +152,7 @@ describe('classifyCamundaNativeGrant', () => {
     }).reasonCodes).toEqual(['broad_resource_acknowledgement_required', 'group_grant_process_definition']);
   });
 
-  it.each([
+  const closedFailureCases: Array<[CamundaNativeAuthorization, CamundaNativeGrantDisposition, CamundaNativeGrantReasonCode]> = [
     [{ id: 'user', type: 1, permissions: ['READ'], userId: 'user@example.test', resourceType: 6, resourceId: 'payments-order' }, 'manual_required', 'user_identity_mapping_required'],
     [{ id: 'global', type: 0, permissions: ['READ'], resourceType: 6, resourceId: 'payments-order' }, 'manual_required', 'global_authorization_not_convertible'],
     [{ id: 'revoke', type: 2, permissions: ['READ'], groupId: 'operations', resourceType: 6, resourceId: 'payments-order' }, 'manual_required', 'revoke_authorization_not_convertible'],
@@ -154,7 +161,9 @@ describe('classifyCamundaNativeGrant', () => {
     [{ id: 'missing-principal', type: 1, permissions: ['READ'], resourceType: 6, resourceId: 'payments-order' }, 'manual_required', 'missing_group_principal'],
     [{ id: 'missing-resource', type: 1, permissions: ['READ'], groupId: 'operations', resourceType: 6 }, 'blocked', 'missing_resource_id'],
     [{ id: 'missing', type: 1, permissions: ['READ'], groupId: 'operations', resourceType: 6, resourceId: 'missing' }, 'blocked', 'runtime_resource_inventory_required'],
-  ] as const)('fails closed for %s', (authorization, disposition, reasonCode) => {
+  ];
+
+  it.each(closedFailureCases)('fails closed for %s', (authorization, disposition, reasonCode) => {
     const result = classifyCamundaNativeGrant(authorization);
     expect(result.disposition).toBe(disposition);
     expect(result.reasonCodes).toEqual([reasonCode]);

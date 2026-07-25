@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { camundaNativeGrantExternalEngineKey, CamundaNativeGrantDraftService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js';
+import { camundaNativeGrantExternalEngineKey, CamundaNativeGrantDraftService, type GenerateCamundaNativeGrantDraftInput } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js';
+import type { CamundaNativeGrantClassification } from '@enterpriseglue/shared/schemas/platform-admin/camunda-native-grants.js';
 
 const base = {
   bundle: {
@@ -21,9 +22,9 @@ const base = {
   },
 };
 
-const proposed = {
-  sourceAuthorizationId: 'native-a', disposition: 'proposed' as const, reasonCodes: ['group_grant_process_definition'],
-  principal: { type: 'group' as const, groupId: 'C7-native-sensitive-ops' }, resourceKind: 'process_definition' as const,
+const proposed: CamundaNativeGrantClassification = {
+  sourceAuthorizationId: 'native-a', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'],
+  principal: { type: 'group', groupId: 'C7-native-sensitive-ops' }, resourceKind: 'process_definition',
   resourceId: 'payments-order', runtimeTenantId: 'runtime-payments', mappedActionIds: ['engine.runtime.process-definitions.read'],
 };
 const opaque = (value: string) => createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 16);
@@ -31,7 +32,7 @@ const opaque = (value: string) => createHash('sha256').update(value, 'utf8').dig
 describe('CamundaNativeGrantDraftService', () => {
   it('generates a deterministic, resource-aware configuration draft without changing authority mode', () => {
     const service = new CamundaNativeGrantDraftService();
-    const input = {
+    const input: GenerateCamundaNativeGrantDraftInput = {
       base,
       engineKey: 'engine.camunda7',
       classifications: [

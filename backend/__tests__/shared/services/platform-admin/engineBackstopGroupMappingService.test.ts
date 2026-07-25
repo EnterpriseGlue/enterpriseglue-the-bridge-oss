@@ -37,7 +37,7 @@ function mapping(overrides: Record<string, unknown> = {}) {
 
 function setup(input: { currentEngine?: Record<string, unknown> | null; groups?: Record<string, Record<string, unknown>>; mappings?: Array<Record<string, unknown>> } = {}) {
   const currentEngine = input.currentEngine === undefined ? engine() : input.currentEngine;
-  const groups = input.groups || { 'group-a': group('group-a') };
+  const groups: Record<string, Record<string, unknown>> = input.groups || { 'group-a': group('group-a') };
   const mappings = [...(input.mappings || [])];
   const engineRepo = { findOne: vi.fn().mockResolvedValue(currentEngine) };
   const groupRepo = { findOne: vi.fn().mockImplementation(({ where }) => groups[where.id] || null) };

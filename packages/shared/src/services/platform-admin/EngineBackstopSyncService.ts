@@ -109,7 +109,8 @@ export type CamundaBackstopNativeClient = EngineBackstopNativeAuthorizationClien
 export type CamundaBackstopOwnedGrant = CamundaCompatibleBackstopOwnedGrant;
 
 interface ProjectionBuild {
-  engine: Engine;
+  /** A custom projection builder needs only the transport identity. */
+  engine: Pick<Engine, 'id' | 'connectionMode'>;
   tenantId: string | null;
   projection: EngineBackstopProjection;
   sourceHash: string;

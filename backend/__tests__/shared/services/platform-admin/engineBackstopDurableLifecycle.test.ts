@@ -5,6 +5,7 @@ import { EngineBackstopSyncTask } from '@enterpriseglue/shared/infrastructure/pe
 import { EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
 import { EngineBackstopSyncRunService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncRunService.js';
 import { EngineBackstopSyncTaskService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncTaskService.js';
+import type { EngineBackstopProjection } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
@@ -16,7 +17,7 @@ vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
 const sourceHash = 'a'.repeat(64);
 const desiredHash = 'b'.repeat(64);
 
-function projection() {
+function projection(): EngineBackstopProjection {
   return {
     classifications: [{
       sourceAssignmentId: 'assignment-1', principalType: 'group', disposition: 'proposed', reasonCodes: ['exact_group_read_projected'],
