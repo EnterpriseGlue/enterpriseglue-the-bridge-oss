@@ -15,7 +15,6 @@ import {
   getE2ECredentials,
   getE2EEngineId,
   getE2EFineGrainedFixture,
-  hasE2ECredentials,
 } from './utils/credentials';
 
 function isLocalUrl(value: string): boolean {
@@ -33,9 +32,7 @@ const mockControlUrl = process.env.CAMUNDA_MOCK_CONTROL_URL || 'http://localhost
 const enabled = process.env.CAMUNDA_NATIVE_GRANT_BROWSER_EVIDENCE === 'true'
   && isLocalUrl(baseUrl)
   && isLocalUrl(apiUrl)
-  && isLocalUrl(mockControlUrl)
-  && hasE2ECredentials()
-  && Boolean(getE2EEngineId());
+  && isLocalUrl(mockControlUrl);
 
 function git(args: string[]): string {
   return execFileSync('git', args, {
