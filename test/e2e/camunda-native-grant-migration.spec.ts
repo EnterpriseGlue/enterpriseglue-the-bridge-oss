@@ -169,7 +169,7 @@ test.describe('Camunda native-grant migration browser workflow', () => {
 
       const browser = page.context().browser();
       if (!browser) throw new Error('Native-grant evidence requires a browser-backed Playwright page');
-      memberContext = await browser.newContext({ baseURL, ignoreHTTPSErrors: true });
+      memberContext = await browser.newContext({ baseURL: baseUrl, ignoreHTTPSErrors: true });
       const memberPage = await memberContext.newPage();
       await login(memberPage, fixture.runtimeScopedEmail, fixture.runtimeScopedPassword);
       const definitionsPath = `/mission-control-api/process-definitions?engineId=${encodeURIComponent(engineId)}`;
