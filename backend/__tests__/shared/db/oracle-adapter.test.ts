@@ -137,13 +137,15 @@ describe('OracleAdapter metadata normalization', () => {
     expect(createdAtColumn?.options.scale).toBe(0);
   });
 
-  it('uses CLOB for bounded native-grant evidence instead of Oracle display-text length', () => {
+  it('uses CLOB for bounded native-grant and backstop evidence instead of Oracle display-text length', () => {
     new OracleAdapter();
     const metadata = getMetadataArgsStorage();
-    for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
-      const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === 'CamundaNativeGrantImportRun'
-        && candidate.propertyName === propertyName);
-      expect(column?.options.type).toBe('clob');
+    for (const entity of ['CamundaNativeGrantImportRun', 'EngineBackstopSyncRun']) {
+      for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
+        const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === entity
+          && candidate.propertyName === propertyName);
+        expect(column?.options.type).toBe('clob');
+      }
     }
   });
 

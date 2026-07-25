@@ -99,13 +99,15 @@ describe('SpannerAdapter metadata normalization', () => {
     expect(configKeyIndex?.nullFiltered).toBe(true);
   });
 
-  it('uses STRING(MAX) for bounded native-grant evidence', () => {
+  it('uses STRING(MAX) for bounded native-grant and backstop evidence', () => {
     new SpannerAdapter();
     const metadata = getMetadataArgsStorage();
-    for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
-      const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === 'CamundaNativeGrantImportRun'
-        && candidate.propertyName === propertyName);
-      expect(column?.options).toMatchObject({ type: 'string', length: 'max' });
+    for (const entity of ['CamundaNativeGrantImportRun', 'EngineBackstopSyncRun']) {
+      for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
+        const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === entity
+          && candidate.propertyName === propertyName);
+        expect(column?.options).toMatchObject({ type: 'string', length: 'max' });
+      }
     }
   });
 });

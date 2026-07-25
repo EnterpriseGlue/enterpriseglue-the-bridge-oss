@@ -25,13 +25,15 @@ describe('MySQLAdapter native-grant evidence mapping', () => {
     }
   });
 
-  it('uses LONGTEXT for bounded native-grant evidence instead of the 64 KiB TEXT limit', () => {
+  it('uses LONGTEXT for bounded native-grant and backstop evidence instead of the 64 KiB TEXT limit', () => {
     new MySQLAdapter();
     const metadata = getMetadataArgsStorage();
-    for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
-      const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === 'CamundaNativeGrantImportRun'
-        && candidate.propertyName === propertyName);
-      expect(column?.options.type).toBe('longtext');
+    for (const entity of ['CamundaNativeGrantImportRun', 'EngineBackstopSyncRun']) {
+      for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
+        const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === entity
+          && candidate.propertyName === propertyName);
+        expect(column?.options.type).toBe('longtext');
+      }
     }
   });
 });

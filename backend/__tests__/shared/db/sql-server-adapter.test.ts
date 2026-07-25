@@ -89,13 +89,15 @@ describe('SqlServerAdapter metadata normalization', () => {
     expect(groupDescriptionColumn?.options.length).toBe(4000);
   });
 
-  it('uses NVARCHAR(MAX) for bounded native-grant evidence instead of truncating it to display-text length', () => {
+  it('uses NVARCHAR(MAX) for bounded native-grant and backstop evidence instead of truncating it to display-text length', () => {
     new SqlServerAdapter();
     const metadata = getMetadataArgsStorage();
-    for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
-      const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === 'CamundaNativeGrantImportRun'
-        && candidate.propertyName === propertyName);
-      expect(column?.options).toMatchObject({ type: 'nvarchar', length: 'MAX' });
+    for (const entity of ['CamundaNativeGrantImportRun', 'EngineBackstopSyncRun']) {
+      for (const propertyName of ['classificationsJson', 'encryptedDetailedSnapshot']) {
+        const column = metadata.columns.find((candidate) => (candidate.target as any)?.name === entity
+          && candidate.propertyName === propertyName);
+        expect(column?.options).toMatchObject({ type: 'nvarchar', length: 'MAX' });
+      }
     }
   });
 
