@@ -54,8 +54,15 @@ describe('EngineBackstopProjectionService', () => {
     expect(projection.desiredGrants).toEqual([expect.objectContaining({ resourceKind: 'decision_definition', resourceKey: 'credit-score', camundaResourceType: 10 })]);
   });
 
+  it('projects the same exact grants for an Operaton engine', () => {
+    const projection = service.project(context({ engineType: 'operaton' }), 100);
+    expect(projection.desiredGrants).toEqual([expect.objectContaining({
+      nativeGroupId: 'camunda-operators', resourceKind: 'process_definition', resourceKey: 'payments', camundaResourceType: 6, permissions: ['READ'],
+    })]);
+  });
+
   it.each([
-    ['non-Camunda engine', { engineType: 'operaton' }, 'engine_type_not_supported'],
+    ['non-compatible engine', { engineType: 'ion' }, 'engine_type_not_supported'],
     ['direct user', { candidates: [{ ...context().candidates[0], principal: { type: 'user', id: 'user-1' } }] }, 'principal_not_group'],
     ['missing group map', { mappings: [] }, 'group_mapping_missing'],
     ['ambiguous group map', { mappings: [{ authzGroupId: 'group-operators', nativeGroupId: 'a', isActive: true }, { authzGroupId: 'group-operators', nativeGroupId: 'b', isActive: true }] }, 'group_mapping_ambiguous'],

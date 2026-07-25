@@ -1,32 +1,35 @@
-# Enable a Mirrored Camunda 7 Authorization Backstop
+# Enable a Mirrored Camunda 7 or Operaton Authorization Backstop
 
-`mirrored_engine_backstop` adds a narrow, native Camunda 7 protection layer
-for intentional direct Camunda access. EnterpriseGlue remains the permission
+`mirrored_engine_backstop` adds a narrow, native Camunda-compatible protection
+layer for intentional direct Camunda 7 or Operaton access. EnterpriseGlue remains the permission
 editor and the final authorization decision point for EnterpriseGlue routes.
 
-Use this only when direct Camunda users are already authenticated by Camunda
-or its identity provider and their Camunda group memberships are meaningful.
+Use this only when direct engine users are already authenticated by the engine
+or its identity provider and their native group memberships are meaningful.
 EnterpriseGlue does not create those native users or memberships.
 
 ## Prerequisites
 
-- The engine is an active, direct-connection Camunda 7 engine. Customer-sidecar
+- The engine is an active, direct-connection Camunda 7 or Operaton engine. Customer-sidecar
   engines are intentionally excluded in this release.
+- In a configuration bundle, the referenced engine's `type` is exactly
+  `camunda7` or `operaton`; other engine types fail preview before any secret is
+  resolved or mapping is written.
 - Runtime inventory is current and every resource that will be mirrored has an
   exact, resolved tenant. Shared engines must be synchronized one tenant at a
   time.
 - An EnterpriseGlue authorization group has been assigned a role containing
   `engine:instance:view` at an exact runtime resource or runtime-resource-set
   scope.
-- The native Camunda group already contains the intended direct users.
-- The configured engine service identity may call Camunda's authorization
+- The native engine group already contains the intended direct users.
+- The configured engine service identity may call the engine's authorization
   create, id-specific read, and id-specific delete REST endpoints.
 
 ## Workflow
 
 1. Create an opaque group mapping. In Mission Control, open the active direct
-   Camunda 7 engine, then use **Native authorization backstop** to enter the
-   EnterpriseGlue group ID and the write-only Camunda group ID. The panel shows
+   Camunda 7 or Operaton engine, then use **Native authorization backstop** to enter the
+   EnterpriseGlue group ID and the write-only native engine group ID. The panel shows
    only an opaque native-group reference afterwards, provides the hash-bound
    preview/apply/rollback/drift workflow, and hides or disables each operation
    when the corresponding backstop permission is absent. For automation or
@@ -41,7 +44,7 @@ EnterpriseGlue does not create those native users or memberships.
    {
      "mappings": [{
        "authzGroupId": "<enterpriseglue-group-id>",
-       "nativeGroupId": "<camunda-group-id>",
+       "nativeGroupId": "<native-engine-group-id>",
        "isActive": true
      }]
    }
@@ -49,9 +52,9 @@ EnterpriseGlue does not create those native users or memberships.
 
    A configuration bundle may instead declare a mapping with a secret
    reference. Include `./engine-backstop-mappings.json` alongside the declared
-   `./engines.json` Camunda 7 engine and `./groups.json` group. The secret
+   `./engines.json` Camunda 7 or Operaton engine and `./groups.json` group. The secret
    value must be supplied by the deployment environment; never commit the
-   native Camunda group id.
+   native engine group id.
 
 <!-- enterpriseglue-config-schema: ConfigEngineBackstopMappingsFileSchema -->
 ```json
@@ -91,7 +94,7 @@ EnterpriseGlue does not create those native users or memberships.
    ```
 
    EnterpriseGlue re-resolves the authorization sources immediately before the
-   Camunda call. If groups, roles, assignments, resources, tenancy, or the
+   native engine call. If groups, roles, assignments, resources, tenancy, or the
    desired projection changed, it rejects the apply and requires a new preview.
 
 4. Verify the sanitized status and, for a suitably authorized operator, the
@@ -128,7 +131,7 @@ EnterpriseGlue does not create those native users or memberships.
 Rollback requires a successful run with retained encrypted ownership evidence.
 It deletes only authorization IDs that EnterpriseGlue recorded as created by
 that run. It never searches for, edits, or deletes matching customer-created
-Camunda authorizations.
+engine authorizations.
 
 ```http
 POST /engines-api/engines/{engineId}/backstop/sync/{runId}/rollback

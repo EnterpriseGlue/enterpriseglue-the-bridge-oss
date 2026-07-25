@@ -1,12 +1,12 @@
 # Mirrored Engine Backstop Developer Guide
 
-The Camunda 7 backstop is a defence-in-depth projection, not a second
+The Camunda 7 and Operaton backstop is a defence-in-depth projection, not a second
 authorization system. Its invariants are enforced in the following order:
 
 1. `EngineBackstopProjectionService` accepts only fully resolved exact group,
-   resource, and permission candidates and emits Camunda process/decision
+   resource, and permission candidates and emits Camunda-compatible process/decision
    group `READ` grants.
-2. `EngineBackstopGroupMappingService` validates active Camunda 7 engines and
+2. `EngineBackstopGroupMappingService` validates active direct Camunda 7 or Operaton engines and
    tenant-compatible groups, encrypts native group IDs, and forbids one native
    group from representing more than one EnterpriseGlue group on an engine.
 3. `EngineBackstopSyncService` re-materializes the source before apply,
@@ -32,7 +32,7 @@ remains available for an ownership-only rollback.
 Migration `1700000000103-add-engine-backstop-config-secret-reference` adds
 `native_group_secret_ref` to a backstop mapping. It stores the opaque config
 reference used for reconciliation and export; it never stores a second copy of
-the native Camunda group id.
+the native engine group id.
 
 The migration and entity registry are qualified in PostgreSQL, MySQL, SQL
 Server, Oracle, and Spanner metadata tests. The encrypted run-detail fields
@@ -42,9 +42,12 @@ the cross-provider evidence limit before persistence.
 ## Configuration-bundle mappings
 
 `./engine-backstop-mappings.json` is a config-owned alternative to the
-interactive mapping API. A mapping may target only a Camunda 7 engine and
+interactive mapping API. A mapping may target only a direct Camunda 7 or Operaton engine and
 EnterpriseGlue group declared in the same bundle. It uses a stable mapping key
 and an opaque `nativeGroupIdRef`; a raw `nativeGroupId` is rejected.
+The engine type allow-list is intentionally explicit (`camunda7`, `operaton`),
+so a future adapter cannot gain native authorization write access merely by
+sharing a REST-shaped endpoint.
 
 ```json
 {
@@ -64,7 +67,7 @@ it inside the transaction, encrypts the native value, and records the opaque
 reference for future diff/export. Preview, diff, audit records, exports, and
 normal list APIs never contain the native value. An authoritative bundle that
 removes a mapping disables it locally; it does not infer ownership of, or
-delete, native Camunda grants. Use the reviewed backstop sync and its
+delete, native engine grants. Use the reviewed backstop sync and its
 ownership-only rollback for native grant lifecycle changes.
 
 ## Native ownership protocol
@@ -94,7 +97,7 @@ apply receipt or make an inference about unrelated customer grants.
 
 ## Extending the projection
 
-Do not add a native resource type or permission by changing only the Camunda
+Do not add a native resource type or permission by changing only the compatible-engine
 REST payload. Add it to the shared Zod contract, classifier reason-code matrix,
 sanitized receipt, source builder, test matrix, OpenAPI/action registry, and
 operator documentation. New support must prove that it cannot turn a deny,
@@ -120,9 +123,10 @@ pnpm --dir backend exec vitest run \
   __tests__/modules/mission-control/engines/routes.test.ts
 pnpm run test:action-registry
 pnpm run test:camunda7-native-grant-container
+pnpm run test:operaton-native-auth-container
 ```
 
-The disposable Camunda container validates the pinned Camunda 7 REST contract.
+The disposable Camunda and Operaton containers validate their pinned compatible authorization REST contracts.
 The service tests prove EnterpriseGlue's exact payload, source-drift stop,
 owned-only cleanup, rollback, and missing/altered owned-grant detection without
 requiring customer credentials.

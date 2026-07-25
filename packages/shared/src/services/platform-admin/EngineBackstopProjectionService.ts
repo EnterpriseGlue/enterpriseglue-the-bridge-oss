@@ -2,12 +2,14 @@ import {
   EngineBackstopClassificationSchema,
   EngineBackstopProjectionContextSchema,
   EngineBackstopProjectionSchema,
+  isEngineBackstopNativeAuthorizationEngineType,
   type EngineBackstopClassification,
   type EngineBackstopProjection,
   type EngineBackstopProjectionCandidate,
 } from '../../schemas/platform-admin/engine-backstop.js';
 
-const CAMUNDA_RESOURCE_TYPE: Record<'process_definition' | 'decision_definition', 6 | 10> = {
+/** Shared by Camunda 7 and Operaton's Camunda-compatible authorization REST API. */
+const CAMUNDA_COMPATIBLE_RESOURCE_TYPE: Record<'process_definition' | 'decision_definition', 6 | 10> = {
   process_definition: 6,
   decision_definition: 10,
 };
@@ -41,7 +43,7 @@ function unsupported(candidate: EngineBackstopProjectionCandidate, reason: Engin
 
 /**
  * Converts fully resolved EnterpriseGlue access candidates into only the exact
- * Camunda 7 group READ authorizations that v1 can safely own. This class has
+ * Camunda-compatible group READ authorizations that v1 can safely own. This class has
  * no persistence or transport dependency, so preview and apply can share the
  * same fail-closed classifier.
  */
@@ -85,7 +87,7 @@ export class EngineBackstopProjectionService {
     mappingsByGroup: Map<string, string[]>,
     now: number,
   ): EngineBackstopClassification {
-    if (context.engineType !== 'camunda7') return unsupported(candidate, 'engine_type_not_supported');
+    if (!isEngineBackstopNativeAuthorizationEngineType(context.engineType)) return unsupported(candidate, 'engine_type_not_supported');
     if (candidate.principal.type !== 'group') return unsupported(candidate, 'principal_not_group');
     if (candidate.expiresAt !== null && candidate.expiresAt <= now) return unsupported(candidate, 'assignment_expired');
     if (candidate.permissionIds.some((permission) => !MIRRORABLE_PERMISSIONS.has(permission))) return unsupported(candidate, 'permission_mapping_not_supported');
@@ -113,7 +115,7 @@ export class EngineBackstopProjectionService {
       resourceKind: candidate.resource.kind,
       resourceKey: candidate.resource.key,
       nativeGroupId: nativeGroups[0],
-      camundaResourceType: CAMUNDA_RESOURCE_TYPE[candidate.resource.kind],
+      camundaResourceType: CAMUNDA_COMPATIBLE_RESOURCE_TYPE[candidate.resource.kind],
       permissions: ['READ'],
     });
   }

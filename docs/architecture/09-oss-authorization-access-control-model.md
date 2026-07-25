@@ -52,7 +52,7 @@ Current architecture status:
 - [ ] ⬜ Per-engine `runtimeAccessScope` for distributed `engine_wide` and central `resource_aware` behavior.
 - [ ] ⬜ Proxy/direct deployment ingestion with pipeline receipts, engine metadata reconciliation, and verified lineage quality.
 - [ ] ⬜ Carbon role library and focused single-role editor replacing the horizontally scrolling permission matrix.
-- [x] ✅ `engineRuntimeAuthorizationMode` defaults to `enterpriseglue_authoritative`; the narrow `mirrored_engine_backstop` mode is gated by a retained successful Camunda 7 backstop receipt.
+- [x] ✅ `engineRuntimeAuthorizationMode` defaults to `enterpriseglue_authoritative`; the narrow `mirrored_engine_backstop` mode is gated by a retained successful Camunda 7 or Operaton backstop receipt.
 - [ ] ⬜ First-class customer-managed sidecar engine connection mode with policy-controlled endpoint authentication, normal RBAC/runtime enforcement, UI/config/OpenAPI fields, and transport tests.
 - [ ] ⏸ EnterpriseGlue-issued sidecar action tokens, sidecar principals/heartbeats/inventory, and `engine_native_authority` import mode. The narrow direct-Camunda mirrored backstop is implemented separately.
 
@@ -81,7 +81,7 @@ The remaining relevant work is:
 Deferred and not part of the current v1 implementation path:
 
 - [ ] ⏸ EnterpriseGlue-issued sidecar action-token protocol and dedicated sidecar inventory/heartbeat APIs. Customer-managed sidecar transport is not deferred.
-- [x] ✅ Narrow Camunda 7 engine-native permission mirroring (`mirrored_engine_backstop`): exact mapped-group process/decision `READ`, hash-bound sync, ownership-only rollback, read-only tracked-ID drift receipts, and source-owned configuration-bundle mappings with opaque secret references. UI and direct-identity certification remain follow-up work.
+- [x] ✅ Narrow Camunda 7/Operaton engine-native permission mirroring (`mirrored_engine_backstop`): exact mapped-group process/decision `READ`, hash-bound sync, ownership-only rollback, read-only tracked-ID drift receipts, and source-owned configuration-bundle mappings with opaque secret references. UI and direct-identity certification remain follow-up work.
 - [ ] ⏸ Engine-native permission import/authority (`engine_native_authority`).
 
 ### Clean Target Versus Transitional Compatibility

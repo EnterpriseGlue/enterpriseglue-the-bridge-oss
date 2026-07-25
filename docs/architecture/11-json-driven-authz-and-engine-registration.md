@@ -68,7 +68,7 @@ Current config-as-code status:
 - [x] ✅ Implement central-engine runtime resource inventory, runtime resource sets, materialization, and authorization filtering for Mission Control/dashboard reads. The remaining route-family audit is tracked separately below.
 - [x] ✅ Persist and expose the v1 `engineRuntimeAuthorizationMode`; all settings and bundle schemas reject unsupported modes and normalize missing legacy values to `enterpriseglue_authoritative`. Runtime-resource route filtering remains a later phase.
 - [x] ✅ Implement first-class `customer_sidecar` engine connection mode, endpoint-auth policy, shared connection resolution, UI/config/OpenAPI fields, and mock-sidecar transport tests. The shared diagnostics remain enum-only and keep endpoint URLs and credentials out of responses; the downstream peer token remains outside EnterpriseGlue.
-- [x] ✅ Implement the narrowly scoped `mirrored_engine_backstop` for active, direct Camunda 7 engines, with encrypted write-only group mappings, hash-bound preview/apply/rollback/drift receipts, config-managed secret references, and a guarded Mission Control workflow.
+- [x] ✅ Implement the narrowly scoped `mirrored_engine_backstop` for active, direct Camunda 7 and Operaton engines, with encrypted write-only group mappings, hash-bound preview/apply/rollback/drift receipts, config-managed secret references, and a guarded Mission Control workflow.
 - [ ] ⏸ Defer EnterpriseGlue-issued sidecar action-token integration, sidecar principals/heartbeats/inventory, and engine-native authority/import modes.
 
 ## Core Decisions
@@ -83,7 +83,7 @@ Current config-as-code status:
 - [x] ✅ Keep v1 runtime assignment scopes focused on engine, runtime tenant, process definition key, decision definition key, and runtime resource set.
 - [x] ✅ Keep production configuration bundles separate from test-only identity fixtures while validating both through shared provider and mapping contracts.
 - [x] ✅ Support central shared engines by adding runtime resource scopes below the engine, for example process definition key and decision definition key.
-- [x] ✅ Make `enterpriseglue_authoritative` the default runtime authorization mode and keep `engine_native_authority` deferred. The separate narrow Camunda 7 mirrored backstop remains EnterpriseGlue-authoritative and is available only after a successful retained receipt.
+- [x] ✅ Make `enterpriseglue_authoritative` the default runtime authorization mode and keep `engine_native_authority` deferred. The separate narrow Camunda 7/Operaton mirrored backstop remains EnterpriseGlue-authoritative and is available only after a successful retained receipt.
 - [x] ✅ Keep engine registration separate from engine authorization, then combine them in dropdown and deployment eligibility APIs.
 - [x] ✅ Keep runtime authorization based on database records and evaluator decisions, not direct JSON reads.
 - [x] ✅ Add config-bundle preview, diff, hash-bound apply, server-side export, apply-run history, and ZIP-to-envelope import endpoints. The same ZIP adapter is available to the UI, CI CLI, and bootstrap path.
@@ -110,7 +110,7 @@ The remaining work in this document is not to rebuild those foundations. It is t
 - [x] ✅ Configuration-as-code import/export/preview/apply flows on top of the existing RBAC and engine registry services.
 - [x] ✅ Config source ownership and drift handling for the supported imported objects. Remaining ownership extensions are kept explicitly scoped in the source-ownership checklist.
 - [x] ✅ Central-engine runtime resource scopes below an engine, with Mission Control/dashboard filtering by process and decision resource subsets.
-- [x] ✅ `engineRuntimeAuthorizationMode` enforcement with `enterpriseglue_authoritative` as the default and the narrow, receipt-gated `mirrored_engine_backstop` available only for direct Camunda 7 protection.
+- [x] ✅ `engineRuntimeAuthorizationMode` enforcement with `enterpriseglue_authoritative` as the default and the narrow, receipt-gated `mirrored_engine_backstop` available only for direct Camunda 7 or Operaton protection.
 
 ## Current Platform Capabilities To Reuse
 
@@ -289,7 +289,7 @@ Controls how EnterpriseGlue and engine-native authorization interact for runtime
 | Value | Meaning | Product behavior | Roadmap |
 | --- | --- | --- | --- |
 | `enterpriseglue_authoritative` | EnterpriseGlue is the source of truth for product authorization. Engine-native permissions are not edited as a separate product model. | EnterpriseGlue evaluates scoped roles, runtime resource sets, policies, project-engine targets, and route context. The backend may call the engine with a configured service identity, customer sidecar, or gateway identity. | Implement in v1. This is the default and recommended mode. |
-| `mirrored_engine_backstop` | EnterpriseGlue remains the source of truth, but an exact, representable subset of group runtime `READ` access is mirrored to a direct Camunda 7 endpoint. | Admins still edit EnterpriseGlue roles/groups/resource sets. Native authorization is shown only as sanitized mapping/sync/drift status, never as a second editor. | Implemented for active direct Camunda 7 engines, including secret-reference configuration-bundle mappings and the guarded Mission Control workflow. Direct-identity-provider certification remains a release-evidence gate. |
+| `mirrored_engine_backstop` | EnterpriseGlue remains the source of truth, but an exact, representable subset of group runtime `READ` access is mirrored to a direct Camunda 7 or Operaton endpoint. | Admins still edit EnterpriseGlue roles/groups/resource sets. Native authorization is shown only as sanitized mapping/sync/drift status, never as a second editor. | Implemented for active direct Camunda 7 and Operaton engines, including secret-reference configuration-bundle mappings and the guarded Mission Control workflow. Direct-identity-provider certification remains a release-evidence gate. |
 | `engine_native_authority` | The engine's native authorization model is treated as the runtime source of truth and EnterpriseGlue reflects or imports it. | EnterpriseGlue would need to read/sync engine-native users, groups, permissions, tenants, and resource ids, then map them back to UI decisions and diagnostics. | Defer. This is complex and should not block v1 because it conflicts with EnterpriseGlue project, Starbase, SSO, config, and policy concepts. |
 
 Conflict rule:
@@ -1489,7 +1489,7 @@ The central-engine roadmap should avoid duplicate permission controls. Enterpris
 | Mode | V1 status | What EnterpriseGlue owns | What the engine owns | Admin UI model |
 | --- | --- | --- | --- | --- |
 | `enterpriseglue_authoritative` | Build first. Default. | Roles, groups, scoped assignments, runtime resource sets, policies, route checks, Mission Control filtering, dashboard filtering, Starbase bridge checks, audit, and explanations. | Engine executes requests using the configured integration identity, gateway, or sidecar path. Engine-native authorization is not edited as a product model. | One EnterpriseGlue permission matrix and resource-set model. |
-| `mirrored_engine_backstop` | Implemented narrow Camunda 7 subset. | EnterpriseGlue remains the source of truth and projects only exact mapped-group `READ` grants for resolved process/decision definitions. | A direct Camunda 7 endpoint enforces that subset for meaningful native group identity; all other source shapes remain blocked/manual. | EnterpriseGlue editor plus guarded sanitized Mission Control sync/backstop diagnostics. No separate engine permission editor. |
+| `mirrored_engine_backstop` | Implemented narrow Camunda 7/Operaton subset. | EnterpriseGlue remains the source of truth and projects only exact mapped-group `READ` grants for resolved process/decision definitions. | A direct Camunda 7 or Operaton endpoint enforces that subset for meaningful native group identity; all other source shapes remain blocked/manual. | EnterpriseGlue editor plus guarded sanitized Mission Control sync/backstop diagnostics. No separate engine permission editor. |
 | `engine_native_authority` | Defer. | EnterpriseGlue adds UI diagnostics, project/Starbase context checks, and route guards around imported engine permissions. | Engine-native users, groups, permissions, tenants, and resource ids are treated as runtime authority. | Read/import/diagnose first. Full editing is a separate product decision. |
 
 V1 implementation boundary:
@@ -1497,7 +1497,7 @@ V1 implementation boundary:
 - [x] ✅ Implement `enterpriseglue_authoritative` as the persisted default and product authority. `mirrored_engine_backstop` is a narrow, receipt-gated defense-in-depth adjunct, not a competing authority mode.
 - [x] ✅ Persist `engineRuntimeAuthorizationMode` with `enterpriseglue_authoritative` as the default and permit `mirrored_engine_backstop` only after a retained successful backstop receipt exists. `engine_native_authority` remains unavailable.
 - [x] ✅ Do not build duplicate Camunda permission editors in Access Control. The Role Library manages EnterpriseGlue roles and runtime-resource assignments only.
-- [x] ✅ Synchronize only the explicitly supported exact mapped-group Camunda 7 `READ` subset behind a hash-bound preview/apply/rollback/drift protocol. EnterpriseGlue remains the final product evaluator and never invokes the engine after an EnterpriseGlue denial.
+- [x] ✅ Synchronize only the explicitly supported exact mapped-group Camunda 7/Operaton `READ` subset behind a hash-bound preview/apply/rollback/drift protocol. EnterpriseGlue remains the final product evaluator and never invokes the engine after an EnterpriseGlue denial.
 - [x] ✅ If the engine rejects a call despite EnterpriseGlue allowing it, surface an operational `ENGINE_OPERATION_REJECTED` error with sanitized diagnostics rather than granting by fallback.
 - [x] ✅ If EnterpriseGlue denies a request, never call the engine even if engine-native permissions might allow it. Runtime route tests cover denial before engine service invocation, including engine-native deployment list and detail passthroughs; their OpenAPI contracts explicitly distinguish raw engine payloads from sanitized canonical receipt/history APIs.
 

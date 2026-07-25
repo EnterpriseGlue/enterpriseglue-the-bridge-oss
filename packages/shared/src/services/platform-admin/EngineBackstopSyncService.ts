@@ -11,6 +11,7 @@ import {
   EngineBackstopProjectionSchema,
   EngineBackstopSyncApplyRequestSchema,
   EngineBackstopSyncRollbackRequestSchema,
+  isEngineBackstopNativeAuthorizationEngineType,
   type EngineBackstopProjection,
   type EngineBackstopProjectionCandidate,
   type EngineBackstopSyncApplyRequest,
@@ -23,22 +24,28 @@ import { engineBackstopProjectionService, type EngineBackstopProjectionService }
 import { engineBackstopSyncRunService, type EngineBackstopSyncRunService } from './EngineBackstopSyncRunService.js';
 import { engineBackstopSyncTaskService, type EngineBackstopSyncTaskService, type EngineBackstopSyncTaskResult } from './EngineBackstopSyncTaskService.js';
 
-export interface CamundaBackstopOwnedGrant {
+/** A grant owned by EnterpriseGlue on either compatible native engine. */
+export interface CamundaCompatibleBackstopOwnedGrant {
   id: string;
   nativeGroupId: string;
   camundaResourceType: 6 | 10;
   resourceKey: string;
 }
 
-export interface CamundaBackstopNativeClient {
-  createAuthorization(engineId: string, input: Omit<CamundaBackstopOwnedGrant, 'id'>): Promise<{ id: string }>;
+export interface EngineBackstopNativeAuthorizationClient {
+  createAuthorization(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }>;
   deleteAuthorization(engineId: string, authorizationId: string): Promise<void>;
   /** Returns only an ID-addressed grant; it never inventories unrelated native grants. */
   readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null>;
 }
 
-export class Camunda7BackstopNativeClient implements CamundaBackstopNativeClient {
-  async createAuthorization(engineId: string, input: Omit<CamundaBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
+/**
+ * Uses the authorization REST contract shared by Camunda 7 and Operaton.
+ * Engine type is checked before this client is invoked, so this class never
+ * turns a generic BPMN endpoint into a native authorization writer.
+ */
+export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNativeAuthorizationClient {
+  async createAuthorization(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
     const response = await camundaPost<unknown>(engineId, '/authorization/create', {
       type: 1,
       permissions: ['READ'],
@@ -47,7 +54,7 @@ export class Camunda7BackstopNativeClient implements CamundaBackstopNativeClient
       resourceId: input.resourceKey,
     });
     const id = response && typeof response === 'object' && 'id' in response ? String((response as { id?: unknown }).id || '').trim() : '';
-    if (!id) throw new Error('Camunda authorization create response did not include an authorization id');
+    if (!id) throw new Error('Compatible engine authorization create response did not include an authorization id');
     return { id };
   }
 
@@ -64,6 +71,13 @@ export class Camunda7BackstopNativeClient implements CamundaBackstopNativeClient
     }
   }
 }
+
+/** @deprecated Use CamundaCompatibleBackstopNativeClient. */
+export const Camunda7BackstopNativeClient = CamundaCompatibleBackstopNativeClient;
+/** @deprecated Use CamundaCompatibleBackstopNativeClient. */
+export type CamundaBackstopNativeClient = EngineBackstopNativeAuthorizationClient;
+/** @deprecated Use CamundaCompatibleBackstopOwnedGrant. */
+export type CamundaBackstopOwnedGrant = CamundaCompatibleBackstopOwnedGrant;
 
 interface ProjectionBuild {
   engine: Engine;
@@ -82,7 +96,7 @@ export interface EngineBackstopSyncDependencies {
   mappingService?: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
   runService?: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
   taskService?: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'runNext'>;
-  nativeClient?: CamundaBackstopNativeClient;
+  nativeClient?: EngineBackstopNativeAuthorizationClient;
 }
 
 function stableJson(value: unknown): string {
@@ -171,7 +185,7 @@ export class EngineBackstopSyncService {
   private readonly mappingService: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
   private readonly runService: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
   private readonly taskService: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'runNext'>;
-  private readonly nativeClient: CamundaBackstopNativeClient;
+  private readonly nativeClient: EngineBackstopNativeAuthorizationClient;
   private readonly projectionBuilder?: EngineBackstopProjectionBuilder;
 
   constructor(dependencies: EngineBackstopSyncDependencies = {}) {
@@ -179,7 +193,7 @@ export class EngineBackstopSyncService {
     this.mappingService = dependencies.mappingService || engineBackstopGroupMappingService;
     this.runService = dependencies.runService || engineBackstopSyncRunService;
     this.taskService = dependencies.taskService || engineBackstopSyncTaskService;
-    this.nativeClient = dependencies.nativeClient || new Camunda7BackstopNativeClient();
+    this.nativeClient = dependencies.nativeClient || new CamundaCompatibleBackstopNativeClient();
     this.projectionBuilder = dependencies.projectionBuilder;
   }
 
@@ -393,9 +407,9 @@ export class EngineBackstopSyncService {
     const engineId = input.engineId.trim();
     const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } });
     if (!engine) throw Errors.notFound('Engine', engineId);
-    if (engine.type !== 'camunda7') throw backstopError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop is supported only for Camunda 7 engines');
+    if (!isEngineBackstopNativeAuthorizationEngineType(engine.type)) throw backstopError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop is supported only for Camunda 7 and Operaton engines');
     if (engine.lifecycleStatus !== 'active') throw backstopError('ENGINE_BACKSTOP_ENGINE_INACTIVE', 'Mirrored authorization backstop requires an active engine');
-    if (engine.connectionMode === 'customer_sidecar') throw backstopError('ENGINE_BACKSTOP_CONNECTION_NOT_SUPPORTED', 'Mirrored authorization backstop requires a direct trusted Camunda endpoint');
+    if (engine.connectionMode !== 'direct') throw backstopError('ENGINE_BACKSTOP_CONNECTION_NOT_SUPPORTED', 'Mirrored authorization backstop requires a direct trusted Camunda 7 or Operaton endpoint');
     const requestedTenantId = normalizeTenant(input.tenantId);
     const tenantId = engine.tenancyMode === 'shared'
       ? requestedTenantId

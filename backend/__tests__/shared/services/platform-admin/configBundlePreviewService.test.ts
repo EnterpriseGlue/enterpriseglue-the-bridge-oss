@@ -106,7 +106,7 @@ describe('configBundlePreviewService', () => {
     });
   });
 
-  it('accepts only configured Camunda 7 engines and configured groups for secret-backed backstop mappings', () => {
+  it('accepts configured direct Camunda 7 or Operaton engines and configured groups for secret-backed backstop mappings', () => {
     const input = {
       bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
       files: {
@@ -125,11 +125,22 @@ describe('configBundlePreviewService', () => {
     };
 
     expect(configBundlePreviewService.preview(input)).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+    expect(configBundlePreviewService.preview({
+      ...input,
+      files: {
+        ...input.files,
+        './engines.json': { engines: [{ ...input.files['./engines.json'].engines[0], key: 'engine.operaton', name: 'Operaton', type: 'operaton', baseUrl: 'https://operaton.example.test/engine-rest' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{
+          ...input.files['./engine-backstop-mappings.json'].engineBackstopMappings[0],
+          key: 'engine-backstop-mapping.operaton-operators', engineRef: { engineKey: 'engine.operaton' }, nativeGroupIdRef: 'OPERATON_OPERATORS_GROUP',
+        }] },
+      },
+    })).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
     const invalid = configBundlePreviewService.preview({
       ...input,
       files: {
         ...input.files,
-        './engines.json': { engines: [{ ...input.files['./engines.json'].engines[0], type: 'operaton' }] },
+        './engines.json': { engines: [{ ...input.files['./engines.json'].engines[0], type: 'ion' }] },
         './engine-backstop-mappings.json': { engineBackstopMappings: [{
           ...input.files['./engine-backstop-mappings.json'].engineBackstopMappings[0],
           groupRef: { groupKey: 'group.missing' },
@@ -138,7 +149,7 @@ describe('configBundlePreviewService', () => {
     });
     expect(invalid).toMatchObject({ valid: false });
     expect(invalid.errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ message: 'Mirrored backstop mappings require a Camunda 7 engine' }),
+      expect.objectContaining({ message: 'Mirrored backstop mappings require a direct Camunda 7 or Operaton engine' }),
       expect.objectContaining({ message: 'Unknown group key: group.missing' }),
     ]));
   });

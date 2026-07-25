@@ -248,7 +248,7 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
-  it('defines secret-backed config-owned Camunda 7 backstop mappings without accepting native IDs', () => {
+  it('defines secret-backed config-owned compatible-engine backstop mappings without accepting native IDs', () => {
     const mapping = {
       key: 'engine-backstop-mapping.central-operators',
       engineRef: { engineKey: 'engine-central' },

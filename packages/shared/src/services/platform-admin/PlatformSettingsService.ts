@@ -247,7 +247,7 @@ export class PlatformSettingsService {
         order: { completedAt: 'DESC', id: 'DESC' },
       });
       if (!successfulRun) {
-        throw new Error('mirrored_engine_backstop requires at least one successful, retained Camunda 7 backstop synchronization');
+        throw new Error('mirrored_engine_backstop requires at least one successful, retained Camunda 7 or Operaton backstop synchronization');
       }
     }
 

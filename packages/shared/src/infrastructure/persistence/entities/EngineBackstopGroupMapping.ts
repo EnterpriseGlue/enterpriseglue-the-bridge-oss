@@ -3,7 +3,7 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 /**
  * Source-owned link between an EnterpriseGlue authorization group and the
- * native Camunda group used by a mirrored authorization backstop. Native
+ * native engine group used by a mirrored authorization backstop. Native
  * identifiers are encrypted; ordinary read APIs use nativeGroupReference.
  */
 @Entity({ name: 'engine_backstop_group_mappings', schema: 'main' })

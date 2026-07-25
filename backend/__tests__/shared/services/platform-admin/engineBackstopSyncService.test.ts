@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Camunda7BackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
+import { CamundaCompatibleBackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
 import { camundaDelete, camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
@@ -185,12 +185,12 @@ describe('EngineBackstopSyncService', () => {
   });
 });
 
-describe('Camunda7BackstopNativeClient', () => {
-  it('uses only Camunda authorization create and ID-specific read/delete endpoints', async () => {
+describe('CamundaCompatibleBackstopNativeClient', () => {
+  it('uses only compatible authorization create and ID-specific read/delete endpoints', async () => {
     vi.mocked(camundaGet).mockResolvedValue({ id: 'native-auth-1' });
     vi.mocked(camundaPost).mockResolvedValue({ id: 'native-auth-1' });
     vi.mocked(camundaDelete).mockResolvedValue(undefined as never);
-    const client = new Camunda7BackstopNativeClient();
+    const client = new CamundaCompatibleBackstopNativeClient();
     await expect(client.createAuthorization('engine-1', { nativeGroupId: 'operators', camundaResourceType: 10, resourceKey: 'credit-score' }))
       .resolves.toEqual({ id: 'native-auth-1' });
     await client.deleteAuthorization('engine-1', 'native auth/1');

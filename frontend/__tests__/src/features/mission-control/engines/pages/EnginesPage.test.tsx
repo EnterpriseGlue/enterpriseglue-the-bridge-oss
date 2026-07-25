@@ -413,7 +413,7 @@ describe('EnginesPage', () => {
   it('shows config ownership badges and locks configuration-owned engine fields', async () => {
     authState.permissions = {
       userId: 'user-1',
-      platform: [],
+      platform: ['platform:engine-backstop:view'],
       projects: [],
       engines: [{ resourceId: 'engine-config', permissions: [EnginePermission.ENGINE_EDIT] }],
       generatedAt: 1,
@@ -435,6 +435,7 @@ describe('EnginesPage', () => {
     fireEvent.click((await screen.findByText('Edit')).closest('button')!);
 
     expect(await screen.findByText('Managed by configuration')).toBeInTheDocument();
+    expect(screen.getByText('Native authorization backstop')).toBeInTheDocument();
     expect(screen.getByText(/This engine is config-locked/)).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toBeDisabled();
     expect(screen.getByLabelText('Base URL')).toBeDisabled();

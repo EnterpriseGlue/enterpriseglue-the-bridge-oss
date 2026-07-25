@@ -801,7 +801,7 @@ export const PermissionCatalog: PermissionDefinition[] = [
   permissionDefinition(PlatformPermissions.CAMUNDA_NATIVE_GRANTS_DRAFT, 'platform', 'Camunda Native Grant Migration', 'Generate a reviewed EnterpriseGlue configuration draft from a native-grant preview.'),
   permissionDefinition(PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW, 'platform', 'Camunda Native Grant Migration', 'Read sanitized Camunda native-grant migration history and receipts.'),
   permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_VIEW, 'platform', 'Mirrored Engine Backstop', 'Read sanitized mirrored-engine backstop mappings and synchronization receipts.'),
-  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_MANAGE, 'platform', 'Mirrored Engine Backstop', 'Create or update encrypted EnterpriseGlue-to-Camunda group mappings.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_MANAGE, 'platform', 'Mirrored Engine Backstop', 'Create or update encrypted EnterpriseGlue-to-native-engine group mappings.'),
   permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_PREVIEW, 'platform', 'Mirrored Engine Backstop', 'Create a read-only mirrored-engine backstop preview.'),
   permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_SENSITIVE_VIEW, 'platform', 'Mirrored Engine Backstop', 'View short-lived encrypted mirrored-engine backstop detail.'),
   permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_APPLY, 'platform', 'Mirrored Engine Backstop', 'Apply an acknowledged, hash-bound mirrored-engine backstop synchronization.'),

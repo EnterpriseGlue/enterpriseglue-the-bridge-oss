@@ -89,7 +89,7 @@ describe('EngineBackstopPanel', () => {
     renderPanel()
     expect(await screen.findByText('Native authorization backstop')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('EnterpriseGlue group ID'), { target: { value: 'group-ops' } })
-    fireEvent.change(screen.getByLabelText('Camunda group ID (write-only)'), { target: { value: 'camunda-operators' } })
+    fireEvent.change(screen.getByLabelText('Engine group ID (write-only)'), { target: { value: 'camunda-operators' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save manual mapping' }))
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith(expect.stringContaining('/backstop/mappings'), expect.anything(), expect.anything()))
     expect(screen.queryByDisplayValue('camunda-operators')).not.toBeInTheDocument()

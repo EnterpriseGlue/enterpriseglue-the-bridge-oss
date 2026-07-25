@@ -137,7 +137,7 @@ targeted provisioning, mapping, tenant-role policy, classification/transition,
 request authorization, runtime filtering, and metrics modules each reported
 100% statements, branches, functions, and lines.
 
-### Mirrored Camunda 7 backstop verification
+### Mirrored Camunda 7/Operaton backstop verification
 
 `pnpm run test:engine-backstop` is the focused local release lane for the
 implemented `mirrored_engine_backstop` mode. It covers portable persistence,
@@ -149,7 +149,7 @@ test proves a customer-sidecar engine makes no backstop API call and that the
 manual native group ID is cleared after write and never displayed in a receipt.
 
 This local lane does not replace direct-identity-provider certification: that
-release gate needs a representative direct Camunda 7 environment where a real
+release gate needs representative direct Camunda 7 and Operaton environments where a real
 user has meaningful native group membership, plus retained Effective Access
 and direct-engine allow/deny evidence.
 

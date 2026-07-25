@@ -1,6 +1,18 @@
 import { z } from 'zod';
 
-/** The narrow Camunda 7 subset that v1 backstop synchronization can write. */
+/**
+ * Engines whose native authorization REST contract is compatible with the
+ * Camunda 7 authorization model used by the mirrored backstop.  Keep this
+ * explicit: a newly added engine type must be qualified before it can write
+ * native grants.
+ */
+export const EngineBackstopNativeAuthorizationEngineTypeSchema = z.enum(['camunda7', 'operaton']);
+
+export function isEngineBackstopNativeAuthorizationEngineType(value: unknown): value is z.infer<typeof EngineBackstopNativeAuthorizationEngineTypeSchema> {
+  return value === 'camunda7' || value === 'operaton';
+}
+
+/** The narrow Camunda-compatible subset that v1 backstop synchronization can write. */
 export const EngineBackstopResourceKindSchema = z.enum(['process_definition', 'decision_definition']);
 export const EngineBackstopDispositionSchema = z.enum(['proposed', 'manual_required', 'blocked']);
 export const EngineBackstopReasonCodeSchema = z.enum([
@@ -26,9 +38,10 @@ export const EngineBackstopGroupMappingInputSchema = z.object({
   isActive: z.boolean(),
 }).strict();
 
-export const EngineBackstopNativeGroupReferenceSchema = z.string().regex(/^camunda-group-[a-f0-9]{24}$/);
+/** Accepts historical Camunda-prefixed references while issuing engine-neutral ones. */
+export const EngineBackstopNativeGroupReferenceSchema = z.string().regex(/^(?:camunda-group|native-engine-group)-[a-f0-9]{24}$/);
 
-/** Safe mapping view: the Camunda group ID is intentionally absent. */
+/** Safe mapping view: the native engine group ID is intentionally absent. */
 export const EngineBackstopGroupMappingSummarySchema = z.object({
   id: z.string().min(1).max(255),
   tenantId: z.string().min(1).max(255).nullable(),
@@ -167,6 +180,7 @@ export const EngineBackstopSyncRollbackRequestSchema = z.object({
 }).strict();
 
 export type EngineBackstopGroupMappingInput = z.infer<typeof EngineBackstopGroupMappingInputSchema>;
+export type EngineBackstopNativeAuthorizationEngineType = z.infer<typeof EngineBackstopNativeAuthorizationEngineTypeSchema>;
 export type EngineBackstopGroupMappingSummary = z.infer<typeof EngineBackstopGroupMappingSummarySchema>;
 export type EngineBackstopGroupMappingWrite = z.infer<typeof EngineBackstopGroupMappingWriteSchema>;
 export type EngineBackstopGroupMappingWriteRequest = z.infer<typeof EngineBackstopGroupMappingWriteRequestSchema>;

@@ -661,7 +661,7 @@ describe('mission-control engines routes', () => {
     }));
   });
 
-  it('lists only sanitized tenant-scoped native-grant receipts for a visible Camunda 7 engine', async () => {
+  it('lists only sanitized tenant-scoped native-grant receipts for a visible compatible engine', async () => {
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
     (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });

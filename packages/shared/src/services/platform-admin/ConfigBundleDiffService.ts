@@ -22,6 +22,7 @@ import { EnginePermissions, SystemRoleDefinitions } from './permissions.js';
 import { identityEntitlementMappingService } from './IdentityEntitlementMappingService.js';
 import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
 import { engineTenancyProvisioningService } from './EngineTenancyProvisioningService.js';
+import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
@@ -505,13 +506,13 @@ class ConfigBundleDiffService {
         : undefined;
       const existing = sourceRow || identityRow;
 
-      if (!desiredEngine || desiredEngine.type !== 'camunda7') {
+      if (!desiredEngine || !isEngineBackstopNativeAuthorizationEngineType(desiredEngine.type) || desiredEngine.connectionMode !== 'direct') {
         changes.push({
           objectType: 'engine_backstop_mapping',
           key: mapping.key,
           operation: 'conflict',
           currentId: existing?.id,
-          reason: 'Mirrored backstop mapping references an unresolved or non-Camunda 7 configured engine',
+          reason: 'Mirrored backstop mapping references an unresolved or non-direct Camunda 7 or Operaton configured engine',
         });
         continue;
       }

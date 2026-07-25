@@ -1076,10 +1076,10 @@ describe('configBundleDiffService', () => {
     }));
   });
 
-  it('diffs a config-owned backstop mapping by opaque secret reference without exposing its native value', async () => {
+  it('diffs a config-owned Operaton backstop mapping by opaque secret reference without exposing its native value', async () => {
     const engine = {
-      id: 'engine-camunda', tenantId: 'tenant-a', configKey: 'engine.camunda', configKeyIdentity: 'tenant-a:engine.camunda',
-      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', type: 'camunda7',
+      id: 'engine-operaton', tenantId: 'tenant-a', configKey: 'engine.operaton', configKeyIdentity: 'tenant-a:engine.operaton',
+      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', type: 'operaton',
     };
     const group = {
       id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
@@ -1087,8 +1087,8 @@ describe('configBundleDiffService', () => {
     };
     const mapping = {
       id: 'mapping-operators', engineId: engine.id, authzGroupId: group.id, tenantId: 'tenant-a',
-      source: 'config', sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.camunda-operators',
-      encryptedNativeGroupId: 'encrypted:native-group-secret-value', nativeGroupReference: 'camunda-group-opaque', nativeGroupSecretRef: 'CAMUNDA_OPERATORS_GROUP_OLD',
+      source: 'config', sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.operaton-operators',
+      encryptedNativeGroupId: 'encrypted:native-group-secret-value', nativeGroupReference: 'native-engine-group-opaque', nativeGroupSecretRef: 'OPERATON_OPERATORS_GROUP_OLD',
       ownershipMode: 'config_locked', isActive: true,
     };
     mockDataSource([], [group], [], [engine], [], [], [], [], [], [], [], [], [], [], [mapping]);
@@ -1096,14 +1096,14 @@ describe('configBundleDiffService', () => {
     const result = await configBundleDiffService.diff({
       bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
       files: {
-        './engines.json': { engines: [{ key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CAMUNDA_PASSWORD' } }] },
+        './engines.json': { engines: [{ key: 'engine.operaton', name: 'Operaton', type: 'operaton', baseUrl: 'https://operaton.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'OPERATON_PASSWORD' } }] },
         './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
-        './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.camunda-operators', engineRef: { engineKey: 'engine.camunda' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP_ROTATED' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.operaton-operators', engineRef: { engineKey: 'engine.operaton' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'OPERATON_OPERATORS_GROUP_ROTATED' }] },
       },
     }, 'tenant-a');
 
     expect(result.changes).toContainEqual(expect.objectContaining({
-      objectType: 'engine_backstop_mapping', key: 'engine-backstop-mapping.camunda-operators', operation: 'update', currentId: 'mapping-operators',
+      objectType: 'engine_backstop_mapping', key: 'engine-backstop-mapping.operaton-operators', operation: 'update', currentId: 'mapping-operators',
     }));
     expect(JSON.stringify(result)).not.toContain('native-group-secret-value');
   });

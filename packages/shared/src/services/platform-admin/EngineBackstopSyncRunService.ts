@@ -12,7 +12,7 @@ import {
   type EngineBackstopSyncRunSummary,
 } from '../../schemas/platform-admin/engine-backstop.js';
 
-export const ENGINE_BACKSTOP_CATALOG_VERSION = 'camunda7-mirrored-backstop-v1';
+export const ENGINE_BACKSTOP_CATALOG_VERSION = 'camunda7-operaton-mirrored-backstop-v1';
 export const DEFAULT_ENGINE_BACKSTOP_SNAPSHOT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export const MAX_ENGINE_BACKSTOP_HISTORY_LIMIT = 100;
 export const MAX_ENGINE_BACKSTOP_EVIDENCE_BYTES = 2 * 1024 * 1024;

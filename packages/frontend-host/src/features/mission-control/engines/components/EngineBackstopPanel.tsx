@@ -145,11 +145,11 @@ export default function EngineBackstopPanel({
       <div>
         <h3 style={{ margin: 0 }}>Native authorization backstop</h3>
         <p style={{ margin: '6px 0 0', color: 'var(--cds-text-secondary)' }}>
-          Optionally mirrors exact EnterpriseGlue group READ access into a direct Camunda 7 engine. EnterpriseGlue remains the authority; only grants owned by a successful backstop run can be removed by rollback.
+          Optionally mirrors exact EnterpriseGlue group READ access into a direct Camunda 7 or Operaton engine. EnterpriseGlue remains the authority; only grants owned by a successful backstop run can be removed by rollback.
         </p>
       </div>
       {!readDecision.allowed && <InlineNotification kind="warning" title="Backstop status unavailable" subtitle={readDecision.reason || 'You need permission to view the mirrored authorization backstop.'} hideCloseButton />}
-      {readDecision.allowed && !isDirect && <InlineNotification kind="info" title="Direct connection required" subtitle="This safety backstop is intentionally unavailable for customer-sidecar connections because EnterpriseGlue must be able to read and reconcile the native Camunda authorization state directly." hideCloseButton />}
+      {readDecision.allowed && !isDirect && <InlineNotification kind="info" title="Direct connection required" subtitle="This safety backstop is intentionally unavailable for customer-sidecar connections because EnterpriseGlue must be able to read and reconcile the native engine authorization state directly." hideCloseButton />}
       {readDecision.allowed && isDirect && <>
         {status.isLoading && <InlineLoading description="Loading sanitized backstop status" />}
         {status.error && <InlineNotification kind="error" title="Backstop status unavailable" subtitle={getUiErrorMessage(status.error, 'Check the engine registration and backstop read permission.')} hideCloseButton />}
@@ -157,7 +157,7 @@ export default function EngineBackstopPanel({
 
         <div style={{ display: 'grid', gap: 8 }}>
           <h4 style={{ margin: 0 }}>Group mappings</h4>
-          <p style={{ margin: 0, fontSize: 13, color: 'var(--cds-text-secondary)' }}>Native Camunda group IDs are write-only. Stored mappings are shown only as opaque references.</p>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--cds-text-secondary)' }}>Native engine group IDs are write-only. Stored mappings are shown only as opaque references.</p>
           {status.data?.mappings?.length ? <div style={{ display: 'grid', gap: 6 }}>
             {status.data.mappings.map((mapping) => <div key={mapping.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Tag type={mapping.isActive ? 'green' : 'cool-gray'}>{mapping.isActive ? 'active' : 'inactive'}</Tag>
@@ -170,7 +170,7 @@ export default function EngineBackstopPanel({
           {manageDecision.allowed && <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
               <TextInput id="backstop-authz-group-id" labelText="EnterpriseGlue group ID" value={authzGroupId} onChange={(event) => setAuthzGroupId(event.target.value)} />
-              <TextInput id="backstop-native-group-id" type="password" labelText="Camunda group ID (write-only)" value={nativeGroupId} onChange={(event) => setNativeGroupId(event.target.value)} helperText="The native ID is encrypted and is never returned to this screen." />
+              <TextInput id="backstop-native-group-id" type="password" labelText="Engine group ID (write-only)" value={nativeGroupId} onChange={(event) => setNativeGroupId(event.target.value)} helperText="The native ID is encrypted and is never returned to this screen." />
             </div>
             {writeMapping.error && <InlineNotification kind="error" title="Could not save mapping" subtitle={getUiErrorMessage(writeMapping.error, 'Check the group IDs, engine tenancy, and mapping ownership.')} hideCloseButton />}
             <Button size="sm" kind="secondary" disabled={!canWriteMapping || writeMapping.isPending} title={!manageDecision.allowed ? manageDecision.reason : undefined} onClick={() => writeMapping.mutate()}>{writeMapping.isPending ? 'Saving mapping…' : 'Save manual mapping'}</Button>
@@ -180,7 +180,7 @@ export default function EngineBackstopPanel({
         <div style={{ display: 'grid', gap: 8 }}>
           <h4 style={{ margin: 0 }}>Preview, apply, and verify</h4>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--cds-text-secondary)' }}>Preview first. Applying is hash-bound to that preview and requires the separate sensitive receipt permission; no native identity data is displayed here.</p>
-          {preview.error && <InlineNotification kind="error" title="Could not create preview" subtitle={getUiErrorMessage(preview.error, 'Check the direct Camunda connection and group mappings.')} hideCloseButton />}
+          {preview.error && <InlineNotification kind="error" title="Could not create preview" subtitle={getUiErrorMessage(preview.error, 'Check the direct Camunda 7 or Operaton connection and group mappings.')} hideCloseButton />}
           <Button size="sm" kind="primary" disabled={!previewDecision.allowed || preview.isPending} title={!previewDecision.allowed ? previewDecision.reason : undefined} onClick={() => preview.mutate()}>{preview.isPending ? 'Creating preview…' : 'Create backstop preview'}</Button>
           {currentRun && <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -195,14 +195,14 @@ export default function EngineBackstopPanel({
               <Button size="sm" kind="danger" disabled={!canApply || !acknowledgeApply || apply.isPending} onClick={() => apply.mutate()}>{apply.isPending ? 'Applying backstop…' : 'Apply reviewed backstop'}</Button>
             </>}
             {currentRun.status === 'succeeded' && <>
-              {drift.error && <InlineNotification kind="error" title="Could not check drift" subtitle={getUiErrorMessage(drift.error, 'Check the direct Camunda connection and try again.')} hideCloseButton />}
+              {drift.error && <InlineNotification kind="error" title="Could not check drift" subtitle={getUiErrorMessage(drift.error, 'Check the direct Camunda 7 or Operaton connection and try again.')} hideCloseButton />}
               <Button size="sm" kind="secondary" disabled={!driftDecision.allowed || drift.isPending} title={!driftDecision.allowed ? driftDecision.reason : undefined} onClick={() => drift.mutate()}>{drift.isPending ? 'Checking drift…' : 'Check native drift'}</Button>
               {!canApply && <InlineNotification kind="info" title="Rollback unavailable" subtitle={sensitiveReadDecision.allowed ? (applyDecision.reason || 'You need backstop apply permission.') : (sensitiveReadDecision.reason || 'Rolling back requires the sensitive receipt permission.')} hideCloseButton />}
               <Checkbox id="backstop-rollback-acknowledgement" labelText="I understand that rollback deletes only native grants owned by this successful backstop run." checked={acknowledgeRollback} onChange={(_event, data) => setAcknowledgeRollback(data.checked)} />
               {rollback.error && <InlineNotification kind="error" title="Could not roll back run" subtitle={getUiErrorMessage(rollback.error, 'The native state may have changed; inspect drift and create a new preview if needed.')} hideCloseButton />}
               <Button size="sm" kind="danger" disabled={!canApply || !acknowledgeRollback || rollback.isPending} onClick={() => rollback.mutate()}>{rollback.isPending ? 'Rolling back backstop…' : 'Roll back owned native grants'}</Button>
             </>}
-            {currentRun.status === 'out_of_sync' && <InlineNotification kind="warning" title="Native drift detected" subtitle="The native Camunda grants no longer match the last successful receipt. Review the sanitized receipt, resolve the native change, then create a fresh preview." hideCloseButton />}
+            {currentRun.status === 'out_of_sync' && <InlineNotification kind="warning" title="Native drift detected" subtitle="The native engine grants no longer match the last successful receipt. Review the sanitized receipt, resolve the native change, then create a fresh preview." hideCloseButton />}
           </div>}
         </div>
 

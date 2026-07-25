@@ -17,7 +17,7 @@ every possible external IdP or customer engine is certified.
   compatibility/migration paths.
 - Camunda 7 native-grant inventory and migration tooling with a read-only
   import phase and ownership-scoped configuration rollback.
-- Mirrored Camunda 7 backstop: encrypted group mapping, exact group `READ`
+- Mirrored Camunda 7/Operaton backstop: encrypted group mapping, exact group `READ`
   projection, hash-bound preview/apply, lease-backed retry, encrypted owned-ID
   evidence, ownership-only rollback, read-only tracked-ID drift observations,
   OpenAPI/action contracts, and five database-adapter persistence coverage.

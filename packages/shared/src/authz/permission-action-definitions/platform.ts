@@ -187,7 +187,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       risk: 'high',
       audit: true,
       category: 'Mirrored Engine Backstop',
-      description: 'Create or update encrypted EnterpriseGlue-to-Camunda group mappings.',
+      description: 'Create or update encrypted EnterpriseGlue-to-native-engine group mappings.',
       ui: [{ surfaceId: 'mission-control.engines.backstop.mappings', behavior: 'disable' }],
       routes: [{ method: 'POST', route: '/engines-api/engines/{id}/backstop/mappings', resourceResolver: 'platform.self' }],
     },

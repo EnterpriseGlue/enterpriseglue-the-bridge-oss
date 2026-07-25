@@ -58,7 +58,7 @@ Use Platform Settings and Access Control for interactive administration:
 - Project Targets: eligible project-engine relationships and deployment modes.
 - Effective Access: decision explanation and remediation links.
 - Configuration: bundle preview, apply, history, drift, and export.
-- Camunda 7 engines: sanitized native-grant inventory, protected mapping,
+- Camunda 7/Operaton engines: protected mirrored-backstop mapping,
   hash-bound import apply, and import-owned rollback.
 
 UI and JSON changes use the same source ownership rules. A config-owned field is not silently overwritten by a manual UI edit.
@@ -87,13 +87,13 @@ enterpriseglue-config/
 
 Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database.
 
-For a direct Camunda 7 defense-in-depth mapping, add
-`engine-backstop-mappings.json`. Each entry references a configured Camunda 7
+For a direct Camunda 7 or Operaton defense-in-depth mapping, add
+`engine-backstop-mappings.json`. Each entry references a configured compatible
 engine and configured EnterpriseGlue group and uses `nativeGroupIdRef` such as
 `env://CAMUNDA_OPERATORS_GROUP`. The group id is resolved only while applying
 the reviewed bundle, is encrypted at rest, and is never present in bundle
 exports, generic audit history, or normal mapping reads. See
-[Enable a Mirrored Camunda 7 Authorization Backstop](./enable-mirrored-engine-backstop.md)
+[Enable a Mirrored Camunda 7 or Operaton Authorization Backstop](./enable-mirrored-engine-backstop.md)
 for the sync, drift-check, and rollback workflow.
 
 ### CI/CD

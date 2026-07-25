@@ -6,6 +6,7 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import { PermissionCatalog, SystemRoleDefinitions } from './permissions.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
+import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 import type {
   EngineTenancyPrincipalType,
   EngineTenantReferenceResolver,
@@ -212,8 +213,8 @@ function validateCrossFileReferences(
     const engine = engines.find((candidate) => candidate.key === mapping.engineRef.engineKey);
     if (!engine) {
       errors.push({ path: `${path}.engineRef.engineKey`, message: `Unknown engine key: ${mapping.engineRef.engineKey}` });
-    } else if (engine.type !== 'camunda7') {
-      errors.push({ path: `${path}.engineRef.engineKey`, message: 'Mirrored backstop mappings require a Camunda 7 engine' });
+    } else if (!isEngineBackstopNativeAuthorizationEngineType(engine.type) || engine.connectionMode !== 'direct') {
+      errors.push({ path: `${path}.engineRef.engineKey`, message: 'Mirrored backstop mappings require a direct Camunda 7 or Operaton engine' });
     }
     if (!groupKeys.has(mapping.groupRef.groupKey)) {
       errors.push({ path: `${path}.groupRef.groupKey`, message: `Unknown group key: ${mapping.groupRef.groupKey}` });

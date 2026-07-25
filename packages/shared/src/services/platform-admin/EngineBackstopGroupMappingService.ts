@@ -8,6 +8,7 @@ import {
   EngineBackstopGroupMappingSummarySchema,
   EngineBackstopGroupMappingWriteRequestSchema,
   EngineBackstopGroupMappingWriteResponseSchema,
+  isEngineBackstopNativeAuthorizationEngineType,
   type EngineBackstopGroupMappingInput,
   type EngineBackstopGroupMappingSummary,
   type EngineBackstopGroupMappingWriteRequest,
@@ -36,6 +37,11 @@ function mappingError(
 }
 
 function nativeGroupReference(nativeGroupId: string): string {
+  return `native-engine-group-${hash(nativeGroupId).slice(0, 24)}`;
+}
+
+/** Legacy rows used a Camunda-specific opaque prefix for the same hash. */
+function legacyNativeGroupReference(nativeGroupId: string): string {
   return `camunda-group-${hash(nativeGroupId).slice(0, 24)}`;
 }
 
@@ -94,11 +100,12 @@ export class EngineBackstopGroupMappingService {
     const engine = await this.engineFor(readStore, engineId);
     const seenGroups = new Set<string>();
     const seenNativeReferences = new Set<string>();
-    const resolved: Array<{ item: (typeof request.mappings)[number]; group: AuthzGroup; reference: string }> = [];
+    const resolved: Array<{ item: (typeof request.mappings)[number]; group: AuthzGroup; reference: string; legacyReference: string }> = [];
     for (const item of request.mappings) {
       const authzGroupId = normalized(item.authzGroupId);
       const nativeGroupId = normalized(item.nativeGroupId);
       const reference = nativeGroupReference(nativeGroupId);
+      const legacyReference = legacyNativeGroupReference(nativeGroupId);
       if (seenGroups.has(authzGroupId) || seenNativeReferences.has(reference)) {
         throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'The mapping request contains duplicate authorization or native groups');
       }
@@ -106,7 +113,7 @@ export class EngineBackstopGroupMappingService {
       seenNativeReferences.add(reference);
       const group = await readStore.getRepository(AuthzGroup).findOne({ where: { id: authzGroupId } });
       this.assertGroupUsable(engine, group, authzGroupId);
-      resolved.push({ item: { ...item, authzGroupId, nativeGroupId }, group: group!, reference });
+      resolved.push({ item: { ...item, authzGroupId, nativeGroupId }, group: group!, reference, legacyReference });
     }
 
     const persist = async (store: EntityManager) => {
@@ -124,16 +131,16 @@ export class EngineBackstopGroupMappingService {
       const bySourceRef = new Map(existingForSource.map((row) => [row.sourceRef, row]));
       const output: EngineBackstopGroupMapping[] = [];
       const now = Date.now();
-      for (const { item, group, reference } of resolved) {
+      for (const { item, group, reference, legacyReference } of resolved) {
         const current = byGroup.get(item.authzGroupId)
           || (source === 'config' && sourceRef ? sourceRow || bySourceRef.get(sourceRef) : undefined);
         const conflictingGroup = byGroup.get(item.authzGroupId);
-        const conflictingNative = byNativeReference.get(reference);
+        const conflictingNative = byNativeReference.get(reference) || byNativeReference.get(legacyReference);
         if (current && conflictingGroup && conflictingGroup.id !== current.id) {
           throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'The EnterpriseGlue group is already owned by another native mapping', 409);
         }
         if (conflictingNative && conflictingNative.authzGroupId !== item.authzGroupId) {
-          throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A native Camunda group may map to only one EnterpriseGlue group per engine', 409);
+          throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A native engine group may map to only one EnterpriseGlue group per engine', 409);
         }
         if (source === 'config' && current && current.source !== 'config') {
           throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A configuration bundle cannot take ownership of a manually managed mapping', 409);
@@ -164,6 +171,7 @@ export class EngineBackstopGroupMappingService {
           if (current.authzGroupId !== row.authzGroupId) byGroup.delete(current.authzGroupId);
           byGroup.set(row.authzGroupId, row);
           byNativeReference.delete(current.nativeGroupReference);
+          byNativeReference.delete(legacyReference);
           byNativeReference.set(reference, row);
           bySourceRef.set(row.sourceRef, row);
         } else {
@@ -208,11 +216,11 @@ export class EngineBackstopGroupMappingService {
   private async engineFor(dataSource: EntityManager | DataSource, engineId: string): Promise<Engine> {
     const engine = await dataSource.getRepository(Engine).findOne({ where: { id: normalized(engineId) } });
     if (!engine) throw Errors.notFound('Engine', engineId);
-    if (engine.type !== 'camunda7') {
-      throw mappingError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop is supported only for Camunda 7 engines');
+    if (!isEngineBackstopNativeAuthorizationEngineType(engine.type)) {
+      throw mappingError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop is supported only for Camunda 7 and Operaton engines');
     }
     if (engine.connectionMode !== 'direct') {
-      throw mappingError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop requires a direct Camunda 7 connection');
+      throw mappingError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop requires a direct Camunda 7 or Operaton connection');
     }
     if (engine.lifecycleStatus !== 'active') {
       throw mappingError('ENGINE_BACKSTOP_ENGINE_INACTIVE', 'Mirrored authorization backstop requires an active engine');

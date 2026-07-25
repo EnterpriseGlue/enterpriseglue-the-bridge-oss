@@ -75,7 +75,7 @@ describe('EngineBackstopGroupMappingService', () => {
     });
 
     expect(result).toEqual({ mappings: [expect.objectContaining({
-      engineId: 'engine-1', authzGroupId: 'group-a', tenantId: 'tenant-a', nativeGroupReference: `camunda-group-${'a'.repeat(24)}`,
+      engineId: 'engine-1', authzGroupId: 'group-a', tenantId: 'tenant-a', nativeGroupReference: `native-engine-group-${'a'.repeat(24)}`,
     })] });
     expect(JSON.stringify(result)).not.toContain('native-ops');
     expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
@@ -100,6 +100,15 @@ describe('EngineBackstopGroupMappingService', () => {
     })).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_MAPPING_CONFLICT', statusCode: 409 });
   });
 
+  it('accepts direct Operaton engines using the same encrypted mapping boundary', async () => {
+    const state = setup({ currentEngine: engine({ type: 'operaton' }) });
+    await expect(service.write({
+      engineId: 'engine-1',
+      request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'operaton-operators', isActive: true }] },
+    })).resolves.toMatchObject({ mappings: [expect.objectContaining({ engineId: 'engine-1', authzGroupId: 'group-a' })] });
+    expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ encryptedNativeGroupId: 'encrypted:operaton-operators' }));
+  });
+
   it('rejects unsupported or inactive engines and cross-tenant or archived groups', async () => {
     setup({ currentEngine: engine({ type: 'zeebe' }) });
     await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED' });
@@ -107,7 +116,7 @@ describe('EngineBackstopGroupMappingService', () => {
     setup({ currentEngine: engine({ connectionMode: 'customer_sidecar' }) });
     await expect(service.list('engine-1')).rejects.toMatchObject({
       code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED',
-      message: 'Mirrored authorization backstop requires a direct Camunda 7 connection',
+      message: 'Mirrored authorization backstop requires a direct Camunda 7 or Operaton connection',
     });
 
     setup({ currentEngine: engine({ lifecycleStatus: 'stale' }) });

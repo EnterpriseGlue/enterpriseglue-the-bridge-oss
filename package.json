@@ -28,6 +28,7 @@
     "test:integration": "pnpm --filter webmodeler-backend run test:integration",
     "test:e2e": "playwright test --config test/e2e/playwright.config.ts",
     "test:camunda7-native-grant-container": "pnpm --filter shared run build && EG_RUN_CAMUNDA7_CONTAINER_TESTS=1 node --test test/e2e/camunda7-container/native-grants.test.mjs",
+    "test:operaton-native-auth-container": "pnpm --filter shared run build && EG_RUN_OPERATON_CONTAINER_TESTS=1 node --test test/e2e/operaton-container/native-authorization.test.mjs",
     "test:camunda-native-grant-browser-evidence": "bash ./scripts/run-camunda-native-grant-browser-evidence.sh",
     "test:e2e:smoke": "playwright test --config test/e2e/playwright.config.ts --grep @smoke",
     "test:e2e:smoke:mission-control": "playwright test --config test/e2e/playwright.config.ts --grep @mission-control",

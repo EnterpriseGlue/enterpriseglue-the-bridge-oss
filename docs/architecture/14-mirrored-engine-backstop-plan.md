@@ -5,10 +5,10 @@ the default until a specific engine has completed a healthy backstop sync.
 
 ## Decision
 
-`mirrored_engine_backstop` is a defence-in-depth mode for direct Camunda 7
-access. EnterpriseGlue remains the only permission editor and the final
+`mirrored_engine_backstop` is a defence-in-depth mode for direct Camunda 7 or
+Operaton access. EnterpriseGlue remains the only permission editor and the final
 EnterpriseGlue product-authorisation evaluator. The feature projects a narrow,
-representable subset of EnterpriseGlue group access into Camunda 7
+representable subset of EnterpriseGlue group access into compatible native
 authorizations so a person who reaches Camunda directly is also constrained by
 the engine.
 
@@ -22,9 +22,9 @@ It is not `engine_native_authority`:
   human user. Consequently an engine response to that technical identity is
   reported as an upstream operation failure, not a per-user authorization
   decision.
-- Direct Camunda users must already be authenticated by Camunda or its identity
-  provider and have the mapped Camunda group membership. EnterpriseGlue does
-  not provision Camunda users or memberships in this phase.
+- Direct engine users must already be authenticated by the engine or its identity
+  provider and have the mapped native group membership. EnterpriseGlue does
+  not provision native users or memberships in this phase.
 
 This feature is useful only when direct engine exposure is an intentional
 customer requirement and the engine can observe meaningful group identity.
@@ -36,16 +36,16 @@ operational cost without an additional human-access boundary.
 The v1 projection is deliberately the reverse of the safe native-grant
 migration catalogue:
 
-| EnterpriseGlue source | Camunda 7 target | Result |
+| EnterpriseGlue source | Camunda 7 / Operaton target | Result |
 | --- | --- | --- |
-| Explicit mapped EnterpriseGlue group | Explicit mapped Camunda group | Candidate principal |
+| Explicit mapped EnterpriseGlue group | Explicit mapped native engine group | Candidate principal |
 | Exact active process-definition Runtime Resource Set | resource type `6`, exact key | `READ` authorization |
 | Exact active decision-definition Runtime Resource Set | resource type `10`, exact key | `READ` authorization |
 | Role permission `engine:instance:view` | `READ` | Supported action mapping |
 | Engine-wide, wildcard, user, service-account, policy-only, expired, unresolved, stale, conflicting, or unsupported scope | None | Visible as blocked/manual; never widened |
 
 Every supported grant must have exactly one active EnterpriseGlue group, one
-unambiguous mapped Camunda group, one active resolved runtime resource, and one
+unambiguous mapped native engine group, one active resolved runtime resource, and one
 exact resource key. Shared engines additionally require the resource's resolved
 tenant to equal the group's tenant. An empty desired set is valid and removes
 only previously tracked import-owned native grants.
@@ -60,15 +60,15 @@ Each participating engine stores a source-owned mapping:
 
 ```text
 EnterpriseGlue tenant + group key
-  -> Engine id + encrypted Camunda group id
+  -> Engine id + encrypted native engine group id
 ```
 
-The Camunda group id is sensitive operational metadata. Ordinary history,
+The native engine group id is sensitive operational metadata. Ordinary history,
 audit records, telemetry, and list endpoints expose only an opaque reference.
 Only the dedicated backstop-detail permission can reveal the active mapping.
 
 The mapping proves that EnterpriseGlue is allowed to write grants for that
-Camunda group. It does not assert or create a Camunda user membership. The
+native engine group. It does not assert or create a native user membership. The
 operator must verify that the native IdP/identity service assigns direct users
 to the mapped group before relying on the backstop.
 
@@ -76,12 +76,12 @@ to the mapped group before relying on the backstop.
 
 1. **Preview** reads EnterpriseGlue's canonical assignments, roles, runtime
    resource sets, materializations, and runtime inventory. It does not call a
-   Camunda write endpoint. It generates a deterministic desired-grant hash and
+   native engine write endpoint. It generates a deterministic desired-grant hash and
    classifies every candidate as proposed, manual, or blocked.
 2. **Apply** requires the preview hash, explicit acknowledgement, native-detail
    permission, and configuration-apply permission. It rechecks the current
-   EnterpriseGlue source hash immediately before calling Camunda.
-3. For each proposed grant, the Camunda 7 adapter creates the exact group
+   EnterpriseGlue source hash immediately before calling the native engine.
+3. For each proposed grant, the compatible native-authorization adapter creates the exact group
    `READ` authorization through `/authorization/create`. It records the native
    authorization id and grant identity only in encrypted run detail.
 4. On a later apply or rollback, the adapter deletes only native authorization
@@ -96,9 +96,9 @@ to the mapped group before relying on the backstop.
    `out_of_sync`; unrelated native grants are reported only as aggregate
    non-owned observations and are never changed.
 
-All Camunda calls use the existing hardened connection/secret resolver. A
-participating engine must be `camunda7`, active, reachable through a write-capable
-trusted endpoint, and use an account allowed to manage Camunda authorizations.
+All compatible native-authorization calls use the existing hardened connection/secret resolver. A
+participating engine must be `camunda7` or `operaton`, active, reachable through a write-capable
+trusted endpoint, and use an account allowed to manage native authorizations.
 Customer-sidecar engines are excluded until their sidecar advertises the same
 bounded native-authorization capability.
 
@@ -137,7 +137,7 @@ in shared Zod contracts and OpenAPI.
 
 The global `engineRuntimeAuthorizationMode` gains
 `mirrored_engine_backstop`. Enabling it is rejected until at least one retained
-successful Camunda 7 backstop synchronization exists; every apply separately
+successful Camunda 7 or Operaton backstop synchronization exists; every apply separately
 requires acknowledgement of the direct-identity boundary. Existing engines
 stay in `enterpriseglue_authoritative` behavior until an individual sync
 succeeds.
@@ -151,7 +151,7 @@ the native group id. Plain native ids are forbidden in bundle export, browser
 telemetry, and generic apply history.
 
 Mission Control adds a **Native authorization backstop** panel only for active
-Camunda 7 engines. It shows prerequisites, mapping health, latest sanitized
+Camunda 7 and Operaton engines. It shows prerequisites, mapping health, latest sanitized
 sync receipt, proposed/blocked/manual counts, drift status, and rollback.
 It never presents a second native permission matrix. Platform Settings presents
 the global mode only after the current configuration validates its mapping
@@ -168,7 +168,7 @@ owned-id evidence.
 Rollback deletes only native authorization ids retained by the selected,
 successful run. It leaves EnterpriseGlue groups, roles, assignments, runtime
 resources, engine registration, credentials, external IdP membership, and all
-unrelated Camunda authorizations unchanged. After encrypted detail expires, a
+unrelated native engine authorizations unchanged. After encrypted detail expires, a
 new preview is required; no broad native delete is permitted.
 
 ## Delivery Slices and Acceptance
@@ -179,9 +179,9 @@ new preview is required; no broad native delete is permitted.
 2. **Durable synchronization** — completed for preview/apply/rollback:
    portable entities/migrations, encrypted ownership receipt, leases/retry,
    source/hash conflict handling, and five-adapter tests.
-3. **Camunda adapter and operations** — create/delete, audit redaction,
-   operator/developer runbooks, mocked contract, and disposable real-Camunda
-   REST contract are complete. The read-only tracked-ID drift check creates a
+3. **Compatible adapter and operations** — create/delete, audit redaction,
+   operator/developer runbooks, mocked contract, and disposable real Camunda 7
+   and Operaton REST contracts are complete. The read-only tracked-ID drift check creates a
    linked sanitized receipt and is complete; it never inventories or changes
    unrelated native grants.
 4. **Product workflow** — the guarded API and configuration-bundle mapping
@@ -193,7 +193,7 @@ new preview is required; no broad native delete is permitted.
 
 Acceptance requires 100% coverage of the supported reverse-projection matrix;
 an explicit disposition for every unsupported source shape; native create,
-retry, drift, rollback, and no-non-owned-delete proofs; direct Camunda allow
+retry, drift, rollback, and no-non-owned-delete proofs; direct Camunda 7 and Operaton allow
 and sibling deny with synthetic identities; EnterpriseGlue deny-before-
 transport proof; source/audit redaction; and PostgreSQL, MySQL, SQL Server,
 Oracle, and Spanner migration qualification.

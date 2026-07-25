@@ -40,6 +40,7 @@ import EngineBackstopPanel from './components/EngineBackstopPanel'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js'
 import type {
   EngineOnboardingMode,
   PlatformSettings,
@@ -2059,7 +2060,7 @@ export default function Engines() {
           />
         )}
         {editing?.type === 'camunda7' && <CamundaNativeGrantMigrationPanel engineId={editing.id} />}
-        {editing?.type === 'camunda7' && editing.lifecycleStatus === 'active' && <EngineBackstopPanel engineId={editing.id} connectionMode={editing.connectionMode || 'direct'} />}
+        {editing && isEngineBackstopNativeAuthorizationEngineType(editing.type) && editing.lifecycleStatus === 'active' && <EngineBackstopPanel engineId={editing.id} connectionMode={editing.connectionMode || 'direct'} />}
         {editing && engineDetailSections.includes('access') && (
           <EngineAccessSection
             assignments={accessAssignmentsQ.data || []}

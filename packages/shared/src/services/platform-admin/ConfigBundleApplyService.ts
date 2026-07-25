@@ -45,6 +45,7 @@ import { engineTenantMappingService } from './EngineTenantMappingService.js';
 import { engineBackstopGroupMappingService } from './EngineBackstopGroupMappingService.js';
 import { secretResolver } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
+import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 import type {
   ConfigBundleApplyReconciliation as SchemaConfigBundleApplyReconciliation,
   ConfigBundleCiProvenance as SchemaConfigBundleCiProvenance,
@@ -632,8 +633,8 @@ class ConfigBundleApplyService {
         }
         const engine = engineByKey.get(mapping.engineRef.engineKey);
         const group = groupByKey.get(mapping.groupRef.groupKey);
-        if (!engine || engine.type !== 'camunda7' || !group) {
-          fail(`Backstop mapping ${mapping.key} references an unresolved Camunda 7 engine or authorization group`, 409);
+        if (!engine || !isEngineBackstopNativeAuthorizationEngineType(engine.type) || engine.connectionMode !== 'direct' || !group) {
+          fail(`Backstop mapping ${mapping.key} references an unresolved direct Camunda 7 or Operaton engine or authorization group`, 409);
         }
         let nativeGroupId: string | null;
         try {
