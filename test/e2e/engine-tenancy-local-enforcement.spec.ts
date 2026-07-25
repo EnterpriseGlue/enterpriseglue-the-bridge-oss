@@ -63,9 +63,15 @@ async function login(page: Page): Promise<void> {
   const loginResponse = page.waitForResponse((response) =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/login',
   );
+  const permissionsResponse = page.waitForResponse((response) =>
+    response.request().method() === 'GET'
+    && new URL(response.url()).pathname === '/api/authz/me/permissions'
+    && response.status() === 200,
+  );
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   expect((await loginResponse).status()).toBe(200);
   await page.waitForURL(/\/t\/default(?:\/|$)/);
+  await permissionsResponse;
 }
 
 async function classificationReport(page: Page): Promise<ClassificationReport> {
