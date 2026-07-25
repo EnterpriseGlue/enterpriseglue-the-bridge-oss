@@ -684,6 +684,11 @@ workflow under `prefers-reduced-motion: reduce`. The runner sets
 connection. It writes `browser-accessibility.json` only after all 12 executions
 pass.
 
+On macOS, this matrix uses the same Firefox/WebKit container fallback as the
+seeded authorization smoke. It retains the `E2E_SEED_USER=false` guarantee:
+the container runs the accessibility suite only and global setup/teardown does
+not open a database connection.
+
 The executable local enforcement journey requires:
 
 - a healthy Docker deployment at the default local frontend/backend URLs, or

@@ -11,6 +11,7 @@ const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test
 const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
 const localCrossBrowserAuthzRunner = readFileSync(new URL('./run-authz-local-seeded-cross-browser.sh', import.meta.url), 'utf8');
 const localContainerWebkitRunner = readFileSync(new URL('./run-authz-local-seeded-webkit-container.sh', import.meta.url), 'utf8');
+const accessibilityMatrixRunner = readFileSync(new URL('./run-authz-accessibility-matrix.sh', import.meta.url), 'utf8');
 const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
@@ -225,8 +226,18 @@ test('the macOS WebKit fallback remains a disposable local Docker lane', () => {
   assert.match(localContainerWebkitRunner, /E2E_DIRECT_DB_CLEANUP=true/);
   assert.match(localContainerWebkitRunner, /PLAYWRIGHT_CONTAINER_BROWSER/);
   assert.match(localContainerWebkitRunner, /firefox or webkit/);
+  assert.match(localContainerWebkitRunner, /seeded-smoke or accessibility/);
   assert.match(localContainerWebkitRunner, /mcr\.microsoft\.com\/playwright:v1\.59\.1-jammy/);
   assert.match(localContainerWebkitRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
+});
+
+test('the accessibility matrix uses the same local browser fallback without opening a database fixture', () => {
+  assert.match(scripts['test:authz:accessibility:cross-browser'], /bash \.\/scripts\/run-authz-accessibility-matrix\.sh/);
+  assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_FIREFOX_EXECUTION/);
+  assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_WEBKIT_EXECUTION/);
+  assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_CONTAINER_SUITE=accessibility/);
+  assert.match(accessibilityMatrixRunner, /E2E_SEED_USER=false/);
+  assert.match(accessibilityMatrixRunner, /write-authz-accessibility-evidence\.mjs/);
 });
 
 test('the authorization mutation guard kills every required tenancy fault class and retains evidence', () => {

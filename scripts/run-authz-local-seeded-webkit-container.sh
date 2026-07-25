@@ -8,6 +8,7 @@ api_base_url="${E2E_API_BASE_URL:-http://localhost:8787}"
 db_port="${AUTHZ_LOCAL_POSTGRES_PORT:-}"
 container_image="${PLAYWRIGHT_WEBKIT_CONTAINER_IMAGE:-mcr.microsoft.com/playwright:v1.59.1-jammy}"
 browser="${PLAYWRIGHT_CONTAINER_BROWSER:-webkit}"
+suite="${PLAYWRIGHT_CONTAINER_SUITE:-seeded-smoke}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -43,6 +44,11 @@ fi
 
 if [[ "$browser" != "firefox" && "$browser" != "webkit" ]]; then
   echo "[authz-webkit-container] PLAYWRIGHT_CONTAINER_BROWSER must be firefox or webkit." >&2
+  exit 2
+fi
+
+if [[ "$suite" != "seeded-smoke" && "$suite" != "accessibility" ]]; then
+  echo "[authz-webkit-container] PLAYWRIGHT_CONTAINER_SUITE must be seeded-smoke or accessibility." >&2
   exit 2
 fi
 
@@ -82,6 +88,7 @@ docker run --rm --init \
   -e IBM_TELEMETRY_DISABLED=true \
   -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
   -e PLAYWRIGHT_BROWSERS="$browser" \
+  -e PLAYWRIGHT_CONTAINER_SUITE="$suite" \
   -e PLAYWRIGHT_WORKERS=1 \
   -e PLAYWRIGHT_BASE_URL="$container_base_url" \
   -e PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
@@ -101,4 +108,4 @@ docker run --rm --init \
   -v eg_playwright_linux_pnpm_store:/root/.local/share/pnpm/store \
   -w /work \
   "$container_image" \
-  bash -lc 'corepack pnpm install --frozen-lockfile --prefer-offline >/dev/null && seed_dir="$(mktemp -d /tmp/enterpriseglue-authz-webkit.XXXXXX)" && trap "rm -rf \"$seed_dir\"" EXIT && E2E_SEED_FILE="$seed_dir/user.json" corepack pnpm exec playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts --config test/e2e/playwright.config.ts'
+  bash -lc 'corepack pnpm install --frozen-lockfile --prefer-offline >/dev/null && case "$PLAYWRIGHT_CONTAINER_SUITE" in seeded-smoke) seed_dir="$(mktemp -d /tmp/enterpriseglue-authz-webkit.XXXXXX)"; trap "rm -rf \"$seed_dir\"" EXIT; E2E_SEED_FILE="$seed_dir/user.json" corepack pnpm exec playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts --config test/e2e/playwright.config.ts ;; accessibility) E2E_SEED_USER=false E2E_DIRECT_DB_CLEANUP=false corepack pnpm exec playwright test test/e2e/access-control-accessibility.spec.ts --config test/e2e/playwright.config.ts ;; esac'
