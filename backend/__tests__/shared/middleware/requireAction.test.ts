@@ -359,6 +359,10 @@ describe('requireAction project resource resolvers', () => {
   let runtimeResourceFind: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    // This describe reuses module-level service mocks across its broad route
+    // matrix. Reset implementations as well as call history so shuffled test
+    // order cannot inherit a one-off denial or missing-resource fixture.
+    vi.resetAllMocks();
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
@@ -545,7 +549,6 @@ describe('requireAction project resource resolvers', () => {
       });
     });
     app.use(errorHandler);
-    vi.clearAllMocks();
     (deploymentEligibilityService.evaluate as unknown as Mock).mockReset();
     (engineAccessService.grantAccess as unknown as Mock)
       .mockReset()
@@ -1330,7 +1333,7 @@ describe('requireAction project resource resolvers', () => {
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const custom = await request(app).get(`/runtime-definitions-custom/definition-1?engineId=${engineId}`);
-    expect(custom.status).toBe(200);
+    expect(custom.status, JSON.stringify(custom.body)).toBe(200);
 
     (permissionService.hasPermission as unknown as Mock).mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     camundaGet
@@ -1929,7 +1932,7 @@ describe('requireAction project resource resolvers', () => {
     const manageable = await request(app)
       .get('/engines?tenantId=tenant-a&includeManageableShared=true');
 
-    expect(manageable.status).toBe(200);
+    expect(manageable.status, JSON.stringify(manageable.body)).toBe(200);
     expect(manageable.body.authorizedEngineIds).toEqual([engineId]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       'engine:edit',
@@ -1975,7 +1978,7 @@ describe('requireAction project resource resolvers', () => {
       .get('/engines?includeManageableShared=true')
       .set('x-test-without-tenant', 'true');
 
-    expect(manageable.status).toBe(200);
+    expect(manageable.status, JSON.stringify(manageable.body)).toBe(200);
     expect(manageable.body.authorizedEngineIds).toEqual([engineId]);
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       'engine:edit',
@@ -1992,7 +1995,7 @@ describe('requireAction project resource resolvers', () => {
 
     const response = await request(app).get(`/engines/${engineId}`);
 
-    expect(response.status).toBe(200);
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
     expect(response.body.resource).toEqual({ type: 'engine', id: engineId });
     expect(engineFindOne).toHaveBeenCalledWith({
       where: { id: engineId },
