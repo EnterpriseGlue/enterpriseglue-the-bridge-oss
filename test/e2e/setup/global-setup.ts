@@ -371,7 +371,7 @@ export default async function globalSetup() {
     tenantId: 'tenant-default',
     principalType: 'user',
     principalId: userId,
-    roleId: operatorRoleId,
+    roleId: 'system.engine.owner',
     scopeType: 'engine',
     scopeId: engineId,
     source: 'system',
@@ -383,7 +383,7 @@ export default async function globalSetup() {
        source, source_ref, assignment_key, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [
-      randomUUID(), 'tenant-default', 'user', userId, operatorRoleId, 'engine', engineId,
+      randomUUID(), 'tenant-default', 'user', userId, 'system.engine.owner', 'engine', engineId,
       'system', membershipSourceRef, primaryEngineAssignmentKey, now, now,
     ]
   );
