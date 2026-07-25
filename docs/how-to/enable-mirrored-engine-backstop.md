@@ -24,10 +24,17 @@ EnterpriseGlue does not create those native users or memberships.
 
 ## Workflow
 
-1. Create an opaque group mapping. The native group value is accepted only on
-   write and is encrypted; later list responses show only a stable opaque
-   reference. For configuration-managed engines and groups, prefer the bundle
-   form below so the mapping has reviewable source ownership.
+1. Create an opaque group mapping. In Mission Control, open the active direct
+   Camunda 7 engine, then use **Native authorization backstop** to enter the
+   EnterpriseGlue group ID and the write-only Camunda group ID. The panel shows
+   only an opaque native-group reference afterwards, provides the hash-bound
+   preview/apply/rollback/drift workflow, and hides or disables each operation
+   when the corresponding backstop permission is absent. For automation or
+   configuration-managed engines and groups, prefer the bundle form below so
+   the mapping has reviewable source ownership.
+
+   The native group value is accepted only on write and is encrypted; later
+   list responses show only a stable opaque reference.
 
    ```http
    POST /engines-api/engines/{engineId}/backstop/mappings

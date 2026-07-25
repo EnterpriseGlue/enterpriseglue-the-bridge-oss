@@ -31,6 +31,83 @@ import type {
   EngineProjectAccessRequestResult,
   ReissuedManualEngineInvitation,
 } from '@enterpriseglue/shared/schemas/platform-admin/engine-management.js'
+import type {
+  EngineBackstopGroupMappingSummary,
+  EngineBackstopGroupMappingWriteRequest,
+  EngineBackstopGroupMappingWriteResponse,
+  EngineBackstopSyncApplyRequest,
+  EngineBackstopSyncRollbackRequest,
+  EngineBackstopSyncRunHistory,
+  EngineBackstopSyncRunSummary,
+} from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js'
+
+export interface EngineBackstopStatus {
+  mappings: EngineBackstopGroupMappingSummary[]
+  latestRun: EngineBackstopSyncRunSummary | null
+}
+
+export interface EngineBackstopSyncResult {
+  run: EngineBackstopSyncRunSummary
+}
+
+function engineBackstopPath(engineId: string, suffix = ''): string {
+  return `/engines-api/engines/${encodeURIComponent(engineId)}/backstop${suffix}`
+}
+
+export async function getEngineBackstopStatus(engineId: string): Promise<EngineBackstopStatus> {
+  return apiClient.get<EngineBackstopStatus>(engineBackstopPath(engineId, '/status'), undefined, { credentials: 'include' })
+}
+
+export async function getEngineBackstopMappings(engineId: string): Promise<{ mappings: EngineBackstopGroupMappingSummary[] }> {
+  return apiClient.get<{ mappings: EngineBackstopGroupMappingSummary[] }>(engineBackstopPath(engineId, '/mappings'), undefined, { credentials: 'include' })
+}
+
+export async function writeEngineBackstopMappings(
+  engineId: string,
+  payload: EngineBackstopGroupMappingWriteRequest,
+): Promise<EngineBackstopGroupMappingWriteResponse> {
+  return apiClient.post<EngineBackstopGroupMappingWriteResponse>(engineBackstopPath(engineId, '/mappings'), payload, { credentials: 'include' })
+}
+
+export async function getEngineBackstopSyncHistory(engineId: string): Promise<EngineBackstopSyncRunHistory> {
+  return apiClient.get<EngineBackstopSyncRunHistory>(engineBackstopPath(engineId, '/sync'), undefined, { credentials: 'include' })
+}
+
+export async function previewEngineBackstopSync(engineId: string): Promise<EngineBackstopSyncResult> {
+  return apiClient.post<EngineBackstopSyncResult>(engineBackstopPath(engineId, '/sync/preview'), {}, { credentials: 'include' })
+}
+
+export async function applyEngineBackstopSync(
+  engineId: string,
+  runId: string,
+  payload: EngineBackstopSyncApplyRequest,
+): Promise<EngineBackstopSyncResult> {
+  return apiClient.post<EngineBackstopSyncResult>(
+    engineBackstopPath(engineId, `/sync/${encodeURIComponent(runId)}/apply`),
+    payload,
+    { credentials: 'include' },
+  )
+}
+
+export async function rollbackEngineBackstopSync(
+  engineId: string,
+  runId: string,
+  payload: EngineBackstopSyncRollbackRequest,
+): Promise<EngineBackstopSyncResult> {
+  return apiClient.post<EngineBackstopSyncResult>(
+    engineBackstopPath(engineId, `/sync/${encodeURIComponent(runId)}/rollback`),
+    payload,
+    { credentials: 'include' },
+  )
+}
+
+export async function checkEngineBackstopDrift(engineId: string, runId: string): Promise<EngineBackstopSyncResult> {
+  return apiClient.post<EngineBackstopSyncResult>(
+    engineBackstopPath(engineId, `/sync/${encodeURIComponent(runId)}/drift-check`),
+    {},
+    { credentials: 'include' },
+  )
+}
 
 /**
  * Returns the authorization-filtered engine collection. This is deliberately

@@ -16,7 +16,7 @@ const service = new EngineBackstopGroupMappingService();
 
 function engine(overrides: Record<string, unknown> = {}) {
   return {
-    id: 'engine-1', type: 'camunda7', lifecycleStatus: 'active', tenancyMode: 'dedicated', tenantId: 'tenant-a',
+    id: 'engine-1', type: 'camunda7', connectionMode: 'direct', lifecycleStatus: 'active', tenancyMode: 'dedicated', tenantId: 'tenant-a',
     ...overrides,
   };
 }
@@ -103,6 +103,12 @@ describe('EngineBackstopGroupMappingService', () => {
   it('rejects unsupported or inactive engines and cross-tenant or archived groups', async () => {
     setup({ currentEngine: engine({ type: 'zeebe' }) });
     await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED' });
+
+    setup({ currentEngine: engine({ connectionMode: 'customer_sidecar' }) });
+    await expect(service.list('engine-1')).rejects.toMatchObject({
+      code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED',
+      message: 'Mirrored authorization backstop requires a direct Camunda 7 connection',
+    });
 
     setup({ currentEngine: engine({ lifecycleStatus: 'stale' }) });
     await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_INACTIVE' });
