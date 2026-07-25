@@ -9,6 +9,7 @@ import {
   EngineBackstopSyncService,
 } from '../../../packages/shared/dist/services/platform-admin/EngineBackstopSyncService.js';
 import { fetchBpmnEngineEndpoint } from '../../../packages/shared/dist/services/bpmn-engine-client.js';
+import { startCustomerSidecarReference } from './customer-sidecar-reference.mjs';
 
 const execFileAsync = promisify(execFile);
 const image = process.env.EG_OPERATON_IMAGE
@@ -112,53 +113,6 @@ async function deployFixture(baseUrl, filename, deploymentName) {
   form.set('deployment-name', deploymentName);
   form.set(filename, new Blob([source], { type: 'application/xml' }), filename);
   return adminRequest(baseUrl, '/deployment/create', { method: 'POST', form });
-}
-
-async function startCustomerSidecar(engineBaseUrl, { rejectNativeWrites = false, upstreamAuthorization = null } = {}) {
-  const requests = [];
-  const server = createServer(async (request, response) => {
-    const url = new URL(request.url || '/', 'http://customer-sidecar.local');
-    const allowed = /^\/engine-rest\/authorization(?:\/|$)/.test(url.pathname);
-    const chunks = [];
-    for await (const chunk of request) chunks.push(chunk);
-    const body = Buffer.concat(chunks);
-    requests.push({ method: request.method, path: `${url.pathname}${url.search}`, headers: request.headers, body: body.toString('utf8') });
-    if (!allowed) {
-      response.writeHead(403, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: 'native authorization endpoint not allowed by customer sidecar fixture' }));
-      return;
-    }
-    if (rejectNativeWrites && request.method === 'POST') {
-      response.writeHead(403, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: 'native authorization writes are denied by customer sidecar policy' }));
-      return;
-    }
-    const upstreamHeaders = body.length > 0 ? { 'content-type': request.headers['content-type'] || 'application/json' } : {};
-    if (upstreamAuthorization) upstreamHeaders.authorization = upstreamAuthorization;
-    const upstream = await fetch(`${engineBaseUrl}${url.pathname.slice('/engine-rest'.length)}${url.search}`, {
-      method: request.method,
-      headers: Object.keys(upstreamHeaders).length > 0 ? upstreamHeaders : undefined,
-      body: body.length > 0 ? body : undefined,
-    });
-    const upstreamBody = Buffer.from(await upstream.arrayBuffer());
-    const contentType = upstream.headers.get('content-type');
-    response.writeHead(upstream.status, contentType ? { 'content-type': contentType } : undefined);
-    response.end(upstreamBody);
-  });
-  await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      server.off('error', reject);
-      resolve();
-    });
-  });
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Customer sidecar fixture did not bind a TCP port');
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}/engine-rest`,
-    requests,
-    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
-  };
 }
 
 function projection(processKey, decisionKey) {
@@ -301,6 +255,62 @@ function customerSidecarTransport(baseUrl) {
   };
 }
 
+async function startUpstreamCapture() {
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    requests.push({ method: request.method, path: request.url, headers: request.headers, body: Buffer.concat(chunks).toString('utf8') });
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ id: 'native-auth-reference' }));
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Upstream capture did not bind a TCP port');
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/engine-rest`,
+    requests,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())),
+  };
+}
+
+test('customer-sidecar reference permits only the bounded native ownership contract', async () => {
+  const upstream = await startUpstreamCapture();
+  const sidecar = await startCustomerSidecarReference(upstream.baseUrl, { upstreamAuthorization: 'Basic customer-sidecar-upstream' });
+  try {
+    const rejected = await fetch(`${sidecar.baseUrl}/process-definition/key/payments`, {
+      headers: { authorization: 'Bearer caller-must-not-reach-engine' },
+    });
+    assert.equal(rejected.status, 403);
+    assert.equal(upstream.requests.length, 0);
+
+    const accepted = await fetch(`${sidecar.baseUrl}/authorization/create`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer caller-must-not-reach-engine',
+        'content-type': 'application/json',
+        'x-enterpriseglue-operation-class': 'engine.native_authorization.backstop',
+        'x-untrusted-header': 'must-not-reach-engine',
+      },
+      body: JSON.stringify({ type: 1, permissions: ['READ'] }),
+    });
+    assert.equal(accepted.status, 200);
+    assert.equal(upstream.requests.length, 1);
+    assert.equal(upstream.requests[0].headers.authorization, 'Basic customer-sidecar-upstream');
+    assert.equal(upstream.requests[0].headers['x-untrusted-header'], undefined);
+    assert.equal(upstream.requests[0].headers['x-enterpriseglue-operation-class'], undefined);
+  } finally {
+    await sidecar.close();
+    await upstream.close();
+  }
+});
+
 test('real Operaton lifecycle applies both supported resource types through the bounded customer-sidecar backstop adapter', {
   skip: !enabled && 'set EG_RUN_OPERATON_SIDECAR_BACKSTOP_CONTAINER_TESTS=1 to run the disposable Docker contract',
 }, async () => {
@@ -313,7 +323,7 @@ test('real Operaton lifecycle applies both supported resource types through the 
     const processKey = `egsidecarprocess${suffix}`;
     const decisionKey = `egsidedecision${suffix}`;
     await postJson(operatonBaseUrl, '/group/create', { id: groupId, name: 'EG Sidecar Fixture Operators' });
-    sidecar = await startCustomerSidecar(operatonBaseUrl);
+    sidecar = await startCustomerSidecarReference(operatonBaseUrl);
     const { runService, taskService } = inMemoryRunAndTaskServices();
     const directCalls = [];
     const service = new EngineBackstopSyncService({
@@ -376,7 +386,7 @@ test('real Operaton lifecycle applies both supported resource types through the 
       assert.equal(request.headers['x-enterpriseglue-operation-class'], 'engine.native_authorization.backstop');
     }
 
-    rejectingSidecar = await startCustomerSidecar(operatonBaseUrl, { rejectNativeWrites: true });
+    rejectingSidecar = await startCustomerSidecarReference(operatonBaseUrl, { rejectNativeWrites: true });
     const rejectedDirectCalls = [];
     const rejectedServices = inMemoryRunAndTaskServices();
     const rejectedService = new EngineBackstopSyncService({
@@ -417,6 +427,7 @@ test('real Operaton enforces sidecar-created grants for group members and denies
 }, async () => {
   const { name, baseUrl: operatonBaseUrl } = await startOperaton({ authorizationEnforced: true });
   let sidecar;
+  let badCredentialsSidecar;
   try {
     const groupId = 'egsidecaroperators';
     const allowedAuthorization = basicAuthorization('egallowed', 'fixturepassword');
@@ -443,7 +454,37 @@ test('real Operaton enforces sidecar-created grants for group members and denies
     await deployFixture(operatonBaseUrl, 'authorization-process.bpmn', 'eg-authorization-process-fixture');
     await deployFixture(operatonBaseUrl, 'authorization-decision.dmn', 'eg-authorization-decision-fixture');
 
-    sidecar = await startCustomerSidecar(operatonBaseUrl, { upstreamAuthorization: basicAuthorization('demo', 'demo') });
+    // No downstream credential represents a customer-sidecar authentication
+    // outage without risking a fixture user lockout through bad-password tries.
+    badCredentialsSidecar = await startCustomerSidecarReference(operatonBaseUrl);
+    const rejectedDirectCalls = [];
+    const rejectedServices = inMemoryRunAndTaskServices();
+    const rejectedService = new EngineBackstopSyncService({
+      ...rejectedServices,
+      directNativeClient: {
+        createAuthorization: async () => { rejectedDirectCalls.push('create'); throw new Error('direct adapter must not be used'); },
+        deleteAuthorization: async () => { rejectedDirectCalls.push('delete'); throw new Error('direct adapter must not be used'); },
+        readAuthorization: async () => { rejectedDirectCalls.push('read'); throw new Error('direct adapter must not be used'); },
+      },
+      customerSidecarNativeClient: new CustomerSidecarBackstopNativeClient(customerSidecarTransport(badCredentialsSidecar.baseUrl)),
+      projectionBuilder: async () => ({
+        engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
+        tenantId: 'tenant-sidecar', projection: projection('egprocess', 'egdecision'), sourceHash, desiredHash,
+        capability: { nativeAuthorizationWrite: true },
+      }),
+    });
+    const rejectedPreview = await rejectedService.preview({ engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar' });
+    await assert.rejects(
+      rejectedService.apply({
+        engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar', runId: rejectedPreview.id,
+        request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+      }),
+      /Customer sidecar rejected POST \/authorization\/create: 401/,
+    );
+    assert.deepEqual(rejectedDirectCalls, []);
+    assert.equal(badCredentialsSidecar.requests[0].headers.authorization, undefined);
+
+    sidecar = await startCustomerSidecarReference(operatonBaseUrl, { upstreamAuthorization: basicAuthorization('demo', 'demo') });
     const { runService, taskService } = inMemoryRunAndTaskServices();
     const directCalls = [];
     const service = new EngineBackstopSyncService({
@@ -471,11 +512,22 @@ test('real Operaton enforces sidecar-created grants for group members and denies
     });
     assert.equal(applied.run.status, 'succeeded');
 
-    const [allowedProcess, allowedDecision, deniedProcess, deniedDecision] = await Promise.all([
+    const [allowedProcess, allowedDecision, deniedProcess, deniedDecision, allowedProcessList, allowedDecisionList, deniedProcessList, deniedDecisionList, allowedDecisionEvaluation, deniedDecisionEvaluation, allowedProcessStart] = await Promise.all([
       authenticatedRequest(operatonBaseUrl, '/process-definition/key/egprocess', allowedAuthorization),
       authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision', allowedAuthorization),
       authenticatedRequest(operatonBaseUrl, '/process-definition/key/egprocess', deniedAuthorization),
       authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision', deniedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/process-definition?key=egprocess', allowedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition?key=egdecision', allowedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/process-definition?key=egprocess', deniedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition?key=egdecision', deniedAuthorization),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision/evaluate', allowedAuthorization, {
+        method: 'POST', body: { variables: { input: { value: 'allowed', type: 'String' } } },
+      }),
+      authenticatedRequest(operatonBaseUrl, '/decision-definition/key/egdecision/evaluate', deniedAuthorization, {
+        method: 'POST', body: { variables: { input: { value: 'allowed', type: 'String' } } },
+      }),
+      authenticatedRequest(operatonBaseUrl, '/process-definition/key/egprocess/start', allowedAuthorization, { method: 'POST', body: {} }),
     ]);
     assert.equal(allowedProcess.response.status, 200);
     assert.equal(allowedDecision.response.status, 200);
@@ -483,6 +535,17 @@ test('real Operaton enforces sidecar-created grants for group members and denies
     assert.equal(deniedDecision.response.status, 404);
     assert.equal(allowedProcess.value.key, 'egprocess');
     assert.equal(allowedDecision.value.key, 'egdecision');
+    assert.equal(allowedProcessList.response.status, 200);
+    assert.equal(allowedDecisionList.response.status, 200);
+    assert.equal(deniedProcessList.response.status, 200);
+    assert.equal(deniedDecisionList.response.status, 200);
+    assert.deepEqual(allowedProcessList.value.map((item) => item.key), ['egprocess']);
+    assert.deepEqual(allowedDecisionList.value.map((item) => item.key), ['egdecision']);
+    assert.deepEqual(deniedProcessList.value, []);
+    assert.deepEqual(deniedDecisionList.value, []);
+    assert.notEqual(allowedDecisionEvaluation.response.status, 200, 'READ must not permit decision evaluation');
+    assert.notEqual(deniedDecisionEvaluation.response.status, 200);
+    assert.notEqual(allowedProcessStart.response.status, 200, 'READ must not permit process-instance creation');
     assert.deepEqual(sidecar.requests.map((request) => request.method), ['POST', 'POST']);
     for (const request of sidecar.requests) {
       assert.equal(request.headers.authorization, undefined, 'EnterpriseGlue must not send a downstream engine credential to the sidecar');
@@ -503,6 +566,7 @@ test('real Operaton enforces sidecar-created grants for group members and denies
     assert.deepEqual(directCalls, []);
     assert.deepEqual(sidecar.requests.map((request) => request.method), ['POST', 'POST', 'DELETE', 'DELETE']);
   } finally {
+    await badCredentialsSidecar?.close();
     await sidecar?.close();
     await removeContainer(name);
   }

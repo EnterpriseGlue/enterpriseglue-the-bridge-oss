@@ -114,6 +114,22 @@ authenticates the hop to its engine and should allow only these bounded
 authorization endpoints for this operation class. A sidecar rejection fails
 the sync task closed; no direct-engine fallback occurs.
 
+`test/e2e/operaton-container/customer-sidecar-reference.mjs` is the executable
+reference adapter used by the Docker contract. It accepts only `POST
+/authorization/create` plus ID-addressed `GET`/`DELETE` authorization calls,
+forwards only the JSON content type and sidecar-owned upstream authentication,
+and turns an unavailable downstream engine into a sanitized `502`. Its minimal
+container image can be built with:
+
+```bash
+pnpm run test:customer-sidecar-reference-container
+```
+
+The image expects `EG_CUSTOMER_SIDECAR_ENGINE_URL` and, when the customer uses
+an HTTP authorization scheme, `EG_CUSTOMER_SIDECAR_UPSTREAM_AUTHORIZATION` to
+be injected into the sidecar deployment. Those values are never EnterpriseGlue
+engine configuration fields.
+
 ## Read-only drift protocol
 
 `driftCheck` accepts only a successful apply receipt with retained encrypted
@@ -155,6 +171,7 @@ pnpm --dir backend exec vitest run \
 pnpm run test:action-registry
 pnpm run test:camunda7-native-grant-container
 pnpm run test:operaton-native-auth-container
+pnpm run test:customer-sidecar-reference-container
 pnpm run test:operaton-sidecar-backstop-container
 ```
 
