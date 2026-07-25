@@ -23,6 +23,7 @@ Audience: Developers and architects.
 ## Configuration
 - [Configuration Reference](reference/configuration.md)
 - [Configuration Matrix](reference/configuration-matrix.md)
+- [Customer Sidecar Backstop Adapter API](reference/customer-sidecar-backstop-adapter-api.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
 - [Enable Mirrored Camunda 7 or Operaton Authorization Backstop](how-to/enable-mirrored-engine-backstop.md)

@@ -5,6 +5,10 @@ Use this procedure before registering or changing an engine with
 transport boundary; it does not create a second authorization model and it
 never requires EnterpriseGlue to receive the sidecar-to-engine credential.
 
+When the mirrored backstop is enabled, implement the bounded proxy surface
+from the [Customer Sidecar Backstop Adapter API](../reference/customer-sidecar-backstop-adapter-api.md)
+in addition to this deployment-readiness procedure.
+
 ## Required inputs
 
 Have the approved sidecar DNS name, HTTPS endpoint, network-owner contact,

@@ -100,6 +100,10 @@ delay and never causes a second native execution while its lease is valid.
 
 ## Customer-sidecar transport
 
+The normative sidecar route, header, credential-boundary, error, and
+versioning requirements are in the
+[Customer Sidecar Backstop Adapter API](../reference/customer-sidecar-backstop-adapter-api.md).
+
 For an engine registered with `connectionMode: customer_sidecar`, the sync
 receipt selects `CustomerSidecarBackstopNativeClient`. It has the same bounded
 surface as the direct adapter: create one exact group `READ` grant, then read

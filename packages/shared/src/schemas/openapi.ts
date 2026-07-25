@@ -1025,6 +1025,31 @@ const ExternalProjectEngineTargetDecommissionRequestSchema = z.object({
   externalTargetId: z.string().optional(),
 })
 
+const customerSidecarRegistrationDescription = [
+  'Register an engine directly or through a customer-owned sidecar.',
+  'When `connectionMode` is `customer_sidecar`, `baseUrl` is the sidecar endpoint and the configured authentication applies only to the EnterpriseGlue-to-sidecar hop.',
+  'The sidecar owns the downstream engine credential or peer token. Do not send that material to EnterpriseGlue. Credentialless sidecars require the platform policy to allow them.',
+  'See the Customer Sidecar Backstop Adapter API for the bounded native-authorization contract.',
+].join('\n\n')
+
+const customerSidecarBackstopDescription = [
+  'Mirrored engine backstop operation for a compatible Camunda 7 or Operaton engine.',
+  'For `connectionMode = customer_sidecar`, EnterpriseGlue calls the registered customer-owned sidecar. The sidecar may perform only the bounded tracked native-authorization operation required by this lifecycle step and owns its downstream engine authentication.',
+  'A sidecar rejection or downstream failure fails closed. EnterpriseGlue never falls back to a direct-engine endpoint.',
+].join('\n\n')
+
+const customerSidecarCreateExample = {
+  name: 'Payments customer sidecar',
+  baseUrl: 'https://payments-sidecar.example.invalid/engine-rest',
+  type: 'operaton',
+  connectionMode: 'customer_sidecar',
+  authType: 'basic',
+  username: 'enterpriseglue-sidecar',
+  passwordEnc: 'ref:env://PAYMENTS_SIDECAR_UPSTREAM_PASSWORD',
+  runtimeAccessScope: 'resource_aware',
+  tenancy: { mode: 'dedicated', tenantRef: { type: 'request_context' } },
+}
+
 registry.registerPath({
   method: 'get',
   path: '/engines-api/engines',
@@ -1038,8 +1063,15 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/engines-api/engines',
+  summary: 'Register an engine or customer sidecar',
+  description: customerSidecarRegistrationDescription,
   ...authzExtension('engine.inventory.create', 'POST', '/engines-api/engines'),
-  request: { body: { content: { 'application/json': { schema: CreateEngineRequestSchema } } } },
+  request: {
+    body: {
+      description: 'Use customer_sidecar only when baseUrl addresses the customer-owned gateway, never the downstream engine.',
+      content: { 'application/json': { schema: CreateEngineRequestSchema, example: customerSidecarCreateExample } },
+    },
+  },
   responses: {
     201: { description: 'Created', content: { 'application/json': { schema: EngineSchema } } },
     400: { description: 'Endpoint or tenancy policy rejected the engine registration', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
@@ -1050,9 +1082,12 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/engines-api/external/engines',
+  summary: 'Externally register an engine or customer sidecar',
+  description: customerSidecarRegistrationDescription,
   ...authzExtension('engine.external-registration.upsert', 'POST', '/engines-api/external/engines'),
   request: {
     body: {
+      description: 'External registries may register a customer sidecar, but may not supply its downstream engine credential or peer token.',
       content: {
         'application/json': {
           schema: ExternalEngineRegistrationRequestSchema,
@@ -1164,8 +1199,16 @@ registry.registerPath({
 registry.registerPath({
   method: 'put',
   path: '/engines-api/engines/{id}',
+  summary: 'Update an engine or customer sidecar',
+  description: customerSidecarRegistrationDescription,
   ...authzExtension('engine.inventory.update', 'PUT', '/engines-api/engines/{id}'),
-  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: UpdateEngineRequestSchema } } } },
+  request: {
+    params: z.object({ id: z.string() }),
+    body: {
+      description: 'Changing endpoint credentials changes only the EnterpriseGlue-to-sidecar hop for a customer_sidecar engine.',
+      content: { 'application/json': { schema: UpdateEngineRequestSchema } },
+    },
+  },
   responses: {
     200: { description: 'Updated', content: { 'application/json': { schema: EngineSchema } } },
     400: { description: 'Endpoint or tenancy policy rejected the engine update', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
@@ -3457,16 +3500,72 @@ registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/camunda
 registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply', ...authzExtension('platform.config-bundles.apply', 'POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply'), request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: CamundaNativeGrantApplyRequestSchema } } } }, responses: { 200: { description: 'Applies the exact encrypted, reviewed native-grant configuration draft and records its apply receipt', content: { 'application/json': { schema: z.object({ run: z.unknown(), result: z.unknown() }) } } } } });
 registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback/preview', ...authzExtension('platform.config-bundles.preview', 'POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback/preview'), request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: z.object({}) } } } }, responses: { 200: { description: 'Hash-bound, no-change rollback preview for import-owned configuration records', content: { 'application/json': { schema: z.object({ rollback: z.unknown() }) } } } } });
 registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback', ...authzExtension('platform.config-bundles.apply', 'POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback'), request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: CamundaNativeGrantRollbackRequestSchema } } } }, responses: { 200: { description: 'Archives only the records owned by the reviewed native-grant import and records its rollback receipt', content: { 'application/json': { schema: z.object({ run: z.unknown(), result: z.unknown() }) } } } } });
-registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/status', ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/status'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Sanitized mirrored-engine backstop status', content: { 'application/json': { schema: z.object({ mappings: z.array(EngineBackstopGroupMappingSummarySchema), latestRun: EngineBackstopSyncRunSummarySchema.nullable() }) } } } } });
-registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/mappings', ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/mappings'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Opaque EnterpriseGlue-to-native-engine group mappings', content: { 'application/json': { schema: z.object({ mappings: z.array(EngineBackstopGroupMappingSummarySchema) }) } } } } });
-registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/backstop/mappings', ...authzExtension('platform.engine-backstop.manage', 'POST', '/engines-api/engines/{id}/backstop/mappings'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopGroupMappingWriteRequestSchema } } } }, responses: { 200: { description: 'Encrypted group mappings updated', content: { 'application/json': { schema: EngineBackstopGroupMappingWriteResponseSchema } } } } });
-registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/backstop/sync/preview', ...authzExtension('platform.engine-backstop.preview', 'POST', '/engines-api/engines/{id}/backstop/sync/preview'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({}) } } } }, responses: { 201: { description: 'Hash-bound sanitized mirrored-engine backstop preview', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema }) } } } } });
-registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync', ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/sync'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Bounded sanitized mirrored-engine backstop history', content: { 'application/json': { schema: EngineBackstopSyncRunHistorySchema } } } } });
-registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}', ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Sanitized mirrored-engine backstop receipt', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema }) } } } } });
-registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}/detail', ...authzExtension('platform.engine-backstop.sensitive.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}/detail'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Permission-gated encrypted mirrored-engine backstop detail', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, detail: z.unknown() }) } } } } });
-registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/backstop/sync/{runId}/apply', ...authzExtension('platform.engine-backstop.apply', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/apply'), request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopSyncApplyRequestSchema } } } }, responses: { 200: { description: 'Applies an acknowledged mirrored-engine backstop preview', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } } });
-registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/backstop/sync/{runId}/rollback', ...authzExtension('platform.engine-backstop.apply', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/rollback'), request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopSyncRollbackRequestSchema } } } }, responses: { 200: { description: 'Deletes only native authorization IDs owned by a successful mirrored-engine backstop run', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } } });
-registry.registerPath({ method: 'post', path: '/engines-api/engines/{id}/backstop/sync/{runId}/drift-check', ...authzExtension('platform.engine-backstop.drift-check', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/drift-check'), request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: z.object({}) } } } }, responses: { 200: { description: 'Reads only tracked native authorization IDs and records a sanitized drift receipt', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } } });
+registry.registerPath({
+  method: 'get',
+  path: '/engines-api/engines/{id}/backstop/status',
+  summary: 'Read mirrored-backstop status',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/status'),
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: { description: 'Sanitized mirrored-engine backstop status', content: { 'application/json': { schema: z.object({ mappings: z.array(EngineBackstopGroupMappingSummarySchema), latestRun: EngineBackstopSyncRunSummarySchema.nullable() }) } } } },
+});
+registry.registerPath({
+  method: 'get',
+  path: '/engines-api/engines/{id}/backstop/mappings',
+  summary: 'List opaque mirrored-backstop mappings',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/mappings'),
+  request: { params: z.object({ id: z.string() }) },
+  responses: { 200: { description: 'Opaque EnterpriseGlue-to-native-engine group mappings', content: { 'application/json': { schema: z.object({ mappings: z.array(EngineBackstopGroupMappingSummarySchema) }) } } } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/backstop/mappings',
+  summary: 'Write opaque mirrored-backstop mappings',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.manage', 'POST', '/engines-api/engines/{id}/backstop/mappings'),
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopGroupMappingWriteRequestSchema } } } },
+  responses: { 200: { description: 'Encrypted group mappings updated', content: { 'application/json': { schema: EngineBackstopGroupMappingWriteResponseSchema } } } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/backstop/sync/preview',
+  summary: 'Preview a mirrored-backstop synchronization',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.preview', 'POST', '/engines-api/engines/{id}/backstop/sync/preview'),
+  request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: z.object({}) } } } },
+  responses: { 201: { description: 'Hash-bound sanitized mirrored-engine backstop preview', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema }) } } } },
+});
+registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync', summary: 'List mirrored-backstop synchronization receipts', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/sync'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Bounded sanitized mirrored-engine backstop history', content: { 'application/json': { schema: EngineBackstopSyncRunHistorySchema } } } } });
+registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}', summary: 'Read a mirrored-backstop receipt', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Sanitized mirrored-engine backstop receipt', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema }) } } } } });
+registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}/detail', summary: 'Read permission-gated mirrored-backstop detail', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.sensitive.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}/detail'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Permission-gated encrypted mirrored-engine backstop detail', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, detail: z.unknown() }) } } } } });
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/backstop/sync/{runId}/apply',
+  summary: 'Apply a reviewed mirrored-backstop preview',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.apply', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/apply'),
+  request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopSyncApplyRequestSchema } } } },
+  responses: { 200: { description: 'Applies an acknowledged mirrored-engine backstop preview', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/backstop/sync/{runId}/rollback',
+  summary: 'Roll back owned mirrored-backstop grants',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.apply', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/rollback'),
+  request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopSyncRollbackRequestSchema } } } },
+  responses: { 200: { description: 'Deletes only native authorization IDs owned by a successful mirrored-engine backstop run', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } },
+});
+registry.registerPath({
+  method: 'post',
+  path: '/engines-api/engines/{id}/backstop/sync/{runId}/drift-check',
+  summary: 'Check tracked mirrored-backstop grants for drift',
+  description: customerSidecarBackstopDescription,
+  ...authzExtension('platform.engine-backstop.drift-check', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/drift-check'),
+  request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: z.object({}) } } } },
+  responses: { 200: { description: 'Reads only tracked native authorization IDs and records a sanitized drift receipt', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } },
+});
 registry.registerPath({ method: 'get', path: '/api/authz/project-engine-targets', ...authzExtension('platform.project-engine-targets.read', 'GET', '/api/authz/project-engine-targets'), request: { query: z.object({ projectId: z.string().optional(), engineId: z.string().optional(), status: z.enum(['active', 'disabled', 'archived', 'all']).optional(), source: z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation', 'config']).optional() }) }, responses: { 200: { description: 'List project-engine targets', content: { 'application/json': { schema: z.array(ProjectEngineTargetSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/project-engine-targets/evaluate', ...authzExtension('project.deployment-eligibility.evaluate', 'POST', '/api/authz/project-engine-targets/evaluate'), request: { body: { content: { 'application/json': { schema: DeploymentEligibilityEvaluateRequestSchema } } } }, responses: { 200: { description: 'Deployment eligibility evaluation', content: { 'application/json': { schema: DeploymentEligibilityEvaluateResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/project-engine-targets/sync-legacy', ...authzExtension('platform.project-engine-targets.manage', 'POST', '/api/authz/project-engine-targets/sync-legacy'), request: { body: { content: { 'application/json': { schema: ProjectEngineTargetSyncLegacyRequestSchema } } } }, responses: { 200: { description: 'Legacy project-engine access mirrored into targets', content: { 'application/json': { schema: ProjectEngineTargetSyncLegacyResponseSchema } } } } });

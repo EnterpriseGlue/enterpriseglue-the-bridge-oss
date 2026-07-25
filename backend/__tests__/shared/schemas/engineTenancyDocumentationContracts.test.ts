@@ -28,6 +28,7 @@ const DOCUMENTS = [
   'docs/how-to/provision-engines-externally.md',
   'docs/how-to/upgrade-engine-tenancy.md',
   'docs/reference/engine-tenancy-and-provisioning-api.md',
+  'docs/reference/customer-sidecar-backstop-adapter-api.md',
   'docs/reference/engine-tenancy-compatibility-and-deprecation.md',
   'docs/reference/engine-tenancy-data-model.md',
   'docs/reference/configuration-matrix.md',

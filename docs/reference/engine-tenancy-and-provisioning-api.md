@@ -122,6 +122,44 @@ curl --fail-with-body \
   }'
 ```
 
+## Customer-sidecar Registration API
+
+Set `connectionMode` to `customer_sidecar` when `baseUrl` is a
+customer-owned gateway rather than the underlying engine. The configured
+authentication values apply only to the EnterpriseGlue-to-sidecar request.
+Never provide the sidecar-to-engine peer token or engine credential to this
+API. `authType: "none"` is accepted only for a policy-approved private
+sidecar; a direct engine must have EnterpriseGlue-managed endpoint
+authentication.
+
+<!-- enterpriseglue-curl-contract: POST /engines-api/engines CreateEngineRequestSchema -->
+```bash
+curl --fail-with-body \
+  -X POST "$ENTERPRISEGLUE_URL/engines-api/engines" \
+  -H "Authorization: Bearer $ENTERPRISEGLUE_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{
+    "name": "Payments customer sidecar",
+    "baseUrl": "https://payments-sidecar.example.test/engine-rest",
+    "type": "operaton",
+    "connectionMode": "customer_sidecar",
+    "authType": "basic",
+    "username": "enterpriseglue-sidecar",
+    "passwordEnc": "ref:env://PAYMENTS_SIDECAR_UPSTREAM_PASSWORD",
+    "runtimeAccessScope": "resource_aware",
+    "tenancy": {
+      "mode": "dedicated",
+      "tenantRef": { "type": "request_context" }
+    }
+  }'
+```
+
+The customer sidecar's bounded mirrored-backstop adapter has a separate v1
+contract. It permits only tracked native-authorization create/read/delete
+operations, owns its downstream authentication, and fails closed with no
+direct-engine fallback. See the
+[Customer Sidecar Backstop Adapter API](./customer-sidecar-backstop-adapter-api.md).
+
 Deletion requires engine-inventory deletion permission. Export the topology,
 mappings, assignments, and diagnostics first; an externally owned engine must
 use its decommission workflow instead.
