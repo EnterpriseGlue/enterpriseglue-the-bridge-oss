@@ -119,27 +119,50 @@ async function startCustomerSidecar(engineBaseUrl, { rejectNativeWrites = false 
   };
 }
 
-function projection(processKey) {
+function projection(processKey, decisionKey) {
   return {
-    classifications: [{
-      sourceAssignmentId: 'assignment-sidecar-1',
-      principalType: 'group',
-      disposition: 'proposed',
-      reasonCodes: ['exact_group_read_projected'],
-      resourceKind: 'process_definition',
-      resourceKey: processKey,
-      nativeGroupId: 'egsidecaroperators',
-      camundaResourceType: 6,
-      permissions: ['READ'],
-    }],
-    desiredGrants: [{
-      nativeGroupId: 'egsidecaroperators',
-      resourceKind: 'process_definition',
-      resourceKey: processKey,
-      camundaResourceType: 6,
-      permissions: ['READ'],
-      sourceAssignmentIds: ['assignment-sidecar-1'],
-    }],
+    classifications: [
+      {
+        sourceAssignmentId: 'assignment-sidecar-process-1',
+        principalType: 'group',
+        disposition: 'proposed',
+        reasonCodes: ['exact_group_read_projected'],
+        resourceKind: 'process_definition',
+        resourceKey: processKey,
+        nativeGroupId: 'egsidecaroperators',
+        camundaResourceType: 6,
+        permissions: ['READ'],
+      },
+      {
+        sourceAssignmentId: 'assignment-sidecar-decision-1',
+        principalType: 'group',
+        disposition: 'proposed',
+        reasonCodes: ['exact_group_read_projected'],
+        resourceKind: 'decision_definition',
+        resourceKey: decisionKey,
+        nativeGroupId: 'egsidecaroperators',
+        camundaResourceType: 10,
+        permissions: ['READ'],
+      },
+    ],
+    desiredGrants: [
+      {
+        nativeGroupId: 'egsidecaroperators',
+        resourceKind: 'process_definition',
+        resourceKey: processKey,
+        camundaResourceType: 6,
+        permissions: ['READ'],
+        sourceAssignmentIds: ['assignment-sidecar-process-1'],
+      },
+      {
+        nativeGroupId: 'egsidecaroperators',
+        resourceKind: 'decision_definition',
+        resourceKey: decisionKey,
+        camundaResourceType: 10,
+        permissions: ['READ'],
+        sourceAssignmentIds: ['assignment-sidecar-decision-1'],
+      },
+    ],
   };
 }
 
@@ -236,7 +259,7 @@ function customerSidecarTransport(baseUrl) {
   };
 }
 
-test('real Operaton lifecycle succeeds through the bounded customer-sidecar backstop adapter', {
+test('real Operaton lifecycle applies both supported resource types through the bounded customer-sidecar backstop adapter', {
   skip: !enabled && 'set EG_RUN_OPERATON_SIDECAR_BACKSTOP_CONTAINER_TESTS=1 to run the disposable Docker contract',
 }, async () => {
   const { name, baseUrl: operatonBaseUrl } = await startOperaton();
@@ -246,6 +269,7 @@ test('real Operaton lifecycle succeeds through the bounded customer-sidecar back
     const suffix = Date.now().toString(36);
     const groupId = 'egsidecaroperators';
     const processKey = `egsidecarprocess${suffix}`;
+    const decisionKey = `egsidedecision${suffix}`;
     await postJson(operatonBaseUrl, '/group/create', { id: groupId, name: 'EG Sidecar Fixture Operators' });
     sidecar = await startCustomerSidecar(operatonBaseUrl);
     const { runService, taskService } = inMemoryRunAndTaskServices();
@@ -262,7 +286,7 @@ test('real Operaton lifecycle succeeds through the bounded customer-sidecar back
       projectionBuilder: async () => ({
         engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
         tenantId: 'tenant-sidecar',
-        projection: projection(processKey),
+        projection: projection(processKey, decisionKey),
         sourceHash,
         desiredHash,
         capability: { nativeAuthorizationWrite: true },
@@ -288,11 +312,22 @@ test('real Operaton lifecycle succeeds through the bounded customer-sidecar back
     });
     assert.equal(rolledBack.run.status, 'rolled_back');
     assert.deepEqual(directCalls, []);
-    assert.equal(sidecar.requests.length, 3);
-    assert.deepEqual(sidecar.requests.map((request) => request.method), ['POST', 'GET', 'DELETE']);
-    assert.equal(sidecar.requests[0].path, '/engine-rest/authorization/create');
-    assert.match(sidecar.requests[1].path, /^\/engine-rest\/authorization\/.+$/);
-    assert.match(sidecar.requests[2].path, /^\/engine-rest\/authorization\/.+$/);
+    assert.equal(sidecar.requests.length, 6);
+    assert.deepEqual(sidecar.requests.map((request) => request.method), ['POST', 'POST', 'GET', 'GET', 'DELETE', 'DELETE']);
+    assert.deepEqual(sidecar.requests.slice(0, 2).map((request) => ({
+      path: request.path,
+      body: JSON.parse(request.body),
+    })), [
+      {
+        path: '/engine-rest/authorization/create',
+        body: { type: 1, permissions: ['READ'], groupId, resourceType: 6, resourceId: processKey },
+      },
+      {
+        path: '/engine-rest/authorization/create',
+        body: { type: 1, permissions: ['READ'], groupId, resourceType: 10, resourceId: decisionKey },
+      },
+    ]);
+    for (const request of sidecar.requests.slice(2)) assert.match(request.path, /^\/engine-rest\/authorization\/.+$/);
     for (const request of sidecar.requests) {
       assert.equal(request.headers.authorization, undefined, 'EnterpriseGlue must not send a downstream engine credential to the sidecar');
       assert.equal(request.headers['x-enterpriseglue-engine-id'], 'operaton-sidecar-engine');
@@ -312,7 +347,7 @@ test('real Operaton lifecycle succeeds through the bounded customer-sidecar back
       customerSidecarNativeClient: new CustomerSidecarBackstopNativeClient(customerSidecarTransport(rejectingSidecar.baseUrl)),
       projectionBuilder: async () => ({
         engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
-        tenantId: 'tenant-sidecar', projection: projection(`${processKey}-rejected`), sourceHash, desiredHash,
+        tenantId: 'tenant-sidecar', projection: projection(`${processKey}-rejected`, `${decisionKey}-rejected`), sourceHash, desiredHash,
         capability: { nativeAuthorizationWrite: true },
       }),
     });
