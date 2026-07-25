@@ -258,6 +258,7 @@ test('the authorization mutation guard kills every required tenancy fault class 
   assert.match(authzMutationRunner, /requireAction\.test\.ts/);
   assert.match(authzMutationRunner, /apiClientAuth\.test\.ts/);
   assert.match(authzMutationRunner, /engineTenantMappingService\.test\.ts/);
+  assert.match(authzMutationRunner, /for \(const testFile of focusedTests\)/);
   assert.match(authzMutationRunner, /user action deny bypass/);
   assert.match(authzMutationRunner, /API client deny bypass/);
   assert.match(authzMutationRunner, /removed-tenant-filter/);

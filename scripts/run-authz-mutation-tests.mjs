@@ -28,13 +28,16 @@ function command(commandName, args) {
 }
 
 function runFocusedTests(label, options = {}) {
-  const result = spawnSync('pnpm', [...commonVitestArgs, ...focusedTests, ...vitestOptions], {
-    cwd: root,
-    stdio: options.quiet ? 'pipe' : 'inherit',
-    encoding: options.quiet ? 'utf8' : undefined,
-  });
-  if (result.error) throw new Error(`${label}: ${result.error.message}`);
-  return result;
+  for (const testFile of focusedTests) {
+    const result = spawnSync('pnpm', [...commonVitestArgs, testFile, ...vitestOptions], {
+      cwd: root,
+      stdio: options.quiet ? 'pipe' : 'inherit',
+      encoding: options.quiet ? 'utf8' : undefined,
+    });
+    if (result.error) throw new Error(`${label}: ${result.error.message}`);
+    if ((result.status ?? 1) !== 0) return result;
+  }
+  return { status: 0 };
 }
 
 function replaceOnce(source, before, after, label) {

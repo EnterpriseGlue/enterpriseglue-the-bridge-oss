@@ -658,10 +658,10 @@ local TLS frontend for WebKit. On macOS it runs Firefox and WebKit in the
 pinned Linux Playwright container by default: current macOS releases can
 reject Playwright's ad-hoc-signed host executables before a test reaches the
 application. The test container receives only an allowlisted PostgreSQL
-connection, the TLS frontend, backend, and disposable Camunda mock on a
-fresh Docker `--internal` network; it has no external egress and its temporary
-network is removed on exit. Its Playwright image is digest-pinned. On a first
-run, a separate bootstrap container may download the lockfile dependencies;
+connection, the TLS frontend and its frontend upstream, backend, and disposable
+Camunda mock on a fresh Docker `--internal` network; it has no external egress
+and its temporary network is removed on exit. Its Playwright image is
+digest-pinned. On a first run, a separate bootstrap container may download the lockfile dependencies;
 that bootstrap has no application credentials, mounts source read-only, and
 never joins the application network. The isolated test container then installs
 offline. Seed setup and teardown reject any non-local URL or database host
@@ -671,9 +671,24 @@ database cleanup. Set `PLAYWRIGHT_FIREFOX_EXECUTION=native` or
 `container` to use the container deliberately on another operating system.
 
 The local backend must be published on its loopback port for these browser
-fixtures, including the direct Effective Access calls. Start the stack with
-`infra/docker/compose/docker-compose.backend-expose.yml` when it is not
-already exposed.
+fixtures, including the direct Effective Access calls. The container fallback
+also requires the local TLS frontend. From the repository root, create the
+development CA and start the complete local test stack with:
+
+```bash
+bash infra/docker/keycloak/generate-local-tls.sh
+docker compose --project-directory . --env-file .local/docker/env/docker.env \
+  -f infra/docker/compose/docker-compose.yml \
+  -f infra/docker/compose/docker-compose.e2e-mission-control.yml \
+  -f infra/docker/compose/docker-compose.backend-expose.yml \
+  -f infra/docker/compose/docker-compose.keycloak-tls.yml \
+  up -d --wait db backend frontend frontend-tls camunda-mock
+```
+
+This starts only the services needed by the local authorization suite; it does
+not start a real IdP or use customer credentials. Leave the stack running for
+the matrix and inspect `docker compose ... ps` if the fallback reports a
+missing `frontend-tls` service.
 
 `TEN-UI-006` runs the separate database-free accessibility matrix against the
 same local frontend with:
