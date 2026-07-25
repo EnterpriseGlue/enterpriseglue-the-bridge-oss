@@ -9,6 +9,8 @@ const releaseIndexWriter = readFileSync(new URL('./write-engine-tenancy-release-
 const sourceCoverageRunner = readFileSync(new URL('./run-engine-tenancy-source-coverage.mjs', import.meta.url), 'utf8');
 const localRunner = readFileSync(new URL('./run-engine-tenancy-local-evidence.sh', import.meta.url), 'utf8');
 const browserWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
+const nativeGrantBrowserWriter = readFileSync(new URL('./write-camunda-native-grant-browser-evidence.mjs', import.meta.url), 'utf8');
+const nativeGrantBrowserRunner = readFileSync(new URL('./run-camunda-native-grant-browser-evidence.sh', import.meta.url), 'utf8');
 const mutationWriter = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
 const authorizationMatrixRunner = readFileSync(new URL('./run-authz-state-space-evidence.mjs', import.meta.url), 'utf8');
 const authorizationFoundationRunner = readFileSync(new URL('./run-local-safe-authz-state-space-foundation.sh', import.meta.url), 'utf8');
@@ -89,6 +91,7 @@ test('builds a fail-closed same-commit release evidence index', () => {
     'mutation',
     'browserMatrix',
     'browserAccessibility',
+    'nativeGrantBrowser',
     'authorizationMatrix',
     'databaseMatrix',
     'provisioningJourneys',
@@ -142,6 +145,28 @@ test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(releaseIndexWriter, /documentationReviewEvidenceFileExists/);
   assert.match(releaseIndexWriter, /README\.md/);
   assert.match(releaseIndexWriter, /process\.exitCode = 1/);
+});
+
+test('retains a local authenticated Camunda native-grant browser workflow as a release gate', () => {
+  assert.match(packageJson.scripts['test:camunda-native-grant-browser-evidence'], /run-camunda-native-grant-browser-evidence\.sh/);
+  for (const requiredField of [
+    'read_only_native_inventory',
+    'sanitized_preview_then_protected_mapping',
+    'hash_bound_draft_and_apply',
+    'sso_membership_effective_access_allow_and_sibling_deny',
+    'history_resume_and_hash_bound_rollback',
+    'rollback_restores_denial',
+    'releaseCommitQualified',
+    'localhostOnly',
+    'persistentDatabase',
+    'authorizationEvaluator',
+  ]) {
+    assert.match(nativeGrantBrowserWriter, new RegExp(requiredField));
+  }
+  assert.match(nativeGrantBrowserRunner, /CAMUNDA_NATIVE_GRANT_BROWSER_EVIDENCE=true/);
+  assert.match(nativeGrantBrowserRunner, /E2E_CAMUNDA_BASE_URL="http:\/\/camunda-mock:9080\/engine-rest"/);
+  assert.match(nativeGrantBrowserRunner, /camunda-native-grant-migration\.spec\.ts/);
+  assert.doesNotMatch(nativeGrantBrowserWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 
 test('assembles provisioning evidence only from exact real-service observations', () => {

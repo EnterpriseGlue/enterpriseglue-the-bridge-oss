@@ -131,6 +131,18 @@ const gateDefinitions = [
         .every((check) => value.verifiedChecks?.includes(check)),
   },
   {
+    id: 'nativeGrantBrowser',
+    label: 'Camunda native-grant authenticated browser workflow',
+    path: 'test/results/engine-tenancy-release/camunda-native-grant-browser.json',
+    passes: (value) => value.status === 'passed'
+      && value.verifiedTargets?.browser === 'chromium'
+      && value.verifiedTargets?.database === 'postgres'
+      && value.verifiedTargets?.deployment === 'localhost-docker'
+      && Array.isArray(value.assertions)
+      && value.assertions.length === 6
+      && value.assertions.every((assertion) => assertion.status === 'passed'),
+  },
+  {
     id: 'authorizationMatrix',
     label: 'Complete supported authorization matrix',
     path: 'test/results/engine-tenancy-release/authorization-matrix.json',

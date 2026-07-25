@@ -210,13 +210,18 @@ export default async function globalSetup() {
   }
 
   const engineId = randomUUID();
-  const engineBaseUrl = process.env.CAMUNDA_BASE_URL || 'http://localhost:9080/engine-rest';
+  // A browser evidence runner talks to the host frontend while the backend is
+  // in Docker. Prefer its Compose-network URL so any discovered engine is
+  // reachable from the backend container, not from the host loopback device.
+  const engineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL
+    || process.env.CAMUNDA_BASE_URL
+    || 'http://localhost:9080/engine-rest';
   await pool.query(
     `INSERT INTO ${schema}.engines
       (id, name, base_url, type, auth_type, username, password_enc, version,
        owner_id, delegate_id, environment_tag_id, environment_locked, tenant_id,
-       tenancy_mode, tenant_resolution_status, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+       runtime_access_scope, tenancy_mode, tenant_resolution_status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     [
       engineId,
       `${prefix}-engine`,
@@ -231,6 +236,7 @@ export default async function globalSetup() {
       null,
       false,
       'tenant-default',
+      'resource_aware',
       'dedicated',
       'ready',
       now,
