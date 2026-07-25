@@ -112,7 +112,8 @@ migration, are:
   hash;
 - `EngineBackstopSyncRun`: engine/tenant, status, desired/result hashes,
   opaque classifications/counts, mode/catalog version, and encrypted native
-  detail with a maximum 30-day retention; and
+  detail with a maximum 30-day retention. Read-only observations link to their
+  source apply receipt without replacing its ownership evidence; and
 - `EngineBackstopSyncTask`: bounded leasing/retry state for a requested apply,
   source hash, and run id.
 
@@ -121,11 +122,11 @@ The API surface is engine-scoped and permission-separated:
 ```text
 GET  /engines-api/engines/{id}/backstop/status
 GET  /engines-api/engines/{id}/backstop/mappings
-POST /engines-api/engines/{id}/backstop/mappings/preview
-POST /engines-api/engines/{id}/backstop/mappings/apply
+POST /engines-api/engines/{id}/backstop/mappings
 POST /engines-api/engines/{id}/backstop/sync/preview
-POST /engines-api/engines/{id}/backstop/sync/apply
+POST /engines-api/engines/{id}/backstop/sync/{runId}/apply
 POST /engines-api/engines/{id}/backstop/sync/{runId}/rollback
+POST /engines-api/engines/{id}/backstop/sync/{runId}/drift-check
 GET  /engines-api/engines/{id}/backstop/sync/{runId}/detail
 ```
 
@@ -135,10 +136,11 @@ receive distinct platform/engine action metadata. Every response is represented
 in shared Zod contracts and OpenAPI.
 
 The global `engineRuntimeAuthorizationMode` gains
-`mirrored_engine_backstop`. Enabling it is rejected unless the submitted
-configuration has at least one validated Camunda 7 mapping and an operator has
-acknowledged the direct-identity boundary. Existing engines stay in
-`enterpriseglue_authoritative` behavior until an individual sync succeeds.
+`mirrored_engine_backstop`. Enabling it is rejected until at least one retained
+successful Camunda 7 backstop synchronization exists; every apply separately
+requires acknowledgement of the direct-identity boundary. Existing engines
+stay in `enterpriseglue_authoritative` behavior until an individual sync
+succeeds.
 
 ## Configuration and UI
 
@@ -179,8 +181,9 @@ new preview is required; no broad native delete is permitted.
    source/hash conflict handling, and five-adapter tests.
 3. **Camunda adapter and operations** — create/delete, audit redaction,
    operator/developer runbooks, mocked contract, and disposable real-Camunda
-   REST contract are complete. Read-only tracked-ID drift check is the next
-   operation slice.
+   REST contract are complete. The read-only tracked-ID drift check creates a
+   linked sanitized receipt and is complete; it never inventories or changes
+   unrelated native grants.
 4. **Product workflow** — the guarded API is complete. Configuration-bundle
    secret-reference input, Mission Control UI, Effective Access link,
    browser accessibility, and direct-user identity-provider certification

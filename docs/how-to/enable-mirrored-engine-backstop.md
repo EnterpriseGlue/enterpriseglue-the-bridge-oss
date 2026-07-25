@@ -20,7 +20,7 @@ EnterpriseGlue does not create those native users or memberships.
   scope.
 - The native Camunda group already contains the intended direct users.
 - The configured engine service identity may call Camunda's authorization
-  create and id-specific delete REST endpoints.
+  create, id-specific read, and id-specific delete REST endpoints.
 
 ## Workflow
 
@@ -74,7 +74,22 @@ EnterpriseGlue does not create those native users or memberships.
    GET /engines-api/engines/{engineId}/backstop/sync/{runId}/detail
    ```
 
-5. After at least one synchronization succeeds, an administrator may set the
+5. Run a read-only drift check before relying on direct native access and after
+   any suspected native-side change. It reads only the authorization IDs in
+   the selected successful receipt and returns a separate sanitized observation
+   receipt. It does not list, alter, or remove any customer-native grants.
+
+   ```http
+   POST /engines-api/engines/{engineId}/backstop/sync/{runId}/drift-check
+   {}
+   ```
+
+   An `out_of_sync` observation means that a tracked grant is missing or no
+   longer exactly the group/type/resource/`READ` authorization EnterpriseGlue
+   created. Re-run the reviewed preview/apply workflow; do not manually widen
+   a grant to compensate.
+
+6. After at least one synchronization succeeds, an administrator may set the
    global runtime authorization mode to `mirrored_engine_backstop`. The setting
    rejects enabling before that evidence exists. Existing and unsynchronized
    engines continue with `enterpriseglue_authoritative` behavior.

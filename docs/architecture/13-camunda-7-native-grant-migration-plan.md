@@ -126,7 +126,7 @@ or decisions; it does not become shared merely because that scope is selected.
 
 ### Authority mode
 
-The active v1 mode is `enterpriseglue_authoritative`:
+The default mode is `enterpriseglue_authoritative`:
 
 ```text
 verified identity -> EnterpriseGlue group -> scoped role -> route decision
@@ -138,9 +138,10 @@ the human-access decision. Camunda's configured technical identity must still
 have enough technical permission to execute calls that EnterpriseGlue already
 allowed; a Camunda rejection fails the request safely.
 
-`mirrored_engine_backstop` remains a later, optional mode in which
-EnterpriseGlue is still the editor but synchronizes a representable subset to
-Camunda. `engine_native_authority` remains deferred: it would require an
+The optional `mirrored_engine_backstop` is now implemented for the narrow,
+direct Camunda 7 exact-group `READ` subset. EnterpriseGlue is still the editor
+and final product evaluator; the backstop is a separate direct-access defence
+layer, not a native-grant import. `engine_native_authority` remains deferred: it would require an
 ongoing, authoritative reconciliation of native Camunda identities, groups,
 grants, revokes, tenant checks, resource identifiers, and EnterpriseGlue
 project/SSO context.

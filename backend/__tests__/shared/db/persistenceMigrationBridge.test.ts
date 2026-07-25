@@ -29,6 +29,8 @@ import { AddCamundaNativeGrantRollbackReceipt1700000000099 as DbCamundaNativeGra
 import { AddCamundaNativeGrantRollbackReceipt1700000000099 as PersistenceCamundaNativeGrantRollbackReceiptMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000099-add-camunda-native-grant-rollback-receipt.js';
 import { AddEngineBackstopFoundation1700000000101 as DbEngineBackstopFoundationMigration } from '@enterpriseglue/shared/db/migrations/1700000000101-add-engine-backstop-foundation.js';
 import { AddEngineBackstopFoundation1700000000101 as PersistenceEngineBackstopFoundationMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000101-add-engine-backstop-foundation.js';
+import { AddEngineBackstopDriftObservations1700000000102 as DbEngineBackstopDriftObservationsMigration } from '@enterpriseglue/shared/db/migrations/1700000000102-add-engine-backstop-drift-observations.js';
+import { AddEngineBackstopDriftObservations1700000000102 as PersistenceEngineBackstopDriftObservationsMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000102-add-engine-backstop-drift-observations.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
@@ -47,5 +49,6 @@ describe('persistence migration bridges', () => {
     expect(PersistenceCamundaNativeGrantEvidenceMigration).toBe(DbCamundaNativeGrantEvidenceMigration);
     expect(PersistenceCamundaNativeGrantRollbackReceiptMigration).toBe(DbCamundaNativeGrantRollbackReceiptMigration);
     expect(PersistenceEngineBackstopFoundationMigration).toBe(DbEngineBackstopFoundationMigration);
+    expect(PersistenceEngineBackstopDriftObservationsMigration).toBe(DbEngineBackstopDriftObservationsMigration);
   });
 });

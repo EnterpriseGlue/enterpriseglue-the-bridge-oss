@@ -1,4 +1,4 @@
-import { camundaDelete, camundaPost } from '../bpmn-engine-client.js';
+import { BpmnEngineOperationError, camundaDelete, camundaGet, camundaPost } from '../bpmn-engine-client.js';
 import { getDataSource } from '../../db/data-source.js';
 import { Engine } from '../../infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '../../infrastructure/persistence/entities/EngineSetMaterialization.js';
@@ -33,6 +33,8 @@ export interface CamundaBackstopOwnedGrant {
 export interface CamundaBackstopNativeClient {
   createAuthorization(engineId: string, input: Omit<CamundaBackstopOwnedGrant, 'id'>): Promise<{ id: string }>;
   deleteAuthorization(engineId: string, authorizationId: string): Promise<void>;
+  /** Returns only an ID-addressed grant; it never inventories unrelated native grants. */
+  readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null>;
 }
 
 export class Camunda7BackstopNativeClient implements CamundaBackstopNativeClient {
@@ -51,6 +53,15 @@ export class Camunda7BackstopNativeClient implements CamundaBackstopNativeClient
 
   async deleteAuthorization(engineId: string, authorizationId: string): Promise<void> {
     await camundaDelete(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
+  }
+
+  async readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null> {
+    try {
+      return await camundaGet<unknown>(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
+    } catch (error) {
+      if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return null;
+      throw error;
+    }
   }
 }
 
@@ -113,6 +124,19 @@ function parseOwnedGrants(detail: unknown): CamundaBackstopOwnedGrant[] {
 function projectionFromDetail(detail: unknown): EngineBackstopProjection {
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw new Error('Backstop preview detail is invalid');
   return EngineBackstopProjectionSchema.parse((detail as Record<string, unknown>).projection);
+}
+
+function matchesOwnedGrant(authorization: unknown, grant: CamundaBackstopOwnedGrant): boolean {
+  if (!authorization || typeof authorization !== 'object' || Array.isArray(authorization)) return false;
+  const value = authorization as Record<string, unknown>;
+  const permissions = value.permissions;
+  return Number(value.type) === 1
+    && value.groupId === grant.nativeGroupId
+    && Number(value.resourceType) === grant.camundaResourceType
+    && value.resourceId === grant.resourceKey
+    && Array.isArray(permissions)
+    && permissions.length === 1
+    && permissions[0] === 'READ';
 }
 
 function candidateFor(assignment: RbacRoleAssignment, permissionIds: string[], resource: RuntimeResource | null): EngineBackstopProjectionCandidate {
@@ -223,8 +247,39 @@ export class EngineBackstopSyncService {
     return { run: updated, task };
   }
 
+  /**
+   * Verifies only the authorization IDs retained in a prior successful apply
+   * receipt. It does not enumerate, create, update, or delete native grants.
+   */
+  async driftCheck(input: { engineId: string; tenantId?: string | null; runId: string; actorId?: string | null }): Promise<{ run: EngineBackstopSyncRunSummary; task: EngineBackstopSyncTaskResult | null }> {
+    const sourceRun = await this.runService.getSummary(input.runId);
+    const tenantId = normalizeTenant(input.tenantId);
+    if (!sourceRun || sourceRun.engineId !== input.engineId.trim() || sourceRun.tenantId !== tenantId) throw Errors.notFound('Backstop sync run');
+    if (sourceRun.status !== 'succeeded' || sourceRun.rollbackOfRunId || sourceRun.observedOfRunId) {
+      throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'Only a successful apply receipt with retained owned-grant evidence may be drift checked');
+    }
+    const sourceDetail = await this.runService.getDetailedSnapshot(sourceRun.id);
+    if (!sourceDetail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The owned-grant receipt expired; no native drift conclusion is permitted');
+    const projection = projectionFromDetail(sourceDetail);
+    const observation = await this.runService.createPreview({
+      engineId: sourceRun.engineId, tenantId: sourceRun.tenantId, sourceHash: sourceRun.sourceHash, desiredHash: sourceRun.desiredHash,
+      projection, capability: sourceRun.capability, actorId: input.actorId || null,
+    });
+    const ownedGrants = parseOwnedGrants(sourceDetail);
+    await this.runService.updateRun({
+      id: observation.id, status: 'queued', observedOfRunId: sourceRun.id,
+      detailedSnapshot: { version: 1, observedOfRunId: sourceRun.id, projection, ownedGrants },
+    });
+    await this.taskService.enqueue({ engineId: observation.engineId, tenantId: observation.tenantId, runId: observation.id, sourceHash: observation.sourceHash, operation: 'drift_check' });
+    const task = await this.taskService.runNext((next) => this.executeTask(next), { runId: observation.id });
+    const updated = await this.runService.getSummary(observation.id);
+    if (!updated) throw Errors.notFound('Backstop drift-check run');
+    return { run: updated, task };
+  }
+
   private async executeTask(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string; operation: 'apply' | 'rollback' | 'drift_check' }): Promise<Record<string, unknown>> {
     if (task.operation === 'rollback') return this.executeRollback(task);
+    if (task.operation === 'drift_check') return this.executeDriftCheck(task);
     if (task.operation !== 'apply') throw new Error(`Unsupported backstop task operation: ${task.operation}`);
     const run = await this.runService.getSummary(task.runId);
     if (!run) throw new Error('Backstop sync run was not found');
@@ -286,6 +341,35 @@ export class EngineBackstopSyncService {
       await this.runService.updateRun({ id: rollbackRun.id, status: 'rolled_back', resultHash, completed: true, detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
       await this.runService.updateRun({ id: rollbackRun.rollbackOfRunId, status: 'rolled_back', completed: true });
       return { deletedCount: ownedGrants.length, resultHash };
+    } catch (error) {
+      await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
+      throw error;
+    }
+  }
+
+  private async executeDriftCheck(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string }): Promise<Record<string, unknown>> {
+    const observation = await this.runService.getSummary(task.runId);
+    if (!observation?.observedOfRunId) throw new Error('Backstop drift-check run is invalid');
+    try {
+      const detail = await this.runService.getDetailedSnapshot(observation.id);
+      if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The drift-check receipt expired before it could be read');
+      const ownedGrants = parseOwnedGrants(detail);
+      await this.runService.updateRun({ id: observation.id, status: 'running', detailedSnapshot: detail });
+      let intactCount = 0;
+      let missingCount = 0;
+      let alteredCount = 0;
+      for (const grant of ownedGrants) {
+        const nativeGrant = await this.nativeClient.readAuthorization(observation.engineId, grant.id);
+        if (nativeGrant === null) missingCount += 1;
+        else if (matchesOwnedGrant(nativeGrant, grant)) intactCount += 1;
+        else alteredCount += 1;
+      }
+      const outOfSync = missingCount > 0 || alteredCount > 0;
+      const resultHash = hash(stableJson({ observedOfRunId: observation.observedOfRunId, ownedGrantIds: ownedGrants.map((grant) => grant.id).sort(), intactCount, missingCount, alteredCount }));
+      await this.runService.updateRun({
+        id: observation.id, status: outOfSync ? 'out_of_sync' : 'succeeded', resultHash, completed: true, detailedSnapshot: detail,
+      });
+      return { observedGrantCount: ownedGrants.length, intactCount, missingCount, alteredCount, outOfSync, resultHash };
     } catch (error) {
       await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
       throw error;

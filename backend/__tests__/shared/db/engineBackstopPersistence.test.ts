@@ -4,6 +4,7 @@ import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructur
 import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
 import { EngineBackstopSyncTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncTask.js';
 import { AddEngineBackstopFoundation1700000000101 } from '@enterpriseglue/shared/db/migrations/1700000000101-add-engine-backstop-foundation.js';
+import { AddEngineBackstopDriftObservations1700000000102 } from '@enterpriseglue/shared/db/migrations/1700000000102-add-engine-backstop-drift-observations.js';
 
 function columns(entity: Function): string[] {
   return getMetadataArgsStorage().columns
@@ -18,6 +19,7 @@ describe('mirrored engine backstop persistence', () => {
     ]));
     expect(columns(EngineBackstopSyncRun)).toEqual(expect.arrayContaining([
       'source_hash', 'desired_hash', 'result_hash', 'classifications_json', 'encrypted_detailed_snapshot', 'detailed_snapshot_expires_at',
+      'observed_of_run_id',
     ]));
     expect(columns(EngineBackstopSyncTask)).toEqual(expect.arrayContaining([
       'run_id', 'source_hash', 'operation', 'lease_id', 'lease_expires_at', 'next_attempt_at',
@@ -71,5 +73,21 @@ describe('mirrored engine backstop persistence', () => {
     for (const name of ['classifications_json', 'encrypted_detailed_snapshot']) {
       expect(detail.get(name)).toMatchObject({ type, ...(length === undefined ? {} : { length }) });
     }
+  });
+
+  it.each([
+    ['postgres', 'text', undefined],
+    ['mysql', 'varchar', '191'],
+    ['mssql', 'nvarchar', '191'],
+    ['oracle', 'varchar2', '191'],
+    ['spanner', 'string', '191'],
+  ])('adds an indexed portable observation link for %s only after the backstop receipt table exists', async (database, type, length) => {
+    const table = { columns: [], indices: [] } as any;
+    const addColumn = vi.fn(async (_table, column) => { table.columns.push(column); });
+    const createIndex = vi.fn(async (_table, index) => { table.indices.push(index); });
+    const migration = new AddEngineBackstopDriftObservations1700000000102();
+    await migration.up({ connection: { options: { type: database } }, getTable: vi.fn(async () => table), addColumn, createIndex } as any);
+    expect(addColumn).toHaveBeenCalledWith('engine_backstop_sync_runs', expect.objectContaining({ name: 'observed_of_run_id', type, isNullable: true, ...(length === undefined ? {} : { length }) }));
+    expect(createIndex).toHaveBeenCalledWith('engine_backstop_sync_runs', expect.objectContaining({ name: 'idx_engine_backstop_sync_run_observed_source', columnNames: ['observed_of_run_id'] }));
   });
 });

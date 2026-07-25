@@ -125,6 +125,7 @@ function summaryFor(run: EngineBackstopSyncRun, now = Date.now()): EngineBacksto
     counts,
     classifications: parseClassifications(run.classificationsJson),
     rollbackOfRunId: run.rollbackOfRunId || null,
+    observedOfRunId: run.observedOfRunId || null,
     detailedSnapshotAvailable: snapshotAvailable(run, now),
     detailedSnapshotExpiresAt: epoch(run.detailedSnapshotExpiresAt, 'Detailed snapshot expiry'),
     completedAt: epoch(run.completedAt, 'Completed timestamp'),
@@ -161,6 +162,7 @@ export class EngineBackstopSyncRunService {
       encryptedDetailedSnapshot: encryptedDetail({ version: 1, projection }),
       detailedSnapshotExpiresAt: now + retention,
       rollbackOfRunId: null,
+      observedOfRunId: null,
       createdById: optionalId(input.actorId),
       completedAt: null,
       createdAt: now,
@@ -196,7 +198,7 @@ export class EngineBackstopSyncRunService {
     return JSON.parse(decrypt(run.encryptedDetailedSnapshot));
   }
 
-  async updateRun(input: { id: string; status: EngineBackstopSyncRun['status']; resultHash?: string | null; detailedSnapshot?: unknown; rollbackOfRunId?: string | null; completed?: boolean; now?: number }): Promise<EngineBackstopSyncRunSummary | null> {
+  async updateRun(input: { id: string; status: EngineBackstopSyncRun['status']; resultHash?: string | null; detailedSnapshot?: unknown; rollbackOfRunId?: string | null; observedOfRunId?: string | null; completed?: boolean; now?: number }): Promise<EngineBackstopSyncRunSummary | null> {
     const id = input.id.trim();
     const repository = (await getDataSource()).getRepository(EngineBackstopSyncRun);
     const current = await repository.findOne({ where: { id } });
@@ -207,6 +209,7 @@ export class EngineBackstopSyncRunService {
       ...(input.resultHash === undefined ? {} : { resultHash: input.resultHash === null ? null : requiredHash(input.resultHash, 'Result hash') }),
       ...(input.detailedSnapshot === undefined ? {} : { encryptedDetailedSnapshot: encryptedDetail(input.detailedSnapshot) }),
       ...(input.rollbackOfRunId === undefined ? {} : { rollbackOfRunId: optionalId(input.rollbackOfRunId) }),
+      ...(input.observedOfRunId === undefined ? {} : { observedOfRunId: optionalId(input.observedOfRunId) }),
       ...(input.completed ? { completedAt: now } : {}),
       updatedAt: now,
     };

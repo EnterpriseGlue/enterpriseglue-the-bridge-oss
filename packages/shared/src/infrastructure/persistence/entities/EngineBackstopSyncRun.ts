@@ -23,6 +23,8 @@ export class EngineBackstopSyncRun extends AppBaseEntity {
   @Column({ name: 'encrypted_detailed_snapshot', type: 'text', nullable: true }) encryptedDetailedSnapshot!: string | null;
   @Column({ name: 'detailed_snapshot_expires_at', type: 'bigint', nullable: true }) detailedSnapshotExpiresAt!: number | null;
   @Column({ name: 'rollback_of_run_id', type: 'text', nullable: true }) rollbackOfRunId!: string | null;
+  /** Present for a read-only observation of the owned grants from an apply run. */
+  @Column({ name: 'observed_of_run_id', type: 'text', nullable: true }) observedOfRunId!: string | null;
   @Column({ name: 'created_by_id', type: 'text', nullable: true }) createdById!: string | null;
   @Column({ name: 'completed_at', type: 'bigint', nullable: true }) completedAt!: number | null;
   @Column({ name: 'created_at', type: 'bigint' }) createdAt!: number;

@@ -144,6 +144,8 @@ export const EngineBackstopSyncRunSummarySchema = z.object({
   counts: z.record(z.string(), z.number().int().nonnegative()),
   classifications: z.array(EngineBackstopSanitizedClassificationSchema).max(50_000),
   rollbackOfRunId: z.string().min(1).max(255).nullable(),
+  /** Links a read-only native observation to the apply run that owns its IDs. */
+  observedOfRunId: z.string().min(1).max(255).nullable(),
   detailedSnapshotAvailable: z.boolean(),
   detailedSnapshotExpiresAt: z.number().int().nullable(),
   completedAt: z.number().int().nullable(),

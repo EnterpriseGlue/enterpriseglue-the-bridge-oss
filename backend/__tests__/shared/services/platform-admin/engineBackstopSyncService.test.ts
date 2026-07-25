@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Camunda7BackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
-import { camundaDelete, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import { camundaDelete, camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
+  BpmnEngineOperationError: class BpmnEngineOperationError extends Error {},
+  camundaGet: vi.fn(),
   camundaPost: vi.fn(),
   camundaDelete: vi.fn(),
 }));
@@ -25,7 +27,7 @@ function projection(resourceKey = 'payments') {
 function run(overrides: Record<string, unknown> = {}) {
   return {
     id: 'run-1', engineId: 'engine-1', tenantId: 'tenant-a', status: 'previewed', sourceHash, desiredHash, resultHash: null,
-    catalogVersion: 'camunda7-mirrored-backstop-v1', capability: {}, counts: {}, classifications: [], rollbackOfRunId: null,
+    catalogVersion: 'camunda7-mirrored-backstop-v1', capability: {}, counts: {}, classifications: [], rollbackOfRunId: null, observedOfRunId: null,
     detailedSnapshotAvailable: true, detailedSnapshotExpiresAt: 10_000, completedAt: null, createdAt: 1, updatedAt: 1,
     ...overrides,
   } as any;
@@ -52,7 +54,11 @@ function setup(input: { builtProjection?: ReturnType<typeof projection>; sourceH
       return { taskId: 'task-1', runId: 'run-1', operation: 'apply', status: 'completed', attempts: 0, nextAttemptAt: null, lastError: null };
     }),
   };
-  const nativeClient = { createAuthorization: vi.fn(async () => ({ id: 'native-auth-1' })), deleteAuthorization: vi.fn(async () => undefined) };
+  const nativeClient = {
+    createAuthorization: vi.fn(async () => ({ id: 'native-auth-1' })),
+    deleteAuthorization: vi.fn(async () => undefined),
+    readAuthorization: vi.fn(async () => ({ type: 1, permissions: ['READ'], groupId: 'camunda-operators', resourceType: 6, resourceId: 'payments' })),
+  };
   const projectionBuilder = vi.fn(async () => ({
     engine: { id: 'engine-1', type: 'camunda7', lifecycleStatus: 'active' }, tenantId: 'tenant-a',
     projection: input.builtProjection || projection(), sourceHash: input.sourceHash || sourceHash, desiredHash: input.desiredHash || desiredHash,
@@ -116,7 +122,7 @@ describe('EngineBackstopSyncService', () => {
         return target;
       }),
     };
-    const nativeClient = { createAuthorization: vi.fn(), deleteAuthorization: vi.fn(async () => undefined) };
+    const nativeClient = { createAuthorization: vi.fn(), deleteAuthorization: vi.fn(async () => undefined), readAuthorization: vi.fn() };
     const taskService = {
       enqueue: vi.fn(async () => ({ id: 'task-rollback' })),
       runNext: vi.fn(async (execute) => {
@@ -133,19 +139,66 @@ describe('EngineBackstopSyncService', () => {
     expect(result.run).toMatchObject({ id: 'rollback-run', status: 'rolled_back', rollbackOfRunId: 'source-run' });
     expect(sourceRun.status).toBe('rolled_back');
   });
+
+  it.each([
+    ['an unchanged owned grant', { type: 1, permissions: ['READ'], groupId: 'camunda-operators', resourceType: 6, resourceId: 'payments' }, 'succeeded'],
+    ['an altered owned grant', { type: 1, permissions: ['READ'], groupId: 'camunda-operators', resourceType: 6, resourceId: 'changed-payments' }, 'out_of_sync'],
+    ['a missing owned grant', null, 'out_of_sync'],
+  ])('creates a separate read-only receipt for %s', async (_caseName, nativeGrant, expectedStatus) => {
+    const sourceRun = run({ id: 'source-run', status: 'succeeded', resultHash: 'c'.repeat(64) });
+    const observationRun = run({ id: 'observation-run', status: 'previewed' });
+    const runs = new Map<string, any>([[sourceRun.id, sourceRun], [observationRun.id, observationRun]]);
+    const details = new Map<string, any>([
+      [sourceRun.id, { version: 1, projection: projection(), ownedGrants: [{ id: 'owned-1', nativeGroupId: 'camunda-operators', camundaResourceType: 6, resourceKey: 'payments' }] }],
+    ]);
+    const runService = {
+      createPreview: vi.fn(async () => observationRun),
+      getSummary: vi.fn(async (id) => runs.get(id) || null),
+      getDetailedSnapshot: vi.fn(async (id) => details.get(id) || null),
+      listForEngine: vi.fn(async () => [...runs.values()]),
+      updateRun: vi.fn(async ({ id, detailedSnapshot, ...values }) => {
+        const target = runs.get(id);
+        Object.assign(target, values);
+        if (detailedSnapshot !== undefined) details.set(id, detailedSnapshot);
+        return target;
+      }),
+    };
+    const nativeClient = {
+      createAuthorization: vi.fn(), deleteAuthorization: vi.fn(),
+      readAuthorization: vi.fn(async () => nativeGrant),
+    };
+    const taskService = {
+      enqueue: vi.fn(async () => ({ id: 'task-drift' })),
+      runNext: vi.fn(async (execute) => {
+        await execute({ id: 'task-drift', engineId: 'engine-1', tenantId: 'tenant-a', runId: 'observation-run', sourceHash, operation: 'drift_check' });
+        return { taskId: 'task-drift', runId: 'observation-run', operation: 'drift_check', status: 'completed', attempts: 0, nextAttemptAt: null, lastError: null };
+      }),
+    };
+    const service = new EngineBackstopSyncService({ runService: runService as any, taskService: taskService as any, nativeClient });
+
+    const result = await service.driftCheck({ engineId: 'engine-1', tenantId: 'tenant-a', runId: 'source-run' });
+
+    expect(nativeClient.readAuthorization).toHaveBeenCalledWith('engine-1', 'owned-1');
+    expect(nativeClient.createAuthorization).not.toHaveBeenCalled();
+    expect(nativeClient.deleteAuthorization).not.toHaveBeenCalled();
+    expect(result.run).toMatchObject({ id: 'observation-run', status: expectedStatus, observedOfRunId: 'source-run' });
+  });
 });
 
 describe('Camunda7BackstopNativeClient', () => {
-  it('uses only Camunda authorization create and id-specific delete endpoints', async () => {
+  it('uses only Camunda authorization create and ID-specific read/delete endpoints', async () => {
+    vi.mocked(camundaGet).mockResolvedValue({ id: 'native-auth-1' });
     vi.mocked(camundaPost).mockResolvedValue({ id: 'native-auth-1' });
     vi.mocked(camundaDelete).mockResolvedValue(undefined as never);
     const client = new Camunda7BackstopNativeClient();
     await expect(client.createAuthorization('engine-1', { nativeGroupId: 'operators', camundaResourceType: 10, resourceKey: 'credit-score' }))
       .resolves.toEqual({ id: 'native-auth-1' });
     await client.deleteAuthorization('engine-1', 'native auth/1');
+    await client.readAuthorization('engine-1', 'native auth/1');
     expect(camundaPost).toHaveBeenCalledWith('engine-1', '/authorization/create', {
       type: 1, permissions: ['READ'], groupId: 'operators', resourceType: 10, resourceId: 'credit-score',
     });
     expect(camundaDelete).toHaveBeenCalledWith('engine-1', '/authorization/native%20auth%2F1');
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/authorization/native%20auth%2F1');
   });
 });

@@ -11,7 +11,8 @@ authorization system. Its invariants are enforced in the following order:
    group from representing more than one EnterpriseGlue group on an engine.
 3. `EngineBackstopSyncService` re-materializes the source before apply,
    compares source and desired hashes to preview evidence, and calls only
-   `/authorization/create` or id-specific `/authorization/{id}` deletes.
+   `/authorization/create`, id-specific `/authorization/{id}` reads, or
+   id-specific deletes.
 4. `EngineBackstopSyncRun` encrypts native IDs and exact resource keys. Normal
    APIs expose only opaque references, counts, and reason codes.
 
@@ -22,6 +23,11 @@ Migration `1700000000101-add-engine-backstop-foundation` creates:
 - `engine_backstop_group_mappings`;
 - `engine_backstop_sync_runs`; and
 - `engine_backstop_sync_tasks`.
+
+Migration `1700000000102-add-engine-backstop-drift-observations` adds an
+indexed `observed_of_run_id` link. A drift observation is a new receipt rather
+than a mutation of the original apply receipt, so the original ownership proof
+remains available for an ownership-only rollback.
 
 The migration and entity registry are qualified in PostgreSQL, MySQL, SQL
 Server, Oracle, and Spanner metadata tests. The encrypted run-detail fields
@@ -41,6 +47,17 @@ resourceKey }` only in encrypted detail. Reconciliation does the following:
 On a partial failure, the recorded IDs remain with the failed run so retry or
 rollback does not need to infer native ownership. A missing or expired receipt
 is a hard stop for deletion.
+
+## Read-only drift protocol
+
+`driftCheck` accepts only a successful apply receipt with retained encrypted
+ownership evidence. It creates a linked observation receipt and schedules a
+`drift_check` task. The task reads only `/authorization/{id}` for the recorded
+IDs, then compares type `1`, the mapped group, resource type/key, and the
+single `READ` permission. It never lists the authorization collection and
+never creates, updates, or deletes a grant. A missing or altered owned grant
+makes only the observation receipt `out_of_sync`; it does not rewrite the
+apply receipt or make an inference about unrelated customer grants.
 
 ## Extending the projection
 
@@ -62,6 +79,7 @@ pnpm --dir backend exec vitest run \
   __tests__/shared/services/platform-admin/engineBackstopGroupMappingService.test.ts \
   __tests__/shared/services/platform-admin/engineBackstopSyncRunService.test.ts \
   __tests__/shared/services/platform-admin/engineBackstopSyncService.test.ts \
+  __tests__/shared/db/engineBackstopPersistence.test.ts \
   __tests__/modules/mission-control/engines/routes.test.ts
 pnpm run test:action-registry
 pnpm run test:camunda7-native-grant-container
@@ -69,5 +87,5 @@ pnpm run test:camunda7-native-grant-container
 
 The disposable Camunda container validates the pinned Camunda 7 REST contract.
 The service tests prove EnterpriseGlue's exact payload, source-drift stop,
-owned-only cleanup, and rollback behavior without requiring customer
-credentials.
+owned-only cleanup, rollback, and missing/altered owned-grant detection without
+requiring customer credentials.

@@ -1459,6 +1459,12 @@ describe('permissionService', () => {
         PlatformPermissions.CAMUNDA_NATIVE_GRANTS_PREVIEW,
         PlatformPermissions.CAMUNDA_NATIVE_GRANTS_DRAFT,
         PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW,
+        PlatformPermissions.ENGINE_BACKSTOP_VIEW,
+        PlatformPermissions.ENGINE_BACKSTOP_MANAGE,
+        PlatformPermissions.ENGINE_BACKSTOP_PREVIEW,
+        PlatformPermissions.ENGINE_BACKSTOP_SENSITIVE_VIEW,
+        PlatformPermissions.ENGINE_BACKSTOP_APPLY,
+        PlatformPermissions.ENGINE_BACKSTOP_DRIFT_CHECK,
         PlatformPermissions.AUDIT_VIEW,
       ],
     });
@@ -1470,6 +1476,7 @@ describe('permissionService', () => {
         PlatformPermissions.AUTHZ_CHECK,
         PlatformPermissions.AUDIT_VIEW,
         PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW,
+        PlatformPermissions.ENGINE_BACKSTOP_VIEW,
       ],
     });
     expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_USER_ADMIN)?.permissions).toEqual([

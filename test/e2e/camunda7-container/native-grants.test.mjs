@@ -82,6 +82,16 @@ async function postJson(baseUrl, path, body) {
   if (!response.ok) {
     throw new Error(`Camunda fixture write ${path} failed with ${response.status}: ${text.slice(0, 500)}`);
   }
+  return text ? JSON.parse(text) : null;
+}
+
+async function getJson(baseUrl, path) {
+  const response = await fetch(`${baseUrl}${path}`);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Camunda fixture read ${path} failed with ${response.status}: ${text.slice(0, 500)}`);
+  }
+  return text ? JSON.parse(text) : null;
 }
 
 test('real Camunda 7 container returns exact process/decision READ grants to the read-only inventory', {
@@ -98,12 +108,23 @@ test('real Camunda 7 container returns exact process/decision READ grants to the
     const processKey = `egfixtureprocess${suffix}`;
     const decisionKey = `egfixturedecision${suffix}`;
     await postJson(baseUrl, '/group/create', { id: groupId, name: 'EG Fixture Operators' });
-    await postJson(baseUrl, '/authorization/create', {
+    const processAuthorization = await postJson(baseUrl, '/authorization/create', {
       type: 1, permissions: ['READ'], groupId, resourceType: 6, resourceId: processKey,
     });
-    await postJson(baseUrl, '/authorization/create', {
+    const decisionAuthorization = await postJson(baseUrl, '/authorization/create', {
       type: 1, permissions: ['READ'], groupId, resourceType: 10, resourceId: decisionKey,
     });
+    assert.match(processAuthorization?.id || '', /^.+$/);
+    assert.match(decisionAuthorization?.id || '', /^.+$/);
+    const processById = await getJson(baseUrl, `/authorization/${encodeURIComponent(processAuthorization.id)}`);
+    const decisionById = await getJson(baseUrl, `/authorization/${encodeURIComponent(decisionAuthorization.id)}`);
+    assert.deepEqual(
+      [processById, decisionById].map(({ type, groupId: observedGroupId, resourceType, resourceId, permissions }) => ({ type, groupId: observedGroupId, resourceType, resourceId, permissions })),
+      [
+        { type: 1, groupId, resourceType: 6, resourceId: processKey, permissions: ['READ'] },
+        { type: 1, groupId, resourceType: 10, resourceId: decisionKey, permissions: ['READ'] },
+      ],
+    );
 
     const observedRequests = [];
     const inventory = await new CamundaNativeGrantInventoryService(async (_engineId, page) => {

@@ -1880,6 +1880,16 @@ r.post('/engines-api/engines/:id/backstop/sync/:runId/rollback', engineLimiter, 
   res.json(result)
 }))
 
+r.post('/engines-api/engines/:id/backstop/sync/:runId/drift-check', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(backstopSyncRunIdParamSchema), requireAction('platform.engine-backstop.drift-check', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(backstopPreviewBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
+  const result = await engineBackstopSyncService.driftCheck({ engineId, tenantId, runId: String(req.params.runId), actorId: req.user!.userId })
+  await logAudit({ tenantId: tenantId || undefined, userId: req.user!.userId, action: 'engine.backstop.drift_check', resourceType: 'engine', resourceId: engineId, details: { runId: result.run.id, observedOfRunId: result.run.observedOfRunId, status: result.run.status, taskStatus: result.task?.status || null } })
+  res.json(result)
+}))
+
 r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/draft', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(nativeGrantImportRunIdParamSchema), requireAction('platform.camunda-native-grants.draft', { resourceResolver: 'platform.self' }), requireAction('platform.camunda-native-grants.sensitive.read', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(nativeGrantDraftBodySchema), asyncHandler(async (req: Request, res: Response) => {
   const run = await camundaNativeGrantImportRunService.getSummary(String(req.params.runId))
   if (!run || run.engineId !== String(req.params.id) || (run.tenantId || null) !== (req.tenant?.tenantId || null)) throw Errors.notFound('Camunda native-grant import run')

@@ -231,6 +231,18 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       ],
     },
   {
+      actionId: 'platform.engine-backstop.drift-check',
+      permissionId: 'platform:engine-backstop:drift-check',
+      resourceType: 'platform',
+      operation: 'read',
+      risk: 'high',
+      audit: true,
+      category: 'Mirrored Engine Backstop',
+      description: 'Read only EnterpriseGlue-owned native authorization IDs and record an auditable drift receipt.',
+      ui: [{ surfaceId: 'mission-control.engines.backstop.drift-check', behavior: 'disable' }],
+      routes: [{ method: 'POST', route: '/engines-api/engines/{id}/backstop/sync/{runId}/drift-check', resourceResolver: 'platform.self' }],
+    },
+  {
       actionId: 'platform.authz.assignments.read',
       permissionId: 'platform:authz:roles:view',
       resourceType: 'platform',

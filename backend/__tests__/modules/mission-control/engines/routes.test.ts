@@ -59,7 +59,7 @@ const nativeGrantMigrationMock = vi.hoisted(() => ({
 const configBundleApplyMock = vi.hoisted(() => ({ apply: vi.fn() }));
 const configBundleRollbackMock = vi.hoisted(() => ({ compile: vi.fn(), diff: vi.fn() }));
 const backstopMock = vi.hoisted(() => ({
-  listMappings: vi.fn(), writeMappings: vi.fn(), listRuns: vi.fn(), getRun: vi.fn(), getDetail: vi.fn(), preview: vi.fn(), apply: vi.fn(), rollback: vi.fn(),
+  listMappings: vi.fn(), writeMappings: vi.fn(), listRuns: vi.fn(), getRun: vi.fn(), getDetail: vi.fn(), preview: vi.fn(), apply: vi.fn(), rollback: vi.fn(), driftCheck: vi.fn(),
 }));
 
 vi.mock('fs', () => ({
@@ -107,7 +107,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncRunSer
   engineBackstopSyncRunService: { listForEngine: backstopMock.listRuns, getSummary: backstopMock.getRun, getDetailedSnapshot: backstopMock.getDetail },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js', () => ({
-  engineBackstopSyncService: { preview: backstopMock.preview, apply: backstopMock.apply, rollback: backstopMock.rollback },
+  engineBackstopSyncService: { preview: backstopMock.preview, apply: backstopMock.apply, rollback: backstopMock.rollback, driftCheck: backstopMock.driftCheck },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
   configBundleApplyService: { apply: configBundleApplyMock.apply },
@@ -707,16 +707,18 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
     (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
-    const run = { id: 'backstop-run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed', sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), resultHash: null, catalogVersion: 'camunda7-mirrored-backstop-v1', capability: {}, counts: { total: 0, proposed: 0, manual_required: 0, blocked: 0, proposedGrantCount: 0 }, classifications: [], rollbackOfRunId: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, completedAt: null, createdAt: 1, updatedAt: 1 };
+    const run = { id: 'backstop-run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed', sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), resultHash: null, catalogVersion: 'camunda7-mirrored-backstop-v1', capability: {}, counts: { total: 0, proposed: 0, manual_required: 0, blocked: 0, proposedGrantCount: 0 }, classifications: [], rollbackOfRunId: null, observedOfRunId: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, completedAt: null, createdAt: 1, updatedAt: 1 };
     backstopMock.preview.mockResolvedValue(run);
     backstopMock.apply.mockResolvedValue({ run: { ...run, status: 'succeeded', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
     backstopMock.rollback.mockResolvedValue({ run: { ...run, id: 'rollback-run-1', status: 'rolled_back', rollbackOfRunId: 'backstop-run-1', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
+    backstopMock.driftCheck.mockResolvedValue({ run: { ...run, id: 'drift-run-1', status: 'out_of_sync', observedOfRunId: 'backstop-run-1', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
 
     const preview = await request(app).post('/engines-api/engines/e1/backstop/sync/preview').send({});
     const rejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64) });
     const applied = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true });
     const rollbackRejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({});
     const rolledBack = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({ acknowledgeOwnedGrantDeletion: true });
+    const drift = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/drift-check').send({});
 
     expect(preview.status).toBe(201);
     expect(JSON.stringify(preview.body)).not.toContain('sensitive-camunda-group');
@@ -724,11 +726,15 @@ describe('mission-control engines routes', () => {
     expect(applied.status).toBe(200);
     expect(rollbackRejected.status).toBe(400);
     expect(rolledBack.status).toBe(200);
+    expect(drift.status).toBe(200);
     expect(backstopMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', request: { desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true },
     }));
     expect(backstopMock.rollback).toHaveBeenCalledWith(expect.objectContaining({
       engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', request: { acknowledgeOwnedGrantDeletion: true },
+    }));
+    expect(backstopMock.driftCheck).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', actorId: 'user-1',
     }));
   });
 
