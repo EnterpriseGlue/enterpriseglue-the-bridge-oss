@@ -251,7 +251,7 @@ test('retains complete constraint-derived authorization state-space evidence', (
   assert.match(authorizationMatrixRunner, /request-authorization-order-independence/);
   assert.match(authorizationMatrixRunner, /--sequence\.shuffle\.tests/);
   assert.match(authorizationMatrixRunner, /--sequence\.seed=1729/);
-  assert.match(randomizedAuthorizationModel, /databaseModelTimeoutMs = 15_000/);
+  assert.match(randomizedAuthorizationModel, /databaseModelTimeoutMs = 45_000/);
   assert.match(randomizedAuthorizationModel, /}, databaseModelTimeoutMs\);/);
   assert.match(authorizationMatrixRunner, /Authorization state-space evidence must be run from a clean worktree/);
   assert.match(authorizationMatrixRunner, /scripts\/local-safe-test\.env/);
