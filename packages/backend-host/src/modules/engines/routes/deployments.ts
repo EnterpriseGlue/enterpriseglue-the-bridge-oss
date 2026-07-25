@@ -91,6 +91,26 @@ function deploymentLineageDiagnostics(row: EngineDeployment, artifacts: EngineDe
   };
 }
 
+/**
+ * PostgreSQL returns BIGINT columns as strings.  Normalize persisted epoch
+ * fields at this HTTP boundary while rejecting malformed or unsafe values.
+ */
+function persistedEpoch(value: unknown, field: string, nullable = false): number | null {
+  if (value === null || value === undefined) {
+    if (nullable) return null
+    throw new Error(`${field} is missing from the persisted deployment record`)
+  }
+  const normalized = typeof value === 'string' ? value.trim() : value
+  if (typeof normalized === 'string' && !/^\d+$/.test(normalized)) {
+    throw new Error(`${field} is invalid in the persisted deployment record`)
+  }
+  const timestamp = typeof normalized === 'number' ? normalized : Number(normalized)
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
+    throw new Error(`${field} is invalid in the persisted deployment record`)
+  }
+  return timestamp
+}
+
 const r = Router()
 
 // Helpers - now imported from deployment-utils.ts
@@ -823,8 +843,8 @@ r.get('/engines-api/engines/:engineId/deployment-history', apiLimiter, requireAu
   const response = rows.map((row) => ({
     id: row.id, engineId: row.engineId, engineDeploymentId: row.camundaDeploymentId, deploymentName: row.camundaDeploymentName,
     deploymentTime: row.camundaDeploymentTime, projectId: row.projectId, ingestionSource: row.ingestionSource,
-    lineageQuality: row.lineageQuality, reportingPrincipalId: row.reportingPrincipalId, deployedAt: row.deployedAt,
-    reconciledAt: row.reconciledAt, resourceCount: row.resourceCount, status: row.status,
+    lineageQuality: row.lineageQuality, reportingPrincipalId: row.reportingPrincipalId, deployedAt: persistedEpoch(row.deployedAt, 'deployedAt'),
+    reconciledAt: persistedEpoch(row.reconciledAt, 'reconciledAt', true), resourceCount: row.resourceCount, status: row.status,
     ...deploymentLineageDiagnostics(row, artifactsByDeployment.get(row.id) || []),
   }))
   res.json(DeploymentHistoryViewSchema.array().parse(response))
@@ -848,7 +868,7 @@ r.get('/engines-api/engines/:engineId/deployments/:deploymentId/lineage', apiLim
     projectId: deployment.projectId,
     ingestionSource: deployment.ingestionSource,
     lineageQuality: deployment.lineageQuality,
-    reconciledAt: deployment.reconciledAt,
+    reconciledAt: persistedEpoch(deployment.reconciledAt, 'reconciledAt', true),
     status: deployment.status,
     ...deploymentLineageDiagnostics(deployment, artifacts),
     reconciliationStatus: deployment.reconciledAt ? 'reconciled' : 'pending',

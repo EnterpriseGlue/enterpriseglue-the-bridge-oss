@@ -733,6 +733,10 @@ describe('mission-control engines routes', () => {
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     const draftHash = 'b'.repeat(64);
     const rollbackHash = 'c'.repeat(64);
+    // Assignment acknowledgements contain canonical principal/role/scope/source
+    // identifiers. They can be longer than a UUID-based object acknowledgement
+    // while still fitting the shared config-bundle contract (500 characters).
+    const assignmentAcknowledgement = `config.authoritative_archive:assignment:${'a'.repeat(256)}`;
     const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' };
     (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) }) });
     nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'applied', draftHash });
@@ -742,23 +746,23 @@ describe('mission-control engines routes', () => {
       canonicalHash: draftHash, engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' }, generated: { groupCount: 1, roleCount: 0, runtimeResourceSetCount: 0, assignmentCount: 0 }, manualWorkAuthorizationIds: [],
     });
     configBundleRollbackMock.compile.mockReturnValue({ preview: { valid: true, canonicalHash: rollbackHash } });
-    configBundleRollbackMock.diff.mockResolvedValue({ valid: true, requiredAcknowledgements: ['config.authoritative_archive:group:group.imported'], changes: [{ objectType: 'group', key: 'group.imported', operation: 'archive' }], warnings: [] });
+    configBundleRollbackMock.diff.mockResolvedValue({ valid: true, requiredAcknowledgements: [assignmentAcknowledgement], changes: [{ objectType: 'group', key: 'group.imported', operation: 'archive' }], warnings: [] });
 
     const preview = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback/preview').send({});
     expect(preview.status).toBe(200);
-    expect(preview.body.rollback).toMatchObject({ canonicalHash: rollbackHash, requiredAcknowledgements: ['config.authoritative_archive:group:group.imported'] });
+    expect(preview.body.rollback).toMatchObject({ canonicalHash: rollbackHash, requiredAcknowledgements: [assignmentAcknowledgement] });
 
     configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-rollback-1', canonicalHash: rollbackHash, created: 0, updated: 0, archived: 4, reconciliation: { status: 'completed' } });
     nativeGrantMigrationMock.markRolledBack.mockResolvedValue({ id: 'run-1', status: 'rolled_back', draftHash, rollbackConfigBundleRunId: 'config-rollback-1' });
     const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback').send({
       expectedRollbackHash: rollbackHash,
-      acknowledgements: ['config.authoritative_archive:group:group.imported'],
+      acknowledgements: [assignmentAcknowledgement],
     });
 
     expect(response.status).toBe(200);
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
       expectedPreviewHash: rollbackHash,
-      acknowledgements: ['config.authoritative_archive:group:group.imported'],
+      acknowledgements: [assignmentAcknowledgement],
       idempotencyKey: `camunda-native-grant-rollback:run-1:${rollbackHash}`,
     }), expect.objectContaining({
       externalEngineReferences: [{ key: 'external.camunda-native-e1', engineId: 'e1' }],

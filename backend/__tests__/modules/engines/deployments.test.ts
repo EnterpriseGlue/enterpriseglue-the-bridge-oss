@@ -19,7 +19,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
-    req.tenant = { tenantId: null };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
@@ -150,6 +150,9 @@ describe('engines deployments routes', () => {
       id: 'e1',
       baseUrl: 'http://localhost:8080',
       name: 'Test Engine',
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+      runtimeAccessScope: 'engine_wide',
       username: null,
       passwordEnc: null,
     };
@@ -275,7 +278,7 @@ describe('engines deployments routes', () => {
     deploymentHistoryRows = [{
       id: 'history-1', engineId: 'e1', camundaDeploymentId: 'camunda-1', camundaDeploymentName: 'Payments release', camundaDeploymentTime: null,
       projectId: null, ingestionSource: 'engine_discovery', lineageQuality: 'discovered', reportingPrincipalId: null,
-      deployedAt: 1700000000000, reconciledAt: 1700000001000, resourceCount: 2, status: 'success', rawResponse: '{"secret":"must-not-leak"}', lineageJson: '{"internal":"must-not-leak"}',
+      deployedAt: '1700000000000', reconciledAt: '1700000001000', resourceCount: 2, status: 'success', rawResponse: '{"secret":"must-not-leak"}', lineageJson: '{"internal":"must-not-leak"}',
     }];
 
     const response = await request(app).get('/engines-api/engines/e1/deployment-history');
@@ -284,6 +287,7 @@ describe('engines deployments routes', () => {
     expect(response.body).toEqual([expect.objectContaining({
       id: 'history-1', engineDeploymentId: 'camunda-1', lineageQuality: 'discovered', lineageReadiness: 'inventory_only',
       lineageIssues: ['missing_project_lineage', 'no_artifacts_recorded'], artifactCount: 0, linkedArtifactCount: 0, resourceCount: 2,
+      deployedAt: 1700000000000, reconciledAt: 1700000001000,
     })]);
     expect(response.body[0]).not.toHaveProperty('rawResponse');
     expect(response.body[0]).not.toHaveProperty('lineageJson');
@@ -439,7 +443,7 @@ describe('engines deployments routes', () => {
     });
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith({
       userId: 'user-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       projectId: 'project-1',
       engineId: 'e1',
       mode: 'manual',
@@ -479,7 +483,7 @@ describe('engines deployments routes', () => {
     expect(response.status).toBe(201);
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith({
       userId: 'user-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       projectId: 'project-1',
       engineId: 'e1',
       mode: 'manual',
@@ -530,7 +534,7 @@ describe('engines deployments routes', () => {
     });
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledWith({
       userId: 'user-1',
-      tenantId: null,
+      tenantId: 'tenant-default',
       projectId: 'project-1',
       engineId: 'e1',
       mode: 'manual',

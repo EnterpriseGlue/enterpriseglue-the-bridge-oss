@@ -103,12 +103,12 @@ const nativeGrantDraftBodySchema = z.object({
 }).strict()
 const nativeGrantApplyBodySchema = z.object({
   expectedDraftHash: z.string().regex(/^[a-f0-9]{64}$/),
-  acknowledgements: z.array(z.string().min(1).max(255)).max(100).optional(),
+  acknowledgements: z.array(z.string().min(1).max(500)).max(100).optional(),
 }).strict()
 const nativeGrantRollbackPreviewBodySchema = z.object({}).strict()
 const nativeGrantRollbackBodySchema = z.object({
   expectedRollbackHash: z.string().regex(/^[a-f0-9]{64}$/),
-  acknowledgements: z.array(z.string().min(1).max(255)).max(100),
+  acknowledgements: z.array(z.string().min(1).max(500)).max(100),
 }).strict()
 
 /**

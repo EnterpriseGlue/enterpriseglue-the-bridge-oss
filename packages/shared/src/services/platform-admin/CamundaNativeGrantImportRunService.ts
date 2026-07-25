@@ -97,7 +97,29 @@ function countsFor(classifications: CamundaNativeGrantSanitizedClassification[])
   return counts;
 }
 
+/**
+ * PostgreSQL drivers return BIGINT columns as strings. Normalize that boundary
+ * before a retention decision so a valid persisted expiry stays available and
+ * malformed evidence cannot become an unbounded snapshot by accident.
+ */
+function nullableEpoch(value: unknown, field: string): number | null {
+  if (value === null || value === undefined) return null;
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (normalized === '') throw new Error(`${field} must be a non-negative safe integer`);
+  const timestamp = typeof normalized === 'number' ? normalized : Number(normalized);
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
+    throw new Error(`${field} must be a non-negative safe integer`);
+  }
+  return timestamp;
+}
+
+function detailedSnapshotIsAvailable(run: CamundaNativeGrantImportRun, now = Date.now()): boolean {
+  const expiresAt = nullableEpoch(run.detailedSnapshotExpiresAt, 'Detailed snapshot expiry');
+  return Boolean(run.encryptedDetailedSnapshot) && (expiresAt === null || expiresAt > now);
+}
+
 function summaryFor(run: CamundaNativeGrantImportRun): CamundaNativeGrantImportRunSummary {
+  const detailedSnapshotExpiresAt = nullableEpoch(run.detailedSnapshotExpiresAt, 'Detailed snapshot expiry');
   return CamundaNativeGrantImportRunSummarySchema.parse({
     id: run.id,
     engineId: run.engineId,
@@ -113,8 +135,8 @@ function summaryFor(run: CamundaNativeGrantImportRun): CamundaNativeGrantImportR
     appliedConfigBundleRunId: run.appliedConfigBundleRunId || null,
     rollbackConfigBundleRunId: run.rollbackConfigBundleRunId || null,
     rolledBackAt: run.rolledBackAt == null ? null : Number(run.rolledBackAt),
-    detailedSnapshotAvailable: Boolean(run.encryptedDetailedSnapshot) && (run.detailedSnapshotExpiresAt === null || run.detailedSnapshotExpiresAt > Date.now()),
-    detailedSnapshotExpiresAt: run.detailedSnapshotExpiresAt,
+    detailedSnapshotAvailable: detailedSnapshotIsAvailable(run),
+    detailedSnapshotExpiresAt,
     createdAt: Number(run.createdAt),
     updatedAt: Number(run.updatedAt),
   });
@@ -212,7 +234,7 @@ export class CamundaNativeGrantImportRunService {
   async getDetailedSnapshot(id: string, now = Date.now()): Promise<unknown | null> {
     const run = await (await getDataSource()).getRepository(CamundaNativeGrantImportRun).findOne({ where: { id: id.trim() } });
     if (!run?.encryptedDetailedSnapshot) return null;
-    if (run.detailedSnapshotExpiresAt !== null && run.detailedSnapshotExpiresAt <= now) return null;
+    if (!detailedSnapshotIsAvailable(run, now)) return null;
     return JSON.parse(decrypt(run.encryptedDetailedSnapshot));
   }
 
@@ -227,7 +249,7 @@ export class CamundaNativeGrantImportRunService {
     const draftHash = assertHash(input.draftHash, 'Draft hash');
     let encryptedDetailedSnapshot: string | undefined;
     if (input.draft) {
-      if (!run.encryptedDetailedSnapshot || (run.detailedSnapshotExpiresAt !== null && run.detailedSnapshotExpiresAt <= now)) {
+      if (!run.encryptedDetailedSnapshot || !detailedSnapshotIsAvailable(run, now)) {
         throw new Error('Native-grant detail is unavailable; create a new preview before generating a draft');
       }
       if (input.draft.canonicalHash !== draftHash || !input.draft.engineReference?.key || !input.draft.engineReference?.engineId) {

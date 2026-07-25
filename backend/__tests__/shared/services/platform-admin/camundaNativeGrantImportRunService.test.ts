@@ -105,6 +105,26 @@ describe('CamundaNativeGrantImportRunService', () => {
     expect(expired).toBeNull();
   });
 
+  it('normalizes PostgreSQL BIGINT snapshot expiry values before making retention decisions', async () => {
+    const repository = setup();
+    const now = Date.now();
+    repository.findOne.mockResolvedValue({
+      id: 'run-1', engineId: 'engine-1', tenantId: null, sourceKind: 'live_api', status: 'previewed', inputHash: hash,
+      mappingCatalogVersion: 'camunda7-v1-read-only', inventoryTruncated: false,
+      normalizedCountsJson: '{"total":0,"proposed":0,"approval_required":0,"manual_required":0,"blocked":0}', classificationsJson: '[]',
+      encryptedDetailedSnapshot: 'encrypted:{"native":"secret"}', detailedSnapshotExpiresAt: String(now + 1_000),
+      draftHash: null, createdAt: String(now), updatedAt: String(now),
+    });
+    const service = new CamundaNativeGrantImportRunService();
+
+    await expect(service.getSummary('run-1')).resolves.toMatchObject({
+      detailedSnapshotAvailable: true,
+      detailedSnapshotExpiresAt: now + 1_000,
+    });
+    await expect(service.getDetailedSnapshot('run-1', now)).resolves.toEqual({ native: 'secret' });
+    await expect(service.getDetailedSnapshot('run-1', now + 1_000)).resolves.toBeNull();
+  });
+
   it('binds an approved draft and config-bundle apply receipt to an existing run', async () => {
     const repository = setup();
     const now = Date.now();
