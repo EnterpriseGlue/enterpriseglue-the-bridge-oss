@@ -9,7 +9,13 @@ load_local_admin_credentials() {
   if [[ -n "${LOCAL_SAML_ADMIN_EMAIL:-}" && -n "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]; then
     return
   fi
-  if [[ -f "$root_dir/.env.docker" ]]; then
+  if [[ -f "$root_dir/.local/docker/env/oidc-rehearsal.env" ]]; then
+    # Prefer the currently selected disposable TLS stack. Its env file can use
+    # non-default published ports and is ignored by Git.
+    set -a
+    source "$root_dir/.local/docker/env/oidc-rehearsal.env"
+    set +a
+  elif [[ -f "$root_dir/.env.docker" ]]; then
     set -a
     source "$root_dir/.env.docker"
     set +a
@@ -47,6 +53,12 @@ if [[ -z "${LOCAL_SAML_ADMIN_EMAIL:-}" || -z "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]
   exit 2
 fi
 
+issuer_url="${LOCAL_SAML_ISSUER_URL:-https://localhost:${KEYCLOAK_HOST_PORT:-8180}/realms/enterpriseglue-local}"
+if ! is_local_url "$issuer_url"; then
+  echo "[local-saml-rehearsal] LOCAL_SAML_ISSUER_URL must target localhost, loopback, or a .local host; got: $issuer_url" >&2
+  exit 2
+fi
+
 if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/dev/null; then
   echo "[local-saml-rehearsal] Frontend is not reachable at $base_url/login." >&2
   exit 2
@@ -55,6 +67,7 @@ fi
 LOCAL_SAML_ADMIN_EMAIL="$LOCAL_SAML_ADMIN_EMAIL" \
 LOCAL_SAML_ADMIN_PASSWORD="$LOCAL_SAML_ADMIN_PASSWORD" \
 LOCAL_SAML_APP_URL="$base_url" \
+LOCAL_SAML_ISSUER_URL="$issuer_url" \
 LOCAL_SAML_CA_FILE="$ca_file" \
 "$root_dir/scripts/configure-local-saml-provider.sh"
 

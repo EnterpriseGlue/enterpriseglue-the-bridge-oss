@@ -278,9 +278,12 @@ Then run the guarded browser lane. It refreshes the disposable certificate from
 Keycloak metadata and reprovisions the local SAML provider before signing in,
 so a recreated Keycloak container cannot leave a stale signing certificate in
 the test setup. The runner uses explicitly supplied `LOCAL_SAML_ADMIN_*`
-credentials when present, otherwise the ignored local `.env.docker` values; it
-never prints credentials, assertions, cookies, or tokens. It then receives a
-signed HTTP-POST assertion at the provider-specific callback and verifies the
+credentials when present, otherwise the disposable TLS stack's ignored
+`.local/docker/env/oidc-rehearsal.env` (or `.env.docker` as a fallback). It
+uses that stack's `KEYCLOAK_HOST_PORT` for the issuer; override it explicitly
+with `LOCAL_SAML_ISSUER_URL` for another local stack. It never prints
+credentials, assertions, cookies, or tokens. It then receives a signed
+HTTP-POST assertion at the provider-specific callback and verifies the
 EnterpriseGlue session.
 
 ```bash
