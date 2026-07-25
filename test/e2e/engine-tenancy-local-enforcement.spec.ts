@@ -60,8 +60,12 @@ async function login(page: Page): Promise<void> {
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
+  const loginResponse = page.waitForResponse((response) =>
+    response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/login',
+  );
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+  expect((await loginResponse).status()).toBe(200);
+  await page.waitForURL(/\/t\/default(?:\/|$)/);
 }
 
 async function classificationReport(page: Page): Promise<ClassificationReport> {
