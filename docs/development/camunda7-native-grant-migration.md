@@ -117,6 +117,7 @@ pnpm --dir backend exec vitest run \
 node --test test/e2e/mock-camunda/native-grants.test.mjs
 pnpm run test:camunda7-native-grant-container
 bash ./scripts/run-local-safe-native-grant-migration.sh
+pnpm run test:camunda-native-grant-browser-evidence
 pnpm --dir frontend exec vitest run \
   __tests__/src/features/mission-control/engines/components/CamundaNativeGrantMigrationPanel.test.tsx
 pnpm --filter frontend-host run build
@@ -137,6 +138,21 @@ the configuration-owned group, proves target allow/sibling deny Effective
 Access, then performs a hash-bound authoritative rollback. It cleans all
 synthetic rows after completion. It intentionally does not use the manual
 membership API, because source-managed groups reject manual edits.
+
+`test:camunda-native-grant-browser-evidence` is the retained authenticated UI
+gate. From a clean worktree, it uses the existing localhost Docker frontend,
+backend, PostgreSQL database, and synthetic Camunda mock to seed a dedicated,
+resource-aware engine. It drives the actual panel through read-only preview,
+protected mapping, hash-bound draft/apply, a source-managed synthetic SSO
+membership, protected-route allow/sibling deny, history resume, and
+hash-bound rollback/denial. It checks that the mock receives only `GET`
+requests during inventory. The runner calls the normal durable runtime
+reconciliation service inside the local backend container after the UI apply;
+the standard local stack deliberately leaves that background poller disabled.
+It never writes native grants or uses customer identities. A passing run emits
+the same-commit sanitized
+`test/results/engine-tenancy-release/camunda-native-grant-browser.json`
+artifact, which is required by the release index.
 
 `test:camunda7-native-grant-container` is an opt-in, disposable Docker
 contract against the pinned `camunda/camunda-bpm-platform` image digest. It seeds only synthetic groups
@@ -165,18 +181,16 @@ target resource allow and a sibling-resource deny using Effective Access and
 the protected Mission Control route. For shared engines also test resolved,
 unmapped, and conflicting runtime-tenant rows.
 
-## Browser and customer-acceptance handoff
+## Authenticated local browser evidence
 
-The following is the executable final gate that cannot be substituted by unit,
-container, or API-only evidence. It requires a browser runner permitted to
-reach the local Docker frontend and backend, plus an authenticated
-EnterpriseGlue administrator session. Do not use customer identities or
-customer grants for this qualification.
+The following executable gate cannot be substituted by unit, container, or
+API-only evidence. It runs entirely against localhost Docker with synthetic
+identities and grants; it does not require a customer environment or an IdP.
 
 ### Required inputs
 
-- A clean release commit, the local Docker EnterpriseGlue stack, and the
-  pinned Camunda image used by `pnpm run test:camunda7-native-grant-container`.
+- A clean release commit and the local Docker EnterpriseGlue stack, including
+  the synthetic Camunda mock.
 - One synthetic registered Camunda 7 engine and active discovered runtime
   resources: at least one mapped process definition, one mapped decision
   definition, and one sibling resource with no grant.
@@ -188,17 +202,10 @@ customer grants for this qualification.
 
 ### Procedure and retained evidence
 
-1. Run `pnpm run test:camunda7-native-grant-container` and retain the pinned
-   image digest plus its passing result.
-2. In Mission Control, create the preview from the synthetic source, inspect
-   every manual/blocked disposition, map only supported groups, generate the
-   draft, and apply its exact returned hash. Record sanitized preview counts,
-   input hash, draft hash, and configuration apply receipt id.
-3. Synchronize the synthetic member through the configured provider path. In
-   Effective Access and the protected process/decision routes, prove target
-   allow and sibling/non-member deny for every mapped resource type. Record the
-   explained decision and protected-route response without raw group ids.
-4. Run the guarded browser and accessibility lanes:
+1. Run `pnpm run test:camunda-native-grant-browser-evidence`. It covers the
+   synthetic preview/map/draft/apply/membership/allow-deny/resume/rollback
+   workflow and writes the dedicated release artifact.
+2. Run the guarded broader browser and accessibility lanes:
 
    ```bash
    pnpm run test:authz:local-smoke:cross-browser
@@ -215,23 +222,17 @@ customer grants for this qualification.
    separate `authorization-matrix.local.json` receipt and explicitly remains
    incomplete until the four browser/customer-acceptance commands above run;
    it cannot satisfy the release gate or justify a compatibility cutover.
-5. Reload the engine edit panel. Confirm the applied receipt is listed without
-   native identifiers, select **Resume rollback**, and verify it exposes only
-   the rollback path before continuing.
-6. Preview rollback, confirm that every changed object is owned by the exact
-   migration source reference, acknowledge only the returned archive set, and
-   apply the exact rollback hash. Record the rollback preview hash and receipt
-   id. Re-run the same allow/deny cases and confirm the imported allow has been
-   removed while the engine registration, tenant mapping, and unrelated records
-   remain unchanged.
+3. Retain the current-clean native-grant browser artifact alongside the browser
+   matrix, provisioning journey, accessibility matrix, and authorization
+   state-space matrix.
 
 Success requires all supported groups/resources to have an allow and a sibling
 or non-member deny, every unsupported source row to remain manual or blocked,
 no native Camunda write during inventory, a current-clean artifact for every
-lane above, and the rollback result described in step 6. Stop and roll back if
-a preview is truncated, a receipt/hash changes, a shared tenant is unresolved,
-an unexpected object is proposed for archive, a protected-route deny becomes
-an allow, or the browser evidence cannot be captured. The browser, state-space,
-and customer-acceptance checklist items stay open until those artifacts exist;
-do not remove compatibility or change the runtime model based on local-only
-evidence.
+lane above, and a rollback that removes the imported allow without changing the
+engine. Stop and roll back if a preview is truncated, a receipt/hash changes, a
+shared tenant is unresolved, an unexpected object is proposed for archive, a
+protected-route deny becomes an allow, or browser evidence cannot be captured.
+For a future customer import, repeat the user-facing workflow with that
+customer's approved change record; it is operational adoption evidence, not a
+precondition for the greenfield product release.
