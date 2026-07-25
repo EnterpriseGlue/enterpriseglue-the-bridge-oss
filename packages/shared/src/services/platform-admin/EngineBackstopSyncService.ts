@@ -187,7 +187,12 @@ function matchesOwnedGrant(authorization: unknown, grant: CamundaBackstopOwnedGr
     && permissions[0] === 'READ';
 }
 
-function candidateFor(assignment: RbacRoleAssignment, permissionIds: string[], resource: RuntimeResource | null): EngineBackstopProjectionCandidate {
+function candidateFor(
+  assignment: RbacRoleAssignment,
+  permissionIds: string[],
+  resource: RuntimeResource | null,
+  nativeAuthorizationKeyCrossTenant = false,
+): EngineBackstopProjectionCandidate {
   const principalType = assignment.principalType === 'group' || assignment.principalType === 'user' || assignment.principalType === 'api_client'
     ? assignment.principalType
     : 'service_account';
@@ -203,6 +208,7 @@ function candidateFor(assignment: RbacRoleAssignment, permissionIds: string[], r
       key: resource.resourceKey,
       tenantId: resource.tenantId || null,
       isActive: resource.isActive,
+      nativeAuthorizationKeyCrossTenant,
       tenantResolutionStatus: ['resolved', 'unmapped', 'conflict', 'stale'].includes(resource.tenantResolutionStatus)
         ? resource.tenantResolutionStatus as 'resolved' | 'unmapped' | 'conflict' | 'stale'
         : 'unmapped',
@@ -480,6 +486,19 @@ export class EngineBackstopSyncService {
       permissionsByRole.set(permission.roleId, [...(permissionsByRole.get(permission.roleId) || []), permission.permissionId]);
     }
     const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
+    const tenantIdsByNativeAuthorizationKey = new Map<string, Set<string>>();
+    for (const resource of resources) {
+      if (!resource.isActive || resource.tenantResolutionStatus !== 'resolved') continue;
+      const key = `${resource.resourceKind}\u0000${resource.resourceKey}`;
+      const tenantIds = tenantIdsByNativeAuthorizationKey.get(key) || new Set<string>();
+      tenantIds.add(resource.tenantId || '');
+      tenantIdsByNativeAuthorizationKey.set(key, tenantIds);
+    }
+    const nativeAuthorizationKeyCrossTenant = (resource: RuntimeResource) => {
+      if (engine.tenancyMode !== 'shared') return false;
+      const key = `${resource.resourceKind}\u0000${resource.resourceKey}`;
+      return (tenantIdsByNativeAuthorizationKey.get(key)?.size || 0) > 1;
+    };
     const resourceIdsBySet = new Map<string, string[]>();
     for (const materialization of resourceSetMaterializations) {
       resourceIdsBySet.set(materialization.runtimeResourceSetId, [...(resourceIdsBySet.get(materialization.runtimeResourceSetId) || []), materialization.runtimeResourceId]);
@@ -492,13 +511,13 @@ export class EngineBackstopSyncService {
       if (!permissionIds.includes('engine:instance:view')) continue;
       if (assignment.scopeType === 'engine_runtime_resource') {
         const resource = assignment.scopeId ? resourcesById.get(assignment.scopeId) || null : null;
-        if (resource) candidates.push(candidateFor(assignment, permissionIds, resource));
+        if (resource) candidates.push(candidateFor(assignment, permissionIds, resource, nativeAuthorizationKeyCrossTenant(resource)));
         continue;
       }
       if (assignment.scopeType === 'engine_runtime_resource_set') {
         const matched = assignment.scopeId ? (resourceIdsBySet.get(assignment.scopeId) || []).map((id) => resourcesById.get(id)).filter((resource): resource is RuntimeResource => Boolean(resource)) : [];
         if (matched.length === 0) candidates.push(candidateFor(assignment, permissionIds, null));
-        else matched.forEach((resource) => candidates.push(candidateFor(assignment, permissionIds, resource)));
+        else matched.forEach((resource) => candidates.push(candidateFor(assignment, permissionIds, resource, nativeAuthorizationKeyCrossTenant(resource))));
         continue;
       }
       const relevantBroadScope = (assignment.scopeType === 'engine' && (!assignment.scopeId || assignment.scopeId === engineId))

@@ -103,6 +103,9 @@ export class EngineBackstopProjectionService {
     if (context.tenancyMode === 'dedicated' && context.tenantId && candidate.tenantId !== context.tenantId) {
       return unsupported(candidate, 'runtime_resource_cross_tenant');
     }
+    if (context.tenancyMode === 'shared' && candidate.resource.nativeAuthorizationKeyCrossTenant) {
+      return unsupported(candidate, 'native_authorization_key_cross_tenant');
+    }
     if (candidate.resource.kind !== 'process_definition' && candidate.resource.kind !== 'decision_definition') {
       return unsupported(candidate, 'runtime_resource_kind_not_supported');
     }

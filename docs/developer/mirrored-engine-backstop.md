@@ -16,6 +16,14 @@ authorization system. Its invariants are enforced in the following order:
 4. `EngineBackstopSyncRun` encrypts native IDs and exact resource keys. Normal
    APIs expose only opaque references, counts, and reason codes.
 
+For a shared engine, the projection additionally compares every active,
+resolved native authorization key across tenants. Camunda-compatible native
+grants carry the definition key but not an EnterpriseGlue tenant identifier;
+if the same process or decision key is active in another tenant, the candidate
+is blocked with `native_authorization_key_cross_tenant`. A customer must use
+tenant-unique keys or leave that resource under EnterpriseGlue-authoritative
+runtime authorization rather than mirroring it.
+
 ## Persistence and portability
 
 Migration `1700000000101-add-engine-backstop-foundation` creates:
@@ -84,6 +92,12 @@ On a partial failure, the recorded IDs remain with the failed run so retry or
 rollback does not need to infer native ownership. A missing or expired receipt
 is a hard stop for deletion.
 
+`EngineBackstopSyncTask` has a database unique key on `run_id` and a renewable
+lease. Concurrent enqueue requests re-read the winning row after a unique-key
+collision, while concurrent workers claim a queued row atomically. An expired
+lease is safely returned to the queue; a failed task records a bounded retry
+delay and never causes a second native execution while its lease is valid.
+
 ## Customer-sidecar transport
 
 For an engine registered with `connectionMode: customer_sidecar`, the sync
@@ -130,6 +144,7 @@ pnpm --dir backend exec vitest run \
   __tests__/shared/services/platform-admin/engineBackstopProjectionService.test.ts \
   __tests__/shared/services/platform-admin/engineBackstopGroupMappingService.test.ts \
   __tests__/shared/services/platform-admin/engineBackstopSyncRunService.test.ts \
+  __tests__/shared/services/platform-admin/engineBackstopSyncTaskService.test.ts \
   __tests__/shared/services/platform-admin/engineBackstopSyncService.test.ts \
   __tests__/shared/db/engineBackstopPersistence.test.ts \
   __tests__/shared/services/platform-admin/configBundlePreviewService.test.ts \

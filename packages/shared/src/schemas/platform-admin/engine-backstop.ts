@@ -27,6 +27,7 @@ export const EngineBackstopReasonCodeSchema = z.enum([
   'runtime_resource_inactive',
   'runtime_resource_unresolved_tenant',
   'runtime_resource_cross_tenant',
+  'native_authorization_key_cross_tenant',
   'runtime_resource_kind_not_supported',
   'runtime_resource_key_missing',
 ]);
@@ -88,6 +89,8 @@ export const EngineBackstopProjectionCandidateSchema = z.object({
     tenantId: z.string().min(1).max(255).nullable(),
     isActive: z.boolean(),
     tenantResolutionStatus: z.enum(['resolved', 'unmapped', 'conflict', 'stale']),
+    /** Native Camunda-compatible grants are keyed by resource key, not tenant. */
+    nativeAuthorizationKeyCrossTenant: z.boolean().optional(),
   }).nullable(),
 }).strict();
 

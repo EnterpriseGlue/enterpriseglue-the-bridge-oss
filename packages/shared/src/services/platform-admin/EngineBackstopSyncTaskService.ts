@@ -56,7 +56,16 @@ export class EngineBackstopSyncTaskService {
       status: 'queued' as const, leaseId: null, leaseExpiresAt: null, attempts: 0, nextAttemptAt: null,
       resultJson: null, lastError: null, completedAt: null, createdAt: now, updatedAt: now,
     };
-    await repository.insert(task);
+    try {
+      await repository.insert(task);
+    } catch (error) {
+      // The database unique key on run_id is the cross-worker arbiter. A
+      // concurrent request may pass the initial read, so re-read once before
+      // surfacing a genuine persistence failure.
+      const concurrent = await repository.findOne({ where: { runId } });
+      if (concurrent) return concurrent;
+      throw error;
+    }
     return task as EngineBackstopSyncTask;
   }
 

@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CamundaCompatibleBackstopNativeClient, CustomerSidecarBackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
 import { BpmnEngineOperationError, camundaDelete, camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
+
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   BpmnEngineOperationError: class BpmnEngineOperationError extends Error {
@@ -152,6 +161,48 @@ describe('EngineBackstopSyncService', () => {
     })).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_SOURCE_CHANGED' });
     expect(state.nativeClient.createAuthorization).not.toHaveBeenCalled();
     expect(state.taskService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('blocks a shared-engine preview when a native authorization key is active in another tenant', async () => {
+    const createPreview = vi.fn(async (input) => ({ id: 'shared-preview', ...input, status: 'previewed' }));
+    const engine = {
+      id: 'shared-engine', type: 'operaton', lifecycleStatus: 'active', tenancyMode: 'shared', tenantId: null,
+      connectionMode: 'customer_sidecar', runtimeAccessScope: 'resource_aware',
+    };
+    const resources = [
+      { id: 'resource-a', engineId: 'shared-engine', resourceKind: 'process_definition', resourceKey: 'payments', tenantId: 'tenant-a', isActive: true, tenantResolutionStatus: 'resolved' },
+      { id: 'resource-b', engineId: 'shared-engine', resourceKind: 'process_definition', resourceKey: 'payments', tenantId: 'tenant-b', isActive: true, tenantResolutionStatus: 'resolved' },
+    ];
+    vi.mocked(getDataSource).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn(async () => engine) };
+        if (entity === RbacRoleAssignment) return { find: vi.fn(async () => [{
+          id: 'assignment-a', tenantId: 'tenant-a', roleId: 'role-a', principalType: 'group', principalId: 'authz-operators',
+          expiresAt: null, scopeType: 'engine_runtime_resource', scopeId: 'resource-a',
+        }]) };
+        if (entity === RbacRolePermission) return { find: vi.fn(async () => [{ roleId: 'role-a', permissionId: 'engine:instance:view' }]) };
+        if (entity === RuntimeResource) return { find: vi.fn(async () => resources) };
+        if (entity === RuntimeResourceSetMaterialization || entity === EngineSetMaterialization) return { find: vi.fn(async () => []) };
+        throw new Error('Unexpected repository');
+      },
+    } as any);
+    const service = new EngineBackstopSyncService({
+      mappingService: { activeProjectionMappings: vi.fn(async () => [{ authzGroupId: 'authz-operators', nativeGroupId: 'native-operators', isActive: true }]) },
+      runService: { createPreview, getSummary: vi.fn(), getDetailedSnapshot: vi.fn(), listForEngine: vi.fn(), updateRun: vi.fn() } as any,
+      taskService: { enqueue: vi.fn(), runNext: vi.fn() } as any,
+    });
+
+    await service.preview({ engineId: 'shared-engine', tenantId: 'tenant-a' });
+
+    expect(createPreview).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      projection: expect.objectContaining({
+        desiredGrants: [],
+        classifications: [expect.objectContaining({
+          disposition: 'blocked', reasonCodes: ['native_authorization_key_cross_tenant'],
+        })],
+      }),
+    }));
   });
 
   it('deletes only an earlier owned authorization when the exact desired grant changes', async () => {
