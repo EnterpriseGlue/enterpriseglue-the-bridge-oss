@@ -2,6 +2,7 @@ import { describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
@@ -31,7 +32,7 @@ describe('configBundleExportService', () => {
           labelsJson: '{"environment":"prod"}', authType: 'basic', username: 'eg', passwordEnc: 'ref:PROD_ENGINE_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
           version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'direct_engine', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked',
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineBackstopGroupMapping, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -52,7 +53,7 @@ describe('configBundleExportService', () => {
           labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'v2:encrypted-downstream-token', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
           version: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true, pipelineReceiptEnabled: true, connectionMode: 'customer_sidecar', ownershipMode: 'config_locked',
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineBackstopGroupMapping, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -106,7 +107,7 @@ describe('configBundleExportService', () => {
           ownershipMode: 'config_locked',
           isActive: true,
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineBackstopGroupMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -136,6 +137,49 @@ describe('configBundleExportService', () => {
     expect(configBundlePreviewService.preview(result)).toMatchObject({ valid: true, errors: [] });
   });
 
+  it('exports a backstop mapping with its opaque secret reference and never the native group value', async () => {
+    const nativeGroupValue = 'camunda-operators-must-not-export';
+    const engine = {
+      id: 'engine-camunda', tenantId: null, configKey: 'engine.camunda', configKeyIdentity: 'platform:engine.camunda',
+      name: 'Camunda', baseUrl: 'https://camunda.example.test/engine-rest', type: 'camunda7', externalId: null,
+      labelsJson: '{}', authType: 'basic', username: 'eg', passwordEnc: 'ref:CAMUNDA_PASSWORD', oauthTokenUrl: null,
+      oauthScopes: null, oauthAudience: null, version: null, runtimeAccessScope: 'engine_wide', tenancyMode: 'dedicated',
+      tenantMappingStrategy: null, deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300, pipelineReceiptEnabled: true, connectionMode: 'direct',
+      ownershipMode: 'config_locked', lifecycleStatus: 'active', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+    };
+    const group = { id: 'group-operators', tenantId: null, key: 'group.operators', name: 'Operators', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
+    const mapping = {
+      id: 'backstop-mapping-1', tenantId: null, engineId: engine.id, authzGroupId: group.id,
+      encryptedNativeGroupId: `encrypted:${nativeGroupValue}`, nativeGroupReference: 'camunda-group-opaque', source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.camunda-operators',
+      nativeGroupSecretRef: 'CAMUNDA_OPERATORS_GROUP', ownershipMode: 'config_warn', isActive: true,
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository(entity: unknown) {
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([engine]) };
+        if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
+        if (entity === EngineBackstopGroupMapping) return { find: vi.fn().mockResolvedValue([mapping]) };
+        if ([RbacRole, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const result = await configBundleExportService.exportBundle({ bundleKey: 'acme.authz' });
+    expect(result.files['./engine-backstop-mappings.json']).toEqual({
+      engineBackstopMappings: [{
+        key: 'engine-backstop-mapping.camunda-operators',
+        engineRef: { engineKey: 'engine.camunda' },
+        groupRef: { groupKey: 'group.operators' },
+        nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP',
+        isActive: true,
+        ownershipMode: 'config_warn',
+      }],
+    });
+    expect(JSON.stringify(result)).not.toContain(nativeGroupValue);
+    expect(configBundlePreviewService.preview(result)).toMatchObject({ valid: true, errors: [] });
+  });
+
   it('refuses to export a provider row containing a resolved legacy credential', async () => {
     const rawClientSecret = 'must-not-leak-provider-client-secret';
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -144,7 +188,7 @@ describe('configBundleExportService', () => {
           id: 'provider-1', key: 'identity.oidc.legacy', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null,
           configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test', clientId: 'enterpriseglue', clientSecret: rawClientSecret, nested: { apiKey: rawClientSecret } }), syncJson: '{}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz',
         }]) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, Engine, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, Engine, EngineBackstopGroupMapping, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -170,7 +214,7 @@ describe('configBundleExportService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository(entity: unknown) {
         if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
-        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, AuthzGroup, RbacRolePermission, EngineBackstopGroupMapping, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -193,7 +237,7 @@ describe('configBundleExportService', () => {
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([{ id: 'group-1', key: 'group.operators' }]) };
         if (entity === IdentityProvider) return { find: vi.fn().mockResolvedValue([{ id: 'provider-1', key: 'identity.oidc.main' }]) };
         if (entity === IdentityEntitlementMapping) return { find: vi.fn().mockResolvedValue([legacyScopeMapping]) };
-        if ([RbacRole, RbacRolePermission, Engine, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
+        if ([RbacRole, RbacRolePermission, Engine, EngineBackstopGroupMapping, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, RbacRoleAssignment, ProjectEngineTarget].includes(entity as any)) return { find: vi.fn().mockResolvedValue([]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -220,6 +264,7 @@ describe('configBundleExportService', () => {
         if (entity === RbacRole) return { find: vi.fn().mockImplementation(({ where }: any = {}) => Promise.resolve(where?.sourceRef ? [configRole] : [configRole, systemRole])) };
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
         if (entity === Engine) return { find: vi.fn().mockResolvedValue([engine]) };
+        if (entity === EngineBackstopGroupMapping) return { find: vi.fn().mockResolvedValue([]) };
         if (entity === EngineTenantMapping) return { find: vi.fn().mockResolvedValue([engineTenantMapping]) };
         if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([engineSet]) };
         if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([runtimeResourceSet]) };
@@ -293,7 +338,7 @@ describe('configBundleExportService', () => {
         if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([group]) };
         if (entity === RbacRolePermission) return { find: vi.fn().mockResolvedValue([{ roleId: role.id, permissionId: 'engine:instance:view' }]) };
         if (entity === RbacRoleAssignment) return { find: vi.fn().mockResolvedValue([assignment]) };
-        if ([Engine, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) {
+        if ([Engine, EngineBackstopGroupMapping, EngineTenantMapping, EngineSet, RuntimeResourceSet, RuntimeResource, ProjectEngineTarget, IdentityProvider, IdentityEntitlementMapping].includes(entity as any)) {
           return { find: vi.fn().mockResolvedValue([]) };
         }
         throw new Error('Unexpected repository');

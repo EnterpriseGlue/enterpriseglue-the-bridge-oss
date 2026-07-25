@@ -75,6 +75,7 @@ enterpriseglue-config/
   identity-providers.json
   identity-mappings.json
   engines.json
+  engine-backstop-mappings.json
   engine-sets.json
   runtime-resource-sets.json
   assignments.json
@@ -85,6 +86,15 @@ enterpriseglue-config/
 `enterpriseglue.json` declares schema version, bundle id, imports, expected object files, and optional expected hash. Secret values are never stored in this folder; provider and engine objects contain secret references only.
 
 Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database.
+
+For a direct Camunda 7 defense-in-depth mapping, add
+`engine-backstop-mappings.json`. Each entry references a configured Camunda 7
+engine and configured EnterpriseGlue group and uses `nativeGroupIdRef` such as
+`env://CAMUNDA_OPERATORS_GROUP`. The group id is resolved only while applying
+the reviewed bundle, is encrypted at rest, and is never present in bundle
+exports, generic audit history, or normal mapping reads. See
+[Enable a Mirrored Camunda 7 Authorization Backstop](./enable-mirrored-engine-backstop.md)
+for the sync, drift-check, and rollback workflow.
 
 ### CI/CD
 

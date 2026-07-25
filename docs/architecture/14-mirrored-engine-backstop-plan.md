@@ -184,10 +184,12 @@ new preview is required; no broad native delete is permitted.
    REST contract are complete. The read-only tracked-ID drift check creates a
    linked sanitized receipt and is complete; it never inventories or changes
    unrelated native grants.
-4. **Product workflow** — the guarded API is complete. Configuration-bundle
-   secret-reference input, Mission Control UI, Effective Access link,
-   browser accessibility, and direct-user identity-provider certification
-   remain planned work; see `15-authorization-program-status.md`.
+4. **Product workflow** — the guarded API and configuration-bundle mapping
+   input are complete. The bundle supports secret preflight, hash-bound
+   diff/apply, source-safe archive, and opaque export. Mission Control UI,
+   Effective Access link, browser accessibility, and direct-user
+   identity-provider certification remain planned work; see
+   `15-authorization-program-status.md`.
 
 Acceptance requires 100% coverage of the supported reverse-projection matrix;
 an explicit disposition for every unsupported source shape; native create,

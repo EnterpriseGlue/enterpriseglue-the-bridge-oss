@@ -15,12 +15,15 @@ import {
 } from '../../schemas/platform-admin/engine-backstop.js';
 import { decrypt, encrypt, hash } from '../encryption.js';
 import { generateId } from '../../utils/id.js';
+import type { DataSource, EntityManager } from 'typeorm';
 
 export interface WriteEngineBackstopGroupMappingsInput {
   engineId: string;
   request: EngineBackstopGroupMappingWriteRequest;
   actorId?: string | null;
   source?: 'manual' | 'config';
+  sourceRef?: string | null;
+  nativeGroupSecretRef?: string | null;
   ownershipMode?: 'manual' | 'config_locked' | 'config_warn';
 }
 
@@ -76,13 +79,19 @@ export class EngineBackstopGroupMappingService {
     return rows.map(summaryFor);
   }
 
-  async write(input: WriteEngineBackstopGroupMappingsInput): Promise<EngineBackstopGroupMappingWriteResponse> {
+  async write(input: WriteEngineBackstopGroupMappingsInput, manager?: EntityManager): Promise<EngineBackstopGroupMappingWriteResponse> {
     const request = EngineBackstopGroupMappingWriteRequestSchema.parse(input.request);
     const engineId = normalized(input.engineId);
     const source = input.source || 'manual';
+    const sourceRef = input.sourceRef?.trim() || null;
+    const nativeGroupSecretRef = input.nativeGroupSecretRef?.trim() || null;
     const ownershipMode = input.ownershipMode || 'manual';
     const dataSource = await getDataSource();
-    const engine = await this.engineFor(dataSource, engineId);
+    const readStore: EntityManager | DataSource = manager || dataSource;
+    if (source === 'config' && sourceRef && request.mappings.length !== 1) {
+      throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A config-owned mapping write must use one stable mapping key');
+    }
+    const engine = await this.engineFor(readStore, engineId);
     const seenGroups = new Set<string>();
     const seenNativeReferences = new Set<string>();
     const resolved: Array<{ item: (typeof request.mappings)[number]; group: AuthzGroup; reference: string }> = [];
@@ -95,34 +104,52 @@ export class EngineBackstopGroupMappingService {
       }
       seenGroups.add(authzGroupId);
       seenNativeReferences.add(reference);
-      const group = await dataSource.getRepository(AuthzGroup).findOne({ where: { id: authzGroupId } });
+      const group = await readStore.getRepository(AuthzGroup).findOne({ where: { id: authzGroupId } });
       this.assertGroupUsable(engine, group, authzGroupId);
       resolved.push({ item: { ...item, authzGroupId, nativeGroupId }, group: group!, reference });
     }
 
-    return dataSource.transaction(async (store) => {
+    const persist = async (store: EntityManager) => {
       const repo = store.getRepository(EngineBackstopGroupMapping);
       const existing = await repo.find({ where: { engineId } });
+      const existingForSource = source === 'config' && sourceRef
+        ? await repo.find({ where: { source, sourceRef } })
+        : [];
+      if (existingForSource.length > 1) {
+        throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'More than one persisted mapping is associated with this stable config key', 409);
+      }
+      const sourceRow = existingForSource[0];
       const byGroup = new Map(existing.map((row) => [row.authzGroupId, row]));
       const byNativeReference = new Map(existing.map((row) => [row.nativeGroupReference, row]));
+      const bySourceRef = new Map(existingForSource.map((row) => [row.sourceRef, row]));
       const output: EngineBackstopGroupMapping[] = [];
       const now = Date.now();
       for (const { item, group, reference } of resolved) {
-        const current = byGroup.get(item.authzGroupId);
+        const current = byGroup.get(item.authzGroupId)
+          || (source === 'config' && sourceRef ? sourceRow || bySourceRef.get(sourceRef) : undefined);
+        const conflictingGroup = byGroup.get(item.authzGroupId);
         const conflictingNative = byNativeReference.get(reference);
+        if (current && conflictingGroup && conflictingGroup.id !== current.id) {
+          throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'The EnterpriseGlue group is already owned by another native mapping', 409);
+        }
         if (conflictingNative && conflictingNative.authzGroupId !== item.authzGroupId) {
           throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A native Camunda group may map to only one EnterpriseGlue group per engine', 409);
+        }
+        if (source === 'config' && current && current.source !== 'config') {
+          throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A configuration bundle cannot take ownership of a manually managed mapping', 409);
         }
         if (current && current.source !== source && current.ownershipMode === 'config_locked') {
           throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'The mapping is locked by its configuration source', 409);
         }
         const values = {
+          engineId,
           tenantId: group.tenantId || null,
           authzGroupId: item.authzGroupId,
           encryptedNativeGroupId: encrypt(item.nativeGroupId),
           nativeGroupReference: reference,
           source,
-          sourceRef: `authz-group:${item.authzGroupId}`,
+          sourceRef: sourceRef || `authz-group:${item.authzGroupId}`,
+          nativeGroupSecretRef,
           ownershipMode,
           sourceHash: mappingSourceHash({ engineId, authzGroupId: item.authzGroupId, nativeGroupId: item.nativeGroupId, isActive: item.isActive }),
           lastAppliedAt: now,
@@ -134,20 +161,25 @@ export class EngineBackstopGroupMappingService {
           await repo.update({ id: current.id }, values);
           const row = { ...current, ...values } as EngineBackstopGroupMapping;
           output.push(row);
+          if (current.authzGroupId !== row.authzGroupId) byGroup.delete(current.authzGroupId);
+          byGroup.set(row.authzGroupId, row);
           byNativeReference.delete(current.nativeGroupReference);
           byNativeReference.set(reference, row);
+          bySourceRef.set(row.sourceRef, row);
         } else {
-          const row = { id: generateId(), engineId, ...values, createdAt: now } as EngineBackstopGroupMapping;
+          const row = { id: generateId(), ...values, createdAt: now } as EngineBackstopGroupMapping;
           await repo.insert(row);
           output.push(row);
           byGroup.set(row.authzGroupId, row);
           byNativeReference.set(reference, row);
+          bySourceRef.set(row.sourceRef, row);
         }
       }
       return EngineBackstopGroupMappingWriteResponseSchema.parse({
         mappings: output.map(summaryFor).sort((left, right) => left.authzGroupId.localeCompare(right.authzGroupId)),
       });
-    });
+    };
+    return manager ? persist(manager) : dataSource.transaction(persist);
   }
 
   async activeProjectionMappings(engineId: string, tenantId?: string | null): Promise<EngineBackstopGroupMappingInput[]> {
@@ -173,7 +205,7 @@ export class EngineBackstopGroupMappingService {
       });
   }
 
-  private async engineFor(dataSource: Awaited<ReturnType<typeof getDataSource>>, engineId: string): Promise<Engine> {
+  private async engineFor(dataSource: EntityManager | DataSource, engineId: string): Promise<Engine> {
     const engine = await dataSource.getRepository(Engine).findOne({ where: { id: normalized(engineId) } });
     if (!engine) throw Errors.notFound('Engine', engineId);
     if (engine.type !== 'camunda7') {

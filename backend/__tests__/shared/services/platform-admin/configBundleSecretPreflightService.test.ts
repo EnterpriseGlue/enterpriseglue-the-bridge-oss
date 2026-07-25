@@ -55,6 +55,27 @@ describe('configBundleSecretPreflightService', () => {
     }]);
   });
 
+  it('preflights a backstop native-group reference without returning its value', () => {
+    vi.stubEnv('CAMUNDA_OPERATORS_GROUP', 'not-returned-native-group');
+    const result = configBundleSecretPreflightService.check({
+      bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CAMUNDA_PASSWORD' } }] },
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.camunda-operators', engineRef: { engineKey: 'engine.camunda' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP' }] },
+      },
+    });
+
+    expect(result.references).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reference: 'CAMUNDA_OPERATORS_GROUP',
+        locations: ['./engine-backstop-mappings.json.engineBackstopMappings.0.nativeGroupIdRef'],
+        available: true,
+      }),
+    ]));
+    expect(JSON.stringify(result)).not.toContain('not-returned-native-group');
+  });
+
   it('does not inspect references from an invalid bundle', () => {
     const result = configBundleSecretPreflightService.check({
       bundle,

@@ -29,7 +29,7 @@ function mapping(overrides: Record<string, unknown> = {}) {
   return {
     id: 'mapping-1', tenantId: 'tenant-a', engineId: 'engine-1', authzGroupId: 'group-a',
     encryptedNativeGroupId: 'encrypted:native-ops', nativeGroupReference: `camunda-group-${'a'.repeat(24)}`,
-    source: 'manual', sourceRef: 'authz-group:group-a', ownershipMode: 'manual', sourceHash: 'hash', lastAppliedAt: 1,
+    source: 'manual', sourceRef: 'authz-group:group-a', nativeGroupSecretRef: null, ownershipMode: 'manual', sourceHash: 'hash', lastAppliedAt: 1,
     isActive: true, createdById: 'user-1', createdAt: 1, updatedAt: 1,
     ...overrides,
   };
@@ -42,7 +42,9 @@ function setup(input: { currentEngine?: Record<string, unknown> | null; groups?:
   const engineRepo = { findOne: vi.fn().mockResolvedValue(currentEngine) };
   const groupRepo = { findOne: vi.fn().mockImplementation(({ where }) => groups[where.id] || null) };
   const mappingRepo = {
-    find: vi.fn().mockImplementation(async () => [...mappings]),
+    find: vi.fn().mockImplementation(async ({ where }: any = {}) => mappings.filter((row) =>
+      !where || Object.entries(where).every(([key, value]) => row[key] === value)
+    )),
     insert: vi.fn().mockImplementation(async (row) => mappings.push(row)),
     update: vi.fn().mockImplementation(async ({ id }, values) => {
       const item = mappings.find((row) => row.id === id);
@@ -129,5 +131,40 @@ describe('EngineBackstopGroupMappingService', () => {
       expect.not.objectContaining({ nativeGroupId: expect.anything() }),
       expect.not.objectContaining({ encryptedNativeGroupId: expect.anything() }),
     ]));
+  });
+
+  it('moves a stable config mapping between configured engines without taking over a manual mapping', async () => {
+    const state = setup({
+      currentEngine: engine({ id: 'engine-2' }),
+      mappings: [mapping({
+        engineId: 'engine-1',
+        source: 'config',
+        sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.ops',
+        nativeGroupSecretRef: 'CAMUNDA_OPS_GROUP_OLD',
+        ownershipMode: 'config_locked',
+      })],
+    });
+
+    await service.write({
+      engineId: 'engine-2',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.ops',
+      nativeGroupSecretRef: 'CAMUNDA_OPS_GROUP',
+      ownershipMode: 'config_locked',
+      request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] },
+    });
+
+    expect(state.mappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({
+      engineId: 'engine-2',
+      nativeGroupSecretRef: 'CAMUNDA_OPS_GROUP',
+    }));
+
+    setup({ mappings: [mapping({ source: 'manual', ownershipMode: 'manual' })] });
+    await expect(service.write({
+      engineId: 'engine-1',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.ops',
+      request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] },
+    })).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_MAPPING_CONFLICT', statusCode: 409 });
   });
 });

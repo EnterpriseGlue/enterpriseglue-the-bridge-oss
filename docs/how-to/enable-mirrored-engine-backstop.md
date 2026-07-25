@@ -26,7 +26,8 @@ EnterpriseGlue does not create those native users or memberships.
 
 1. Create an opaque group mapping. The native group value is accepted only on
    write and is encrypted; later list responses show only a stable opaque
-   reference.
+   reference. For configuration-managed engines and groups, prefer the bundle
+   form below so the mapping has reviewable source ownership.
 
    ```http
    POST /engines-api/engines/{engineId}/backstop/mappings
@@ -38,6 +39,27 @@ EnterpriseGlue does not create those native users or memberships.
      }]
    }
    ```
+
+   A configuration bundle may instead declare a mapping with a secret
+   reference. Include `./engine-backstop-mappings.json` alongside the declared
+   `./engines.json` Camunda 7 engine and `./groups.json` group. The secret
+   value must be supplied by the deployment environment; never commit the
+   native Camunda group id.
+
+<!-- enterpriseglue-config-schema: ConfigEngineBackstopMappingsFileSchema -->
+```json
+{
+  "engineBackstopMappings": [{
+    "key": "engine-backstop-mapping.camunda-operators",
+    "engineRef": { "engineKey": "engine.camunda" },
+    "groupRef": { "groupKey": "group.operators" },
+    "nativeGroupIdRef": "env://CAMUNDA_OPERATORS_GROUP"
+  }]
+}
+```
+
+   Bundle preview and secret preflight expose only the reference and its
+   availability. A config export retains the reference, not the native value.
 
 2. Create a preview.
 

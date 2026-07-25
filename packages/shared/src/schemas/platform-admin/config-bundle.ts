@@ -45,6 +45,7 @@ const LabelSchema = z.record(LabelKeySchema, z.string().min(1).max(512));
 
 const AllowedImportPaths = [
   './engines.json',
+  './engine-backstop-mappings.json',
   './engine-tenant-mappings.json',
   './engine-sets.json',
   './runtime-resource-sets.json',
@@ -148,7 +149,7 @@ export const ConfigBundleSecretPreflightResponseSchema = z.object({
 export const ConfigBundleDiffOperationSchema = z.enum(['create', 'update', 'noop', 'archive', 'conflict']);
 export const ConfigBundleDiffObjectTypeSchema = z.enum([
   'role', 'group', 'engine', 'engine_tenant_mapping', 'engine_set', 'runtime_resource_set',
-  'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
+  'engine_backstop_mapping', 'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
 ]);
 const ConfigBundleRuntimeResourceReferenceSchema = z.object({
   resourceKind: z.string(),
@@ -488,6 +489,19 @@ export const ConfigEnginesFileSchema = z.object({
   engines: z.array(ConfigEngineSchema),
 }).strict().superRefine((file, ctx) => uniqueKeys(file.engines, ctx, 'engines'));
 
+/** The native group id is supplied only through an opaque external secret reference. */
+export const ConfigEngineBackstopMappingSchema = z.object({
+  key: ConfigKeySchema.regex(/^engine-backstop-mapping[._-]/, 'Backstop mapping keys must begin with engine-backstop-mapping'),
+  engineRef: ConfigEngineReferenceSchema,
+  groupRef: ConfigGroupReferenceSchema,
+  nativeGroupIdRef: SecretReferenceSchema,
+  isActive: z.boolean().default(true),
+  ownershipMode: z.enum(['config_locked', 'config_warn']).default('config_locked'),
+}).strict();
+export const ConfigEngineBackstopMappingsFileSchema = z.object({
+  engineBackstopMappings: z.array(ConfigEngineBackstopMappingSchema),
+}).strict().superRefine((file, ctx) => uniqueKeys(file.engineBackstopMappings, ctx, 'engineBackstopMappings'));
+
 export const ConfigEngineTenantMappingSchema = z.object({
   key: ConfigKeySchema.regex(
     /^engine-tenant-mapping[._-]/,
@@ -768,6 +782,7 @@ export type ConfigRole = z.infer<typeof ConfigRoleSchema>;
 export type ConfigIdentityProvider = z.infer<typeof ConfigIdentityProviderSchema>;
 export type ConfigIdentityMapping = z.infer<typeof ConfigIdentityMappingSchema>;
 export type ConfigEngineTenantMapping = z.infer<typeof ConfigEngineTenantMappingSchema>;
+export type ConfigEngineBackstopMapping = z.infer<typeof ConfigEngineBackstopMappingSchema>;
 export type ConfigEngineReference = z.infer<typeof ConfigEngineReferenceSchema>;
 export type ConfigEngineSetReference = z.infer<typeof ConfigEngineSetReferenceSchema>;
 export type ConfigGroupReference = z.infer<typeof ConfigGroupReferenceSchema>;

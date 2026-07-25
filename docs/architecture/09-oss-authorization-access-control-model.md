@@ -81,7 +81,7 @@ The remaining relevant work is:
 Deferred and not part of the current v1 implementation path:
 
 - [ ] ⏸ EnterpriseGlue-issued sidecar action-token protocol and dedicated sidecar inventory/heartbeat APIs. Customer-managed sidecar transport is not deferred.
-- [x] ✅ Narrow Camunda 7 engine-native permission mirroring (`mirrored_engine_backstop`): exact mapped-group process/decision `READ`, hash-bound sync, ownership-only rollback, and read-only tracked-ID drift receipts. Configuration-bundle input, UI, and direct-identity certification remain follow-up work.
+- [x] ✅ Narrow Camunda 7 engine-native permission mirroring (`mirrored_engine_backstop`): exact mapped-group process/decision `READ`, hash-bound sync, ownership-only rollback, read-only tracked-ID drift receipts, and source-owned configuration-bundle mappings with opaque secret references. UI and direct-identity certification remain follow-up work.
 - [ ] ⏸ Engine-native permission import/authority (`engine_native_authority`).
 
 ### Clean Target Versus Transitional Compatibility

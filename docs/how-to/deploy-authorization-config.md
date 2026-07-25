@@ -56,6 +56,15 @@ fail-closed; mapping rows are source-owned, versioned, re-resolve known
 inventory atomically, and schedule bounded reconciliation. Always preview
 mapping archives and conflicts before hash-bound apply.
 
+For a Camunda 7 mirrored authorization backstop, a bundle may also import
+`./engine-backstop-mappings.json`. Each mapping references a bundle-owned
+Camunda 7 engine and EnterpriseGlue group, then supplies the native group only
+through `nativeGroupIdRef` (`env://`, `file://`, `docker://`, or an approved
+environment identifier). Enable `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT=true` for
+bootstrap applies so unavailable native-group references fail closed. The
+bundle, preview, export, and logs retain only the opaque reference; applying
+the mapping encrypts the resolved native group id in persistence.
+
 ## Target Environment Variables
 
 | Variable | Values | Purpose |

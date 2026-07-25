@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineSetsFileSchema, ConfigEngineTenantMappingsFileSchema, ConfigGroupsFileSchema,
+  ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineBackstopMappingsFileSchema, ConfigEngineSetsFileSchema, ConfigEngineTenantMappingsFileSchema, ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema, ConfigIdentityProvidersFileSchema, ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema, ConfigRuntimeResourceSetsFileSchema, EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
@@ -13,6 +13,7 @@ import type {
 
 const FILE_SCHEMAS: Record<string, z.ZodType> = {
   './engines.json': ConfigEnginesFileSchema,
+  './engine-backstop-mappings.json': ConfigEngineBackstopMappingsFileSchema,
   './engine-tenant-mappings.json': ConfigEngineTenantMappingsFileSchema,
   './engine-sets.json': ConfigEngineSetsFileSchema,
   './runtime-resource-sets.json': ConfigRuntimeResourceSetsFileSchema,
@@ -160,6 +161,7 @@ function validateCrossFileReferences(
   const roles = fileEntries(normalizedFiles, './roles.json', 'roles');
   const groups = fileEntries(normalizedFiles, './groups.json', 'groups');
   const engines = fileEntries(normalizedFiles, './engines.json', 'engines');
+  const engineBackstopMappings = fileEntries(normalizedFiles, './engine-backstop-mappings.json', 'engineBackstopMappings');
   const engineTenantMappings = fileEntries(normalizedFiles, './engine-tenant-mappings.json', 'engineTenantMappings');
   const engineSets = fileEntries(normalizedFiles, './engine-sets.json', 'engineSets');
   const runtimeResourceSets = fileEntries(normalizedFiles, './runtime-resource-sets.json', 'runtimeResourceSets');
@@ -203,6 +205,19 @@ function validateCrossFileReferences(
         errors.push({ path: `./engine-sets.json.engineSets.${index}.selector.engineKeys.${engineIndex}`, message: `Unknown engine key: ${engineKey}` });
       }
     });
+  });
+
+  engineBackstopMappings.forEach((mapping, index) => {
+    const path = `./engine-backstop-mappings.json.engineBackstopMappings.${index}`;
+    const engine = engines.find((candidate) => candidate.key === mapping.engineRef.engineKey);
+    if (!engine) {
+      errors.push({ path: `${path}.engineRef.engineKey`, message: `Unknown engine key: ${mapping.engineRef.engineKey}` });
+    } else if (engine.type !== 'camunda7') {
+      errors.push({ path: `${path}.engineRef.engineKey`, message: 'Mirrored backstop mappings require a Camunda 7 engine' });
+    }
+    if (!groupKeys.has(mapping.groupRef.groupKey)) {
+      errors.push({ path: `${path}.groupRef.groupKey`, message: `Unknown group key: ${mapping.groupRef.groupKey}` });
+    }
   });
 
   runtimeResourceSets.forEach((set, index) => {

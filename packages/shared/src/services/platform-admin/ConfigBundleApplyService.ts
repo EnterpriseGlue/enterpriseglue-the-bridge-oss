@@ -4,6 +4,7 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
@@ -25,6 +26,8 @@ import { engineTenancyProvisioningService } from './EngineTenancyProvisioningSer
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import {
   configBundleDiffService,
+  configEngineBackstopMappingSourcePrefix,
+  configEngineBackstopMappingSourceRef,
   configEngineTenantMappingSourcePrefix,
   configEngineTenantMappingSourceRef,
   type ConfigBundleDiffChange,
@@ -39,6 +42,8 @@ import { authzGroupService } from './AuthzGroupService.js';
 import { runtimeResourceSetService } from './RuntimeResourceSetService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { engineTenantMappingService } from './EngineTenantMappingService.js';
+import { engineBackstopGroupMappingService } from './EngineBackstopGroupMappingService.js';
+import { secretResolver } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import type {
   ConfigBundleApplyReconciliation as SchemaConfigBundleApplyReconciliation,
@@ -288,7 +293,7 @@ class ConfigBundleApplyService {
         return fail('Secret reference availability changed or is no longer available since preflight', 409);
       }
     }
-    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-tenant-mappings.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
+    const unsupported = Object.keys(compilation.files).filter((path) => !['./roles.json', './groups.json', './engines.json', './engine-backstop-mappings.json', './engine-tenant-mappings.json', './engine-sets.json', './runtime-resource-sets.json', './assignments.json', './project-engine-targets.json', './identity-providers.json', './identity-mappings.json'].includes(path));
     if (unsupported.length > 0) {
       return fail(`Config apply does not yet support: ${unsupported.join(', ')}`, 422);
     }
@@ -351,6 +356,7 @@ class ConfigBundleApplyService {
     const desiredRoles = new Map(entries(compilation.files, './roles.json', 'roles').map((role) => [role.key, role]));
     const desiredGroups = new Map(entries(compilation.files, './groups.json', 'groups').map((group) => [group.key, group]));
     const desiredEngines = new Map(entries(compilation.files, './engines.json', 'engines').map((engine) => [engine.key, engine]));
+    const desiredEngineBackstopMappings = entries(compilation.files, './engine-backstop-mappings.json', 'engineBackstopMappings');
     const desiredEngineTenantMappings = entries(compilation.files, './engine-tenant-mappings.json', 'engineTenantMappings');
     const desiredEngineSets = new Map(entries(compilation.files, './engine-sets.json', 'engineSets').map((set) => [set.key, set]));
     const desiredRuntimeResourceSets = new Map(entries(compilation.files, './runtime-resource-sets.json', 'runtimeResourceSets').map((set) => [set.key, set]));
@@ -372,6 +378,7 @@ class ConfigBundleApplyService {
       const roleRepo = manager.getRepository(RbacRole);
       const groupRepo = manager.getRepository(AuthzGroup);
       const engineRepo = manager.getRepository(Engine);
+      const engineBackstopMappingRepo = manager.getRepository(EngineBackstopGroupMapping);
       const engineTenantMappingRepo = manager.getRepository(EngineTenantMapping);
       const engineSetRepo = manager.getRepository(EngineSet);
       const runtimeResourceSetRepo = manager.getRepository(RuntimeResourceSet);
@@ -611,6 +618,90 @@ class ConfigBundleApplyService {
       const engineSetByKey = new Map(engineSets.map((set) => [set.key, set]));
       const runtimeResourceSetByKey = new Map(runtimeResourceSets.map((set) => [set.key, set]));
       const sourceRef = `config_bundle:${manifest.metadata.key}`;
+      const backstopMappingSourcePrefix = configEngineBackstopMappingSourcePrefix(manifest.metadata.key);
+      const backstopMappingChangesByKey = new Map(
+        diff.changes
+          .filter((change) => change.objectType === 'engine_backstop_mapping')
+          .map((change) => [change.key, change]),
+      );
+      for (const mapping of desiredEngineBackstopMappings) {
+        const change = backstopMappingChangesByKey.get(mapping.key);
+        if (!change || change.operation === 'noop') continue;
+        if (change.operation === 'conflict' || change.operation === 'archive') {
+          fail(`Backstop mapping ${mapping.key} no longer matches its previewed operation`, 409);
+        }
+        const engine = engineByKey.get(mapping.engineRef.engineKey);
+        const group = groupByKey.get(mapping.groupRef.groupKey);
+        if (!engine || engine.type !== 'camunda7' || !group) {
+          fail(`Backstop mapping ${mapping.key} references an unresolved Camunda 7 engine or authorization group`, 409);
+        }
+        let nativeGroupId: string | null;
+        try {
+          nativeGroupId = secretResolver.resolveStored(`ref:${mapping.nativeGroupIdRef}`)?.trim() || null;
+        } catch {
+          fail(`Backstop mapping ${mapping.key} secret reference is no longer available`, 409);
+        }
+        if (!nativeGroupId) fail(`Backstop mapping ${mapping.key} secret reference resolved to an empty native group identifier`, 422);
+        const result = await engineBackstopGroupMappingService.write({
+          engineId: engine.id,
+          request: { mappings: [{ authzGroupId: group.id, nativeGroupId, isActive: mapping.isActive }] },
+          actorId: input.actorId,
+          source: 'config',
+          sourceRef: configEngineBackstopMappingSourceRef(manifest.metadata.key, mapping.key),
+          nativeGroupSecretRef: mapping.nativeGroupIdRef,
+          ownershipMode: mapping.ownershipMode,
+        }, manager);
+        const mappingId = result.mappings[0]?.id;
+        if (!mappingId) fail(`Backstop mapping ${mapping.key} could not be persisted`, 500);
+        await writeAudit(manager, {
+          tenantId,
+          actorId: input.actorId,
+          action: change.operation === 'create'
+            ? 'authz.config_bundle.engine_backstop_mapping.create'
+            : 'authz.config_bundle.engine_backstop_mapping.update',
+          resourceType: 'engine_backstop_group_mapping',
+          resourceId: mappingId,
+          details: {
+            bundleKey: manifest.metadata.key,
+            mappingKey: mapping.key,
+            engineKey: mapping.engineRef.engineKey,
+            groupKey: mapping.groupRef.groupKey,
+            canonicalHash: diff.canonicalHash,
+          },
+        });
+        if (change.operation === 'create') created += 1;
+        else updated += 1;
+      }
+      for (const change of diff.changes) {
+        if (change.objectType !== 'engine_backstop_mapping' || change.operation !== 'archive' || !change.currentId) continue;
+        const existing = await engineBackstopMappingRepo.findOne({ where: { id: change.currentId } });
+        if (
+          !existing
+          || existing.source !== 'config'
+          || !existing.sourceRef.startsWith(backstopMappingSourcePrefix)
+        ) {
+          fail(`Backstop mapping ${change.key} no longer matches its previewed archive`, 409);
+        }
+        if (!existing.isActive) {
+          archived += 1;
+          continue;
+        }
+        await engineBackstopMappingRepo.update({ id: existing.id }, {
+          sourceHash: objectFingerprint('engine_backstop_mapping', change.key, { active: false }),
+          lastAppliedAt: now,
+          isActive: false,
+          updatedAt: now,
+        });
+        await writeAudit(manager, {
+          tenantId,
+          actorId: input.actorId,
+          action: 'authz.config_bundle.engine_backstop_mapping.disable',
+          resourceType: 'engine_backstop_group_mapping',
+          resourceId: existing.id,
+          details: { bundleKey: manifest.metadata.key, mappingKey: change.key, canonicalHash: diff.canonicalHash },
+        });
+        archived += 1;
+      }
       const mappingSourcePrefix = configEngineTenantMappingSourcePrefix(manifest.metadata.key);
       const mappingChangesByKey = new Map(
         diff.changes

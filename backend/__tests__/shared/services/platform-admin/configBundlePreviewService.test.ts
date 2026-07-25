@@ -106,6 +106,43 @@ describe('configBundlePreviewService', () => {
     });
   });
 
+  it('accepts only configured Camunda 7 engines and configured groups for secret-backed backstop mappings', () => {
+    const input = {
+      bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
+      files: {
+        './engines.json': { engines: [{
+          key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest',
+          auth: { type: 'basic', username: 'engine-user', passwordRef: 'CAMUNDA_PASSWORD' },
+        }] },
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{
+          key: 'engine-backstop-mapping.camunda-operators',
+          engineRef: { engineKey: 'engine.camunda' },
+          groupRef: { groupKey: 'group.operators' },
+          nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP',
+        }] },
+      },
+    };
+
+    expect(configBundlePreviewService.preview(input)).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+    const invalid = configBundlePreviewService.preview({
+      ...input,
+      files: {
+        ...input.files,
+        './engines.json': { engines: [{ ...input.files['./engines.json'].engines[0], type: 'operaton' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{
+          ...input.files['./engine-backstop-mappings.json'].engineBackstopMappings[0],
+          groupRef: { groupKey: 'group.missing' },
+        }] },
+      },
+    });
+    expect(invalid).toMatchObject({ valid: false });
+    expect(invalid.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: 'Mirrored backstop mappings require a Camunda 7 engine' }),
+      expect.objectContaining({ message: 'Unknown group key: group.missing' }),
+    ]));
+  });
+
   it('rejects dedicated-engine and strategy-mismatched tenant mappings', () => {
     const result = configBundlePreviewService.preview({
       bundle: {

@@ -29,10 +29,43 @@ indexed `observed_of_run_id` link. A drift observation is a new receipt rather
 than a mutation of the original apply receipt, so the original ownership proof
 remains available for an ownership-only rollback.
 
+Migration `1700000000103-add-engine-backstop-config-secret-reference` adds
+`native_group_secret_ref` to a backstop mapping. It stores the opaque config
+reference used for reconciliation and export; it never stores a second copy of
+the native Camunda group id.
+
 The migration and entity registry are qualified in PostgreSQL, MySQL, SQL
 Server, Oracle, and Spanner metadata tests. The encrypted run-detail fields
 use each provider's unbounded safe text representation and are capped below
 the cross-provider evidence limit before persistence.
+
+## Configuration-bundle mappings
+
+`./engine-backstop-mappings.json` is a config-owned alternative to the
+interactive mapping API. A mapping may target only a Camunda 7 engine and
+EnterpriseGlue group declared in the same bundle. It uses a stable mapping key
+and an opaque `nativeGroupIdRef`; a raw `nativeGroupId` is rejected.
+
+```json
+{
+  "engineBackstopMappings": [{
+    "key": "engine-backstop-mapping.camunda-operators",
+    "engineRef": { "engineKey": "engine.camunda" },
+    "groupRef": { "groupKey": "group.operators" },
+    "nativeGroupIdRef": "env://CAMUNDA_OPERATORS_GROUP",
+    "isActive": true,
+    "ownershipMode": "config_locked"
+  }]
+}
+```
+
+Secret preflight checks only whether the reference is available. Apply resolves
+it inside the transaction, encrypts the native value, and records the opaque
+reference for future diff/export. Preview, diff, audit records, exports, and
+normal list APIs never contain the native value. An authoritative bundle that
+removes a mapping disables it locally; it does not infer ownership of, or
+delete, native Camunda grants. Use the reviewed backstop sync and its
+ownership-only rollback for native grant lifecycle changes.
 
 ## Native ownership protocol
 
@@ -80,6 +113,10 @@ pnpm --dir backend exec vitest run \
   __tests__/shared/services/platform-admin/engineBackstopSyncRunService.test.ts \
   __tests__/shared/services/platform-admin/engineBackstopSyncService.test.ts \
   __tests__/shared/db/engineBackstopPersistence.test.ts \
+  __tests__/shared/services/platform-admin/configBundlePreviewService.test.ts \
+  __tests__/shared/services/platform-admin/configBundleDiffService.test.ts \
+  __tests__/shared/services/platform-admin/configBundleApplyService.test.ts \
+  __tests__/shared/services/platform-admin/configBundleExportService.test.ts \
   __tests__/modules/mission-control/engines/routes.test.ts
 pnpm run test:action-registry
 pnpm run test:camunda7-native-grant-container

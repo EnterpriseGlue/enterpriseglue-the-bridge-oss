@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   ConfigAssignmentSchema,
+  ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
@@ -26,6 +27,7 @@ import {
 
 const SCHEMAS: Record<string, z.ZodType> = {
   ConfigAssignmentSchema,
+  ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,

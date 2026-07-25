@@ -2,6 +2,7 @@ import { In, IsNull, Like } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
@@ -76,10 +77,11 @@ class ConfigBundleExportService {
     const dataSource = await getDataSource();
     const tenantId = input.tenantId || null;
     const sourceRef = `config_bundle:${input.bundleKey}`;
+    const backstopMappingSourcePrefix = `${sourceRef}:engine_backstop_mapping:`;
     const mappingSourcePrefix = `${sourceRef}:engine_tenant_mapping:`;
     const where = { sourceRef, ...(tenantId ? { tenantId } : { tenantId: IsNull() }) };
     const engineScopePrefix = `${tenantId || 'platform'}:`;
-    const [roles, groups, engines, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources] = await Promise.all([
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources] = await Promise.all([
       dataSource.getRepository(RbacRole).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(AuthzGroup).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(Engine).find({
@@ -87,6 +89,14 @@ class ConfigBundleExportService {
           { sourceRef, lifecycleStatus: 'active', tenantId: tenantId || IsNull() },
           { sourceRef, lifecycleStatus: 'active', configKeyIdentity: Like(`${engineScopePrefix}%`) },
         ],
+      }),
+      dataSource.getRepository(EngineBackstopGroupMapping).find({
+        where: {
+          source: 'config',
+          sourceRef: Like(`${backstopMappingSourcePrefix}%`),
+          isActive: true,
+          ...(tenantId ? { tenantId } : { tenantId: IsNull() }),
+        },
       }),
       dataSource.getRepository(EngineTenantMapping).find({
         where: { source: 'config', sourceRef: Like(`${mappingSourcePrefix}%`), isActive: true },
@@ -145,6 +155,32 @@ class ConfigBundleExportService {
     if (engineSets.length) files['./engine-sets.json'] = { engineSets: sortedByKey(engineSets).map((set) => ({ key: set.key, name: set.name, description: set.description || undefined, selector: json(set.selectorJson), ownershipMode: set.ownershipMode || 'config_locked' })) };
 
     const engineKeyById = new Map(engines.filter((engine) => engine.configKey).map((engine) => [engine.id, engine.configKey!]));
+    const groupKeyById = new Map(groups.map((group) => [group.id, group.key]));
+    if (engineBackstopMappings.length) {
+      files['./engine-backstop-mappings.json'] = {
+        engineBackstopMappings: [...engineBackstopMappings]
+          .map((mapping) => ({ mapping, key: mapping.sourceRef.slice(backstopMappingSourcePrefix.length) }))
+          .sort((left, right) => left.key.localeCompare(right.key))
+          .map(({ mapping, key }) => {
+            const engineKey = engineKeyById.get(mapping.engineId);
+            const groupKey = groupKeyById.get(mapping.authzGroupId);
+            if (!engineKey || !groupKey) {
+              throw new Error(`Cannot export backstop mapping ${key}: its engine or authorization group is not config-owned by this bundle`);
+            }
+            if (!mapping.nativeGroupSecretRef) {
+              throw new Error(`Cannot export backstop mapping ${key}: replace its native group value with a secret reference before export`);
+            }
+            return {
+              key,
+              engineRef: { engineKey },
+              groupRef: { groupKey },
+              nativeGroupIdRef: mapping.nativeGroupSecretRef,
+              isActive: mapping.isActive,
+              ownershipMode: mapping.ownershipMode,
+            };
+          }),
+      };
+    }
     if (engineTenantMappings.length) {
       files['./engine-tenant-mappings.json'] = {
         engineTenantMappings: [...engineTenantMappings]
@@ -194,7 +230,6 @@ class ConfigBundleExportService {
       };
     }) };
 
-    const groupKeyById = new Map(groups.map((group) => [group.id, group.key]));
     if (identityMappings.length) files['./identity-mappings.json'] = { identityMappings: sortedByKey(identityMappings.filter((mapping) => Boolean(mapping.configKey)).map((mapping) => ({ ...mapping, key: mapping.configKey! }))).map((mapping) => {
       const providerKey = providerKeyById.get(mapping.providerId);
       const targetGroupKey = groupKeyById.get(mapping.targetGroupId);

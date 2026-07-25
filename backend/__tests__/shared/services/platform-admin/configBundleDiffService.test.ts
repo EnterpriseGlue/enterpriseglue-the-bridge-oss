@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
@@ -50,12 +51,14 @@ function mockDataSource(
   runtimeResourceSets: unknown[] = [],
   runtimeResourceSetMaterializations: unknown[] = [],
   engineTenantMappings: unknown[] = [],
+  engineBackstopMappings: unknown[] = [],
 ) {
   (getDataSource as unknown as Mock).mockResolvedValue({
     getRepository: (entity: unknown) => {
       if (entity === RbacRole) return { find: vi.fn().mockResolvedValue(roles) };
       if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue(groups) };
       if (entity === Engine) return { find: vi.fn().mockResolvedValue(engines) };
+      if (entity === EngineBackstopGroupMapping) return { find: vi.fn().mockResolvedValue(engineBackstopMappings) };
       if (entity === EngineTenantMapping) return { find: vi.fn().mockResolvedValue(engineTenantMappings) };
       if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([]) };
       if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue(runtimeResourceSets) };
@@ -1071,5 +1074,37 @@ describe('configBundleDiffService', () => {
     expect(result.changes).toContainEqual(expect.objectContaining({
       objectType: 'identity_mapping', key: 'mapping.operations', operation: 'conflict', reason: expect.stringContaining('unresolved identity provider'),
     }));
+  });
+
+  it('diffs a config-owned backstop mapping by opaque secret reference without exposing its native value', async () => {
+    const engine = {
+      id: 'engine-camunda', tenantId: 'tenant-a', configKey: 'engine.camunda', configKeyIdentity: 'tenant-a:engine.camunda',
+      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', type: 'camunda7',
+    };
+    const group = {
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false, ownershipMode: 'config_locked',
+    };
+    const mapping = {
+      id: 'mapping-operators', engineId: engine.id, authzGroupId: group.id, tenantId: 'tenant-a',
+      source: 'config', sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.camunda-operators',
+      encryptedNativeGroupId: 'encrypted:native-group-secret-value', nativeGroupReference: 'camunda-group-opaque', nativeGroupSecretRef: 'CAMUNDA_OPERATORS_GROUP_OLD',
+      ownershipMode: 'config_locked', isActive: true,
+    };
+    mockDataSource([], [group], [], [engine], [], [], [], [], [], [], [], [], [], [], [mapping]);
+
+    const result = await configBundleDiffService.diff({
+      bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CAMUNDA_PASSWORD' } }] },
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.camunda-operators', engineRef: { engineKey: 'engine.camunda' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP_ROTATED' }] },
+      },
+    }, 'tenant-a');
+
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'engine_backstop_mapping', key: 'engine-backstop-mapping.camunda-operators', operation: 'update', currentId: 'mapping-operators',
+    }));
+    expect(JSON.stringify(result)).not.toContain('native-group-secret-value');
   });
 });

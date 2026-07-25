@@ -5,6 +5,7 @@ import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/per
 import { EngineBackstopSyncTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncTask.js';
 import { AddEngineBackstopFoundation1700000000101 } from '@enterpriseglue/shared/db/migrations/1700000000101-add-engine-backstop-foundation.js';
 import { AddEngineBackstopDriftObservations1700000000102 } from '@enterpriseglue/shared/db/migrations/1700000000102-add-engine-backstop-drift-observations.js';
+import { AddEngineBackstopConfigSecretReference1700000000103 } from '@enterpriseglue/shared/db/migrations/1700000000103-add-engine-backstop-config-secret-reference.js';
 
 function columns(entity: Function): string[] {
   return getMetadataArgsStorage().columns
@@ -16,6 +17,7 @@ describe('mirrored engine backstop persistence', () => {
   it('stores native identities and owned grant details separately from ordinary receipts', () => {
     expect(columns(EngineBackstopGroupMapping)).toEqual(expect.arrayContaining([
       'tenant_id', 'engine_id', 'authz_group_id', 'encrypted_native_group_id', 'native_group_reference', 'is_active',
+      'native_group_secret_ref',
     ]));
     expect(columns(EngineBackstopSyncRun)).toEqual(expect.arrayContaining([
       'source_hash', 'desired_hash', 'result_hash', 'classifications_json', 'encrypted_detailed_snapshot', 'detailed_snapshot_expires_at',
@@ -89,5 +91,24 @@ describe('mirrored engine backstop persistence', () => {
     await migration.up({ connection: { options: { type: database } }, getTable: vi.fn(async () => table), addColumn, createIndex } as any);
     expect(addColumn).toHaveBeenCalledWith('engine_backstop_sync_runs', expect.objectContaining({ name: 'observed_of_run_id', type, isNullable: true, ...(length === undefined ? {} : { length }) }));
     expect(createIndex).toHaveBeenCalledWith('engine_backstop_sync_runs', expect.objectContaining({ name: 'idx_engine_backstop_sync_run_observed_source', columnNames: ['observed_of_run_id'] }));
+  });
+
+  it.each([
+    ['postgres', 'text', undefined],
+    ['mysql', 'varchar', '191'],
+    ['mssql', 'nvarchar', '191'],
+    ['oracle', 'varchar2', '191'],
+    ['spanner', 'string', '191'],
+  ])('adds an opaque portable config secret reference for %s', async (database, type, length) => {
+    const table = { columns: [] } as any;
+    const addColumn = vi.fn(async (_table, column) => { table.columns.push(column); });
+    await new AddEngineBackstopConfigSecretReference1700000000103().up({
+      connection: { options: { type: database } },
+      getTable: vi.fn(async () => table),
+      addColumn,
+    } as any);
+    expect(addColumn).toHaveBeenCalledWith('engine_backstop_group_mappings', expect.objectContaining({
+      name: 'native_group_secret_ref', type, isNullable: true, ...(length === undefined ? {} : { length }),
+    }));
   });
 });

@@ -20,6 +20,8 @@ export class EngineBackstopGroupMapping extends AppBaseEntity {
   @Column({ name: 'native_group_reference', type: 'text' }) nativeGroupReference!: string;
   @Column({ type: 'text', default: 'manual' }) source!: string;
   @Column({ name: 'source_ref', type: 'text' }) sourceRef!: string;
+  /** Opaque configuration secret reference; never the decrypted native group id. */
+  @Column({ name: 'native_group_secret_ref', type: 'text', nullable: true }) nativeGroupSecretRef!: string | null;
   @Column({ name: 'ownership_mode', type: 'text', default: 'manual' }) ownershipMode!: string;
   @Column({ name: 'source_hash', type: 'text', nullable: true }) sourceHash!: string | null;
   @Column({ name: 'last_applied_at', type: 'bigint', nullable: true }) lastAppliedAt!: number | null;

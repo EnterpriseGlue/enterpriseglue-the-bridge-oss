@@ -4,6 +4,7 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
@@ -23,7 +24,7 @@ import { configBundleApplyService } from '@enterpriseglue/shared/services/platfo
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 
-const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine, createEngineSet, updateEngineSet } = vi.hoisted(() => ({
+const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine, createEngineSet, updateEngineSet, writeBackstopMapping } = vi.hoisted(() => ({
   materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
   materializeForEngine: vi.fn().mockResolvedValue([]),
   materializeEngineSetsForEngine: vi.fn().mockResolvedValue([]),
@@ -52,6 +53,7 @@ const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSe
       materializationStatus: input.isArchived ? 'archived' : 'pending',
     });
   }),
+  writeBackstopMapping: vi.fn().mockResolvedValue({ mappings: [{ id: 'backstop-mapping-1' }] }),
 }));
 const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, created: 0, removed: 0, failed: 0, truncated: false }));
 const previewMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, additions: 0, removals: 0, unchanged: 0, failed: 0, truncated: false }));
@@ -86,6 +88,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeRecon
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js', () => ({
   engineTenantMappingService: { reconcileInStore: reconcileEngineTenantMappings },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopGroupMappingService.js', () => ({
+  engineBackstopGroupMappingService: { write: writeBackstopMapping },
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -160,6 +165,7 @@ function setupDataSource() {
       if (row) Object.assign(row, values);
     }),
   };
+  const engineBackstopMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
   const runtimeResourceSetMaterializationRepo = { find: vi.fn().mockResolvedValue([]) };
@@ -182,6 +188,7 @@ function setupDataSource() {
     if (entity === RbacPermission) return catalogPermissionRepo;
     if (entity === AuthzGroup) return groupRepo;
     if (entity === Engine) return engineRepo;
+    if (entity === EngineBackstopGroupMapping) return engineBackstopMappingRepo;
     if (entity === EngineTenantMapping) return engineTenantMappingRepo;
     if (entity === EngineSet) return engineSetRepo;
     if (entity === RuntimeResourceSet) return runtimeResourceSetRepo;
@@ -204,7 +211,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -1420,5 +1427,53 @@ describe('configBundleApplyService', () => {
     expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'engines.prod', engineSetKeyIdentity: 'tenant-a:engines.prod', source: 'config',
     }));
+  });
+
+  it('resolves a backstop group reference only during apply and does not put its native value in audit output', async () => {
+    const { engineRepo, groupRepo, auditInsert } = setupDataSource();
+    const engine = {
+      id: 'engine-camunda', tenantId: 'tenant-a', configKey: 'engine.camunda', configKeyIdentity: 'tenant-a:engine.camunda',
+      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', name: 'Camunda',
+      baseUrl: 'https://camunda.example.test/engine-rest', type: 'camunda7', externalId: null, labelsJson: '{}',
+      authType: 'basic', username: 'eg', passwordEnc: 'ref:CAMUNDA_PASSWORD', oauthTokenUrl: null, oauthScopes: null,
+      oauthAudience: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', tenancyMode: 'dedicated',
+    };
+    const group = {
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false, ownershipMode: 'config_locked',
+    };
+    engineRepo.find.mockResolvedValue([engine]);
+    engineRepo.findOne.mockResolvedValue(engine);
+    groupRepo.find.mockResolvedValue([group]);
+    groupRepo.findOne.mockImplementation(async ({ where }: any) => where.id === group.id || where.key === group.key ? group : null);
+    const mappingBundle = { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] };
+    const mappingFiles = {
+      './engines.json': { engines: [{ key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CAMUNDA_PASSWORD' } }] },
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.camunda-operators', engineRef: { engineKey: 'engine.camunda' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP' }] },
+    };
+    const previousSecret = process.env.CAMUNDA_OPERATORS_GROUP;
+    process.env.CAMUNDA_OPERATORS_GROUP = 'camunda-operators-not-for-audit';
+    try {
+      const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+      const result = await configBundleApplyService.apply({
+        bundle: mappingBundle,
+        files: mappingFiles,
+        expectedPreviewHash: preview.canonicalHash!,
+        tenantId: 'tenant-a',
+        actorId: 'admin-1',
+      });
+      expect(result).toMatchObject({ created: 1, updated: 0, archived: 0 });
+      expect(writeBackstopMapping).toHaveBeenCalledWith(expect.objectContaining({
+        engineId: 'engine-camunda', source: 'config', nativeGroupSecretRef: 'CAMUNDA_OPERATORS_GROUP',
+        request: { mappings: [{ authzGroupId: 'group-operators', nativeGroupId: 'camunda-operators-not-for-audit', isActive: true }] },
+      }), expect.anything());
+      expect(JSON.stringify(auditInsert.mock.calls)).not.toContain('camunda-operators-not-for-audit');
+    } finally {
+      if (previousSecret === undefined) delete process.env.CAMUNDA_OPERATORS_GROUP;
+      else process.env.CAMUNDA_OPERATORS_GROUP = previousSecret;
+    }
   });
 });

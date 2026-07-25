@@ -36,7 +36,7 @@ is customer/IdP-owned.
 | Workstream | Required outcome | Status |
 | --- | --- | --- |
 | Backstop drift check | Read only tracked native IDs and mark altered/missing grants `out_of_sync`; never touch unrelated native grants. | Implemented: linked durable observation receipt and dedicated action/API |
-| Configuration bundles | Add `engine-backstop-mappings.json` with secret references, preflight, import/apply, diff, and export redaction. | Next implementation slice |
+| Configuration bundles | `engine-backstop-mappings.json` supports secret references, preflight, import/apply, diff, authoritative disable, and opaque export. | Implemented |
 | Mission Control UI | Add the native-backstop panel, prerequisite guidance, receipt/history, and accessibility/browser coverage. | Next implementation slice |
 | Direct-user certification | Prove synthetic mapped-group allow and sibling-deny against a real Camunda identity provider. | Requires local/representative IdP fixture |
 | Customer-sidecar support | Define and prove a bounded authorization-write capability before allowing sidecars. | Deferred by design |

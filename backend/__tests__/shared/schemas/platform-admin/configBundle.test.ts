@@ -7,6 +7,7 @@ import {
   ConfigBundleRuntimeReconciliationTaskSchema,
   ConfigBundleSecretReferenceStatusSchema,
   ConfigAssignmentsFileSchema,
+  ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
   ConfigIdentityProvidersFileSchema,
@@ -244,6 +245,24 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
     expect(ConfigEngineTenantMappingsFileSchema.safeParse({
       engineTenantMappings: [{ ...mapping, ownershipMode: 'manual' }],
+    }).success).toBe(false);
+  });
+
+  it('defines secret-backed config-owned Camunda 7 backstop mappings without accepting native IDs', () => {
+    const mapping = {
+      key: 'engine-backstop-mapping.central-operators',
+      engineRef: { engineKey: 'engine-central' },
+      groupRef: { groupKey: 'group.operators' },
+      nativeGroupIdRef: 'env://CAMUNDA_OPERATORS_GROUP',
+    };
+    expect(ConfigEngineBackstopMappingsFileSchema.parse({ engineBackstopMappings: [mapping] })).toEqual({
+      engineBackstopMappings: [{ ...mapping, isActive: true, ownershipMode: 'config_locked' }],
+    });
+    expect(ConfigEngineBackstopMappingsFileSchema.safeParse({
+      engineBackstopMappings: [{ ...mapping, nativeGroupId: 'camunda-operators' }],
+    }).success).toBe(false);
+    expect(ConfigEngineBackstopMappingsFileSchema.safeParse({
+      engineBackstopMappings: [{ ...mapping, ownershipMode: 'manual' }],
     }).success).toBe(false);
   });
 
