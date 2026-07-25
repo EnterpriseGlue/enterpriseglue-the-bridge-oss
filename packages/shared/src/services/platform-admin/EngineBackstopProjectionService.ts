@@ -26,6 +26,7 @@ function classification(
 function unsupported(candidate: EngineBackstopProjectionCandidate, reason: EngineBackstopClassification['reasonCodes'][number]): EngineBackstopClassification {
   return classification({
     sourceAssignmentId: candidate.sourceAssignmentId,
+    principalType: candidate.principal.type,
     disposition: reason === 'principal_not_group' || reason === 'scope_not_resource_specific'
       ? 'manual_required'
       : 'blocked',
@@ -106,6 +107,7 @@ export class EngineBackstopProjectionService {
     if (!candidate.resource.key.trim()) return unsupported(candidate, 'runtime_resource_key_missing');
     return classification({
       sourceAssignmentId: candidate.sourceAssignmentId,
+      principalType: candidate.principal.type,
       disposition: 'proposed',
       reasonCodes: ['exact_group_read_projected'],
       resourceKind: candidate.resource.kind,

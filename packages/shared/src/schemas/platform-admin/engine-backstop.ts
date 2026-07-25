@@ -89,6 +89,7 @@ export const EngineBackstopProjectionContextSchema = z.object({
 
 export const EngineBackstopClassificationSchema = z.object({
   sourceAssignmentId: z.string().min(1).max(255),
+  principalType: z.enum(['group', 'user', 'api_client', 'service_account']),
   disposition: EngineBackstopDispositionSchema,
   reasonCodes: z.array(EngineBackstopReasonCodeSchema).min(1),
   resourceKind: EngineBackstopResourceKindSchema.nullable(),
@@ -113,6 +114,52 @@ export const EngineBackstopProjectionSchema = z.object({
   desiredGrants: z.array(EngineBackstopDesiredGrantSchema),
 }).strict();
 
+export const EngineBackstopSyncRunStatusSchema = z.enum([
+  'previewed', 'queued', 'running', 'succeeded', 'failed', 'rolled_back', 'out_of_sync',
+]);
+
+/** Safe receipt form; neither native IDs nor exact resource keys are exposed. */
+export const EngineBackstopSanitizedClassificationSchema = z.object({
+  sourceAssignmentReference: z.string().regex(/^backstop-assignment-[a-f0-9]{24}$/),
+  disposition: EngineBackstopDispositionSchema,
+  reasonCodes: z.array(EngineBackstopReasonCodeSchema).min(1),
+  principalType: z.enum(['group', 'user', 'api_client', 'service_account']),
+  nativeGroupReference: EngineBackstopNativeGroupReferenceSchema.nullable(),
+  resourceKind: EngineBackstopResourceKindSchema.nullable(),
+  resourceReference: z.string().regex(/^backstop-resource-[a-f0-9]{24}$/).nullable(),
+  camundaResourceType: z.union([z.literal(6), z.literal(10)]).nullable(),
+  permissions: z.array(z.literal('READ')),
+}).strict();
+
+export const EngineBackstopSyncRunSummarySchema = z.object({
+  id: z.string().min(1).max(255),
+  engineId: z.string().min(1).max(255),
+  tenantId: z.string().min(1).max(255).nullable(),
+  status: EngineBackstopSyncRunStatusSchema,
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  desiredHash: z.string().regex(/^[a-f0-9]{64}$/),
+  resultHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  catalogVersion: z.string().min(1).max(128),
+  capability: z.record(z.string(), z.boolean()),
+  counts: z.record(z.string(), z.number().int().nonnegative()),
+  classifications: z.array(EngineBackstopSanitizedClassificationSchema).max(50_000),
+  rollbackOfRunId: z.string().min(1).max(255).nullable(),
+  detailedSnapshotAvailable: z.boolean(),
+  detailedSnapshotExpiresAt: z.number().int().nullable(),
+  completedAt: z.number().int().nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+}).strict();
+
+export const EngineBackstopSyncRunHistorySchema = z.object({
+  runs: z.array(EngineBackstopSyncRunSummarySchema).max(100),
+}).strict();
+
+export const EngineBackstopSyncApplyRequestSchema = z.object({
+  desiredHash: z.string().regex(/^[a-f0-9]{64}$/),
+  acknowledgeDirectIdentityBoundary: z.literal(true),
+}).strict();
+
 export type EngineBackstopGroupMappingInput = z.infer<typeof EngineBackstopGroupMappingInputSchema>;
 export type EngineBackstopGroupMappingSummary = z.infer<typeof EngineBackstopGroupMappingSummarySchema>;
 export type EngineBackstopGroupMappingWrite = z.infer<typeof EngineBackstopGroupMappingWriteSchema>;
@@ -123,3 +170,8 @@ export type EngineBackstopProjectionContext = z.infer<typeof EngineBackstopProje
 export type EngineBackstopClassification = z.infer<typeof EngineBackstopClassificationSchema>;
 export type EngineBackstopDesiredGrant = z.infer<typeof EngineBackstopDesiredGrantSchema>;
 export type EngineBackstopProjection = z.infer<typeof EngineBackstopProjectionSchema>;
+export type EngineBackstopSanitizedClassification = z.infer<typeof EngineBackstopSanitizedClassificationSchema>;
+export type EngineBackstopSyncRunStatus = z.infer<typeof EngineBackstopSyncRunStatusSchema>;
+export type EngineBackstopSyncRunSummary = z.infer<typeof EngineBackstopSyncRunSummarySchema>;
+export type EngineBackstopSyncRunHistory = z.infer<typeof EngineBackstopSyncRunHistorySchema>;
+export type EngineBackstopSyncApplyRequest = z.infer<typeof EngineBackstopSyncApplyRequestSchema>;
