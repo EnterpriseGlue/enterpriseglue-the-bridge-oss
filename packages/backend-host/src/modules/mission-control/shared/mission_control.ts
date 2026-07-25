@@ -30,7 +30,7 @@ import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/v
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
 import { requireAction, requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js'
-import { presentHistoricVariables, presentRuntimeVariables, presentVariableHistory, requireVariableValueFilterAccess } from './variable-visibility.js'
+import { presentHistoricVariables, presentRuntimeVariables, presentVariableHistory, preventVariableResponseCaching, requireVariableValueFilterAccess } from './variable-visibility.js'
 import {
   filterRuntimeItemsByProcessDefinitionKeys,
   filterRuntimeItemsByResourceKey,
@@ -263,6 +263,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireProcessInst
     const engineId = (req as any).engineId as string
     const instanceId = String(req.params.id)
     const data = await getProcessInstanceVariables(engineId, instanceId)
+    preventVariableResponseCaching(res)
     res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data)))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load instance variables')
@@ -288,6 +289,7 @@ r.get('/mission-control-api/process-instances/:id/execution-details', requirePro
     const query = req.query as z.infer<typeof executionDetailsQuerySchema>
     const data = await getProcessInstanceExecutionDetails(engineId, instanceId, query)
     const redacted = await piiRedactionService.redactPayload(req, data, 'history')
+    preventVariableResponseCaching(res)
     res.json(ProcessInstanceExecutionDetailsSchema.parse({
       ...redacted,
       variables: await presentHistoricVariables(req, data.variables),
@@ -353,6 +355,7 @@ r.get('/mission-control-api/process-instances/:id/variable-history', requireProc
     const instanceId = String(req.params.id)
     const { variableInstanceId } = req.query as { variableInstanceId: string }
     const data = await getProcessInstanceVariableHistory(engineId, instanceId, variableInstanceId)
+    preventVariableResponseCaching(res)
     res.json(z.array(VariableHistoryEntrySchema).parse(await presentVariableHistory(req, data)))
   } catch (e: any) {
     throw Errors.internal(e?.message || 'Failed to load variable history')
@@ -382,13 +385,15 @@ r.get('/mission-control-api/history/variable-instances', requireRuntimeCollectio
     const visibleKeys = keys ? keys.filter((key) => !requestedKey || key === requestedKey) : null
     const query = visibleKeys ? getBoundedRuntimeResourceQuery(req.query) : req.query
     const data = visibleKeys
-      ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByResourceKey(
+      ? (await Promise.all(visibleKeys.map(async (processDefinitionKey) => filterRuntimeItemsByProcessDefinitionKeys(
+        engineId,
         await listHistoricVariableInstances(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }),
         [processDefinitionKey],
-        'processDefinitionKey',
         scopes,
+        { enrichHistoricProcessLineage: true },
       )))).flat()
       : await listHistoricVariableInstances(engineId, query as any)
+    preventVariableResponseCaching(res)
     res.json(HistoricVariableInstanceListSchema.parse(await presentHistoricVariables(req, data)))
   } catch (e: any) {
     if (e?.statusCode) throw e

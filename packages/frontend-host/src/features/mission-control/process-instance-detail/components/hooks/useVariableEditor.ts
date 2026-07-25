@@ -6,9 +6,10 @@ interface UseVariableEditorProps {
   instanceId: string
   varsQ: any
   engineId?: string
+  onVariableSaved?: (name: string, variable: { value: any; type: string }) => void
 }
 
-export function useVariableEditor({ instanceId, varsQ, engineId }: UseVariableEditorProps) {
+export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved }: UseVariableEditorProps) {
   const [editingVarKey, setEditingVarKey] = useState<string | null>(null)
   const [editingVarType, setEditingVarType] = useState<string>('String')
   const [editingVarValue, setEditingVarValue] = useState<string>('')
@@ -68,13 +69,14 @@ export function useVariableEditor({ instanceId, varsQ, engineId }: UseVariableEd
         engineId,
       })
       await varsQ.refetch()
+      onVariableSaved?.(editingVarKey, { value: parsed, type: editingVarType })
       closeVariableEditor()
     } catch (e: any) {
       setEditVarError(getUiErrorMessage(e, 'Failed to update variable'))
     } finally {
       setEditVarBusy(false)
     }
-  }, [instanceId, editingVarKey, editingVarValue, editingVarType, varsQ, closeVariableEditor])
+  }, [instanceId, editingVarKey, editingVarValue, editingVarType, varsQ, onVariableSaved, closeVariableEditor])
 
   return {
     // State

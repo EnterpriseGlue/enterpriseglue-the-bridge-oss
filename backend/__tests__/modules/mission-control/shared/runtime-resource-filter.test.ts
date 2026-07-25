@@ -226,4 +226,80 @@ describe('runtime resource tenant filters', () => {
       'definition-no-tenant',
     ]);
   });
+
+  it('resolves historic variable rows through their process-instance lineage', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce([
+      { id: 'instance-invoice', processDefinitionKey: 'invoice', tenantId: 'runtime-a' },
+      { id: 'instance-other', processDefinitionKey: 'other', tenantId: 'runtime-a' },
+    ]);
+
+    const result = await filterRuntimeItemsByProcessDefinitionKeys(
+      'engine-1',
+      [
+        { id: 'variable-invoice', processInstanceId: 'instance-invoice' },
+        { id: 'variable-other', processInstanceId: 'instance-other' },
+        { id: 'variable-without-lineage' },
+      ],
+      ['invoice'],
+      [{ resourceKey: 'invoice', runtimeTenantId: 'runtime-a' }],
+    );
+
+    expect(result).toEqual([{ id: 'variable-invoice', processInstanceId: 'instance-invoice' }]);
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/history/process-instance', {
+      processInstanceIdIn: 'instance-invoice,instance-other',
+      maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE,
+    });
+
+    vi.mocked(camundaGet).mockClear().mockResolvedValueOnce([
+      { id: 'instance-invoice', processDefinitionKey: 'invoice', tenantId: 'runtime-a' },
+    ]);
+    await expect(filterRuntimeItemsByProcessDefinitionKeys(
+      'engine-1',
+      [{ id: 'historic-variable', processInstanceId: 'instance-invoice' }],
+      ['invoice'],
+      [{ resourceKey: 'invoice', runtimeTenantId: 'runtime-a' }],
+      { enrichHistoricProcessLineage: true },
+    )).resolves.toEqual([{
+      id: 'historic-variable',
+      processInstanceId: 'instance-invoice',
+      processDefinitionKey: 'invoice',
+      tenantId: 'runtime-a',
+    }]);
+  });
+
+  it('fails closed for malformed historic lineage while preserving valid enriched lineage', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce({ malformed: true } as any);
+    await expect(filterRuntimeItemsByProcessDefinitionKeys(
+      'engine-1',
+      [{ id: 'malformed-history', processInstanceId: 'instance-missing' }],
+      ['invoice'],
+      undefined,
+      { enrichHistoricProcessLineage: true },
+    )).resolves.toEqual([]);
+
+    vi.mocked(camundaGet).mockClear().mockResolvedValueOnce([
+      { id: 42, processDefinitionKey: 'invoice' },
+      { id: 'instance-without-key' },
+      { id: 'instance-invoice', processDefinitionKey: 'invoice', tenantId: 'runtime-a' },
+    ] as any);
+    await expect(filterRuntimeItemsByProcessDefinitionKeys(
+      'engine-1',
+      [
+        { id: 'direct', processDefinitionKey: 'invoice', tenantId: 'runtime-a' },
+        { id: 'missing-key', processInstanceId: 'instance-without-key' },
+        { id: 'historic', processInstanceId: 'instance-invoice', tenantId: 'runtime-a' },
+      ],
+      ['invoice'],
+      [{ resourceKey: 'invoice', runtimeTenantId: 'runtime-a' }],
+      { enrichHistoricProcessLineage: true },
+    )).resolves.toEqual([
+      { id: 'direct', processDefinitionKey: 'invoice', tenantId: 'runtime-a' },
+      {
+        id: 'historic',
+        processInstanceId: 'instance-invoice',
+        processDefinitionKey: 'invoice',
+        tenantId: 'runtime-a',
+      },
+    ]);
+  });
 });

@@ -72,6 +72,21 @@ export function getE2EFineGrainedFixture() {
   };
 }
 
+export function getE2EVariableAccessFixture() {
+  const data = getE2ESeedData();
+  return {
+    engineId: data.variableAccessEngineId,
+    processInstanceId: data.variableAccessProcessInstanceId,
+    deniedProcessInstanceId: data.variableAccessDeniedProcessInstanceId,
+    metadataEmail: data.variableMetadataEmail,
+    metadataPassword: data.variableMetadataPassword,
+    valueEmail: data.variableValueEmail,
+    valuePassword: data.variableValuePassword,
+    editorEmail: data.variableEditorEmail,
+    editorPassword: data.variableEditorPassword,
+  };
+}
+
 export function hasE2ECredentials() {
   const { email, password } = getE2ECredentials();
   return Boolean(email && password);

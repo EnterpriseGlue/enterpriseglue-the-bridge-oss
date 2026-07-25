@@ -1,4 +1,4 @@
-import type { Request, RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { EnginePermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js';
@@ -9,6 +9,15 @@ type VariableRecord = Record<string, unknown>;
 type VariableCollectionValueAccess =
   | { all: true }
   | { all: false; identities: Set<string> };
+
+/**
+ * Variable values can be authorized at a narrower scope than the surrounding
+ * process instance. Do not leave either raw values or a redacted variant in a
+ * browser/proxy cache that could outlive a permission or value change.
+ */
+export function preventVariableResponseCaching(res: Response): void {
+  res.setHeader('Cache-Control', 'no-store');
+}
 
 function requestPermissionContext(req: Request) {
   const resource = req.authzResource;

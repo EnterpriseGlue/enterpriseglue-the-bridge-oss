@@ -451,18 +451,28 @@ export async function getProcessInstanceById(engineId: string, id: string) {
 }
 
 export async function getProcessInstanceVariables(engineId: string, id: string) {
-  const histVars = await camundaGet<any[]>(engineId, '/history/variable-instance', { processInstanceId: id })
-  const varsWithExecutionScope = (histVars || []).filter((v: any) => v?.executionId !== undefined && v?.executionId !== null)
-  const globalScopeVars = varsWithExecutionScope.length > 0
-    ? varsWithExecutionScope.filter((v: any) => String(v.executionId) === id)
-    : (histVars || [])
-
+  // This compatibility handler is mounted before the newer process-instance
+  // router. Its endpoint must therefore read the same live state that the
+  // variable editor updates. History is an audit trail and can legitimately
+  // lag a runtime write; using it here made an accepted edit appear lost.
+  const runtimeVariables = await camundaGet<Record<string, any>>(
+    engineId,
+    `/process-instance/${encodeURIComponent(id)}/variables`,
+  )
   const out: Record<string, { value: any; type: string }> = {}
-  for (const v of globalScopeVars) {
-    if (!v || !v.name) continue
-    out[v.name] = {
-      value: v.value,
-      type: v.type || (v.value !== null && v.value !== undefined ? typeof v.value : 'Unknown'),
+  for (const [name, variable] of Object.entries(runtimeVariables || {})) {
+    if (!name || variable === undefined) continue
+    if (variable && typeof variable === 'object' && !Array.isArray(variable)) {
+      const value = Object.prototype.hasOwnProperty.call(variable, 'value') ? variable.value : variable
+      out[name] = {
+        value,
+        type: variable.type || (value !== null && value !== undefined ? typeof value : 'Unknown'),
+      }
+    } else {
+      out[name] = {
+        value: variable,
+        type: variable !== null ? typeof variable : 'Unknown',
+      }
     }
   }
   return out

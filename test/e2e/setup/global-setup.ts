@@ -247,11 +247,16 @@ export default async function globalSetup() {
   // The native-grant browser workflow starts from an already-discovered,
   // synthetic Camunda inventory.  Keeping that inventory in the fixture means
   // its migration operator needs no unrelated inventory-write permission.
+  let primaryProcessRuntimeResourceId = '';
   for (const [resourceKind, resourceKey, engineResourceId, deploymentId] of [
     ['process_definition', 'invoice-process', 'invoice-process:3:mock-process-definition', 'mock-deployment-primary'],
     ['decision_definition', 'invoice-risk', 'invoice-risk:1:mock-decision-definition', 'invoice-risk-drd'],
     ['process_definition', 'invoice-sequential-review', 'invoice-sequential-review:1:mock-process-definition', 'mock-deployment-sequential'],
   ]) {
+    const runtimeResourceId = randomUUID();
+    if (resourceKind === 'process_definition' && resourceKey === 'invoice-process') {
+      primaryProcessRuntimeResourceId = runtimeResourceId;
+    }
     await pool.query(
       `INSERT INTO ${schema}.runtime_resources
         (id, tenant_id, engine_id, resource_kind, resource_key, runtime_tenant_id,
@@ -260,11 +265,14 @@ export default async function globalSetup() {
          tenant_resolution_status, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
       [
-        randomUUID(), 'tenant-default', engineId, resourceKind, resourceKey, '', engineResourceId,
+        runtimeResourceId, 'tenant-default', engineId, resourceKind, resourceKey, '', engineResourceId,
         deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', membershipSourceRef,
         now, true, 'resolved', now, now,
       ]
     );
+  }
+  if (!primaryProcessRuntimeResourceId) {
+    throw new Error('E2E fixture did not create the primary process runtime resource');
   }
 
   // The guarded engine-tenancy journey needs one reproducible legacy row to
@@ -362,6 +370,95 @@ export default async function globalSetup() {
 
   const { canonicalRoleAssignmentKey } = await import('../../../packages/shared/src/authz/role-assignment-identity.ts');
   const operatorRoleId = 'system.engine.operator';
+
+  // Variable disclosure browser evidence needs three distinct principals at
+  // the same process-definition scope. This makes the test prove that the
+  // backend redacts before data reaches the UI, instead of relying on a
+  // frontend-only hide. Use the shipped system roles so this also validates
+  // their metadata -> values -> edit dependency chain after seeding.
+  const variableAccessProcessInstanceId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+  const variableAccessDeniedProcessInstanceId = '11111111-2222-4333-8444-555555555555';
+  const variableNavigationRoleId = `custom.e2e.variable-navigation.${suffix}`;
+  await pool.query(
+    `INSERT INTO ${schema}.roles
+      (id, tenant_id, key, role_key_identity, name, description, scope, kind,
+       is_editable, is_assignable, is_archived, source, source_ref, ownership_mode,
+       source_hash, last_applied_at, drift_status, created_by_id, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+    [
+      variableNavigationRoleId, 'tenant-default', variableNavigationRoleId, `tenant-default:${variableNavigationRoleId}`,
+      'E2E Variable Navigation', 'Disposable engine-level Mission Control navigation grant for resource-scoped variable tests.',
+      'engine', 'custom', true, true, false, 'manual', scopedSourceRef, 'manual',
+      null, null, null, adminUserId, now, now,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.role_permissions (id, role_id, permission_id, created_at)
+     VALUES ($1,$2,$3,$4)`,
+    [randomUUID(), variableNavigationRoleId, 'engine:instance:view', now],
+  );
+  const variableAccessFixtures: Record<string, Record<string, string>> = {};
+  for (const [kind, roleId] of [
+    ['metadata', 'system.engine.runtime_viewer'],
+    ['value', 'system.engine.runtime_investigator'],
+    ['editor', 'system.engine.variable_operator'],
+  ]) {
+    const variableUserId = randomUUID();
+    const variableEmail = `e2e-variable-${kind}-${Date.now()}-${suffix}@example.com`;
+    const variablePassword = `E2eVariable-${kind}-${suffix}-Pass1!`;
+    const variablePasswordHash = await hashPassword(variablePassword);
+
+    await pool.query(
+      `INSERT INTO ${schema}.users
+        (id, email, auth_provider, password_hash, first_name, last_name,
+         is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
+         email_verification_token, email_verification_token_expiry, created_at, updated_at,
+         last_login_at, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      [variableUserId, variableEmail, 'local', variablePasswordHash, 'E2E', `Variable ${kind}`, true, false, 0, null, true, null, null, now, now, null, adminUserId],
+    );
+    await pool.query(
+      `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [randomUUID(), 'tenant-default', variableUserId, 'member', now],
+    );
+    await pool.query(
+      `INSERT INTO ${schema}.authz_group_memberships
+        (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [randomUUID(), null, E2E_PLATFORM_GROUP_IDS.authenticatedUsers, variableUserId, 'system', scopedSourceRef, null, null, now, now],
+    );
+    const navigationAssignmentKey = canonicalRoleAssignmentKey({
+      tenantId: 'tenant-default', principalType: 'user', principalId: variableUserId,
+      roleId: variableNavigationRoleId, scopeType: 'engine', scopeId: engineId,
+      source: 'system', sourceRef: scopedSourceRef,
+    });
+    await pool.query(
+      `INSERT INTO ${schema}.role_assignments
+        (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+         source, source_ref, assignment_key, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [randomUUID(), 'tenant-default', 'user', variableUserId, variableNavigationRoleId, 'engine', engineId, 'system', scopedSourceRef, navigationAssignmentKey, now, now],
+    );
+    const assignmentKey = canonicalRoleAssignmentKey({
+      tenantId: 'tenant-default', principalType: 'user', principalId: variableUserId,
+      roleId, scopeType: 'engine_runtime_resource', scopeId: primaryProcessRuntimeResourceId,
+      source: 'system', sourceRef: scopedSourceRef,
+    });
+    await pool.query(
+      `INSERT INTO ${schema}.role_assignments
+        (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+         source, source_ref, assignment_key, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [randomUUID(), 'tenant-default', 'user', variableUserId, roleId, 'engine_runtime_resource', primaryProcessRuntimeResourceId, 'system', scopedSourceRef, assignmentKey, now, now],
+    );
+    variableAccessFixtures[kind] = {
+      userId: variableUserId,
+      email: variableEmail,
+      password: variablePassword,
+      roleId,
+    };
+  }
 
   // The primary synthetic engine is shared by the native-grant browser lane.
   // Give its disposable administrator an explicit scoped role rather than
@@ -702,6 +799,15 @@ export default async function globalSetup() {
       runtimeAllowedResourceId,
       runtimeAllowedDefinitionId,
       runtimeSiblingDefinitionId,
+      variableAccessEngineId: engineId,
+      variableAccessProcessInstanceId,
+      variableAccessDeniedProcessInstanceId,
+      variableMetadataEmail: variableAccessFixtures.metadata.email,
+      variableMetadataPassword: variableAccessFixtures.metadata.password,
+      variableValueEmail: variableAccessFixtures.value.email,
+      variableValuePassword: variableAccessFixtures.value.password,
+      variableEditorEmail: variableAccessFixtures.editor.email,
+      variableEditorPassword: variableAccessFixtures.editor.password,
       scopedSourceRef,
       groupScopedUserId,
       groupScopedGroupId,

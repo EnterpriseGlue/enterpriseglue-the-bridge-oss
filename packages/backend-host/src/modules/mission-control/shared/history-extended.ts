@@ -12,7 +12,7 @@ import {
   listUserOperations,
 } from './history-extended-service.js';
 import { piiRedactionService } from '@enterpriseglue/shared/services/pii/PiiRedactionService.js';
-import { presentHistoricVariables, requireVariableValueFilterAccess } from './variable-visibility.js';
+import { presentHistoricVariables, preventVariableResponseCaching, requireVariableValueFilterAccess } from './variable-visibility.js';
 import {
   HistoricTaskQueryParams,
   HistoricVariableQueryParams,
@@ -61,6 +61,7 @@ r.get('/mission-control-api/history/variables', requireRuntimeCollectionAction('
       await listHistoricVariables(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey }), [processDefinitionKey], 'processDefinitionKey', scopes,
     )))).flat()
     : await listHistoricVariables(engineId, query);
+  preventVariableResponseCaching(res);
   res.json(HistoricVariableInstanceListSchema.parse(await presentHistoricVariables(req, data)));
 }));
 

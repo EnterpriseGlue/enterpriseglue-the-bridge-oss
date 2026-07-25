@@ -101,14 +101,24 @@ playwright_env=(
   E2E_CAMUNDA_BASE_URL="http://camunda-mock:9080/engine-rest" \
   PLAYWRIGHT_BASE_URL="$base_url" \
   POSTGRES_HOST=127.0.0.1 \
-  POSTGRES_PORT="$db_port"
+  POSTGRES_PORT="$db_port" \
+  PLAYWRIGHT_WORKERS="${PLAYWRIGHT_WORKERS:-1}"
 )
 if [[ -n "$local_ca_file" ]]; then
   playwright_env+=(PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true)
 fi
 
-env "${playwright_env[@]}" pnpm exec playwright test \
-  test/e2e/smoke/login.spec.ts \
-  test/e2e/smoke/access-control-local.spec.ts \
-  test/e2e/smoke/fine-grained-access-local.spec.ts \
-  --config test/e2e/playwright.config.ts
+# The fine-grained suites deliberately revoke assignments and group
+# memberships. Give each suite its own fixture instead of sharing mutable
+# principals across the aggregate smoke run.
+smoke_specs=(
+  test/e2e/smoke/login.spec.ts
+  test/e2e/smoke/access-control-local.spec.ts
+  test/e2e/smoke/fine-grained-access-local.spec.ts
+  test/e2e/smoke/variable-access-control-local.spec.ts
+)
+
+for smoke_spec in "${smoke_specs[@]}"; do
+  env "${playwright_env[@]}" pnpm exec playwright test "$smoke_spec" \
+    --config test/e2e/playwright.config.ts
+done

@@ -137,11 +137,13 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
   definitionId?: unknown;
   processDefinitionKey?: unknown;
   definitionKey?: unknown;
+  processInstanceId?: unknown;
 }>(
   engineId: string,
   items: T[],
   authorizedDefinitionKeys?: string[],
   scopes?: AuthorizedRuntimeResourceScope[],
+  options?: { enrichHistoricProcessLineage?: boolean },
 ): Promise<T[]> {
   if (!authorizedDefinitionKeys) return items
 
@@ -163,14 +165,67 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
     typeof definition.key === 'string' ? definition.key : '',
   ]))
 
-  return items.filter((item) => {
+  // Historic variable-instance responses in the Camunda 7 REST profile carry
+  // a process instance id, but not the stable process-definition key. Resolve
+  // that missing lineage before applying resource-aware authorization. Without
+  // this, scoped users either receive an unsafe unfiltered response or (as the
+  // old direct-key filter did) an empty history collection.
+  const processInstanceIds = [...new Set(items
+    .filter((item) => typeof item.processDefinitionKey !== 'string'
+      && typeof item.definitionKey !== 'string'
+      && typeof item.processDefinitionId !== 'string'
+      && typeof item.definitionId !== 'string')
+    .map((item) => item.processInstanceId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0))]
+  const historicInstances = processInstanceIds.length
+    ? await camundaGet<Record<string, unknown>[]>(engineId, '/history/process-instance', {
+      processInstanceIdIn: processInstanceIds.join(','),
+      maxResults: MAX_RUNTIME_RESOURCE_PAGE_SIZE,
+    })
+    : []
+  const historicInstanceById = new Map((Array.isArray(historicInstances) ? historicInstances : [])
+    .map((instance) => [
+      typeof instance.id === 'string' ? instance.id : '',
+      instance,
+    ] as const)
+    .filter(([id]) => Boolean(id)))
+
+  // Enrich before filtering, not after it. Apart from making the resolved
+  // lineage available to the value-presenter, this keeps malformed historic
+  // records on the fail-closed path instead of relying on an unreachable
+  // post-filter fallback.
+  const itemsWithHistoricProcessLineage = !options?.enrichHistoricProcessLineage
+    ? items
+    : items.map((item) => {
+      const hasDirectOrDefinitionLineage = typeof item.processDefinitionKey === 'string'
+        || typeof item.definitionKey === 'string'
+        || typeof item.processDefinitionId === 'string'
+        || typeof item.definitionId === 'string'
+      if (hasDirectOrDefinitionLineage || typeof item.processInstanceId !== 'string') return item
+      const historicInstance = historicInstanceById.get(item.processInstanceId)
+      if (!historicInstance || typeof historicInstance.processDefinitionKey !== 'string') return item
+      const enriched: Record<string, unknown> = {
+        ...item,
+        processDefinitionKey: historicInstance.processDefinitionKey,
+      }
+      if (enriched.tenantId === undefined && typeof historicInstance.tenantId === 'string') {
+        enriched.tenantId = historicInstance.tenantId
+      }
+      return enriched as T
+    })
+
+  const filtered = itemsWithHistoricProcessLineage.filter((item) => {
     const directKey = typeof item.processDefinitionKey === 'string'
       ? item.processDefinitionKey
       : typeof item.definitionKey === 'string' ? item.definitionKey : ''
     const key = directKey || (() => {
       const candidateDefinitionId = item.processDefinitionId ?? item.definitionId
       const definitionId = typeof candidateDefinitionId === 'string' ? candidateDefinitionId : ''
-      return keyByDefinitionId.get(definitionId) || ''
+      const resolvedDefinitionKey = keyByDefinitionId.get(definitionId) || ''
+      if (resolvedDefinitionKey) return resolvedDefinitionKey
+      const processInstanceId = typeof item.processInstanceId === 'string' ? item.processInstanceId : ''
+      const instance = historicInstanceById.get(processInstanceId)
+      return typeof instance?.processDefinitionKey === 'string' ? instance.processDefinitionKey : ''
     })()
     if (!key || !allowedKeys.has(key)) return false
     if (!scopes) return true
@@ -180,9 +235,14 @@ export async function filterRuntimeItemsByProcessDefinitionKeys<T extends {
     if (scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === runtimeTenantId)) return true
     const candidateDefinitionId = item.processDefinitionId ?? item.definitionId
     const definitionId = typeof candidateDefinitionId === 'string' ? candidateDefinitionId : ''
+    const processInstanceId = typeof item.processInstanceId === 'string' ? item.processInstanceId : ''
+    const historicInstance = historicInstanceById.get(processInstanceId)
+    const historicInstanceTenantId = typeof historicInstance?.tenantId === 'string' ? historicInstance.tenantId : ''
+    if (historicInstance && scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === historicInstanceTenantId)) return true
     const definition = definitions.find(([id]) => id === definitionId)?.[1]
-    if (!definition) return false
     const definitionTenantId = typeof definition?.tenantId === 'string' ? definition.tenantId : ''
-    return scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === definitionTenantId)
+    return Boolean(definition) && scopes.some((scope) => scope.resourceKey === key && scope.runtimeTenantId === definitionTenantId)
   })
+
+  return filtered
 }

@@ -15,7 +15,7 @@ import {
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from '../shared/runtime-resource-filter.js'
 import { addRuntimeProcessInstanceActionDecisions } from '../shared/runtime-row-action-decisions.js'
 import { ProcessInstanceDetailSchema, ProcessInstanceSchema, ProcessInstanceVariablesModifyRequestSchema, RuntimeActivityInstanceTreeSchema, VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js'
-import { presentRuntimeVariables, requireVariableValueAccess } from '../shared/variable-visibility.js'
+import { presentRuntimeVariables, preventVariableResponseCaching, requireVariableValueAccess } from '../shared/variable-visibility.js'
 
 const r = Router()
 
@@ -92,6 +92,7 @@ r.get('/mission-control-api/process-instances/:id/variables', requireAuth, requi
   const engineId = (req as any).engineId as string
   const instanceId = String(req.params.id)
   const data = await getProcessInstanceVariables(engineId, instanceId)
+  preventVariableResponseCaching(res)
   res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data)))
 }))
 

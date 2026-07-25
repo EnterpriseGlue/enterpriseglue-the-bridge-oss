@@ -30,7 +30,7 @@ import {
 } from '@enterpriseglue/shared/schemas/mission-control/task.js';
 import { VariablesSchema } from '@enterpriseglue/shared/schemas/mission-control/process.js';
 import { filterRuntimeItemsByProcessDefinitionKeys, getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
-import { presentRuntimeVariables, requireVariableValueAccess } from './variable-visibility.js';
+import { presentRuntimeVariables, preventVariableResponseCaching, requireVariableValueAccess } from './variable-visibility.js';
 
 const r = Router();
 
@@ -87,6 +87,7 @@ r.get('/mission-control-api/tasks/:id/variables', requireTaskAction('engine.runt
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await getTaskVariablesById(engineId, taskId);
+  preventVariableResponseCaching(res);
   res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data)));
 }));
 
@@ -95,6 +96,7 @@ r.put('/mission-control-api/tasks/:id/variables', requireTaskAction('engine.runt
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await updateTaskVariablesById(engineId, taskId, req.body);
+  preventVariableResponseCaching(res);
   res.json(VariablesSchema.parse(await presentRuntimeVariables(req, data || {})));
 }));
 
@@ -135,6 +137,7 @@ r.post('/mission-control-api/tasks/:id/complete', requireTaskAction('engine.runt
   const engineId = (req as any).engineId as string;
   const taskId = String(req.params.id);
   const data = await completeTaskById(engineId, taskId, req.body);
+  preventVariableResponseCaching(res);
   res.json(TaskCompleteResponseSchema.parse(await presentRuntimeVariables(req, data || {})));
 }));
 

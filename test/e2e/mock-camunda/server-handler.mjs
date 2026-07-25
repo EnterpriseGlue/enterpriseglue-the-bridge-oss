@@ -248,6 +248,36 @@ export function createMockCamundaHandler() {
         return
       }
 
+      // Preserve Camunda's `modifications` request contract for the browser
+      // evidence lane. The state lives only in this disposable mock process,
+      // allowing an editor test to prove a permitted write reaches the engine
+      // and is returned on the next read without touching a real engine.
+      if (req.method === 'POST' && routePath.startsWith('/engine-rest/process-instance/') && routePath.endsWith('/variables')) {
+        const id = routePath.slice('/engine-rest/process-instance/'.length, -'/variables'.length)
+        if (!runtimeInstancesById.has(id) && !historicProcessInstancesById.has(id)) {
+          sendJson(res, 404, { message: `Unknown process instance: ${id}` })
+          return
+        }
+        const body = await parseBody(req)
+        const modifications = body?.modifications
+        if (!modifications || typeof modifications !== 'object' || Array.isArray(modifications)) {
+          sendJson(res, 400, { message: 'Variable modifications are required' })
+          return
+        }
+        const nextVariables = { ...(processInstanceVariables.get(id) || {}) }
+        for (const [name, variable] of Object.entries(modifications)) {
+          if (!name) continue
+          if (variable === null) {
+            delete nextVariables[name]
+          } else {
+            nextVariables[name] = variable
+          }
+        }
+        processInstanceVariables.set(id, nextVariables)
+        sendNoContent(res)
+        return
+      }
+
       if (req.method === 'GET' && routePath.startsWith('/engine-rest/process-instance/')) {
         const id = routePath.slice('/engine-rest/process-instance/'.length)
         const item = runtimeInstancesById.get(id)

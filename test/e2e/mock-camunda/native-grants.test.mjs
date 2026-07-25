@@ -49,3 +49,23 @@ test('synthetic Camunda deployment fixture derives stable deployment metadata fr
     assert.ok(deployments.every((item) => item.deploymentTime === '2026-03-01T00:00:00.000Z'));
   });
 });
+
+test('synthetic Camunda process variables support an isolated modification round trip', async () => {
+  await withServer(async (baseUrl) => {
+    const instanceId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+    const before = await fetch(`${baseUrl}/engine-rest/process-instance/${instanceId}/variables`);
+    assert.equal(before.status, 200);
+    assert.equal((await before.json()).customerId.value, 'ACME-42');
+
+    const update = await fetch(`${baseUrl}/engine-rest/process-instance/${instanceId}/variables`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ modifications: { browserEvidence: { type: 'String', value: 'persisted-in-mock' } } }),
+    });
+    assert.equal(update.status, 204);
+
+    const after = await fetch(`${baseUrl}/engine-rest/process-instance/${instanceId}/variables`);
+    assert.equal(after.status, 200);
+    assert.deepEqual((await after.json()).browserEvidence, { type: 'String', value: 'persisted-in-mock' });
+  });
+});

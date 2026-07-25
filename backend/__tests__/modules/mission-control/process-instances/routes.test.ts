@@ -166,6 +166,7 @@ describe('mission-control process-instances routes', () => {
       .query({ engineId: 'engine-1' });
 
     expect(response.status).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
     expect(response.body).toEqual({
       approvalReason: expect.objectContaining({
         type: 'String', value: 'Need manager sign-off', adapterDiagnostic: { retained: true },

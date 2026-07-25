@@ -2,7 +2,7 @@ import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { sanitizePathParam } from '../../../shared/utils/sanitize'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import styles from './styles/InstanceDetail.module.css'
 import { Modal, Select, BreadcrumbItem, SelectItem, TextInput, TextArea, InlineNotification, Button } from '@carbon/react'
 import { Launch } from '@carbon/icons-react'
@@ -71,6 +71,7 @@ export default function ProcessInstanceDetailPage() {
   const { instanceId } = useParams<{ instanceId: string }>()
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
   const selectedEngineId = useSelectedEngine()
   const [bridgeError, setBridgeError] = React.useState<string | null>(null)
@@ -174,6 +175,24 @@ export default function ProcessInstanceDetailPage() {
   const modifyDecision = withRuntimeActionDecision(snapshotModifyDecision, runtimeActionDecisions?.modify)
   const variablesUpdateDecision = withRuntimeActionDecision(snapshotVariablesUpdateDecision, runtimeActionDecisions?.variablesUpdate)
 
+  // A successful variable write is authoritative even when an engine adapter
+  // has a short read-after-write delay. Keep the confirmed change in the live
+  // query after its refresh, so the operator does not see an apparently lost
+  // update while the next normal fetch converges with the engine.
+  const mergeKnownVariables = React.useCallback((modifications: Record<string, { value: any; type: string } | null>) => {
+    queryClient.setQueryData<Record<string, { value: any; type: string }>>(
+      ['mission-control', 'vars', instanceId, selectedEngineId],
+      (current = {}) => {
+        const next = { ...current }
+        for (const [name, variable] of Object.entries(modifications)) {
+          if (variable === null) delete next[name]
+          else next[name] = variable
+        }
+        return next
+      },
+    )
+  }, [instanceId, queryClient, selectedEngineId])
+
   const showModifyAction = status === 'ACTIVE'
   const activityOverlayData = React.useMemo(() => {
     if (runtimeActivityInstances.length === 0) return actQ.data || []
@@ -243,7 +262,12 @@ export default function ProcessInstanceDetailPage() {
   const { viewerApi, setViewerApi, bpmnRef, applyOverlays } = useDiagramOverlays(activityOverlayQ, incidentsQ, { isSuspended, showTokenPassCounts })
 
   // 3. Variable Editor Hook
-  const variableEditor = useVariableEditor({ instanceId: instanceId!, varsQ, engineId: selectedEngineId })
+  const variableEditor = useVariableEditor({
+    instanceId: instanceId!,
+    varsQ,
+    engineId: selectedEngineId,
+    onVariableSaved: (name, variable) => mergeKnownVariables({ [name]: variable }),
+  })
   const {
     editingVarKey,
     editingVarType,
@@ -468,13 +492,14 @@ export default function ProcessInstanceDetailPage() {
         engineId: selectedEngineId || undefined,
       })
       await varsQ.refetch()
+      mergeKnownVariables({ [key]: { value: parsed, type: addVariableType } })
       setAddVariableOpen(false)
     } catch (e: any) {
       setAddVariableError(getUiErrorMessage(e, 'Failed to add variable'))
     } finally {
       setAddVariableBusy(false)
     }
-  }, [instanceId, addVariableName, addVariableType, addVariableValue, parseTypedValue, varsQ])
+  }, [instanceId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, parseTypedValue, selectedEngineId, varsQ])
 
   const submitBulkUpload = React.useCallback(async () => {
     if (!instanceId) return
@@ -516,13 +541,14 @@ export default function ProcessInstanceDetailPage() {
         engineId: selectedEngineId || undefined,
       })
       await varsQ.refetch()
+      mergeKnownVariables(modifications)
       setBulkUploadOpen(false)
     } catch (e: any) {
       setBulkUploadError(getUiErrorMessage(e, 'Failed to upload variables'))
     } finally {
       setBulkUploadBusy(false)
     }
-  }, [instanceId, bulkUploadValue, varsQ])
+  }, [instanceId, bulkUploadValue, mergeKnownVariables, selectedEngineId, varsQ])
 
   // Incident filtering (keeping local for now - could be extracted later)
   const flowNodeOptions = React.useMemo(() => {

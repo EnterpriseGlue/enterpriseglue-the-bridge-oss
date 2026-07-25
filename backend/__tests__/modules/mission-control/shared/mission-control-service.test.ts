@@ -46,18 +46,19 @@ describe('mission-control-service', () => {
     vi.clearAllMocks();
   });
 
-  it('returns only process-scope variables when execution scopes are present', async () => {
-    vi.mocked(camundaGet).mockResolvedValueOnce([
-      { name: 'requestBody', value: { foo: 'bar' }, type: 'Json', executionId: 'proc-1' },
-      { name: 'validStatuses', value: ['ISSUED', 'LAPSED'], type: 'Object', executionId: 'activity-exec-42' },
-    ] as any);
+  it('reads the live process-variable endpoint instead of history so accepted edits are visible', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce({
+      requestBody: { value: { foo: 'bar' }, type: 'Json' },
+      validStatuses: { value: ['ISSUED', 'LAPSED'], type: 'Object' },
+    } as any);
 
     const result = await getProcessInstanceVariables('engine-1', 'proc-1');
 
     expect(result).toEqual({
       requestBody: { value: { foo: 'bar' }, type: 'Json' },
+      validStatuses: { value: ['ISSUED', 'LAPSED'], type: 'Object' },
     });
-    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/history/variable-instance', { processInstanceId: 'proc-1' });
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-instance/proc-1/variables');
   });
 
   it('passes shared runtime-tenant filters through the compatibility definition list', async () => {
@@ -127,15 +128,13 @@ describe('mission-control-service', () => {
     });
   });
 
-  it('keeps compatibility when executionId is not provided by engine response', async () => {
-    vi.mocked(camundaGet).mockResolvedValueOnce([
-      { name: 'legacyVar', value: 'ok', type: 'String' },
-    ] as any);
+  it('keeps compatibility with engines that return an unwrapped variable value', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce({ legacyVar: 'ok' } as any);
 
     const result = await getProcessInstanceVariables('engine-1', 'proc-1');
 
     expect(result).toEqual({
-      legacyVar: { value: 'ok', type: 'String' },
+      legacyVar: { value: 'ok', type: 'string' },
     });
   });
 
