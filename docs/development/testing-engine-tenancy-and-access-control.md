@@ -681,6 +681,7 @@ docker compose --project-directory . --env-file .local/docker/env/docker.env \
   -f infra/docker/compose/docker-compose.yml \
   -f infra/docker/compose/docker-compose.e2e-mission-control.yml \
   -f infra/docker/compose/docker-compose.backend-expose.yml \
+  -f infra/docker/compose/docker-compose.keycloak.yml \
   -f infra/docker/compose/docker-compose.keycloak-tls.yml \
   up -d --wait db backend frontend frontend-tls camunda-mock
 ```
