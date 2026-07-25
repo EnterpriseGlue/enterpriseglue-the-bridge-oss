@@ -49,7 +49,7 @@ function drainLocalRuntimeReconciliation(applyRunId: string): void {
   }
   const worker = [
     `const applyRunId = ${JSON.stringify(applyRunId)};`,
-    "const { configBundleRuntimeReconciliationTaskService } = await import('./packages/shared/src/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.ts');",
+    "const { configBundleRuntimeReconciliationTaskService } = await import('./packages/shared/dist/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js');",
     'const result = await configBundleRuntimeReconciliationTaskService.drainApplyRun({ applyRunId, maxTasks: 100 });',
     "if (result.status !== 'completed' || result.failedTaskCount !== 0) throw new Error(`runtime reconciliation did not complete: ${JSON.stringify(result)}`);",
   ].join(' ');
@@ -57,7 +57,7 @@ function drainLocalRuntimeReconciliation(applyRunId: string): void {
   execFileSync('docker', [
     'compose', '--project-directory', '.', '--env-file', '.local/docker/env/docker.env',
     '-f', 'infra/docker/compose/docker-compose.yml', 'exec', '-T', 'backend',
-    'sh', '-lc', `cd /repo && pnpm exec tsx -e "$(printf '%s' ${encodedWorker} | base64 -d)"`,
+    'sh', '-lc', `cd /repo && node --input-type=module -e "$(printf '%s' ${encodedWorker} | base64 -d)"`,
   ], { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
