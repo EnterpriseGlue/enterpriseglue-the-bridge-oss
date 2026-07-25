@@ -434,7 +434,7 @@ describe('EngineMembersModal', () => {
     renderModal({ canAddMembers: true });
 
     expect(await screen.findByText('Group: group-ops')).toBeInTheDocument();
-    expect(screen.getByText('Lineage: SSO-managed assignment; Source ref sso-group:payments-ops; SSO mapping mapping-1')).toBeInTheDocument();
+    expect(screen.getByText('Lineage: SSO-managed assignment; Source ref sso-group:payments-ops')).toBeInTheDocument();
   });
 
   it('shows SSO scoped assignments as non-removable in SSO-managed mode', async () => {

@@ -62,12 +62,25 @@ describe('decisionInstances API', () => {
         outputs: mockOutputs,
       };
 
-      vi.mocked(apiClient.get).mockResolvedValue(mockInstance);
+      mockDecisionInstanceDetail(mockInstance);
 
       const result = await fetchDecisionInstance('di1');
 
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/history/decision-instances/di1',
+      expect(apiClient.get).toHaveBeenNthCalledWith(
+        1,
+        '/mission-control-api/history/decisions?decisionInstanceId=di1',
+        undefined,
+        { credentials: 'include' }
+      );
+      expect(apiClient.get).toHaveBeenNthCalledWith(
+        2,
+        '/mission-control-api/history/decisions/di1/inputs',
+        undefined,
+        { credentials: 'include' }
+      );
+      expect(apiClient.get).toHaveBeenNthCalledWith(
+        3,
+        '/mission-control-api/history/decisions/di1/outputs',
         undefined,
         { credentials: 'include' }
       );
@@ -84,7 +97,7 @@ describe('decisionInstances API', () => {
         outputs: [],
       };
 
-      vi.mocked(apiClient.get).mockResolvedValue(mockInstance);
+      mockDecisionInstanceDetail(mockInstance);
 
       const result = await fetchDecisionInstance('di2');
 
@@ -145,7 +158,7 @@ describe('decisionInstances API', () => {
         outputs: mockOutputs,
       };
 
-      vi.mocked(apiClient.get).mockResolvedValue(mockInstance);
+      mockDecisionInstanceDetail(mockInstance);
 
       const result = await fetchDecisionInstance('di3');
 
@@ -186,7 +199,7 @@ describe('decisionInstances API', () => {
         outputs: mockOutputs,
       };
 
-      vi.mocked(apiClient.get).mockResolvedValue(mockInstance);
+      mockDecisionInstanceDetail(mockInstance);
 
       const result = await fetchDecisionInstance('di4');
 
@@ -195,3 +208,11 @@ describe('decisionInstances API', () => {
     });
   });
 });
+
+function mockDecisionInstanceDetail(instance: DecisionInstanceDetail) {
+  const { inputs, outputs, ...decision } = instance;
+  vi.mocked(apiClient.get)
+    .mockResolvedValueOnce([decision])
+    .mockResolvedValueOnce(inputs)
+    .mockResolvedValueOnce(outputs);
+}

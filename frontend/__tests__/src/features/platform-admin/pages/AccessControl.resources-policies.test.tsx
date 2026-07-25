@@ -86,7 +86,7 @@ describe('AccessControl resources and policies', () => {
     fireEvent.click(screen.getByRole('button', { name: /View principal 00000000-0000-4000-8000-000000000011/i }));
 
     expect(screen.getByRole('heading', { name: /User: 00000000-0000-4000-8000-000000000011/i })).toBeInTheDocument();
-    expect(screen.getByText(/SSO group mapping: group:groups Wildcard compatibility SSO Operators/)).toBeInTheDocument();
+    expect(screen.getByText(/Identity mapping: test-idp group exact SSO Operators -> sso-ops \(authoritative\)/)).toBeInTheDocument();
     expect(screen.getAllByText(/authz.sso_group_membership.create/).length).toBeGreaterThan(0);
   });
 
@@ -104,7 +104,7 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getByText('User: 00000000-0000-4000-8000-000000000001')).toBeInTheDocument();
     expect(screen.getByText('Group: Operations')).toBeInTheDocument();
     expect(screen.getAllByText('Custom Operator').length).toBeGreaterThan(0);
-    expect(screen.getByText(/SSO engine mapping: group:groups Wildcard compatibility Ops/)).toBeInTheDocument();
+    expect(screen.getAllByText('Managed by SSO').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/authz.sso_assignment.create/).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Payments').length).toBeGreaterThan(0);
     expect(screen.getByText('manual ci')).toBeInTheDocument();
@@ -396,14 +396,14 @@ describe('AccessControl resources and policies', () => {
         },
         matchedBy: { mode: 'labels', labels: { environment: 'prod' } },
         lineage: { source: 'sso', sourceRef: 'mapping-prod-operators' },
-        ssoMapping: {
+        identityEntitlementMapping: {
           id: 'mapping-prod-operators',
-          providerId: null,
-          claimType: 'group',
-          claimKey: 'groups',
-          claimValue: 'Prod Operators',
-          claimOperator: 'equals',
-          targetSelectorType: 'engine_label',
+          providerId: 'provider-1',
+          entitlementType: 'group',
+          externalId: 'Prod Operators',
+          matchOperator: 'exact',
+          targetGroupId: 'group-operators',
+          syncMode: 'authoritative',
         },
       }],
     };
@@ -416,7 +416,7 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getByText('system.engine.operator')).toBeInTheDocument();
     expect(screen.getByText('user:user-1')).toBeInTheDocument();
     expect(screen.getByText('Engine Set: SSO Prod Operators')).toBeInTheDocument();
-    expect(screen.getByText(/SSO mapping: group groups equals Prod Operators/)).toBeInTheDocument();
+    expect(screen.getByText(/Identity mapping: group exact Prod Operators/)).toBeInTheDocument();
     expect(screen.getByText(/Engine registration: external_api externalId=cluster-a\/prod system=system-1 lifecycle=active/)).toBeInTheDocument();
     expect(screen.getByText(/Matched by: mode: labels/)).toBeInTheDocument();
 
@@ -451,13 +451,12 @@ describe('AccessControl resources and policies', () => {
           sourceRef: 'sso-group-mapping-operators',
           expiresAt: null,
         },
-        ssoGroupMapping: {
+        identityEntitlementMapping: {
           id: 'sso-group-mapping-operators',
-          providerId: null,
-          claimType: 'group',
-          claimKey: 'groups',
-          claimValue: 'Operators',
-          claimOperator: 'contains',
+          providerId: 'provider-1',
+          entitlementType: 'group',
+          externalId: 'Operators',
+          matchOperator: 'contains',
           targetGroupId: 'group-operators',
           syncMode: 'authoritative',
         },
@@ -470,7 +469,7 @@ describe('AccessControl resources and policies', () => {
 
     expect(screen.getByText('group:Operators')).toBeInTheDocument();
     expect(screen.getByText(/Group membership: sso/)).toBeInTheDocument();
-    expect(screen.getByText(/SSO group: group groups contains Operators/)).toBeInTheDocument();
+    expect(screen.getByText(/Identity mapping: group contains Operators/)).toBeInTheDocument();
   });
 
   it('renders machine identity authorization audit references', () => {
