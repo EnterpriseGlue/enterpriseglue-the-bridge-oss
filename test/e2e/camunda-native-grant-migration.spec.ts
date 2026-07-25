@@ -119,7 +119,9 @@ test.describe('Camunda native-grant migration browser workflow', () => {
       expect((await previewResponse).status()).toBe(201);
       await expect(modal.getByText('Sanitized preview created')).toBeVisible();
       await expect(modal.getByText(/proposed: 2/i)).toBeVisible();
-      await expect(modal.getByText(/manual required: 8/i)).toBeVisible();
+      await expect(modal.getByText(/manual required: 5/i)).toBeVisible();
+      await expect(modal.getByText(/approval required: 2/i)).toBeVisible();
+      await expect(modal.getByText(/blocked: 3/i)).toBeVisible();
       await expect(modal.getByText('synthetic-operations')).toHaveCount(0);
 
       const ledger = await responseJson<{ requests: Array<{ request: string }> }>(
