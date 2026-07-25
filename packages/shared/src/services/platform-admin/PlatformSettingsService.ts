@@ -5,6 +5,7 @@
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
 import {
   AccessAuthorityModeSchema,
   EngineOnboardingModeSchema,
@@ -239,6 +240,16 @@ export class PlatformSettingsService {
     const dataSource = await getDataSource();
     const settingsRepo = dataSource.getRepository(PlatformSettings);
     const now = Date.now();
+
+    if (data.engineRuntimeAuthorizationMode === 'mirrored_engine_backstop') {
+      const successfulRun = await dataSource.getRepository(EngineBackstopSyncRun).findOne({
+        where: { status: 'succeeded' },
+        order: { completedAt: 'DESC', id: 'DESC' },
+      });
+      if (!successfulRun) {
+        throw new Error('mirrored_engine_backstop requires at least one successful, retained Camunda 7 backstop synchronization');
+      }
+    }
 
     // Prepare update data
     const updateData: Record<string, any> = {

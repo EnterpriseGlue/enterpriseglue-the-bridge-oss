@@ -36,7 +36,7 @@ export class PlatformSettings {
   projectAccessAuthority!: 'manual' | 'transition_to_sso' | 'sso_managed';
 
   @Column({ name: 'engine_runtime_authorization_mode', type: 'text', default: 'enterpriseglue_authoritative' })
-  engineRuntimeAuthorizationMode!: 'enterpriseglue_authoritative';
+  engineRuntimeAuthorizationMode!: 'enterpriseglue_authoritative' | 'mirrored_engine_backstop';
 
   @Column({ name: 'credentialless_customer_sidecars_enabled', type: 'boolean', default: false })
   credentiallessCustomerSidecarsEnabled!: boolean;

@@ -66,7 +66,7 @@ describe('platform-admin settings routes', () => {
       error: 'Validation failed',
       issues: [{
         path: 'engineRuntimeAuthorizationMode',
-        message: 'Unsupported runtime authorization mode; v1 supports only enterpriseglue_authoritative',
+        message: 'Unsupported runtime authorization mode',
         code: 'invalid_value',
       }],
     });

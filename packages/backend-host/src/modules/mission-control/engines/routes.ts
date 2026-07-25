@@ -76,6 +76,10 @@ import { CamundaNativeAuthorizationExportSchema, CamundaNativeGrantClassificatio
 import { camundaNativeGrantInventoryService, classifyCamundaNativeGrant } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js'
 import { CamundaNativeGrantEvidenceLimitError, camundaNativeGrantImportRunService } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js'
 import { camundaNativeGrantDraftService, camundaNativeGrantExternalEngineKey } from '@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js'
+import { EngineBackstopGroupMappingWriteRequestSchema, EngineBackstopGroupMappingWriteResponseSchema, EngineBackstopSyncApplyRequestSchema, EngineBackstopSyncRunHistorySchema, EngineBackstopSyncRunSummarySchema } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js'
+import { engineBackstopGroupMappingService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopGroupMappingService.js'
+import { EngineBackstopEvidenceLimitError, engineBackstopSyncRunService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncRunService.js'
+import { engineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js'
 
 type RequestWithAuthorizedEngineIds = Request & { authorizedEngineIds?: string[] }
 
@@ -110,6 +114,8 @@ const nativeGrantRollbackBodySchema = z.object({
   expectedRollbackHash: z.string().regex(/^[a-f0-9]{64}$/),
   acknowledgements: z.array(z.string().min(1).max(500)).max(100),
 }).strict()
+const backstopPreviewBodySchema = z.object({}).strict()
+const backstopSyncRunIdParamSchema = z.object({ id: z.string().min(1), runId: z.string().min(1) })
 
 /**
  * Native-grant imports deliberately start from an empty, dedicated additive
@@ -1787,6 +1793,81 @@ r.get('/engines-api/engines/:id/camunda-native-grants/imports/:runId/detail', en
   const detail = await camundaNativeGrantImportRunService.getDetailedSnapshot(run.id)
   if (!detail) throw Errors.notFound('Camunda native-grant import detail')
   res.json({ run, detail })
+}))
+
+r.get('/engines-api/engines/:id/backstop/status', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('platform.engine-backstop.read', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
+  const [mappings, runs] = await Promise.all([
+    engineBackstopGroupMappingService.list(engineId),
+    engineBackstopSyncRunService.listForEngine({ engineId, tenantId }),
+  ])
+  res.json({ mappings, latestRun: runs[0] || null })
+}))
+
+r.get('/engines-api/engines/:id/backstop/mappings', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('platform.engine-backstop.read', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
+  res.json({ mappings: await engineBackstopGroupMappingService.list(engineId) })
+}))
+
+r.post('/engines-api/engines/:id/backstop/mappings', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('platform.engine-backstop.manage', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(EngineBackstopGroupMappingWriteRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, req.tenant?.tenantId || null)) throw Errors.notFound('Engine')
+  const result = await engineBackstopGroupMappingService.write({ engineId, request: req.body, actorId: req.user!.userId })
+  await logAudit({ tenantId: req.tenant?.tenantId || undefined, userId: req.user!.userId, action: 'engine.backstop.mapping.write', resourceType: 'engine', resourceId: engineId, details: { mappingCount: result.mappings.length } })
+  res.status(200).json(EngineBackstopGroupMappingWriteResponseSchema.parse(result))
+}))
+
+r.post('/engines-api/engines/:id/backstop/sync/preview', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(engineIdParamSchema), requireAction('platform.engine-backstop.preview', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(backstopPreviewBodySchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
+  try {
+    const run = await engineBackstopSyncService.preview({ engineId, tenantId, actorId: req.user!.userId })
+    await logAudit({ tenantId: tenantId || undefined, userId: req.user!.userId, action: 'engine.backstop.preview', resourceType: 'engine', resourceId: engineId, details: { runId: run.id, desiredHash: run.desiredHash, counts: run.counts } })
+    res.status(201).json({ run })
+  } catch (error) {
+    if (error instanceof EngineBackstopEvidenceLimitError) throw Errors.validation(error.message)
+    throw error
+  }
+}))
+
+r.get('/engines-api/engines/:id/backstop/sync', engineLimiter, requireAuth, validateParams(engineIdParamSchema), requireAction('platform.engine-backstop.read', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
+  res.json(EngineBackstopSyncRunHistorySchema.parse({ runs: await engineBackstopSyncRunService.listForEngine({ engineId, tenantId }) }))
+}))
+
+r.get('/engines-api/engines/:id/backstop/sync/:runId', engineLimiter, requireAuth, validateParams(backstopSyncRunIdParamSchema), requireAction('platform.engine-backstop.read', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+  const run = await engineBackstopSyncRunService.getSummary(String(req.params.runId))
+  if (!run || run.engineId !== String(req.params.id) || (run.tenantId || null) !== (req.tenant?.tenantId || null)) throw Errors.notFound('Backstop sync run')
+  res.json({ run: EngineBackstopSyncRunSummarySchema.parse(run) })
+}))
+
+r.get('/engines-api/engines/:id/backstop/sync/:runId/detail', engineLimiter, requireAuth, validateParams(backstopSyncRunIdParamSchema), requireAction('platform.engine-backstop.sensitive.read', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
+  const run = await engineBackstopSyncRunService.getSummary(String(req.params.runId))
+  if (!run || run.engineId !== String(req.params.id) || (run.tenantId || null) !== (req.tenant?.tenantId || null)) throw Errors.notFound('Backstop sync run')
+  const detail = await engineBackstopSyncRunService.getDetailedSnapshot(run.id)
+  if (!detail) throw Errors.notFound('Backstop sync detail')
+  res.json({ run, detail })
+}))
+
+r.post('/engines-api/engines/:id/backstop/sync/:runId/apply', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(backstopSyncRunIdParamSchema), requireAction('platform.engine-backstop.apply', { resourceResolver: 'platform.self' }), requireAction('platform.engine-backstop.sensitive.read', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(EngineBackstopSyncApplyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  const engineId = String(req.params.id)
+  const tenantId = req.tenant?.tenantId || null
+  const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: engineId } })
+  if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId)) throw Errors.notFound('Engine')
+  const result = await engineBackstopSyncService.apply({ engineId, tenantId, runId: String(req.params.runId), request: req.body, actorId: req.user!.userId })
+  await logAudit({ tenantId: tenantId || undefined, userId: req.user!.userId, action: 'engine.backstop.apply', resourceType: 'engine', resourceId: engineId, details: { runId: result.run.id, status: result.run.status, desiredHash: result.run.desiredHash, taskStatus: result.task?.status || null } })
+  res.json(result)
 }))
 
 r.post('/engines-api/engines/:id/camunda-native-grants/imports/:runId/draft', engineLimiter, requireAuth, engineRegistrationLimiter, validateParams(nativeGrantImportRunIdParamSchema), requireAction('platform.camunda-native-grants.draft', { resourceResolver: 'platform.self' }), requireAction('platform.camunda-native-grants.sensitive.read', { resourceResolver: 'platform.self' }), engineRegistrationJsonPayloadLimit, validateBody(nativeGrantDraftBodySchema), asyncHandler(async (req: Request, res: Response) => {

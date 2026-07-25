@@ -7,9 +7,11 @@ import {
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 
 describe('platform settings runtime authorization contracts', () => {
-  it('accepts only the EnterpriseGlue-authoritative v1 mode', () => {
+  it('accepts EnterpriseGlue-authoritative and explicitly synchronized mirrored-backstop modes', () => {
     expect(EngineRuntimeAuthorizationModeSchema.parse('enterpriseglue_authoritative'))
       .toBe('enterpriseglue_authoritative');
+    expect(EngineRuntimeAuthorizationModeSchema.parse('mirrored_engine_backstop'))
+      .toBe('mirrored_engine_backstop');
 
     const result = EngineRuntimeAuthorizationModeSchema.safeParse('engine_native_authority');
     expect(result.success).toBe(false);
@@ -28,7 +30,7 @@ describe('platform settings runtime authorization contracts', () => {
 
     expect(schemas?.EngineRuntimeAuthorizationMode).toMatchObject({
       type: 'string',
-      enum: ['enterpriseglue_authoritative'],
+      enum: ['enterpriseglue_authoritative', 'mirrored_engine_backstop'],
     });
     expect(schemas?.UnsupportedEngineRuntimeAuthorizationModeError).toBeDefined();
     expect(response?.content?.['application/json']?.schema)

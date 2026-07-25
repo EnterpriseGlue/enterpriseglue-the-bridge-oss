@@ -6,8 +6,8 @@ const BrandingHexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
 export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed']);
-export const UnsupportedEngineRuntimeAuthorizationModeMessage = 'Unsupported runtime authorization mode; v1 supports only enterpriseglue_authoritative';
-export const EngineRuntimeAuthorizationModeSchema = z.literal('enterpriseglue_authoritative', {
+export const UnsupportedEngineRuntimeAuthorizationModeMessage = 'Unsupported runtime authorization mode';
+export const EngineRuntimeAuthorizationModeSchema = z.enum(['enterpriseglue_authoritative', 'mirrored_engine_backstop'], {
   error: UnsupportedEngineRuntimeAuthorizationModeMessage,
 });
 export const UnsupportedEngineRuntimeAuthorizationModeErrorSchema = z.object({

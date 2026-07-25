@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { PlatformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
+import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
 import { encrypt, isEncrypted, safeDecrypt } from '@enterpriseglue/shared/services/encryption.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -153,7 +154,7 @@ describe('PlatformSettingsService', () => {
     }));
   });
 
-  it('persists only the supported runtime authorization mode', async () => {
+  it('persists the authoritative runtime authorization mode without a backstop prerequisite', async () => {
     const repo = {
       findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
       insert: vi.fn(),
@@ -172,6 +173,27 @@ describe('PlatformSettingsService', () => {
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
       engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
       updatedById: 'admin-1',
+    }));
+  });
+
+  it('requires a successful backstop receipt before enabling mirrored mode', async () => {
+    const repo = { findOneBy: vi.fn().mockResolvedValue({ id: 'default' }), insert: vi.fn(), update: vi.fn() };
+    const backstopRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        if (entity === EngineBackstopSyncRun) return backstopRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    await expect(service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1'))
+      .rejects.toThrow('requires at least one successful');
+    expect(repo.update).not.toHaveBeenCalled();
+
+    backstopRepo.findOne.mockResolvedValue({ id: 'run-1', status: 'succeeded' });
+    await service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1');
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      engineRuntimeAuthorizationMode: 'mirrored_engine_backstop',
     }));
   });
 

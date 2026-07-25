@@ -58,6 +58,9 @@ const nativeGrantMigrationMock = vi.hoisted(() => ({
 }));
 const configBundleApplyMock = vi.hoisted(() => ({ apply: vi.fn() }));
 const configBundleRollbackMock = vi.hoisted(() => ({ compile: vi.fn(), diff: vi.fn() }));
+const backstopMock = vi.hoisted(() => ({
+  listMappings: vi.fn(), writeMappings: vi.fn(), listRuns: vi.fn(), getRun: vi.fn(), getDetail: vi.fn(), preview: vi.fn(), apply: vi.fn(),
+}));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
@@ -95,6 +98,16 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImport
 vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js', () => ({
   camundaNativeGrantDraftService: { generate: nativeGrantMigrationMock.generate },
   camundaNativeGrantExternalEngineKey: nativeGrantMigrationMock.externalEngineKey,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopGroupMappingService.js', () => ({
+  engineBackstopGroupMappingService: { list: backstopMock.listMappings, write: backstopMock.writeMappings },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncRunService.js', () => ({
+  EngineBackstopEvidenceLimitError: class EngineBackstopEvidenceLimitError extends Error {},
+  engineBackstopSyncRunService: { listForEngine: backstopMock.listRuns, getSummary: backstopMock.getRun, getDetailedSnapshot: backstopMock.getDetail },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js', () => ({
+  engineBackstopSyncService: { preview: backstopMock.preview, apply: backstopMock.apply },
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
   configBundleApplyService: { apply: configBundleApplyMock.apply },
@@ -265,6 +278,13 @@ describe('mission-control engines routes', () => {
     configBundleApplyMock.apply.mockReset();
     configBundleRollbackMock.compile.mockReset();
     configBundleRollbackMock.diff.mockReset();
+    backstopMock.listMappings.mockReset();
+    backstopMock.writeMappings.mockReset();
+    backstopMock.listRuns.mockReset();
+    backstopMock.getRun.mockReset();
+    backstopMock.getDetail.mockReset();
+    backstopMock.preview.mockReset();
+    backstopMock.apply.mockReset();
     (engineService as any).listEngines.mockReset();
     (engineService as any).getEngine.mockReset();
     (engineService as any).hasEngineAccess.mockReset();
@@ -327,6 +347,8 @@ describe('mission-control engines routes', () => {
     (runtimeResourceInventoryService as any).materializeForEngine.mockResolvedValue([]);
     (existsSync as any).mockReturnValue(false);
     engineTenantMappingServiceMock.list.mockResolvedValue([]);
+    backstopMock.listMappings.mockResolvedValue([]);
+    backstopMock.listRuns.mockResolvedValue([]);
     engineTenantMappingServiceMock.getDiagnostics.mockResolvedValue({
       mode: 'shared',
       tenantId: null,
@@ -656,6 +678,49 @@ describe('mission-control engines routes', () => {
     expect(JSON.stringify(response.body)).not.toContain('sensitive-native-group');
     expect(nativeGrantMigrationMock.listForEngine).toHaveBeenCalledWith({ engineId: 'e1', tenantId: 'tenant-default' });
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('platform:camunda-native-grants:history-view', expect.anything());
+  });
+
+  it('writes and reads opaque backstop mappings without returning the native group ID', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+    const mapping = { id: 'mapping-1', engineId: 'e1', tenantId: 'tenant-default', authzGroupId: 'group-1', nativeGroupReference: 'camunda-group-aaaaaaaaaaaaaaaaaaaaaaaa', source: 'manual', ownershipMode: 'manual', isActive: true, createdById: 'user-1', createdAt: 1, updatedAt: 1 };
+    backstopMock.writeMappings.mockResolvedValue({ mappings: [mapping] });
+    backstopMock.listMappings.mockResolvedValue([mapping]);
+
+    const created = await request(app).post('/engines-api/engines/e1/backstop/mappings').send({
+      mappings: [{ authzGroupId: 'group-1', nativeGroupId: 'sensitive-camunda-group', isActive: true }],
+    });
+    const listed = await request(app).get('/engines-api/engines/e1/backstop/mappings');
+
+    expect(created.status).toBe(200);
+    expect(listed.status).toBe(200);
+    expect(JSON.stringify(created.body)).not.toContain('sensitive-camunda-group');
+    expect(JSON.stringify(listed.body)).not.toContain('sensitive-camunda-group');
+    expect(backstopMock.writeMappings).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', actorId: 'user-1', request: expect.objectContaining({ mappings: [expect.objectContaining({ nativeGroupId: 'sensitive-camunda-group' })] }),
+    }));
+  });
+
+  it('creates a sanitized hash-bound backstop preview and requires acknowledgment before apply', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+    const run = { id: 'backstop-run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed', sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), resultHash: null, catalogVersion: 'camunda7-mirrored-backstop-v1', capability: {}, counts: { total: 0, proposed: 0, manual_required: 0, blocked: 0, proposedGrantCount: 0 }, classifications: [], rollbackOfRunId: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, completedAt: null, createdAt: 1, updatedAt: 1 };
+    backstopMock.preview.mockResolvedValue(run);
+    backstopMock.apply.mockResolvedValue({ run: { ...run, status: 'succeeded', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
+
+    const preview = await request(app).post('/engines-api/engines/e1/backstop/sync/preview').send({});
+    const rejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64) });
+    const applied = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true });
+
+    expect(preview.status).toBe(201);
+    expect(JSON.stringify(preview.body)).not.toContain('sensitive-camunda-group');
+    expect(rejected.status).toBe(400);
+    expect(applied.status).toBe(200);
+    expect(backstopMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', request: { desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true },
+    }));
   });
 
   it('creates a sanitized, read-only Camunda native-grant preview and never returns native identities', async () => {
