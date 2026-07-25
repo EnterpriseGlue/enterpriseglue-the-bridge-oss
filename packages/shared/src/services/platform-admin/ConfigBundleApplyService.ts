@@ -633,8 +633,8 @@ class ConfigBundleApplyService {
         }
         const engine = engineByKey.get(mapping.engineRef.engineKey);
         const group = groupByKey.get(mapping.groupRef.groupKey);
-        if (!engine || !isEngineBackstopNativeAuthorizationEngineType(engine.type) || engine.connectionMode !== 'direct' || !group) {
-          fail(`Backstop mapping ${mapping.key} references an unresolved direct Camunda 7 or Operaton engine or authorization group`, 409);
+        if (!engine || !isEngineBackstopNativeAuthorizationEngineType(engine.type) || !group) {
+          fail(`Backstop mapping ${mapping.key} references an unresolved Camunda 7 or Operaton engine or authorization group`, 409);
         }
         let nativeGroupId: string | null;
         try {

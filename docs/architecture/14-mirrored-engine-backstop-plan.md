@@ -5,8 +5,8 @@ the default until a specific engine has completed a healthy backstop sync.
 
 ## Decision
 
-`mirrored_engine_backstop` is a defence-in-depth mode for direct Camunda 7 or
-Operaton access. EnterpriseGlue remains the only permission editor and the final
+`mirrored_engine_backstop` is a defence-in-depth mode for Camunda 7 or Operaton
+access, reached directly or through a customer-owned sidecar. EnterpriseGlue remains the only permission editor and the final
 EnterpriseGlue product-authorisation evaluator. The feature projects a narrow,
 representable subset of EnterpriseGlue group access into compatible native
 authorizations so a person who reaches Camunda directly is also constrained by
@@ -97,10 +97,14 @@ to the mapped group before relying on the backstop.
    non-owned observations and are never changed.
 
 All compatible native-authorization calls use the existing hardened connection/secret resolver. A
-participating engine must be `camunda7` or `operaton`, active, reachable through a write-capable
-trusted endpoint, and use an account allowed to manage native authorizations.
-Customer-sidecar engines are excluded until their sidecar advertises the same
-bounded native-authorization capability.
+participating engine must be `camunda7` or `operaton`, active, and reachable through a write-capable
+trusted endpoint. A direct engine uses its configured integration account. A
+`customer_sidecar` engine uses the generic bounded sidecar adapter, sends only
+the normal sanitized request/engine/operation metadata to the registered proxy,
+and lets the customer-owned proxy authenticate its own engine hop. No downstream
+peer token or engine credential is stored or forwarded by EnterpriseGlue. The
+sidecar must allow only create, tracked-ID read, and tracked-ID delete calls for
+the backstop operation class; a rejection fails closed with no direct fallback.
 
 ## Data and API Design
 
@@ -181,14 +185,16 @@ new preview is required; no broad native delete is permitted.
    source/hash conflict handling, and five-adapter tests.
 3. **Compatible adapter and operations** — create/delete, audit redaction,
    operator/developer runbooks, mocked contract, and disposable real Camunda 7
-   and Operaton REST contracts are complete. The read-only tracked-ID drift check creates a
+   and Operaton REST contracts are complete. A disposable Operaton test also runs the complete
+   customer-sidecar preview/apply/drift/rollback lifecycle through a bounded local proxy and
+   proves no downstream credential crosses that hop. The read-only tracked-ID drift check creates a
    linked sanitized receipt and is complete; it never inventories or changes
    unrelated native grants.
 4. **Product workflow** — the guarded API and configuration-bundle mapping
    input are complete. The bundle supports secret preflight, hash-bound
-   diff/apply, source-safe archive, and opaque export. Mission Control UI,
-   Effective Access link, browser accessibility, and direct-user
-   identity-provider certification remain planned work; see
+   diff/apply, source-safe archive, and opaque export. Effective Access links,
+   browser accessibility, and direct-user identity-provider certification remain
+   planned work; see
    `15-authorization-program-status.md`.
 
 Acceptance requires 100% coverage of the supported reverse-projection matrix;

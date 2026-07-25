@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CamundaCompatibleBackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
+import { CamundaCompatibleBackstopNativeClient, CustomerSidecarBackstopNativeClient, EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
 import { camundaDelete, camundaGet, camundaPost } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
@@ -68,6 +68,57 @@ function setup(input: { builtProjection?: ReturnType<typeof projection>; sourceH
 }
 
 describe('EngineBackstopSyncService', () => {
+  it('selects the customer-sidecar adapter from the previewed transport capability', async () => {
+    const state = setup();
+    state.currentRun.capability = { customerSidecarTransport: true, directTrustedEndpoint: false };
+    const directNativeClient = {
+      createAuthorization: vi.fn(async () => { throw new Error('direct transport must not be selected'); }),
+      deleteAuthorization: vi.fn(), readAuthorization: vi.fn(),
+    };
+    const customerSidecarNativeClient = {
+      createAuthorization: vi.fn(async () => ({ id: 'sidecar-native-auth-1' })),
+      deleteAuthorization: vi.fn(async () => undefined),
+      readAuthorization: vi.fn(),
+    };
+    const service = new EngineBackstopSyncService({
+      runService: state.runService as any,
+      taskService: state.taskService as any,
+      projectionBuilder: state.projectionBuilder,
+      directNativeClient,
+      customerSidecarNativeClient,
+    });
+
+    await service.apply({
+      engineId: 'engine-1', tenantId: 'tenant-a', runId: 'run-1',
+      request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+    });
+
+    expect(customerSidecarNativeClient.createAuthorization).toHaveBeenCalledWith('engine-1', {
+      nativeGroupId: 'camunda-operators', camundaResourceType: 6, resourceKey: 'payments',
+    });
+    expect(directNativeClient.createAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('records customer-sidecar transport capability on a newly created preview', async () => {
+    const previewRun = run({ id: 'sidecar-preview' });
+    const createPreview = vi.fn(async (input) => ({ ...previewRun, capability: input.capability }));
+    const service = new EngineBackstopSyncService({
+      runService: { createPreview, getSummary: vi.fn(), getDetailedSnapshot: vi.fn(), listForEngine: vi.fn(), updateRun: vi.fn() } as any,
+      taskService: { enqueue: vi.fn(), runNext: vi.fn() } as any,
+      projectionBuilder: async () => ({
+        engine: { id: 'engine-sidecar', type: 'operaton', lifecycleStatus: 'active', connectionMode: 'customer_sidecar' } as any,
+        tenantId: 'tenant-a', projection: projection(), sourceHash, desiredHash,
+        capability: { nativeAuthorizationWrite: true },
+      }),
+    });
+
+    await service.preview({ engineId: 'engine-sidecar', tenantId: 'tenant-a' });
+
+    expect(createPreview).toHaveBeenCalledWith(expect.objectContaining({
+      capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: false, customerSidecarTransport: true },
+    }));
+  });
+
   it('rechecks source hashes, creates only exact group READ grants, and records owned native IDs before completing', async () => {
     const state = setup();
     const result = await state.service.apply({
@@ -200,5 +251,17 @@ describe('CamundaCompatibleBackstopNativeClient', () => {
     });
     expect(camundaDelete).toHaveBeenCalledWith('engine-1', '/authorization/native%20auth%2F1');
     expect(camundaGet).toHaveBeenCalledWith('engine-1', '/authorization/native%20auth%2F1');
+  });
+
+  it('uses the same bounded authorization contract through the generic customer-sidecar adapter', async () => {
+    vi.mocked(camundaPost).mockResolvedValue({ id: 'native-auth-sidecar' });
+    const client = new CustomerSidecarBackstopNativeClient();
+
+    await expect(client.createAuthorization('engine-sidecar', { nativeGroupId: 'operators', camundaResourceType: 6, resourceKey: 'payments' }))
+      .resolves.toEqual({ id: 'native-auth-sidecar' });
+
+    expect(camundaPost).toHaveBeenCalledWith('engine-sidecar', '/authorization/create', {
+      type: 1, permissions: ['READ'], groupId: 'operators', resourceType: 6, resourceId: 'payments',
+    });
   });
 });

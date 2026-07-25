@@ -53,8 +53,8 @@ Current architecture status:
 - [ ] ⬜ Proxy/direct deployment ingestion with pipeline receipts, engine metadata reconciliation, and verified lineage quality.
 - [ ] ⬜ Carbon role library and focused single-role editor replacing the horizontally scrolling permission matrix.
 - [x] ✅ `engineRuntimeAuthorizationMode` defaults to `enterpriseglue_authoritative`; the narrow `mirrored_engine_backstop` mode is gated by a retained successful Camunda 7 or Operaton backstop receipt.
-- [ ] ⬜ First-class customer-managed sidecar engine connection mode with policy-controlled endpoint authentication, normal RBAC/runtime enforcement, UI/config/OpenAPI fields, and transport tests.
-- [ ] ⏸ EnterpriseGlue-issued sidecar action tokens, sidecar principals/heartbeats/inventory, and `engine_native_authority` import mode. The narrow direct-Camunda mirrored backstop is implemented separately.
+- [x] ✅ First-class customer-managed sidecar engine connection mode with policy-controlled endpoint authentication, normal RBAC/runtime enforcement, UI/config/OpenAPI fields, transport tests, and bounded mirrored-backstop propagation. EnterpriseGlue never receives the customer's downstream peer token.
+- [ ] ⏸ EnterpriseGlue-issued sidecar action tokens, sidecar principals/heartbeats/inventory, and `engine_native_authority` import mode. The narrow Camunda/Operaton mirrored backstop is implemented separately.
 
 ### Current Remaining Work
 
@@ -75,13 +75,13 @@ The remaining relevant work is:
 - [ ] ⬜ Replace Access Control's role-column matrix with a role list plus one-role-at-a-time grouped permission editor and responsive overflow tests.
 - [x] ✅ Mission Control and dashboard filtering by authorized process/decision/runtime resource subsets inside central shared engines.
 - [ ] ⬜ `engineRuntimeAuthorizationMode` setting with `enterpriseglue_authoritative` enabled for v1 and later engine-native modes explicitly unsupported until future milestones.
-- [ ] ⬜ Add `connectionMode = customer_sidecar` to engine persistence, shared schemas, OpenAPI, manual/external/config registration, connection resolution, Engine UI, and mock-sidecar tests. EnterpriseGlue must never receive the customer's downstream peer token.
+- [x] ✅ Add `connectionMode = customer_sidecar` to engine persistence, shared schemas, OpenAPI, manual/external/config registration, connection resolution, Engine UI, mock-sidecar tests, and the bounded mirrored-backstop path. EnterpriseGlue never receives the customer's downstream peer token.
 - [ ] ⬜ Optional cleanup: reusable composite/branch guard extraction, optional approval workflow semantics if approvals become deployment gates, optional live SAML/OIDC/Google provider diagnostics, and broader reusable diagnostic-link/field-level guard patterns.
 
 Deferred and not part of the current v1 implementation path:
 
 - [ ] ⏸ EnterpriseGlue-issued sidecar action-token protocol and dedicated sidecar inventory/heartbeat APIs. Customer-managed sidecar transport is not deferred.
-- [x] ✅ Narrow Camunda 7/Operaton engine-native permission mirroring (`mirrored_engine_backstop`): exact mapped-group process/decision `READ`, hash-bound sync, ownership-only rollback, read-only tracked-ID drift receipts, and source-owned configuration-bundle mappings with opaque secret references. UI and direct-identity certification remain follow-up work.
+- [x] ✅ Narrow Camunda 7/Operaton engine-native permission mirroring (`mirrored_engine_backstop`): exact mapped-group process/decision `READ`, hash-bound sync, ownership-only rollback, read-only tracked-ID drift receipts, source-owned configuration-bundle mappings with opaque secret references, and direct or customer-sidecar transport. Direct-identity certification remains follow-up work.
 - [ ] ⏸ Engine-native permission import/authority (`engine_native_authority`).
 
 ### Clean Target Versus Transitional Compatibility

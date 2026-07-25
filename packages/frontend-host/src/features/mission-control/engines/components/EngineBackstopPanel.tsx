@@ -66,17 +66,17 @@ export default function EngineBackstopPanel({
   const [acknowledgeRollback, setAcknowledgeRollback] = React.useState(false)
   const [selectedRun, setSelectedRun] = React.useState<EngineBackstopSyncRunSummary | null>(null)
 
-  const isDirect = connectionMode === 'direct'
+  const usesCustomerSidecar = connectionMode === 'customer_sidecar'
   const status = useQuery({
     queryKey: queryKey(engineId, 'status'),
     queryFn: () => getEngineBackstopStatus(engineId),
-    enabled: readDecision.allowed && isDirect,
+    enabled: readDecision.allowed,
     retry: false,
   })
   const history = useQuery({
     queryKey: queryKey(engineId, 'history'),
     queryFn: () => getEngineBackstopSyncHistory(engineId),
-    enabled: readDecision.allowed && isDirect,
+    enabled: readDecision.allowed,
     retry: false,
   })
   const refresh = async () => {
@@ -145,12 +145,12 @@ export default function EngineBackstopPanel({
       <div>
         <h3 style={{ margin: 0 }}>Native authorization backstop</h3>
         <p style={{ margin: '6px 0 0', color: 'var(--cds-text-secondary)' }}>
-          Optionally mirrors exact EnterpriseGlue group READ access into a direct Camunda 7 or Operaton engine. EnterpriseGlue remains the authority; only grants owned by a successful backstop run can be removed by rollback.
+          Optionally mirrors exact EnterpriseGlue group READ access into a Camunda 7 or Operaton engine. EnterpriseGlue remains the authority; only grants owned by a successful backstop run can be removed by rollback.
         </p>
       </div>
       {!readDecision.allowed && <InlineNotification kind="warning" title="Backstop status unavailable" subtitle={readDecision.reason || 'You need permission to view the mirrored authorization backstop.'} hideCloseButton />}
-      {readDecision.allowed && !isDirect && <InlineNotification kind="info" title="Direct connection required" subtitle="This safety backstop is intentionally unavailable for customer-sidecar connections because EnterpriseGlue must be able to read and reconcile the native engine authorization state directly." hideCloseButton />}
-      {readDecision.allowed && isDirect && <>
+      {readDecision.allowed && usesCustomerSidecar && <InlineNotification kind="info" title="Customer-sidecar transport" subtitle="EnterpriseGlue uses the registered customer sidecar for the bounded native authorization calls. The sidecar owns its downstream peer-to-peer authentication; no engine credential is stored in EnterpriseGlue." hideCloseButton />}
+      {readDecision.allowed && <>
         {status.isLoading && <InlineLoading description="Loading sanitized backstop status" />}
         {status.error && <InlineNotification kind="error" title="Backstop status unavailable" subtitle={getUiErrorMessage(status.error, 'Check the engine registration and backstop read permission.')} hideCloseButton />}
         {history.error && <InlineNotification kind="warning" title="Backstop history unavailable" subtitle={getUiErrorMessage(history.error, 'The latest receipt may still be visible above.')} hideCloseButton />}
@@ -180,7 +180,7 @@ export default function EngineBackstopPanel({
         <div style={{ display: 'grid', gap: 8 }}>
           <h4 style={{ margin: 0 }}>Preview, apply, and verify</h4>
           <p style={{ margin: 0, fontSize: 13, color: 'var(--cds-text-secondary)' }}>Preview first. Applying is hash-bound to that preview and requires the separate sensitive receipt permission; no native identity data is displayed here.</p>
-          {preview.error && <InlineNotification kind="error" title="Could not create preview" subtitle={getUiErrorMessage(preview.error, 'Check the direct Camunda 7 or Operaton connection and group mappings.')} hideCloseButton />}
+          {preview.error && <InlineNotification kind="error" title="Could not create preview" subtitle={getUiErrorMessage(preview.error, 'Check the Camunda 7 or Operaton connection and group mappings.')} hideCloseButton />}
           <Button size="sm" kind="primary" disabled={!previewDecision.allowed || preview.isPending} title={!previewDecision.allowed ? previewDecision.reason : undefined} onClick={() => preview.mutate()}>{preview.isPending ? 'Creating preview…' : 'Create backstop preview'}</Button>
           {currentRun && <div style={{ display: 'grid', gap: 8 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -191,11 +191,11 @@ export default function EngineBackstopPanel({
             {currentRun.status === 'previewed' && <>
               {!canApply && <InlineNotification kind="info" title="Apply unavailable" subtitle={sensitiveReadDecision.allowed ? (applyDecision.reason || 'You need backstop apply permission.') : (sensitiveReadDecision.reason || 'Applying requires the sensitive receipt permission.')} hideCloseButton />}
               <Checkbox id="backstop-apply-acknowledgement" labelText="I understand that EnterpriseGlue will write only the exact native grants owned by this run." checked={acknowledgeApply} onChange={(_event, data) => setAcknowledgeApply(data.checked)} />
-              {apply.error && <InlineNotification kind="error" title="Could not apply preview" subtitle={getUiErrorMessage(apply.error, 'The preview may be stale, or the direct engine state may have changed. Create a new preview and review it again.')} hideCloseButton />}
+              {apply.error && <InlineNotification kind="error" title="Could not apply preview" subtitle={getUiErrorMessage(apply.error, 'The preview may be stale, or the native engine state may have changed. Create a new preview and review it again.')} hideCloseButton />}
               <Button size="sm" kind="danger" disabled={!canApply || !acknowledgeApply || apply.isPending} onClick={() => apply.mutate()}>{apply.isPending ? 'Applying backstop…' : 'Apply reviewed backstop'}</Button>
             </>}
             {currentRun.status === 'succeeded' && <>
-              {drift.error && <InlineNotification kind="error" title="Could not check drift" subtitle={getUiErrorMessage(drift.error, 'Check the direct Camunda 7 or Operaton connection and try again.')} hideCloseButton />}
+              {drift.error && <InlineNotification kind="error" title="Could not check drift" subtitle={getUiErrorMessage(drift.error, 'Check the Camunda 7 or Operaton connection and try again.')} hideCloseButton />}
               <Button size="sm" kind="secondary" disabled={!driftDecision.allowed || drift.isPending} title={!driftDecision.allowed ? driftDecision.reason : undefined} onClick={() => drift.mutate()}>{drift.isPending ? 'Checking drift…' : 'Check native drift'}</Button>
               {!canApply && <InlineNotification kind="info" title="Rollback unavailable" subtitle={sensitiveReadDecision.allowed ? (applyDecision.reason || 'You need backstop apply permission.') : (sensitiveReadDecision.reason || 'Rolling back requires the sensitive receipt permission.')} hideCloseButton />}
               <Checkbox id="backstop-rollback-acknowledgement" labelText="I understand that rollback deletes only native grants owned by this successful backstop run." checked={acknowledgeRollback} onChange={(_event, data) => setAcknowledgeRollback(data.checked)} />

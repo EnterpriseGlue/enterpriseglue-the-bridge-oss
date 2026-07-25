@@ -40,13 +40,33 @@ export interface EngineBackstopNativeAuthorizationClient {
 }
 
 /**
+ * Bounded transport needed for native backstop authorizations.  Keeping this
+ * surface small prevents a customer-sidecar from becoming a general native
+ * administration proxy: the backstop client can create an exact READ grant
+ * and read or delete only a recorded authorization ID.
+ */
+export interface EngineBackstopNativeAuthorizationTransport {
+  post(engineId: string, path: string, body: unknown): Promise<unknown>;
+  get(engineId: string, path: string): Promise<unknown>;
+  delete(engineId: string, path: string): Promise<void>;
+}
+
+const bpmnNativeAuthorizationTransport: EngineBackstopNativeAuthorizationTransport = {
+  post: (engineId, path, body) => camundaPost<unknown>(engineId, path, body),
+  get: (engineId, path) => camundaGet<unknown>(engineId, path),
+  delete: (engineId, path) => camundaDelete(engineId, path),
+};
+
+/**
  * Uses the authorization REST contract shared by Camunda 7 and Operaton.
  * Engine type is checked before this client is invoked, so this class never
  * turns a generic BPMN endpoint into a native authorization writer.
  */
 export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNativeAuthorizationClient {
+  constructor(private readonly transport: EngineBackstopNativeAuthorizationTransport = bpmnNativeAuthorizationTransport) {}
+
   async createAuthorization(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
-    const response = await camundaPost<unknown>(engineId, '/authorization/create', {
+    const response = await this.transport.post(engineId, '/authorization/create', {
       type: 1,
       permissions: ['READ'],
       groupId: input.nativeGroupId,
@@ -59,18 +79,27 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
   }
 
   async deleteAuthorization(engineId: string, authorizationId: string): Promise<void> {
-    await camundaDelete(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
+    await this.transport.delete(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
   }
 
   async readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null> {
     try {
-      return await camundaGet<unknown>(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
+      return await this.transport.get(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
     } catch (error) {
       if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return null;
       throw error;
     }
   }
 }
+
+/**
+ * Generic customer-sidecar adapter. It deliberately uses the same bounded
+ * Camunda-compatible contract as a direct engine, while the shared BPMN
+ * connection resolver selects the registered `customer_sidecar` endpoint.
+ * EnterpriseGlue therefore sends no downstream engine credential or peer
+ * token; the customer-owned sidecar authenticates its own engine hop.
+ */
+export class CustomerSidecarBackstopNativeClient extends CamundaCompatibleBackstopNativeClient {}
 
 /** @deprecated Use CamundaCompatibleBackstopNativeClient. */
 export const Camunda7BackstopNativeClient = CamundaCompatibleBackstopNativeClient;
@@ -96,7 +125,12 @@ export interface EngineBackstopSyncDependencies {
   mappingService?: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
   runService?: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
   taskService?: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'runNext'>;
+  /** Applies to both transports and preserves existing test/custom injections. */
   nativeClient?: EngineBackstopNativeAuthorizationClient;
+  /** Optional direct-engine client; defaults to the Camunda-compatible transport. */
+  directNativeClient?: EngineBackstopNativeAuthorizationClient;
+  /** Optional customer-sidecar client; defaults to the generic bounded adapter. */
+  customerSidecarNativeClient?: EngineBackstopNativeAuthorizationClient;
 }
 
 function stableJson(value: unknown): string {
@@ -185,7 +219,8 @@ export class EngineBackstopSyncService {
   private readonly mappingService: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
   private readonly runService: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
   private readonly taskService: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'runNext'>;
-  private readonly nativeClient: EngineBackstopNativeAuthorizationClient;
+  private readonly directNativeClient: EngineBackstopNativeAuthorizationClient;
+  private readonly customerSidecarNativeClient: EngineBackstopNativeAuthorizationClient;
   private readonly projectionBuilder?: EngineBackstopProjectionBuilder;
 
   constructor(dependencies: EngineBackstopSyncDependencies = {}) {
@@ -193,7 +228,8 @@ export class EngineBackstopSyncService {
     this.mappingService = dependencies.mappingService || engineBackstopGroupMappingService;
     this.runService = dependencies.runService || engineBackstopSyncRunService;
     this.taskService = dependencies.taskService || engineBackstopSyncTaskService;
-    this.nativeClient = dependencies.nativeClient || new CamundaCompatibleBackstopNativeClient();
+    this.directNativeClient = dependencies.directNativeClient || dependencies.nativeClient || new CamundaCompatibleBackstopNativeClient();
+    this.customerSidecarNativeClient = dependencies.customerSidecarNativeClient || dependencies.nativeClient || new CustomerSidecarBackstopNativeClient();
     this.projectionBuilder = dependencies.projectionBuilder;
   }
 
@@ -205,7 +241,7 @@ export class EngineBackstopSyncService {
       sourceHash: built.sourceHash,
       desiredHash: built.desiredHash,
       projection: built.projection,
-      capability: built.capability,
+      capability: this.transportCapability(built),
       actorId: input.actorId || null,
     });
   }
@@ -306,6 +342,7 @@ export class EngineBackstopSyncService {
       const projection = projectionFromDetail(detail);
       const currentOwned = parseOwnedGrants(detail);
       const priorOwned = currentOwned.length > 0 ? currentOwned : await this.ownedGrantsFromPriorRun(run);
+      const nativeClient = this.nativeClientForRun(run);
       const desired = projection.desiredGrants.map((grant) => ({
         nativeGroupId: grant.nativeGroupId,
         camundaResourceType: grant.camundaResourceType,
@@ -318,14 +355,14 @@ export class EngineBackstopSyncService {
       await this.runService.updateRun({ id: run.id, status: 'running', detailedSnapshot: { version: 1, projection, ownedGrants: owned } });
       for (const grant of desired) {
         if (existingByIdentity.has(desiredIdentity(grant))) continue;
-        const created = await this.nativeClient.createAuthorization(run.engineId, grant);
+        const created = await nativeClient.createAuthorization(run.engineId, grant);
         owned = [...owned, { ...grant, id: created.id }];
         await this.runService.updateRun({ id: run.id, status: 'running', detailedSnapshot: { version: 1, projection, ownedGrants: owned } });
       }
       const retainedIds = new Set(retained.map((grant) => grant.id));
       for (const grant of priorOwned) {
         if (retainedIds.has(grant.id)) continue;
-        await this.nativeClient.deleteAuthorization(run.engineId, grant.id);
+        await nativeClient.deleteAuthorization(run.engineId, grant.id);
       }
       const resultHash = hash(stableJson(owned
         .map(({ id, ...grant }) => ({ ...grant, id }))
@@ -349,8 +386,9 @@ export class EngineBackstopSyncService {
       const detail = await this.runService.getDetailedSnapshot(rollbackRun.id);
       const ownedGrants = parseOwnedGrants(detail);
       if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The rollback receipt expired; no broad native delete is permitted');
+      const nativeClient = this.nativeClientForRun(rollbackRun);
       await this.runService.updateRun({ id: rollbackRun.id, status: 'running', detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
-      for (const grant of ownedGrants) await this.nativeClient.deleteAuthorization(rollbackRun.engineId, grant.id);
+      for (const grant of ownedGrants) await nativeClient.deleteAuthorization(rollbackRun.engineId, grant.id);
       const resultHash = hash(stableJson(ownedGrants.map((grant) => grant.id).sort()));
       await this.runService.updateRun({ id: rollbackRun.id, status: 'rolled_back', resultHash, completed: true, detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
       await this.runService.updateRun({ id: rollbackRun.rollbackOfRunId, status: 'rolled_back', completed: true });
@@ -368,12 +406,13 @@ export class EngineBackstopSyncService {
       const detail = await this.runService.getDetailedSnapshot(observation.id);
       if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The drift-check receipt expired before it could be read');
       const ownedGrants = parseOwnedGrants(detail);
+      const nativeClient = this.nativeClientForRun(observation);
       await this.runService.updateRun({ id: observation.id, status: 'running', detailedSnapshot: detail });
       let intactCount = 0;
       let missingCount = 0;
       let alteredCount = 0;
       for (const grant of ownedGrants) {
-        const nativeGrant = await this.nativeClient.readAuthorization(observation.engineId, grant.id);
+        const nativeGrant = await nativeClient.readAuthorization(observation.engineId, grant.id);
         if (nativeGrant === null) missingCount += 1;
         else if (matchesOwnedGrant(nativeGrant, grant)) intactCount += 1;
         else alteredCount += 1;
@@ -401,6 +440,19 @@ export class EngineBackstopSyncService {
     return parseOwnedGrants(detail);
   }
 
+  private transportCapability(built: ProjectionBuild): Record<string, boolean> {
+    const customerSidecarTransport = built.engine.connectionMode === 'customer_sidecar';
+    return {
+      ...built.capability,
+      directTrustedEndpoint: !customerSidecarTransport,
+      customerSidecarTransport,
+    };
+  }
+
+  private nativeClientForRun(run: EngineBackstopSyncRunSummary): EngineBackstopNativeAuthorizationClient {
+    return run.capability.customerSidecarTransport ? this.customerSidecarNativeClient : this.directNativeClient;
+  }
+
   private async buildProjection(input: { engineId: string; tenantId?: string | null }): Promise<ProjectionBuild> {
     if (this.projectionBuilder) return this.projectionBuilder(input);
     const dataSource = await getDataSource();
@@ -409,7 +461,6 @@ export class EngineBackstopSyncService {
     if (!engine) throw Errors.notFound('Engine', engineId);
     if (!isEngineBackstopNativeAuthorizationEngineType(engine.type)) throw backstopError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop is supported only for Camunda 7 and Operaton engines');
     if (engine.lifecycleStatus !== 'active') throw backstopError('ENGINE_BACKSTOP_ENGINE_INACTIVE', 'Mirrored authorization backstop requires an active engine');
-    if (engine.connectionMode !== 'direct') throw backstopError('ENGINE_BACKSTOP_CONNECTION_NOT_SUPPORTED', 'Mirrored authorization backstop requires a direct trusted Camunda 7 or Operaton endpoint');
     const requestedTenantId = normalizeTenant(input.tenantId);
     const tenantId = engine.tenancyMode === 'shared'
       ? requestedTenantId
@@ -466,7 +517,18 @@ export class EngineBackstopSyncService {
       candidates: candidates.sort((left, right) => left.sourceAssignmentId.localeCompare(right.sourceAssignmentId)),
     }));
     const desiredHash = hash(stableJson(projection.desiredGrants));
-    return { engine, tenantId, projection, sourceHash, desiredHash, capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: true } };
+    return {
+      engine,
+      tenantId,
+      projection,
+      sourceHash,
+      desiredHash,
+      capability: {
+        nativeAuthorizationWrite: true,
+        directTrustedEndpoint: engine.connectionMode !== 'customer_sidecar',
+        customerSidecarTransport: engine.connectionMode === 'customer_sidecar',
+      },
+    };
   }
 }
 

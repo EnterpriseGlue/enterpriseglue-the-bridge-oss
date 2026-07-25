@@ -105,9 +105,16 @@ describe('EngineBackstopPanel', () => {
     expect(await screen.findByText('Rolled Back')).toBeInTheDocument()
   })
 
-  it('does not call the backstop API for a customer-sidecar engine', () => {
+  it('uses the same backstop controls for a customer-sidecar engine without exposing downstream credentials', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url.endsWith('/backstop/status')) return { mappings: [], latestRun: null }
+      if (url.endsWith('/backstop/sync')) return { runs: [] }
+      throw new Error(`Unexpected GET ${url}`)
+    })
     renderPanel('customer_sidecar')
-    expect(screen.getByText('Direct connection required')).toBeInTheDocument()
-    expect(apiClient.get).not.toHaveBeenCalled()
+    expect(await screen.findByText('Customer-sidecar transport')).toBeInTheDocument()
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('/backstop/status'), undefined, expect.anything()))
+    expect(screen.getByRole('button', { name: 'Create backstop preview' })).toBeEnabled()
+    expect(screen.queryByText('Direct connection required')).not.toBeInTheDocument()
   })
 })

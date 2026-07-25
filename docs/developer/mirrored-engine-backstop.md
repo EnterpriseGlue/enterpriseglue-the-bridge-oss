@@ -6,7 +6,7 @@ authorization system. Its invariants are enforced in the following order:
 1. `EngineBackstopProjectionService` accepts only fully resolved exact group,
    resource, and permission candidates and emits Camunda-compatible process/decision
    group `READ` grants.
-2. `EngineBackstopGroupMappingService` validates active direct Camunda 7 or Operaton engines and
+2. `EngineBackstopGroupMappingService` validates active Camunda 7 or Operaton engines and
    tenant-compatible groups, encrypts native group IDs, and forbids one native
    group from representing more than one EnterpriseGlue group on an engine.
 3. `EngineBackstopSyncService` re-materializes the source before apply,
@@ -42,7 +42,7 @@ the cross-provider evidence limit before persistence.
 ## Configuration-bundle mappings
 
 `./engine-backstop-mappings.json` is a config-owned alternative to the
-interactive mapping API. A mapping may target only a direct Camunda 7 or Operaton engine and
+interactive mapping API. A mapping may target a direct or customer-sidecar Camunda 7 or Operaton engine and
 EnterpriseGlue group declared in the same bundle. It uses a stable mapping key
 and an opaque `nativeGroupIdRef`; a raw `nativeGroupId` is rejected.
 The engine type allow-list is intentionally explicit (`camunda7`, `operaton`),
@@ -84,6 +84,22 @@ On a partial failure, the recorded IDs remain with the failed run so retry or
 rollback does not need to infer native ownership. A missing or expired receipt
 is a hard stop for deletion.
 
+## Customer-sidecar transport
+
+For an engine registered with `connectionMode: customer_sidecar`, the sync
+receipt selects `CustomerSidecarBackstopNativeClient`. It has the same bounded
+surface as the direct adapter: create one exact group `READ` grant, then read
+or delete only an ID retained in encrypted ownership evidence. It uses the
+shared BPMN connection resolver, so calls go to the registered sidecar URL with
+the normal request/engine/operation metadata and operation class
+`engine.native_authorization.backstop`.
+
+EnterpriseGlue does not store, receive, forward, rotate, or log the sidecar's
+downstream peer-to-peer token or engine credential. The customer-owned sidecar
+authenticates the hop to its engine and should allow only these bounded
+authorization endpoints for this operation class. A sidecar rejection fails
+the sync task closed; no direct-engine fallback occurs.
+
 ## Read-only drift protocol
 
 `driftCheck` accepts only a successful apply receipt with retained encrypted
@@ -124,9 +140,15 @@ pnpm --dir backend exec vitest run \
 pnpm run test:action-registry
 pnpm run test:camunda7-native-grant-container
 pnpm run test:operaton-native-auth-container
+pnpm run test:operaton-sidecar-backstop-container
 ```
 
 The disposable Camunda and Operaton containers validate their pinned compatible authorization REST contracts.
 The service tests prove EnterpriseGlue's exact payload, source-drift stop,
 owned-only cleanup, rollback, and missing/altered owned-grant detection without
-requiring customer credentials.
+requiring customer credentials. The sidecar container test runs preview, apply,
+tracked-ID drift, and ownership-only rollback through a local bounded proxy in
+front of a real Operaton engine, and asserts that no downstream credential is
+sent to the proxy. The test command temporarily permits loopback HTTP only for
+its disposable local fixture; production endpoint policy and HTTPS requirements
+remain unchanged.

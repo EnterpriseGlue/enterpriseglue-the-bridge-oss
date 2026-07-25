@@ -219,9 +219,6 @@ export class EngineBackstopGroupMappingService {
     if (!isEngineBackstopNativeAuthorizationEngineType(engine.type)) {
       throw mappingError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop is supported only for Camunda 7 and Operaton engines');
     }
-    if (engine.connectionMode !== 'direct') {
-      throw mappingError('ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED', 'Mirrored authorization backstop requires a direct Camunda 7 or Operaton connection');
-    }
     if (engine.lifecycleStatus !== 'active') {
       throw mappingError('ENGINE_BACKSTOP_ENGINE_INACTIVE', 'Mirrored authorization backstop requires an active engine');
     }

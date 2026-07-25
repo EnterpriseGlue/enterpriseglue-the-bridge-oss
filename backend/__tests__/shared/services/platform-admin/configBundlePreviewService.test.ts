@@ -106,7 +106,7 @@ describe('configBundlePreviewService', () => {
     });
   });
 
-  it('accepts configured direct Camunda 7 or Operaton engines and configured groups for secret-backed backstop mappings', () => {
+  it('accepts configured direct or customer-sidecar Camunda 7 or Operaton engines and configured groups for secret-backed backstop mappings', () => {
     const input = {
       bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
       files: {
@@ -136,6 +136,21 @@ describe('configBundlePreviewService', () => {
         }] },
       },
     })).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+    expect(configBundlePreviewService.preview({
+      ...input,
+      files: {
+        ...input.files,
+        './engines.json': { engines: [{
+          ...input.files['./engines.json'].engines[0],
+          key: 'engine.operaton-sidecar', name: 'Operaton sidecar', type: 'operaton',
+          baseUrl: 'https://operaton-sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar',
+        }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{
+          ...input.files['./engine-backstop-mappings.json'].engineBackstopMappings[0],
+          key: 'engine-backstop-mapping.operaton-sidecar-operators', engineRef: { engineKey: 'engine.operaton-sidecar' }, nativeGroupIdRef: 'OPERATON_SIDECAR_OPERATORS_GROUP',
+        }] },
+      },
+    })).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
     const invalid = configBundlePreviewService.preview({
       ...input,
       files: {
@@ -149,7 +164,7 @@ describe('configBundlePreviewService', () => {
     });
     expect(invalid).toMatchObject({ valid: false });
     expect(invalid.errors).toEqual(expect.arrayContaining([
-      expect.objectContaining({ message: 'Mirrored backstop mappings require a direct Camunda 7 or Operaton engine' }),
+      expect.objectContaining({ message: 'Mirrored backstop mappings require a Camunda 7 or Operaton engine' }),
       expect.objectContaining({ message: 'Unknown group key: group.missing' }),
     ]));
   });

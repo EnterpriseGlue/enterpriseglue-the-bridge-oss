@@ -109,15 +109,18 @@ describe('EngineBackstopGroupMappingService', () => {
     expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ encryptedNativeGroupId: 'encrypted:operaton-operators' }));
   });
 
+  it('accepts customer-sidecar Operaton engines using the same encrypted mapping boundary', async () => {
+    const state = setup({ currentEngine: engine({ type: 'operaton', connectionMode: 'customer_sidecar' }) });
+    await expect(service.write({
+      engineId: 'engine-1',
+      request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'operaton-sidecar-operators', isActive: true }] },
+    })).resolves.toMatchObject({ mappings: [expect.objectContaining({ engineId: 'engine-1', authzGroupId: 'group-a' })] });
+    expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ encryptedNativeGroupId: 'encrypted:operaton-sidecar-operators' }));
+  });
+
   it('rejects unsupported or inactive engines and cross-tenant or archived groups', async () => {
     setup({ currentEngine: engine({ type: 'zeebe' }) });
     await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED' });
-
-    setup({ currentEngine: engine({ connectionMode: 'customer_sidecar' }) });
-    await expect(service.list('engine-1')).rejects.toMatchObject({
-      code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED',
-      message: 'Mirrored authorization backstop requires a direct Camunda 7 or Operaton connection',
-    });
 
     setup({ currentEngine: engine({ lifecycleStatus: 'stale' }) });
     await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_INACTIVE' });

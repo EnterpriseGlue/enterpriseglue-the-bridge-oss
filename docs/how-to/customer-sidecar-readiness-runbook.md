@@ -88,6 +88,13 @@ never substitute a literal value for a reference.
    Confirm EnterpriseGlue denies it before outbound transport and that the
    sidecar receives no request. This proves `connectionMode` is transport
    metadata, not an authorization bypass.
+7. If `mirrored_engine_backstop` is enabled, allow only the bounded
+   `engine.native_authorization.backstop` operation class for
+   `/authorization/create` and ID-addressed `/authorization/{id}` reads and
+   deletes. Create a reviewed backstop preview, apply it, run tracked-ID drift,
+   and roll it back in a non-production engine. Confirm the sidecar receives no
+   `Authorization` header containing a downstream engine credential; the
+   customer-owned hop authenticates separately.
 
 ## Evidence and success criteria
 
@@ -99,11 +106,16 @@ Attach sanitized artifacts to the change record:
 - connection-health outcome and allowed/denied request timestamps;
 - relevant audit-event identifiers and a statement that no secrets or
   downstream credentials were captured.
+- when the backstop is enabled, the reviewed preview/apply/drift/rollback
+  receipt identifiers and sidecar allow-list evidence for the three bounded
+  authorization endpoint shapes.
 
 Success requires an HTTPS allowlisted sidecar endpoint, restricted network
 reachability, successful approved operations, a denied operation blocked before
 transport, and no customer downstream credential in EnterpriseGlue-managed
-data. A connection failure must surface as the sanitized transport condition;
+data. When the backstop is enabled, success also requires the bounded native
+authorization lifecycle to complete through the sidecar without direct-engine
+fallback. A connection failure must surface as the sanitized transport condition;
 an upstream sidecar rejection must remain distinct from an EnterpriseGlue
 authorization denial.
 

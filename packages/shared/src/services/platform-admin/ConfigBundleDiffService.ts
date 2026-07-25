@@ -506,13 +506,13 @@ class ConfigBundleDiffService {
         : undefined;
       const existing = sourceRow || identityRow;
 
-      if (!desiredEngine || !isEngineBackstopNativeAuthorizationEngineType(desiredEngine.type) || desiredEngine.connectionMode !== 'direct') {
+      if (!desiredEngine || !isEngineBackstopNativeAuthorizationEngineType(desiredEngine.type)) {
         changes.push({
           objectType: 'engine_backstop_mapping',
           key: mapping.key,
           operation: 'conflict',
           currentId: existing?.id,
-          reason: 'Mirrored backstop mapping references an unresolved or non-direct Camunda 7 or Operaton configured engine',
+          reason: 'Mirrored backstop mapping references an unresolved or unsupported Camunda 7 or Operaton configured engine',
         });
         continue;
       }

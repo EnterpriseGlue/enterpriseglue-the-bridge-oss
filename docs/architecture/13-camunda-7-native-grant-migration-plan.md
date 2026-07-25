@@ -139,9 +139,10 @@ have enough technical permission to execute calls that EnterpriseGlue already
 allowed; a Camunda rejection fails the request safely.
 
 The optional `mirrored_engine_backstop` is now implemented for the narrow,
-direct Camunda 7 exact-group `READ` subset. EnterpriseGlue is still the editor
-and final product evaluator; the backstop is a separate direct-access defence
-layer, not a native-grant import. `engine_native_authority` remains deferred: it would require an
+Camunda 7/Operaton exact-group `READ` subset, reached directly or through a
+customer-owned sidecar. EnterpriseGlue is still the editor and final product
+evaluator; the backstop is a separate engine-access defence layer, not a
+native-grant import. `engine_native_authority` remains deferred: it would require an
 ongoing, authoritative reconciliation of native Camunda identities, groups,
 grants, revokes, tenant checks, resource identifiers, and EnterpriseGlue
 project/SSO context.
@@ -549,7 +550,7 @@ mappings, or unrelated EnterpriseGlue records.
 After the pilot, decide independently whether there is a demonstrated need for:
 
 1. a recurring read-only native-grant drift report;
-2. `mirrored_engine_backstop` for direct Camunda exposure; or
+2. `mirrored_engine_backstop` for direct or customer-sidecar Camunda exposure; or
 3. full `engine_native_authority`.
 
 None of these is needed to complete the migration tool. Full native authority

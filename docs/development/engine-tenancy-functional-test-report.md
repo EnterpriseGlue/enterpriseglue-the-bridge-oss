@@ -145,8 +145,12 @@ encrypted write-only native-group mappings, exact projection classification,
 hash-bound preview/apply/rollback/drift receipts, the runtime-mode success
 gate, API authorization and redaction, config-bundle secret-reference
 preflight/diff/apply/export, and the guarded Mission Control workflow. The UI
-test proves a customer-sidecar engine makes no backstop API call and that the
-manual native group ID is cleared after write and never displayed in a receipt.
+test proves the customer-sidecar controls remain available without exposing a
+downstream credential, and that the manual native group ID is cleared after
+write and never displayed in a receipt. `pnpm run test:operaton-sidecar-backstop-container` adds a disposable real-Operaton
+contract: preview, apply, tracked-ID drift, and ownership-only rollback pass
+through a bounded local customer-sidecar proxy while asserting no downstream
+engine credential is sent to that proxy.
 
 This local lane does not replace direct-identity-provider certification: that
 release gate needs representative direct Camunda 7 and Operaton environments where a real

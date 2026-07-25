@@ -368,6 +368,23 @@ describe('bpmn-engine-client', () => {
     });
   });
 
+  it('marks bounded native authorization calls for customer-sidecar policy checks', async () => {
+    await runWithBpmnEngineRequestContext({ requestId: 'req-backstop' }, async () => {
+      await camundaPost('engine-1', '/authorization/create', {});
+    });
+
+    expect(fetch).toHaveBeenCalledWith('http://localhost:8080/engine-rest/authorization/create', {
+      method: 'POST',
+      redirect: 'error',
+      signal: expect.anything(),
+      headers: expect.objectContaining({
+        'X-EnterpriseGlue-Request-Id': 'req-backstop',
+        'X-EnterpriseGlue-Operation-Class': 'engine.native_authorization.backstop',
+      }),
+      body: '{}',
+    });
+  });
+
   it('keeps basic engine credentials server-side while adding metadata headers', async () => {
     const engineRepo = {
       findOneBy: vi.fn().mockResolvedValue({

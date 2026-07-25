@@ -328,6 +328,7 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
 function inferOperationClass(method: string, path: string): string {
   const normalizedMethod = method.toUpperCase()
   const normalizedPath = path.startsWith('http') ? new URL(path).pathname : path
+  if (/\/authorization(?:\/|$)/.test(normalizedPath)) return 'engine.native_authorization.backstop'
   if (normalizedMethod === 'GET') return 'engine.read'
   if (normalizedPath.includes('/deployment')) return 'engine.deploy'
   if (normalizedPath.includes('/task/')) return 'engine.task.mutate'
