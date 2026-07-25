@@ -19,7 +19,7 @@ export interface IssuedAuthSession {
 
 /** Issues a renewable user session with optional provider lineage for targeted revocation. */
 class AuthSessionService {
-  async issue(user: { id: string; email: string }, input: IssueAuthSessionInput = {}): Promise<IssuedAuthSession> {
+  async issue(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput = {}): Promise<IssuedAuthSession> {
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
     const now = Date.now();

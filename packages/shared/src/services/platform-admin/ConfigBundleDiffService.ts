@@ -813,7 +813,8 @@ class ConfigBundleDiffService {
         (provider ? existing.providerId !== provider.id : stagedProvider) ||
         (group ? existing.targetGroupId !== group.id : stagedGroup) ||
         existing.entitlementType !== mapping.source.type || existing.externalId !== (mapping.source.externalId || null) ||
-        existing.matchOperator !== mapping.source.operator || existing.syncMode !== mapping.syncMode || !existing.isActive
+        existing.matchOperator !== mapping.source.operator || existing.syncMode !== mapping.syncMode ||
+        (existing.ownershipMode || (existing.sourceRef ? 'config_locked' : 'manual')) !== (mapping.ownershipMode || 'config_locked') || !existing.isActive
       ) changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity mapping differs from desired provider, entitlement, target group, sync mode, or active state' });
       else changes.push({ objectType: 'identity_mapping', key: mapping.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned identity mapping already matches the desired state' });
       const change = changes[changes.length - 1];

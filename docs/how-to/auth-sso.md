@@ -56,6 +56,15 @@ targets an existing internal group, and use secret preflight before apply. Role
 access comes from that group's canonical assignments; provider-level default
 roles are not the target access model.
 
+Identity mappings support the same explicit ownership modes as other
+configuration-managed access objects. `config_locked` (the default) prevents
+local changes. `config_warn` permits a local edit of the mapping and marks it
+as `drifted`; the next reviewed bundle apply restores the mapping declared in
+the bundle. Local deletion remains unavailable for both modes: disable or edit
+a `config_warn` mapping for a temporary change, or remove it from the bundle
+for an authoritative removal. The Identity Mappings page shows **Managed by
+config** or **Config warning** accordingly.
+
 When startup apply changes identity mappings, EnterpriseGlue drains the stored
 identity snapshots affected by that apply before `/ready` opens. The drain is
 bounded to 100 pages of 500 identities. Failure, cancellation, deferred retry,

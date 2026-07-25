@@ -42,6 +42,7 @@ export interface IdentityEntitlementMappingInput extends IdentityEntitlementMapp
   configKey?: string | null;
   configKeyIdentity?: string | null;
   sourceRef?: string | null;
+  ownershipMode?: 'manual' | 'config_locked' | 'config_warn';
   sourceHash?: string | null;
   lastAppliedAt?: number | null;
   driftStatus?: string | null;
@@ -60,6 +61,7 @@ export interface ManagedIdentityEntitlementMapping {
   isActive: boolean;
   configKey: string | null;
   sourceRef: string | null;
+  ownershipMode: 'manual' | 'config_locked' | 'config_warn';
 }
 
 export interface ConfiguredIdentityEntitlementMappingUpdate {
@@ -68,6 +70,7 @@ export interface ConfiguredIdentityEntitlementMappingUpdate {
   configKey: string;
   configKeyIdentity: string;
   sourceRef: string;
+  ownershipMode: 'config_locked' | 'config_warn';
   sourceHash: string;
   lastAppliedAt: number;
   driftStatus: string;
@@ -111,6 +114,15 @@ function normalized(value: string, field: string): string {
   const result = value.trim();
   if (!result) throw Errors.validation(`${field} is required`);
   return result;
+}
+
+function ownershipMode(mapping: Pick<IdentityEntitlementMapping, 'ownershipMode' | 'sourceRef'>): 'manual' | 'config_locked' | 'config_warn' {
+  if (mapping.ownershipMode === 'config_locked' || mapping.ownershipMode === 'config_warn' || mapping.ownershipMode === 'manual') {
+    return mapping.ownershipMode;
+  }
+  // Rows created before ownership tracking treated any source reference as a
+  // configuration lock. Preserve that safety posture until the migration runs.
+  return mapping.sourceRef ? 'config_locked' : 'manual';
 }
 
 function validateInput(input: IdentityEntitlementMappingInput): void {
@@ -173,6 +185,7 @@ class IdentityEntitlementMappingService {
         targetGroupKey: group.key, entitlementType: mapping.entitlementType as ExternalEntitlement['type'], externalId: mapping.externalId,
         matchOperator: mapping.matchOperator as IdentityEntitlementMatchOperator, syncMode: mapping.syncMode as 'additive' | 'authoritative',
         isActive: mapping.isActive, configKey: mapping.configKey, sourceRef: mapping.sourceRef,
+        ownershipMode: ownershipMode(mapping),
       }];
     });
   }
@@ -197,6 +210,7 @@ class IdentityEntitlementMappingService {
       configKey: input.configKey ?? null,
       configKeyIdentity: input.configKeyIdentity ?? null,
       sourceRef: input.sourceRef ?? null,
+      ownershipMode: input.ownershipMode || (input.sourceRef ? 'config_locked' : 'manual'),
       sourceHash: input.sourceHash ?? null,
       lastAppliedAt: input.lastAppliedAt ?? null,
       driftStatus: input.driftStatus ?? null,
@@ -209,7 +223,7 @@ class IdentityEntitlementMappingService {
       createdAt: now,
       updatedAt: now,
     });
-    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, syncMode: input.syncMode || 'authoritative', isActive: true, configKey: input.configKey ?? null, sourceRef: input.sourceRef ?? null };
+    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: input.entitlementType, externalId: input.externalId?.trim() || null, matchOperator: input.matchOperator, syncMode: input.syncMode || 'authoritative', isActive: true, configKey: input.configKey ?? null, sourceRef: input.sourceRef ?? null, ownershipMode: input.ownershipMode || (input.sourceRef ? 'config_locked' : 'manual') };
   }
 
   /** Applies an already-validated configuration mapping and clears only its prior derived memberships. */
@@ -224,6 +238,7 @@ class IdentityEntitlementMappingService {
       configKey: input.configKey,
       configKeyIdentity: input.configKeyIdentity,
       sourceRef: input.sourceRef,
+      ownershipMode: input.ownershipMode,
       sourceHash: input.sourceHash,
       lastAppliedAt: input.lastAppliedAt,
       driftStatus: input.driftStatus,
@@ -250,7 +265,8 @@ class IdentityEntitlementMappingService {
     const repo = dataSource.getRepository(IdentityEntitlementMapping);
     const existing = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
     if (!existing) throw Errors.notFound('Identity mapping not found');
-    if (existing.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
+    const isConfigWarn = existing.sourceRef && ownershipMode(existing) === 'config_warn';
+    if (existing.sourceRef && !isConfigWarn) throw Errors.forbidden('This identity mapping is managed by configuration');
     const current = (await this.list(tenantId)).find((mapping) => mapping.id === id);
     if (!current) throw Errors.notFound('Identity mapping references a missing provider or group');
     if (current.entitlementType === 'scope' && input.entitlementType === undefined) {
@@ -281,7 +297,7 @@ class IdentityEntitlementMappingService {
     if (isActive && (current.matchOperator === 'exact' || !existing.isActive) && merged.matchOperator !== 'exact') {
       await requireBroadEntitlementMappingsEnabled(dataSource, merged.matchOperator);
     }
-    const values = { providerId: provider.id, targetGroupId: group.id, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, updatedAt: Date.now() };
+    const values = { providerId: provider.id, targetGroupId: group.id, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, ...(isConfigWarn ? { driftStatus: 'drifted' } : {}), updatedAt: Date.now() };
     const membershipDefinitionChanged = existing.providerId !== values.providerId
       || existing.targetGroupId !== values.targetGroupId
       || existing.entitlementType !== values.entitlementType
@@ -299,7 +315,7 @@ class IdentityEntitlementMappingService {
       }
       await manager.getRepository(IdentityEntitlementMapping).update({ id }, values);
     });
-    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, configKey: null, sourceRef: null };
+    return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, configKey: existing.configKey, sourceRef: existing.sourceRef, ownershipMode: ownershipMode(existing) };
   }
 
   async remove(id: string, tenantId?: string | null): Promise<void> {
@@ -308,7 +324,7 @@ class IdentityEntitlementMappingService {
       const repo = manager.getRepository(IdentityEntitlementMapping);
       const mapping = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
       if (!mapping) throw Errors.notFound('Identity mapping not found');
-      if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration');
+      if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration; edit or disable a config-warning mapping instead');
       await manager.getRepository(AuthzGroupMembership).delete({
         ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(mapping.providerId, mapping.id)),
       } as any);

@@ -107,6 +107,7 @@ export const IdentityEntitlementMappingRecordSchema = z.object({
   configKey: z.string().nullable(),
   configKeyIdentity: z.string().nullable(),
   sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
   sourceHash: z.string().nullable(),
   lastAppliedAt: z.number().int().nonnegative().nullable(),
   driftStatus: z.string().nullable(),

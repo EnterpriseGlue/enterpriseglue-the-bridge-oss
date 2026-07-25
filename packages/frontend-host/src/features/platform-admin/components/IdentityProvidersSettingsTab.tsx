@@ -126,7 +126,7 @@ export default function IdentityProvidersSettingsTab() {
 
   if (!read.allowed) return <UnauthorizedEmptyState title="Identity providers unavailable" reason={read.reason || 'Missing identity provider read permission.'} />;
   if (providersQuery.isLoading) return <SkeletonText paragraph lineCount={5} />;
-  if (providersQuery.error) return <InlineNotification kind="error" title="Identity providers could not be loaded" subtitle={parseApiError(providersQuery.error, 'Request failed').message} hideCloseButton />;
+  if (providersQuery.error) return <div role="alert"><InlineNotification kind="error" title="Identity providers could not be loaded" subtitle={parseApiError(providersQuery.error, 'Request failed').message} hideCloseButton /></div>;
 
   const rows = providersQuery.data || [];
   return <>

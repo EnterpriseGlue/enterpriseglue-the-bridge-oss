@@ -39,9 +39,9 @@ describe('provider-neutral OIDC routes', () => {
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([provider]);
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
-    identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
-    identityProviderProvisioningService.reconcileLdapLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
-    identityProviderProvisioningService.reconcileSamlLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true });
+    identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
+    identityProviderProvisioningService.reconcileLdapLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
+    identityProviderProvisioningService.reconcileSamlLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
     directLdapIdentityService.authenticate.mockResolvedValue({ subjectId: 'ldap-user-1', email: 'person@example.test', displayName: 'Person', firstName: 'Person', lastName: 'Example', groups: ['ops'] });
     genericSamlService.createAuthorizationRequest.mockResolvedValue({ url: 'https://idp.example.test/sso?SAMLRequest=request', entryPoint: 'https://idp.example.test/sso' });
     genericSamlService.validatePostResponse.mockResolvedValue({ nameID: 'person@example.test', groups: ['ops'] });
@@ -98,7 +98,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
     expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: 'nonce' });
-    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
   it('rejects callback state when its provider id resolves to a different same-protocol provider', async () => {

@@ -13,6 +13,7 @@ export class IdentityEntitlementMapping extends AppBaseEntity {
   @Column({ name: 'config_key', type: 'text', nullable: true }) configKey!: string | null;
   @Column({ name: 'config_key_identity', type: 'text', nullable: true }) configKeyIdentity!: string | null;
   @Column({ name: 'source_ref', type: 'text', nullable: true }) sourceRef!: string | null;
+  @Column({ name: 'ownership_mode', type: 'text', default: 'manual' }) ownershipMode!: string;
   @Column({ name: 'source_hash', type: 'text', nullable: true }) sourceHash!: string | null;
   @Column({ name: 'last_applied_at', type: 'bigint', nullable: true }) lastAppliedAt!: number | null;
   @Column({ name: 'drift_status', type: 'text', nullable: true }) driftStatus!: string | null;

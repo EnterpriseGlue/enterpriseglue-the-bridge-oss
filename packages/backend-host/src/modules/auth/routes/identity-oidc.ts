@@ -70,7 +70,7 @@ async function startSamlLogin(req: Request, res: Response, provider: IdentityPro
   res.redirect(authorizationUrl.toString());
 }
 
-async function setProviderSession(req: Request, res: Response, user: { id: string; email: string }, provider: IdentityProvider): Promise<void> {
+async function setProviderSession(req: Request, res: Response, user: { id: string; email: string; authSessionVersion?: number }, provider: IdentityProvider): Promise<void> {
   const session = await authSessionService.issue(user, {
     identityProviderId: provider.id,
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,

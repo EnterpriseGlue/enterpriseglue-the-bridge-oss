@@ -212,6 +212,7 @@ describe('identity entitlement mapping', () => {
       configKey: 'mapping.operators',
       configKeyIdentity: 'tenant-a:mapping.operators',
       sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
       sourceHash: 'bundle-hash',
       lastAppliedAt: 123,
       driftStatus: 'in_sync',
@@ -222,6 +223,7 @@ describe('identity entitlement mapping', () => {
       configKey: 'mapping.operators',
       configKeyIdentity: 'tenant-a:mapping.operators',
       sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
       sourceHash: 'bundle-hash',
       lastAppliedAt: 123,
       driftStatus: 'in_sync',
@@ -240,7 +242,7 @@ describe('identity entitlement mapping', () => {
     await identityEntitlementMappingService.reconcileConfiguredMapping('mapping-1', {
       providerId: 'provider-2', previousProviderId: 'provider-1', configKey: 'mapping.operators',
       configKeyIdentity: 'tenant-a:mapping.operators', sourceRef: 'config_bundle:acme.authz', sourceHash: 'hash-2',
-      lastAppliedAt: 200, driftStatus: 'in_sync', entitlementType: 'group', externalId: 'operators',
+      ownershipMode: 'config_locked', lastAppliedAt: 200, driftStatus: 'in_sync', entitlementType: 'group', externalId: 'operators',
       matchOperator: 'exact', targetGroupId: 'group-2', syncMode: 'authoritative', isActive: true,
     }, 'tenant-a', store);
     await identityEntitlementMappingService.disableConfiguredMapping('mapping-1', 'provider-2', 'tenant-a', store);
@@ -249,7 +251,7 @@ describe('identity entitlement mapping', () => {
       tenantId: 'tenant-a', source: 'identity_provider', sourceRef: expect.anything(),
     }));
     expect(mappingRepo.update).toHaveBeenNthCalledWith(1, { id: 'mapping-1' }, expect.objectContaining({
-      providerId: 'provider-2', targetGroupId: 'group-2', configKey: 'mapping.operators', sourceHash: 'hash-2', isActive: true,
+      providerId: 'provider-2', targetGroupId: 'group-2', configKey: 'mapping.operators', ownershipMode: 'config_locked', sourceHash: 'hash-2', isActive: true,
     }));
     expect(mappingRepo.update).toHaveBeenNthCalledWith(2, { id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
   });
@@ -371,6 +373,29 @@ describe('identity entitlement mapping', () => {
       identityProviderMembershipSourceRef('provider-1', 'mapping-1'), 'identity_mapping:mapping-1',
     ]);
     expect(mappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
+  });
+
+  it('allows a config-warning mapping to be edited and marks the configuration as drifted', async () => {
+    const existing = {
+      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', targetGroupId: 'group-1', entitlementType: 'group',
+      externalId: 'ops', matchOperator: 'exact', syncMode: 'authoritative', isActive: true,
+      sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', configKey: 'mapping.operators',
+    };
+    const mappingRepo = { findOne: vi.fn().mockResolvedValue(existing), find: vi.fn().mockResolvedValue([existing]), update: vi.fn().mockResolvedValue(undefined) };
+    const providerRepo = { find: vi.fn().mockResolvedValue([{ id: 'provider-1', key: 'identity.oidc.main' }]), findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main' }) };
+    const groupRepo = { find: vi.fn().mockResolvedValue([{ id: 'group-1', key: 'group.operators' }]), findOne: vi.fn().mockResolvedValue({ id: 'group-1', key: 'group.operators' }) };
+    const membershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };
+    const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo
+      : entity === IdentityProvider ? providerRepo
+        : entity === AuthzGroup ? groupRepo
+          : entity === AuthzGroupMembership ? membershipRepo
+            : {};
+    (getDataSource as unknown as Mock).mockResolvedValue({ getRepository: repositories, transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })) });
+
+    const result = await identityEntitlementMappingService.update('mapping-1', { externalId: 'operations' }, 'tenant-a');
+
+    expect(result).toMatchObject({ sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn' });
+    expect(mappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ externalId: 'operations', driftStatus: 'drifted' }));
   });
 
   it('normalizes a legacy mapping-only membership reference after the matching provider sync', async () => {

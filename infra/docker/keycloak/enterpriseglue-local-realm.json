@@ -18,7 +18,20 @@
       "http://localhost:5173",
       "https://localhost:5443",
       "https://localhost:15443"
-    ]
+    ],
+    "protocolMappers": [{
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }]
   }, {
     "clientId": "enterpriseglue-local-saml",
     "name": "EnterpriseGlue local SAML rehearsal",

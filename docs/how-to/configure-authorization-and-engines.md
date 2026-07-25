@@ -85,7 +85,7 @@ enterpriseglue-config/
 
 `enterpriseglue.json` declares schema version, bundle id, imports, expected object files, and optional expected hash. Secret values are never stored in this folder; provider and engine objects contain secret references only.
 
-Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database.
+Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database. For identity mappings, use the default `config_locked` mode to make the bundle authoritative, or `config_warn` to allow a temporary local edit marked as drift. A subsequent bundle apply restores the reviewed provider, entitlement, target group, sync mode, and ownership state; configuration-managed mappings cannot be deleted from the UI.
 
 For a direct or customer-sidecar Camunda 7 or Operaton defense-in-depth mapping, add
 `engine-backstop-mappings.json`. Each entry references a configured compatible
@@ -136,6 +136,14 @@ same user belongs to both groups
 ```
 
 Avoid creating one external identity mapping per permission. Map stable enterprise teams to internal groups, then manage scoped role assignments separately.
+
+When the Platform Settings mapping wizard provisions an assignment for a
+tenant-owned engine, Engine Set, runtime resource, or runtime-resource set, it
+automatically creates the role assignment in that selected target's tenant.
+The identity mapping and its external group remain platform-wide, so the same
+provider entitlement can still be used consistently across tenant-scoped
+assignments. This prevents a platform administrator from accidentally creating
+an assignment against a same-id resource in another tenant.
 
 ### Control access to Mission Control variable data
 

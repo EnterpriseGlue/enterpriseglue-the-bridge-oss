@@ -11,7 +11,16 @@ import type { IdentityProviderType } from './IdentityProviderAdapter.js';
 import { hasIncompleteOidcGroupClaims } from './IdentityProviderAdapter.js';
 import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
 
-export interface ProvisionedIdentityUser { id: string; email: string; firstName: string | null; lastName: string | null; isActive: boolean; }
+/** The canonical user snapshot returned after external identity reconciliation. */
+export interface ProvisionedIdentityUser {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  isActive: boolean;
+  /** Must be carried into the freshly issued browser session. */
+  authSessionVersion: number;
+}
 export interface ProvisionIdentityInput {
   providerType: IdentityProviderType; subjectId: string; email: string; emailVerified: boolean; displayName?: string | null;
   firstName?: string | null; lastName?: string | null; directoryTenantId?: string | null; claims: Record<string, unknown>;
@@ -166,7 +175,14 @@ class IdentityProviderProvisioningService {
       if (!user) {
         const id = generateId();
         await userRepo.insert({ id, email, authProvider: input.providerType, passwordHash: null, firstName: input.firstName || null, lastName: input.lastName || null, isActive: true, mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null, isEmailVerified: emailVerified, emailVerificationToken: null, emailVerificationTokenExpiry: null, createdAt: now, updatedAt: now, lastLoginAt: now, createdByUserId: null });
-        user = { id, email, firstName: input.firstName || null, lastName: input.lastName || null, isActive: true } as User;
+        user = {
+          id,
+          email,
+          firstName: input.firstName || null,
+          lastName: input.lastName || null,
+          isActive: true,
+          authSessionVersion: 0,
+        } as User;
       } else {
         if (emailVerified && user.email !== email) {
           const matchingEmailUser = await userRepo.findOneBy({ email });
@@ -201,7 +217,14 @@ class IdentityProviderProvisioningService {
       });
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
       return {
-        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isActive: user.isActive },
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          isActive: user.isActive,
+          authSessionVersion: user.authSessionVersion || 0,
+        },
         groupMembershipsCreated: normalizedIdentity.groupMembershipsCreated || 0,
         groupMembershipsRemoved: normalizedIdentity.groupMembershipsRemoved || 0,
       };

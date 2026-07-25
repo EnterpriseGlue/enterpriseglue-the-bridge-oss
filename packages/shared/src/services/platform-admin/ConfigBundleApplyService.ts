@@ -985,7 +985,7 @@ class ConfigBundleApplyService {
         if (!provider || !group) fail(`Identity mapping references an unresolved provider or group: ${mapping.key}`, 422);
         mappingKeys.add(mapping.key);
         const existing = await identityMappingRepo.findOne({ where: { tenantId, configKey: mapping.key } as any });
-        const values = { providerId: provider.id, configKey: mapping.key, configKeyIdentity: identityMappingConfigKeyIdentity(tenantId, mapping.key), sourceRef, sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
+        const values = { providerId: provider.id, configKey: mapping.key, configKeyIdentity: identityMappingConfigKeyIdentity(tenantId, mapping.key), sourceRef, ownershipMode: mapping.ownershipMode || 'config_locked', sourceHash, lastAppliedAt: now, driftStatus: 'in_sync', entitlementType: mapping.source.type, externalId: mapping.source.externalId || null, matchOperator: mapping.source.operator, targetGroupId: group.id, syncMode: mapping.syncMode, isActive: true, updatedAt: now };
         if (!existing) {
           const createdMapping = await identityEntitlementMappingService.create({
             providerKey: mapping.providerKey,
@@ -997,6 +997,7 @@ class ConfigBundleApplyService {
             configKey: mapping.key,
             configKeyIdentity: identityMappingConfigKeyIdentity(tenantId, mapping.key),
             sourceRef,
+            ownershipMode: mapping.ownershipMode || 'config_locked',
             sourceHash,
             lastAppliedAt: now,
             driftStatus: 'in_sync',
@@ -1011,6 +1012,7 @@ class ConfigBundleApplyService {
             || existing.externalId !== values.externalId
             || existing.matchOperator !== values.matchOperator
             || existing.syncMode !== values.syncMode
+            || (existing.ownershipMode || (existing.sourceRef ? 'config_locked' : 'manual')) !== values.ownershipMode
             || !existing.isActive;
           if (mappingChanged) {
             await identityEntitlementMappingService.reconcileConfiguredMapping(existing.id, { ...values, previousProviderId: existing.providerId }, tenantId, manager);

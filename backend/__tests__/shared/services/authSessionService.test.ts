@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
+import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({ generateAccessToken: vi.fn(() => 'access-token'), generateRefreshToken: vi.fn(() => 'refresh-token') }));
@@ -32,5 +33,14 @@ describe('authSessionService', () => {
   it('keeps local sessions unscoped when no provider lineage is supplied', async () => {
     await authSessionService.issue({ id: 'user-1', email: 'person@example.test' });
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ identityProviderId: null }));
+  });
+
+  it('preserves the current session version in newly issued provider sessions', async () => {
+    const user = { id: 'user-1', email: 'person@example.test', authSessionVersion: 7 };
+
+    await authSessionService.issue(user, { identityProviderId: 'provider-1' });
+
+    expect(generateAccessToken).toHaveBeenCalledWith(user);
+    expect(generateRefreshToken).toHaveBeenCalledWith(user);
   });
 });

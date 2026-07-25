@@ -70,7 +70,7 @@ describe('provider-neutral identity shared contracts', () => {
       id: 'snapshot-1', tenantId: 'tenant-a', providerId: 'provider-1', providerType: 'oidc', providerSubject: 'subject-1', subjectClaim: 'sub', providerTenantId: 'directory-a', userId: 'user-1', email: null, displayName: null, firstName: null, lastName: null, groupsJson: '[]', rolesJson: '[]', claimsJson: '{}', providerStatus: 'active', lastSeenAt: 2, lastProviderCheckAt: null, createdAt: 1, updatedAt: 2,
     }).providerTenantId).toBe('directory-a');
     expect(IdentityEntitlementMappingRecordSchema.parse({
-      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', configKey: null, configKeyIdentity: null, sourceRef: null, sourceHash: null, lastAppliedAt: null, driftStatus: null, entitlementType: 'group', externalId: 'operators', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative', isActive: true, createdAt: 1, updatedAt: 2,
+      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', configKey: null, configKeyIdentity: null, sourceRef: null, ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null, entitlementType: 'group', externalId: 'operators', matchOperator: 'exact', targetGroupId: 'group-1', syncMode: 'authoritative', isActive: true, createdAt: 1, updatedAt: 2,
     }).externalId).toBe('operators');
   });
 
@@ -85,7 +85,7 @@ describe('provider-neutral identity shared contracts', () => {
   it('keeps identity mapping and Effective Access provider lineage in shared API contracts', () => {
     expect(IdentityMappingResponseSchema.parse({
       id: 'mapping-1', providerId: 'provider-1', providerKey: 'identity.oidc.example', targetGroupId: 'group-1', targetGroupKey: 'operators',
-      entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null,
+      entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, configKey: null, sourceRef: null, ownershipMode: 'manual',
     }).syncMode).toBe('authoritative');
     expect(EffectiveAccessEvaluateResponseSchema.parse({
       allowed: true, decision: 'allow', reason: 'Granted by group', baseAllowed: true, baseReason: 'Canonical assignment',

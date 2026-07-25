@@ -100,8 +100,10 @@ pnpm run db:migration:run
 ## Optional local Keycloak OIDC rehearsal
 
 The repository includes a disposable Keycloak realm that lets you exercise
-OIDC discovery and the provider's authorization endpoints locally. It never
-modifies EnterpriseGlue SSO mappings or replaces an existing provider.
+OIDC discovery and the provider's authorization endpoints locally. The live
+rehearsal creates uniquely named disposable provider, mapping, group, and
+engine rows, then removes them at the end; it never modifies an existing
+provider or mapping.
 
 Start the normal Docker stack first (for example, `pnpm run dev`). Then, from
 the repository root, start the overlay using the same active Docker env file:
@@ -218,9 +220,12 @@ pnpm test:identity:browser
 
 ### Live local OIDC callback
 
-After configuring the disposable provider, run the opt-in live callback lane to
-sign in through Keycloak and verify the application session on the dashboard.
-The runner accepts only localhost, loopback, or `.local` browser targets and
+After configuring the disposable provider, run the opt-in live callback lane.
+It uses the real browser UI to create and connection-test an OIDC provider and
+an atomic group + engine-scoped identity mapping; then it signs in through
+Keycloak, proves that the mapped user sees only the assigned engine (not a
+sibling), disables the mapping, and proves access is revoked immediately. The
+runner accepts only localhost, loopback, or `.local` browser targets and
 applies certificate-error handling only to this local rehearsal. It probes
 issuer discovery first, so a stale Keycloak network namespace fails with the
 recreate guidance above instead of appearing as a browser-login timeout.
@@ -232,7 +237,7 @@ corepack pnpm@11.0.8 run test:oidc:local-rehearsal
 ```
 
 The test uses the realm's disposable fixture account and never prints its
-credentials, session cookies, or tokens.
+credentials, session cookies, tokens, or generated provider identifiers.
 
 This is local protocol and browser-flow evidence only. It does not replace the
 representative deployed-provider cutover evidence described below.

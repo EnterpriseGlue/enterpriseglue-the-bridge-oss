@@ -1123,6 +1123,7 @@ export const IdentityMappingResponseSchema = IdentityMappingRequestSchema.extend
   isActive: z.boolean(),
   configKey: z.string().nullable(),
   sourceRef: z.string().nullable(),
+  ownershipMode: AuthzOwnershipModeSchema,
 });
 
 export const IdentityMappingUpdateSchema = IdentityMappingRequestSchema.partial().extend({

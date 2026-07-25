@@ -3,6 +3,7 @@ import { AddConfigBundleApiVersion1700000000071 } from '@enterpriseglue/shared/d
 import { AddRuntimeResourceSetConfigProvenance1700000000072 } from '@enterpriseglue/shared/db/migrations/1700000000072-add-runtime-resource-set-config-provenance.js';
 import { AddIdentityConfigProvenance1700000000073 } from '@enterpriseglue/shared/db/migrations/1700000000073-add-identity-config-provenance.js';
 import { AddRuntimeResourceSetOwnershipMode1700000000088 } from '@enterpriseglue/shared/db/migrations/1700000000088-add-runtime-resource-set-ownership-mode.js';
+import { AddIdentityMappingOwnershipMode1700000000104 } from '@enterpriseglue/shared/db/migrations/1700000000104-add-identity-mapping-ownership-mode.js';
 
 function runner(tables: string[], existingColumns: string[] = [], tablePaths: Record<string, string> = {}) {
   const columns = new Set(existingColumns);
@@ -49,5 +50,14 @@ describe('config provenance migrations', () => {
     expect(queryRunner.addColumn).toHaveBeenCalledTimes(1);
     expect(queryRunner.addColumn).toHaveBeenCalledWith('main.runtime_resource_sets', expect.objectContaining({ name: 'ownership_mode', default: "'manual'" }));
     expect(queryRunner.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE main.runtime_resource_sets SET ownership_mode = 'config_locked'"));
+  });
+
+  it('preserves existing mapping locks while adding explicit mapping ownership', async () => {
+    const queryRunner = runner(['main.identity_entitlement_mappings'], [], { IdentityEntitlementMapping: 'main.identity_entitlement_mappings' });
+    await new AddIdentityMappingOwnershipMode1700000000104().up(queryRunner as any);
+    await new AddIdentityMappingOwnershipMode1700000000104().up(queryRunner as any);
+    expect(queryRunner.addColumn).toHaveBeenCalledTimes(1);
+    expect(queryRunner.addColumn).toHaveBeenCalledWith('main.identity_entitlement_mappings', expect.objectContaining({ name: 'ownership_mode', default: "'manual'" }));
+    expect(queryRunner.query).toHaveBeenCalledWith(expect.stringContaining("UPDATE main.identity_entitlement_mappings SET ownership_mode = 'config_locked' WHERE source_ref IS NOT NULL"));
   });
 });

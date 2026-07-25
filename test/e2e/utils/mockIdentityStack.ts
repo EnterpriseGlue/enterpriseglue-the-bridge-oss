@@ -39,14 +39,18 @@ export class MockBrowserIdentityStack {
 
   readonly mapping = {
     id: 'browser-identity-mapping',
+    providerId: this.provider.id,
     providerKey: this.provider.key,
+    targetGroupId: 'browser-group',
     targetGroupKey: 'group.browser-operators',
     entitlementType: 'group' as const,
     externalId: 'operators',
     matchOperator: 'exact' as const,
     syncMode: 'authoritative' as const,
     isActive: true,
+    configKey: null,
     sourceRef: null,
+    ownershipMode: 'manual' as const,
   };
 
   async install(page: Page, appOrigin: string): Promise<void> {

@@ -144,6 +144,45 @@ describe('auth login routes', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(expect.any(Object), 'break-glass-1');
   });
 
+  it('revokes break-glass access immediately when the canonical administrator membership is removed', async () => {
+    identityProviderRepo.count.mockResolvedValue(1);
+    getActivePlatformAdministratorUserIds
+      .mockResolvedValueOnce(new Set(['break-glass-1']))
+      .mockResolvedValueOnce(new Set());
+    (verifyPassword as unknown as Mock).mockResolvedValue(true);
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn().mockResolvedValue({
+        id: 'break-glass-1',
+        email: 'break-glass@example.com',
+        authProvider: 'local',
+        passwordHash: 'local-password-hash',
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        isEmailVerified: true,
+        firstName: 'Break',
+        lastName: 'Glass',
+        mustResetPassword: false,
+        createdByUserId: null,
+      }),
+    });
+
+    const beforeRemoval = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'break-glass@example.com', password: 'Password123!' });
+    const afterRemoval = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'break-glass@example.com', password: 'Password123!' });
+
+    expect(beforeRemoval.status).toBe(200);
+    expect(afterRemoval.status).toBe(403);
+    expect(afterRemoval.body.error).toContain('Local login is disabled. Please use your SSO provider.');
+    expect(getActivePlatformAdministratorUserIds).toHaveBeenNthCalledWith(1, ['break-glass-1'], expect.any(Object));
+    expect(getActivePlatformAdministratorUserIds).toHaveBeenNthCalledWith(2, ['break-glass-1'], expect.any(Object));
+    expect(verifyPassword).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps local non-administrator accounts blocked while SSO is active', async () => {
     identityProviderRepo.count.mockResolvedValue(1);
     getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());

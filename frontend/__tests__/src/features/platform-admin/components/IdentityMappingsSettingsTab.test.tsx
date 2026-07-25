@@ -1,6 +1,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import IdentityMappingsSettingsTab from '@src/features/platform-admin/components/IdentityMappingsSettingsTab';
@@ -66,6 +67,87 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
   });
 
+  it.each([
+    ['engine', 'One engine', 'Main engine', 'engine-1'],
+    ['engine_set', 'Engine Set', 'Production engines (engines.production)', 'engine-set-1'],
+    ['engine_runtime_resource', 'One runtime resource', 'invoice-process (process)', 'runtime-resource-1'],
+    ['engine_runtime_resource_set', 'Runtime Resource Set', 'Payments resources (runtime.payments)', 'runtime-resource-set-1'],
+  ] as const)('completes all mapping-wizard steps and atomically provisions %s access', async (resourceType, _scopeLabel, targetLabel, resourceId) => {
+    const provisionRequests: unknown[] = [];
+    const user = userEvent.setup();
+    authState.permissions = {
+      ...authState.permissions,
+      platform: ['platform:sso-assignments:view', 'platform:sso-assignments:manage', 'platform:authz:groups:manage', 'platform:authz:roles:manage'],
+    };
+    server.use(
+      http.get('/api/authz/roles', () => HttpResponse.json([{ id: 'role-operator', name: 'Engine operator', scope: 'engine', isAssignable: true, isArchived: false }])),
+      http.get('/engines-api/engines', () => HttpResponse.json([{ id: 'engine-1', name: 'Main engine', lifecycleStatus: 'active' }])),
+      http.get('/t/default/engines-api/engines', () => HttpResponse.json([{ id: 'engine-1', name: 'Main engine', lifecycleStatus: 'active' }])),
+      http.get('/api/authz/engine-sets', () => HttpResponse.json([{ id: 'engine-set-1', name: 'Production engines', key: 'engines.production', isArchived: false }])),
+      http.get('/api/authz/runtime-resources', () => HttpResponse.json([{ id: 'runtime-resource-1', engineId: 'engine-1', resourceKey: 'invoice-process', resourceKind: 'process_definition', isActive: true }])),
+      http.get('/api/authz/runtime-resource-sets', () => HttpResponse.json([{ id: 'runtime-resource-set-1', engineId: 'engine-1', name: 'Payments resources', key: 'runtime.payments', isArchived: false }])),
+      http.post('/api/identity/mappings/provision-access', async ({ request }) => {
+        provisionRequests.push(await request.json());
+        return HttpResponse.json({ mapping: identityMappingFixture, assignment: { id: 'assignment-1', warnings: [] }, createdGroup: { id: 'group-created' } }, { status: 201 });
+      }),
+    );
+    renderTab();
+    await screen.findByText('group.engine-operators');
+
+    fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Identity provider' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'demo-oidc' }));
+    fireEvent.change(screen.getByLabelText('External ID'), { target: { value: 'operations' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByText('Step 2 of 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create a new group' }));
+    fireEvent.change(await screen.findByLabelText('New EnterpriseGlue group name'), { target: { value: `Operators ${resourceType}` } });
+    fireEvent.change(screen.getByLabelText('New group key'), { target: { value: `group.operators.${resourceType}` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add engine access with this mapping' }));
+    fireEvent.click(document.getElementById('identity-mapping-provision-role')!);
+    fireEvent.click(await screen.findByRole('option', { name: 'Engine operator' }));
+    await user.selectOptions(document.getElementById('identity-mapping-provision-scope') as HTMLSelectElement, resourceType);
+    expect(document.getElementById('identity-mapping-provision-scope')).toHaveValue(resourceType);
+
+    if (resourceType === 'engine') {
+      await waitFor(() => expect(document.getElementById('identity-mapping-provision-engine')).not.toBeNull());
+      fireEvent.click(document.getElementById('identity-mapping-provision-engine')!);
+      fireEvent.click(await screen.findByRole('option', { name: targetLabel }));
+    } else if (resourceType === 'engine_set') {
+      const engineSetSelectors = await screen.findAllByRole('combobox', { name: 'Engine Set' });
+      fireEvent.click(engineSetSelectors[0]);
+      fireEvent.click(await screen.findByRole('option', { name: targetLabel }));
+    } else {
+      fireEvent.click(document.getElementById('identity-mapping-provision-runtime-engine')!);
+      fireEvent.click(await screen.findByRole('option', { name: 'Main engine' }));
+      const targetInputId = resourceType === 'engine_runtime_resource'
+        ? 'identity-mapping-provision-runtime-resource'
+        : 'identity-mapping-provision-runtime-resource-set';
+      await waitFor(() => {
+        const targetInput = document.getElementById(targetInputId) as HTMLInputElement | null;
+        expect(targetInput).not.toBeNull();
+        expect(targetInput).not.toBeDisabled();
+      });
+      fireEvent.click(document.getElementById(targetInputId)!);
+      fireEvent.click(await screen.findByRole('option', { name: targetLabel }));
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Step 3 of 3')).toBeInTheDocument();
+    expect(screen.getByText('Ready to create atomically')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create mapping' }));
+
+    await waitFor(() => expect(provisionRequests).toHaveLength(1));
+    expect(provisionRequests[0]).toEqual(expect.objectContaining({
+      providerKey: 'demo-oidc',
+      newGroup: { name: `Operators ${resourceType}`, key: `group.operators.${resourceType}` },
+      roleId: 'role-operator',
+      resourceType,
+      resourceId,
+    }));
+  });
+
   it('warns before a broad entitlement match is saved', async () => {
     renderTab();
     await screen.findByText('group.engine-operators');
@@ -78,7 +160,7 @@ describe('IdentityMappingsSettingsTab', () => {
   });
 
   it('shows config-managed mappings but disables UI mutation actions', async () => {
-    server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations' }])));
+    server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations', ownershipMode: 'config_locked' }])));
     renderTab();
     await waitFor(() => expect(screen.getByText('Managed by config')).toBeInTheDocument());
 
@@ -91,6 +173,21 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(menuItem('Edit')).toHaveAttribute('title', 'Managed by configuration');
     expect(menuItem('Delete')).toBeDisabled();
     expect(menuItem('Delete')).toHaveAttribute('title', 'Managed by configuration');
+  });
+
+  it('shows config warnings and permits local mapping edits without allowing deletion', async () => {
+    server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations', ownershipMode: 'config_warn' }])));
+    renderTab();
+    await waitFor(() => expect(screen.getByText('Config warning')).toBeInTheDocument());
+
+    const overflow = screen.getAllByRole('button').find((button) => button.className.includes('cds--overflow-menu'));
+    if (!overflow) throw new Error('Mapping actions menu not found');
+    fireEvent.click(overflow);
+
+    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    expect(menuItem('Edit')).toBeEnabled();
+    expect(menuItem('Delete')).toBeDisabled();
+    expect(menuItem('Delete')).toHaveAttribute('title', 'Managed by configuration; edit or disable a config-warning mapping instead');
   });
 
   it('does not load mapping data without the read action', () => {

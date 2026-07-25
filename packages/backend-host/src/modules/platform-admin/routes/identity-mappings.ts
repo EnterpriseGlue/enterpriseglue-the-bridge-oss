@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { EntityManager } from 'typeorm';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -8,6 +9,10 @@ import { identityEntitlementMappingService } from '@enterpriseglue/shared/servic
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { identityAdminLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
@@ -22,6 +27,41 @@ import {
 const router = Router();
 const idSchema = z.string().min(1).max(128);
 
+/**
+ * Identity providers and mappings are administered at platform scope, but an
+ * engine/resource role assignment must live in the tenant that owns its
+ * target.  OSS platform-settings routes do not carry a tenant context, so a
+ * mapping provisioned for a dedicated default-tenant engine would otherwise
+ * be validated as though the engine were global and fail atomically.
+ *
+ * Preserve an explicit request tenant (EE) and derive only the absent context
+ * from the selected resource. The permission service still validates that the
+ * resource exists in the resulting tenant before writing the assignment.
+ */
+async function resolveProvisioningAssignmentTenant(
+  manager: EntityManager,
+  requestTenantId: string | null,
+  resourceType: string,
+  resourceId: string | null | undefined,
+): Promise<string | null> {
+  if (requestTenantId || !resourceId) return requestTenantId;
+
+  const entityByResourceType: Record<string, unknown> = {
+    engine: Engine,
+    engine_set: EngineSet,
+    engine_runtime_resource: RuntimeResource,
+    engine_runtime_resource_set: RuntimeResourceSet,
+  };
+  const entity = entityByResourceType[resourceType];
+  if (!entity) return null;
+
+  const resource = await manager.getRepository(entity as any).findOne({
+    where: { id: resourceId },
+    select: ['tenantId'],
+  }) as { tenantId?: string | null } | null;
+  return resource?.tenantId || null;
+}
+
 router.get('/api/identity/mappings', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.read'), asyncHandler(async (req, res) => {
   res.json(await identityEntitlementMappingService.list(req.tenant?.tenantId || null));
 }));
@@ -34,6 +74,12 @@ router.post('/api/identity/mappings/provision-access', requireAuth, identityAdmi
   const tenantId = req.tenant?.tenantId || null;
   const dataSource = await getDataSource();
   const result = await dataSource.transaction(async (manager) => {
+    const assignmentTenantId = await resolveProvisioningAssignmentTenant(
+      manager,
+      tenantId,
+      req.body.resourceType,
+      req.body.resourceId,
+    );
     const createdGroup = req.body.newGroup ? await authzGroupService.createGroup({
       tenantId,
       key: req.body.newGroup.key,
@@ -52,7 +98,7 @@ router.post('/api/identity/mappings/provision-access', requireAuth, identityAdmi
       syncMode: req.body.syncMode,
     }, tenantId, manager);
     const assignment = await permissionService.assignRole({
-      tenantId,
+      tenantId: assignmentTenantId,
       createdById: req.user!.userId,
       principalType: 'group',
       principalId: mapping.targetGroupId,
