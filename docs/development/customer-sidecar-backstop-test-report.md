@@ -26,7 +26,7 @@ pnpm run test:sidecar-backstop
 | Durable recovery | Concurrent enqueue requests collapse to one `run_id` task; only one worker receives the lease; expired leases recover and failed tasks use bounded retry scheduling. | `engineBackstopSyncTaskService.test.ts` |
 | Real Operaton lifecycle | A disposable Docker Operaton engine behind a bounded local sidecar completes preview, apply, drift check, and rollback for both supported native resource types: process definition (`6`) and decision definition (`10`). It observes only create/read/delete authorization calls. | `test:operaton-sidecar-backstop-container` |
 | Live authorization enforcement | A second disposable Operaton fixture enables HTTP Basic authentication and native authorization checks. A member of the synchronized group can read and list the deployed process and decision definitions; a non-member cannot. `READ` does not permit decision evaluation or process-instance creation. After owned-grant rollback, the former member is denied again. | `test:operaton-sidecar-backstop-container` |
-| Fail-closed rejection | A sidecar policy rejection and a downstream-authentication rejection both fail the run and prove no direct-adapter fallback occurs. | `test:operaton-sidecar-backstop-container` |
+| Fail-closed rejection | A sidecar policy rejection and an invalid sidecar-owned downstream bearer-token rejection both fail the run and prove no direct-adapter fallback occurs. | `test:operaton-sidecar-backstop-container` |
 | Documentation contract | Configuration documentation schemas and deployment contract remain valid. | `pnpm run test:documentation-contracts` |
 
 The Docker fixture temporarily permits loopback HTTP only inside its disposable

@@ -454,9 +454,12 @@ test('real Operaton enforces sidecar-created grants for group members and denies
     await deployFixture(operatonBaseUrl, 'authorization-process.bpmn', 'eg-authorization-process-fixture');
     await deployFixture(operatonBaseUrl, 'authorization-decision.dmn', 'eg-authorization-decision-fixture');
 
-    // No downstream credential represents a customer-sidecar authentication
-    // outage without risking a fixture user lockout through bad-password tries.
-    badCredentialsSidecar = await startCustomerSidecarReference(operatonBaseUrl);
+    // The customer-owned sidecar can fail independently when its peer token is
+    // invalid or expired. A bearer token avoids fixture-user lockout from bad
+    // basic-password attempts while still producing an engine-side 401.
+    badCredentialsSidecar = await startCustomerSidecarReference(operatonBaseUrl, {
+      upstreamAuthorization: 'Bearer invalid-sidecar-peer-token',
+    });
     const rejectedDirectCalls = [];
     const rejectedServices = inMemoryRunAndTaskServices();
     const rejectedService = new EngineBackstopSyncService({
