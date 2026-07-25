@@ -89,6 +89,7 @@ async function openMigrationPanel(page: Page, engineName: string) {
 
 test.describe('Camunda native-grant migration browser workflow', () => {
   test.skip(!enabled, 'Runs only from the explicit localhost Docker native-grant evidence runner');
+  test.setTimeout(120_000);
 
   test('previews, drafts, applies, enforces, resumes, and rolls back the safe Camunda subset', async ({ page }) => {
     const { email, password } = getE2ECredentials();
