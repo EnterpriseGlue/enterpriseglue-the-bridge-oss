@@ -89,7 +89,6 @@ async function openMigrationPanel(page: Page, engineName: string) {
 
 test.describe('Camunda native-grant migration browser workflow', () => {
   test.skip(!enabled, 'Runs only from the explicit localhost Docker native-grant evidence runner');
-  test.setTimeout(120_000);
 
   test('previews, drafts, applies, enforces, resumes, and rolls back the safe Camunda subset', async ({ page }) => {
     const { email, password } = getE2ECredentials();
@@ -212,7 +211,9 @@ test.describe('Camunda native-grant migration browser workflow', () => {
       await expect(modal.getByText('Applied migration resumed')).toBeVisible();
       await modal.getByRole('button', { name: 'Preview rollback' }).click();
       await expect(modal.getByText('Rollback removes only import-owned configuration')).toBeVisible();
-      await modal.getByLabel(/I understand that this will remove/i).check();
+      const rollbackAcknowledgement = modal.locator('label[for="camunda-native-rollback-acknowledgement"]');
+      await rollbackAcknowledgement.click();
+      await expect(modal.getByLabel(/I understand that this will remove/i)).toBeChecked();
       await modal.getByRole('button', { name: 'Roll back imported configuration' }).click();
       await expect(modal.getByText('Imported configuration rolled back')).toBeVisible();
 
