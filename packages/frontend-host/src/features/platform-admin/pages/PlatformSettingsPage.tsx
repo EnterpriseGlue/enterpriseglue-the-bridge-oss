@@ -38,6 +38,7 @@ import type {
   EngineGovernanceItem,
   AccessAuthorityMode,
   EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
   ProjectEngineTargetPolicyMode,
   UserListItem,
 } from '../../../api/platform-admin';
@@ -54,6 +55,7 @@ import EmailTemplates from '../../../pages/admin/EmailTemplates';
 import BrandingSettingsTab from '../components/BrandingSettingsTab';
 import { PiiRedactionSettingsSection } from '../components/PiiRedactionSettingsSection';
 import { AuthContext } from '../../../contexts/AuthContext';
+import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils';
 import { evaluateActionSnapshot } from '../../../shared/auth/guards';
 import {
   ACCESS_CONTROL_PLATFORM_PERMISSIONS,
@@ -170,6 +172,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const { data: envTags, isLoading: envLoading } = useEnvironmentTags({ enabled: canReadSettings });
   const { data: gitProviders, isLoading: gitProvidersLoading } = useAdminGitProviders({ enabled: canManageGitProviders });
   const updateSettings = useUpdatePlatformSettings();
+  const settingsUpdateError = updateSettings.isError
+    ? getUiErrorMessage(updateSettings.error, 'Failed to save platform settings')
+    : null;
   const updateGitProvider = useUpdateGitProvider();
   const createTag = useCreateEnvironmentTag();
   const updateTag = useUpdateEnvironmentTag();
@@ -374,6 +379,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     updateSettings.mutate({ projectAccessAuthority: mode });
   };
 
+  const handleEngineRuntimeAuthorizationModeChange = (mode: EngineRuntimeAuthorizationMode) => {
+    if (!canManageSettings) return;
+    updateSettings.mutate({ engineRuntimeAuthorizationMode: mode });
+  };
+
   const handleCredentiallessCustomerSidecarsEnabledChange = (enabled: boolean) => {
     if (!canManageSettings) return;
     updateSettings.mutate({ credentiallessCustomerSidecarsEnabled: enabled });
@@ -468,6 +478,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       onProjectEngineTargetModeChange={handleProjectEngineTargetModeChange}
       onEngineAccessAuthorityChange={handleEngineAccessAuthorityChange}
       onProjectAccessAuthorityChange={handleProjectAccessAuthorityChange}
+      onEngineRuntimeAuthorizationModeChange={handleEngineRuntimeAuthorizationModeChange}
       onCredentiallessCustomerSidecarsEnabledChange={handleCredentiallessCustomerSidecarsEnabledChange}
       onDeployRoleToggle={handleDeployRoleToggle}
       envTags={envTags}
@@ -706,6 +717,17 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         subtitle={headerSubtitle}
         gradient={PAGE_GRADIENTS.red}
       />
+
+      {settingsUpdateError && (
+        <div style={{ paddingInline: 'var(--spacing-5)' }}>
+          <InlineNotification
+            kind="error"
+            title="Platform settings not saved"
+            subtitle={settingsUpdateError}
+            hideCloseButton
+          />
+        </div>
+      )}
 
       {section ? (
         <div style={{ paddingInline: 0, paddingBlock: 'var(--cds-layout-density-padding-inline-local)' }}>

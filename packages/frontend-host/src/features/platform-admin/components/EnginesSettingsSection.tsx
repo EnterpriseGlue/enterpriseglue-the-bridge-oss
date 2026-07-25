@@ -7,6 +7,7 @@ import type {
   EnvironmentTag,
   AccessAuthorityMode,
   EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
   PlatformSettings,
   ProjectEngineTargetPolicyMode,
 } from '../../../api/platform-admin'
@@ -25,6 +26,7 @@ interface EnginesSettingsSectionProps {
   onProjectEngineTargetModeChange: (mode: ProjectEngineTargetPolicyMode) => void
   onEngineAccessAuthorityChange: (mode: AccessAuthorityMode) => void
   onProjectAccessAuthorityChange: (mode: AccessAuthorityMode) => void
+  onEngineRuntimeAuthorizationModeChange: (mode: EngineRuntimeAuthorizationMode) => void
   onCredentiallessCustomerSidecarsEnabledChange: (enabled: boolean) => void
   onDeployRoleToggle: (role: string, checked: boolean) => void
   envTags: EnvironmentTag[] | undefined
@@ -103,6 +105,19 @@ const ACCESS_AUTHORITY_MODE_ITEMS: Array<{ id: AccessAuthorityMode; label: strin
   },
 ]
 
+const ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS: Array<{ id: EngineRuntimeAuthorizationMode; label: string; description: string }> = [
+  {
+    id: 'enterpriseglue_authoritative',
+    label: 'EnterpriseGlue authoritative',
+    description: 'EnterpriseGlue is the authorization source for runtime resources. This is the default mode.',
+  },
+  {
+    id: 'mirrored_engine_backstop',
+    label: 'Mirrored engine backstop',
+    description: 'Mirrors a narrow, reviewed group READ subset to compatible Camunda 7 or Operaton engines while EnterpriseGlue remains authoritative.',
+  },
+]
+
 export function EnginesSettingsSection({
   settings,
   allEngines,
@@ -117,6 +132,7 @@ export function EnginesSettingsSection({
   onProjectEngineTargetModeChange,
   onEngineAccessAuthorityChange,
   onProjectAccessAuthorityChange,
+  onEngineRuntimeAuthorizationModeChange,
   onCredentiallessCustomerSidecarsEnabledChange,
   onDeployRoleToggle,
   envTags,
@@ -229,17 +245,34 @@ export function EnginesSettingsSection({
                 size="md"
                 disabled={!canManageSettings}
               />
-              <div aria-label="Runtime authorization mode" style={{ display: 'grid', gap: 'var(--spacing-2)', paddingTop: 'var(--spacing-2)' }}>
-                <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Runtime authorization</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-                  <Tag type="blue">EnterpriseGlue authoritative</Tag>
-                  <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
-                    {engineRuntimeAuthorizationMode === 'enterpriseglue_authoritative'
-                      ? 'EnterpriseGlue is the v1 authorization source for runtime resources.'
-                      : 'Unsupported runtime authorization mode.'}
-                  </span>
-                </div>
-              </div>
+              <Dropdown
+                id="engine-runtime-authorization-mode"
+                titleText="Runtime authorization mode"
+                label="Select runtime authorization mode"
+                items={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS}
+                itemToString={(item) => item?.label || ''}
+                selectedItem={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS.find((item) => item.id === engineRuntimeAuthorizationMode)}
+                onChange={({ selectedItem }) => {
+                  if (selectedItem) onEngineRuntimeAuthorizationModeChange(selectedItem.id)
+                }}
+                helperText={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS.find((item) => item.id === engineRuntimeAuthorizationMode)?.description}
+                size="md"
+                disabled={!canManageSettings}
+              />
+              {engineRuntimeAuthorizationMode === 'mirrored_engine_backstop' && (
+                <InlineNotification
+                  lowContrast
+                  kind="info"
+                  title="Mirrored backstop enabled"
+                  subtitle="EnterpriseGlue remains authoritative. Only exact, reviewed group READ grants for compatible Camunda 7 or Operaton engines are mirrored; use each engine’s Native authorization backstop panel to manage the receipt-bound lifecycle."
+                  hideCloseButton
+                />
+              )}
+              {engineRuntimeAuthorizationMode === 'enterpriseglue_authoritative' && (
+                <p style={{ margin: '-0.5rem 0 0', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
+                  Enabling a mirrored backstop requires at least one successful, retained backstop synchronization receipt. The API enforces this prerequisite.
+                </p>
+              )}
               <Checkbox
                 id="credentialless-customer-sidecars-enabled"
                 labelText="Allow credentialless customer-sidecar endpoints"

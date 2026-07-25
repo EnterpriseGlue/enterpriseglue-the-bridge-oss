@@ -130,9 +130,13 @@ credential.
    a grant to compensate.
 
 6. After at least one synchronization succeeds, an administrator may set the
-   global runtime authorization mode to `mirrored_engine_backstop`. The setting
-   rejects enabling before that evidence exists. Existing and unsynchronized
-   engines continue with `enterpriseglue_authoritative` behavior.
+   global runtime authorization mode to `mirrored_engine_backstop` in
+   **Platform Settings > Engines > Runtime authorization mode**, or through
+   `PUT /api/admin/settings` with
+   `{ "engineRuntimeAuthorizationMode": "mirrored_engine_backstop" }`. The
+   setting requires `platform:settings:manage` and rejects enabling before that
+   retained evidence exists. Existing and unsynchronized engines continue with
+   `enterpriseglue_authoritative` behavior.
 
 ## Rollback
 
