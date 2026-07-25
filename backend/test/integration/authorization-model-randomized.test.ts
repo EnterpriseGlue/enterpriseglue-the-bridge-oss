@@ -28,7 +28,11 @@ const tenantId = `tenant-${prefix}`;
 const roleKeyPrefix = `custom.model${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
 const modelGroupKey = `${prefix}-group`;
 const scenarios = 24;
-const databaseModelTimeoutMs = 15_000;
+// The model deliberately performs every generated permission decision against
+// PostgreSQL. Keep the bound finite, but allow a loaded local Docker database
+// to complete the full 24-state witness and its cleanup without a false
+// timeout.
+const databaseModelTimeoutMs = 45_000;
 
 type Scope = 'platform' | 'project' | 'engine' | 'engine_set' | 'engine_runtime_resource' | 'engine_runtime_resource_set';
 type Principal = 'direct' | 'group';
@@ -249,13 +253,19 @@ describe('randomized authorization model (database)', () => {
         createdById: adminUserId,
       })));
       try {
-        for (const request of requests()) {
-          const actual = await permissionService.evaluatePermission(request.permission as any, {
+        // Each decision reads the same immutable scenario assignments. Evaluate
+        // them together so the property test retains its full state space
+        // without serial round trips dominating a local Docker database run.
+        const decisions = await Promise.all(requests().map(async (request) => ({
+          request,
+          actual: await permissionService.evaluatePermission(request.permission as any, {
             userId: request.principal === 'group' ? groupUserId : directUserId,
             tenantId,
             resourceType: request.resourceType,
             resourceId: request.resourceId,
-          });
+          }),
+        })));
+        for (const { request, actual } of decisions) {
           expect(actual.allowed, `scenario ${iteration}: ${JSON.stringify({ rules, request, actual })}`).toBe(expectedDecision(rules, request, now));
         }
       } finally {
