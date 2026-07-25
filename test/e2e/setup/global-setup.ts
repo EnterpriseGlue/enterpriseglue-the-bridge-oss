@@ -244,6 +244,29 @@ export default async function globalSetup() {
     ]
   );
 
+  // The native-grant browser workflow starts from an already-discovered,
+  // synthetic Camunda inventory.  Keeping that inventory in the fixture means
+  // its migration operator needs no unrelated inventory-write permission.
+  for (const [resourceKind, resourceKey, engineResourceId, deploymentId] of [
+    ['process_definition', 'invoice-process', 'invoice-process:3:mock-process-definition', 'mock-deployment-primary'],
+    ['decision_definition', 'invoice-risk', 'invoice-risk:1:mock-decision-definition', 'invoice-risk-drd'],
+    ['process_definition', 'invoice-sequential-review', 'invoice-sequential-review:1:mock-process-definition', 'mock-deployment-sequential'],
+  ]) {
+    await pool.query(
+      `INSERT INTO ${schema}.runtime_resources
+        (id, tenant_id, engine_id, resource_kind, resource_key, runtime_tenant_id,
+         engine_resource_id, deployment_id, project_id, file_id, version, labels_json,
+         lineage_json, source, source_ref, observed_at, is_active,
+         tenant_resolution_status, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [
+        randomUUID(), 'tenant-default', engineId, resourceKind, resourceKey, '', engineResourceId,
+        deploymentId, null, null, 1, '{}', '{}', 'engine_discovery', membershipSourceRef,
+        now, true, 'resolved', now, now,
+      ]
+    );
+  }
+
   // The guarded engine-tenancy journey needs one reproducible legacy row to
   // prove the quarantined migration path through the real API. It is created
   // only for that local/CI evidence lane and is removed by the e2e-* teardown

@@ -58,19 +58,6 @@ async function login(page: Page, email?: string, password?: string): Promise<voi
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
-async function csrfToken(page: Page): Promise<string> {
-  const body = await responseJson<{ csrfToken: string }>(
-    await page.request.get('/api/csrf-token'),
-    'obtain CSRF token',
-  );
-  expect(body.csrfToken).toBeTruthy();
-  return body.csrfToken;
-}
-
-function mutationOptions(token: string, data?: unknown) {
-  return { headers: { 'X-CSRF-Token': token }, ...(data === undefined ? {} : { data }) };
-}
-
 async function openMigrationPanel(page: Page, engineName: string) {
   await page.goto('/t/default/engines');
   const row = page.getByRole('row').filter({ hasText: engineName });
@@ -107,23 +94,15 @@ test.describe('Camunda native-grant migration browser workflow', () => {
 
     try {
       await login(page, email, password);
-      const csrf = await csrfToken(page);
       const engine = await responseJson<{ id: string; name: string; tenantId: string | null; runtimeAccessScope: string }>(
         await page.request.get(`/engines-api/engines/${encodeURIComponent(engineId)}`),
         'read seeded Camunda engine',
       );
       expect(engine).toMatchObject({ id: engineId, tenantId: 'tenant-default', runtimeAccessScope: 'resource_aware' });
 
-      await responseJson(
-        await page.request.post(
-          `/engines-api/engines/${encodeURIComponent(engineId)}/runtime-resources/reconcile`,
-          mutationOptions(csrf),
-        ),
-        'reconcile synthetic Camunda runtime inventory',
-      );
       const runtimeResources = await responseJson<Array<{ resourceKind: string; resourceKey: string }>>(
         await page.request.get(`/engines-api/engines/${encodeURIComponent(engineId)}/runtime-resources`),
-        'read reconciled runtime inventory',
+        'read synthetic Camunda runtime inventory',
       );
       expect(runtimeResources).toEqual(expect.arrayContaining([
         expect.objectContaining({ resourceKind: 'process_definition', resourceKey: 'invoice-process' }),
