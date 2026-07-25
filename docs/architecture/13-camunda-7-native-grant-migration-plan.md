@@ -520,7 +520,7 @@ local Docker environment must execute the authenticated preview/draft/apply,
 Effective Access allow-and-deny, protected-route, accessibility, and
 hash-bound rollback journey using only synthetic identities and grants. The
 exact prerequisites, commands, retained artifacts, success criteria, and stop
-conditions are maintained in the [developer handoff](../development/camunda7-native-grant-migration.md#browser-and-customer-acceptance-handoff).
+conditions are maintained in the [developer handoff](../development/camunda7-native-grant-migration.md#authenticated-local-browser-evidence).
 No runtime authority-mode change or compatibility removal is permitted before
 that evidence exists.
 
