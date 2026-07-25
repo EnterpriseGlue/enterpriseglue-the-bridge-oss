@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "guard:no-raw-sql": "tsx scripts/check-no-raw-sql.ts",
     "test:unit": "npm run guard:no-raw-sql && vitest --run --dir __tests__ --config vitest.config.ts",
-    "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.config.ts --fileParallelism=false",
+    "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.integration.config.ts --fileParallelism=false",
     "verify": "npm run typecheck && npm run build:skip-generate && npm run test:unit",
     "db:migration:generate": "npx typeorm migration:generate -d dist/packages/shared/src/db/data-source.js",
     "db:migration:run": "npx typeorm migration:run -d dist/packages/shared/src/db/data-source.js",

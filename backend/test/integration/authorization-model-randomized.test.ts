@@ -65,7 +65,10 @@ function roleFor(scope: Scope): string {
 }
 
 function permissionFor(scope: Scope): string {
-  return scope === 'platform' ? PlatformPermissions.DASHBOARD_VIEW : scope === 'project' ? ProjectPermissions.DEPLOY : EnginePermissions.INSTANCE_VIEW;
+  // Dashboard access is granted to every authenticated user through the
+  // foundation group. Audit access is not, so it keeps the platform branch of
+  // this independent model meaningful for both direct and group assignments.
+  return scope === 'platform' ? PlatformPermissions.AUDIT_VIEW : scope === 'project' ? ProjectPermissions.DEPLOY : EnginePermissions.INSTANCE_VIEW;
 }
 
 function expectedDecision(rules: ModelRule[], request: ModelRequest, now: number): boolean {
@@ -119,7 +122,7 @@ function generatedRules(iteration: number, now: number): ModelRule[] {
 
 function requests(): ModelRequest[] {
   return [
-    ...(['direct', 'group'] as Principal[]).map((principal) => ({ permission: PlatformPermissions.DASHBOARD_VIEW, principal, resourceType: 'platform' as const })),
+    ...(['direct', 'group'] as Principal[]).map((principal) => ({ permission: PlatformPermissions.AUDIT_VIEW, principal, resourceType: 'platform' as const })),
     ...(['direct', 'group'] as Principal[]).flatMap((principal) => [projectAId, projectBId].map((resourceId) => ({ permission: ProjectPermissions.DEPLOY, principal, resourceType: 'project' as const, resourceId }))),
     ...(['direct', 'group'] as Principal[]).flatMap((principal) => [engineAId, engineBId].map((resourceId) => ({ permission: EnginePermissions.INSTANCE_VIEW, principal, resourceType: 'engine' as const, resourceId }))),
     ...(['direct', 'group'] as Principal[]).flatMap((principal) => [runtimeAId, runtimeBId, runtimeCId].map((resourceId) => ({ permission: EnginePermissions.INSTANCE_VIEW, principal, resourceType: 'engine_runtime_resource' as const, resourceId }))),
@@ -213,7 +216,7 @@ describe('randomized authorization model (database)', () => {
       await dataSource.getRepository(RuntimeResourceSetMaterialization).insert({ id: generateId(), tenantId, runtimeResourceSetId: runtimeSetId, runtimeResourceId: runtimeBId, selectorFingerprint: 'model', matchedByJson: '{}', lineageJson: '{}', lastSeenAt: now, createdAt: now, updatedAt: now });
     }
     const [platformRole, projectRole, engineRole] = await Promise.all([
-      permissionService.createCustomRole({ key: `${roleKeyPrefix}.platform`, name: `${prefix} platform`, scope: 'platform', permissionIds: [PlatformPermissions.DASHBOARD_VIEW], createdById: adminUserId }),
+      permissionService.createCustomRole({ key: `${roleKeyPrefix}.platform`, name: `${prefix} platform`, scope: 'platform', permissionIds: [PlatformPermissions.AUDIT_VIEW], createdById: adminUserId }),
       permissionService.createCustomRole({ key: `${roleKeyPrefix}.project`, name: `${prefix} project`, scope: 'project', permissionIds: [ProjectPermissions.DEPLOY], createdById: adminUserId }),
       permissionService.createCustomRole({ key: `${roleKeyPrefix}.engine`, name: `${prefix} engine`, scope: 'engine', permissionIds: [EnginePermissions.INSTANCE_VIEW], createdById: adminUserId }),
     ]);

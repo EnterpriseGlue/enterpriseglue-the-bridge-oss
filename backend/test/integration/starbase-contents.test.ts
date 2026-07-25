@@ -73,6 +73,6 @@ describe('Starbase project contents', () => {
       .get(`/t/default/starbase-api/projects/${projectId}/contents`)
       .set('Authorization', `Bearer ${otherToken}`);
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
   });
 });

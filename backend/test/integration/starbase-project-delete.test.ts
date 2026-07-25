@@ -46,6 +46,8 @@ describe('Starbase project delete', () => {
       .delete(`/t/default/starbase-api/projects/${projectId}`)
       .set('Authorization', `Bearer ${otherToken}`);
 
-    expect(response.status).toBe(403);
+    // The project routes intentionally conceal inaccessible resources, so a
+    // non-member receives not-found rather than confirmation that it exists.
+    expect(response.status).toBe(404);
   });
 });

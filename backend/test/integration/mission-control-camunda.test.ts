@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { createApp as CreateAppFn } from '../../../packages/backend-host/src/app.js';
-import { seedUser, seedEngine, cleanupEngines, cleanupStaleTestData } from '../utils/seed.js';
+import { seedUser, seedEngine, cleanupEngines, cleanupSeededData, cleanupStaleTestData } from '../utils/seed.js';
 import { createCamundaFetchMock } from '../utils/camunda-mock.js';
 
 const prefix = `test_camunda_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -29,10 +29,9 @@ describe('Mission control Camunda integration', () => {
     });
 
     process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret-please-change-00000000000000';
-    const user = await seedUser(prefix);
+    const user = await seedUser(prefix, { platformRole: 'admin' });
     userId = user.id;
-    const { generateAccessToken } = await import('@enterpriseglue/shared/utils/jwt.js');
-    token = generateAccessToken({ id: user.id, email: user.email, platformRole: 'admin' });
+    token = user.token;
 
     const engine = await seedEngine(userId, 'http://camunda.mock/engine-rest', `${prefix}-engine`);
     engineId = engine.id;
@@ -43,12 +42,7 @@ describe('Mission control Camunda integration', () => {
 
   afterAll(async () => {
     await cleanupEngines(engineId ? [engineId] : []);
-    if (userId) {
-      const { getDataSource } = await import('@enterpriseglue/shared/db/data-source.js');
-      const { User } = await import('@enterpriseglue/shared/db/entities/User.js');
-      const dataSource = await getDataSource();
-      await dataSource.getRepository(User).delete({ id: userId as any });
-    }
+    await cleanupSeededData(prefix, [], userId ? [userId] : []);
   });
 
   it('lists engines', async () => {

@@ -1,9 +1,6 @@
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '../../../packages/backend-host/src/app.js';
-import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { User } from '@enterpriseglue/shared/db/entities/User.js';
-import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { cleanupSeededData, seedUser, seedAdditionalUser, seedProject } from '../utils/seed.js';
 
 const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -30,11 +27,9 @@ describe('Starbase projects', () => {
     const seededProject = await seedProject(userId, `${prefix}-engine-access-project`);
     seededProjectId = seededProject.id;
 
-    const admin = await seedAdditionalUser(prefix, 'admin');
+    const admin = await seedAdditionalUser(prefix, 'admin', { platformRole: 'admin' });
     adminUserId = admin.id;
-    const dataSource = await getDataSource();
-    await dataSource.getRepository(User).update({ id: admin.id }, { platformRole: 'admin' });
-    adminToken = generateAccessToken({ id: admin.id, email: admin.email, platformRole: 'admin' });
+    adminToken = admin.token;
   });
 
   afterAll(async () => {
@@ -66,7 +61,7 @@ describe('Starbase projects', () => {
     expect(names).toContain(`${prefix}-project`);
   });
 
-  it('lists tenant-visible projects for a platform admin without project membership', async () => {
+  it('does not grant project visibility to a platform admin without project membership', async () => {
     const app = createApp({
       includeRateLimiting: false,
     });
@@ -77,7 +72,7 @@ describe('Starbase projects', () => {
 
     expect(response.status).toBe(200);
     const projectIds = (response.body || []).map((p: any) => p.id);
-    expect(projectIds).toContain(seededProjectId);
+    expect(projectIds).not.toContain(seededProjectId);
   });
 
   it('renames a project', async () => {
