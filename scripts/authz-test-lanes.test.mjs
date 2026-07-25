@@ -10,6 +10,7 @@ const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsa
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
 const localCrossBrowserAuthzRunner = readFileSync(new URL('./run-authz-local-seeded-cross-browser.sh', import.meta.url), 'utf8');
+const localContainerWebkitRunner = readFileSync(new URL('./run-authz-local-seeded-webkit-container.sh', import.meta.url), 'utf8');
 const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
@@ -192,7 +193,12 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
 });
 
 test('cross-browser authorization writes sanitized evidence only after all targets pass', () => {
-  assert.match(localCrossBrowserAuthzRunner, /for browser in chromium firefox webkit/);
+  assert.match(scripts['test:authz:local-smoke:cross-browser'], /bash \.\/scripts\/run-authz-local-seeded-cross-browser\.sh/);
+  assert.match(localCrossBrowserAuthzRunner, /for browser in chromium/);
+  assert.match(localCrossBrowserAuthzRunner, /PLAYWRIGHT_FIREFOX_EXECUTION/);
+  assert.match(localCrossBrowserAuthzRunner, /PLAYWRIGHT_WEBKIT_EXECUTION/);
+  assert.match(localCrossBrowserAuthzRunner, /run_firefox/);
+  assert.match(localCrossBrowserAuthzRunner, /run-authz-local-seeded-webkit-container\.sh/);
   assert.match(localCrossBrowserAuthzRunner, /write-authz-browser-evidence\.mjs/);
   assert.ok(
     localCrossBrowserAuthzRunner.indexOf('write-authz-browser-evidence.mjs')
@@ -208,6 +214,19 @@ test('cross-browser authorization writes sanitized evidence only after all targe
   assert.match(browserEvidenceWriter, /multi_tab_revalidation/);
   assert.match(browserEvidenceWriter, /session_refresh_revalidation/);
   assert.match(browserEvidenceWriter, /back_forward_cache_revalidation/);
+});
+
+test('the macOS WebKit fallback remains a disposable local Docker lane', () => {
+  assert.match(localContainerWebkitRunner, /localhost, loopback, or a \.local host/);
+  assert.match(localContainerWebkitRunner, /--add-host enterpriseglue-webkit\.local:host-gateway/);
+  assert.match(localContainerWebkitRunner, /--network "\$compose_network"/);
+  assert.match(localContainerWebkitRunner, /E2E_CAMUNDA_BASE_URL=http:\/\/camunda-mock:9080\/engine-rest/);
+  assert.match(localContainerWebkitRunner, /E2E_SEED_USER=true/);
+  assert.match(localContainerWebkitRunner, /E2E_DIRECT_DB_CLEANUP=true/);
+  assert.match(localContainerWebkitRunner, /PLAYWRIGHT_CONTAINER_BROWSER/);
+  assert.match(localContainerWebkitRunner, /firefox or webkit/);
+  assert.match(localContainerWebkitRunner, /mcr\.microsoft\.com\/playwright:v1\.59\.1-jammy/);
+  assert.match(localContainerWebkitRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
 });
 
 test('the authorization mutation guard kills every required tenancy fault class and retains evidence', () => {

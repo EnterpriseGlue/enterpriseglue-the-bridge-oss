@@ -653,6 +653,22 @@ three targets, run:
 pnpm run test:authz:local-smoke:cross-browser
 ```
 
+The command tests Chromium with the host Playwright installation and uses the
+local TLS frontend for WebKit. On macOS it runs Firefox and WebKit in the
+pinned Linux Playwright container by default: current macOS releases can
+reject Playwright's ad-hoc-signed host executables before a test reaches the
+application. The container can reach only the existing local stack through a
+`.local` host alias and joins the local Compose network solely to resolve the
+disposable Camunda mock. It uses fresh synthetic records and direct database
+cleanup. Set `PLAYWRIGHT_FIREFOX_EXECUTION=native` or
+`PLAYWRIGHT_WEBKIT_EXECUTION=native` to require a host runtime; set either to
+`container` to use the container deliberately on another operating system.
+
+The local backend must be published on its loopback port for these browser
+fixtures, including the direct Effective Access calls. Start the stack with
+`infra/docker/compose/docker-compose.backend-expose.yml` when it is not
+already exposed.
+
 `TEN-UI-006` runs the separate database-free accessibility matrix against the
 same local frontend with:
 
