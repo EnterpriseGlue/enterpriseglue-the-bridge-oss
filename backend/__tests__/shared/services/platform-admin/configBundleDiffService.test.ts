@@ -1076,10 +1076,10 @@ describe('configBundleDiffService', () => {
     }));
   });
 
-  it('diffs a config-owned Operaton backstop mapping by opaque secret reference without exposing its native value', async () => {
+  it('diffs a config-owned customer-sidecar Operaton backstop mapping by opaque secret reference without exposing its native value', async () => {
     const engine = {
       id: 'engine-operaton', tenantId: 'tenant-a', configKey: 'engine.operaton', configKeyIdentity: 'tenant-a:engine.operaton',
-      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', type: 'operaton',
+      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', type: 'operaton', connectionMode: 'customer_sidecar',
     };
     const group = {
       id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
@@ -1096,7 +1096,7 @@ describe('configBundleDiffService', () => {
     const result = await configBundleDiffService.diff({
       bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
       files: {
-        './engines.json': { engines: [{ key: 'engine.operaton', name: 'Operaton', type: 'operaton', baseUrl: 'https://operaton.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'OPERATON_PASSWORD' } }] },
+        './engines.json': { engines: [{ key: 'engine.operaton', name: 'Operaton sidecar', type: 'operaton', baseUrl: 'https://operaton-sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', auth: { type: 'basic', username: 'eg', passwordRef: 'OPERATON_PASSWORD' } }] },
         './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
         './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.operaton-operators', engineRef: { engineKey: 'engine.operaton' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'OPERATON_OPERATORS_GROUP_ROTATED' }] },
       },

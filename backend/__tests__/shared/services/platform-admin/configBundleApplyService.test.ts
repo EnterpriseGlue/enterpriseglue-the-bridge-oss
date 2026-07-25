@@ -1432,13 +1432,13 @@ describe('configBundleApplyService', () => {
   it('resolves a backstop group reference only during apply and does not put its native value in audit output', async () => {
     const { engineRepo, groupRepo, auditInsert } = setupDataSource();
     const engine = {
-      id: 'engine-camunda', tenantId: 'tenant-a', configKey: 'engine.camunda', configKeyIdentity: 'tenant-a:engine.camunda',
-      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', name: 'Camunda',
-      baseUrl: 'https://camunda.example.test/engine-rest', type: 'camunda7', externalId: null, labelsJson: '{}',
-      authType: 'basic', username: 'eg', passwordEnc: 'ref:CAMUNDA_PASSWORD', oauthTokenUrl: null, oauthScopes: null,
+      id: 'engine-operaton-sidecar', tenantId: 'tenant-a', configKey: 'engine.operaton-sidecar', configKeyIdentity: 'tenant-a:engine.operaton-sidecar',
+      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', name: 'Operaton sidecar',
+      baseUrl: 'https://operaton-sidecar.example.test/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}',
+      authType: 'basic', username: 'eg', passwordEnc: 'ref:OPERATON_SIDECAR_PASSWORD', oauthTokenUrl: null, oauthScopes: null,
       oauthAudience: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',
       metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300,
-      pipelineReceiptEnabled: true, connectionMode: 'direct', ownershipMode: 'config_locked', tenancyMode: 'dedicated',
+      pipelineReceiptEnabled: true, connectionMode: 'customer_sidecar', ownershipMode: 'config_locked', tenancyMode: 'dedicated',
     };
     const group = {
       id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
@@ -1450,12 +1450,12 @@ describe('configBundleApplyService', () => {
     groupRepo.findOne.mockImplementation(async ({ where }: any) => where.id === group.id || where.key === group.key ? group : null);
     const mappingBundle = { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] };
     const mappingFiles = {
-      './engines.json': { engines: [{ key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CAMUNDA_PASSWORD' } }] },
+      './engines.json': { engines: [{ key: 'engine.operaton-sidecar', name: 'Operaton sidecar', type: 'operaton', baseUrl: 'https://operaton-sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', auth: { type: 'basic', username: 'eg', passwordRef: 'OPERATON_SIDECAR_PASSWORD' } }] },
       './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
-      './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.camunda-operators', engineRef: { engineKey: 'engine.camunda' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP' }] },
+      './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.operaton-sidecar-operators', engineRef: { engineKey: 'engine.operaton-sidecar' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'OPERATON_SIDECAR_OPERATORS_GROUP' }] },
     };
-    const previousSecret = process.env.CAMUNDA_OPERATORS_GROUP;
-    process.env.CAMUNDA_OPERATORS_GROUP = 'camunda-operators-not-for-audit';
+    const previousSecret = process.env.OPERATON_SIDECAR_OPERATORS_GROUP;
+    process.env.OPERATON_SIDECAR_OPERATORS_GROUP = 'operaton-sidecar-operators-not-for-audit';
     try {
       const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
       const result = await configBundleApplyService.apply({
@@ -1467,13 +1467,13 @@ describe('configBundleApplyService', () => {
       });
       expect(result).toMatchObject({ created: 1, updated: 0, archived: 0 });
       expect(writeBackstopMapping).toHaveBeenCalledWith(expect.objectContaining({
-        engineId: 'engine-camunda', source: 'config', nativeGroupSecretRef: 'CAMUNDA_OPERATORS_GROUP',
-        request: { mappings: [{ authzGroupId: 'group-operators', nativeGroupId: 'camunda-operators-not-for-audit', isActive: true }] },
+        engineId: 'engine-operaton-sidecar', source: 'config', nativeGroupSecretRef: 'OPERATON_SIDECAR_OPERATORS_GROUP',
+        request: { mappings: [{ authzGroupId: 'group-operators', nativeGroupId: 'operaton-sidecar-operators-not-for-audit', isActive: true }] },
       }), expect.anything());
-      expect(JSON.stringify(auditInsert.mock.calls)).not.toContain('camunda-operators-not-for-audit');
+      expect(JSON.stringify(auditInsert.mock.calls)).not.toContain('operaton-sidecar-operators-not-for-audit');
     } finally {
-      if (previousSecret === undefined) delete process.env.CAMUNDA_OPERATORS_GROUP;
-      else process.env.CAMUNDA_OPERATORS_GROUP = previousSecret;
+      if (previousSecret === undefined) delete process.env.OPERATON_SIDECAR_OPERATORS_GROUP;
+      else process.env.OPERATON_SIDECAR_OPERATORS_GROUP = previousSecret;
     }
   });
 });
