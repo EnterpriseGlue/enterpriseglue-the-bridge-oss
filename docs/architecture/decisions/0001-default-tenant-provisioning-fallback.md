@@ -41,18 +41,17 @@ link-validated, and covered by the engine-tenancy documentation contract lane.
   tenant exists.
 - A centralized installation is safe because default fallback cannot authorize
   a resource on a shared engine.
-- Fallback use is observable through a bounded process-local counter so
-  integrations can migrate to explicit tenancy.
-- Compatibility omission remains temporary API behavior, not a persistence or
-  authorization invariant.
+- The internal manual-create fallback remains observable through a bounded
+  process-local counter; it is not available to external integrations.
+- External compatibility omission has been removed and was never a persistence
+  or authorization invariant.
 
 ## Compatibility and Removal
 
-Omitted tenancy continues to create a dedicated engine during the published
-compatibility window. Removal requires all supported clients to send explicit
-tenancy, zero observed omission fallback during the evidence window, updated
-SDK/examples, and a release note. Explicit `default` remains a supported
-provisioning choice for local installations.
+External registration now requires explicit tenancy and rejects omission before
+state access. The internal manual-create fallback remains limited to dedicated
+provisioning. Explicit `default` remains a supported provisioning choice for
+local installations.
 
 ## Verification
 
@@ -68,4 +67,3 @@ provisioning choice for local installations.
 - [Centralized and Decentralized Engine Tenancy Implementation Plan](../12-engine-tenancy-and-external-provisioning-plan.md)
 - [Configure Dedicated and Shared Engine Tenancy](../../how-to/configure-engine-tenancy.md)
 - [Engine Tenancy Data Model](../../reference/engine-tenancy-data-model.md)
-

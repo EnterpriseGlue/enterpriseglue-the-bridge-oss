@@ -600,11 +600,10 @@
     },
     {
       "id": "TEN-RESOLVE-001",
-      "requirement": "Omitted and request-context dedicated tenancy resolves to the request tenant or canonical OSS default.",
+      "requirement": "Internal manual-create omission resolves dedicated tenancy to the request tenant or canonical OSS default; external registration requires explicit tenancy.",
       "source": "Engine Tenancy Data Model / Provisioning and Resolution",
       "dimensions": [
         "manual",
-        "external",
         "request_context",
         "default"
       ],
@@ -770,15 +769,15 @@
     },
     {
       "id": "TEN-SHARED-002",
-      "requirement": "External registration accepts explicit shared topology without emitting a dedicated compatibility warning.",
+      "requirement": "External registration accepts explicit shared topology without exposing a tenancy compatibility diagnostic.",
       "source": "Engine Tenancy Data Model / Provisioning and Resolution",
       "dimensions": [
         "shared",
         "resource_aware",
         "external",
-        "diagnostics"
+        "external-contract"
       ],
-      "expected": "incomplete shared persistence with no omission warning",
+      "expected": "incomplete shared persistence without compatibility diagnostics",
       "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
       "testName": "externally provisions explicit shared engines without the compatibility warning",
       "documentation": "docs/reference/engine-tenancy-data-model.md",
@@ -854,17 +853,16 @@
     },
     {
       "id": "TEN-API-004",
-      "requirement": "External registration omission remains dedicated-compatible and emits a machine-readable warning.",
+      "requirement": "External registration rejects omitted tenancy before it reads or writes engine state.",
       "source": "Engine Tenancy Data Model / Provisioning and Resolution",
       "dimensions": [
         "external",
-        "compatibility",
-        "diagnostics",
-        "audit"
+        "input-validation",
+        "fail-closed"
       ],
-      "expected": "ENGINE_TENANCY_DEFAULTED_TO_DEDICATED",
+      "expected": "HTTP 400 before persistence",
       "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
-      "testName": "upserts engines through the external registration API",
+      "testName": "rejects an external registration that omits tenancy before it reads or writes engine state",
       "documentation": "docs/reference/engine-tenancy-data-model.md",
       "ciJob": "test:engine-tenancy:provisioning",
       "coverage": {
@@ -887,8 +885,7 @@
           "external-api"
         ],
         "outcomes": [
-          "audit",
-          "compatibility"
+          "deny"
         ]
       },
       "documentationExample": "Provisioning and Resolution",

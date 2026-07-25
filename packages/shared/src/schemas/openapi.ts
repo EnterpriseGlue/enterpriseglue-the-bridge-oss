@@ -996,9 +996,6 @@ const ExternalEngineRegistrationResponseSchema = z.object({
   created: z.boolean(),
   engine: EngineSchema,
   health: ExternalRegistrationHealthSchema.nullable().optional(),
-  diagnostics: z.object({
-    tenancyWarnings: z.array(z.literal('ENGINE_TENANCY_DEFAULTED_TO_DEDICATED')),
-  }).strict(),
 })
 registry.register('ExternalEngineRegistrationResponse', ExternalEngineRegistrationResponseSchema)
 const ExternalProjectEngineTargetModeFlagsSchema = z.object({

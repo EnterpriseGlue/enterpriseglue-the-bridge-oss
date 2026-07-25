@@ -384,8 +384,6 @@ const ENGINE_SECRET_UPDATE_FIELDS = [
   'oauthAudience',
 ] as const
 
-const EXTERNAL_TENANCY_COMPATIBILITY_WARNING = 'ENGINE_TENANCY_DEFAULTED_TO_DEDICATED'
-
 function engineTenantReferenceResolver(req: Request) {
   return req.app.locals.engineTenantReferenceResolver || null
 }
@@ -1219,7 +1217,7 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       principalType: 'api_client',
       principalId: req.apiClient?.id || null,
       resolver: engineTenantReferenceResolver(req),
-    }, { compatibilityOmissionMeansDedicated: true })
+    })
     : await engineTenancyProvisioningService.resolveForCreate({
       tenancy: req.body.tenancy,
       runtimeAccessScope: req.body.runtimeAccessScope || 'engine_wide',
@@ -1231,9 +1229,6 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
   if (!resolvedTenancy) {
     throw Errors.internal('External engine tenancy resolution returned no decision')
   }
-  const tenancyWarnings = req.body.tenancy === undefined
-    ? [EXTERNAL_TENANCY_COMPATIBILITY_WARNING]
-    : []
   if (existing && req.body.runtimeAccessScope === 'engine_wide' && existing.runtimeAccessScope === 'resource_aware') {
     await assertEngineCanUseEngineWideAccess(dataSource, String(existing.id))
   }
@@ -1342,7 +1337,6 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
           mode: resolvedTenancy?.tenancyMode,
           tenantId: resolvedTenancy?.tenantId,
           mappingStrategy: resolvedTenancy?.tenantMappingStrategy,
-          warnings: tenancyWarnings,
         },
         connectionTest: health ? { status: health.status, latencyMs: health.latencyMs, version: health.version ?? null } : undefined,
       },
@@ -1352,7 +1346,6 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
       created: false,
       engine: withEngineCapabilities(serializeEngine(responseEngine)),
       health,
-      diagnostics: { tenancyWarnings },
     })
   }
 
@@ -1418,7 +1411,6 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
         mode: resolvedTenancy.tenancyMode,
         tenantId: resolvedTenancy.tenantId,
         mappingStrategy: resolvedTenancy.tenantMappingStrategy,
-        warnings: tenancyWarnings,
       },
       connectionTest: health ? { status: health.status, latencyMs: health.latencyMs, version: health.version ?? null } : undefined,
     },
@@ -1428,7 +1420,6 @@ r.post('/engines-api/external/engines', engineLimiter, requireApiClientAction(Ap
     created: true,
     engine: withEngineCapabilities(serializeEngine(responseEngine)),
     health,
-    diagnostics: { tenancyWarnings },
   })
 }))
 

@@ -8,22 +8,22 @@ managers.
 
 ## Current Compatibility Contract
 
-`tenancy` is optional on manual and external engine creation for compatibility.
-Omission creates a dedicated engine in authenticated request context or the
-canonical local default tenant. Only `POST /engines-api/external/engines`
-returns `ENGINE_TENANCY_DEFAULTED_TO_DEDICATED` in
-`diagnostics.tenancyWarnings`; manual UI and `POST /engines-api/engines`
-creation return the normal engine representation, so they should send explicit
-tenancy rather than relying on a response warning.
+`POST /engines-api/external/engines` requires explicit tenancy (`tenancy`). A
+request that omits it is rejected before the service reads or
+writes engine state. External responses no longer include a compatibility
+warning or omission metric.
 
-This compatibility path:
+Manual UI creates already send an explicit declaration. The internal manual
+creation API retains its provisioning-only default for older callers; it is
+not an external integration contract and never authorizes a null-owned engine
+or a shared runtime resource.
 
-- runs only during provisioning;
-- persists the resolved dedicated tenant;
-- never interprets a later null tenant as default;
-- never applies to shared engines or runtime resources; and
-- increments the bounded fallback metric only when request context genuinely
-  falls through to the local default.
+The external cutover guarantees:
+
+- a dedicated declaration persists its resolved tenant;
+- a shared declaration must still use `resource_aware` and `unmappedPolicy = deny`;
+- no later null tenant is interpreted as default; and
+- stored engines are unaffected by the request-contract change.
 
 ## Null-Owner Authorization Boundary
 
@@ -49,10 +49,10 @@ even if an older database contains a reference to it.
 
 | Stage | Earliest duration | Behavior | Exit gate |
 | --- | --- | --- | --- |
-| Explicit contract release | One minor release | Omission accepted with warning; all first-party UI/config/examples send explicit tenancy | Focused lanes and upgrade guide published |
-| Adoption observation | At least 90 days and one additional minor release | Operators monitor fallback counters and integration inventory | Zero omitted-tenancy use in representative environments for the agreed evidence window |
-| Required declaration | Earliest in the next announced breaking release | New/updated external clients must send explicit tenancy; release notes name the cutoff | Supported SDKs/integrations updated and negative contract tests enabled |
-| Compatibility removal | Only after the breaking-release gate | Omitted tenancy is rejected; warning/counter branch may be removed | Clean-install and upgrade evidence, rollback rehearsal, and approved release review |
+| Explicit contract release | Completed | All first-party UI/config/examples send explicit tenancy | Focused lanes and upgrade guide published |
+| Adoption observation | Completed for the published breaking-release decision | Integrator migration guide and negative contract tests are retained | Release review approved the cutover |
+| Required declaration | Active | New and updated external clients must send explicit tenancy | Missing tenancy receives HTTP 400 before persistence |
+| Compatibility removal | Completed | Omitted external tenancy is rejected; warning/counter response branch is removed | Clean-install, upgrade, and rollback evidence are requalified for this change |
 
 No calendar date alone authorizes removal. If evidence is incomplete, extend the
 stage and publish the new target release.
@@ -76,16 +76,16 @@ does not shorten the external API deprecation window.
    inventory, and require zero unexpected unresolved/conflicting resources.
 5. Treat `ENGINE_TENANCY_TRANSITION_REQUIRED` as a stop signal; do not delete
    and recreate an engine to change topology.
-6. Update retry logic for stable 400/403/409 codes.
+6. Update retry logic so omitted tenancy is treated as a non-retryable HTTP 400.
 7. Verify decommission, credential rotation, reconciliation, and audit evidence.
 8. Remove reliance on the omission warning and confirm the fallback metric
    remains flat through the observation window.
 
 ## Removal Pull Request Requirements
 
-The pull request that rejects omission must include:
+The completed removal change includes:
 
-- the announced breaking release and compatibility-window evidence;
+- the breaking-release compatibility-window evidence;
 - SDK, API, OpenAPI, configuration, CLI help, and Markdown updates;
 - clean-install and supported-upgrade results;
 - explicit omission rejection tests for user and API-client paths;

@@ -2057,13 +2057,12 @@ describe('mission-control engines routes', () => {
         baseUrl: 'https://engine.example.com/engine-rest',
         externalId: 'cluster-a/prod',
         labels: { environment: 'prod' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
       });
 
     expect(createResponse.status).toBe(201);
     expect(createResponse.body.created).toBe(true);
-    expect(createResponse.body.diagnostics).toEqual({
-      tenancyWarnings: ['ENGINE_TENANCY_DEFAULTED_TO_DEDICATED'],
-    });
+    expect(createResponse.body.diagnostics).toBeUndefined();
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('platform:engine-registration:manage', expect.objectContaining({
       principalType: 'api_client',
       principalId: 'client-1',
@@ -2100,6 +2099,7 @@ describe('mission-control engines routes', () => {
         baseUrl: 'https://engine.example.com/engine-rest',
         externalId: 'cluster-a/prod',
         labels: { environment: 'prod' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
       });
 
     expect(updateResponse.status).toBe(200);
@@ -2119,6 +2119,35 @@ describe('mission-control engines routes', () => {
       lastExternalSyncAt: expect.any(Number),
     }));
     expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenLastCalledWith('e1', 'tenant-default');
+  });
+
+  it('rejects an external registration that omits tenancy before it reads or writes engine state', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Missing tenancy',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/missing-tenancy',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Validation failed');
+    expect(getDataSource).not.toHaveBeenCalled();
   });
 
   it('rejects silent topology changes during normal engine updates', async () => {
@@ -2551,6 +2580,7 @@ describe('mission-control engines routes', () => {
         externalSystemId: 'system-1',
         labels: { environment: 'prod' },
         capabilities: { operations: ['engine.read'], supportLevel: 'compatible' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
       });
 
     expect(response.status).toBe(201);
@@ -2609,7 +2639,7 @@ describe('mission-control engines routes', () => {
       });
 
     expect(response.status).toBe(201);
-    expect(response.body.diagnostics).toEqual({ tenancyWarnings: [] });
+    expect(response.body.diagnostics).toBeUndefined();
     expect(response.body.engine).toMatchObject({
       tenancyMode: 'shared',
       tenantId: null,
@@ -2704,6 +2734,7 @@ describe('mission-control engines routes', () => {
         externalId: 'cluster-a/prod',
         fieldOwnership: { connection: 'manual', display: 'manual', auth: 'external', labels: 'external' },
         labels: { environment: 'prod', region: 'eu' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
       });
 
     expect(response.status).toBe(200);
@@ -2865,6 +2896,7 @@ describe('mission-control engines routes', () => {
         baseUrl: 'https://engine.example.com/engine-rest',
         externalId: 'cluster-a/prod',
         testConnection: true,
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
       });
 
     expect(response.status).toBe(201);

@@ -80,7 +80,7 @@ the full end-to-end goal remains open until the following evidence is retained:
 | Browser targets | The guarded local runner passes 27 authorization executions plus 12 database-free accessibility executions across Chromium, Firefox, and WebKit, including error announcements, contrast, 200% reflow, and reduced motion | Both browser artifacts are retained from the same clean release commit |
 | Database targets | The disposable local matrix passes all 35 stage cells and all ten upgrade-baseline observations on PostgreSQL 18.4, MySQL 8.4.10, SQL Server 16.0.4265.3, Oracle 21.0.0.0.0, and Spanner emulator 1.5.30, with one logical-schema fingerprint | `database-matrix.json` retains the complete result from the same unchanged clean release commit |
 | Documentation | Developer, user, operator, API, migration, compatibility, test, review, and release-evidence Markdown is published and executable contracts pass | Independent engineering, security, and operator review is signed; all examples and links pass on the release commit |
-| Compatibility | Null-owned authorization fallback is removed; omitted new-provisioning tenancy remains warned and defaulted | Published deprecation window closes before omission warnings are removed |
+| Compatibility | Null-owned authorization fallback is removed; external registration requires explicit tenancy and has no warning/default branch | Clean-install, upgrade, and API rejection evidence remain passing on the cutover commit |
 
 No unchecked qualification gate may be described as covered by a target list
 alone. The manifest evidence records declared targets separately from executed
@@ -843,7 +843,7 @@ checkboxes are closed.
 - [x] Resolve every ambiguous engine/resource.
 - [x] Enable shared-engine fail-closed enforcement.
 - [x] Make topology non-null.
-- [ ] Remove temporary omission warnings after the external API deprecation window.
+- [x] Remove temporary omission warnings after the external API deprecation window.
 - [x] Retire any compatibility path that interprets null tenant as default.
 
 The completed local technical gates are evidenced by `TEN-MIGRATION-008`,
@@ -908,7 +908,7 @@ omission-warning window, tracked below.
 - [x] Complete independent Markdown documentation review by engineering,
   security, and operator roles using only the published procedures. All three
   approvals are retained against the release commit.
-- [ ] Close the external API omission-warning compatibility window before
+- [x] Close the external API omission-warning compatibility window before
   removing that warning behavior.
 
 ### Completed end-to-end release sequence and compatibility handoff

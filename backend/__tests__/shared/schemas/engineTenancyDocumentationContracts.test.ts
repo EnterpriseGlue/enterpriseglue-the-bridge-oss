@@ -239,7 +239,7 @@ describe('engine tenancy documentation contracts', () => {
     expect(reviewChecklist).toContain('authorization-matrix.json');
   });
 
-  it('documents the omission warning only on the external registration response', () => {
+  it('requires explicit tenancy for external registration without a compatibility warning', () => {
     const compatibilityGuide = readFileSync(
       resolve(repoRoot, 'docs/reference/engine-tenancy-compatibility-and-deprecation.md'),
       'utf8',
@@ -257,14 +257,11 @@ describe('engine tenancy documentation contracts', () => {
     const externalCreate = openApi.paths?.['/engines-api/external/engines']?.post;
 
     for (const document of [compatibilityGuide, upgradeGuide, releaseNotes]) {
-      expect(document).toContain('manual UI and');
-      expect(document).toContain('normal engine');
+      expect(document).toContain('explicit tenancy');
+      expect(document).toContain('rejected');
     }
-    expect(JSON.stringify(manualCreate?.responses?.[201])).not.toContain(
-      'ENGINE_TENANCY_DEFAULTED_TO_DEDICATED',
-    );
-    expect(JSON.stringify(externalCreate?.responses?.[201])).toContain(
-      'ENGINE_TENANCY_DEFAULTED_TO_DEDICATED',
-    );
+    expect(JSON.stringify(manualCreate?.responses?.[201])).not.toContain('ENGINE_TENANCY_DEFAULTED_TO_DEDICATED');
+    expect(JSON.stringify(externalCreate?.responses?.[201])).not.toContain('ENGINE_TENANCY_DEFAULTED_TO_DEDICATED');
+    expect(JSON.stringify(externalCreate?.requestBody)).toContain('tenancy');
   });
 });

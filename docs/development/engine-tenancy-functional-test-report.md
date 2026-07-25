@@ -164,7 +164,7 @@ The guarded apply:
 
 The browser journey then proved:
 
-- omitted tenancy creates a dedicated `tenant-default` engine in ready state;
+- external omission of tenancy is rejected before engine state is read or written;
 - shared plus `engine_wide` is rejected;
 - a shared resource-aware engine starts incomplete;
 - reconciliation without a mapping reports unmapped inventory and exposes

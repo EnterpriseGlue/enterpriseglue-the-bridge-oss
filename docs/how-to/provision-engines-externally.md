@@ -64,9 +64,6 @@ A successful OSS engine includes:
     "tenantId": "tenant-default",
     "tenantMappingStrategy": null,
     "tenantResolutionStatus": "ready"
-  },
-  "diagnostics": {
-    "tenancyWarnings": []
   }
 }
 ```
@@ -194,17 +191,9 @@ engine to another tenant, or change a shared mapping strategy. Those operations
 return HTTP 409 with `ENGINE_TENANCY_TRANSITION_REQUIRED`. Do not work around
 the error by deleting and recreating production inventory.
 
-If tenancy is omitted, the API treats the request as dedicated and returns:
-
-```text
-{
-  "diagnostics": {
-    "tenancyWarnings": ["ENGINE_TENANCY_DEFAULTED_TO_DEDICATED"]
-  }
-}
-```
-
-Update the integration to send explicit tenancy when this warning appears.
+Every external create and idempotent upsert must include `tenancy`. A missing
+declaration is rejected with HTTP 400 before EnterpriseGlue reads or writes the
+engine. Existing engines are not reclassified by this request-contract change.
 
 ## Rotate Credentials and Reconcile
 

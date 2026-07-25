@@ -321,12 +321,11 @@ read or mutation continues.
 
 ## Compatibility
 
-Omitted tenancy means dedicated request-context tenancy. In OSS, a missing
-request tenant becomes `tenant-default`. External responses include
-`ENGINE_TENANCY_DEFAULTED_TO_DEDICATED` in `diagnostics.tenancyWarnings`.
-Manual update omission preserves existing topology; external upsert omission
-reasserts the compatibility-dedicated contract and cannot overwrite a shared
-engine.
+Internal manual create compatibility may resolve omitted dedicated tenancy from
+the request context or the OSS default. External registration requires an
+explicit declaration: an omitted value is rejected with HTTP 400 before it can
+read or overwrite any engine. Manual update omission still preserves existing
+topology.
 
 ## Classification and Transition API
 
@@ -518,7 +517,8 @@ Errors are sanitized and do not reveal whether another tenant exists.
 - Shared: null engine `tenantId`, non-null mapping strategy, and only resolved
   runtime rows are tenant-visible.
 - Ordinary updates never mutate topology.
-- External omission is warned and audited.
+- External registration requires explicit tenancy and rejects omission before
+  persistence.
 - Mapping writes are atomic and version guarded.
 - Configuration mapping ownership is source-scoped; authoritative apply cannot
   retire another source's rows.

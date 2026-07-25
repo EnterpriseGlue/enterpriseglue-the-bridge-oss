@@ -120,15 +120,14 @@ actually used:
 Repeat with an active session after removing the assignment or mapping to prove
 immediate revocation.
 
-## Compatibility Window
+## Explicit External Tenancy
 
-Omitted tenancy continues to create a dedicated engine during the compatibility
-window. The external registration response emits
-`ENGINE_TENANCY_DEFAULTED_TO_DEDICATED`; manual UI and manual API creation
-return the normal engine representation, so make their tenancy explicit rather
-than waiting for a response warning. Treat a non-zero or rising fallback metric
-as unfinished client migration. The fallback applies only during provisioning;
-it cannot authorize a null engine or shared resource.
+The external registration API now requires explicit tenancy on every create and
+idempotent upsert. A missing declaration is rejected with HTTP 400 before an
+engine is read or written; it does not default to a dedicated engine and no
+longer returns a compatibility warning. Use an explicit dedicated declaration
+with a portable tenant reference, or an explicit shared declaration with
+`resource_aware`, a mapping strategy, and `unmappedPolicy = deny`.
 
 See
 [Engine Tenancy Compatibility and Deprecation](../reference/engine-tenancy-compatibility-and-deprecation.md)

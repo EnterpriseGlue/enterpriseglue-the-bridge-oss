@@ -1758,7 +1758,6 @@ test.describe('Engine tenancy provisioning journeys', () => {
       const created = await responseJson<{
         created: boolean;
         engine: Record<string, unknown>;
-        diagnostics: { tenancyWarnings: string[] };
       }>(createdResponse, 'externally create dedicated engine');
       engineId = String(created.engine.id);
       expect(created).toMatchObject({
@@ -1775,7 +1774,6 @@ test.describe('Engine tenancy provisioning journeys', () => {
             display: 'external',
           }),
         },
-        diagnostics: { tenancyWarnings: [] },
       });
 
       const idempotentRetryResponse = await externalApi.post(

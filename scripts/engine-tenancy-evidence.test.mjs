@@ -282,12 +282,13 @@ test('retains database-free cross-browser accessibility evidence', () => {
   assert.doesNotMatch(accessibilityWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 
-test('retains omission warnings until the documented removal window closes', () => {
+test('records the completed external-registration omission-warning removal', () => {
   assert.match(packageJson.scripts['test:engine-tenancy:compatibility-evidence'], /run-engine-tenancy-compatibility-evidence\.mjs/);
   assert.match(compatibilityRunner, /warningBehaviorTestsPassed: true/);
-  assert.match(compatibilityRunner, /warningBehavior: 'retained'/);
-  assert.match(compatibilityRunner, /removalProposed: false/);
-  assert.match(compatibilityRunner, /ENGINE_TENANCY_DEFAULTED_TO_DEDICATED/);
+  assert.match(compatibilityRunner, /warningBehavior: 'removed'/);
+  assert.match(compatibilityRunner, /removalProposed: true/);
+  assert.match(compatibilityRunner, /windowClosed: true/);
+  assert.doesNotMatch(compatibilityRunner, /ENGINE_TENANCY_DEFAULTED_TO_DEDICATED/);
   assert.match(compatibilityRunner, /test:engine-tenancy:engine-routes/);
   assert.match(compatibilityRunner, /Compatibility-window evidence must be run from a clean worktree/);
   assert.match(compatibilityRunner, /scripts\/local-safe-test\.env/);

@@ -166,11 +166,11 @@ results plus aggregate diagnostics.
 
 ## Provisioning and Resolution
 
-`TEN-RESOLVE-001`: omitting `tenancy` remains backward-compatible. Creation and
-external upsert interpret omission as dedicated request-context tenancy. The
-request tenant is normalized and persisted. An OSS request without a tenant
-context uses the canonical `tenant-default`; it never creates another ambiguous
-null-owned engine.
+`TEN-RESOLVE-001`: the internal manual-create compatibility path may resolve an
+omitted dedicated declaration from the request tenant or canonical OSS
+`tenant-default`. External registration never uses that fallback: it requires
+an explicit declaration and therefore never creates an ambiguous null-owned
+engine.
 
 `TEN-DEDICATED-001`: a successfully provisioned dedicated engine always has one
 tenant and `tenantResolutionStatus = ready`.
@@ -191,17 +191,16 @@ declared mapping strategy, mapping version zero, and
 engine is not ready merely because its connection works.
 
 `TEN-SHARED-002`: external registration uses the same explicit shared contract
-and returns an empty tenancy-warning list when `tenancy` is present.
+and its successful response contains no tenancy-warning diagnostics.
 
 `TEN-API-003`: ordinary manual updates and external upserts may repeat an
 equivalent declaration, but cannot change dedicated/shared topology, the
 dedicated tenant, or a shared mapping strategy. Such a request returns
 `ENGINE_TENANCY_TRANSITION_REQUIRED` with HTTP 409.
 
-`TEN-API-004`: an external request that omits `tenancy` receives the
-machine-readable warning `ENGINE_TENANCY_DEFAULTED_TO_DEDICATED` in
-`diagnostics.tenancyWarnings`. The same compatibility decision is attached to
-external registration audit details.
+`TEN-API-004`: an external request that omits `tenancy` is rejected with HTTP
+400 by the shared request schema before engine state is read or written. No
+compatibility warning or fallback audit branch remains.
 
 `TEN-API-005`: create, update, and external registration share the canonical
 `tenancy` schema and stable sanitized error schema in OpenAPI.

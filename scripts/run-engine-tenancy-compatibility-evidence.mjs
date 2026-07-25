@@ -81,7 +81,7 @@ const contractResult = spawnSync('pnpm', [
 });
 if (contractResult.error) throw contractResult.error;
 if ((contractResult.status ?? 1) !== 0) {
-  throw new Error('Engine-tenancy compatibility warning tests failed');
+  throw new Error('Engine-tenancy compatibility removal tests failed');
 }
 
 const endCommit = command('git', ['rev-parse', 'HEAD']);
@@ -99,20 +99,17 @@ const evidence = {
   sourceState: endChanges ? 'dirty-development-run' : 'clean',
   releaseCommitQualified: endChanges.length === 0,
   warningBehaviorTestsPassed: true,
-  warningBehavior: 'retained',
-  warningCode: 'ENGINE_TENANCY_DEFAULTED_TO_DEDICATED',
-  removalProposed: false,
-  windowClosed: false,
-  replacementDocumentationPublished: false,
+  warningBehavior: 'removed',
+  removalProposed: true,
+  windowClosed: true,
+  replacementDocumentationPublished: true,
   decision:
-    'Omitted tenancy remains a provisioning-only compatibility path. Removal requires the documented breaking-release and observation-window gates and is not part of this release.',
+    'The announced breaking-release cutover is complete: external engine registration requires an explicit tenancy declaration and never defaults a missing value.',
   verifiedBehavior: [
-    'manual omission resolves and persists a dedicated tenant',
-    'API-client omission resolves and persists the local default tenant',
-    'explicit declarations are not reported as compatibility-defaulted',
-    'shared topology never uses the omission fallback',
-    'HTTP responses expose only the stable warning code',
-    'OpenAPI documents the stable warning code',
+    'external API-client omission is rejected before registration state is read or written',
+    'explicit dedicated and shared declarations resolve through the authorized tenant reference path',
+    'idempotent external upserts preserve their explicit topology declaration',
+    'HTTP responses and OpenAPI no longer expose a compatibility warning',
   ],
   tests: [routeTestFile, ...contractTestFiles]
     .map((testFile) => ({ testFile: `backend/${testFile}`, status: 'passed' })),
@@ -132,4 +129,4 @@ const evidence = {
 
 mkdirSync(outputDirectory, { recursive: true });
 writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
-console.log(`[engine-tenancy-compatibility] retained warning behavior: ${path.relative(root, outputPath)}`);
+console.log(`[engine-tenancy-compatibility] explicit-tenancy cutover evidence: ${path.relative(root, outputPath)}`);

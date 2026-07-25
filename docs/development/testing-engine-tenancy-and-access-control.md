@@ -60,9 +60,9 @@ Independent engineering, security, and operator review is a release-governance
 gate, not an automated functional cell. Release policy may designate a human
 reviewer or a delegated automated review agent; retained evidence records that
 mode and keeps it distinct from feature implementation. The temporary
-omission-warning compatibility path is a passing retained-warning gate until
-its published window closes; its future removal is not counted as present
-functionality.
+external omission-warning path has been removed. The compatibility gate proves
+that external registration rejects missing tenancy before state access and that
+the OpenAPI response no longer advertises a warning.
 
 ## Required Release-Candidate Evidence
 
@@ -338,9 +338,9 @@ The detailed artifacts are fail-closed as well:
   three approvals. Every approval must name the exact commit, reviewer,
   reviewer mode, ISO timestamp, and an existing sanitized Markdown record under
   `test/results/engine-tenancy-review/`; and
-- `compatibility-window.json` must prove warning behavior is tested and either
-  remains retained with no removal proposed, or was removed only after the
-  window closed and replacement documentation shipped.
+- `compatibility-window.json` must prove that missing external tenancy is
+  rejected and that the removed warning is absent from HTTP and OpenAPI
+  contracts.
 
 Generate the retained-warning compatibility artifact with:
 
@@ -348,12 +348,10 @@ Generate the retained-warning compatibility artifact with:
 pnpm run test:engine-tenancy:compatibility-evidence
 ```
 
-This is an executable contract for engine-provisioning omission behavior, not
-a claim about deployed SSO providers or customer adoption. It reruns the
-provisioning, HTTP response, and OpenAPI warning tests under the local-safe
-environment. The artifact passes while the warning is retained and
-`removalProposed` is false; removing the fallback requires the separately
-documented breaking-release and observation-window evidence.
+This is an executable contract for the completed external-registration
+cutover, not a claim about deployed SSO providers or customer adoption. It
+reruns the provisioning, HTTP rejection, and OpenAPI contract tests under the
+local-safe environment.
 
 Generate the automated documentation evidence with:
 

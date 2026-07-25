@@ -145,7 +145,7 @@ describe('EngineSchema', () => {
     })).toMatchObject({ type: 'ion', connectionMode: 'direct' });
     expect(ExternalEngineRegistrationRequestSchema.parse({
       name: 'External', baseUrl: 'https://external.example.test/engine-rest', externalId: 'external-1',
-      connectionMode: 'customer_sidecar',
+      connectionMode: 'customer_sidecar', tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
     }).connectionMode).toBe('customer_sidecar');
     expect(ConfigEngineSchema.parse({
       key: 'engine.config', name: 'Config', type: 'operaton', baseUrl: 'https://config.example.test/engine-rest',
@@ -156,7 +156,10 @@ describe('EngineSchema', () => {
       name: 'Invalid', baseUrl: 'https://invalid.example.test', connectionMode: 'engine_proxy',
     }).success).toBe(false);
     expect(ExternalEngineRegistrationRequestSchema.safeParse({
-      name: 'Invalid', baseUrl: 'https://invalid.example.test', externalId: 'external-2', connectionMode: 'engine_proxy',
+      name: 'Invalid', baseUrl: 'https://invalid.example.test', externalId: 'external-2', connectionMode: 'engine_proxy', tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+    }).success).toBe(false);
+    expect(ExternalEngineRegistrationRequestSchema.safeParse({
+      name: 'Missing tenancy', baseUrl: 'https://missing-tenancy.example.test', externalId: 'external-3',
     }).success).toBe(false);
   });
 

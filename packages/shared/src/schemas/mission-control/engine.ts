@@ -345,6 +345,11 @@ export const CreateEngineRequestSchema = EngineRegistrationFieldsSchema.extend({
 });
 export const UpdateEngineRequestSchema = EngineRegistrationFieldsSchema.partial();
 export const ExternalEngineRegistrationRequestSchema = EngineRegistrationFieldsSchema.extend({
+  /**
+   * External registration is a cross-system contract. Require an explicit
+   * topology declaration rather than inheriting a request/default tenant.
+   */
+  tenancy: EngineTenancyConfigurationSchema,
   type: EngineTypeSchema.default('ion'),
   connectionMode: EngineConnectionModeSchema.default('direct'),
   externalId: z.string().min(1).max(255),
