@@ -1,17 +1,24 @@
 # Enable a Mirrored Camunda 7 or Operaton Authorization Backstop
 
 `mirrored_engine_backstop` adds a narrow, native Camunda-compatible protection
-layer for intentional direct Camunda 7 or Operaton access. EnterpriseGlue remains the permission
-editor and the final authorization decision point for EnterpriseGlue routes.
+layer for intentional Camunda 7 or Operaton access. The compatible engine can
+be registered directly or through a customer-owned sidecar. EnterpriseGlue
+remains the permission editor and the final authorization decision point for
+EnterpriseGlue routes.
 
-Use this only when direct engine users are already authenticated by the engine
+Use this only when native engine users are already authenticated by the engine
 or its identity provider and their native group memberships are meaningful.
-EnterpriseGlue does not create those native users or memberships.
+EnterpriseGlue does not create those native users or memberships. For a
+customer-sidecar engine, the sidecar owner independently authenticates its
+downstream engine hop; EnterpriseGlue never receives that downstream
+credential.
 
 ## Prerequisites
 
-- The engine is an active, direct-connection Camunda 7 or Operaton engine. Customer-sidecar
-  engines are intentionally excluded in this release.
+- The engine is an active Camunda 7 or Operaton engine registered with either
+  `connectionMode: "direct"` or `connectionMode: "customer_sidecar"`. Before
+  using a sidecar engine, complete the
+  [customer-sidecar readiness runbook](./customer-sidecar-readiness-runbook.md).
 - In a configuration bundle, the referenced engine's `type` is exactly
   `camunda7` or `operaton`; other engine types fail preview before any secret is
   resolved or mapping is written.
@@ -27,8 +34,9 @@ EnterpriseGlue does not create those native users or memberships.
 
 ## Workflow
 
-1. Create an opaque group mapping. In Mission Control, open the active direct
-   Camunda 7 or Operaton engine, then use **Native authorization backstop** to enter the
+1. Create an opaque group mapping. In Mission Control, open the active
+   Camunda 7 or Operaton engine (direct or customer-sidecar connected), then use
+   **Native authorization backstop** to enter the
    EnterpriseGlue group ID and the write-only native engine group ID. The panel shows
    only an opaque native-group reference afterwards, provides the hash-bound
    preview/apply/rollback/drift workflow, and hides or disables each operation

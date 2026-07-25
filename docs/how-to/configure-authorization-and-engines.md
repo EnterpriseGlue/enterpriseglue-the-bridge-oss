@@ -87,14 +87,17 @@ enterpriseglue-config/
 
 Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database.
 
-For a direct Camunda 7 or Operaton defense-in-depth mapping, add
+For a direct or customer-sidecar Camunda 7 or Operaton defense-in-depth mapping, add
 `engine-backstop-mappings.json`. Each entry references a configured compatible
 engine and configured EnterpriseGlue group and uses `nativeGroupIdRef` such as
 `env://CAMUNDA_OPERATORS_GROUP`. The group id is resolved only while applying
 the reviewed bundle, is encrypted at rest, and is never present in bundle
 exports, generic audit history, or normal mapping reads. See
 [Enable a Mirrored Camunda 7 or Operaton Authorization Backstop](./enable-mirrored-engine-backstop.md)
-for the sync, drift-check, and rollback workflow.
+for the sync, drift-check, and rollback workflow. A customer-sidecar engine
+owns its downstream engine credential; complete the
+[customer-sidecar readiness runbook](./customer-sidecar-readiness-runbook.md)
+before enabling its backstop.
 
 ### CI/CD
 

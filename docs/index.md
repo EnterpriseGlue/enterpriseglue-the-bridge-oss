@@ -25,6 +25,8 @@ Audience: Developers and architects.
 - [Configuration Matrix](reference/configuration-matrix.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
+- [Enable Mirrored Camunda 7 or Operaton Authorization Backstop](how-to/enable-mirrored-engine-backstop.md)
+- [Customer Sidecar Readiness Runbook](how-to/customer-sidecar-readiness-runbook.md)
 - [Configure Dedicated and Shared Engine Tenancy](how-to/configure-engine-tenancy.md)
 - [Diagnose Engine Tenant Resolution](how-to/diagnose-engine-tenant-resolution.md)
 - [Migrate Existing Engines to Explicit Tenancy](how-to/migrate-existing-engines-to-explicit-tenancy.md)
@@ -40,6 +42,10 @@ Audience: Developers and architects.
 - [Camunda 7 Native Grant Migration Plan](architecture/13-camunda-7-native-grant-migration-plan.md)
 - [ADR 0001: Limit Default Tenant Fallback to Provisioning](architecture/decisions/0001-default-tenant-provisioning-fallback.md)
 - [ADR 0002: Fail Closed for Shared-Engine Tenant Resolution](architecture/decisions/0002-shared-engine-fail-closed-resolution.md)
+
+## Development and Verification
+- [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)
+- [Customer Sidecar Backstop Test Report](development/customer-sidecar-backstop-test-report.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
