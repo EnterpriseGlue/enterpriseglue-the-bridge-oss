@@ -128,7 +128,12 @@ test.describe('Camunda native-grant migration browser workflow', () => {
         await mockControl.get('/__e2e/requests'),
         'read native-grant mock request ledger',
       );
-      expect(ledger.requests).toEqual([expect.objectContaining({ request: 'GET /engine-rest/authorization' })]);
+      expect(ledger.requests).toEqual(expect.arrayContaining([
+        expect.objectContaining({ request: 'GET /engine-rest/authorization' }),
+      ]));
+      // Health/version probes can race the panel open, but the inventory path
+      // itself may never write to Camunda.
+      expect(ledger.requests.every(({ request }) => request.startsWith('GET '))).toBe(true);
 
       await modal.getByRole('button', { name: 'Map proposed groups' }).click();
       await expect(modal.getByLabel(/EnterpriseGlue group key for synthetic-operations/i)).toBeVisible();
