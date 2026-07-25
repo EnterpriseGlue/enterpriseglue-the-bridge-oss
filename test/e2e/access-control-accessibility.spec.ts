@@ -10,6 +10,12 @@ const permission = {
   kind: 'system',
 };
 
+// The isolated Linux WebKit container can finish hydrating this route after
+// Playwright's default 10-second assertion window, even once navigation has
+// completed. Keep the readiness assertion explicit so every browser validates
+// the same rendered interface instead of intermittently racing hydration.
+const accessControlReadyTimeoutMs = 30_000;
+
 async function openPermissions(page: Page, failPermissions = false): Promise<void> {
   const identityStack = new MockBrowserIdentityStack();
   await identityStack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
@@ -19,7 +25,9 @@ async function openPermissions(page: Page, failPermissions = false): Promise<voi
     body: JSON.stringify(failPermissions ? { error: 'Permission catalog unavailable' } : [permission]),
   }));
   await page.goto('/admin/access-control');
-  await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Access Control' })).toBeVisible({
+    timeout: accessControlReadyTimeoutMs,
+  });
   await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
 }
 
