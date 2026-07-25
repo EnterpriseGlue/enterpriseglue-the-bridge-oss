@@ -8,6 +8,7 @@ import { AppBaseEntity } from './BaseEntity.js';
  */
 @Entity({ name: 'engine_backstop_group_mappings', schema: 'main' })
 @Unique('uq_engine_backstop_group_mapping_group', ['engineId', 'authzGroupId'])
+@Unique('uq_engine_backstop_group_mapping_native_group', ['engineId', 'nativeGroupReference'])
 @Unique('uq_engine_backstop_group_mapping_source', ['engineId', 'source', 'sourceRef'])
 @Index('idx_engine_backstop_group_mapping_engine_active', ['engineId', 'isActive'])
 @Index('idx_engine_backstop_group_mapping_tenant', ['tenantId'])

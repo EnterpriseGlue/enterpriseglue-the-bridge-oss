@@ -54,6 +54,8 @@ export * from './RuntimeResourceInventoryService.js';
 export * from './CamundaNativeGrantInventoryService.js';
 export * from './CamundaNativeGrantImportRunService.js';
 export * from './CamundaNativeGrantDraftService.js';
+export * from './EngineBackstopProjectionService.js';
+export * from './EngineBackstopGroupMappingService.js';
 export * from './RuntimeResourceSetService.js';
 export * from './EngineMetadataReconciliationService.js';
 export * from './EngineTenancyProvisioningService.js';

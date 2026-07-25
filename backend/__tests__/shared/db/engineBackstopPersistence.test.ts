@@ -24,7 +24,7 @@ describe('mirrored engine backstop persistence', () => {
     ]));
     const mappingUniques = getMetadataArgsStorage().uniques.filter((candidate) => candidate.target === EngineBackstopGroupMapping);
     expect(mappingUniques.map((unique) => unique.columns)).toEqual(expect.arrayContaining([
-      ['engineId', 'authzGroupId'], ['engineId', 'source', 'sourceRef'],
+      ['engineId', 'authzGroupId'], ['engineId', 'nativeGroupReference'], ['engineId', 'source', 'sourceRef'],
     ]));
   });
 
@@ -39,6 +39,7 @@ describe('mirrored engine backstop persistence', () => {
     ]);
     expect(tables[0].uniques).toEqual(expect.arrayContaining([
       expect.objectContaining({ columnNames: ['engine_id', 'authz_group_id'] }),
+      expect.objectContaining({ columnNames: ['engine_id', 'native_group_reference'] }),
     ]));
     expect(tables[1].indices).toEqual(expect.arrayContaining([
       expect.objectContaining({ columnNames: ['engine_id', 'created_at'] }),

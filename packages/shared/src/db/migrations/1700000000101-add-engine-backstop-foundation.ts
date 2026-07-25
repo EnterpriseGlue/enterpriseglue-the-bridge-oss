@@ -66,6 +66,7 @@ export class AddEngineBackstopFoundation1700000000101 implements MigrationInterf
       ],
       uniques: [
         new TableUnique({ name: 'uq_engine_backstop_group_mapping_group', columnNames: ['engine_id', 'authz_group_id'] }),
+        new TableUnique({ name: 'uq_engine_backstop_group_mapping_native_group', columnNames: ['engine_id', 'native_group_reference'] }),
         new TableUnique({ name: 'uq_engine_backstop_group_mapping_source', columnNames: ['engine_id', 'source', 'source_ref'] }),
       ],
       indices: [

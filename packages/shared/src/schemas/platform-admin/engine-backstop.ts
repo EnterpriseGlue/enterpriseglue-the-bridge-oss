@@ -26,6 +26,38 @@ export const EngineBackstopGroupMappingInputSchema = z.object({
   isActive: z.boolean(),
 }).strict();
 
+export const EngineBackstopNativeGroupReferenceSchema = z.string().regex(/^camunda-group-[a-f0-9]{24}$/);
+
+/** Safe mapping view: the Camunda group ID is intentionally absent. */
+export const EngineBackstopGroupMappingSummarySchema = z.object({
+  id: z.string().min(1).max(255),
+  tenantId: z.string().min(1).max(255).nullable(),
+  engineId: z.string().min(1).max(255),
+  authzGroupId: z.string().min(1).max(255),
+  nativeGroupReference: EngineBackstopNativeGroupReferenceSchema,
+  source: z.enum(['manual', 'config']),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  isActive: z.boolean(),
+  createdById: z.string().min(1).max(255).nullable(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+}).strict();
+
+/** Native group values are write-only through the public mapping contract. */
+export const EngineBackstopGroupMappingWriteSchema = z.object({
+  authzGroupId: z.string().min(1).max(255),
+  nativeGroupId: z.string().min(1).max(255),
+  isActive: z.boolean().default(true),
+}).strict();
+
+export const EngineBackstopGroupMappingWriteRequestSchema = z.object({
+  mappings: z.array(EngineBackstopGroupMappingWriteSchema).min(1).max(1_000),
+}).strict();
+
+export const EngineBackstopGroupMappingWriteResponseSchema = z.object({
+  mappings: z.array(EngineBackstopGroupMappingSummarySchema).max(1_000),
+}).strict();
+
 /** A fully resolved assignment candidate supplied by the persistence adapter. */
 export const EngineBackstopProjectionCandidateSchema = z.object({
   sourceAssignmentId: z.string().min(1).max(255),
@@ -82,6 +114,10 @@ export const EngineBackstopProjectionSchema = z.object({
 }).strict();
 
 export type EngineBackstopGroupMappingInput = z.infer<typeof EngineBackstopGroupMappingInputSchema>;
+export type EngineBackstopGroupMappingSummary = z.infer<typeof EngineBackstopGroupMappingSummarySchema>;
+export type EngineBackstopGroupMappingWrite = z.infer<typeof EngineBackstopGroupMappingWriteSchema>;
+export type EngineBackstopGroupMappingWriteRequest = z.infer<typeof EngineBackstopGroupMappingWriteRequestSchema>;
+export type EngineBackstopGroupMappingWriteResponse = z.infer<typeof EngineBackstopGroupMappingWriteResponseSchema>;
 export type EngineBackstopProjectionCandidate = z.infer<typeof EngineBackstopProjectionCandidateSchema>;
 export type EngineBackstopProjectionContext = z.infer<typeof EngineBackstopProjectionContextSchema>;
 export type EngineBackstopClassification = z.infer<typeof EngineBackstopClassificationSchema>;
