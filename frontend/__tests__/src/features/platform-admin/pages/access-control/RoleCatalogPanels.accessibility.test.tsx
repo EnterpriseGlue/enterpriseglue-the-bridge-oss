@@ -6,6 +6,26 @@ import {
 } from '@src/features/platform-admin/pages/access-control/RoleCatalogPanels';
 
 describe('role catalog error announcements', () => {
+  it('keeps the scope filter accessible without a toolbar label row', () => {
+    render(
+      <RoleCatalogPanel
+        roles={[]}
+        loading={false}
+        failed={false}
+        onCreate={vi.fn()}
+        onEdit={vi.fn()}
+        onDuplicate={vi.fn()}
+        onArchive={vi.fn()}
+        canManage={false}
+        filterRoles={(roles) => roles}
+      />,
+    );
+
+    const scopeFilter = screen.getByRole('combobox', { name: 'Filter roles by scope' });
+    expect(scopeFilter).toBeInTheDocument();
+    expect(scopeFilter.closest('.cds--dropdown__wrapper')?.querySelector('label')).toBeNull();
+  });
+
   it('announces role and permission load failures assertively', () => {
     const { rerender } = render(
       <RoleCatalogPanel

@@ -88,7 +88,8 @@ export function RolesTable({
                 <TableToolbarSearch persistent onChange={(event: any) => setSearchQuery(event.target.value)} value={searchQuery} placeholder="Search roles" />
                 <Dropdown
                   id="roles-scope-filter"
-                  titleText="Scope"
+                  titleText=""
+                  aria-label="Filter roles by scope"
                   label="Scope"
                   items={ROLE_SCOPE_FILTERS}
                   selectedItem={selectedScopeFilter}
