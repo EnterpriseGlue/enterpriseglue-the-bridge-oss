@@ -30,7 +30,10 @@ async function startScopedMapping(page: Page, suffix: string): Promise<void> {
   await page.getByRole('button', { name: 'Create a new group', exact: true }).click();
   await page.getByLabel('New EnterpriseGlue group name').fill(`Scope coverage ${slug}`);
   await page.getByLabel('New group key').fill(`group.scope-coverage-${slug}`);
-  await page.getByRole('button', { name: 'Add engine access with this mapping', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Engine access', exact: true })).toBeVisible();
+  await expect(page.getByText('Optional. Grant this group scoped engine access now, or create the mapping first and grant access later.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add engine access', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Skip engine access for now', exact: true })).toBeVisible();
   await page.locator('#identity-mapping-provision-role').click();
   await page.getByRole('option', { name: engineRole.name, exact: true }).click();
 }
