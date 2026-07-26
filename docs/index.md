@@ -47,6 +47,7 @@ Audience: Developers and architects.
 ## Development and Verification
 - [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)
 - [Customer Sidecar Backstop Test Report](development/customer-sidecar-backstop-test-report.md)
+- [Identity Protocol Rehearsal and LDAP Test Harness](how-to/ldap-protocol-test-harness.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)

@@ -52,7 +52,7 @@ The complete functional denominator is explicit:
 | Database upgrade-baseline observations | 10/10 |
 | Database logical-schema equivalence | 1 fingerprint |
 | Functional browser executions | 27/27 |
-| Browser accessibility executions | 12/12 |
+| Browser accessibility executions | 27/27 |
 | Targeted security mutants | 9/9 |
 | Declared critical source modules | 100% statements, branches, functions, and lines per file |
 
@@ -80,11 +80,12 @@ service accounts.
 `TEN-UI-005` proves that an already authenticated browser session observes
 assignment and group-membership revocation immediately in the active tab, a
 stale second tab, a direct URL, a refreshed session, and a page restored
-through browser history. The guarded local matrix runs nine tests in each of
-Chromium, Firefox, and WebKit and writes `browser-matrix.json` only after all
-27 executions pass. The separate database-free accessibility runner executes
-error announcements, contrast, 200% zoom/reflow, and reduced motion in all
-three browsers and retains 12 passing executions in
+through browser history. The guarded local matrix runs twelve tests in each of
+Chromium, Firefox, and WebKit, including variable metadata redaction, value
+disclosure, and edit round-trips, and writes `browser-matrix.json` only after
+all 36 executions pass. The separate database-free accessibility runner
+executes four Access Control plus five Identity Provider/Mapping workflows in
+all three browsers and retains 27 passing executions in
 `browser-accessibility.json`.
 
 `TEN-DOCS-007` writes the validated manifest as sanitized, retained evidence.
@@ -696,13 +697,27 @@ same local frontend with:
 pnpm run test:authz:accessibility:cross-browser
 ```
 
-It executes four Access Control workflows in Chromium, Firefox, and WebKit:
-assertive error announcements, WCAG AA contrast on primary controls, 200%
-zoom/reflow without page-level horizontal scrolling, and a complete permission
-workflow under `prefers-reduced-motion: reduce`. The runner sets
-`E2E_SEED_USER=false`, so global setup and teardown cannot open a database
-connection. It writes `browser-accessibility.json` only after all 12 executions
-pass.
+It executes four Access Control workflows plus five Identity Provider/Identity
+Mapping workflows in Chromium, Firefox, and WebKit. The matrix covers assertive
+error announcements, WCAG AA contrast on primary controls, 200% zoom/reflow,
+reduced motion, keyboard-only identity-tab selection, and config-lock/config-
+warning mutation behavior. The runner sets `E2E_SEED_USER=false`, so global
+setup and teardown cannot open a database connection. It writes
+`browser-accessibility.json` only after all 27 executions pass.
+
+The cross-browser enforcement smoke also includes
+`variable-access-control-local.spec.ts`. In every browser it proves that the
+backend redacts variable values before they reach Mission Control, permits
+value reading only with the corresponding permission, and permits an edit only
+when the editor permission is present and the engine returns the next value.
+This is a real browser-to-backend-to-Camunda-mock flow, not a frontend-only
+visibility assertion.
+
+The scheduled adapter/backstop job runs the existing Camunda 7 and Operaton
+native-authorization/sidecar suites through `pnpm run test:authz:adapter-backstop`.
+The broader local command `pnpm run test:authz:extended-matrix` combines the
+authorization state-space, custom-role matrix, variable boundary tests, and
+both adapter paths when a full Docker-enabled matrix is needed before release.
 
 On macOS, this matrix uses the same Firefox/WebKit container fallback as the
 seeded authorization smoke. It retains the `E2E_SEED_USER=false` guarantee:

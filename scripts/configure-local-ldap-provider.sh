@@ -6,6 +6,8 @@ ca_file="${LOCAL_LDAP_APP_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
 provider_key="${LOCAL_LDAP_PROVIDER_KEY:-local-openldap}"
 directory_host="${LOCAL_LDAP_DIRECTORY_HOST:-host.docker.internal}"
 secret_dir="${LOCAL_LDAP_SECRET_DIR:-.local/docker/identity-secrets}"
+secret_dir_mode="${LOCAL_LDAP_SECRET_DIRECTORY_MODE:-700}"
+secret_file_mode="${LOCAL_LDAP_SECRET_FILE_MODE:-600}"
 container_secret_root="${LOCAL_LDAP_CONTAINER_SECRET_ROOT:-/etc/enterpriseglue/local-identity-secrets}"
 admin_email="${LOCAL_LDAP_ADMIN_EMAIL:-}"
 admin_password="${LOCAL_LDAP_ADMIN_PASSWORD:-}"
@@ -67,6 +69,11 @@ if [[ ! -f "$ca_file" || -z "${EG_LDAP_TEST_CA_CERT_PATH:-}" || ! -f "$EG_LDAP_T
   exit 2
 fi
 
+if [[ ! "$secret_dir_mode" =~ ^(700|750|755)$ ]] || [[ ! "$secret_file_mode" =~ ^(600|640|644)$ ]]; then
+  echo 'LOCAL_LDAP_SECRET_DIRECTORY_MODE must be 700, 750, or 755 and LOCAL_LDAP_SECRET_FILE_MODE must be 600, 640, or 644.' >&2
+  exit 2
+fi
+
 ldap_port="$(node --input-type=module - "$EG_LDAP_TEST_URL" <<'NODE'
 const url = new URL(process.argv[2]);
 if (url.protocol !== 'ldaps:' || !url.port) process.exit(1);
@@ -75,11 +82,11 @@ NODE
 )"
 
 mkdir -p "$secret_dir"
-chmod 700 "$secret_dir"
+chmod "$secret_dir_mode" "$secret_dir"
 cp "$EG_LDAP_TEST_CA_CERT_PATH" "$secret_dir/local-openldap-ca.crt"
-chmod 600 "$secret_dir/local-openldap-ca.crt"
+chmod "$secret_file_mode" "$secret_dir/local-openldap-ca.crt"
 printf '%s' "$EG_LDAP_TEST_ADMIN_PASSWORD" > "$secret_dir/local-openldap-bind-password"
-chmod 600 "$secret_dir/local-openldap-bind-password"
+chmod "$secret_file_mode" "$secret_dir/local-openldap-bind-password"
 
 curl_args=(--fail --silent --show-error --max-time 15 --cacert "$ca_file")
 login_payload="$(jq -nc --arg email "$admin_email" --arg password "$admin_password" '{email:$email,password:$password}')"

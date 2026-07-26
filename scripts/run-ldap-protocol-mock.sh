@@ -12,6 +12,12 @@ project="enterpriseglue-ldap-$RANDOM-$RANDOM"
 domain="identity-mock.test"
 base_dn="dc=identity-mock,dc=test"
 bind_dn="cn=admin,$base_dn"
+ready_timeout_seconds="${EG_LDAP_TEST_READY_TIMEOUT_SECONDS:-90}"
+
+if ! [[ "$ready_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo 'EG_LDAP_TEST_READY_TIMEOUT_SECONDS must be a positive whole number.' >&2
+  exit 2
+fi
 
 random_secret() {
   node -e "process.stdout.write(require('node:crypto').randomBytes(24).toString('base64url'))"
@@ -42,7 +48,7 @@ if ! docker compose -p "$project" -f "$compose_file" up --detach --wait; then
   exit 1
 fi
 
-for _attempt in $(seq 1 30); do
+for _attempt in $(seq 1 "$ready_timeout_seconds"); do
   if docker compose -p "$project" -f "$compose_file" exec -T openldap \
     env LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://localhost -b '' -s base >/dev/null 2>&1; then
     break
@@ -51,7 +57,7 @@ for _attempt in $(seq 1 30); do
 done
 if ! docker compose -p "$project" -f "$compose_file" exec -T openldap \
   env LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://localhost -b '' -s base >/dev/null; then
-  echo 'LDAP test harness did not expose LDAPS before the timeout.' >&2
+  echo "LDAP test harness did not expose LDAPS within ${ready_timeout_seconds} seconds." >&2
   docker compose -p "$project" -f "$compose_file" logs --no-color >&2 || true
   exit 1
 fi

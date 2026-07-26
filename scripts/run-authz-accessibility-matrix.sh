@@ -2,7 +2,16 @@
 set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-test_file="${1:-test/e2e/access-control-accessibility.spec.ts}"
+if [[ "$#" -gt 0 ]]; then
+  test_files=("$@")
+else
+  # Identity-provider and mapping administration is just as security-sensitive
+  # as Access Control, so retain both surfaces in the release accessibility lane.
+  test_files=(
+    test/e2e/access-control-accessibility.spec.ts
+    test/e2e/identity-administration-accessibility.spec.ts
+  )
+fi
 
 run_container_browser() {
   local browser="$1"
@@ -14,7 +23,7 @@ run_firefox() {
   local execution="${PLAYWRIGHT_FIREFOX_EXECUTION:-auto}"
   case "$execution" in
     native)
-      PLAYWRIGHT_BROWSERS=firefox PLAYWRIGHT_WORKERS=1 E2E_SEED_USER=false pnpm exec playwright test "$test_file" --config test/e2e/playwright.config.ts
+      PLAYWRIGHT_BROWSERS=firefox PLAYWRIGHT_WORKERS=1 E2E_SEED_USER=false pnpm exec playwright test "${test_files[@]}" --config test/e2e/playwright.config.ts
       ;;
     container)
       run_container_browser firefox
@@ -24,7 +33,7 @@ run_firefox() {
         echo "[authz-accessibility] Using the pinned Linux Playwright container for Firefox on macOS."
         run_container_browser firefox
       else
-        PLAYWRIGHT_BROWSERS=firefox PLAYWRIGHT_WORKERS=1 E2E_SEED_USER=false pnpm exec playwright test "$test_file" --config test/e2e/playwright.config.ts
+        PLAYWRIGHT_BROWSERS=firefox PLAYWRIGHT_WORKERS=1 E2E_SEED_USER=false pnpm exec playwright test "${test_files[@]}" --config test/e2e/playwright.config.ts
       fi
       ;;
     *)
@@ -44,7 +53,7 @@ run_webkit() {
         echo "[authz-accessibility] WebKit requires the local TLS CA at $ca_file." >&2
         exit 2
       fi
-      PLAYWRIGHT_BROWSERS=webkit PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_BASE_URL="$base_url" PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" E2E_SEED_USER=false pnpm exec playwright test "$test_file" --config test/e2e/playwright.config.ts
+      PLAYWRIGHT_BROWSERS=webkit PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_BASE_URL="$base_url" PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" E2E_SEED_USER=false pnpm exec playwright test "${test_files[@]}" --config test/e2e/playwright.config.ts
       ;;
     container)
       run_container_browser webkit
@@ -58,7 +67,7 @@ run_webkit() {
           echo "[authz-accessibility] WebKit requires the local TLS CA at $ca_file." >&2
           exit 2
         fi
-        PLAYWRIGHT_BROWSERS=webkit PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_BASE_URL="$base_url" PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" E2E_SEED_USER=false pnpm exec playwright test "$test_file" --config test/e2e/playwright.config.ts
+        PLAYWRIGHT_BROWSERS=webkit PLAYWRIGHT_WORKERS=1 PLAYWRIGHT_BASE_URL="$base_url" PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" E2E_SEED_USER=false pnpm exec playwright test "${test_files[@]}" --config test/e2e/playwright.config.ts
       fi
       ;;
     *)
@@ -69,13 +78,13 @@ run_webkit() {
 }
 
 for browser in chromium; do
-  echo "[authz-accessibility] Running Access Control accessibility checks in ${browser}"
-  PLAYWRIGHT_BROWSERS="$browser" PLAYWRIGHT_WORKERS=1 E2E_SEED_USER=false pnpm exec playwright test "$test_file" --config test/e2e/playwright.config.ts
+  echo "[authz-accessibility] Running Access Control and Identity Administration accessibility checks in ${browser}"
+  PLAYWRIGHT_BROWSERS="$browser" PLAYWRIGHT_WORKERS=1 E2E_SEED_USER=false pnpm exec playwright test "${test_files[@]}" --config test/e2e/playwright.config.ts
 done
 
-echo "[authz-accessibility] Running Access Control accessibility checks in firefox"
+echo "[authz-accessibility] Running Access Control and Identity Administration accessibility checks in firefox"
 run_firefox
-echo "[authz-accessibility] Running Access Control accessibility checks in webkit"
+echo "[authz-accessibility] Running Access Control and Identity Administration accessibility checks in webkit"
 run_webkit
 
 node "$repo_root/scripts/write-authz-accessibility-evidence.mjs"

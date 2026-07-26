@@ -8,7 +8,9 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-local-keycloak-admin}
       KC_HEALTH_ENABLED: "true"
     volumes:
-      - ./infra/docker/keycloak/enterpriseglue-local-realm.json:/opt/keycloak/data/import/enterpriseglue-local-realm.json:ro
+      # CI protocol rehearsals generate a copy with their disposable dynamic
+      # localhost origin. Developer stacks keep using the checked-in fixture.
+      - ${KEYCLOAK_REALM_IMPORT_FILE:-./infra/docker/keycloak/enterpriseglue-local-realm.json}:/opt/keycloak/data/import/enterpriseglue-local-realm.json:ro
     ports:
       - "${KEYCLOAK_HOST_PORT:-8180}:8080"
     healthcheck:

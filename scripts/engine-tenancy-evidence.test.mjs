@@ -68,7 +68,7 @@ test('writes sanitized commit, schema, target, waiver, and requirement traceabil
 });
 
 test('keeps transient Playwright output separate from retained release evidence', () => {
-  assert.match(playwrightConfig, /outputDir: '\.\.\/results\/playwright'/);
+  assert.match(playwrightConfig, /outputDir: process\.env\.PLAYWRIGHT_OUTPUT_DIR \|\| '\.\.\/results\/playwright'/);
   assert.match(browserWriter, /test\/results\/playwright\/\.last-run\.json/);
   assert.ok(
     localRunner.indexOf('write-engine-tenancy-local-evidence.mjs')
@@ -268,6 +268,7 @@ test('retains database-free cross-browser accessibility evidence', () => {
   }
   assert.match(accessibilityRunner, /E2E_SEED_USER=false/);
   assert.match(accessibilityRunner, /access-control-accessibility\.spec\.ts/);
+  assert.match(accessibilityRunner, /identity-administration-accessibility\.spec\.ts/);
   for (const check of [
     'error_announcement',
     'contrast',
@@ -279,6 +280,8 @@ test('retains database-free cross-browser accessibility evidence', () => {
   assert.match(accessibilityWriter, /workflowCount/);
   assert.match(accessibilityWriter, /passedWorkflowCount/);
   assert.match(accessibilityWriter, /missingChecks: 0/);
+  assert.match(accessibilityWriter, /keyboard_tab_selection_and_error_announcement/);
+  assert.match(accessibilityWriter, /configuration_lock_mutation_protection/);
   assert.doesNotMatch(accessibilityWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 

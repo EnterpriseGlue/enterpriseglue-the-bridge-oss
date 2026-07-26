@@ -365,7 +365,9 @@ Run the retained three-browser matrix with:
 pnpm run test:authz:local-smoke:cross-browser
 ```
 
-It writes `browser-matrix.json` only after all 27 executions pass.
+It writes `browser-matrix.json` only after all 36 executions pass (twelve
+tests in each browser, including variable metadata redaction, value
+disclosure, and permitted edit round-trips).
 
 Run the disposable five-database qualification from a clean commit with:
 

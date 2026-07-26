@@ -16,6 +16,7 @@ automation that already use them.
 | `pnpm run test:authz:browser` | Access Control responsive permission-catalog layout at tablet width | local frontend and Playwright Chromium |
 | `pnpm run test:identity:ldap` | real LDAPS bind, search, TLS, and nested-group flow | Docker |
 | `pnpm run test:identity:verify` | complete local identity verification, including browser lifecycle and LDAPS | local frontend, Playwright Chromium, and Docker |
+| `pnpm run test:identity:protocol-rehearsal` | disposable Docker deployment plus real OIDC provider/mapping authorization, signed SAML callback, and LDAPS browser sign-in | Docker, local TLS, and Playwright Chromium |
 
 Run `test:identity:local` during ordinary development. It is fully in-process
 and does not read or write a database. Add `test:identity:browser` when a
@@ -35,6 +36,33 @@ broader `test:authz-refactor` lane keeps its compatibility-oriented CI scope
 and includes the protocol-mock lane, but deliberately does not start Docker.
 Use `test:identity:verify` when the local frontend, Playwright, and Docker are
 available and a complete local identity pass is appropriate.
+
+## Disposable OIDC, SAML, and LDAP rehearsal
+
+`test:identity:protocol-rehearsal` is the production-shaped local acceptance
+lane used by the advisory GitHub Actions workflow. It creates its own Docker
+Compose project, database volume, localhost ports, TLS CA, platform
+administrator, and IdP/LDAP inputs. It then runs the maintained OIDC, SAML,
+and LDAP browser runners against that one stack. It does not reuse an existing
+developer deployment or any customer IdP credentials.
+
+```bash
+pnpm exec playwright install chromium
+pnpm run test:identity:protocol-rehearsal
+```
+
+Success requires all three protocol runners to pass. On either success or
+failure it retains service logs, Compose status, protocol runner logs, and
+Playwright output under `.artifacts/identity-protocol-rehearsal/`; generated
+credentials, TLS private keys, and the temporary environment file are removed
+and are never retained as artifacts. The command finishes by removing the
+dedicated Docker project and volume.
+
+The CI workflow is intentionally advisory while its fresh-stack behavior is
+observed. Once stable, change its documented `continue-on-error` setting to
+`false` and add it to branch protection. It is not evidence for a customer
+provider cutover: those still require the customer-owned IdP and Effective
+Access acceptance procedure.
 
 `test:authz:browser` uses the same guarded local browser runner, disables E2E
 seeding, and intercepts its API requests. It verifies the real Access Control

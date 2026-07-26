@@ -11,6 +11,7 @@ const testFiles = [
   'test/e2e/smoke/login.spec.ts',
   'test/e2e/smoke/access-control-local.spec.ts',
   'test/e2e/smoke/fine-grained-access-local.spec.ts',
+  'test/e2e/smoke/variable-access-control-local.spec.ts',
 ];
 const journeys = [
   'local_login',
@@ -25,6 +26,9 @@ const journeys = [
   'multi_tab_revalidation',
   'session_refresh_revalidation',
   'back_forward_cache_revalidation',
+  'variable_metadata_redaction',
+  'variable_value_disclosure',
+  'variable_edit_permission_and_engine_round_trip',
 ];
 
 function run(command, args) {
@@ -50,8 +54,8 @@ const evidence = {
   command: 'pnpm run test:authz:local-smoke:cross-browser',
   status: 'passed',
   testFiles,
-  testCountPerBrowser: 9,
-  totalPassingExecutions: 27,
+  testCountPerBrowser: 12,
+  totalPassingExecutions: 36,
   verifiedTargets: {
     browsers,
     database: 'postgres',

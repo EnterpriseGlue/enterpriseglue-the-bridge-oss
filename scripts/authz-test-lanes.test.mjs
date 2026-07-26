@@ -7,6 +7,8 @@ const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
+const localLdapConfigureRunner = readFileSync(new URL('./configure-local-ldap-provider.sh', import.meta.url), 'utf8');
+const ciIdentityProtocolRehearsalRunner = readFileSync(new URL('./run-ci-identity-protocol-rehearsals.sh', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
 const localCrossBrowserAuthzRunner = readFileSync(new URL('./run-authz-local-seeded-cross-browser.sh', import.meta.url), 'utf8');
@@ -16,6 +18,7 @@ const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-eviden
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const e2eGlobalTeardown = readFileSync(new URL('../test/e2e/setup/global-teardown.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
+const identityProtocolRehearsalWorkflow = readFileSync(new URL('../.github/workflows/identity-protocol-rehearsal.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
@@ -89,6 +92,9 @@ test('the pull-request authorization gate keeps decision coverage and focused fa
   assert.match(scripts['test:authz:pr'], /custom-role-scope-matrix\.test\.ts/);
   assert.match(scripts['test:authz:pr'], /machine-principal-authz\.test\.ts/);
   assert.match(scripts['test:authz:pr'], /bpmn-engine-client\.test\.ts/);
+  assert.match(scripts['test:authz:pr'], /process-instances\/routes\.test\.ts/);
+  assert.match(scripts['test:authz:pr'], /history-extended\.test\.ts/);
+  assert.match(scripts['test:authz:pr'], /shared\/tasks\.test\.ts/);
 
   const coverage = scripts['test:authz:decision-coverage'];
   assert.match(coverage, /permissions\.test\.ts/);
@@ -108,6 +114,9 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /\["firefox", "webkit"\]/);
   assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=\$\{\{ matrix\.browser \}\}/);
   assert.match(authzPrWorkflow, /fine-grained-access-local\.spec\.ts/);
+  assert.match(authzPrWorkflow, /variable-access-control-local\.spec\.ts/);
+  assert.match(authzPrWorkflow, /adapter-backstop:/);
+  assert.match(authzPrWorkflow, /test:authz:adapter-backstop/);
   assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);
   assert.match(authzPrWorkflow, /test\/results/);
   assert.match(authzPrWorkflow, /backend\/coverage\/authz-decisions/);
@@ -242,6 +251,7 @@ test('the macOS WebKit fallback remains an egress-isolated local Docker lane', (
   assert.match(localContainerWebkitRunner, /seeded-smoke or accessibility/);
   assert.match(localContainerWebkitRunner, /mcr\.microsoft\.com\/playwright@sha256:8a0360d39d1973be506dd59002904a774f6d697d4946c94063b3fd006461c8ff/);
   assert.match(localContainerWebkitRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
+  assert.match(localContainerWebkitRunner, /test\/e2e\/smoke\/variable-access-control-local\.spec\.ts/);
 });
 
 test('the accessibility matrix uses the same local browser fallback without opening a database fixture', () => {
@@ -250,6 +260,7 @@ test('the accessibility matrix uses the same local browser fallback without open
   assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_WEBKIT_EXECUTION/);
   assert.match(accessibilityMatrixRunner, /PLAYWRIGHT_CONTAINER_SUITE=accessibility/);
   assert.match(accessibilityMatrixRunner, /E2E_SEED_USER=false/);
+  assert.match(accessibilityMatrixRunner, /identity-administration-accessibility\.spec\.ts/);
   assert.match(accessibilityMatrixRunner, /write-authz-accessibility-evidence\.mjs/);
 });
 
@@ -274,6 +285,7 @@ test('the authorization mutation guard kills every required tenancy fault class 
 test('the fine-grained authorization lane combines scope, machine-principal, policy, runtime, and mutation evidence', () => {
   const command = scripts['test:authz:fine-grained'];
   assert.match(command, /services\/platform-admin\/permissions\.test\.ts/);
+  assert.match(command, /test:authz:variable-boundary/);
   assert.match(command, /test:authz:machine-principal-coverage/);
   assert.match(command, /test:authz:policy-coverage/);
   assert.match(command, /test:authz:require-action-coverage/);
@@ -386,6 +398,8 @@ test('the live local SAML rehearsal is opt-in and guarded to local browser targe
   assert.match(localSamlRehearsalRunner, /localhost, loopback, or a \.local host/);
   assert.match(localSamlRehearsalRunner, /load_local_admin_credentials\nbase_url="\$\{PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}\}"/);
   assert.match(localSamlRehearsalRunner, /LOCAL_SAML_ISSUER_URL:-https:\/\/localhost:\$\{KEYCLOAK_HOST_PORT:-8180\}/);
+  assert.match(localSamlRehearsalRunner, /LOCAL_SAML_ADMIN_ENV_FILE/);
+  assert.match(localSamlRehearsalRunner, /LOCAL_SAML_SIGNING_CERT_FILE/);
 });
 
 test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to local browser targets', () => {
@@ -399,4 +413,40 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /source "\$rehearsal_env_file"/);
   assert.match(localLdapRehearsalRunner, /PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}/);
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL:-\}|\$\{ADMIN_EMAIL:-\}/);
+  assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_DIRECTORY_MODE/);
+  assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_FILE_MODE/);
+});
+
+test('the disposable identity-protocol CI lane keeps fresh-stack inputs and useful diagnostics isolated', () => {
+  assert.match(scripts['test:identity:protocol-rehearsal'], /run-ci-identity-protocol-rehearsals\.sh/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /mktemp -d/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /randomBytes/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /generate-local-tls\.sh/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /test:oidc:local-rehearsal/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /test:saml:local-rehearsal/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /test:ldap:local-rehearsal/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /down --volumes --remove-orphans/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /credentials=ephemeral-and-not-retained/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_SAML_ADMIN_ENV_FILE/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /KEYCLOAK_REALM_IMPORT_FILE/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_SAML_SKIP_SIGNING_CERTIFICATE_FETCH=true/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_LDAP_SECRET_FILE_MODE=644/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /test -r \/etc\/enterpriseglue\/local-identity-secrets\/keycloak-saml-signing\.crt/);
+
+  assert.match(identityProtocolRehearsalWorkflow, /name: Identity Protocol Rehearsal \(Advisory\)/);
+  assert.match(identityProtocolRehearsalWorkflow, /continue-on-error: true/);
+  assert.match(identityProtocolRehearsalWorkflow, /pnpm run test:identity:protocol-rehearsal/);
+  assert.match(identityProtocolRehearsalWorkflow, /playwright install --with-deps chromium/);
+  assert.match(identityProtocolRehearsalWorkflow, /Upload identity protocol diagnostics/);
+});
+
+test('the extended authorization matrix includes variable boundaries and both engine adapter paths', () => {
+  assert.match(scripts['test:authz:variable-boundary'], /process-instances\/routes\.test\.ts/);
+  assert.match(scripts['test:authz:variable-boundary'], /history-extended\.test\.ts/);
+  assert.match(scripts['test:authz:variable-boundary'], /shared\/tasks\.test\.ts/);
+  assert.match(scripts['test:authz:adapter-backstop'], /test:sidecar-backstop/);
+  assert.match(scripts['test:authz:adapter-backstop'], /test:operaton-native-auth-container/);
+  assert.match(scripts['test:authz:extended-matrix'], /test:authz:pr/);
+  assert.match(scripts['test:authz:extended-matrix'], /test:authz:variable-boundary/);
+  assert.match(scripts['test:authz:extended-matrix'], /test:authz:adapter-backstop/);
 });

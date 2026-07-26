@@ -2,16 +2,17 @@
 set -Eeuo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+admin_env_file="${LOCAL_SAML_ADMIN_ENV_FILE:-$root_dir/.local/docker/env/oidc-rehearsal.env}"
 
 load_local_admin_credentials() {
   if [[ -n "${LOCAL_SAML_ADMIN_EMAIL:-}" && -n "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]; then
     return
   fi
-  if [[ -f "$root_dir/.local/docker/env/oidc-rehearsal.env" ]]; then
+  if [[ -f "$admin_env_file" ]]; then
     # Prefer the currently selected disposable TLS stack. Its env file can use
     # non-default published ports and is ignored by Git.
     set -a
-    source "$root_dir/.local/docker/env/oidc-rehearsal.env"
+    source "$admin_env_file"
     set +a
   elif [[ -f "$root_dir/.env.docker" ]]; then
     set -a
@@ -59,6 +60,7 @@ if [[ -z "${LOCAL_SAML_ADMIN_EMAIL:-}" || -z "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]
 fi
 
 issuer_url="${LOCAL_SAML_ISSUER_URL:-https://localhost:${KEYCLOAK_HOST_PORT:-8180}/realms/enterpriseglue-local}"
+signing_certificate_file="${LOCAL_SAML_SIGNING_CERT_FILE:-$root_dir/.local/docker/identity-secrets/keycloak-saml-signing.crt}"
 if ! is_local_url "$issuer_url"; then
   echo "[local-saml-rehearsal] LOCAL_SAML_ISSUER_URL must target localhost, loopback, or a .local host; got: $issuer_url" >&2
   exit 2
@@ -74,6 +76,7 @@ LOCAL_SAML_ADMIN_PASSWORD="$LOCAL_SAML_ADMIN_PASSWORD" \
 LOCAL_SAML_APP_URL="$base_url" \
 LOCAL_SAML_ISSUER_URL="$issuer_url" \
 LOCAL_SAML_CA_FILE="$ca_file" \
+LOCAL_SAML_SIGNING_CERT_FILE="$signing_certificate_file" \
 "$root_dir/scripts/configure-local-saml-provider.sh"
 
 headless_shell_path="$(pnpm exec playwright install chromium --dry-run 2>/dev/null | awk '/Chrome Headless Shell/{found=1; next} found && /Install location:/{sub(/^.*Install location:[[:space:]]*/, ""); print; exit}')"

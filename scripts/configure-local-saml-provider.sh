@@ -9,6 +9,7 @@ callback_url="${LOCAL_SAML_CALLBACK_URL:-${base_url%/}/api/auth/providers/saml/c
 metadata_url="${LOCAL_SAML_METADATA_URL:-${issuer_url%/}/protocol/saml/descriptor}"
 certificate_ref="${LOCAL_SAML_SIGNING_CERTIFICATE_REF:-file:///etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt}"
 ca_file="${LOCAL_SAML_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
+signing_certificate_file="${LOCAL_SAML_SIGNING_CERT_FILE:-.local/docker/identity-secrets/keycloak-saml-signing.crt}"
 admin_email="${LOCAL_SAML_ADMIN_EMAIL:-}"
 admin_password="${LOCAL_SAML_ADMIN_PASSWORD:-}"
 
@@ -71,10 +72,18 @@ if [[ ! -f "$ca_file" ]]; then
   exit 2
 fi
 
-LOCAL_SAML_ISSUER_URL="$issuer_url" \
-LOCAL_SAML_METADATA_URL="$metadata_url" \
-LOCAL_SAML_CA_FILE="$ca_file" \
-./scripts/prepare-local-keycloak-saml-certificate.sh
+if [[ "${LOCAL_SAML_SKIP_SIGNING_CERTIFICATE_FETCH:-false}" == 'true' ]]; then
+  if [[ ! -f "$signing_certificate_file" ]]; then
+    echo "LOCAL_SAML_SIGNING_CERT_FILE does not exist: $signing_certificate_file" >&2
+    exit 2
+  fi
+else
+  LOCAL_SAML_ISSUER_URL="$issuer_url" \
+  LOCAL_SAML_METADATA_URL="$metadata_url" \
+  LOCAL_SAML_CA_FILE="$ca_file" \
+  LOCAL_SAML_SIGNING_CERT_FILE="$signing_certificate_file" \
+  ./scripts/prepare-local-keycloak-saml-certificate.sh
+fi
 
 curl_args=(--fail --silent --show-error --max-time 15 --cacert "$ca_file")
 login_payload="$(jq -nc --arg email "$admin_email" --arg password "$admin_password" '{email:$email,password:$password}')"

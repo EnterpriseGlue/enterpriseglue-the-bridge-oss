@@ -163,7 +163,7 @@ jobs:
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
-            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts --config test/e2e/playwright.config.ts && pnpm run test:engine-tenancy:enforcement"
+            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts test/e2e/smoke/variable-access-control-local.spec.ts --config test/e2e/playwright.config.ts && pnpm run test:engine-tenancy:enforcement"
 
       - name: Upload engine tenancy enforcement evidence
         if: always()
@@ -207,5 +207,47 @@ jobs:
         with:
           name: authorization-decision-coverage-${{ matrix.browser }}-${{ github.run_id }}
           path: backend/coverage/authz-decisions
+          if-no-files-found: warn
+          retention-days: 14
+
+  adapter-backstop:
+    name: Camunda and Operaton mirrored-backstop matrix
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Camunda and Operaton adapter/backstop matrix
+        run: pnpm run test:authz:adapter-backstop
+
+      - name: Capture Docker diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p .artifacts/authz-adapter-backstop
+          docker ps --all --format '{{.Names}} {{.Image}} {{.Status}}' > .artifacts/authz-adapter-backstop/docker-ps.txt
+          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' > .artifacts/authz-adapter-backstop/docker-images.txt
+
+      - name: Upload adapter/backstop diagnostics
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: authz-adapter-backstop-${{ github.run_id }}
+          path: .artifacts/authz-adapter-backstop
           if-no-files-found: warn
           retention-days: 14

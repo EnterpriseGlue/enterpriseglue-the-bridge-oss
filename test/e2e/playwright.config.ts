@@ -12,7 +12,7 @@ export default defineConfig({
   testDir: './',
   // Keep Playwright's automatic cleanup inside its own directory so retained
   // release evidence from earlier lanes is never removed at test startup.
-  outputDir: '../results/playwright',
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || '../results/playwright',
   preserveOutput: process.env.ENGINE_TENANCY_LOCAL_EVIDENCE === 'true' ? 'always' : 'failures-only',
   globalSetup: './setup/global-setup.ts',
   globalTeardown: './setup/global-teardown.ts',

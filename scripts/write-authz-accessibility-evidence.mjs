@@ -9,13 +9,28 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputDirectory = path.join(root, 'test/results/engine-tenancy-release');
 const outputPath = path.join(outputDirectory, 'browser-accessibility.json');
 const browsers = ['chromium', 'firefox', 'webkit'];
-const verifiedChecks = [
-  'error_announcement',
-  'contrast',
-  'zoom_200_reflow',
-  'reduced_motion',
+const testFiles = [
+  'test/e2e/access-control-accessibility.spec.ts',
+  'test/e2e/identity-administration-accessibility.spec.ts',
 ];
-const workflowCount = browsers.length * verifiedChecks.length;
+const verifiedChecks = {
+  'test/e2e/access-control-accessibility.spec.ts': [
+    'error_announcement',
+    'contrast',
+    'zoom_200_reflow',
+    'reduced_motion',
+  ],
+  'test/e2e/identity-administration-accessibility.spec.ts': [
+    'keyboard_tab_selection_and_error_announcement',
+    'zoom_200_reflow_and_reduced_motion',
+    'configuration_lock_mutation_protection',
+    'configuration_warning_provider_mutation',
+    'configuration_warning_mapping_mutation',
+  ],
+};
+const checksPerBrowser = Object.values(verifiedChecks)
+  .reduce((total, checks) => total + checks.length, 0);
+const workflowCount = browsers.length * checksPerBrowser;
 
 function run(command, args) {
   return execFileSync(command, args, { cwd: root, encoding: 'utf8' }).trim();
@@ -32,14 +47,14 @@ if (lastRun.status !== 'passed' || (lastRun.failedTests || []).length !== 0) {
 const evidence = {
   schemaVersion: 1,
   evidenceKind: 'engine-tenancy-browser-accessibility',
-  coverageScope: 'access-control-critical-workflows',
+  coverageScope: 'access-control-and-identity-administration-critical-workflows',
   generatedAt: new Date().toISOString(),
   commit,
   sourceState: trackedChanges ? 'dirty' : 'clean',
   releaseCommitQualified: trackedChanges.length === 0,
   command: 'pnpm run test:authz:accessibility:cross-browser',
   status: 'passed',
-  testFile: 'test/e2e/access-control-accessibility.spec.ts',
+  testFiles,
   workflowCount,
   passedWorkflowCount: workflowCount,
   missingChecks: 0,
@@ -49,7 +64,7 @@ const evidence = {
     deployment: 'localhost',
   },
   runnerGuarantee:
-    'set -Eeuo pipefail writes this artifact only after all four checks pass independently in Chromium, Firefox, and WebKit',
+    'set -Eeuo pipefail writes this artifact only after every Access Control and Identity Administration check passes independently in Chromium, Firefox, and WebKit',
   sanitization: {
     containsCredentials: false,
     containsTokens: false,
