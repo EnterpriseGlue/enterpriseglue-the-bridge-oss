@@ -2,6 +2,7 @@ import type {
   ApiClient,
   AuthzGroup,
   ExternalEngineSystem,
+  EngineSetSummary,
   RoleAssignment,
   RoleSummary,
   ServiceAccount,
@@ -18,6 +19,7 @@ export function RoleAssignmentsPanel({
   groups,
   serviceAccounts,
   externalSystems,
+  engineSets,
   runtimeEngines,
   loading,
   onAssign,
@@ -32,6 +34,7 @@ export function RoleAssignmentsPanel({
   groups: AuthzGroup[];
   serviceAccounts: ServiceAccount[];
   externalSystems: ExternalEngineSystem[];
+  engineSets: EngineSetSummary[];
   runtimeEngines: RuntimeResourceEngineOption[];
   loading: boolean;
   onAssign: (form: AssignmentFormValues) => void;
@@ -48,6 +51,7 @@ export function RoleAssignmentsPanel({
         groups={groups}
         serviceAccounts={serviceAccounts}
         externalSystems={externalSystems}
+        engineSets={engineSets}
         runtimeEngines={runtimeEngines}
         onAssign={onAssign}
         pending={pending}

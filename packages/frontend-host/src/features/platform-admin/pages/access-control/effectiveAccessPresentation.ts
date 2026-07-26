@@ -5,6 +5,7 @@ export type CoreAssignmentResourceType =
   | 'tenant'
   | 'project'
   | 'engine'
+  | 'engine_set'
   | 'engine_runtime_resource'
   | 'engine_runtime_resource_set'
   | 'external_engine_system';

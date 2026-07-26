@@ -92,6 +92,13 @@ export class MockBrowserIdentityStack {
           platform: [
             'platform:dashboard:view', 'platform:settings:view', 'platform:settings:manage',
             'platform:authz:roles:view', 'platform:authz:roles:manage',
+            'platform:authz:permissions:view', 'platform:authz:assignments:view',
+            'platform:authz:assignments:create', 'platform:authz:assignments:delete',
+            'platform:authz:groups:view', 'platform:authz:groups:manage',
+            'platform:authz:check', 'platform:authz:policies:view', 'platform:authz:policies:manage',
+            'platform:engine-sets:view', 'platform:engine-sets:manage',
+            'platform:project-engine-targets:view', 'platform:project-engine-targets:manage',
+            'platform:audit:view',
             'platform:config-bundles:view', 'platform:config-bundles:preview',
             'platform:config-bundles:apply', 'platform:config-bundles:export',
             'platform:sso-providers:view', 'platform:sso-providers:manage',

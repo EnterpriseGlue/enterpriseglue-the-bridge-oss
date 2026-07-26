@@ -18,9 +18,9 @@ export const ASSIGNMENT_PRINCIPAL_OPTIONS: Array<{ id: AssignmentPrincipalType; 
   { id: 'user', label: 'User' }, { id: 'group', label: 'Group' }, { id: 'api_client', label: 'API client' }, { id: 'service_account', label: 'Service account' },
 ];
 export function assignmentResourceTypeOptions(principalType: AssignmentPrincipalType) {
-  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
-  if (principalType === 'service_account') return [{ id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }];
-  return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
+  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine Set' }];
+  if (principalType === 'service_account') return [{ id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine Set' }];
+  return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine Set' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
 }
 export function withAssignmentPrincipalType(state: AssignmentFormState, principalType: AssignmentPrincipalType): AssignmentFormState {
   return {
@@ -59,7 +59,7 @@ const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set([
 ]);
 
 export function getAssignableRolesForPrincipal(roles: RoleSummary[], resourceType: CoreAssignmentResourceType, principalType: AssignmentPrincipalType) {
-  const roleScope = resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? 'engine' : resourceType;
+  const roleScope = resourceType === 'engine_set' || resourceType === 'engine_runtime_resource' || resourceType === 'engine_runtime_resource_set' ? 'engine' : resourceType;
   return roles.filter((role) => {
     if (role.scope !== roleScope || !role.isAssignable || role.isArchived) return false;
     if (principalType !== 'api_client' && principalType !== 'service_account') return true;

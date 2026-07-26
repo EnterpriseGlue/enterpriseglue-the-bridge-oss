@@ -4,6 +4,7 @@ import type {
   ApiClient,
   AuthzGroup,
   ExternalEngineSystem,
+  EngineSetSummary,
   RoleSummary,
   ServiceAccount,
 } from '../../hooks/useAuthzApi';
@@ -28,6 +29,7 @@ export function RoleAssignmentForm({
   groups,
   serviceAccounts,
   externalSystems,
+  engineSets,
   runtimeEngines,
   onAssign,
   pending,
@@ -38,6 +40,7 @@ export function RoleAssignmentForm({
   groups: AuthzGroup[];
   serviceAccounts: ServiceAccount[];
   externalSystems: ExternalEngineSystem[];
+  engineSets: EngineSetSummary[];
   runtimeEngines: RuntimeResourceEngineOption[];
   onAssign: (form: AssignmentFormValues) => void;
   pending: boolean;
@@ -52,6 +55,7 @@ export function RoleAssignmentForm({
   const selectedGroup = activeGroups.find((group) => group.id === form.principalId) || null;
   const selectedServiceAccount = activeServiceAccounts.find((account) => account.id === form.principalId) || null;
   const selectedExternalSystem = activeExternalSystems.find((system) => system.id === form.resourceId) || null;
+  const selectedEngineSet = engineSets.find((set) => set.id === form.resourceId && !set.isArchived) || null;
   const selectedRuntimeEngine = runtimeEngines.find((engine) => engine.id === form.runtimeEngineId) || null;
   const { runtimeResourcesQ, runtimeSetsQ } = useAssignmentRuntimeOptions(form);
   const selectedRuntimeResource = (runtimeResourcesQ.data || []).find((resource) => resource.id === form.resourceId) || null;
@@ -137,7 +141,17 @@ export function RoleAssignmentForm({
             setForm((current) => withAssignmentResourceType(current, resourceType));
           }}
         />
-        {form.resourceType === 'engine_runtime_resource' || form.resourceType === 'engine_runtime_resource_set' ? <>
+        {form.resourceType === 'engine_set' ? (
+          <Dropdown
+            id="assignment-engine-set"
+            titleText="Engine Set"
+            label="Select an Engine Set"
+            items={engineSets.filter((set) => !set.isArchived)}
+            itemToString={(item) => item ? `${item.name} (${item.key})` : ''}
+            selectedItem={selectedEngineSet}
+            onChange={({ selectedItem }) => setForm((current) => ({ ...current, resourceId: selectedItem?.id || '' }))}
+          />
+        ) : form.resourceType === 'engine_runtime_resource' || form.resourceType === 'engine_runtime_resource_set' ? <>
           <Dropdown
             id="assignment-runtime-engine"
             titleText="Engine"

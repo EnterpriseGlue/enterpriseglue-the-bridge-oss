@@ -239,6 +239,23 @@ corepack pnpm@11.0.8 run test:oidc:local-rehearsal
 The test uses the realm's disposable fixture account and never prints its
 credentials, session cookies, tokens, or generated provider identifiers.
 
+The rehearsal runs against the already running disposable Compose stack. When
+testing uncommitted backend or frontend changes, refresh the affected services
+from the current worktree first. Recreate Keycloak together with the backend,
+because it shares the backend network namespace:
+
+```bash
+docker compose --project-directory . \
+  --env-file .local/docker/env/oidc-rehearsal.env \
+  -p eg-sso-authz-rehearsal \
+  -f infra/docker/compose/docker-compose.yml \
+  -f infra/docker/compose/docker-compose.backend-expose.yml \
+  -f infra/docker/compose/docker-compose.keycloak.yml \
+  -f infra/docker/compose/docker-compose.keycloak-tls.yml \
+  -f infra/docker/compose/docker-compose.keycloak-saml.yml \
+  up -d --build --force-recreate backend keycloak frontend frontend-tls
+```
+
 This is local protocol and browser-flow evidence only. It does not replace the
 representative deployed-provider cutover evidence described below.
 

@@ -471,6 +471,7 @@ export default function ProSidebar() {
             </span>
             <ComboBox
               id="sidebar-process-filter"
+              aria-label="Process"
               titleText=""
               placeholder="Select process"
               items={defItems}

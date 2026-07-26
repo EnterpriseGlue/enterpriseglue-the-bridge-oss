@@ -179,6 +179,24 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect([403, 404]).toContain(denied.status);
   });
 
+  test('shows only the granted runtime resource in the Mission Control process picker', async ({ page }) => {
+    expect(fixture.runtimeScopedEmail).toBeTruthy();
+    expect(fixture.runtimeScopedPassword).toBeTruthy();
+    expect(fixture.runtimeScopedEngineId).toBeTruthy();
+
+    await loginAs(page, fixture.runtimeScopedEmail!, fixture.runtimeScopedPassword!);
+    await page.goto(`/t/default/mission-control/processes?engineId=${encodeURIComponent(fixture.runtimeScopedEngineId!)}`);
+
+    const processPicker = page.getByRole('combobox', { name: 'Process', exact: true });
+    await expect(processPicker).toBeVisible();
+    await processPicker.click();
+    await expect(page.getByRole('option', { name: 'Invoice Approval', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'invoice-sequential-review', exact: true })).toHaveCount(0);
+
+    await page.getByRole('option', { name: 'Invoice Approval', exact: true }).click();
+    await expect(processPicker).toHaveValue('Invoice Approval');
+  });
+
   test('does not honor an expired scoped assignment', async ({ page }) => {
     expect(fixture.expiredEmail).toBeTruthy();
     expect(fixture.expiredPassword).toBeTruthy();

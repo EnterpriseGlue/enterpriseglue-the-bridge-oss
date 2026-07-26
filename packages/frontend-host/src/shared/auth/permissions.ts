@@ -274,6 +274,13 @@ export function hasAnyEngineWithAllPermissions(snapshot: CurrentUserPermissions 
   ));
 }
 
+export function hasAnyRuntimeResourceWithAllPermissions(snapshot: CurrentUserPermissions | null | undefined, permissions: string[]): boolean {
+  if (permissions.length === 0) return false;
+  return Boolean(snapshot?.engines?.some((engine) =>
+    permissions.every((permission) => engine.runtimePermissions?.includes(permission))
+  ));
+}
+
 export function hasEnginePermission(
   snapshot: CurrentUserPermissions | null | undefined,
   engineId: string | null | undefined,
@@ -296,7 +303,8 @@ export function hasMissionControlUiAccess(
   snapshot: CurrentUserPermissions | null | undefined,
   _user?: unknown
 ): boolean {
-  return hasAnyEnginePermission(snapshot, MISSION_CONTROL_NAV_ENGINE_PERMISSIONS);
+  return hasAnyEnginePermission(snapshot, MISSION_CONTROL_NAV_ENGINE_PERMISSIONS) ||
+    hasAnyRuntimeResourceWithAllPermissions(snapshot, MISSION_CONTROL_NAV_ENGINE_PERMISSIONS);
 }
 
 export function hasMissionControlSectionAccess(
@@ -304,7 +312,8 @@ export function hasMissionControlSectionAccess(
   _user: unknown,
   permissions: string[]
 ): boolean {
-  return hasAnyEngineWithAllPermissions(snapshot, permissions);
+  return hasAnyEngineWithAllPermissions(snapshot, permissions) ||
+    hasAnyRuntimeResourceWithAllPermissions(snapshot, permissions);
 }
 
 export function hasEnginesUiAccess(

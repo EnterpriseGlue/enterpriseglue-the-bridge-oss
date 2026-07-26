@@ -284,10 +284,14 @@ const POLICY_EFFECTS: Array<{ id: AuthzPolicy['effect']; label: string }> = [
 const POLICY_RESOURCE_TYPES: Array<{ id: string; label: string }> = [
   { id: '', label: 'All resources' },
   { id: 'platform', label: 'Platform' },
+  { id: 'tenant', label: 'Current tenant' },
   { id: 'project', label: 'Project' },
   { id: 'engine', label: 'Engine' },
   { id: 'engine_set', label: 'Engine Set' },
+  { id: 'engine_runtime_resource', label: 'Runtime resource' },
+  { id: 'engine_runtime_resource_set', label: 'Runtime resource set' },
   { id: 'project_engine_target', label: 'Project-engine target' },
+  { id: 'external_engine_system', label: 'External engine system' },
   { id: 'api_client', label: 'API client' },
   { id: 'sso_mapping', label: 'SSO mapping' },
 ];
@@ -309,6 +313,13 @@ const DEFAULT_AUTHZ_POLICY_FORM: AuthzPolicyFormState = {
   resourceType: '',
   action: '',
 };
+
+function VisibleTabPanels({ children }: { children: React.ReactNode }) {
+  // Carbon uses the position of every direct child when pairing a Tab with its
+  // panel. React conditional children can leave false placeholders behind,
+  // which would otherwise shift later panels for a partially authorized user.
+  return <TabPanels>{React.Children.toArray(children)}</TabPanels>;
+}
 
 interface AuthzGroupFormState {
   key: string;
@@ -1584,7 +1595,7 @@ export default function AccessControl() {
         <TabList aria-label="Access control tabs">
           {visibleTabIds.map((tabId) => <Tab key={tabId}>{ACCESS_CONTROL_TAB_LABELS[tabId]}</Tab>)}
         </TabList>
-        <TabPanels>
+        <VisibleTabPanels>
           {rolesReadDecision.allowed && (
           <TabPanel>
             <RoleCatalogPanel roles={roles} loading={rolesQ.isLoading} failed={rolesQ.isError} onCreate={openCreateRole} onEdit={openEditRole} onDuplicate={openDuplicateRole} onArchive={archiveRole} canManage={canManageRoles} filterRoles={filterRoles} />
@@ -1609,6 +1620,7 @@ export default function AccessControl() {
                 groups={groups}
                 serviceAccounts={serviceAccounts}
                 externalSystems={externalSystems}
+                engineSets={engineSets}
                 runtimeEngines={runtimeResourceEnginesQ.data || []}
                 loading={assignmentsQ.isLoading || groupsQ.isLoading || serviceAccountsQ.isLoading}
                 onAssign={assignRole}
@@ -1892,7 +1904,7 @@ export default function AccessControl() {
               />
           </TabPanel>
           )}
-        </TabPanels>
+        </VisibleTabPanels>
       </Tabs>
 
       <Modal

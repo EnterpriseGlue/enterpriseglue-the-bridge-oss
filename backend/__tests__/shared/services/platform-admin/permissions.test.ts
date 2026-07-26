@@ -583,6 +583,7 @@ describe('permissionService', () => {
   it('includes explicit engine grants in known engine discovery', async () => {
     const grantQb = {
       select: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
       getMany: vi.fn().mockResolvedValue([{ resourceId: 'engine-granted' }]),
@@ -1610,16 +1611,32 @@ describe('permissionService', () => {
     };
     const grantQb = {
       select: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
       getMany: vi.fn().mockResolvedValue([]),
+      getCount: vi.fn().mockResolvedValue(0),
+    };
+    const runtimeNavigationDirectQb = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getCount: vi.fn().mockResolvedValue(0),
+    };
+    const runtimeNavigationSetQb = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getCount: vi.fn().mockResolvedValue(0),
     };
     const assignmentRepo = {
       createQueryBuilder: vi.fn()
         .mockReturnValueOnce(projectAssignmentQb)
         .mockReturnValueOnce(engineAssignmentQb)
         .mockReturnValueOnce(engineSetAssignmentQb)
-        .mockReturnValueOnce(runtimeAssignmentQb),
+        .mockReturnValueOnce(runtimeAssignmentQb)
+        .mockReturnValueOnce(runtimeNavigationDirectQb)
+        .mockReturnValueOnce(runtimeNavigationSetQb),
     };
     const groupMembership = createGroupMembershipRepo();
     const catalogSpy = vi.spyOn(permissionService, 'getPermissionCatalog').mockResolvedValue([]);
@@ -1645,6 +1662,45 @@ describe('permissionService', () => {
     expect(snapshot.engines.map((engine) => engine.resourceId)).toEqual(['engine-rbac']);
     catalogSpy.mockRestore();
     versionSpy.mockRestore();
+  });
+
+  it.each([
+    ['a direct runtime-resource role assignment', 1, 0, 0],
+    ['a runtime-resource-set role assignment', 0, 1, 0],
+    ['a direct runtime-resource permission grant', 0, 0, 1],
+  ])('emits only the coarse navigation marker for %s', async (_source, directCount, resourceSetCount, grantCount) => {
+    const queryBuilder = (count: number) => ({
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getCount: vi.fn().mockResolvedValue(count),
+    });
+    const directAssignmentQb = queryBuilder(directCount);
+    const resourceSetAssignmentQb = queryBuilder(resourceSetCount);
+    const grantQb = queryBuilder(grantCount);
+    const dataSource = {
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRoleAssignment) {
+          return {
+            createQueryBuilder: vi.fn()
+              .mockReturnValueOnce(directAssignmentQb)
+              .mockReturnValueOnce(resourceSetAssignmentQb),
+          };
+        }
+        if (entity === PermissionGrant) return { createQueryBuilder: vi.fn().mockReturnValue(grantQb) };
+        throw new Error('Unexpected repository');
+      },
+    };
+
+    const marker = await (permissionService as any).getRuntimeNavigationPermissions(
+      dataSource,
+      'user-1',
+      [],
+      'tenant-default',
+      'engine-1',
+    );
+
+    expect(marker).toEqual([EnginePermissions.INSTANCE_VIEW]);
   });
 
   it('discovers an explicitly granted project in the tenant-scoped permission snapshot', async () => {

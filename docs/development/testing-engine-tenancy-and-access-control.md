@@ -713,6 +713,16 @@ when the editor permission is present and the engine returns the next value.
 This is a real browser-to-backend-to-Camunda-mock flow, not a frontend-only
 visibility assertion.
 
+For a principal that has `engine:instance:view` only on a runtime resource or
+Runtime Resource Set, `/api/authz/me/permissions` exposes a deliberately
+coarse `engines[].runtimePermissions` navigation marker. It contains neither a
+runtime-resource key nor tenant lineage. The frontend may use that marker only
+to admit the principal to the read-only Mission Control process/decision
+sections; the backend still filters every picker, collection, detail, and
+mutation against the resolved runtime inventory. The seeded browser smoke must
+therefore prove both that the permitted process is selectable and that its
+sibling is absent.
+
 The scheduled adapter/backstop job runs the existing Camunda 7 and Operaton
 native-authorization/sidecar suites through `pnpm run test:authz:adapter-backstop`.
 The broader local command `pnpm run test:authz:extended-matrix` combines the

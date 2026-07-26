@@ -204,7 +204,7 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
       tenantId: req.tenant?.tenantId || null,
       platform: snapshot.platform,
       projects: snapshot.projects.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
-      engines: snapshot.engines.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
+      engines: snapshot.engines.map(({ resourceId, permissions, runtimePermissions }) => ({ resourceId, permissions, runtimePermissions })),
       authorizationVersion: snapshot.authorizationVersion,
       generatedAt: snapshot.generatedAt,
     }));

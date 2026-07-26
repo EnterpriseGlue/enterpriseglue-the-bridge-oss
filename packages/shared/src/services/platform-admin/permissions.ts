@@ -677,11 +677,15 @@ export interface EffectiveResourcePermissions {
   permissions: Permission[];
 }
 
+export interface EffectiveEngineResourcePermissions extends EffectiveResourcePermissions {
+  runtimePermissions: Permission[];
+}
+
 export interface CurrentUserPermissionsSnapshot {
   userId: string;
   platform: Permission[];
   projects: EffectiveResourcePermissions[];
-  engines: EffectiveResourcePermissions[];
+  engines: EffectiveEngineResourcePermissions[];
   authorizationVersion: string;
   generatedAt: number;
 }
@@ -3028,6 +3032,7 @@ class PermissionServiceClass {
     const generatedAt = Date.now();
     const projectIds = await this.getKnownProjectIds(dataSource, userId, tenantId);
     const engineIds = await this.getKnownEngineIds(dataSource, userId, tenantId);
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
 
     return {
       userId,
@@ -3036,10 +3041,13 @@ class PermissionServiceClass {
         resourceId: projectId,
         permissions: await this.evaluatePermissionSet(userId, 'project', projectId, tenantId),
       }))),
-      engines: await Promise.all(engineIds.map(async (engineId) => ({
-        resourceId: engineId,
-        permissions: await this.evaluatePermissionSet(userId, 'engine', engineId, tenantId),
-      }))),
+      engines: await Promise.all(engineIds.map(async (engineId) => {
+        const [permissions, runtimePermissions] = await Promise.all([
+          this.evaluatePermissionSet(userId, 'engine', engineId, tenantId),
+          this.getRuntimeNavigationPermissions(dataSource, userId, groupIds, tenantId, engineId),
+        ]);
+        return { resourceId: engineId, permissions, runtimePermissions };
+      })),
       authorizationVersion: await this.getAuthorizationVersion(dataSource, {
         userId,
         tenantId,
@@ -3058,6 +3066,77 @@ class PermissionServiceClass {
   async getKnownEngineIdsForUser(userId: string, tenantId?: string | null): Promise<string[]> {
     const dataSource = await getDataSource();
     return this.getKnownEngineIds(dataSource, userId, tenantId);
+  }
+
+  /**
+   * Return only a coarse runtime-navigation capability for an engine. It is
+   * intentionally derived without serializing runtime resource names, ids, or
+   * tenant resolution data; collection routes remain the enforcement point.
+   */
+  private async getRuntimeNavigationPermissions(
+    dataSource: DataSource,
+    userId: string,
+    groupIds: string[],
+    tenantId: string | null | undefined,
+    engineId: string,
+  ): Promise<Permission[]> {
+    const now = Date.now();
+    const permission = EnginePermissions.INSTANCE_VIEW;
+    const candidatePermissions = compatiblePermissionCandidates(permission);
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+
+    const directAssignments = assignmentRepo.createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = assignment.scopeId')
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine_runtime_resource' })
+      .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('rolePermission.permissionId IN (:...permissions)', { permissions: candidatePermissions })
+      .andWhere('runtimeResource.engineId = :engineId', { engineId })
+      .andWhere('runtimeResource.isActive = :isActive', { isActive: true })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(directAssignments, 'assignment', userId, groupIds);
+    addTenantScopeFilter(directAssignments, 'assignment', tenantId);
+    addTenantScopeFilter(directAssignments, 'role', tenantId);
+    addTenantScopeFilter(directAssignments, 'runtimeResource', tenantId);
+
+    const resourceSetAssignments = assignmentRepo.createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .innerJoin(RuntimeResourceSet, 'runtimeResourceSet', 'runtimeResourceSet.id = assignment.scopeId')
+      .innerJoin(RuntimeResourceSetMaterialization, 'runtimeMaterialization', 'runtimeMaterialization.runtimeResourceSetId = assignment.scopeId')
+      .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = runtimeMaterialization.runtimeResourceId')
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine_runtime_resource_set' })
+      .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('rolePermission.permissionId IN (:...permissions)', { permissions: candidatePermissions })
+      .andWhere('runtimeResourceSet.engineId = :engineId', { engineId })
+      .andWhere('runtimeResource.isActive = :isActive', { isActive: true })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(resourceSetAssignments, 'assignment', userId, groupIds);
+    addTenantScopeFilter(resourceSetAssignments, 'assignment', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'role', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'runtimeResourceSet', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'runtimeMaterialization', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'runtimeResource', tenantId);
+
+    const explicitGrants = dataSource.getRepository(PermissionGrant)
+      .createQueryBuilder('grant')
+      .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = grant.resourceId')
+      .where('grant.userId = :userId', { userId })
+      .andWhere('grant.resourceType = :resourceType', { resourceType: 'engine_runtime_resource' })
+      .andWhere('grant.permission IN (:...permissions)', { permissions: candidatePermissions })
+      .andWhere('runtimeResource.engineId = :engineId', { engineId })
+      .andWhere('runtimeResource.isActive = :isActive', { isActive: true })
+      .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now });
+    addTenantScopeFilter(explicitGrants, 'grant', tenantId);
+    addTenantScopeFilter(explicitGrants, 'runtimeResource', tenantId);
+
+    const [directCount, setCount, explicitGrantCount] = await Promise.all([
+      directAssignments.getCount(), resourceSetAssignments.getCount(), explicitGrants.getCount(),
+    ]);
+    return directCount > 0 || setCount > 0 || explicitGrantCount > 0 ? [permission] : [];
   }
 
   /**

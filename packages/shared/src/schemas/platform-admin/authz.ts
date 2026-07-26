@@ -295,12 +295,18 @@ export const EffectiveResourcePermissionsSchema = z.object({
   permissions: z.array(z.string()),
 });
 
+export const EffectiveEngineResourcePermissionsSchema = EffectiveResourcePermissionsSchema.extend({
+  // A coarse, key-free signal used only to admit a principal into a runtime
+  // UI. Runtime collections remain authoritatively filtered server-side.
+  runtimePermissions: z.array(z.string()).default([]),
+});
+
 export const CurrentUserPermissionsSchema = z.object({
   userId: z.string(),
   tenantId: z.string().nullable(),
   platform: z.array(z.string()),
   projects: z.array(EffectiveResourcePermissionsSchema),
-  engines: z.array(EffectiveResourcePermissionsSchema),
+  engines: z.array(EffectiveEngineResourcePermissionsSchema),
   authorizationVersion: z.string(),
   generatedAt: z.number(),
 });
@@ -1371,6 +1377,7 @@ export type SamlAuthenticationStatus = z.infer<typeof SamlAuthenticationStatusSc
 export type PermissionCatalogEntry = z.infer<typeof PermissionCatalogEntrySchema>;
 export type CustomPermissionCreate = z.infer<typeof CustomPermissionCreateSchema>;
 export type EffectiveResourcePermissions = z.infer<typeof EffectiveResourcePermissionsSchema>;
+export type EffectiveEngineResourcePermissions = z.infer<typeof EffectiveEngineResourcePermissionsSchema>;
 export type CurrentUserPermissions = z.infer<typeof CurrentUserPermissionsSchema>;
 export type RoleSummary = z.infer<typeof RoleSummarySchema>;
 export type RoleDetail = z.infer<typeof RoleDetailSchema>;

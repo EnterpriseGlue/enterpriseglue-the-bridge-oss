@@ -24,5 +24,6 @@ export type {
 // rather than the older general authentication contracts barrel.
 export type {
   CurrentUserPermissions,
+  EffectiveEngineResourcePermissions,
   EffectiveResourcePermissions,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';

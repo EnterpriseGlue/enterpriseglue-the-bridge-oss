@@ -130,13 +130,18 @@ export interface EffectiveResourcePermissions {
   permissions: string[];
 }
 
+export interface EffectiveEngineResourcePermissions extends EffectiveResourcePermissions {
+  /** Coarse runtime-navigation permissions; never contains resource keys or tenant lineage. */
+  runtimePermissions: string[];
+}
+
 export interface CurrentUserPermissions {
   userId: string;
   /** Request-derived tenant context for this evaluated snapshot. */
   tenantId: string | null;
   platform: string[];
   projects: EffectiveResourcePermissions[];
-  engines: EffectiveResourcePermissions[];
+  engines: EffectiveEngineResourcePermissions[];
   authorizationVersion?: string;
   generatedAt: number;
 }

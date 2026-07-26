@@ -94,11 +94,21 @@ describe('frontend permission helpers', () => {
         { resourceId: 'engine-2', permissions: [EnginePermission.INSTANCE_DELETE] },
       ],
     };
+    const runtimeResourceViewer = {
+      ...baseSnapshot,
+      // The snapshot deliberately does not expose the resource key. It only
+      // gives the navigation guard enough information to let the backend
+      // filter the process picker for a resource-scoped user.
+      engines: [{ resourceId: 'engine-1', permissions: [], runtimePermissions: [EnginePermission.INSTANCE_VIEW] }],
+    };
 
     expect(hasMissionControlUiAccess(processViewer, baseUser)).toBe(true);
     expect(hasMissionControlSectionAccess(processViewer, baseUser, MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS)).toBe(true);
     expect(hasMissionControlSectionAccess(deleteBatchUser, baseUser, MISSION_CONTROL_BATCH_DELETE_ENGINE_PERMISSIONS)).toBe(true);
     expect(hasMissionControlSectionAccess(splitPermissions, baseUser, MISSION_CONTROL_BATCH_DELETE_ENGINE_PERMISSIONS)).toBe(false);
+    expect(hasMissionControlUiAccess(runtimeResourceViewer, baseUser)).toBe(true);
+    expect(hasMissionControlSectionAccess(runtimeResourceViewer, baseUser, MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS)).toBe(true);
+    expect(hasMissionControlSectionAccess(runtimeResourceViewer, baseUser, MISSION_CONTROL_BATCH_DELETE_ENGINE_PERMISSIONS)).toBe(false);
     expect(hasMissionControlUiAccess(baseSnapshot, baseUser)).toBe(false);
   });
 

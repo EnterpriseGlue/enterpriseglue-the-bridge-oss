@@ -229,6 +229,10 @@ describe('authorization response contracts', () => {
       userId: 'user-a', tenantId: null, platform: ['platform:authz:view'], projects: [{ resourceId: 'project-a', permissions: ['project:read'] }],
       engines: [{ resourceId: 'engine-a', permissions: ['engine:read'] }], authorizationVersion: 'version-a', generatedAt: 1,
     }).authorizationVersion).toBe('version-a');
+    expect(CurrentUserPermissionsSchema.parse({
+      userId: 'user-a', tenantId: null, platform: [], projects: [],
+      engines: [{ resourceId: 'engine-a', permissions: ['engine:read'] }], authorizationVersion: 'version-a', generatedAt: 1,
+    }).engines[0].runtimePermissions).toEqual([]);
     expect(DeploymentEligibilityEvaluateResponseSchema.parse({
       allowed: true, decision: 'allow', mode: 'ci', projectId: 'project-a', engineId: 'engine-a',
       checks: [{ id: 'target.ci', allowed: true, reason: 'CI deployment is enabled' }], reasons: [],
