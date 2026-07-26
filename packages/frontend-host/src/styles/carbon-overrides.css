@@ -40,6 +40,14 @@
   padding: 1.5rem 0;
 }
 
+/* Toolbar controls use the search field's outline for separation. Remove the
+   standalone dropdown underline so the scope filter has a clean shared edge
+   with the search field and primary action. */
+.eg-role-scope-filter.cds--dropdown,
+.eg-role-scope-filter.cds--dropdown:hover {
+  border-block-end: 0;
+}
+
 /* -----------------------------------------
    4. STARBASE - COLLABORATORS PANEL
    (Match toolbar search height to small primary button)

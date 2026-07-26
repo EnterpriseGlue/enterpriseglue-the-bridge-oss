@@ -24,6 +24,7 @@ describe('role catalog error announcements', () => {
     const scopeFilter = screen.getByRole('combobox', { name: 'Filter roles by scope' });
     expect(scopeFilter).toBeInTheDocument();
     expect(scopeFilter.closest('.cds--dropdown--lg')).toBeInTheDocument();
+    expect(scopeFilter.closest('.eg-role-scope-filter')).toBeInTheDocument();
     expect(scopeFilter.closest('.cds--dropdown__wrapper')?.querySelector('label')).toBeNull();
   });
 
