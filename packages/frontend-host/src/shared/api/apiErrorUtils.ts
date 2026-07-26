@@ -19,9 +19,13 @@ export function parseApiError(error: unknown, fallbackMessage = 'Request failed'
 
     const rawError = payload?.error
     const rawMessage = payload?.message
+    const nestedErrorMessage = rawError && typeof rawError === 'object' && typeof rawError.message === 'string'
+      ? rawError.message.trim()
+      : ''
     const message =
       (typeof rawError === 'string' && rawError.trim()) ||
       (typeof rawMessage === 'string' && rawMessage.trim()) ||
+      nestedErrorMessage ||
       (typeof error.message === 'string' && error.message.trim()) ||
       `HTTP ${error.status}`
 

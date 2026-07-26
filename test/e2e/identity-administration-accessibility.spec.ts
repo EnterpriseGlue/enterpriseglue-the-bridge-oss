@@ -114,6 +114,24 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
   });
 
+  test('shows a safe provider-connection failure without nested backend diagnostics @identity-accessibility', async ({ page }) => {
+    await openIdentitySettings(page, 'Identity Providers');
+    await page.route('**/api/identity/providers/identity.oidc.browser-mock/test-connection', (route) => fulfillJson(route, {
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Provider connection could not be verified',
+        stack: 'IdentityProviderFailure: client_secret=should-never-be-rendered',
+      },
+    }, 502));
+
+    const providersPanel = page.getByLabel('Identity Providers', { exact: true });
+    await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
+    await page.getByRole('menuitem', { name: 'Test connection' }).click();
+    await expect(providersPanel.getByText('Provider connection could not be verified', { exact: true })).toBeVisible();
+    await expect(providersPanel.getByText('client_secret=should-never-be-rendered', { exact: false })).toHaveCount(0);
+    await expect(providersPanel.getByText('IdentityProviderFailure:', { exact: false })).toHaveCount(0);
+  });
+
   test('keeps the OIDC configuration visible above the provider modal footer @identity-accessibility', async ({ page }) => {
     await openIdentitySettings(page, 'Identity Providers');
     await page.getByRole('button', { name: 'Add provider', exact: true }).click();
