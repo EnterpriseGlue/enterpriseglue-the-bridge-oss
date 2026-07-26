@@ -154,6 +154,7 @@ export function EffectiveAccessPanel({
       {evaluateM.isError && <InlineNotification kind="error" title={parseApiError(evaluateM.error, 'Unable to evaluate access').message} lowContrast />}
       {evaluateM.data && <InlineNotification kind={evaluateM.data.allowed ? 'success' : 'warning'} title={evaluateM.data.allowed ? 'Access allowed' : 'Access denied'} subtitle={`${evaluateM.data.reason} (${evaluateM.data.sources.length} source${evaluateM.data.sources.length === 1 ? '' : 's'})`} lowContrast />}
       {evaluateM.data?.resolvedRuntimeResource && <InlineNotification kind="info" lowContrast hideCloseButton title="Resolved runtime resource" subtitle={`${evaluateM.data.resolvedRuntimeResource.engineId} / ${evaluateM.data.resolvedRuntimeResource.resourceKind} / ${evaluateM.data.resolvedRuntimeResource.resourceKey}${evaluateM.data.resolvedRuntimeResource.runtimeTenantId ? ` / tenant ${evaluateM.data.resolvedRuntimeResource.runtimeTenantId}` : ''}`} />}
+      {evaluateM.data && sourceRows.length === 0 && <InlineNotification kind="info" lowContrast hideCloseButton title="No authorization sources" subtitle="No role assignment, group membership, policy, or inherited grant allows this request." />}
       {evaluateM.data && sourceRows.length > 0 && (
         <DataTable rows={sourceRows} headers={effectiveAccessSourceHeaders}>
           {({ rows, headers, getHeaderProps, getRowProps }) => (

@@ -86,7 +86,18 @@ export function PermissionsTable({
           <>
             <TableToolbar>
               <TableToolbarContent>
-                <Dropdown id="permissions-quick-filter" titleText="Quick filter" label="Quick filter" items={PERMISSION_QUICK_FILTERS} selectedItem={selectedQuickFilter} itemToString={(item) => item?.label || ''} onChange={({ selectedItem }) => setQuickFilter(selectedItem?.id || 'all')} />
+                <Dropdown
+                  id="permissions-quick-filter"
+                  titleText=""
+                  aria-label="Quick filter"
+                  label="Quick filter"
+                  className="eg-table-toolbar-filter"
+                  size="lg"
+                  items={PERMISSION_QUICK_FILTERS}
+                  selectedItem={selectedQuickFilter}
+                  itemToString={(item) => item?.label || ''}
+                  onChange={({ selectedItem }) => setQuickFilter(selectedItem?.id || 'all')}
+                />
                 <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'}>Add Permission</Button>
               </TableToolbarContent>
             </TableToolbar>

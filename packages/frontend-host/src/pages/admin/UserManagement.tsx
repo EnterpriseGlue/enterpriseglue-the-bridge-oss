@@ -664,17 +664,9 @@ export default function UserManagement() {
                                     ) : roleAssignmentsQ.isError ? (
                                       <span>Scoped RBAC: assignments unavailable</span>
                                     ) : directAssignments.length > 0 ? (
-                                      <>
-                                        <span>Scoped RBAC: {directAssignments.length} direct assignment{directAssignments.length === 1 ? '' : 's'}</span>
-                                        {directAssignments.slice(0, 2).map((assignment) => (
-                                          <span key={assignment.id} title={formatUserRoleAssignmentSourceLineage(assignment)}>
-                                            {formatUserRoleAssignmentSummary(assignment)}; Lineage: {formatUserRoleAssignmentSourceLineage(assignment)}
-                                          </span>
-                                        ))}
-                                        {directAssignments.length > 2 ? (
-                                          <span>+{directAssignments.length - 2} more direct assignment{directAssignments.length - 2 === 1 ? '' : 's'}</span>
-                                        ) : null}
-                                      </>
+                                      <span title={directAssignments.map((assignment) => `${formatUserRoleAssignmentSummary(assignment)}; ${formatUserRoleAssignmentSourceLineage(assignment)}`).join('\n')}>
+                                        Scoped RBAC: {directAssignments.length} direct assignment{directAssignments.length === 1 ? '' : 's'}
+                                      </span>
                                     ) : (
                                       <span>Scoped RBAC: no direct assignments</span>
                                     )}

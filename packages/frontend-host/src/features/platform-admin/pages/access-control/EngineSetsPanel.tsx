@@ -146,6 +146,7 @@ export function EngineSetsPanel({
 }) {
   if (loading) return <DataTableSkeleton headers={engineSetHeaders} rowCount={4} />;
   const selectedEngineSetMaterializations = selectedEngineSet?.materializations || [];
+  const selectedEngineSetLabel = selectedEngineSet?.name || selectedEngineSet?.key || 'Selected Engine Set';
   const selectedAssignments = selectedEngineSet
     ? assignments.filter((assignment) => assignmentScopeMatches(assignment, 'engine_set', selectedEngineSet.id))
     : [];
@@ -243,7 +244,7 @@ export function EngineSetsPanel({
         <DataTableSkeleton headers={engineSetMaterializationHeaders} rowCount={3} />
       ) : selectedEngineSet ? (
         <>
-          <TableContainer title={`${selectedEngineSet.name} materializations`}>
+          <TableContainer title={`${selectedEngineSetLabel} materializations`}>
             <DataTable
               rows={selectedEngineSetMaterializations.map((materialization) => ({
                 id: materialization.id,
@@ -285,7 +286,7 @@ export function EngineSetsPanel({
             assignmentLoading ? (
               <DataTableSkeleton headers={engineSetAssignmentUsageHeaders} rowCount={3} />
             ) : (
-              <TableContainer title={`${selectedEngineSet.name} assignment usage`}>
+              <TableContainer title={`${selectedEngineSetLabel} assignment usage`}>
                 <DataTable
                   rows={selectedAssignments.map((assignment) => ({
                     id: assignment.id,
@@ -334,7 +335,7 @@ export function EngineSetsPanel({
             auditLoading ? (
               <DataTableSkeleton headers={engineSetAuditPreviewHeaders} rowCount={3} />
             ) : (
-              <TableContainer title={`${selectedEngineSet.name} authorization audit`}>
+              <TableContainer title={`${selectedEngineSetLabel} authorization audit`}>
                 <DataTable
                   rows={auditEntries.map((entry) => ({
                     id: entry.id,
@@ -389,4 +390,3 @@ export function EngineSetsPanel({
     </div>
   );
 }
-

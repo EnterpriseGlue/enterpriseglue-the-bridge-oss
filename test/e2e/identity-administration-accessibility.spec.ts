@@ -113,4 +113,24 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await expect(page.getByRole('menuitem', { name: 'Edit' })).toBeEnabled();
     await expect(page.getByRole('menuitem', { name: 'Delete' })).toBeDisabled();
   });
+
+  test('keeps the OIDC configuration visible above the provider modal footer @identity-accessibility', async ({ page }) => {
+    await openIdentitySettings(page, 'Identity Providers');
+    await page.getByRole('button', { name: 'Add provider', exact: true }).click();
+
+    const issuer = page.getByLabel('Issuer URL', { exact: true });
+    const scopes = page.getByLabel('Scopes', { exact: true });
+    await expect(issuer).toBeVisible();
+    await expect(scopes).toBeVisible();
+
+    const layout = await scopes.evaluate((element) => {
+      const dialog = element.closest('[role="dialog"]');
+      const footer = dialog?.querySelector('.cds--modal-footer');
+      if (!footer) return null;
+      const input = element.getBoundingClientRect();
+      const footerBox = footer.getBoundingClientRect();
+      return { visibleAboveFooter: input.bottom <= footerBox.top, inputBottom: input.bottom, footerTop: footerBox.top };
+    });
+    expect(layout).toMatchObject({ visibleAboveFooter: true });
+  });
 });

@@ -109,4 +109,44 @@ test.describe('Access Control accessibility release checks', () => {
     await page.getByRole('combobox', { name: 'Quick filter' }).click();
     await expect(page.getByRole('option', { name: 'All permissions', exact: true })).toBeVisible();
   });
+
+  test('aligns the permission filter with the primary toolbar action @accessibility', async ({ page }) => {
+    await openPermissions(page);
+
+    const quickFilter = page.getByRole('combobox', { name: 'Quick filter' });
+    const addPermission = page.getByRole('button', { name: 'Add Permission' });
+    await expect(quickFilter).toBeVisible();
+    await expect(addPermission).toBeVisible();
+
+    await expect.poll(() => quickFilter.evaluate((element) => {
+      const button = Array.from(document.querySelectorAll('button'))
+        .find((candidate) => candidate.textContent?.includes('Add Permission'));
+      if (!button) return null;
+      const filter = element.getBoundingClientRect();
+      const action = button.getBoundingClientRect();
+      return {
+        filterTop: filter.top,
+        filterBottom: filter.bottom,
+        actionTop: action.top,
+        actionBottom: action.bottom,
+        borderBottom: getComputedStyle(element).borderBottomWidth,
+      };
+    })).toEqual(expect.objectContaining({
+      borderBottom: '0px',
+      filterTop: expect.any(Number),
+      filterBottom: expect.any(Number),
+      actionTop: expect.any(Number),
+      actionBottom: expect.any(Number),
+    }));
+
+    const geometry = await quickFilter.evaluate((element) => {
+      const button = Array.from(document.querySelectorAll('button'))
+        .find((candidate) => candidate.textContent?.includes('Add Permission'))!;
+      const filter = element.getBoundingClientRect();
+      const action = button.getBoundingClientRect();
+      return { topDifference: Math.abs(filter.top - action.top), bottomDifference: Math.abs(filter.bottom - action.bottom) };
+    });
+    expect(geometry.topDifference).toBeLessThanOrEqual(1);
+    expect(geometry.bottomDifference).toBeLessThanOrEqual(1);
+  });
 });

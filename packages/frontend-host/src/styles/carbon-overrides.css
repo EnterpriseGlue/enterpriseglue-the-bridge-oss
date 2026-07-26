@@ -44,8 +44,52 @@
    standalone dropdown underline so the scope filter has a clean shared edge
    with the search field and primary action. */
 .eg-role-scope-filter.cds--dropdown,
-.eg-role-scope-filter.cds--dropdown:hover {
+.eg-role-scope-filter.cds--dropdown:hover,
+.eg-role-scope-filter .cds--dropdown,
+.eg-role-scope-filter .cds--dropdown:hover,
+.eg-table-toolbar-filter.cds--dropdown,
+.eg-table-toolbar-filter.cds--dropdown:hover,
+.eg-table-toolbar-filter .cds--dropdown,
+.eg-table-toolbar-filter .cds--dropdown:hover {
   border-block-end: 0;
+}
+
+/* A labelled text input consumes an extra row inside a data-table toolbar.
+   Toolbar filters use placeholders and an accessible label instead so all
+   controls share the same 48px vertical rhythm. */
+.eg-table-toolbar-text-filter.cds--text-input,
+.eg-table-toolbar-text-filter.cds--text-input:hover {
+  border-block-end: 0;
+}
+
+/* Provider forms contain protocol-specific configuration. A two-column grid
+   keeps the complete OIDC/SAML form visible in a standard laptop viewport
+   instead of hiding the configuration beneath the modal footer. */
+.eg-identity-provider-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-4);
+  align-items: start;
+}
+
+.eg-identity-provider-form .cds--form-item {
+  margin: 0;
+}
+
+.cds--modal-container:has(.eg-identity-provider-form) {
+  height: min(92vh, 54rem);
+}
+
+@media (max-width: 66rem) {
+  .eg-identity-provider-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 42rem) {
+  .eg-identity-provider-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* -----------------------------------------

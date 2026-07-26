@@ -110,7 +110,16 @@ export function ProjectEngineTargetsPanel({
               <TableToolbar>
                 <TableToolbarContent>
                   <TableToolbarSearch persistent placeholder="Filter projects" value={projectFilter} onChange={(event: any) => setProjectFilter(event.target.value)} />
-                  <TextInput id="target-engine-filter" labelText="Filter engines" value={engineFilter} onChange={(event) => setEngineFilter(event.target.value)} />
+                  <TextInput
+                    id="target-engine-filter"
+                    labelText=""
+                    aria-label="Filter engines"
+                    placeholder="Filter engines"
+                    className="eg-table-toolbar-text-filter"
+                    size="lg"
+                    value={engineFilter}
+                    onChange={(event) => setEngineFilter(event.target.value)}
+                  />
                   <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={manageUnavailableReason}>
                     Create Target
                   </Button>

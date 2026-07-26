@@ -164,6 +164,7 @@ export function GroupsPanel({
                                     {!group.isArchived && (
                                       <Button kind="ghost" size="sm" disabled={pending || Boolean(rowUnavailableReason)} title={rowUnavailableReason} renderIcon={TrashCan} onClick={() => onArchive(group.id)}>Archive</Button>
                                     )}
+                                    {rowUnavailableReason && <Tag type="gray" title={rowUnavailableReason}>Read-only</Tag>}
                                   </>
                                 )}
                               </TableCell>
@@ -277,4 +278,3 @@ export function GroupsPanel({
     </div>
   );
 }
-

@@ -120,6 +120,7 @@ export function RoleAssignmentForm({
           <TextInput
             id="assignment-user-id"
             labelText="User ID"
+            placeholder="Enter user ID"
             value={form.principalId}
             onChange={(event) => setForm((current) => ({ ...current, principalId: event.target.value }))}
           />
@@ -185,6 +186,7 @@ export function RoleAssignmentForm({
             labelText={form.resourceType === 'tenant' ? 'Tenant' : 'Resource ID'}
             helperText={form.resourceType === 'tenant' ? 'The authenticated tenant is used automatically.' : undefined}
             disabled={form.resourceType === 'platform' || form.resourceType === 'tenant'}
+            placeholder={form.resourceType === 'platform' || form.resourceType === 'tenant' ? 'Not required for this scope' : 'Enter resource ID'}
             value={form.resourceId}
             onChange={(event) => setForm((current) => ({ ...current, resourceId: event.target.value }))}
           />
@@ -199,7 +201,8 @@ export function RoleAssignmentForm({
           onChange={({ selectedItem }) => setForm((current) => ({ ...current, roleId: selectedItem?.id || '' }))}
         />
       </div>
-      <div>
+      <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+        {!canAssign && <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Choose a principal, scope, resource, and role to enable assignment.</p>}
         <Button disabled={!canAssign || !canCreate} title={canCreate ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onAssign(form)}>
           Assign Role
         </Button>
