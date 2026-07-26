@@ -1,4 +1,6 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 function isLocalUrl(value: string): boolean {
   try {
@@ -20,6 +22,18 @@ const keycloakPassword = process.env.LOCAL_OIDC_TEST_PASSWORD || 'local-oidc-ope
 
 type Engine = { id: string; name: string };
 type Mapping = { id: string; providerKey: string; isActive: boolean };
+
+async function captureConfiguredMappingScreenshot(page: Page): Promise<void> {
+  const screenshotDirectory = process.env.LOCAL_OIDC_SCREENSHOT_DIR;
+  if (!screenshotDirectory) return;
+
+  await mkdir(screenshotDirectory, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({
+    path: resolve(screenshotDirectory, '41-identity-mapping-live-oidc-scoped.png'),
+    fullPage: false,
+  });
+}
 
 async function csrfToken(page: Page): Promise<string> {
   const response = await page.request.get('/api/csrf-token');
@@ -155,6 +169,8 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       expect(mappings.status).toBe(200);
       const mapping = mappings.body?.find((candidate) => candidate.providerKey === providerKey);
       expect(mapping).toMatchObject({ isActive: true });
+      await expect(admin.getByRole('dialog', { name: 'Add identity mapping' })).toBeHidden();
+      await captureConfiguredMappingScreenshot(admin);
 
       const operator = await signInWithKeycloak(operatorContext, providerKey);
       const inventory = await requestJson<Engine[]>(operator, '/engines-api/engines');

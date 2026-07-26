@@ -44,10 +44,12 @@ async function request(page: Page, path: string, init?: RequestInit) {
 }
 
 async function backendRequest(page: Page, path: string) {
-  // Playwright's request context shares the authenticated browser cookies, but
-  // talks to the backend directly. This gives the write test a fresh engine
-  // read in addition to the visible browser/UI assertion through nginx.
-  const response = await page.context().request.get(`http://localhost:8787${path}`, {
+  // The request context shares the authenticated browser cookies while
+  // bypassing UI and React Query caches.  Resolve the configured local API
+  // target instead of the runner's loopback address: Firefox/WebKit execute
+  // inside an isolated container where localhost is the runner, not the app.
+  const apiBaseUrl = process.env.E2E_API_BASE_URL || 'http://localhost:8787';
+  const response = await page.context().request.get(new URL(path, apiBaseUrl).toString(), {
     headers: { 'Cache-Control': 'no-store' },
   });
   return { status: response.status(), body: await response.json().catch(() => null) };
