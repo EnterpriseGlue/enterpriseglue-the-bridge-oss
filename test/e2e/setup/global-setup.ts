@@ -210,6 +210,7 @@ export default async function globalSetup() {
   }
 
   const engineId = randomUUID();
+  const engineName = `${prefix}-engine`;
   // A browser evidence runner talks to the host frontend while the backend is
   // in Docker. Prefer its Compose-network URL so any discovered engine is
   // reachable from the backend container, not from the host loopback device.
@@ -224,7 +225,7 @@ export default async function globalSetup() {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     [
       engineId,
-      `${prefix}-engine`,
+      engineName,
       engineBaseUrl,
       'camunda7',
       null,
@@ -248,6 +249,7 @@ export default async function globalSetup() {
   // synthetic Camunda inventory.  Keeping that inventory in the fixture means
   // its migration operator needs no unrelated inventory-write permission.
   let primaryProcessRuntimeResourceId = '';
+  let primarySiblingProcessDefinitionId = '';
   for (const [resourceKind, resourceKey, engineResourceId, deploymentId] of [
     ['process_definition', 'invoice-process', 'invoice-process:3:mock-process-definition', 'mock-deployment-primary'],
     ['decision_definition', 'invoice-risk', 'invoice-risk:1:mock-decision-definition', 'invoice-risk-drd'],
@@ -256,6 +258,9 @@ export default async function globalSetup() {
     const runtimeResourceId = randomUUID();
     if (resourceKind === 'process_definition' && resourceKey === 'invoice-process') {
       primaryProcessRuntimeResourceId = runtimeResourceId;
+    }
+    if (resourceKind === 'process_definition' && resourceKey === 'invoice-sequential-review') {
+      primarySiblingProcessDefinitionId = engineResourceId;
     }
     await pool.query(
       `INSERT INTO ${schema}.runtime_resources
@@ -271,8 +276,8 @@ export default async function globalSetup() {
       ]
     );
   }
-  if (!primaryProcessRuntimeResourceId) {
-    throw new Error('E2E fixture did not create the primary process runtime resource');
+  if (!primaryProcessRuntimeResourceId || !primarySiblingProcessDefinitionId) {
+    throw new Error('E2E fixture did not create the required primary runtime resources');
   }
 
   // The guarded engine-tenancy journey needs one reproducible legacy row to
@@ -547,9 +552,11 @@ export default async function globalSetup() {
   const runtimeScopedPassword = `E2eRuntimeScope-${suffix}-Pass1!`;
   const runtimeScopedPasswordHash = await hashPassword(runtimeScopedPassword);
   const runtimeScopedEngineId = randomUUID();
+  const runtimeScopedEngineName = `${prefix}-runtime-scoped-engine`;
   const runtimeAllowedResourceId = randomUUID();
   const runtimeSiblingResourceId = randomUUID();
   const runtimeCustomRoleId = `custom.e2e.runtime-reader.${suffix}`;
+  const runtimeCustomRoleName = `E2E Runtime Reader ${suffix}`;
   const runtimeAllowedDefinitionId = 'invoice-process:3:mock-process-definition';
   const runtimeSiblingDefinitionId = 'invoice-sequential-review:1:mock-process-definition';
   const runtimeEngineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL || 'http://camunda-mock:9080/engine-rest';
@@ -580,7 +587,7 @@ export default async function globalSetup() {
        runtime_access_scope, tenancy_mode, tenant_resolution_status, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     [
-      runtimeScopedEngineId, `${prefix}-runtime-scoped-engine`, runtimeEngineBaseUrl,
+      runtimeScopedEngineId, runtimeScopedEngineName, runtimeEngineBaseUrl,
       'camunda7', null, null, null, null, userId, null, null, false,
       'tenant-default', 'resource_aware', 'dedicated', 'ready', now, now,
     ]
@@ -611,7 +618,7 @@ export default async function globalSetup() {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
     [
       runtimeCustomRoleId, 'tenant-default', runtimeCustomRoleId, `tenant-default:${runtimeCustomRoleId}`,
-      'E2E Runtime Reader', 'Disposable custom role used to prove resource-aware access.',
+      runtimeCustomRoleName, 'Disposable custom role used to prove resource-aware access.',
       'engine', 'custom', true, true, false, 'manual', scopedSourceRef, 'manual',
       null, null, null, adminUserId, now, now,
     ]
@@ -633,6 +640,123 @@ export default async function globalSetup() {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [randomUUID(), 'tenant-default', 'user', runtimeScopedUserId, runtimeCustomRoleId, 'engine_runtime_resource', runtimeAllowedResourceId, 'system', scopedSourceRef, runtimeAssignmentKey, now, now]
   );
+
+  // The browser administrator must be able to select the disposable
+  // resource-aware engine in Access Control. This is deliberately an
+  // administrator-only prerequisite; the three personas below receive no
+  // engine access until their grants are submitted through the UI.
+  const scopeAssignmentAdministratorKey = canonicalRoleAssignmentKey({
+    tenantId: 'tenant-default', principalType: 'user', principalId: userId,
+    roleId: operatorRoleId, scopeType: 'engine', scopeId: runtimeScopedEngineId,
+    source: 'system', sourceRef: scopedSourceRef,
+  });
+  await pool.query(
+    `INSERT INTO ${schema}.role_assignments
+      (id, tenant_id, principal_type, principal_id, role_id, scope_type, scope_id,
+       source, source_ref, assignment_key, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [randomUUID(), 'tenant-default', 'user', userId, operatorRoleId, 'engine', runtimeScopedEngineId, 'system', scopedSourceRef, scopeAssignmentAdministratorKey, now, now],
+  );
+
+  // Assignment-form browser evidence uses this same resource-aware engine,
+  // whose two runtime definitions are already exercised end-to-end below.
+  // The target rows are prerequisites only; every scoped grant is created by
+  // the administrator through Access Control during the browser test.
+  const scopeAssignmentEngineSetId = randomUUID();
+  const scopeAssignmentEngineSetKey = `e2e-scope-set-${suffix}`;
+  const scopeAssignmentEngineSetName = `E2E scope Engine Set ${suffix}`;
+  const scopeAssignmentEngineSetFingerprint = `e2e-scope-engine-set:${runtimeScopedEngineId}`;
+  await pool.query(
+    `INSERT INTO ${schema}.engine_sets
+      (id, tenant_id, key, engine_set_key_identity, name, description, selector_json,
+       selector_fingerprint, source, source_ref, ownership_mode, source_hash,
+       last_applied_at, drift_status, is_archived, created_by_id, last_materialized_at,
+       materialization_status, materialization_error, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+    [
+      scopeAssignmentEngineSetId, 'tenant-default', scopeAssignmentEngineSetKey,
+      `tenant-default:${scopeAssignmentEngineSetKey}`, scopeAssignmentEngineSetName,
+      'Disposable local target for the scoped assignment browser test.',
+      JSON.stringify({ mode: 'engine_ids', engineIds: [runtimeScopedEngineId] }), scopeAssignmentEngineSetFingerprint,
+      'system', membershipSourceRef, 'manual', null, null, null, false, adminUserId,
+      now, 'ok', null, now, now,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.engine_set_materializations
+      (id, tenant_id, engine_set_id, engine_id, selector_fingerprint, matched_by_json,
+       lineage_json, source, source_ref, last_seen_at, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [
+      randomUUID(), 'tenant-default', scopeAssignmentEngineSetId, runtimeScopedEngineId,
+      scopeAssignmentEngineSetFingerprint, JSON.stringify({ mode: 'engine_ids', engineId: runtimeScopedEngineId }),
+      JSON.stringify({ engineSetId: scopeAssignmentEngineSetId, engineId: runtimeScopedEngineId }), 'system',
+      membershipSourceRef, now, now, now,
+    ],
+  );
+  const scopeAssignmentRuntimeResourceSetId = randomUUID();
+  const scopeAssignmentRuntimeResourceSetKey = `e2e-scope-runtime-${suffix}`;
+  const scopeAssignmentRuntimeResourceSetName = `E2E scope runtime resources ${suffix}`;
+  const scopeAssignmentRuntimeResourceSetFingerprint = `e2e-scope-runtime-set:${runtimeAllowedResourceId}`;
+  await pool.query(
+    `INSERT INTO ${schema}.runtime_resource_sets
+      (id, tenant_id, key, runtime_resource_set_key_identity, name, description, engine_id,
+       resource_kind, selector_json, selector_fingerprint, runtime_tenant_id, source, source_ref,
+       ownership_mode, source_hash, last_applied_at, drift_status, is_archived, created_by_id,
+       created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+    [
+      scopeAssignmentRuntimeResourceSetId, 'tenant-default', scopeAssignmentRuntimeResourceSetKey,
+      `tenant-default:${scopeAssignmentRuntimeResourceSetKey}`, scopeAssignmentRuntimeResourceSetName,
+      'Disposable local target containing only Invoice Approval.', runtimeScopedEngineId, 'process_definition',
+      JSON.stringify({ mode: 'keys', keys: ['invoice-process'] }), scopeAssignmentRuntimeResourceSetFingerprint,
+      '', 'system', membershipSourceRef, 'manual', null, null, null, false, adminUserId, now, now,
+    ],
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.runtime_resource_set_materializations
+      (id, tenant_id, runtime_resource_set_id, runtime_resource_id, selector_fingerprint,
+       matched_by_json, lineage_json, last_seen_at, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      randomUUID(), 'tenant-default', scopeAssignmentRuntimeResourceSetId, runtimeAllowedResourceId,
+      scopeAssignmentRuntimeResourceSetFingerprint, JSON.stringify({ mode: 'keys', resourceKey: 'invoice-process' }),
+      JSON.stringify({ runtimeResourceSetId: scopeAssignmentRuntimeResourceSetId, runtimeResourceId: runtimeAllowedResourceId, engineId: runtimeScopedEngineId }),
+      now, now, now,
+    ],
+  );
+
+  // Keep the three assignment-form personas unprivileged until their role is
+  // created through the Access Control UI. They share only the authenticated
+  // users group needed for a local session and tenant route selection.
+  const scopeAssignmentPersonas: Record<'engineSet' | 'runtimeResource' | 'runtimeResourceSet', { userId: string; email: string; password: string }> = {
+    engineSet: { userId: randomUUID(), email: `e2e-assignment-engine-set-${Date.now()}-${suffix}@example.com`, password: `E2eAssignmentEngineSet-${suffix}-Pass1!` },
+    runtimeResource: { userId: randomUUID(), email: `e2e-assignment-runtime-resource-${Date.now()}-${suffix}@example.com`, password: `E2eAssignmentRuntimeResource-${suffix}-Pass1!` },
+    runtimeResourceSet: { userId: randomUUID(), email: `e2e-assignment-runtime-set-${Date.now()}-${suffix}@example.com`, password: `E2eAssignmentRuntimeSet-${suffix}-Pass1!` },
+  };
+  for (const [kind, persona] of Object.entries(scopeAssignmentPersonas)) {
+    const personaHash = await hashPassword(persona.password);
+    await pool.query(
+      `INSERT INTO ${schema}.users
+        (id, email, auth_provider, password_hash, first_name, last_name,
+         is_active, must_reset_password, failed_login_attempts, locked_until, is_email_verified,
+         email_verification_token, email_verification_token_expiry, created_at, updated_at,
+         last_login_at, created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      [persona.userId, persona.email, 'local', personaHash, 'E2E', `Assignment ${kind}`, true, false, 0, null, true, null, null, now, now, null, adminUserId],
+    );
+    await pool.query(
+      `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [randomUUID(), 'tenant-default', persona.userId, 'member', now],
+    );
+    await pool.query(
+      `INSERT INTO ${schema}.authz_group_memberships
+        (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [randomUUID(), null, E2E_PLATFORM_GROUP_IDS.authenticatedUsers, persona.userId, 'system', scopedSourceRef, null, null, now, now],
+    );
+  }
 
   // A separate operator proves that the same bounded decision is available
   // through an internal group, without depending on the direct user
@@ -781,6 +905,7 @@ export default async function globalSetup() {
       adminEmail,
       adminPassword,
       engineId,
+      engineName,
       migrationEngineId,
       scopedUserId,
       scopedEmail,
@@ -796,9 +921,30 @@ export default async function globalSetup() {
       runtimeScopedUserId,
       runtimeScopedEngineId,
       runtimeCustomRoleId,
+      scopeAssignmentRuntimeRoleName: runtimeCustomRoleName,
       runtimeAllowedResourceId,
       runtimeAllowedDefinitionId,
       runtimeSiblingDefinitionId,
+      scopeAssignmentEngineSetId,
+      scopeAssignmentEngineSetKey,
+      scopeAssignmentEngineSetName,
+      scopeAssignmentRuntimeResourceId: runtimeAllowedResourceId,
+      scopeAssignmentRuntimeResourceSetId,
+      scopeAssignmentRuntimeResourceSetKey,
+      scopeAssignmentRuntimeResourceSetName,
+      scopeAssignmentEngineId: runtimeScopedEngineId,
+      scopeAssignmentEngineName: runtimeScopedEngineName,
+      scopeAssignmentAllowedDefinitionId: runtimeAllowedDefinitionId,
+      scopeAssignmentSiblingDefinitionId: runtimeSiblingDefinitionId,
+      scopeAssignmentEngineSetUserId: scopeAssignmentPersonas.engineSet.userId,
+      scopeAssignmentEngineSetEmail: scopeAssignmentPersonas.engineSet.email,
+      scopeAssignmentEngineSetPassword: scopeAssignmentPersonas.engineSet.password,
+      scopeAssignmentRuntimeResourceUserId: scopeAssignmentPersonas.runtimeResource.userId,
+      scopeAssignmentRuntimeResourceEmail: scopeAssignmentPersonas.runtimeResource.email,
+      scopeAssignmentRuntimeResourcePassword: scopeAssignmentPersonas.runtimeResource.password,
+      scopeAssignmentRuntimeResourceSetUserId: scopeAssignmentPersonas.runtimeResourceSet.userId,
+      scopeAssignmentRuntimeResourceSetEmail: scopeAssignmentPersonas.runtimeResourceSet.email,
+      scopeAssignmentRuntimeResourceSetPassword: scopeAssignmentPersonas.runtimeResourceSet.password,
       variableAccessEngineId: engineId,
       variableAccessProcessInstanceId,
       variableAccessDeniedProcessInstanceId,

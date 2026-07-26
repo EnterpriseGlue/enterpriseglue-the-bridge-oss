@@ -214,6 +214,22 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   });
 
   if (membershipSourceRef) {
+    const [engineSetRows, runtimeResourceSetRows] = await Promise.all([
+      pool.query(`SELECT id FROM ${schema}.engine_sets WHERE source_ref = $1`, [membershipSourceRef]),
+      pool.query(`SELECT id FROM ${schema}.runtime_resource_sets WHERE source_ref = $1`, [membershipSourceRef]),
+    ]);
+    const engineSetIds = engineSetRows.rows.map((row: { id: string }) => row.id);
+    const runtimeResourceSetIds = runtimeResourceSetRows.rows.map((row: { id: string }) => row.id);
+    if (engineSetIds.length > 0) {
+      await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_type = 'engine_set' AND scope_id = ANY($1::text[])`, [engineSetIds]);
+      await pool.query(`DELETE FROM ${schema}.engine_set_materializations WHERE engine_set_id = ANY($1::text[])`, [engineSetIds]);
+      await pool.query(`DELETE FROM ${schema}.engine_sets WHERE id = ANY($1::text[])`, [engineSetIds]);
+    }
+    if (runtimeResourceSetIds.length > 0) {
+      await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_type = 'engine_runtime_resource_set' AND scope_id = ANY($1::text[])`, [runtimeResourceSetIds]);
+      await pool.query(`DELETE FROM ${schema}.runtime_resource_set_materializations WHERE runtime_resource_set_id = ANY($1::text[])`, [runtimeResourceSetIds]);
+      await pool.query(`DELETE FROM ${schema}.runtime_resource_sets WHERE id = ANY($1::text[])`, [runtimeResourceSetIds]);
+    }
     await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = $1`, [membershipSourceRef]);
     await pool.query(`DELETE FROM ${schema}.role_assignments WHERE source_ref = $1`, [membershipSourceRef]);
     await pool.query(`DELETE FROM ${schema}.authz_groups WHERE source_ref = $1`, [membershipSourceRef]);
@@ -320,6 +336,18 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     await pool.query(`DELETE FROM ${schema}.engine_tenant_mappings WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
     await pool.query(`DELETE FROM ${schema}.external_engine_registrations WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
     await pool.query(`DELETE FROM ${schema}.engines WHERE id = ANY($1::text[])`, [staleEngineIds]);
+  }
+  // A cancelled browser run can leave its disposable custom roles behind even
+  // after the seeded users have been removed. The `custom.e2e.` namespace is
+  // reserved for this local test harness, so remove its dependants first.
+  const staleRoleIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.roles WHERE key LIKE 'custom.e2e.%'`
+  );
+  const staleRoleIds = staleRoleIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleRoleIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE role_id = ANY($1::text[])`, [staleRoleIds]);
+    await pool.query(`DELETE FROM ${schema}.role_permissions WHERE role_id = ANY($1::text[])`, [staleRoleIds]);
+    await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [staleRoleIds]);
   }
   const staleApiClientIdsResult = await pool.query(
     `SELECT id FROM ${schema}.api_clients WHERE name LIKE 'e2e-%'`

@@ -24,9 +24,15 @@ const engineSetPreviewSchema = z.object({ selector: EngineSetSelectorSchema });
 
 export interface EngineSetRouteDependencies {
   requirePlatformAction: (actionId: string) => RequestHandler;
+  /**
+   * Platform Authorization routes are also mounted without tenant middleware.
+   * The host supplies its normalized tenant fallback so every scoped selector
+   * uses the same tenant as role assignment and effective-access evaluation.
+   */
+  effectiveTenantId: (req: Request) => string;
 }
 
-export function registerEngineSetRoutes(router: Router, { requirePlatformAction }: EngineSetRouteDependencies): void {
+export function registerEngineSetRoutes(router: Router, { requirePlatformAction, effectiveTenantId }: EngineSetRouteDependencies): void {
   router.get('/api/authz/engine-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(z.object({ includeArchived: z.enum(['true', 'false']).optional() })), asyncHandler(async (req: Request, res: Response) => {
     try {
       res.json(await engineSetService.listEngineSets({ tenantId: req.tenant?.tenantId || null, includeArchived: req.query.includeArchived === 'true' }));
@@ -103,7 +109,7 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
   }));
 
   router.get('/api/authz/runtime-resources', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(RuntimeResourceQuerySchema), asyncHandler(async (req: Request, res: Response) => {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = effectiveTenantId(req);
     const resources = await (await getDataSource()).getRepository(RuntimeResource).find({
       where: { engineId: String(req.query.engineId), ...(req.query.resourceKind ? { resourceKind: String(req.query.resourceKind) } : {}), ...(req.query.includeInactive === 'true' ? {} : { isActive: true }) },
       order: { resourceKind: 'ASC', resourceKey: 'ASC', id: 'ASC' },
@@ -112,7 +118,7 @@ export function registerEngineSetRoutes(router: Router, { requirePlatformAction 
   }));
 
   router.get('/api/authz/runtime-resource-sets', apiLimiter, requireAuth, requirePlatformAction('platform.engine-sets.read'), validateQuery(RuntimeResourceSetQuerySchema), asyncHandler(async (req: Request, res: Response) => {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = effectiveTenantId(req);
     const sets = await (await getDataSource()).getRepository(RuntimeResourceSet).find({
       where: { ...(req.query.engineId ? { engineId: String(req.query.engineId) } : {}), ...(req.query.includeArchived === 'true' ? {} : { isArchived: false }) },
       order: { key: 'ASC' },

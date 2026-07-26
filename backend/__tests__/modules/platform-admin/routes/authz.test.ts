@@ -896,6 +896,38 @@ describe('platform-admin authz routes', () => {
     }));
   });
 
+  it('lists default-tenant runtime targets when platform access control has no tenant middleware', async () => {
+    const runtimeResources = [
+      { id: 'runtime-default', tenantId: 'tenant-default', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'invoice-process', isActive: true },
+      { id: 'runtime-other', tenantId: 'tenant-other', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'other-tenant', isActive: true },
+    ];
+    const runtimeResourceSets = [
+      { id: 'runtime-set-default', tenantId: 'tenant-default', engineId: 'engine-1', key: 'invoice-processes', isArchived: false },
+      { id: 'runtime-set-other', tenantId: 'tenant-other', engineId: 'engine-1', key: 'other-tenant-processes', isArchived: false },
+    ];
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity.name === 'RuntimeResource') return { find: vi.fn().mockResolvedValue(runtimeResources) };
+        if (entity.name === 'RuntimeResourceSet') return { find: vi.fn().mockResolvedValue(runtimeResourceSets) };
+        return { find: vi.fn().mockResolvedValue([]) };
+      },
+    });
+
+    const [resourcesResponse, setsResponse] = await Promise.all([
+      request(app)
+        .get('/api/authz/runtime-resources?engineId=engine-1')
+        .set('x-test-omit-tenant-context', 'true'),
+      request(app)
+        .get('/api/authz/runtime-resource-sets?engineId=engine-1')
+        .set('x-test-omit-tenant-context', 'true'),
+    ]);
+
+    expect(resourcesResponse.status).toBe(200);
+    expect(resourcesResponse.body.map((resource: { id: string }) => resource.id)).toEqual(['runtime-default']);
+    expect(setsResponse.status).toBe(200);
+    expect(setsResponse.body.map((set: { id: string }) => set.id)).toEqual(['runtime-set-default']);
+  });
+
   it('lists exact runtime grants only through the platform-authorized engine filter', async () => {
     const response = await request(app)
       .get('/api/authz/role-assignments?engineId=engine-1');

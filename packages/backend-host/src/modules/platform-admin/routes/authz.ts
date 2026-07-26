@@ -304,7 +304,7 @@ registerExternalEngineSystemRoutes(router, { requirePlatformAction });
 
 registerExternalEngineRoutes(router, { requirePlatformAction });
 
-registerEngineSetRoutes(router, { requirePlatformAction });
+registerEngineSetRoutes(router, { requirePlatformAction, effectiveTenantId });
 
 registerProjectEngineTargetRoutes(router, { requirePlatformAction });
 
