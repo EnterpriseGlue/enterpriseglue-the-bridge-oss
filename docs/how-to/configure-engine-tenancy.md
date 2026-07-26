@@ -337,6 +337,90 @@ keep engine-wide runtime access:
 }
 ```
 
+### Complete headless engine registration
+
+`engines.json` is the same engine-registration contract used by the UI and
+the external-engine API, except it accepts only opaque secret references. The
+following direct Operaton entry exercises every persisted engine setting. It is
+safe to use as a GitOps template after replacing identifiers and endpoints.
+
+<!-- enterpriseglue-config-schema: ConfigEnginesFileSchema -->
+```json
+{
+  "engines": [
+    {
+      "key": "engine.payments-prod",
+      "name": "Payments production",
+      "type": "operaton",
+      "baseUrl": "https://payments.example.test/engine-rest",
+      "externalId": "payments-prod-01",
+      "labels": {
+        "environment": "production",
+        "domain": "payments"
+      },
+      "auth": {
+        "type": "oauth2-client-credentials",
+        "username": "enterpriseglue",
+        "passwordRef": "env://PAYMENTS_ENGINE_CLIENT_SECRET",
+        "tokenUrl": "https://identity.example.test/oauth/token",
+        "scopes": "engine.read engine.deploy",
+        "audience": "payments-engine"
+      },
+      "connectionMode": "direct",
+      "runtimeAccessScope": "engine_wide",
+      "tenancy": {
+        "mode": "dedicated",
+        "tenantRef": { "type": "key", "key": "tenant.payments" }
+      },
+      "deploymentIntegration": "enterpriseglue_proxy",
+      "metadataDiscoveryEnabled": true,
+      "deploymentDiscoveryEnabled": true,
+      "reconciliationIntervalSeconds": 300,
+      "pipelineReceiptEnabled": true,
+      "version": "1.2.3",
+      "environmentTagId": "00000000-0000-4000-8000-000000000001",
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+For a customer-sidecar, EnterpriseGlue authenticates only to the sidecar. The
+customer owns the downstream engine credential, so `auth.type: "none"` is
+valid only with `connectionMode: "customer_sidecar"` and only when the platform
+policy enables credentialless sidecars:
+
+<!-- enterpriseglue-config-schema: ConfigEnginesFileSchema -->
+```json
+{
+  "engines": [
+    {
+      "key": "engine.customer-sidecar",
+      "name": "Customer Operaton sidecar",
+      "type": "operaton",
+      "baseUrl": "https://customer-sidecar.example.test/engine-rest",
+      "auth": { "type": "none" },
+      "connectionMode": "customer_sidecar",
+      "runtimeAccessScope": "engine_wide",
+      "tenancy": {
+        "mode": "dedicated",
+        "tenantRef": { "type": "key", "key": "tenant.customer-a" }
+      },
+      "deploymentIntegration": "enterpriseglue_proxy",
+      "metadataDiscoveryEnabled": true,
+      "deploymentDiscoveryEnabled": true,
+      "reconciliationIntervalSeconds": 300,
+      "pipelineReceiptEnabled": true,
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+Engine credentials, OAuth client secrets, and customer-sidecar downstream
+credentials are never bundle values. The first two are provider references;
+the third never reaches EnterpriseGlue at all.
+
 A centralized connection declares shared topology and resource-aware access:
 
 <!-- enterpriseglue-config-schema: ConfigEnginesFileSchema -->
@@ -365,7 +449,7 @@ A centralized connection declares shared topology and resource-aware access:
 }
 ```
 
-For GitOps-managed engines, declare both files in `enterpriseglue.json`:
+For GitOps-managed engines, declare both files in `bundle.json`:
 
 <!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
 ```json

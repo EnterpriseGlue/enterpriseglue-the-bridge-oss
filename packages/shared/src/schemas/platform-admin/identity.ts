@@ -3,6 +3,75 @@ import { z } from 'zod';
 /** Provider-neutral contracts shared by adapters, mapping services, and API schemas. */
 export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
 export const IdentityProviderAuthenticationModeSchema = z.enum(['direct', 'claims_only']);
+
+/**
+ * Provider credentials and trust material are always resolved by the shared
+ * secret resolver. API and configuration-bundle contracts may carry only an
+ * opaque reference, never a secret value.
+ */
+export const IdentityProviderSecretReferenceSchema = z.string()
+  .min(1)
+  .max(512)
+  .regex(/^[A-Za-z][A-Za-z0-9_.:/-]*$/, 'Secret references must be opaque identifiers');
+
+/** Synchronization behavior shared by direct API and configuration-bundle providers. */
+export const IdentityProviderSyncConfigurationSchema = z.object({
+  triggers: z.array(z.enum(['login', 'scheduled', 'manual'])).min(1),
+  intervalSeconds: z.number().int().min(60).max(86_400).optional(),
+  requiredForLogin: z.boolean().default(true),
+  incompleteEntitlements: z.enum(['fail_closed', 'preserve_previous']).default('fail_closed'),
+  connectorCapability: z.enum(['claim_only', 'ldap_directory', 'scim', 'graph']).default('claim_only'),
+  scheduled: z.boolean().default(false),
+}).strict();
+
+const IdentityProviderAuthorizationConfigurationSchema = z.object({
+  // This is optional in a protocol configuration because config bundles keep
+  // it at the provider root and apply it when persisting the provider.  A
+  // default here would add the key back to exported nested protocol settings
+  // and make an export/diff round trip report a spurious update.
+  allowVerifiedEmailLinking: z.boolean().optional(),
+  authorizationAttributeKeys: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/)).max(20).optional(),
+});
+
+export const OidcIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
+  issuerUrl: z.string().url(),
+  clientId: z.string().min(1).max(255),
+  clientSecretRef: IdentityProviderSecretReferenceSchema.optional(),
+  callbackUrl: z.string().url(),
+  scopes: z.array(z.string().min(1).max(255)).min(1),
+  groupClaim: z.string().min(1).max(255).optional(),
+  expectedAudience: z.string().min(1).max(2000).optional(),
+}).strict();
+
+export const SamlIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
+  metadataUrl: z.string().url().optional(),
+  metadataXmlRef: IdentityProviderSecretReferenceSchema.optional(),
+  entityId: z.string().min(1).max(2000),
+  callbackUrl: z.string().url(),
+  ssoUrl: z.string().url(),
+  nameIdAttribute: z.string().min(1).max(255),
+  emailAttribute: z.string().min(1).max(255).optional(),
+  groupAttribute: z.string().min(1).max(255).optional(),
+  signingCertificateRef: IdentityProviderSecretReferenceSchema,
+  signatureAlgorithm: z.enum(['sha256', 'sha512']).default('sha256'),
+}).strict();
+
+export const LdapIdentityProviderConfigurationSchema = IdentityProviderAuthorizationConfigurationSchema.extend({
+  url: z.string().url().refine((url) => url.startsWith('ldaps://'), 'LDAP URLs must use LDAPS'),
+  bindDn: z.string().min(1).max(2000),
+  bindPasswordRef: IdentityProviderSecretReferenceSchema,
+  userBaseDn: z.string().min(1).max(2000),
+  userSearchFilter: z.string().min(1).max(2000),
+  userEnumerationFilter: z.string().min(1).max(2000).default('(objectClass=person)'),
+  pageSize: z.number().int().min(1).max(1000).default(200),
+  subjectAttribute: z.string().min(1).max(255).default('entryUUID'),
+  emailAttribute: z.string().min(1).max(255).default('mail'),
+  groupBaseDn: z.string().min(1).max(2000),
+  groupIdAttribute: z.string().min(1).max(255),
+  membershipMode: z.enum(['memberOf', 'group_search']),
+  nestedGroups: z.boolean().default(false),
+  tlsTrustRef: IdentityProviderSecretReferenceSchema.optional(),
+}).strict();
 export const ExternalEntitlementTypeSchema = z.enum(['group', 'role', 'scope', 'attribute', 'authenticated']);
 /** Scopes are protocol metadata, not human authorization inputs. */
 export const HumanIdentityEntitlementTypeSchema = z.enum(['group', 'role', 'attribute', 'authenticated']);

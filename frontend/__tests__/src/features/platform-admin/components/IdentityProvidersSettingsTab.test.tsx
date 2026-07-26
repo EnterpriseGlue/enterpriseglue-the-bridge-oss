@@ -147,6 +147,44 @@ describe('IdentityProvidersSettingsTab', () => {
     expect(screen.getByLabelText('Allow verified email account linking')).not.toBeChecked();
   });
 
+  it('exposes and submits the advanced OIDC and synchronization options shared with configuration bundles', async () => {
+    const create = vi.fn();
+    server.use(http.post('/api/identity/providers', async ({ request }) => {
+      create(await request.json());
+      return HttpResponse.json({ id: 'advanced-oidc', key: 'advanced-oidc', protocol: 'oidc', isEnabled: false, authenticationMode: 'claims_only', directoryTenantId: null, configurationJson: '{}', syncJson: '{}', ownershipMode: 'manual', sourceRef: null }, { status: 201 });
+    }));
+    renderTab();
+    await screen.findByText('demo-oidc');
+    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
+    const modal = await screen.findByRole('dialog', { name: 'Add identity provider' });
+    fireEvent.change(within(modal).getByLabelText('Provider key'), { target: { value: 'advanced-oidc' } });
+    fireEvent.change(within(modal).getByLabelText('Issuer URL'), { target: { value: 'https://login.example.test' } });
+    fireEvent.change(within(modal).getByLabelText('Client ID'), { target: { value: 'enterpriseglue-web' } });
+    fireEvent.change(within(modal).getByLabelText('Callback URL'), { target: { value: 'https://app.example.test/api/auth/identity/callback' } });
+    fireEvent.change(within(modal).getByLabelText('Group claim (optional)'), { target: { value: 'groups' } });
+    fireEvent.change(within(modal).getByLabelText('Expected audience (optional)'), { target: { value: 'enterpriseglue-web' } });
+    fireEvent.change(within(modal).getByLabelText('Connector capability'), { target: { value: 'graph' } });
+    fireEvent.click(within(modal).getByRole('button', { name: /^Add$/ }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'advanced-oidc', protocol: 'oidc',
+      configuration: expect.objectContaining({ groupClaim: 'groups', expectedAudience: 'enterpriseglue-web', scopes: ['openid', 'profile', 'email'] }),
+      sync: expect.objectContaining({ triggers: ['login'], connectorCapability: 'graph', requiredForLogin: true, incompleteEntitlements: 'fail_closed' }),
+    })));
+  });
+
+  it('exposes LDAP identity and TLS trust fields that are available to headless configuration', async () => {
+    renderTab();
+    await screen.findByText('demo-oidc');
+    fireEvent.click(screen.getByRole('button', { name: /Add provider/i }));
+    fireEvent.change(screen.getByLabelText('Protocol'), { target: { value: 'ldap' } });
+
+    expect(screen.getByLabelText('Subject identifier attribute')).toHaveValue('entryUUID');
+    expect(screen.getByLabelText('Email attribute')).toHaveValue('mail');
+    expect(screen.getByLabelText('TLS trust reference (optional)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Connector capability')).toHaveValue('ldap_directory');
+  });
+
   it('does not expose legacy-provider migration or cutover controls', async () => {
     renderTab();
     await screen.findByText('demo-oidc');

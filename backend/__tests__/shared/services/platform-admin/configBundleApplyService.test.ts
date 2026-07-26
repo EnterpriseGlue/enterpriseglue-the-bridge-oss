@@ -273,6 +273,52 @@ describe('configBundleApplyService', () => {
     }));
   });
 
+  it('persists every current headless engine and OIDC provider option through the same config apply', async () => {
+    const { engineInsert, providerRepo } = setupDataSource();
+    const advancedBundle = { ...bundle, imports: ['./engines.json', './identity-providers.json'] };
+    const advancedFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.payments-prod', name: 'Payments production', type: 'operaton',
+          baseUrl: 'https://payments.example.test/engine-rest', externalId: 'payments-prod-01', labels: { environment: 'production', domain: 'payments' },
+          auth: { type: 'oauth2-client-credentials', username: 'enterpriseglue', passwordRef: 'env://PAYMENTS_ENGINE_CLIENT_SECRET', tokenUrl: 'https://identity.example.test/oauth/token', scopes: 'engine.read engine.deploy', audience: 'payments-engine' },
+          connectionMode: 'direct', runtimeAccessScope: 'resource_aware', tenancy: { mode: 'dedicated', tenantRef: { type: 'request_context' } },
+          deploymentIntegration: 'direct_engine', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900,
+          pipelineReceiptEnabled: false, version: '1.2.3', environmentTagId: '00000000-0000-4000-8000-000000000001', ownershipMode: 'config_warn',
+        }],
+      },
+      './identity-providers.json': {
+        identityProviders: [{
+          key: 'identity.corporate-oidc', type: 'oidc', enabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory',
+          allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'],
+          sync: { triggers: ['login', 'manual'], requiredForLogin: false, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+          oidc: { issuerUrl: 'https://login.example.test/tenant/v2.0', clientId: 'enterpriseglue-web', clientSecretRef: 'env://CORPORATE_OIDC_CLIENT_SECRET', callbackUrl: 'https://enterpriseglue.example.test/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue-web' },
+          ownershipMode: 'config_warn',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: advancedBundle, files: advancedFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: advancedBundle, files: advancedFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', identityReconciliationMode: 'none',
+    });
+
+    expect(result).toMatchObject({ created: 2, updated: 0, archived: 0 });
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      externalId: 'payments-prod-01', labelsJson: JSON.stringify({ environment: 'production', domain: 'payments' }),
+      authType: 'oauth2-client-credentials', username: 'enterpriseglue', passwordEnc: 'ref:env://PAYMENTS_ENGINE_CLIENT_SECRET',
+      oauthTokenUrl: 'https://identity.example.test/oauth/token', oauthScopes: 'engine.read engine.deploy', oauthAudience: 'payments-engine',
+      connectionMode: 'direct', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine', metadataDiscoveryEnabled: false,
+      deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900, pipelineReceiptEnabled: false, version: '1.2.3',
+      environmentTagId: '00000000-0000-4000-8000-000000000001', ownershipMode: 'config_warn',
+    }));
+    expect(providerRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'identity.corporate-oidc', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory', ownershipMode: 'config_warn',
+      configurationJson: expect.stringContaining('"expectedAudience":"enterpriseglue-web"'),
+      syncJson: expect.stringContaining('"connectorCapability":"graph"'),
+    }));
+  });
+
   it('persists config-warning ownership for roles and groups', async () => {
     const { roleInsert, groupInsert } = setupDataSource();
     const warningFiles = {

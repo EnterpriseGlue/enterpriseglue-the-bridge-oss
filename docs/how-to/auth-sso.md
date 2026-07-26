@@ -56,6 +56,157 @@ targets an existing internal group, and use secret preflight before apply. Role
 access comes from that group's canonical assignments; provider-level default
 roles are not the target access model.
 
+### Fully headless SSO example
+
+The EnterpriseGlue side of SSO needs no portal interaction. Keep the following
+files in source control, make them a folder-style ZIP with `bundle.json` as
+the manifest (or send the equivalent `{ "bundle", "files" }` envelope to the
+Config Bundles API), then use the preview/diff/preflight/apply lifecycle in
+[Deploy Authorization Configuration](./deploy-authorization-config.md).
+
+This example grants a mapped upstream `enterpriseglue-operators` group a
+minimal platform role. Replace that role assignment with your scoped engine,
+Engine Set, runtime-resource, or project assignments as appropriate; the SSO
+mapping itself stays platform-wide.
+
+`bundle.json`:
+
+<!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
+```json
+{
+  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "kind": "EnterpriseGlueConfigBundle",
+  "metadata": {
+    "key": "bundle.corporate-sso",
+    "owner": "identity-platform"
+  },
+  "tenantKey": "platform",
+  "mode": "authoritative",
+  "settings": {},
+  "imports": [
+    "./roles.json",
+    "./groups.json",
+    "./assignments.json",
+    "./identity-providers.json",
+    "./identity-mappings.json"
+  ]
+}
+```
+
+`roles.json` and `groups.json`:
+
+<!-- enterpriseglue-config-schema: ConfigRolesFileSchema -->
+```json
+{
+  "roles": [
+    {
+      "key": "custom.platform.identity-operator",
+      "name": "Identity Operator",
+      "scope": "platform",
+      "permissions": ["platform:authz:check"]
+    }
+  ]
+}
+```
+
+<!-- enterpriseglue-config-schema: ConfigGroupsFileSchema -->
+```json
+{
+  "groups": [
+    {
+      "key": "group.identity-operators",
+      "name": "Identity operators"
+    }
+  ]
+}
+```
+
+`assignments.json`:
+
+<!-- enterpriseglue-config-schema: ConfigAssignmentsFileSchema -->
+```json
+{
+  "assignments": [
+    {
+      "key": "assignment.platform.identity-operators",
+      "principal": { "type": "group", "key": "group.identity-operators" },
+      "roleKey": "custom.platform.identity-operator",
+      "scope": { "type": "platform" }
+    }
+  ]
+}
+```
+
+`identity-providers.json`:
+
+<!-- enterpriseglue-config-schema: ConfigIdentityProvidersFileSchema -->
+```json
+{
+  "identityProviders": [
+    {
+      "key": "identity.corporate-oidc",
+      "type": "oidc",
+      "enabled": true,
+      "authenticationMode": "direct",
+      "directoryTenantId": "corporate-directory",
+      "allowVerifiedEmailLinking": false,
+      "authorizationAttributeKeys": ["department"],
+      "sync": {
+        "triggers": ["login", "manual"],
+        "requiredForLogin": true,
+        "incompleteEntitlements": "fail_closed",
+        "connectorCapability": "claim_only",
+        "scheduled": false
+      },
+      "oidc": {
+        "issuerUrl": "https://login.example.test/tenant/v2.0",
+        "clientId": "enterpriseglue-web",
+        "clientSecretRef": "env://CORPORATE_OIDC_CLIENT_SECRET",
+        "callbackUrl": "https://enterpriseglue.example.test/api/auth/identity/callback",
+        "scopes": ["openid", "profile", "email", "groups"],
+        "groupClaim": "groups",
+        "expectedAudience": "enterpriseglue-web"
+      },
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+`identity-mappings.json`:
+
+<!-- enterpriseglue-config-schema: ConfigIdentityMappingsFileSchema -->
+```json
+{
+  "identityMappings": [
+    {
+      "key": "mapping.corporate-operators",
+      "providerKey": "identity.corporate-oidc",
+      "source": {
+        "type": "group",
+        "externalId": "enterpriseglue-operators",
+        "operator": "exact"
+      },
+      "targetGroupKey": "group.identity-operators",
+      "syncMode": "authoritative",
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+Every provider option is available in the configuration bundle and the direct
+provider API: OIDC supports `groupClaim` and `expectedAudience`; SAML supports
+metadata by URL or secret reference plus certificate/signature settings; LDAP
+supports immutable subject/email attributes, nested groups, paging, and an
+optional TLS trust reference. The external IdP client, redirect-URI trust, and
+upstream group membership are still configured at the IdP—usually through that
+provider's own IaC—not in EnterpriseGlue's bundle.
+
+For CI, supply `CORPORATE_OIDC_CLIENT_SECRET` through the configured secret
+provider, run secret preflight, then apply the exact preview hash. Never put
+the value itself in JSON or commit it to the repository.
+
 Identity mappings support the same explicit ownership modes as other
 configuration-managed access objects. `config_locked` (the default) prevents
 local changes. `config_warn` permits a local edit of the mapping and marks it

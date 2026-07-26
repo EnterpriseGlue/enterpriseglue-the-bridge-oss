@@ -4,6 +4,10 @@ import {
   HumanIdentityEntitlementTypeSchema,
   IdentityEntitlementMatchOperatorSchema,
   IdentityEntitlementSyncModeSchema,
+  IdentityProviderSyncConfigurationSchema,
+  LdapIdentityProviderConfigurationSchema,
+  OidcIdentityProviderConfigurationSchema,
+  SamlIdentityProviderConfigurationSchema,
 } from './identity.js';
 import {
   AccessAuthorityModeSchema,
@@ -601,15 +605,6 @@ export const ConfigAssignmentsFileSchema = z.object({
   uniqueKeys(keyed, ctx, 'assignments');
 });
 
-const IdentityProviderSyncSchema = z.object({
-  triggers: z.array(z.enum(['login', 'scheduled', 'manual'])).min(1),
-  intervalSeconds: z.number().int().min(60).max(86_400).optional(),
-  requiredForLogin: z.boolean().default(true),
-  incompleteEntitlements: z.enum(['fail_closed', 'preserve_previous']).default('fail_closed'),
-  connectorCapability: z.enum(['claim_only', 'ldap_directory', 'scim', 'graph']).default('claim_only'),
-  scheduled: z.boolean().default(false),
-}).strict();
-
 const CommonIdentityProviderSchema = z.object({
   key: ConfigKeySchema,
   enabled: z.boolean().default(true),
@@ -617,57 +612,23 @@ const CommonIdentityProviderSchema = z.object({
   allowVerifiedEmailLinking: z.boolean().default(false),
   authorizationAttributeKeys: z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/)).max(20).optional(),
   directoryTenantId: z.string().min(1).max(255).optional(),
-  sync: IdentityProviderSyncSchema,
+  sync: IdentityProviderSyncConfigurationSchema,
   ownershipMode: ConfigOwnershipModeSchema.optional(),
 });
 
 export const ConfigIdentityProviderSchema = z.discriminatedUnion('type', [
   CommonIdentityProviderSchema.extend({
     type: z.literal('oidc'),
-    oidc: z.object({
-      issuerUrl: z.string().url(),
-      clientId: z.string().min(1).max(255),
-      clientSecretRef: SecretReferenceSchema.optional(),
-      callbackUrl: z.string().url(),
-      scopes: z.array(z.string().min(1).max(255)).min(1),
-      groupClaim: z.string().min(1).max(255).optional(),
-      expectedAudience: z.string().min(1).max(2000).optional(),
-    }).strict(),
+    oidc: OidcIdentityProviderConfigurationSchema,
   }).strict(),
   CommonIdentityProviderSchema.extend({
     type: z.literal('saml'),
-    saml: z.object({
-      metadataUrl: z.string().url().optional(),
-      metadataXmlRef: SecretReferenceSchema.optional(),
-      entityId: z.string().min(1).max(2000),
-      callbackUrl: z.string().url(),
-      ssoUrl: z.string().url(),
-      nameIdAttribute: z.string().min(1).max(255),
-      emailAttribute: z.string().min(1).max(255).optional(),
-      groupAttribute: z.string().min(1).max(255).optional(),
-      signingCertificateRef: SecretReferenceSchema,
-      signatureAlgorithm: z.enum(['sha256', 'sha512']).default('sha256'),
-    }).strict(),
+    saml: SamlIdentityProviderConfigurationSchema,
   }).strict(),
   CommonIdentityProviderSchema.extend({
     type: z.literal('ldap'),
     authenticationMode: z.enum(['direct', 'claims_only']).default('direct'),
-    ldap: z.object({
-      url: z.string().url().refine((url) => url.startsWith('ldaps://'), 'LDAP URLs must use LDAPS'),
-      bindDn: z.string().min(1).max(2000),
-      bindPasswordRef: SecretReferenceSchema,
-      userBaseDn: z.string().min(1).max(2000),
-      userSearchFilter: z.string().min(1).max(2000),
-      userEnumerationFilter: z.string().min(1).max(2000).default('(objectClass=person)'),
-      pageSize: z.number().int().min(1).max(1000).default(200),
-      subjectAttribute: z.string().min(1).max(255).default('entryUUID'),
-      emailAttribute: z.string().min(1).max(255).default('mail'),
-      groupBaseDn: z.string().min(1).max(2000),
-      groupIdAttribute: z.string().min(1).max(255),
-      membershipMode: z.enum(['memberOf', 'group_search']),
-      nestedGroups: z.boolean().default(false),
-      tlsTrustRef: SecretReferenceSchema.optional(),
-    }).strict(),
+    ldap: LdapIdentityProviderConfigurationSchema,
   }).strict(),
 ]);
 export const ConfigIdentityProvidersFileSchema = z.object({

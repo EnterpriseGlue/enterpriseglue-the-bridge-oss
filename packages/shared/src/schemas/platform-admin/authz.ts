@@ -15,8 +15,12 @@ import { RuntimeResourceKindSchema } from './config-bundle.js';
 import {
   IdentityProviderAuthenticationModeSchema,
   IdentityProviderProtocolSchema as SharedIdentityProviderProtocolSchema,
+  IdentityProviderSyncConfigurationSchema,
   IdentitySyncEventSchema,
   IdentitySyncRunSchema,
+  LdapIdentityProviderConfigurationSchema,
+  OidcIdentityProviderConfigurationSchema,
+  SamlIdentityProviderConfigurationSchema,
 } from './identity.js';
 
 export { IdentityProviderProtocolSchema } from './identity.js';
@@ -1297,33 +1301,61 @@ export const IdentityProviderExternalIdentityUnlinkResponseSchema = z.object({
   recovery: z.literal('verified_sign_in_required'),
 });
 
-export const IdentityProviderConfigurationSchema = z.record(z.string(), z.unknown());
-
-/** Configuration contains opaque secret references only; resolved values are never an API contract. */
-export const IdentityProviderRequestSchema = z.object({
+const IdentityProviderRequestFields = {
   key: z.string().min(1).max(128),
-  protocol: SharedIdentityProviderProtocolSchema,
   isEnabled: z.boolean().optional(),
   authenticationMode: IdentityProviderAuthenticationModeSchema.optional(),
   directoryTenantId: z.string().nullable().optional(),
-  configuration: IdentityProviderConfigurationSchema,
-  sync: z.record(z.string(), z.unknown()).optional(),
+  sync: IdentityProviderSyncConfigurationSchema.optional(),
   ownershipMode: z.string().max(64).optional(),
   sourceRef: z.string().nullable().optional(),
-});
+};
 
-export const IdentityProviderUpdateSchema = IdentityProviderRequestSchema.omit({ key: true }).partial();
+/**
+ * Direct API and configuration bundles intentionally use the same
+ * protocol-specific options. The API shape nests options under
+ * `configuration`; bundles nest them under the provider type.
+ */
+export const IdentityProviderRequestSchema = z.discriminatedUnion('protocol', [
+  z.object({ ...IdentityProviderRequestFields, protocol: z.literal('oidc'), configuration: OidcIdentityProviderConfigurationSchema }).strict(),
+  z.object({ ...IdentityProviderRequestFields, protocol: z.literal('saml'), configuration: SamlIdentityProviderConfigurationSchema }).strict(),
+  z.object({ ...IdentityProviderRequestFields, protocol: z.literal('ldap'), configuration: LdapIdentityProviderConfigurationSchema }).strict(),
+]);
 
-export const IdentityProviderResponseSchema = IdentityProviderRequestSchema.extend({
+/**
+ * The provider protocol and key are path-owned on update. The route merges an
+ * update with the stored record and validates that complete result through the
+ * creation schema above.
+ */
+export const IdentityProviderUpdateSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  authenticationMode: IdentityProviderAuthenticationModeSchema.optional(),
+  directoryTenantId: z.string().nullable().optional(),
+  configuration: z.union([
+    OidcIdentityProviderConfigurationSchema,
+    SamlIdentityProviderConfigurationSchema,
+    LdapIdentityProviderConfigurationSchema,
+  ]).optional(),
+  sync: IdentityProviderSyncConfigurationSchema.optional(),
+  ownershipMode: z.string().max(64).optional(),
+  sourceRef: z.string().nullable().optional(),
+}).strict();
+
+export const IdentityProviderResponseSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable(),
+  key: z.string().min(1).max(128),
+  protocol: SharedIdentityProviderProtocolSchema,
   isEnabled: z.boolean(),
   authenticationMode: IdentityProviderAuthenticationModeSchema,
+  directoryTenantId: z.string().nullable(),
+  ownershipMode: z.string().max(64),
+  sourceRef: z.string().nullable(),
   configurationJson: z.string(),
   syncJson: z.string(),
   createdAt: z.number(),
   updatedAt: z.number(),
-}).omit({ configuration: true, sync: true });
+});
 
 export const IdentityProviderConnectionTestResponseSchema = z.discriminatedUnion('protocol', [
   z.object({ status: z.literal('connected'), protocol: z.literal('oidc'), issuer: z.string() }),

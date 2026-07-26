@@ -107,10 +107,19 @@ router.put('/api/identity/providers/:key', requireAuth, identityAdminLimiter, re
   const key = providerKeySchema.parse(req.params.key);
   const existing = await identityProviderService.getByKey(key, req.tenant?.tenantId || null);
   if (!existing) throw Errors.notFound('Identity provider not found');
-  const provider = await identityProviderService.upsert({
-    key: existing.key, protocol: existing.protocol as 'oidc' | 'saml' | 'ldap', configuration: JSON.parse(existing.configurationJson),
-    ...req.body, tenantId: req.tenant?.tenantId || null,
+  const providerInput = IdentityProviderRequestSchema.parse({
+    key: existing.key,
+    protocol: existing.protocol,
+    isEnabled: existing.isEnabled,
+    authenticationMode: existing.authenticationMode,
+    directoryTenantId: existing.directoryTenantId,
+    configuration: JSON.parse(existing.configurationJson),
+    sync: JSON.parse(existing.syncJson),
+    ownershipMode: existing.ownershipMode,
+    sourceRef: existing.sourceRef,
+    ...req.body,
   });
+  const provider = await identityProviderService.upsert({ ...providerInput, tenantId: req.tenant?.tenantId || null });
   await logAudit({
     action: 'identity.provider.update', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id,
     details: { key: provider.key, changedFields: Object.keys(req.body) },

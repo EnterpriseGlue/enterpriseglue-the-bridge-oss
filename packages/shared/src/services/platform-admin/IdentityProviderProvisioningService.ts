@@ -55,6 +55,16 @@ function authorizationAttributeKeys(provider: IdentityProvider): string[] {
   }
 }
 
+function oidcClaimsWithConfiguredGroups(provider: IdentityProvider, claims: OidcIdentityClaims): Record<string, unknown> {
+  try {
+    const groupClaim = JSON.parse(provider.configurationJson).groupClaim;
+    if (typeof groupClaim !== 'string' || !groupClaim.trim() || groupClaim === 'groups') return claims as Record<string, unknown>;
+    return { ...claims, groups: (claims as Record<string, unknown>)[groupClaim] };
+  } catch {
+    return claims as Record<string, unknown>;
+  }
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as { code?: unknown; message?: unknown };
@@ -95,7 +105,7 @@ class IdentityProviderProvisioningService {
 
   private oidcInput(provider: IdentityProvider, claims: OidcIdentityClaims): ProvisionIdentityInput {
     const email = requiredEmail(claims);
-    return { providerType: 'oidc', subjectId: claims.sub, email, emailVerified: claims.email_verified === true, displayName: typeof claims.name === 'string' ? claims.name : null, firstName: typeof claims.given_name === 'string' ? claims.given_name : null, lastName: typeof claims.family_name === 'string' ? claims.family_name : null, directoryTenantId: typeof claims.tid === 'string' ? claims.tid : provider.directoryTenantId, claims: claims as Record<string, unknown> };
+    return { providerType: 'oidc', subjectId: claims.sub, email, emailVerified: claims.email_verified === true, displayName: typeof claims.name === 'string' ? claims.name : null, firstName: typeof claims.given_name === 'string' ? claims.given_name : null, lastName: typeof claims.family_name === 'string' ? claims.family_name : null, directoryTenantId: typeof claims.tid === 'string' ? claims.tid : provider.directoryTenantId, claims: oidcClaimsWithConfiguredGroups(provider, claims) };
   }
 
   private async reconcileLogin(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {

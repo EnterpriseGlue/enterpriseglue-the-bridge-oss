@@ -45,8 +45,8 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ logAudit: vi.fn() }
 const provider = {
   id: 'provider-1', tenantId: 'tenant-1', key: 'entra', protocol: 'oidc', isEnabled: true,
   authenticationMode: 'claims_only', directoryTenantId: null,
-  configurationJson: JSON.stringify({ issuerUrl: 'https://login.example.test', clientId: 'client-1' }),
-  syncJson: '{}', ownershipMode: 'manual', sourceRef: null, createdAt: 1, updatedAt: 1,
+  configurationJson: JSON.stringify({ issuerUrl: 'https://login.example.test', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'] }),
+  syncJson: JSON.stringify({ triggers: ['login'] }), ownershipMode: 'manual', sourceRef: null, createdAt: 1, updatedAt: 1,
 };
 
 describe('identity provider routes', () => {
@@ -156,11 +156,50 @@ describe('identity provider routes', () => {
 
   it('creates a provider and audits sanitized definition metadata', async () => {
     const response = await request(app).post('/api/identity/providers').send({
-      key: 'entra', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client-1', clientSecretRef: 'secret/entra' },
+      key: 'entra', protocol: 'oidc', authenticationMode: 'direct', configuration: {
+        issuerUrl: 'https://login.example.test', clientId: 'client-1', clientSecretRef: 'secret/entra',
+        callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue',
+      }, sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
     });
     expect(response.status).toBe(201);
-    expect(service.upsert).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-1', key: 'entra' }));
+    expect(service.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-1', key: 'entra', protocol: 'oidc',
+      configuration: expect.objectContaining({ groupClaim: 'groups', expectedAudience: 'enterpriseglue' }),
+      sync: expect.objectContaining({ triggers: ['login', 'manual'], connectorCapability: 'claim_only' }),
+    }));
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.create', resourceId: 'provider-1' }));
+  });
+
+  it('rejects incomplete or plaintext direct-provider configuration before it reaches the service', async () => {
+    const incomplete = await request(app).post('/api/identity/providers').send({
+      key: 'invalid-oidc', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client-1' },
+    });
+    const plaintext = await request(app).post('/api/identity/providers').send({
+      key: 'invalid-ldap', protocol: 'ldap', configuration: {
+        url: 'ldaps://directory.example.test', bindDn: 'CN=EnterpriseGlue', bindPassword: 'not-a-reference',
+        userBaseDn: 'OU=Users,DC=example,DC=test', userSearchFilter: '(uid={username})', groupBaseDn: 'OU=Groups,DC=example,DC=test', groupIdAttribute: 'entryUUID', membershipMode: 'memberOf',
+      },
+    });
+    expect(incomplete.status).toBe(400);
+    expect(plaintext.status).toBe(400);
+    expect(service.upsert).not.toHaveBeenCalled();
+  });
+
+  it('revalidates a merged provider record against its stored protocol on update', async () => {
+    const response = await request(app).put('/api/identity/providers/entra').send({
+      isEnabled: false,
+      configuration: {
+        issuerUrl: 'https://login.example.test', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'],
+        allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'], groupClaim: 'groups', expectedAudience: 'enterpriseglue',
+      },
+      sync: { triggers: ['manual'], requiredForLogin: false, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+    });
+    expect(response.status).toBe(200);
+    expect(service.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'entra', protocol: 'oidc', isEnabled: false,
+      configuration: expect.objectContaining({ allowVerifiedEmailLinking: true, expectedAudience: 'enterpriseglue' }),
+      sync: expect.objectContaining({ triggers: ['manual'], incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph' }),
+    }));
   });
 
   it('archives instead of deleting provider history', async () => {

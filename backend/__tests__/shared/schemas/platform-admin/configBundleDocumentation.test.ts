@@ -4,11 +4,16 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 import {
   ConfigAssignmentSchema,
+  ConfigAssignmentsFileSchema,
   ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
+  ConfigGroupsFileSchema,
+  ConfigIdentityMappingsFileSchema,
   ConfigIdentityProviderSchema,
+  ConfigIdentityProvidersFileSchema,
+  ConfigRolesFileSchema,
   ConfigRoleSchema,
   EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
@@ -27,11 +32,16 @@ import {
 
 const SCHEMAS: Record<string, z.ZodType> = {
   ConfigAssignmentSchema,
+  ConfigAssignmentsFileSchema,
   ConfigEngineBackstopMappingsFileSchema,
   ConfigEngineSchema,
   ConfigEngineTenantMappingsFileSchema,
   ConfigEnginesFileSchema,
+  ConfigGroupsFileSchema,
+  ConfigIdentityMappingsFileSchema,
   ConfigIdentityProviderSchema,
+  ConfigIdentityProvidersFileSchema,
+  ConfigRolesFileSchema,
   ConfigRoleSchema,
   CreateEngineRequestSchema,
   EngineTenancyTransitionApplyRequestSchema,

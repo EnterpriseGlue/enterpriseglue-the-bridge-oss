@@ -118,7 +118,7 @@
     "test:ldap:local-rehearsal": "./scripts/run-local-ldap-rehearsal-test.sh",
     "test:identity:protocol-rehearsal": "./scripts/run-ci-identity-protocol-rehearsals.sh",
     "test:authz:browser": "pnpm run test:e2e:access-control-layout",
-    "test:authz:accessibility:cross-browser": "bash ./scripts/run-authz-accessibility-matrix.sh",
+    "test:authz:accessibility:cross-browser": "bash ./scripts/run-authz-accessibility-matrix.sh test/e2e/access-control-accessibility.spec.ts test/e2e/identity-administration-accessibility.spec.ts",
     "test:authz:state-space-foundation": "./scripts/run-local-safe-authz-state-space-foundation.sh __tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
     "test:authz:state-space-local-evidence": "node scripts/run-authz-state-space-evidence.mjs --local-only",
     "test:authz:state-space-evidence": "node scripts/run-authz-state-space-evidence.mjs",

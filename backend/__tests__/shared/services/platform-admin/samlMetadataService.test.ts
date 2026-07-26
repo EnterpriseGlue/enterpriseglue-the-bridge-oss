@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { samlMetadataService } from '@enterpriseglue/shared/services/platform-admin/SamlMetadataService.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete process.env.SAML_METADATA_XML;
+});
 
 describe('samlMetadataService', () => {
   it('validates a bounded HTTPS metadata document with entity descriptors', async () => {
@@ -30,5 +33,17 @@ describe('samlMetadataService', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>not metadata</html>', { status: 200 })));
 
     await expect(samlMetadataService.testConnection(JSON.stringify({ metadataUrl: 'https://idp.example.test/metadata.xml' }))).rejects.toThrow('does not contain an EntityDescriptor');
+  });
+
+  it('validates secret-referenced metadata without fetching or exposing the reference', async () => {
+    process.env.SAML_METADATA_XML = '<EntityDescriptor entityID="https://idp.example.test" />';
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(samlMetadataService.testConnection(JSON.stringify({ metadataXmlRef: 'env://SAML_METADATA_XML' }))).resolves.toEqual({
+      metadataUrl: 'secret-reference',
+      entityDescriptorCount: 1,
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

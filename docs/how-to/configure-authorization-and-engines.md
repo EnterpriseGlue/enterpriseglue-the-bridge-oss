@@ -69,7 +69,7 @@ The target folder layout is:
 
 ```text
 enterpriseglue-config/
-  enterpriseglue.json
+  bundle.json
   roles.json
   groups.json
   identity-providers.json
@@ -83,7 +83,7 @@ enterpriseglue-config/
   policies.json
 ```
 
-`enterpriseglue.json` declares schema version, bundle id, imports, expected object files, and optional expected hash. Secret values are never stored in this folder; provider and engine objects contain secret references only.
+`bundle.json` declares schema version, bundle id, imports, expected object files, and optional expected hash. This is the manifest name required inside a folder-style ZIP. A mounted single-file bundle instead uses an outer JSON envelope with `bundle` and `files` properties; its file name is arbitrary. Secret values are never stored in either form; provider and engine objects contain secret references only.
 
 Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database. For identity mappings, use the default `config_locked` mode to make the bundle authoritative, or `config_warn` to allow a temporary local edit marked as drift. A subsequent bundle apply restores the reviewed provider, entitlement, target group, sync mode, and ownership state; configuration-managed mappings cannot be deleted from the UI.
 
@@ -459,5 +459,5 @@ Provider lockout rollback must also preserve a tested local break-glass administ
 - [x] ✅ Implement bundle schemas, services, preview/diff/apply/export/history APIs, OpenAPI contracts, authorization metadata, and the API-driven CLI lifecycle.
 - [ ] ⬜ Add screenshots and exact UI navigation after the role editor, Identity, Configuration, Engine connection, and diagnostics surfaces are complete.
 - [x] ✅ Replace target API notices with the current executable API and CI CLI examples.
-- [ ] ⬜ Add tested standalone, OIDC, SAML, LDAP, distributed-engine, central-engine, external-registration, and customer-sidecar examples.
-- [ ] ⬜ Validate every documented example in CI against shared Zod/OpenAPI schemas.
+- [x] ✅ Add schema-validated headless OIDC and direct/shared/customer-sidecar engine examples, including the current engine registration options.
+- [x] ✅ Validate every executable JSON example in these how-to guides in CI against the shared Zod schemas; validate engine API examples through the OpenAPI contract suite.
