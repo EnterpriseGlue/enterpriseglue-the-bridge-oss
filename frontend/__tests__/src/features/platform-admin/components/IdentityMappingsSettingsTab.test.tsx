@@ -54,6 +54,25 @@ describe('IdentityMappingsSettingsTab', () => {
     expect(screen.getByRole('button', { name: /Add mapping/i })).toBeEnabled();
   });
 
+  it('persists a disabled manual mapping through the edit form', async () => {
+    let updateBody: Record<string, unknown> | null = null;
+    server.use(http.put('/api/identity/mappings/:id', async ({ request }) => {
+      updateBody = await request.json() as Record<string, unknown>;
+      return HttpResponse.json({ ...identityMappingFixture, isActive: false });
+    }));
+    renderTab();
+    await screen.findByText('group.engine-operators');
+    await editManualMapping();
+
+    const enabled = screen.getByRole('checkbox', { name: 'Enable mapping' });
+    expect(enabled).toBeChecked();
+    fireEvent.click(enabled);
+    expect(enabled).not.toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(updateBody).toEqual(expect.objectContaining({ isActive: false })));
+  });
+
   it('starts new mapping creation as a guarded three-step engine-access wizard', async () => {
     renderTab();
     await screen.findByText('group.engine-operators');
@@ -104,7 +123,7 @@ describe('IdentityMappingsSettingsTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create a new group' }));
     fireEvent.change(await screen.findByLabelText('New EnterpriseGlue group name'), { target: { value: `Operators ${resourceType}` } });
     fireEvent.change(screen.getByLabelText('New group key'), { target: { value: `group.operators.${resourceType}` } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add engine access with this mapping' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Grant scoped engine access now' }));
     fireEvent.click(document.getElementById('identity-mapping-provision-role')!);
     fireEvent.click(await screen.findByRole('option', { name: 'Engine operator' }));
     await user.selectOptions(document.getElementById('identity-mapping-provision-scope') as HTMLSelectElement, resourceType);

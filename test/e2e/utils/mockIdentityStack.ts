@@ -6,7 +6,7 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   body: JSON.stringify(body),
 });
 
-export type MockIdentityStackEvent = 'provider_listed' | 'authorization_started' | 'token_issued' | 'session_created' | 'connection_tested' | 'membership_previewed' | 'membership_replayed' | 'mapping_tested' | 'mapping_previewed';
+export type MockIdentityStackEvent = 'provider_listed' | 'authorization_started' | 'token_issued' | 'session_created' | 'connection_tested' | 'membership_previewed' | 'membership_replayed' | 'mapping_tested' | 'mapping_previewed' | 'external_identity_unlinked';
 
 /**
  * Browser-local identity stack for lifecycle tests. Protocol verification lives
@@ -61,7 +61,7 @@ export class MockBrowserIdentityStack {
 
       if (path === '/api/auth/providers/enabled') {
         this.events.push('provider_listed');
-        return json(route, [{ id: this.provider.id, key: this.provider.key, protocol: this.provider.protocol, loginMethod: 'redirect' }]);
+        return json(route, this.provider.isEnabled ? [{ id: this.provider.id, key: this.provider.key, protocol: this.provider.protocol, loginMethod: 'redirect' }] : []);
       }
       if (path === `/api/auth/providers/${this.provider.id}/start`) {
         this.events.push('authorization_started', 'token_issued', 'session_created');
@@ -115,6 +115,20 @@ export class MockBrowserIdentityStack {
       if (path === '/api/admin/environments' || path === '/api/admin/projects' || path === '/api/admin/engines') return json(route, []);
       if (path === '/api/sso/providers' || path === '/api/identity/providers/environment-migration-drafts') return json(route, []);
       if (path === '/api/identity/providers') return json(route, [this.provider]);
+      if (path === `/api/identity/providers/${this.provider.key}` && request.method() === 'PUT') {
+        const body = request.postDataJSON() as Partial<typeof this.provider>;
+        if (typeof body.isEnabled === 'boolean') this.provider.isEnabled = body.isEnabled;
+        if (body.authenticationMode === 'direct' || body.authenticationMode === 'claims_only') this.provider.authenticationMode = body.authenticationMode;
+        return json(route, this.provider);
+      }
+      if (path === `/api/identity/providers/${this.provider.key}` && request.method() === 'DELETE') {
+        this.provider.isEnabled = false;
+        return route.fulfill({ status: 204 });
+      }
+      if (path === `/api/identity/providers/${this.provider.key}/external-identities/unlink`) {
+        this.events.push('external_identity_unlinked');
+        return json(route, { providerManagedMembershipsRemoved: 1, providerRefreshSessionsRevoked: 1 });
+      }
       if (path === `/api/identity/providers/${this.provider.key}/test-connection`) {
         this.events.push('connection_tested');
         if (this.connectionFailurePending) {
@@ -135,6 +149,11 @@ export class MockBrowserIdentityStack {
         return json(route, { runId: 'browser-replay-run', scanned: 1, created: 1, removed: 0, failed: 0, truncated: false, nextCursor: null });
       }
       if (path === '/api/identity/mappings') return json(route, [this.mapping]);
+      if (path === `/api/identity/mappings/${this.mapping.id}` && request.method() === 'PUT') {
+        const body = request.postDataJSON() as Partial<typeof this.mapping>;
+        if (typeof body.isActive === 'boolean') this.mapping.isActive = body.isActive;
+        return json(route, this.mapping);
+      }
       if (path === '/api/identity/mappings/test') {
         this.events.push('mapping_tested');
         return json(route, { matches: true, entitlements: [{ type: 'group', externalId: 'operators' }] });
@@ -161,5 +180,10 @@ export class MockBrowserIdentityStack {
 
   failNextConnectionTest(): void {
     this.connectionFailurePending = true;
+  }
+
+  makeProviderManual(): void {
+    this.provider.ownershipMode = 'manual';
+    this.provider.sourceRef = null;
   }
 }
