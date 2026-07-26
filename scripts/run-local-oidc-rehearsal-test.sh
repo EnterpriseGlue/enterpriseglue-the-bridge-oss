@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
-ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
-issuer_url="${LOCAL_OIDC_ISSUER_URL:-https://localhost:8180/realms/enterpriseglue-local}"
 admin_env_file="${LOCAL_OIDC_ADMIN_ENV_FILE:-.local/docker/env/oidc-rehearsal.env}"
 
-if [[ ( -z "${LOCAL_OIDC_ADMIN_EMAIL:-}" || -z "${LOCAL_OIDC_ADMIN_PASSWORD:-}" ) && -f "$admin_env_file" ]]; then
-  # The optional browser authorization rehearsal needs only the disposable
-  # localhost bootstrap administrator. Do not print or persist its password.
-  admin_email="$(awk -F= '$1 == "ADMIN_EMAIL" { print substr($0, index($0, "=") + 1); exit }' "$admin_env_file")"
-  admin_password="$(awk -F= '$1 == "ADMIN_PASSWORD" { print substr($0, index($0, "=") + 1); exit }' "$admin_env_file")"
-  export LOCAL_OIDC_ADMIN_EMAIL="${LOCAL_OIDC_ADMIN_EMAIL:-$admin_email}"
-  export LOCAL_OIDC_ADMIN_PASSWORD="${LOCAL_OIDC_ADMIN_PASSWORD:-$admin_password}"
+if [[ -f "$admin_env_file" ]]; then
+  # Use the selected disposable TLS stack as one coherent fixture. Its
+  # published ports and bootstrap credentials can differ from the default
+  # developer stack, so derive every default from this one ignored env file.
+  # Explicit caller overrides still take precedence below.
+  set -a
+  source "$admin_env_file"
+  set +a
 fi
+
+base_url="${PLAYWRIGHT_BASE_URL:-${FRONTEND_URL:-https://localhost:${KEYCLOAK_HTTPS_FRONTEND_PORT:-5443}}}"
+ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-${KEYCLOAK_TLS_DIR:-.local/docker/keycloak-tls}/ca.crt}"
+issuer_url="${LOCAL_OIDC_ISSUER_URL:-https://localhost:${KEYCLOAK_HOST_PORT:-8180}/realms/enterpriseglue-local}"
+export LOCAL_OIDC_ADMIN_EMAIL="${LOCAL_OIDC_ADMIN_EMAIL:-${ADMIN_EMAIL:-}}"
+export LOCAL_OIDC_ADMIN_PASSWORD="${LOCAL_OIDC_ADMIN_PASSWORD:-${ADMIN_PASSWORD:-}}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -93,6 +97,7 @@ fi
 PLAYWRIGHT_WORKERS="${PLAYWRIGHT_WORKERS:-1}" \
 LOCAL_OIDC_REHEARSAL=true \
 LOCAL_OIDC_AUTHORIZATION_REHEARSAL=true \
+LOCAL_OIDC_ISSUER_URL="$issuer_url" \
 PLAYWRIGHT_BASE_URL="$base_url" \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" \

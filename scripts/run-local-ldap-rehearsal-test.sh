@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
-ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The disposable TLS rehearsal may use different published ports than the
+# developer stack. Load its ignored environment first so the app URL, CA, and
+# administrator credentials always describe the same localhost deployment.
+rehearsal_env_file="${LOCAL_LDAP_ADMIN_ENV_FILE:-$root_dir/.local/docker/env/oidc-rehearsal.env}"
+if [[ -f "$rehearsal_env_file" ]]; then
+  set -a
+  source "$rehearsal_env_file"
+  set +a
+fi
+
+base_url="${PLAYWRIGHT_BASE_URL:-${FRONTEND_URL:-https://localhost:${KEYCLOAK_HTTPS_FRONTEND_PORT:-5443}}}"
+ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-${KEYCLOAK_TLS_DIR:-.local/docker/keycloak-tls}/ca.crt}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -32,14 +43,15 @@ if ! curl --fail --silent --show-error --cacert "$ca_file" "$base_url/login" >/d
 fi
 
 if [[ "${LOCAL_LDAP_FIXTURE_ACTIVE:-}" != 'true' ]]; then
-  if [[ -z "${LOCAL_LDAP_ADMIN_EMAIL:-}" || -z "${LOCAL_LDAP_ADMIN_PASSWORD:-}" ]]; then
-    if [[ -f "$root_dir/.env.docker" ]]; then
+  if [[ -z "${LOCAL_LDAP_ADMIN_EMAIL:-}" || -z "${LOCAL_LDAP_ADMIN_PASSWORD:-}" ]] \
+    && [[ -z "${ADMIN_EMAIL:-}" || -z "${ADMIN_PASSWORD:-}" ]]; then
+    if [[ -f "$rehearsal_env_file" ]]; then
+      set -a
+      source "$rehearsal_env_file"
+      set +a
+    elif [[ -f "$root_dir/.env.docker" ]]; then
       set -a
       source "$root_dir/.env.docker"
-      set +a
-    elif [[ -z "${ADMIN_EMAIL:-}" || -z "${ADMIN_PASSWORD:-}" ]] && [[ -f "$root_dir/.local/docker/env/oidc-rehearsal.env" ]]; then
-      set -a
-      source "$root_dir/.local/docker/env/oidc-rehearsal.env"
       set +a
     fi
   fi

@@ -366,6 +366,10 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcRehearsalRunner, /localhost, loopback, or a \.local host/);
   assert.match(localOidcRehearsalRunner, /for _ in \{1\.\.30\}/);
   assert.match(localOidcRehearsalRunner, /sleep 1/);
+  assert.match(localOidcRehearsalRunner, /source "\$admin_env_file"/);
+  assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}/);
+  assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_ISSUER_URL:-https:\/\/localhost:\$\{KEYCLOAK_HOST_PORT:-8180\}/);
+  assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_AUTHORIZATION_REHEARSAL=true[\s\\]+LOCAL_OIDC_ISSUER_URL="\$issuer_url"/);
 });
 
 test('the identity browser lifecycle runner accepts the generated local TLS CA', () => {
@@ -380,6 +384,8 @@ test('the live local SAML rehearsal is opt-in and guarded to local browser targe
   assert.match(localSamlRehearsalRunner, /LOCAL_SAML_REHEARSAL=true/);
   assert.match(localSamlRehearsalRunner, /PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true/);
   assert.match(localSamlRehearsalRunner, /localhost, loopback, or a \.local host/);
+  assert.match(localSamlRehearsalRunner, /load_local_admin_credentials\nbase_url="\$\{PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}\}"/);
+  assert.match(localSamlRehearsalRunner, /LOCAL_SAML_ISSUER_URL:-https:\/\/localhost:\$\{KEYCLOAK_HOST_PORT:-8180\}/);
 });
 
 test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to local browser targets', () => {
@@ -390,4 +396,7 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /localhost, loopback, or a \.local host/);
   assert.match(localLdapRehearsalRunner, /-z "\$\{ADMIN_EMAIL:-\}"/);
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL/);
+  assert.match(localLdapRehearsalRunner, /source "\$rehearsal_env_file"/);
+  assert.match(localLdapRehearsalRunner, /PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}/);
+  assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL:-\}|\$\{ADMIN_EMAIL:-\}/);
 });

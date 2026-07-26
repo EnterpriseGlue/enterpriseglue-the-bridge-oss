@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-base_url="${PLAYWRIGHT_BASE_URL:-https://localhost:5443}"
-ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 load_local_admin_credentials() {
@@ -23,6 +21,14 @@ load_local_admin_credentials() {
   : "${LOCAL_SAML_ADMIN_EMAIL:=${ADMIN_EMAIL:-}}"
   : "${LOCAL_SAML_ADMIN_PASSWORD:=${ADMIN_PASSWORD:-}}"
 }
+
+# Load the selected disposable stack before computing any network defaults.
+# Its frontend, Keycloak, and CA ports may differ from the developer-stack
+# defaults; mixing its administrator credentials with another local stack
+# produces an opaque authentication failure before the browser flow starts.
+load_local_admin_credentials
+base_url="${PLAYWRIGHT_BASE_URL:-${FRONTEND_URL:-https://localhost:${KEYCLOAK_HTTPS_FRONTEND_PORT:-5443}}}"
+ca_file="${PLAYWRIGHT_LOCAL_CA_FILE:-${KEYCLOAK_TLS_DIR:-.local/docker/keycloak-tls}/ca.crt}"
 
 is_local_url() {
   node --input-type=module - "$1" <<'NODE'
@@ -47,7 +53,6 @@ if [[ ! -f "$ca_file" ]]; then
   exit 2
 fi
 
-load_local_admin_credentials
 if [[ -z "${LOCAL_SAML_ADMIN_EMAIL:-}" || -z "${LOCAL_SAML_ADMIN_PASSWORD:-}" ]]; then
   echo '[local-saml-rehearsal] Local administrator credentials are required to refresh the disposable SAML provider.' >&2
   exit 2
