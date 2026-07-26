@@ -91,6 +91,7 @@ export function RolesTable({
                   titleText=""
                   aria-label="Filter roles by scope"
                   label="Scope"
+                  size="lg"
                   items={ROLE_SCOPE_FILTERS}
                   selectedItem={selectedScopeFilter}
                   itemToString={(item) => item?.label || ''}
