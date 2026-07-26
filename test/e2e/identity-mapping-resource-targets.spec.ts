@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { resolve } from 'node:path';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 
 const providerKey = 'identity.oidc.browser-mock';
@@ -7,6 +8,13 @@ const engineSet = { id: 'scope-engine-set', key: 'operations', name: 'Operations
 const runtimeResource = { id: 'scope-runtime-resource', engineId: engine.id, resourceKey: 'invoice-process', resourceKind: 'process_definition', isActive: true };
 const runtimeResourceSet = { id: 'scope-runtime-resource-set', engineId: engine.id, key: 'invoices', name: 'Invoice resources', resourceKind: 'process_definition', isArchived: false };
 const engineRole = { id: 'scope-engine-viewer', key: 'engine-viewer', name: 'Engine Viewer', scope: 'engine', isAssignable: true, isArchived: false };
+const manualScreenshotDirectory = process.env.MANUAL_UI_SCREENSHOT_DIR;
+
+async function captureManualScreenshot(page: Page, fileName: string): Promise<void> {
+  if (!manualScreenshotDirectory) return;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: resolve(manualScreenshotDirectory, fileName), type: 'jpeg', quality: 90 });
+}
 
 type TargetCase = {
   resourceType: 'engine' | 'engine_set' | 'engine_runtime_resource' | 'engine_runtime_resource_set';
@@ -20,7 +28,7 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   body: JSON.stringify(body),
 });
 
-async function startScopedMapping(page: Page, suffix: string): Promise<void> {
+async function startScopedMapping(page: Page, suffix: string, captureInitialState = false): Promise<void> {
   const slug = suffix.replaceAll('_', '-');
   await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
   await page.getByRole('combobox', { name: 'Identity provider' }).click();
@@ -31,9 +39,16 @@ async function startScopedMapping(page: Page, suffix: string): Promise<void> {
   await page.getByLabel('New EnterpriseGlue group name').fill(`Scope coverage ${slug}`);
   await page.getByLabel('New group key').fill(`group.scope-coverage-${slug}`);
   await expect(page.getByRole('heading', { name: 'Engine access', exact: true })).toBeVisible();
-  await expect(page.getByText('Optional. Grant this group scoped engine access now, or create the mapping first and grant access later.', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Add engine access', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Skip engine access for now', exact: true })).toBeVisible();
+  await expect(page.getByText('Optional. Select this only when the mapping should also grant a scoped engine role.', { exact: true })).toBeVisible();
+  if (captureInitialState) await captureManualScreenshot(page, '26-identity-mapping-wizard-step-2-group.jpg');
+  const provisionAccess = page.getByRole('checkbox', { name: 'Grant scoped engine access now', exact: true });
+  await expect(provisionAccess).not.toBeChecked();
+  // Carbon's checkbox input is visually hidden beneath its label. Keyboard
+  // activation exercises the actual accessible control without forcing a
+  // click through the visual label.
+  await provisionAccess.press('Space');
+  await expect(provisionAccess).toBeChecked();
+  if (captureInitialState) await captureManualScreenshot(page, '34-identity-mapping-group-and-access-layout.jpg');
   await page.locator('#identity-mapping-provision-role').click();
   await page.getByRole('option', { name: engineRole.name, exact: true }).click();
 }
@@ -119,13 +134,22 @@ test.describe('Identity mapping scoped access', () => {
       const suffix = `${index + 1}-${target.resourceType}`;
       const slug = suffix.replaceAll('_', '-');
 
-      await startScopedMapping(page, suffix);
+      await startScopedMapping(page, suffix, index === 0);
       await page.locator('#identity-mapping-provision-scope').selectOption(target.resourceType);
       await target.selectTarget(page);
+      if (manualScreenshotDirectory) {
+        await captureManualScreenshot(page, [
+          '34-identity-mapping-engine.jpg',
+          '35-identity-mapping-engine-set.jpg',
+          '36-identity-mapping-runtime-resource.jpg',
+          '37-identity-mapping-runtime-resource-set.jpg',
+        ][index]);
+      }
       await page.getByRole('button', { name: 'Continue', exact: true }).click();
       const review = page.getByLabel('Identity mapping review');
       await expect(review).toContainText(target.resourceType.replaceAll('_', ' '));
       await expect(review).toContainText(target.resourceId);
+      if (index === 0) await captureManualScreenshot(page, '28-identity-mapping-wizard-step-3-review.jpg');
       await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
       await expect(page.getByRole('table').getByText(`group.scope-coverage-${slug}`, { exact: true })).toBeVisible();
 
@@ -138,4 +162,17 @@ test.describe('Identity mapping scoped access', () => {
       })]);
     });
   }
+
+  test('selects an existing group before deciding whether to grant engine access @identity-mapping-scopes', async ({ page }) => {
+    await openScopedMappingPage(page);
+    await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Identity provider' }).click();
+    await page.getByRole('option', { name: providerKey, exact: true }).click();
+    await page.getByRole('textbox', { name: 'External ID' }).fill('operators-existing-group');
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await page.getByRole('combobox', { name: 'EnterpriseGlue group' }).click();
+    await page.getByRole('option', { name: 'Browser operators (group.browser-operators)', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Grant scoped engine access now', exact: true })).not.toBeChecked();
+    await captureManualScreenshot(page, '27-identity-mapping-wizard-step-2-selected-group.jpg');
+  });
 });

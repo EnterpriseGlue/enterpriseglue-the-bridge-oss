@@ -102,7 +102,7 @@ async function createMappingThroughUi(page: Page, providerKey: string, groupKey:
   await page.getByRole('button', { name: 'Create a new group', exact: true }).click();
   await page.getByLabel('New EnterpriseGlue group name').fill(groupName);
   await page.getByLabel('New group key').fill(groupKey);
-  await page.getByRole('button', { name: 'Add engine access', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Grant scoped engine access now', exact: true }).press('Space');
   await page.getByRole('combobox', { name: 'Engine role' }).click();
   await page.getByRole('option', { name: /engine operator/i }).click();
   await page.locator('#identity-mapping-provision-scope').selectOption('engine');
