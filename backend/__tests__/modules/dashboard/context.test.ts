@@ -139,7 +139,7 @@ describe('GET /api/dashboard/context', () => {
   it('returns context with scoped engine permissions', async () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       ...emptyPermissions(),
-      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'], runtimePermissions: [] }],
     });
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
 
@@ -208,7 +208,7 @@ describe('GET /api/dashboard/context', () => {
       ...emptyPermissions(),
       platform: ['platform:users:view'],
       projects: [{ resourceId: 'project-2', permissions: ['project:deploy'] }],
-      engines: [{ resourceId: 'engine-2', permissions: ['engine:deploy:view'] }],
+      engines: [{ resourceId: 'engine-2', permissions: ['engine:deploy:view'], runtimePermissions: [] }],
     });
     const projectRepo = { find: vi.fn().mockResolvedValue([
       { id: 'project-2', name: 'Scoped Project' },
@@ -238,7 +238,7 @@ describe('GET /api/dashboard/context', () => {
       ...emptyPermissions(),
       // Runtime-resource-only users discover the containing engine but do not
       // receive a synthetic engine-wide permission in their snapshot.
-      engines: [{ resourceId: 'engine-central', permissions: [] }],
+      engines: [{ resourceId: 'engine-central', permissions: [], runtimePermissions: [] }],
     });
     vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);
     const projectRepo = { find: vi.fn().mockResolvedValue([]) };
@@ -266,8 +266,8 @@ describe('GET /api/dashboard/context', () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       ...emptyPermissions(),
       engines: [
-        { resourceId: 'engine-direct', permissions: ['engine:instance:view'] },
-        { resourceId: 'engine-sidecar', permissions: ['engine:instance:view'] },
+        { resourceId: 'engine-direct', permissions: ['engine:instance:view'], runtimePermissions: [] },
+        { resourceId: 'engine-sidecar', permissions: ['engine:instance:view'], runtimePermissions: [] },
       ],
     });
     vi.mocked(permissionService.getVisibleRuntimeResources).mockResolvedValue([{ resourceKey: 'payments' }] as any);

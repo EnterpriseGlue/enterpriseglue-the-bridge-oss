@@ -59,7 +59,7 @@ describe('frontend permission helpers', () => {
       hasEnginesUiAccess(
         {
           ...baseSnapshot,
-          engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.MEMBERS_VIEW] }],
+          engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.MEMBERS_VIEW], runtimePermissions: [] }],
         },
         baseUser
       )
@@ -69,7 +69,7 @@ describe('frontend permission helpers', () => {
       hasEnginesUiAccess(
         {
           ...baseSnapshot,
-          engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.SECRETS_MANAGE] }],
+          engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.SECRETS_MANAGE], runtimePermissions: [] }],
         },
         baseUser
       )
@@ -81,17 +81,17 @@ describe('frontend permission helpers', () => {
   it('maps Mission Control UI and section access to runtime engine permissions', () => {
     const processViewer = {
       ...baseSnapshot,
-      engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW] }],
+      engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW], runtimePermissions: [] }],
     };
     const deleteBatchUser = {
       ...baseSnapshot,
-      engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW, EnginePermission.INSTANCE_DELETE] }],
+      engines: [{ resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW, EnginePermission.INSTANCE_DELETE], runtimePermissions: [] }],
     };
     const splitPermissions = {
       ...baseSnapshot,
       engines: [
-        { resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW] },
-        { resourceId: 'engine-2', permissions: [EnginePermission.INSTANCE_DELETE] },
+        { resourceId: 'engine-1', permissions: [EnginePermission.INSTANCE_VIEW], runtimePermissions: [] },
+        { resourceId: 'engine-2', permissions: [EnginePermission.INSTANCE_DELETE], runtimePermissions: [] },
       ],
     };
     const runtimeResourceViewer = {

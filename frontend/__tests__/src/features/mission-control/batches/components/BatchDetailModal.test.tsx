@@ -53,7 +53,7 @@ const deniedAuthContext: AuthContextValue = {
     tenantId: null,
     platform: [],
     projects: [],
-    engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+    engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'], runtimePermissions: [] }],
     authorizationVersion: 'test-authz-v1',
     generatedAt: 1,
   },
