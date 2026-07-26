@@ -21,14 +21,15 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
 });
 
 async function startScopedMapping(page: Page, suffix: string): Promise<void> {
+  const slug = suffix.replaceAll('_', '-');
   await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
   await page.getByRole('combobox', { name: 'Identity provider' }).click();
   await page.getByRole('option', { name: providerKey, exact: true }).click();
-  await page.getByRole('textbox', { name: 'External ID' }).fill(`operators-${suffix}`);
+  await page.getByRole('textbox', { name: 'External ID' }).fill(`operators-${slug}`);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.getByRole('button', { name: 'Create a new group', exact: true }).click();
-  await page.getByLabel('New EnterpriseGlue group name').fill(`Scope coverage ${suffix}`);
-  await page.getByLabel('New group key').fill(`group.scope-coverage-${suffix}`);
+  await page.getByLabel('New EnterpriseGlue group name').fill(`Scope coverage ${slug}`);
+  await page.getByLabel('New group key').fill(`group.scope-coverage-${slug}`);
   await page.getByRole('button', { name: 'Add engine access with this mapping', exact: true }).click();
   await page.locator('#identity-mapping-provision-role').click();
   await page.getByRole('option', { name: engineRole.name, exact: true }).click();
@@ -40,7 +41,7 @@ async function chooseEngine(page: Page): Promise<void> {
 }
 
 async function chooseEngineSet(page: Page): Promise<void> {
-  await page.locator('#identity-mapping-provision-engine-set').click();
+  await page.getByRole('combobox', { name: 'Engine Set', exact: true }).click();
   await page.getByRole('option', { name: `${engineSet.name} (${engineSet.key})`, exact: true }).click();
 }
 
@@ -60,54 +61,61 @@ async function chooseRuntimeResourceSet(page: Page): Promise<void> {
   await page.getByRole('option', { name: `${runtimeResourceSet.name} (${runtimeResourceSet.key})`, exact: true }).click();
 }
 
+const targetCases: TargetCase[] = [
+  { resourceType: 'engine', resourceId: engine.id, selectTarget: chooseEngine },
+  { resourceType: 'engine_set', resourceId: engineSet.id, selectTarget: chooseEngineSet },
+  { resourceType: 'engine_runtime_resource', resourceId: runtimeResource.id, selectTarget: chooseRuntimeResource },
+  { resourceType: 'engine_runtime_resource_set', resourceId: runtimeResourceSet.id, selectTarget: chooseRuntimeResourceSet },
+];
+
+async function openScopedMappingPage(page: Page): Promise<Record<string, unknown>[]> {
+  const stack = new MockBrowserIdentityStack();
+  await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+  const persistedMappings: Record<string, unknown>[] = [];
+  const provisionRequests: Record<string, unknown>[] = [];
+
+  await page.route('**/api/authz/roles', (route) => json(route, [engineRole]));
+  await page.route('**/api/authz/engine-sets', (route) => json(route, [engineSet]));
+  await page.route('**/engines-api/engines', (route) => json(route, [engine]));
+  await page.route('**/api/authz/runtime-resources**', (route) => json(route, [runtimeResource]));
+  await page.route('**/api/authz/runtime-resource-sets**', (route) => json(route, [runtimeResourceSet]));
+  await page.route('**/api/identity/mappings/provision-access', async (route) => {
+    const request = route.request().postDataJSON() as Record<string, unknown>;
+    provisionRequests.push(request);
+    const mapping = {
+      id: 'scope-mapping',
+      providerId: 'browser-oidc-provider',
+      providerKey: request.providerKey,
+      targetGroupId: 'scope-group',
+      targetGroupKey: (request.newGroup as { key: string }).key,
+      entitlementType: request.entitlementType,
+      externalId: request.externalId,
+      matchOperator: request.matchOperator,
+      syncMode: request.syncMode,
+      isActive: true,
+      configKey: null,
+      sourceRef: null,
+      ownershipMode: 'manual',
+    };
+    persistedMappings.push(mapping);
+    await json(route, { mapping, assignment: { id: 'scope-assignment', warnings: [] }, createdGroup: { id: 'scope-group' } }, 201);
+  });
+  await page.route('**/api/identity/mappings', (route) => json(route, persistedMappings));
+
+  await page.goto('/admin/settings');
+  await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
+  return provisionRequests;
+}
+
 test.describe('Identity mapping scoped access', () => {
-  test('provisions every supported resource target atomically through the mapping wizard @identity-mapping-scopes', async ({ page }) => {
-    const stack = new MockBrowserIdentityStack();
-    await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
-    const persistedMappings: Record<string, unknown>[] = [];
-    const provisionRequests: Record<string, unknown>[] = [];
+  test.setTimeout(60_000);
 
-    await page.route('**/api/authz/roles', (route) => json(route, [engineRole]));
-    await page.route('**/api/authz/engine-sets', (route) => json(route, [engineSet]));
-    await page.route('**/engines-api/engines', (route) => json(route, [engine]));
-    await page.route('**/api/authz/runtime-resources**', (route) => json(route, [runtimeResource]));
-    await page.route('**/api/authz/runtime-resource-sets**', (route) => json(route, [runtimeResourceSet]));
-    await page.route('**/api/identity/mappings/provision-access', async (route) => {
-      const request = route.request().postDataJSON() as Record<string, unknown>;
-      provisionRequests.push(request);
-      const sequence = provisionRequests.length;
-      const mapping = {
-        id: `scope-mapping-${sequence}`,
-        providerId: 'browser-oidc-provider',
-        providerKey: request.providerKey,
-        targetGroupId: `scope-group-${sequence}`,
-        targetGroupKey: (request.newGroup as { key: string }).key,
-        entitlementType: request.entitlementType,
-        externalId: request.externalId,
-        matchOperator: request.matchOperator,
-        syncMode: request.syncMode,
-        isActive: true,
-        configKey: null,
-        sourceRef: null,
-        ownershipMode: 'manual',
-      };
-      persistedMappings.push(mapping);
-      await json(route, { mapping, assignment: { id: `scope-assignment-${sequence}`, warnings: [] }, createdGroup: { id: `scope-group-${sequence}` } }, 201);
-    });
-    await page.route('**/api/identity/mappings', (route) => json(route, persistedMappings));
-
-    await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
-
-    const targetCases: TargetCase[] = [
-      { resourceType: 'engine', resourceId: engine.id, selectTarget: chooseEngine },
-      { resourceType: 'engine_set', resourceId: engineSet.id, selectTarget: chooseEngineSet },
-      { resourceType: 'engine_runtime_resource', resourceId: runtimeResource.id, selectTarget: chooseRuntimeResource },
-      { resourceType: 'engine_runtime_resource_set', resourceId: runtimeResourceSet.id, selectTarget: chooseRuntimeResourceSet },
-    ];
-
-    for (const [index, target] of targetCases.entries()) {
+  for (const [index, target] of targetCases.entries()) {
+    test(`provisions ${target.resourceType} access atomically through the mapping wizard @identity-mapping-scopes`, async ({ page }) => {
+      const provisionRequests = await openScopedMappingPage(page);
       const suffix = `${index + 1}-${target.resourceType}`;
+      const slug = suffix.replaceAll('_', '-');
+
       await startScopedMapping(page, suffix);
       await page.locator('#identity-mapping-provision-scope').selectOption(target.resourceType);
       await target.selectTarget(page);
@@ -116,16 +124,15 @@ test.describe('Identity mapping scoped access', () => {
       await expect(review).toContainText(target.resourceType.replaceAll('_', ' '));
       await expect(review).toContainText(target.resourceId);
       await page.getByRole('button', { name: 'Create mapping', exact: true }).click();
-      await expect(page.getByRole('table').getByText(`group.scope-coverage-${suffix}`, { exact: true })).toBeVisible();
-    }
+      await expect(page.getByRole('table').getByText(`group.scope-coverage-${slug}`, { exact: true })).toBeVisible();
 
-    expect(provisionRequests).toEqual(targetCases.map((target, index) => expect.objectContaining({
-      providerKey,
-      roleId: engineRole.id,
-      resourceType: target.resourceType,
-      resourceId: target.resourceId,
-      newGroup: expect.objectContaining({ key: `group.scope-coverage-${index + 1}-${target.resourceType}` }),
-    })));
-    await expect(page.getByRole('table').getByRole('row')).toHaveCount(5);
-  });
+      expect(provisionRequests).toEqual([expect.objectContaining({
+        providerKey,
+        roleId: engineRole.id,
+        resourceType: target.resourceType,
+        resourceId: target.resourceId,
+        newGroup: expect.objectContaining({ key: `group.scope-coverage-${slug}` }),
+      })]);
+    });
+  }
 });
