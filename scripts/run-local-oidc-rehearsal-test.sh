@@ -98,8 +98,9 @@ PLAYWRIGHT_WORKERS="${PLAYWRIGHT_WORKERS:-1}" \
 LOCAL_OIDC_REHEARSAL=true \
 LOCAL_OIDC_AUTHORIZATION_REHEARSAL=true \
 LOCAL_OIDC_ISSUER_URL="$issuer_url" \
+LOCAL_OIDC_CONFIG_AUTHORIZATION_REHEARSAL=true \
 PLAYWRIGHT_BASE_URL="$base_url" \
 PLAYWRIGHT_IGNORE_HTTPS_ERRORS=true \
 PLAYWRIGHT_LOCAL_CA_FILE="$ca_file" \
 E2E_SEED_USER=false \
-pnpm exec playwright test test/e2e/local-oidc-rehearsal.spec.ts test/e2e/local-oidc-mapping-authorization.spec.ts --config test/e2e/playwright.config.ts "$@"
+pnpm exec playwright test test/e2e/local-oidc-rehearsal.spec.ts test/e2e/local-oidc-mapping-authorization.spec.ts test/e2e/local-oidc-config-authorization.spec.ts --config test/e2e/playwright.config.ts "$@"

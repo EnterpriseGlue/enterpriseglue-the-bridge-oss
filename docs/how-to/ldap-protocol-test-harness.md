@@ -16,7 +16,7 @@ automation that already use them.
 | `pnpm run test:identity:browser` | configure, apply, login, and reconciliation browser lifecycle using the in-browser identity stack | local frontend and Playwright Chromium |
 | `pnpm run test:authz:browser` | Access Control responsive permission-catalog layout at tablet width | local frontend and Playwright Chromium |
 | `pnpm run test:identity:ldap` | real LDAPS bind, search, TLS, and nested-group flow | Docker |
-| `pnpm run test:entra:local-rehearsal` | real browser authorization-code flow against a separate local Keycloak Entra-compatible client, with an app-role-to-engine-access mapping | Docker, local TLS, and Playwright Chromium |
+| `pnpm run test:entra:local-rehearsal` | real browser authorization-code flow against a separate local Keycloak Entra-compatible client, including config-bundle and UI app-role-to-engine-access mappings | Docker, local TLS, and Playwright Chromium |
 | `pnpm run test:identity:verify` | complete local identity verification, including browser lifecycle and LDAPS | local frontend, Playwright Chromium, and Docker |
 | `pnpm run test:identity:protocol-rehearsal` | disposable Docker deployment plus generic OIDC, Entra-compatible OIDC, signed SAML, and LDAPS browser rehearsals | Docker, local TLS, and Playwright Chromium |
 | `pnpm run test:entra:real-rehearsal` | opt-in browser authorization-code flow against Microsoft Entra ID, including a role mapping, scoped access, and revocation | dedicated Entra test tenant and dedicated EnterpriseGlue test environment |
@@ -49,9 +49,11 @@ claims and authorization boundary EnterpriseGlue owns.
 `test:entra:compatibility` uses an in-process OIDC profile with a
 tenant-specific Microsoft issuer shape and the claims EnterpriseGlue consumes:
 `sub`, `oid`, `tid`, `preferred_username`, immutable group identifiers, and
-app roles. It proves expected-audience checking and that Entra's `hasgroups`,
-`_claim_names`, or `_claim_sources` group-overage markers fail closed before
-any identity or membership write.
+app roles. It proves expected-audience checking, guest identities, one-time
+S256 PKCE-bound authorization codes, consent denial, accepted signing-key
+rotation, rejection of a retired signing key, configured-directory tenant
+matching, and that Entra's `hasgroups`, `_claim_names`, or `_claim_sources`
+group-overage markers fail closed before any identity or membership write.
 
 `test:entra:local-rehearsal` uses a separate public Keycloak client and a real
 browser authorization-code redirect. Its fixture user emits a synthetic Entra
@@ -60,6 +62,15 @@ role `enterpriseglue.engine_operator`. The browser creates the provider and an
 atomic **role** mapping through the UI, proves access to only its assigned
 engine, and proves immediate denial after mapping disablement. It is included
 in the disposable protocol rehearsal below.
+
+Both local OIDC profiles also apply a real configuration bundle containing the
+engine, group, scoped role assignment, provider, and mapping. The generic
+profile maps the `operators` group; the Entra-compatible profile maps the
+synthetic app role. Each verifies the login chooser when two OIDC providers
+are enabled, signs in through the configuration-owned provider, proves access
+to exactly the configured engine, then reapplies the bundle without the
+mapping and proves immediate denial. Each test archives its source-owned rows
+before it finishes.
 
 ## Disposable OIDC, SAML, LDAP, and Entra-compatible rehearsal
 

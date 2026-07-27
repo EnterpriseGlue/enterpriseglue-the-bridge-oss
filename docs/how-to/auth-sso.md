@@ -232,7 +232,9 @@ or apply receipts.
 For Entra OIDC, use a tenant-specific issuer URL in the form
 `https://login.microsoftonline.com/<tenant-id>/v2.0`, set
 `directoryTenantId`, and set `expectedAudience` to the Entra app registration's
-client ID. Map immutable Entra group object IDs or app-role values—never display
+client ID. When an ID token contains `tid`, EnterpriseGlue requires it to
+equal `directoryTenantId` before it writes an external identity or any mapped
+membership. Map immutable Entra group object IDs or app-role values—never display
 names. Prefer app roles for business personas because group-overage markers can
 leave group claims incomplete; EnterpriseGlue rejects `hasgroups`,
 `_claim_names`, and `_claim_sources` fail closed instead of treating them as an

@@ -53,6 +53,50 @@ describe('identity mock provider contracts', () => {
     });
   });
 
+  it('emulates an Entra guest login with a PKCE-bound one-time authorization code', async () => {
+    const provider = new MockEntraOidcProvider();
+    provider.setScenario('guest_user');
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    const request = await genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-guest', 'nonce-1');
+    const callback = provider.authorize(request.url);
+    const code = callback.searchParams.get('code');
+    expect(callback.searchParams.get('state')).toBe('state-guest');
+    expect(code).toMatch(/^entra-code-/);
+
+    const claims = await genericOidcService.exchangeCode(provider.configuration(), {
+      code: code!, codeVerifier: request.codeVerifier, nonce: 'nonce-1',
+    });
+    expect(claims).toMatchObject({
+      tid: provider.tenantId,
+      oid: 'ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb',
+      idp: `https://login.microsoftonline.com/${provider.guestHomeTenantId}/v2.0`,
+      roles: ['enterpriseglue.engine_operator'],
+    });
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: code!, codeVerifier: request.codeVerifier, nonce: 'nonce-1',
+    })).rejects.toThrow('OIDC token exchange failed (400)');
+
+    const incorrectPkceRequest = await genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-pkce', 'nonce-pkce');
+    const incorrectPkceCallback = provider.authorize(incorrectPkceRequest.url);
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: incorrectPkceCallback.searchParams.get('code')!, codeVerifier: 'not-the-request-verifier', nonce: 'nonce-pkce',
+    })).rejects.toThrow('OIDC token exchange failed (400)');
+  });
+
+  it('emulates Entra consent denial without issuing an authorization code', async () => {
+    const provider = new MockEntraOidcProvider();
+    provider.setScenario('consent_denied');
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    const request = await genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-consent', 'nonce-1');
+    const callback = provider.authorize(request.url);
+    expect(callback.searchParams.get('state')).toBe('state-consent');
+    expect(callback.searchParams.get('code')).toBeNull();
+    expect(callback.searchParams.get('error')).toBe('access_denied');
+    expect(callback.searchParams.get('error_description')).toContain('AADSTS65004');
+  });
+
   it('normalizes SAML assertion attributes through the same entitlement envelope', () => {
     const assertion = new MockSamlIdentityProvider().assertion();
     const identity = samlIdentityProviderAdapter.normalizeIdentity({ providerKey: 'saml-mock', subjectId: String(assertion.nameID), claims: assertion });
@@ -110,13 +154,18 @@ describe('identity mock provider contracts', () => {
     expect(() => stack.samlReplayCache.consume('saml-provider-1', 'signed-assertion', 1_010, 10)).not.toThrow();
   });
 
-  it('accepts a token signed with rotated provider key material', async () => {
-    const provider = new MockOidcProvider();
+  it('accepts Entra signing-key rotation and rejects a token from its retired JWKS key', async () => {
+    const provider = new MockEntraOidcProvider();
     provider.rotateSigningMaterial();
     vi.stubGlobal('fetch', provider.fetch.bind(provider));
     await expect(genericOidcService.exchangeCode(provider.configuration(), {
       code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
-    })).resolves.toMatchObject({ sub: 'user-1' });
+    })).resolves.toMatchObject({ sub: 'entra-subject-1' });
+    provider.rotateSigningMaterial();
+    provider.setFailureMode('unknown_signing_key');
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-2', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).rejects.toThrow('OIDC signing key was not found in the provider JWKS');
   });
 
   it.each([
@@ -141,7 +190,7 @@ describe('identity mock provider contracts', () => {
 
   it('emits an Entra-style group-overage marker that authorization rejects before synchronization', async () => {
     const provider = new MockEntraOidcProvider();
-    provider.setFailureMode('group_overage');
+    provider.setScenario('group_overage');
     vi.stubGlobal('fetch', provider.fetch.bind(provider));
 
     const claims = await genericOidcService.exchangeCode(provider.configuration(), {

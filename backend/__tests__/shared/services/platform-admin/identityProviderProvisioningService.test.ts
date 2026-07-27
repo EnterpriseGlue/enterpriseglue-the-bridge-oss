@@ -129,6 +129,21 @@ describe('IdentityProviderProvisioningService', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
   });
 
+  it('fails closed before identity writes when the Entra token tenant differs from the configured directory tenant', async () => {
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: '11111111-2222-3333-4444-555555555555', configurationJson: '{}' } as any;
+
+    await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+      sub: 'entra-subject-1', oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      tid: '99999999-aaaa-bbbb-cccc-dddddddddddd', email: 'entra-operator@example.test', email_verified: true,
+    } as any)).rejects.toThrow('OIDC ID token directory tenant does not match the configured identity provider');
+
+    expect(stores.externalIdentity.findOne).not.toHaveBeenCalled();
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
+    expect(stores.user.insert).not.toHaveBeenCalled();
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+  });
+
   it('normalizes the configured OIDC group claim before entitlement mappings are evaluated', async () => {
     const provider = {
       id: 'provider-1', tenantId: 'tenant-1', directoryTenantId: 'directory-1',

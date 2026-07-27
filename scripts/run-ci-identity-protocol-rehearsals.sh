@@ -77,6 +77,10 @@ const values = {
   POSTGRES_SSL: 'false',
   POSTGRES_SSL_REJECT_UNAUTHORIZED: 'false',
   POSTGRES_HOST_PORT: postgresPort,
+  // The protocol rehearsal reaches the engine mock only through the Compose
+  // network. Let Docker choose a host port so a developer's other local test
+  // stack cannot prevent this fully disposable suite from starting.
+  CAMUNDA_MOCK_HOST_PORT: '0',
   JWT_SECRET: randomHex(32),
   ADMIN_EMAIL: 'identity-protocol-rehearsal-admin@example.test',
   ADMIN_PASSWORD: randomHex(24),
@@ -91,6 +95,7 @@ const values = {
   KEYCLOAK_TLS_DIR: tlsDir,
   KEYCLOAK_REALM_IMPORT_FILE: realmImportFile,
   LOCAL_IDENTITY_SECRET_DIR: identitySecretDir,
+  E2E_ENGINE_PASSWORD: randomHex(24),
 };
 fs.writeFileSync(envFile, `${Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')}\n`, { mode: 0o600 });
 
@@ -121,6 +126,7 @@ compose=(
   --project-directory "$root_dir"
   --env-file "$env_file"
   -f "$root_dir/infra/docker/compose/docker-compose.yml"
+  -f "$root_dir/infra/docker/compose/docker-compose.e2e-mission-control.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.backend-expose.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.keycloak.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.keycloak-tls.yml"
@@ -133,7 +139,7 @@ run_compose() {
 
 capture_diagnostics() {
   run_compose ps --all > "$artifact_dir/compose-status.txt" 2>&1 || true
-  for service in db backend frontend frontend-tls keycloak; do
+  for service in db backend frontend frontend-tls keycloak camunda-mock; do
     run_compose logs --no-color --tail=500 "$service" > "$artifact_dir/${service}.log" 2>&1 || true
   done
   if [[ -d "$playwright_output_dir" ]]; then
@@ -156,7 +162,7 @@ cd "$root_dir"
 KEYCLOAK_TLS_DIR="$tls_dir" ./infra/docker/keycloak/generate-local-tls.sh
 
 echo "[identity-protocol-rehearsal] Starting disposable local Docker stack ($project_name)."
-run_compose up --build -d --wait db backend frontend frontend-tls keycloak
+run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock
 
 curl --fail --silent --show-error --cacert "$tls_dir/ca.crt" \
   "https://localhost:${tls_frontend_port}/login" >/dev/null
@@ -186,7 +192,7 @@ common_env=(
   LOCAL_LDAP_SECRET_FILE_MODE=644
 )
 
-echo '[identity-protocol-rehearsal] Running OIDC provider/mapping/browser authorization rehearsal.'
+echo '[identity-protocol-rehearsal] Running OIDC provider, configuration, mapping, and browser authorization rehearsal.'
 env "${common_env[@]}" pnpm run test:oidc:local-rehearsal 2>&1 | tee "$artifact_dir/oidc-rehearsal.log"
 
 echo '[identity-protocol-rehearsal] Running Entra-compatible OIDC provider/mapping/browser authorization rehearsal.'
@@ -202,7 +208,7 @@ node - "$artifact_dir/summary.txt" <<'NODE'
 const { writeFileSync } = require('node:fs');
 writeFileSync(process.argv[2], [
   'status=passed',
-  'protocols=oidc,entra-compatible-oidc,saml,ldap',
+  'protocols=oidc-config,oidc,entra-compatible-oidc,saml,ldap',
   'scope=disposable-localhost-docker-stack',
   'artifacts=compose-status,service-logs,playwright-output,protocol-run-logs',
   'credentials=ephemeral-and-not-retained',

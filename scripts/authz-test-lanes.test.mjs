@@ -386,6 +386,8 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}/);
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_ISSUER_URL:-https:\/\/localhost:\$\{KEYCLOAK_HOST_PORT:-8180\}/);
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_AUTHORIZATION_REHEARSAL=true[\s\\]+LOCAL_OIDC_ISSUER_URL="\$issuer_url"/);
+  assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_CONFIG_AUTHORIZATION_REHEARSAL=true/);
+  assert.match(localOidcRehearsalRunner, /local-oidc-config-authorization\.spec\.ts/);
   assert.match(localOidcConfigureRunner, /groupClaim:"groups"/);
   assert.match(localOidcConfigureRunner, /expectedAudience:\$clientId/);
   assert.match(localOidcConfigureRunner, /triggers:\["login","manual"\]/);
@@ -394,6 +396,7 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
 
 test('the Entra compatibility lanes distinguish local claim compatibility from opt-in real-tenant evidence', () => {
   assert.match(scripts['test:entra:compatibility'], /identityProviderMockContracts\.test\.ts/);
+  assert.match(scripts['test:entra:compatibility'], /identityProviderProvisioningService\.test\.ts/);
   assert.match(scripts['test:entra:local-rehearsal'], /run-local-entra-oidc-rehearsal-test\.sh/);
   assert.match(scripts['test:entra:real-rehearsal'], /run-entra-id-rehearsal\.sh/);
   assert.match(localEntraOidcRehearsalRunner, /LOCAL_OIDC_CLIENT_ID.*enterpriseglue-local-entra/);

@@ -13,7 +13,8 @@ const { signXml } = require('@node-saml/node-saml/lib/xml.js') as {
   signXml: (xml: string, xpath: string, location: { reference: string; action: 'after' }, options: { privateKey: string; publicCert: string; signatureAlgorithm: 'sha256' }) => string;
 };
 
-export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'timeout';
+export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'unknown_signing_key' | 'timeout';
+export type MockEntraOidcScenario = 'standard' | 'guest_user' | 'group_overage' | 'tenant_mismatch' | 'consent_denied';
 
 export interface MockOidcProviderOptions {
   issuer?: string;
@@ -61,6 +62,7 @@ export class MockOidcProvider {
   readonly clientId: string;
   readonly callbackUrl: string;
   private signingMaterial = createSigningMaterial('identity-mock-key-1');
+  private previousSigningMaterial: SigningMaterial | null = null;
   private tokenClaims: Record<string, unknown> = {
     sub: 'user-1', email: 'person@example.test', email_verified: true, groups: ['ops'], nonce: 'nonce-1',
   };
@@ -86,12 +88,14 @@ export class MockOidcProvider {
 
   rotateSigningMaterial(): void {
     const kid = `identity-mock-key-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.previousSigningMaterial = this.signingMaterial;
     this.signingMaterial = createSigningMaterial(kid);
   }
 
   reset(): void {
     this.failureMode = 'none';
     this.tokenClaims = { sub: 'user-1', email: 'person@example.test', email_verified: true, groups: ['ops'], nonce: 'nonce-1' };
+    this.previousSigningMaterial = null;
     this.signingMaterial = createSigningMaterial(`identity-mock-key-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   }
 
@@ -132,6 +136,11 @@ export class MockOidcProvider {
           algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m',
         }) });
       }
+      if (this.failureMode === 'unknown_signing_key' && this.previousSigningMaterial) {
+        return Response.json({ id_token: jwt.sign({ ...this.tokenClaims, iss: this.issuer, aud: this.clientId }, this.previousSigningMaterial.privateKey, {
+          algorithm: 'RS256', keyid: String(this.previousSigningMaterial.publicJwk.kid), expiresIn: '5m',
+        }) });
+      }
       if (this.failureMode === 'expired_token') return Response.json({ id_token: this.issueIdToken(undefined, -1) });
       if (this.failureMode === 'not_yet_valid_token') return Response.json({ id_token: this.issueIdTokenWithNotBefore(this.tokenClaims, '5m') });
       if (this.failureMode === 'missing_subject') return Response.json({ id_token: this.issueIdToken({ email: 'person@example.test', email_verified: true, nonce: 'nonce-1', groups: ['ops'] }) });
@@ -170,6 +179,10 @@ export class MockOidcProvider {
  */
 export class MockEntraOidcProvider extends MockOidcProvider {
   readonly tenantId: string;
+  readonly guestHomeTenantId = '66666666-7777-8888-9999-000000000000';
+  private scenario: MockEntraOidcScenario = 'standard';
+  private authorizationCodeSequence = 0;
+  private readonly authorizationCodes = new Map<string, { codeChallenge: string; consumed: boolean }>();
 
   constructor(options: MockEntraOidcProviderOptions = {}) {
     const tenantId = options.tenantId || '11111111-2222-3333-4444-555555555555';
@@ -190,6 +203,15 @@ export class MockEntraOidcProvider extends MockOidcProvider {
 
   override reset(): void {
     super.reset();
+    this.scenario = 'standard';
+    this.authorizationCodeSequence = 0;
+    this.authorizationCodes.clear();
+    this.setScenario('standard');
+  }
+
+  setScenario(scenario: MockEntraOidcScenario): void {
+    this.scenario = scenario;
+    this.setFailureMode('none');
     this.setTokenClaims({
       sub: 'entra-subject-1',
       oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
@@ -201,6 +223,89 @@ export class MockEntraOidcProvider extends MockOidcProvider {
       roles: ['enterpriseglue.engine_operator'],
       nonce: 'nonce-1',
     });
+    if (scenario === 'guest_user') {
+      this.setTokenClaims({
+        sub: 'entra-guest-subject-1',
+        oid: 'ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb',
+        tid: this.tenantId,
+        email: 'guest.operator@example.test',
+        email_verified: true,
+        preferred_username: 'guest_operator_example.test#EXT#@enterpriseglue-local.onmicrosoft.com',
+        idp: `https://login.microsoftonline.com/${this.guestHomeTenantId}/v2.0`,
+        groups: ['group-id-guests'],
+        roles: ['enterpriseglue.engine_operator'],
+        nonce: 'nonce-1',
+      });
+    }
+    if (scenario === 'tenant_mismatch') {
+      this.setTokenClaims({
+        sub: 'entra-subject-1',
+        oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        tid: '99999999-aaaa-bbbb-cccc-dddddddddddd',
+        email: 'entra-operator@example.test',
+        email_verified: true,
+        preferred_username: 'entra-operator@example.test',
+        groups: ['group-id-operators'],
+        roles: ['enterpriseglue.engine_operator'],
+        nonce: 'nonce-1',
+      });
+    }
+  }
+
+  /**
+   * Simulates Entra's authorization endpoint without attempting to emulate its
+   * login page. The returned callback is bound to PKCE and can be exchanged
+   * exactly once through the ordinary token endpoint.
+   */
+  authorize(authorizationUrl: string): URL {
+    const request = new URL(authorizationUrl);
+    if (`${request.origin}${request.pathname}` !== `${this.issuer}/authorize`) throw new Error('Unexpected Entra authorization endpoint');
+    if (request.searchParams.get('client_id') !== this.clientId) throw new Error('Unexpected Entra client ID');
+    const callback = new URL(request.searchParams.get('redirect_uri') || this.callbackUrl);
+    const state = request.searchParams.get('state');
+    if (!state) throw new Error('Entra authorization request state is required');
+    callback.searchParams.set('state', state);
+    if (this.scenario === 'consent_denied') {
+      callback.searchParams.set('error', 'access_denied');
+      callback.searchParams.set('error_description', 'AADSTS65004: User declined consent.');
+      return callback;
+    }
+    const codeChallenge = request.searchParams.get('code_challenge');
+    if (!codeChallenge || request.searchParams.get('code_challenge_method') !== 'S256') throw new Error('Entra authorization request must use S256 PKCE');
+    const code = `entra-code-${++this.authorizationCodeSequence}`;
+    this.authorizationCodes.set(code, { codeChallenge, consumed: false });
+    callback.searchParams.set('code', code);
+    return callback;
+  }
+
+  override async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
+    const url = new URL(String(input));
+    if (url.href === `${this.issuer}/authorize`) {
+      return new Response(null, { status: 302, headers: { location: this.authorize(url.toString()).toString() } });
+    }
+    if (url.href === `${this.issuer}/token` && init?.method === 'POST') {
+      const body = init.body instanceof URLSearchParams ? init.body : new URLSearchParams(typeof init.body === 'string' ? init.body : undefined);
+      const code = body.get('code') || '';
+      const authorization = this.authorizationCodes.get(code);
+      if (authorization) {
+        const suppliedChallenge = createHash('sha256').update(body.get('code_verifier') || '').digest('base64url');
+        if (authorization.consumed || suppliedChallenge !== authorization.codeChallenge) {
+          return Response.json({ error: 'invalid_grant', error_description: 'AADSTS54005: Authorization code was already redeemed or PKCE verification failed.' }, { status: 400 });
+        }
+        authorization.consumed = true;
+      } else if (this.authorizationCodes.size > 0) {
+        return Response.json({ error: 'invalid_grant', error_description: 'AADSTS70000: Authorization code is invalid.' }, { status: 400 });
+      }
+      if (this.scenario === 'group_overage') {
+        return Response.json({ id_token: this.issueIdToken({
+          sub: 'entra-subject-1', oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', tid: this.tenantId,
+          email: 'entra-operator@example.test', email_verified: true, preferred_username: 'entra-operator@example.test',
+          roles: ['enterpriseglue.engine_operator'], nonce: 'nonce-1', hasgroups: true,
+          _claim_names: { groups: 'src1' }, _claim_sources: { src1: { endpoint: 'https://graph.microsoft.com/v1.0/me/getMemberObjects' } },
+        }) });
+      }
+    }
+    return super.fetch(input, init);
   }
 }
 

@@ -65,6 +65,18 @@ function oidcClaimsWithConfiguredGroups(provider: IdentityProvider, claims: Oidc
   }
 }
 
+function configuredOidcDirectoryTenant(provider: IdentityProvider, claims: OidcIdentityClaims): string | null {
+  const configuredTenant = typeof provider.directoryTenantId === 'string' ? provider.directoryTenantId.trim() : '';
+  const claimedTenant = typeof claims.tid === 'string' ? claims.tid.trim() : '';
+  // A tenant-specific issuer is the primary Entra boundary. This additional
+  // comparison makes the configured directory tenant explicit and prevents a
+  // future broad issuer configuration from silently accepting another tenant.
+  if (configuredTenant && claimedTenant && configuredTenant !== claimedTenant) {
+    throw new Error('OIDC ID token directory tenant does not match the configured identity provider');
+  }
+  return claimedTenant || configuredTenant || null;
+}
+
 function isUniqueConstraintError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as { code?: unknown; message?: unknown };
@@ -105,7 +117,7 @@ class IdentityProviderProvisioningService {
 
   private oidcInput(provider: IdentityProvider, claims: OidcIdentityClaims): ProvisionIdentityInput {
     const email = requiredEmail(claims);
-    return { providerType: 'oidc', subjectId: claims.sub, email, emailVerified: claims.email_verified === true, displayName: typeof claims.name === 'string' ? claims.name : null, firstName: typeof claims.given_name === 'string' ? claims.given_name : null, lastName: typeof claims.family_name === 'string' ? claims.family_name : null, directoryTenantId: typeof claims.tid === 'string' ? claims.tid : provider.directoryTenantId, claims: oidcClaimsWithConfiguredGroups(provider, claims) };
+    return { providerType: 'oidc', subjectId: claims.sub, email, emailVerified: claims.email_verified === true, displayName: typeof claims.name === 'string' ? claims.name : null, firstName: typeof claims.given_name === 'string' ? claims.given_name : null, lastName: typeof claims.family_name === 'string' ? claims.family_name : null, directoryTenantId: configuredOidcDirectoryTenant(provider, claims), claims: oidcClaimsWithConfiguredGroups(provider, claims) };
   }
 
   private async reconcileLogin(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisionedIdentityUser> {
