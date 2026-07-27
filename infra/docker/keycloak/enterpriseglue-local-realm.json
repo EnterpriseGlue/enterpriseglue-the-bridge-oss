@@ -158,6 +158,7 @@
     "name": "group-id-operators"
   }],
   "users": [{
+    "id": "11111111-aaaa-4aaa-8aaa-111111111111",
     "username": "oidc-operator",
     "enabled": true,
     "emailVerified": true,
@@ -168,6 +169,7 @@
     "realmRoles": ["offline_access"],
     "groups": ["/operators"]
   }, {
+    "id": "22222222-bbbb-4bbb-8bbb-222222222222",
     "username": "entra-operator",
     "enabled": true,
     "emailVerified": true,
@@ -182,6 +184,7 @@
     "realmRoles": ["enterpriseglue.engine_operator"],
     "groups": ["/group-id-operators"]
   }, {
+    "id": "33333333-cccc-4ccc-8ccc-333333333333",
     "username": "saml-operator",
     "enabled": true,
     "emailVerified": true,

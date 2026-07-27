@@ -444,7 +444,8 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL:-\}|\$\{ADMIN_EMAIL:-\}/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_DIRECTORY_MODE/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_FILE_MODE/);
-  assert.match(localLdapConfigureRunner, /triggers:\["login","manual"\]/);
+  assert.match(localLdapConfigureRunner, /triggers:\["login","manual","scheduled"\]/);
+  assert.match(localLdapConfigureRunner, /scheduled:true,intervalSeconds:60/);
   assert.match(localLdapConfigureRunner, /requiredForLogin:true/);
   assert.match(localLdapConfigureRunner, /incompleteEntitlements:"fail_closed"/);
 });

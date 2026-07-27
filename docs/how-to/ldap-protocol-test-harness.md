@@ -72,6 +72,17 @@ to exactly the configured engine, then reapplies the bundle without the
 mapping and proves immediate denial. Each test archives its source-owned rows
 before it finishes.
 
+The generic OIDC mapping rehearsal also covers the provider-recovery lifecycle
+against the real disposable backend: it unlinks the known upstream subject
+through the Identity Provider UI, proves the current engine session is no
+longer accepted, signs in again through Keycloak to recover the mapping, then
+disables the mapping and archives the provider. The LDAP runner configures
+schedule-compatible nested-group synchronization (`scheduled: true`, 60-second
+interval) and invokes the same reconciliation service manually, proving that
+all three eligible directory users are processed and that a successful manual
+sync run is recorded. It does not claim to execute an autonomous scheduler;
+that deployment-owned trigger needs separate environment evidence.
+
 ## Disposable OIDC, SAML, LDAP, and Entra-compatible rehearsal
 
 `test:identity:protocol-rehearsal` is the production-shaped local acceptance

@@ -31,9 +31,15 @@ const externalEntitlementType = process.env.OIDC_REHEARSAL_ENTITLEMENT_TYPE || p
 const externalEntitlementId = process.env.OIDC_REHEARSAL_ENTITLEMENT_ID || process.env.LOCAL_OIDC_ENTITLEMENT_ID || 'operators';
 const testEngineBaseUrl = process.env.OIDC_REHEARSAL_ENGINE_BASE_URL || 'http://camunda-mock:9080/engine-rest';
 const testEngineType = process.env.OIDC_REHEARSAL_ENGINE_TYPE || 'camunda7';
+// The local Keycloak realm gives this fixture user a stable UUID. The recovery
+// journey uses the same upstream subject that the real OIDC callback persisted,
+// rather than an implementation-only database lookup.
+const localOidcOperatorSubjectId = process.env.LOCAL_OIDC_TEST_SUBJECT_ID || '11111111-aaaa-4aaa-8aaa-111111111111';
+const runsLocalIdentityRecovery = !realEntra && clientId === 'enterpriseglue-local';
 
 type Engine = { id: string; name: string };
 type Mapping = { id: string; providerKey: string; isActive: boolean };
+type SessionUser = { id: string };
 
 async function captureConfiguredMappingScreenshot(page: Page): Promise<void> {
   const screenshotDirectory = process.env.OIDC_REHEARSAL_SCREENSHOT_DIR || process.env.LOCAL_OIDC_SCREENSHOT_DIR;
@@ -183,6 +189,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
     const operatorContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
     const admin = await adminContext.newPage();
     const createdEngines: Engine[] = [];
+    let recoveredOperatorContext: BrowserContext | null = null;
 
     try {
       await loginLocalAdministrator(admin);
@@ -211,14 +218,62 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       const sibling = await requestJson(operator, `/engines-api/engines/${siblingEngine.id}`);
       expect([403, 404]).toContain(sibling.status);
 
+      // Keycloak's deterministic fixture user lets this use the real recovery
+      // UI and backend data instead of a browser-only identity mock. Entra's
+      // local profile has a separate subject and retains its focused
+      // provider/mapping authorization coverage above.
+      let recoveredOperator: Page | null = null;
+      if (runsLocalIdentityRecovery) {
+        const session = await requestJson<SessionUser>(operator, '/api/auth/me');
+        expect(session.status, JSON.stringify(session.body)).toBe(200);
+        expect(session.body?.id).toBeTruthy();
+
+        await admin.goto('/admin/settings');
+        await admin.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+        const providerRow = admin.getByRole('row').filter({ hasText: providerKey });
+        await providerRow.getByRole('button', { name: 'Provider actions' }).click();
+        await admin.getByRole('menuitem', { name: 'Resolve external identity conflict' }).click();
+        const conflictDialog = admin.getByRole('dialog', { name: 'Resolve external identity conflict' });
+        await conflictDialog.getByLabel('External provider subject ID').fill(localOidcOperatorSubjectId);
+        await conflictDialog.getByLabel('Currently linked account ID').fill(session.body!.id);
+        await conflictDialog.getByRole('button', { name: /Unlink external identity/ }).click();
+        await expect(admin.getByText(`External identity unlinked: ${providerKey}`, { exact: true })).toBeVisible();
+
+        const unlinkedSession = await requestJson(operator, `/engines-api/engines/${allowedEngine.id}`);
+        expect([401, 403, 404]).toContain(unlinkedSession.status);
+
+        recoveredOperatorContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
+        recoveredOperator = await signInWithProvider(recoveredOperatorContext, providerKey);
+        const recoveredAccess = await requestJson<Engine>(recoveredOperator, `/engines-api/engines/${allowedEngine.id}`);
+        expect(recoveredAccess.status, JSON.stringify(recoveredAccess.body)).toBe(200);
+      }
+
       const revoke = await requestJson<Mapping>(admin, `/api/identity/mappings/${mapping!.id}`, {
         method: 'PUT', csrf, data: { isActive: false },
       });
       expect(revoke.status, JSON.stringify(revoke.body)).toBe(200);
       expect(revoke.body).toMatchObject({ id: mapping!.id, isActive: false });
 
-      const immediatelyRevoked = await requestJson(operator, `/engines-api/engines/${allowedEngine.id}`);
+      const immediatelyRevoked = await requestJson(recoveredOperator || operator, `/engines-api/engines/${allowedEngine.id}`);
       expect([403, 404]).toContain(immediatelyRevoked.status);
+
+      if (runsLocalIdentityRecovery) {
+        await admin.goto('/admin/settings');
+        await admin.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+        const providerRow = admin.getByRole('row').filter({ hasText: providerKey });
+        await providerRow.getByRole('button', { name: 'Provider actions' }).click();
+        await admin.getByRole('menuitem', { name: 'Archive' }).click();
+        const archiveDialog = admin.getByRole('dialog', { name: 'Archive identity provider' });
+        await expect(archiveDialog).toContainText('Provider-managed group memberships are removed');
+        await archiveDialog.getByRole('button', { name: /Archive/ }).click();
+        await expect(providerRow).toContainText('Archived');
+
+        const chooser = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
+        const chooserPage = await chooser.newPage();
+        await chooserPage.goto('/login');
+        await expect(chooserPage.getByRole('button', { name: `Sign in with ${providerKey}`, exact: true })).toHaveCount(0);
+        await chooser.close();
+      }
     } finally {
       const csrf = await csrfToken(admin).catch(() => null);
       const mappings = await requestJson<Mapping[]>(admin, '/api/identity/mappings').catch(() => ({ status: 0, body: null }));
@@ -228,6 +283,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       for (const engine of createdEngines) {
         if (csrf) await requestJson(admin, `/engines-api/engines/${engine.id}`, { method: 'DELETE', csrf }).catch(() => undefined);
       }
+      await recoveredOperatorContext?.close();
       await operatorContext.close();
       await adminContext.close();
     }
