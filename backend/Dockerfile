@@ -12,6 +12,8 @@ COPY --chown=node:node packages/shared/package.json packages/shared/
 COPY --chown=node:node packages/backend-host/package.json packages/backend-host/
 COPY --chown=node:node packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY --chown=node:node packages/frontend-host/package.json packages/frontend-host/
+COPY --chown=node:node packages/plugin-sdk/package.json packages/plugin-sdk/
+COPY --chown=node:node packages/plugin-runtime/package.json packages/plugin-runtime/
 COPY --chown=node:node frontend/package.json frontend/
 
 RUN apk upgrade --no-cache zlib \

@@ -1,1 +1,194 @@
-{}
+{
+  "@asteasolutions/zod-to-openapi@8.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/asteasolutions/zod-to-openapi",
+    "publisher": "Astea Solutions",
+    "email": "info@asteasolutions.com"
+  },
+  "@azure/msal-node@5.1.5": {
+    "licenses": "MIT",
+    "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-js.git",
+    "publisher": "Microsoft",
+    "email": "nugetaad@microsoft.com",
+    "url": "https://www.microsoft.com"
+  },
+  "@gitbeaker/rest@43.8.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/jdalrymple/gitbeaker",
+    "publisher": "Justin Dalrymple"
+  },
+  "@google-cloud/spanner@8.10.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/googleapis/google-cloud-node.git",
+    "publisher": "Google Inc."
+  },
+  "@node-saml/node-saml@5.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/node-saml/node-saml.git",
+    "publisher": "Henri Bergius",
+    "email": "henri.bergius@iki.fi",
+    "url": "http://bergie.iki.fi"
+  },
+  "@types/node@25.6.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+  },
+  "@types/qs@6.15.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+  },
+  "adm-zip@0.6.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/cthackers/adm-zip.git",
+    "publisher": "Nasca Iacob",
+    "email": "adm-zip@pm.me",
+    "url": "https://github.com/cthackers"
+  },
+  "azure-devops-node-api@15.1.2": {
+    "licenses": "MIT",
+    "repository": "https://github.com/Microsoft/azure-devops-node-api",
+    "publisher": "Microsoft Corporation"
+  },
+  "bcryptjs@3.0.3": {
+    "licenses": "BSD-3-Clause",
+    "repository": "https://github.com/dcodeIO/bcrypt.js.git",
+    "publisher": "Daniel Wirtz",
+    "email": "dcode@dcode.io"
+  },
+  "bitbucket@2.12.0": {
+    "licenses": "MIT",
+    "repository": "github:MunifTanjim/node-bitbucket",
+    "publisher": "MunifTanjim",
+    "url": "https://muniftanjim.dev"
+  },
+  "cookie-parser@1.4.7": {
+    "licenses": "MIT",
+    "repository": "expressjs/cookie-parser",
+    "publisher": "TJ Holowaychuk",
+    "email": "tj@vision-media.ca",
+    "url": "http://tjholowaychuk.com"
+  },
+  "cors@2.8.6": {
+    "licenses": "MIT",
+    "repository": "expressjs/cors",
+    "publisher": "Troy Goode",
+    "email": "troygoode@gmail.com",
+    "url": "https://github.com/troygoode/"
+  },
+  "dotenv@16.6.1": {
+    "licenses": "BSD-2-Clause",
+    "repository": "git://github.com/motdotla/dotenv.git"
+  },
+  "dotenv@17.4.2": {
+    "licenses": "BSD-2-Clause",
+    "repository": "git://github.com/motdotla/dotenv.git"
+  },
+  "escape-html@1.0.3": {
+    "licenses": "MIT",
+    "repository": "component/escape-html"
+  },
+  "express-rate-limit@8.5.1": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/express-rate-limit/express-rate-limit.git",
+    "publisher": "Nathan Friedly",
+    "url": "http://nfriedly.com/"
+  },
+  "express@5.2.1": {
+    "licenses": "MIT",
+    "repository": "expressjs/express",
+    "publisher": "TJ Holowaychuk",
+    "email": "tj@vision-media.ca"
+  },
+  "google-auth-library@10.6.2": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/googleapis/google-cloud-node-core.git",
+    "publisher": "Google Inc."
+  },
+  "helmet@8.1.0": {
+    "licenses": "MIT",
+    "repository": "git://github.com/helmetjs/helmet.git",
+    "publisher": "Adam Baldwin",
+    "email": "adam@npmjs.com",
+    "url": "https://evilpacket.net"
+  },
+  "ip-address@10.2.0": {
+    "licenses": "MIT",
+    "repository": "git://github.com/beaugunderson/ip-address.git",
+    "publisher": "Beau Gunderson",
+    "email": "beau@beaugunderson.com",
+    "url": "https://beaugunderson.com/"
+  },
+  "jsonwebtoken@9.0.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/auth0/node-jsonwebtoken",
+    "publisher": "auth0"
+  },
+  "mssql@12.7.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/tediousjs/node-mssql.git",
+    "publisher": "Patrik Simek",
+    "url": "https://patriksimek.cz"
+  },
+  "mysql2@3.23.1": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/sidorares/node-mysql2.git",
+    "publisher": "Andrey Sidorov",
+    "email": "andrey.sidorov@gmail.com"
+  },
+  "nodemailer@9.0.3": {
+    "licenses": "MIT-0",
+    "repository": "https://github.com/nodemailer/nodemailer.git",
+    "publisher": "Andris Reinman"
+  },
+  "octokit@5.0.5": {
+    "licenses": "MIT",
+    "repository": "github:octokit/octokit.js",
+    "publisher": "Gregor Martynus",
+    "url": "https://github.com/gr2m"
+  },
+  "oracledb@6.10.0": {
+    "licenses": "(Apache-2.0 OR UPL-1.0)",
+    "repository": "git://github.com/oracle/node-oracledb.git"
+  },
+  "pg@8.20.0": {
+    "licenses": "MIT",
+    "repository": "git://github.com/brianc/node-postgres.git",
+    "publisher": "Brian Carlson",
+    "email": "brian.m.carlson@gmail.com"
+  },
+  "reflect-metadata@0.2.2": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/rbuckton/reflect-metadata.git",
+    "publisher": "Ron Buckton",
+    "email": "ron.buckton@microsoft.com",
+    "url": "http://github.com/rbuckton"
+  },
+  "resend@6.12.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/resend/resend-node.git"
+  },
+  "typeorm@0.3.28": {
+    "licenses": "MIT",
+    "repository": "https://github.com/typeorm/typeorm.git",
+    "publisher": "TypeORM",
+    "email": "maintainers@typeorm.io"
+  },
+  "undici@7.29.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/nodejs/undici.git"
+  },
+  "uuid@11.1.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/uuidjs/uuid.git"
+  },
+  "uuid@14.0.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/uuidjs/uuid.git"
+  },
+  "zod@4.4.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/colinhacks/zod.git",
+    "publisher": "Colin McDonnell",
+    "email": "zod@colinhacks.com"
+  }
+}

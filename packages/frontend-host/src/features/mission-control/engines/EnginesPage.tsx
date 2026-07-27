@@ -33,6 +33,7 @@ import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { apiClient } from '../../../shared/api/client'
 import EngineMembersModal from './components/EngineMembersModal'
+import { NativePluginSlotV1 } from '../../../plugins/nativePluginRuntime'
 
 function getDockerLoopbackSuggestion(raw: string): string | null {
   try {
@@ -475,29 +476,39 @@ export default function Engines() {
                             if (key === 'actions') {
                               return (
                                 <TableCell key={cell.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
-                                  <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                    {canManage && (
-                                      <OverflowMenuItem
-                                        itemText="Edit"
-                                        onClick={() => openEdit(engine)}
-                                      />
-                                    )}
-                                    {canManage && (
-                                      <OverflowMenuItem itemText="Test connection" onClick={() => testM.mutate(row.id)} />
-                                    )}
-                                    <OverflowMenuItem
-                                      itemText="Manage members"
-                                      onClick={() => openMembersPanel(engine)}
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                                    <NativePluginSlotV1
+                                      slot="mission-control.engine.actions.v1"
+                                      context={{
+                                        schemaVersion: 1,
+                                        disabled: false,
+                                        engineRef: row.id,
+                                      }}
                                     />
-                                    {canManage && (
+                                    <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                                      {canManage && (
+                                        <OverflowMenuItem
+                                          itemText="Edit"
+                                          onClick={() => openEdit(engine)}
+                                        />
+                                      )}
+                                      {canManage && (
+                                        <OverflowMenuItem itemText="Test connection" onClick={() => testM.mutate(row.id)} />
+                                      )}
                                       <OverflowMenuItem
-                                        itemText="Delete"
-                                        isDelete
-                                        hasDivider
-                                        onClick={() => deleteM.mutate(row.id)}
+                                        itemText="Manage members"
+                                        onClick={() => openMembersPanel(engine)}
                                       />
-                                    )}
-                                  </OverflowMenu>
+                                      {canManage && (
+                                        <OverflowMenuItem
+                                          itemText="Delete"
+                                          isDelete
+                                          hasDivider
+                                          onClick={() => deleteM.mutate(row.id)}
+                                        />
+                                      )}
+                                    </OverflowMenu>
+                                  </div>
                                 </TableCell>
                               )
                             }

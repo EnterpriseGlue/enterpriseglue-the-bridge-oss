@@ -44,10 +44,10 @@ See `infra/docker/env/examples/selfhost.env.example` for all available options.
 Use `--db` to launch with another database:
 
 ```bash
-pm run dev -- --db mysql
-pm run dev -- --db mssql
-pm run dev -- --db oracle
-pm run dev -- --db spanner
+pnpm run dev -- --db mysql
+pnpm run dev -- --db mssql
+pnpm run dev -- --db oracle
+pnpm run dev -- --db spanner
 ```
 
 What happens automatically:
@@ -95,9 +95,9 @@ Published images:
 3. Keep `API_BASE_URL` empty for same-origin mode. In published-image mode, `API_BASE_URL` is baked into the frontend image at build time; use `API_UPSTREAM` only when the runtime Nginx proxy must target a different backend host.
 4. Start from images:
    ```bash
-   ppnpm run prod:images:postgres
+   pnpm run prod:images:postgres
    # or
-   ppnpm run prod:images:oracle
+   pnpm run prod:images:oracle
    ```
 5. Roll back by changing `IMAGE_TAG` to a previous working tag and re-running the same command.
 

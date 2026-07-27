@@ -1,0 +1,109 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { apiClient } from '../../../shared/api/client';
+import {
+  getPluginDeploymentExecution,
+  getPluginPlatformCapabilities,
+  getPluginPlatformEmergencyState,
+  listPluginEventDeadLetters,
+  listPluginPlatformAudit,
+  listPluginPlatformPlugins,
+  requeuePluginEventDeadLetter,
+  setPluginDeploymentEnabled,
+  setPluginPlatformEmergencyState,
+} from './pluginPlatform';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('plugin platform admin API', () => {
+  it('reads only the safe list and emergency endpoints', async () => {
+    const get = vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({ plugins: [] })
+      .mockResolvedValueOnce({ disabled: false })
+      .mockResolvedValueOnce({ events: [] })
+      .mockResolvedValueOnce({ observationState: 'not_started' })
+      .mockResolvedValueOnce({ permissions: [] });
+
+    await listPluginPlatformPlugins();
+    await getPluginPlatformEmergencyState();
+    await listPluginPlatformAudit();
+    await getPluginDeploymentExecution();
+    await getPluginPlatformCapabilities();
+
+    expect(get.mock.calls.map(([path]) => path)).toEqual([
+      '/api/plugin-platform/v1/plugins',
+      '/api/plugin-platform/v1/emergency-control',
+      '/api/plugin-platform/v1/audit',
+      '/api/plugin-platform/v1/deployment-execution',
+      '/api/plugin-platform/v1/capabilities',
+    ]);
+  });
+
+  it('sends only revision, idempotency, and desired emergency state', async () => {
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue({
+      disabled: true,
+      revision: 1,
+    });
+    await setPluginPlatformEmergencyState({
+      disabled: true,
+      expectedRevision: 0,
+      idempotencyKey: 'emergency-ui-request-0001',
+    });
+    expect(put).toHaveBeenCalledWith(
+      '/api/plugin-platform/v1/emergency-control',
+      {
+        disabled: true,
+        expectedRevision: 0,
+        idempotencyKey: 'emergency-ui-request-0001',
+      },
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('uses fixed lifecycle paths and a fixed administrator disable reason', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+    await setPluginDeploymentEnabled({
+      pluginId: 'io.enterpriseglue.reference',
+      enabled: false,
+      expectedRevision: 3,
+      idempotencyKey: 'plugin-ui-disable-0001',
+    });
+    expect(post).toHaveBeenCalledWith(
+      '/api/plugin-platform/v1/plugins/io.enterpriseglue.reference/disable',
+      {
+        expectedRevision: 3,
+        idempotencyKey: 'plugin-ui-disable-0001',
+        reason: 'administrator_request',
+      },
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('uses fixed payload-free event recovery paths and sends only the expected attempt', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      items: [],
+      nextCursor: null,
+    });
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({});
+
+    await listPluginEventDeadLetters(25);
+    await requeuePluginEventDeadLetter({
+      pluginId: 'io.enterpriseglue.reference',
+      deliveryId: 'event-dead-letter-1',
+      expectedAttempt: 3,
+    });
+
+    expect(get).toHaveBeenCalledWith(
+      '/api/plugin-platform/v1/events/dead-letters?limit=25',
+      undefined,
+      expect.objectContaining({ credentials: 'include' }),
+    );
+    expect(post).toHaveBeenCalledWith(
+      '/api/plugin-platform/v1/plugins/io.enterpriseglue.reference/events/dead-letters/event-dead-letter-1/requeue',
+      { expectedAttempt: 3 },
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+});

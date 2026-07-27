@@ -1,0 +1,90 @@
+{
+  "name": "@enterpriseglue/plugin-sdk",
+  "version": "0.2.0",
+  "description": "Public, product-neutral contracts for EnterpriseGlue OSS plugins",
+  "license": "Apache-2.0",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/generate-json-schema.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:compat": "tsc -p fixtures/sdk-0.1.0/tsconfig.json --noEmit && tsc -p fixtures/sdk-0.2.0/tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./manifest": {
+      "types": "./dist/manifest.d.ts",
+      "default": "./dist/manifest.js"
+    },
+    "./platform": {
+      "types": "./dist/platform.d.ts",
+      "default": "./dist/platform.js"
+    },
+    "./frontend": {
+      "types": "./dist/frontend.d.ts",
+      "default": "./dist/frontend.js"
+    },
+    "./backend": {
+      "types": "./dist/backend.d.ts",
+      "default": "./dist/backend.js"
+    },
+    "./availability": {
+      "types": "./dist/availability.d.ts",
+      "default": "./dist/availability.js"
+    },
+    "./brokers": {
+      "types": "./dist/brokers.d.ts",
+      "default": "./dist/brokers.js"
+    },
+    "./control": {
+      "types": "./dist/control.d.ts",
+      "default": "./dist/control.js"
+    },
+    "./distribution": {
+      "types": "./dist/distribution.d.ts",
+      "default": "./dist/distribution.js"
+    },
+    "./schema/enterpriseglue-plugin-compatibility-matrix-v1.schema.json": "./dist/schema/enterpriseglue-plugin-compatibility-matrix-v1.schema.json",
+    "./schema/enterpriseglue-plugin-platform-capabilities-v1.schema.json": "./dist/schema/enterpriseglue-plugin-platform-capabilities-v1.schema.json",
+    "./schema/enterpriseglue-plugin-manifest-v1.schema.json": "./dist/schema/enterpriseglue-plugin-manifest-v1.schema.json"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@carbon/icons-react": "11.80.0",
+    "@carbon/react": "1.107.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "react-is": "19.2.6",
+    "react-router-dom": "7.18.1"
+  },
+  "devDependencies": {
+    "@carbon/icons-react": "11.80.0",
+    "@carbon/react": "1.107.0",
+    "@types/react": "^19.2.6",
+    "@types/react-dom": "^19.2.3",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "react-is": "19.2.6",
+    "react-router-dom": "7.18.1",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss.git",
+    "directory": "packages/plugin-sdk"
+  }
+}

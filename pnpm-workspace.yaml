@@ -6,6 +6,14 @@ public-hoist-pattern:
   - '*'
   - 'inferno'
   - 'inferno*'
+overrides:
+  # Security remediations for vulnerable transitive runtime and build dependencies.
+  brace-expansion: 5.0.8
+  form-data: 4.0.6
+  immutable: 5.1.9
+  postcss: 8.5.18
+  undici: 7.29.0
+  vite: 7.3.6
 allowBuilds:
   '@carbon/charts': true
   '@carbon/charts-react': true
@@ -41,3 +49,12 @@ allowBuilds:
   inferno: true
   msw: true
   oracledb: true
+  # @google-cloud/spanner works without protobufjs' optional postinstall-generated code.
+  # Keep third-party install-time code disabled and verify the supported runtime in the
+  # connected Spanner acceptance gate.
+  protobufjs: false
+auditConfig:
+  # The OSS host uses React Router Data Mode only. GHSA-qwww-vcr4-c8h2 applies exclusively to
+  # unstable RSC APIs, which are forbidden by the production-audit source guard.
+  ignoreGhsas:
+    - GHSA-qwww-vcr4-c8h2

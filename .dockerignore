@@ -10,6 +10,7 @@
 **/frontend-dev.log
 **/preview.log
 **/third_party_licenses.json
+!packages/plugin-installer/third_party_licenses.json
 THIRD_PARTY_NOTICES.md
 archive
 archive/**

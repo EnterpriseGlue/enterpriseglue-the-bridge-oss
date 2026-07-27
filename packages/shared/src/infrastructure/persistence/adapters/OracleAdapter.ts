@@ -3,6 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
+import {
+  isPluginLargeTextColumn,
+  pluginKeyColumnLength,
+} from '../pluginColumnPolicy.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
@@ -16,6 +20,7 @@ import {
   Engine, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  pluginPlatformEntities,
 } from '../entities/index.js';
 
 const entities = [
@@ -30,6 +35,7 @@ const entities = [
   Engine, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  ...pluginPlatformEntities,
 ];
 
 /**
@@ -55,6 +61,9 @@ export class OracleAdapter implements DatabaseAdapter {
 
   private normalizeColumnsForOracle(): void {
     const metadata = getMetadataArgsStorage();
+    const pluginEntityNames = new Set(
+      pluginPlatformEntities.map((entity) => entity.name),
+    );
     const indexedColumns = new Set<string>();
     const uniqueConstraintColumns = new Set<string>();
     const uniqueConstraintSignatures = new Set<string>();
@@ -118,6 +127,24 @@ export class OracleAdapter implements DatabaseAdapter {
         uniqueConstraintColumns.has(key);
 
       if (column.options.type === 'text') {
+        if (pluginEntityNames.has(targetName)) {
+          const columnName =
+            typeof column.options.name === 'string'
+              ? column.options.name
+              : column.propertyName;
+          const requiresBoundedText =
+            isPrimaryOrIndexedOrUnique || column.options.default != null;
+          if (isPluginLargeTextColumn(columnName) && !requiresBoundedText) {
+            column.options.type = 'clob';
+            delete column.options.length;
+          } else {
+            column.options.type = 'varchar2';
+            column.options.length = requiresBoundedText
+              ? pluginKeyColumnLength(columnName)
+              : 4000;
+          }
+          continue;
+        }
         column.options.type = 'varchar2';
         if (column.options.length == null) {
           column.options.length = isPrimaryOrIndexedOrUnique ? 191 : 4000;

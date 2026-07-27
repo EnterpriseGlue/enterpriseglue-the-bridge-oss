@@ -1,0 +1,33 @@
+{
+  "apiVersion": "resources.plugin.enterpriseglue.io/v1",
+  "kind": "EnterpriseGluePluginResources",
+  "service": {
+    "containerPort": 8080,
+    "runAsNonRoot": true,
+    "readOnlyRootFilesystem": true,
+    "tmpfsMiB": 16,
+    "cpuLimit": "100m",
+    "memoryLimitMiB": 128
+  },
+  "configuration": [],
+  "storage": [
+    {
+      "name": "replay-state",
+      "mountPath": "/var/lib/enterpriseglue/reference-health",
+      "readOnly": false,
+      "sizeMiB": 16
+    }
+  ],
+  "network": {
+    "ingress": "host-gateway-only",
+    "egressPolicy": "none"
+  },
+  "probes": {
+    "healthPath": "/_plugin/health",
+    "readyPath": "/_plugin/ready",
+    "initialDelaySeconds": 1,
+    "periodSeconds": 10,
+    "timeoutSeconds": 2,
+    "failureThreshold": 3
+  }
+}

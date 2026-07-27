@@ -28,6 +28,8 @@ Audience: Developers and architects.
 - [Architecture Overview](architecture/00-architecture-overview.md)
 - [Logical Architecture](architecture/02-oss-logical-architecture.md)
 - [Authorization and Access Control](architecture/09-oss-authorization-access-control-model.md)
+- [Custom RBAC and External Engine Registration Plan](architecture/11-oss-custom-rbac-and-engine-registration-plan.md)
+- [Plugin Platform and Authoring Guide](architecture/12-plugin-platform-and-authoring.md)
 
 ## Database
 - [Database Architecture Overview](reference/database-architecture.md)
@@ -41,8 +43,8 @@ Audience: Developers and architects.
 - [Security Hardening Checklist](reference/security-hardening.md)
 
 ## Existing Technical References
-- [Database Architecture](../backend/src/shared/db/README.md)
+- [Database Architecture](../packages/shared/src/db/README.md)
 - [Database Migrations](../backend/docs/DATABASE-MIGRATIONS.md)
-- [Error Handling Guide](../backend/src/shared/middleware/README.md)
-- [Frontend Shared Components](../frontend/src/features/shared/components/README.md)
-- [Frontend Modal System](../frontend/src/shared/components/modals/README.md)
+- [Error Handling Guide](../packages/shared/src/middleware/README.md)
+- [Frontend Shared Components](../packages/frontend-host/src/features/shared/components/README.md)
+- [Frontend Modal System](../packages/frontend-host/src/shared/components/modals/README.md)

@@ -1,0 +1,185 @@
+{{- if not (has $.Values.platform (list "kubernetes" "openshift")) }}
+{{- fail "platform must be kubernetes or openshift" }}
+{{- end }}
+{{- range $plugin := .Values.pluginRuntime.plugins }}
+{{- $context := dict "root" $ "plugin" $plugin }}
+{{- include "enterpriseglue-plugin-runtime.validate" $context }}
+{{- $hasDeploymentFiles := false }}
+{{- range $configuration := $plugin.configuration }}
+{{- if eq $configuration.source "deployment_file" }}
+{{- $hasDeploymentFiles = true }}
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+  labels:
+    {{- include "enterpriseglue-plugin-runtime.labels" $context | nindent 4 }}
+  annotations:
+    io.enterpriseglue/manifest-sha256: {{ $plugin.manifestSha256 | quote }}
+    io.enterpriseglue/bundle: {{ $plugin.bundle | quote }}
+    io.enterpriseglue/egress-policy: {{ $plugin.network.egressPolicy | quote }}
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+  template:
+    metadata:
+      labels:
+        {{- include "enterpriseglue-plugin-runtime.labels" $context | nindent 8 }}
+        {{- with $.Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        checksum/plugin-record: {{ toJson $plugin | sha256sum }}
+        {{- with $.Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        {{- if eq $.Values.platform "kubernetes" }}
+        runAsUser: {{ int $.Values.securityIdentity.runAsUser }}
+        runAsGroup: {{ int $.Values.securityIdentity.runAsUser }}
+        fsGroup: {{ int $.Values.securityIdentity.runAsUser }}
+        {{- end }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: plugin
+          image: {{ $plugin.image | quote }}
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            {{- if eq $.Values.platform "kubernetes" }}
+            runAsUser: {{ int $.Values.securityIdentity.runAsUser }}
+            {{- end }}
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: plugin-http
+              containerPort: {{ $plugin.service.containerPort }}
+              protocol: TCP
+          env:
+            - name: ENTERPRISEGLUE_PLUGIN_ID
+              value: {{ $plugin.id | quote }}
+            - name: ENTERPRISEGLUE_PLUGIN_VERSION
+              value: {{ $plugin.version | quote }}
+            - name: ENTERPRISEGLUE_PLUGIN_BROKER_URL
+              value: {{ $.Values.hostGateway.baseUrl | quote }}
+            - name: ENTERPRISEGLUE_PLUGIN_INVOCATION_PUBLIC_KEY_FILE
+              value: {{ $.Values.invocationPublicKey.mountPath | quote }}
+            {{- range $configuration := $plugin.configuration }}
+            {{- if eq $configuration.source "deployment_config" }}
+            - name: {{ $configuration.name }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ $.Values.deploymentConfigMap | quote }}
+                  key: {{ $configuration.reference | quote }}
+                  optional: {{ not $configuration.required }}
+            {{- else if eq $configuration.source "deployment_file" }}
+            - name: {{ printf "%s_FILE" $configuration.name }}
+              value: {{ printf "%s/%s" $.Values.deploymentConfigFilesMountPath $configuration.reference | quote }}
+            {{- else }}
+            - name: {{ printf "%s_REFERENCE" $configuration.name }}
+              value: {{ $configuration.reference | quote }}
+            {{- end }}
+            {{- end }}
+          resources:
+            limits:
+              cpu: {{ $plugin.service.cpuLimit | quote }}
+              memory: {{ printf "%dMi" (int $plugin.service.memoryLimitMiB) | quote }}
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+          livenessProbe:
+            httpGet:
+              path: {{ $plugin.probes.healthPath | quote }}
+              port: plugin-http
+            initialDelaySeconds: {{ $plugin.probes.initialDelaySeconds }}
+            periodSeconds: {{ $plugin.probes.periodSeconds }}
+            timeoutSeconds: {{ $plugin.probes.timeoutSeconds }}
+            failureThreshold: {{ $plugin.probes.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ $plugin.probes.readyPath | quote }}
+              port: plugin-http
+            initialDelaySeconds: {{ $plugin.probes.initialDelaySeconds }}
+            periodSeconds: {{ $plugin.probes.periodSeconds }}
+            timeoutSeconds: {{ $plugin.probes.timeoutSeconds }}
+            failureThreshold: {{ $plugin.probes.failureThreshold }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: invocation-public-key
+              mountPath: {{ $.Values.invocationPublicKey.mountPath | quote }}
+              subPath: {{ $.Values.invocationPublicKey.key | quote }}
+              readOnly: true
+            {{- if $hasDeploymentFiles }}
+            - name: deployment-config-files
+              mountPath: {{ $.Values.deploymentConfigFilesMountPath | quote }}
+              readOnly: true
+            {{- end }}
+            {{- range $storage := $plugin.storage }}
+            - name: {{ $storage.name }}
+              mountPath: {{ $storage.mountPath | quote }}
+              readOnly: {{ $storage.readOnly }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ printf "%dMi" (int $plugin.service.tmpfsMiB) | quote }}
+        - name: invocation-public-key
+          configMap:
+            name: {{ $.Values.invocationPublicKey.configMapName | quote }}
+            items:
+              - key: {{ $.Values.invocationPublicKey.key | quote }}
+                path: {{ $.Values.invocationPublicKey.key | quote }}
+        {{- if $hasDeploymentFiles }}
+        - name: deployment-config-files
+          configMap:
+            name: {{ $.Values.deploymentConfigFilesConfigMap | quote }}
+            items:
+              {{- range $configuration := $plugin.configuration }}
+              {{- if eq $configuration.source "deployment_file" }}
+              - key: {{ printf "%s--%s" (sha256sum $plugin.id | trunc 32) $configuration.reference | quote }}
+                path: {{ $configuration.reference | quote }}
+              {{- end }}
+              {{- end }}
+        {{- end }}
+        {{- range $storage := $plugin.storage }}
+        - name: {{ $storage.name }}
+          persistentVolumeClaim:
+            claimName: {{ include "enterpriseglue-plugin-runtime.pvcname" (dict "root" $ "plugin" $plugin "storage" $storage) }}
+        {{- end }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
