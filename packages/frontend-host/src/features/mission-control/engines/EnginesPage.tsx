@@ -366,18 +366,22 @@ export default function Engines() {
                 <Table {...getTableProps()} size="md" useZebraStyles>
                   <TableHead>
                     <TableRow>
-                      {headers.map((header) => (
-                        <TableHeader
-                          {...getHeaderProps({ header })}
-                          style={
-                            header.key === 'actions'
-                              ? { width: 48, textAlign: 'right' }
-                              : undefined
-                          }
-                        >
-                          {header.header}
-                        </TableHeader>
-                      ))}
+                      {headers.map((header) => {
+                        const { key, ...headerProps } = getHeaderProps({ header })
+                        return (
+                          <TableHeader
+                            key={key}
+                            {...headerProps}
+                            style={
+                              header.key === 'actions'
+                                ? { width: 48, textAlign: 'right' }
+                                : undefined
+                            }
+                          >
+                            {header.header}
+                          </TableHeader>
+                        )
+                      })}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -389,9 +393,10 @@ export default function Engines() {
                     {tableRows.map((row) => {
                       const engine = rows.find((e: any) => e.id === row.id)
                       const canManage = !!engine && canManageEngine(engine)
+                      const { key, ...rowProps } = getRowProps({ row })
 
                       return (
-                        <TableRow {...getRowProps({ row })}>
+                        <TableRow key={key} {...rowProps}>
                           {row.cells.map((cell) => {
                             const key = cell.info.header
 
