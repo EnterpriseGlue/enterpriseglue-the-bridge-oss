@@ -10,19 +10,13 @@
     <link rel="icon" type="image/x-icon" href="/favicon-light.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EnterpriseGlue</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- EnterpriseGlue.ai Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Keep IBM Plex Mono for code/monospace -->
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
     <style>
       /* ============================================
          CARBON DESIGN SYSTEM OVERRIDES
          Using centralized CSS variables from theme.css
          ============================================ */
       
-      /* Font Override - Use EnterpriseGlue.ai Inter font globally */
+      /* Use the self-hosted Carbon typeface globally. */
       body,
       .cds--text-input,
       .cds--text-area,
@@ -32,7 +26,7 @@
       .cds--header,
       .cds--side-nav,
       .cds--data-table {
-        font-family: Inter, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif !important;
+        font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif !important;
       }
       
       /* Header - uses g100 theme from Theme wrapper, no override needed */

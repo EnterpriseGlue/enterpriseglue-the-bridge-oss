@@ -143,6 +143,36 @@ Adding another paid plugin therefore requires no new public import or dependency
 implements the same SDK contracts in its private repository and distributes an immutable signed
 artifact through the existing installer interface.
 
+### Release-image immutability and browser self-containment
+
+Release-producing Dockerfiles pin every external `FROM` image by exact `sha256`. A declared
+BuildKit syntax image is also an external build input and must be pinned by digest. Run:
+
+```text
+pnpm run guard:release-dockerfile-pins
+```
+
+The guard covers backend/frontend production images, the installer, the reference plugin, and its
+lifecycle/migration fixtures. Updating a base or syntax image is an explicit reviewed source
+change; a mutable tag alone is rejected.
+
+Mission Control must render without a public font host. The production source imports pinned
+local IBM Plex Sans, IBM Plex Sans Arabic, and IBM Plex Mono packages, removes Carbon font-face
+rules that point at IBM's CDN, contains no Google font/preconnect links, and retains
+`font-src 'self' data:`. Do not widen CSP to repair a missing asset. Run:
+
+```text
+pnpm run guard:frontend-self-contained
+```
+
+Publisher acceptance must still exercise the actual frontend release image, not only a Vite
+source server. The ION publisher gate builds this Dockerfile, obtains the host through a
+disposable registry manifest digest, deletes mutable tags, stops the registry, and runs with
+pulling disabled on a hardened internal network. It then verifies the exact network-delivered
+private entry, customer-side diagnostic boundary, technical Q&A selector boundary,
+not-entitled contribution isolation, ordinary Mission Control continuity, CSP, and zero public
+browser egress. This is publisher CI; customers still compile nothing.
+
 ## Repository layout for a new plugin
 
 The publisher may use any build system, but its output must map to this logical layout:
@@ -1159,6 +1189,8 @@ while preserving the original signed manifest.
 
 ### P4: distribution and operations
 
+- [ ] Require exact-digest external base and declared Dockerfile syntax images; keep the host
+  browser bundle self-contained under self/data-only font CSP.
 - [ ] Build immutable frontend, backend, and migration artifacts in publisher CI.
 - [ ] Generate SBOM, provenance, vulnerability, license, malware, and secret-scan evidence.
 - [ ] Sign the payload-only package inventory, publish its OCI subject, finalize the
@@ -1200,6 +1232,8 @@ From the EnterpriseGlue OSS repository:
 
 ```text
 pnpm run audit:production
+pnpm run guard:release-dockerfile-pins
+pnpm run guard:frontend-self-contained
 pnpm run test:plugin-platform
 pnpm run typecheck:plugin-platform
 pnpm run build:plugin-platform

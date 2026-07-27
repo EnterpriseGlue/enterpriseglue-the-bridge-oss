@@ -149,6 +149,25 @@ entitled registry execution, proxy/custom-CA customer acceptance, and production
 handoff remain release gates. Do not replace these gates with a browser upload, customer CI,
 mutable tag, or registry credential mounted into EnterpriseGlue.
 
+## Verify release-image browser invariants
+
+This is an EnterpriseGlue maintainer/publisher check, not a customer installation step:
+
+```text
+pnpm run guard:release-dockerfile-pins
+pnpm run guard:frontend-self-contained
+```
+
+The first command denies mutable external bases and mutable declared BuildKit syntax images in
+release-producing Dockerfiles. The second requires locally packaged IBM Plex fonts, removal of
+Carbon's external font faces, no Google font links, and production
+`font-src 'self' data:`. Never add a public font host to production CSP to make a test pass.
+
+The paid-plugin publisher additionally runs its production Mission Control image acceptance by a
+registry-derived OSS host digest with no runtime build/pull. A passing local source-server test is
+not a substitute. Customers consume the reviewed signed artifacts; they do not run this build or
+need a CI pipeline.
+
 ## Plugin event-stream proxying
 
 The supplied frontend Nginx configuration disables buffering only for the fixed same-origin

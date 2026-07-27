@@ -41,6 +41,18 @@
     "repository": "https://github.com/googleapis/google-cloud-node.git",
     "publisher": "Google Inc."
   },
+  "@ibm/plex-mono@1.1.0": {
+    "licenses": "OFL-1.1",
+    "repository": "https://github.com/ibm/plex.git"
+  },
+  "@ibm/plex-sans-arabic@1.1.0": {
+    "licenses": "OFL-1.1",
+    "repository": "https://github.com/ibm/plex.git"
+  },
+  "@ibm/plex-sans@1.1.0": {
+    "licenses": "OFL-1.1",
+    "repository": "https://github.com/ibm/plex.git"
+  },
   "@node-saml/node-saml@5.1.0": {
     "licenses": "MIT",
     "repository": "https://github.com/node-saml/node-saml.git",

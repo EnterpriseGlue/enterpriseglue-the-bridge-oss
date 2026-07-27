@@ -3,6 +3,24 @@ import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 
+function stripExternalCarbonFontFaces() {
+  return {
+    postcssPlugin: 'enterpriseglue-strip-external-carbon-font-faces',
+    AtRule(atRule: {
+      name: string
+      toString(): string
+      remove(): void
+    }) {
+      if (
+        atRule.name === 'font-face' &&
+        atRule.toString().includes('https://1.www.s81c.com/')
+      ) {
+        atRule.remove()
+      }
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const proxyTarget = (globalThis as any).process?.env?.DEV_PROXY_TARGET || 'http://localhost:8787'
   const manualChunks = (id: string) => {
@@ -127,6 +145,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    css: {
+      postcss: {
+        plugins: [stripExternalCarbonFontFaces()],
+      },
+    },
     resolve: {
       alias: {
         '@src': path.resolve(__dirname, '../packages/frontend-host/src'),
@@ -160,10 +183,10 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       headers: {
         // Allow eval in development (removes CSP warning)
-        // Allow Carbon Design System fonts from IBM CDN + data URIs for embedded fonts
+        // Fonts are bundled with the application; no third-party font host is allowed.
         // Allow API calls to backend on localhost:8787
         // Allow images including data URIs (inline SVGs)
-        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://1.www.s81c.com; font-src 'self' data: https://fonts.gstatic.com https://1.www.s81c.com; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:8787;",
+        'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; connect-src 'self' http://localhost:8787;",
       },
       proxy: proxyRoutes,
     },
