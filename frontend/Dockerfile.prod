@@ -16,6 +16,8 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/frontend-host/package.json packages/frontend-host/
 COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
+COPY packages/plugin-sdk/package.json packages/plugin-sdk/
+COPY packages/plugin-runtime/package.json packages/plugin-runtime/
 COPY backend/package.json backend/
 
 # BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
@@ -28,7 +30,9 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
 
 COPY frontend frontend
 COPY packages packages
-RUN pnpm run build:frontend-host \
+RUN pnpm --filter @enterpriseglue/plugin-sdk run build \
+    && pnpm --filter @enterpriseglue/plugin-runtime run build \
+    && pnpm run build:frontend-host \
     && pnpm --filter webmodeler-frontend run build \
     && mkdir -p /tmp/busybox-bin \
     && cp /bin/busybox.static /tmp/busybox-bin/busybox \

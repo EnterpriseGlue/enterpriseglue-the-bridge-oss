@@ -79,6 +79,15 @@ jobs:
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/production.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/production.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" -f "$COMPOSE_DIR/docker-compose.backend-expose.yml" config >/dev/null
 
+      - name: Setup Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Validate plugin runtime Helm chart
+        run: bash ./scripts/check-plugin-platform-chart.sh
+
+      - name: Validate protected plugin toolchain publication policy
+        run: node ./scripts/check-plugin-toolchain-release-policy.mjs
+
   test:
     runs-on: ubuntu-latest
     if: inputs.run_tests
@@ -175,6 +184,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
+      - name: Audit production dependencies and approved reachability exception
+        if: matrix.database == 'postgres'
+        run: pnpm run audit:production
+
       - name: Install DB driver for matrix database
         if: matrix.database == 'oracle'
         run: |
@@ -206,8 +219,12 @@ jobs:
 
       - name: Build local packages
         run: |
+          pnpm run guard:paid-plugin-boundary
           if [ -d packages/shared ]; then
             pnpm --filter shared run build
+          fi
+          if [ -d packages/plugin-sdk ] && [ -d packages/plugin-runtime ]; then
+            pnpm run build:plugin-platform
           fi
           if [ -d packages/backend-host ]; then
             pnpm install --filter backend-host
@@ -225,6 +242,14 @@ jobs:
             fi
           done
 
+      - name: Test plugin platform contracts
+        if: matrix.database == 'postgres'
+        run: |
+          pnpm run test:plugin-platform
+          pnpm run test:plugin-platform:reference-image
+          pnpm run test:plugin-platform:multi-replica
+          pnpm run test:plugin-platform:mysql
+
       - name: Build backend
         run: pnpm --filter webmodeler-backend run build:skip-generate
 
@@ -232,6 +257,15 @@ jobs:
         if: matrix.database == 'postgres'
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+
+      - name: Test plugin platform on Oracle
+        if: matrix.database == 'oracle'
+        env:
+          ENTERPRISEGLUE_PLUGIN_TEST_ORACLE_EXTERNAL: "true"
+          ENTERPRISEGLUE_PLUGIN_TEST_ORACLE_CONTAINER: ${{ job.services.oracle.id }}
+          ENTERPRISEGLUE_PLUGIN_TEST_ORACLE_RUN_DATABASE_DRILLS: "true"
+          ENTERPRISEGLUE_PLUGIN_TEST_ORACLE_ADMIN_PASSWORD: oracle123
+        run: pnpm run test:plugin-platform:oracle
 
       - name: Sync database schema
         run: pnpm --filter webmodeler-backend run db:schema:sync
@@ -349,6 +383,12 @@ jobs:
             -t eg-local-frontend:pr \
             .
 
+      - name: Prove production images contain only public EnterpriseGlue packages
+        run: |
+          node ./scripts/check-paid-plugin-image-boundary.mjs \
+            --backend-image eg-local-backend:pr \
+            --frontend-image eg-local-frontend:pr
+
       - name: Export local images
         run: |
           docker save eg-local-backend:pr | gzip -1 > eg-local-backend-pr.tar.gz
@@ -361,6 +401,7 @@ jobs:
           path: |
             eg-local-backend-pr.tar.gz
             eg-local-frontend-pr.tar.gz
+          retention-days: 2
 
   smoke-postgres-image-deploy:
     runs-on: ubuntu-latest

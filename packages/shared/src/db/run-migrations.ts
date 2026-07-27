@@ -14,6 +14,7 @@ import { File } from '../infrastructure/persistence/entities/File.js';
 import { WorkingFile } from '../infrastructure/persistence/entities/WorkingFile.js';
 import { FileSnapshot } from '../infrastructure/persistence/entities/FileSnapshot.js';
 import { Invitation } from '../infrastructure/persistence/entities/Invitation.js';
+import { ensureSpannerTypeOrmMigrationLedgerV1 } from './spanner-migration-ledger.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -373,6 +374,9 @@ export async function runMigrations() {
   try {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
+    if (dbType === 'spanner') {
+      await ensureSpannerTypeOrmMigrationLedgerV1(dataSource);
+    }
 
     const queryRunner = dataSource.createQueryRunner();
     try {
@@ -422,7 +426,9 @@ export async function runMigrations() {
     const pendingMigrations = await dataSource.showMigrations();
     if (pendingMigrations) {
       console.log('  Running pending migrations...');
-      await dataSource.runMigrations();
+      await dataSource.runMigrations({
+        transaction: dbType === 'spanner' ? 'none' : 'all',
+      });
     }
 
     const integrityRunner = dataSource.createQueryRunner();

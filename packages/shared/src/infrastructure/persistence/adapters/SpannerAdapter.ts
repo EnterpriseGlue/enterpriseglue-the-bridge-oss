@@ -1,9 +1,13 @@
-import { DataSourceOptions } from 'typeorm';
+import { DataSourceOptions, getMetadataArgsStorage } from 'typeorm';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import {
+  isPluginLargeTextColumn,
+  pluginKeyColumnLength,
+} from '../pluginColumnPolicy.js';
 import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
@@ -16,6 +20,7 @@ import {
   Engine, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  pluginPlatformEntities,
 } from '../entities/index.js';
 
 const entities = [
@@ -30,7 +35,11 @@ const entities = [
   Engine, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  ...pluginPlatformEntities,
 ];
+const pluginEntityTargetNames = new Set(
+  pluginPlatformEntities.map((entity) => entity.name),
+);
 
 /**
  * Google Cloud Spanner Database Adapter
@@ -48,6 +57,94 @@ export class SpannerAdapter implements DatabaseAdapter {
     this.logging = config.nodeEnv === 'development';
     
     this.checkDriverAvailability();
+    this.normalizeColumnsForSpanner();
+  }
+
+  /**
+   * Shared entities use portable logical types. TypeORM's Spanner driver only
+   * accepts the native GoogleSQL names and requires an explicit length for
+   * STRING columns. Keep indexed identifiers bounded while allowing payload
+   * columns to use STRING(MAX).
+   */
+  private normalizeColumnsForSpanner(): void {
+    const metadata = getMetadataArgsStorage();
+    const indexedColumns = new Set<string>();
+    const uniqueConstraintColumns = new Set<string>();
+
+    for (const table of metadata.tables) {
+      // Spanner GoogleSQL databases do not expose Postgres-style schemas.
+      table.schema = undefined;
+    }
+
+    for (const unique of metadata.uniques) {
+      if (!Array.isArray(unique.columns)) continue;
+      const targetName = this.getTargetName(unique.target);
+      for (const columnName of unique.columns) {
+        if (typeof columnName === 'string') {
+          uniqueConstraintColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const index of metadata.indices) {
+      if (!Array.isArray(index.columns)) continue;
+      const targetName = this.getTargetName(index.target);
+      for (const columnName of index.columns) {
+        if (typeof columnName === 'string') {
+          indexedColumns.add(`${targetName}:${columnName}`);
+        }
+      }
+    }
+
+    for (const column of metadata.columns) {
+      const targetName = this.getTargetName(column.target);
+      const key = `${targetName}:${column.propertyName}`;
+
+      if (column.options.type === 'boolean') {
+        column.options.type = 'bool';
+        continue;
+      }
+      if (
+        column.options.type === 'bigint' ||
+        column.options.type === 'integer' ||
+        column.options.type === 'int'
+      ) {
+        column.options.type = 'int64';
+        continue;
+      }
+      if (column.options.type !== 'text') continue;
+
+      const databaseColumnName =
+        typeof column.options.name === 'string'
+          ? column.options.name
+          : column.propertyName.replace(
+              /[A-Z]/g,
+              (character) => `_${character.toLowerCase()}`,
+            );
+      const requiresBoundedText =
+        Boolean(column.options.primary) ||
+        Boolean(column.options.unique) ||
+        indexedColumns.has(key) ||
+        uniqueConstraintColumns.has(key) ||
+        column.options.default != null;
+
+      column.options.type = 'string';
+      if (requiresBoundedText) {
+        column.options.length = pluginEntityTargetNames.has(targetName)
+          ? pluginKeyColumnLength(databaseColumnName)
+          : 191;
+      } else {
+        column.options.length =
+          pluginEntityTargetNames.has(targetName) &&
+          !isPluginLargeTextColumn(databaseColumnName)
+            ? 4000
+            : 'max';
+      }
+    }
+  }
+
+  private getTargetName(target: string | Function): string {
+    return typeof target === 'function' ? target.name : String(target);
   }
 
   private checkDriverAvailability(): void {

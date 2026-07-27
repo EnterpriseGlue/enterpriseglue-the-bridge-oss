@@ -1,0 +1,415 @@
+name: Publish plugin installation toolchain
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact 40-character OSS commit to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: enterpriseglue-plugin-toolchain-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Verify, sign, and publish the reusable plugin toolchain
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: plugin-toolchain-production
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      SOURCE_REF: ${{ inputs.source_ref }}
+      INSTALLER_REPOSITORY: ghcr.io/enterpriseglue/plugin-installer
+      RUNTIME_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-runtime
+      RBAC_CHART_REPOSITORY: ghcr.io/enterpriseglue/charts/enterpriseglue-plugin-installer-rbac
+      TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+      ZOT_IMAGE: ghcr.io/project-zot/zot-minimal@sha256:892f2a5a63dd99bdf85320fee5448506119328a6d5e1a2d14d4db876be595236
+      COSIGN_EXPERIMENTAL: '1'
+
+    steps:
+      - name: Validate protected release authority
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_REF" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "source_ref must be an immutable 40-character commit" >&2
+            exit 1
+          }
+          [[ "$GITHUB_REPOSITORY_OWNER" == "EnterpriseGlue" ]] || {
+            echo "Plugin toolchain releases are restricted to EnterpriseGlue" >&2
+            exit 1
+          }
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "The protected release workflow must run from refs/heads/main" >&2
+            exit 1
+          }
+          [[ "$SOURCE_REF" == "$GITHUB_SHA" ]] || {
+            echo "source_ref must equal the protected workflow commit" >&2
+            exit 1
+          }
+
+      - name: Checkout the exact public OSS revision
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Verify checked-out source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          test -z "$(git status --porcelain)"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+        with:
+          version: v3.19.5
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6
+        with:
+          version: 1.3.3
+
+      - name: Set up Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v3.1.2
+
+      - name: Install the immutable public dependency graph
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Resolve and validate one toolchain version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALLER_VERSION="$(node -p "require('./packages/plugin-installer/package.json').version")"
+          RUNTIME_CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-runtime/Chart.yaml)"
+          RBAC_CHART_VERSION="$(sed -n 's/^version:[[:space:]]*//p' infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac/Chart.yaml)"
+          [[ "$INSTALLER_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$INSTALLER_VERSION" == "$RUNTIME_CHART_VERSION" ]]
+          [[ "$INSTALLER_VERSION" == "$RBAC_CHART_VERSION" ]]
+          echo "version=$INSTALLER_VERSION" >> "$GITHUB_OUTPUT"
+          {
+            echo "TOOLCHAIN_VERSION=$INSTALLER_VERSION"
+            echo "INSTALLER_TAG_REFERENCE=$INSTALLER_REPOSITORY:$INSTALLER_VERSION-$SOURCE_REF"
+            echo "CHART_OUTPUT=$RUNNER_TEMP/enterpriseglue-plugin-charts"
+            echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$SOURCE_REF")"
+          } >> "$GITHUB_ENV"
+
+      - name: Run public plugin-platform and chart gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm guard:paid-plugin-boundary
+          pnpm test:plugin-platform
+          pnpm typecheck:plugin-platform
+          pnpm test:plugin-platform:mssql
+          pnpm test:plugin-platform:spanner
+          pnpm test:plugin-platform:helm
+          pnpm audit:production
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Authenticate Helm to GHCR
+        shell: bash
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" |
+            helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Reject immutable version reuse
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker buildx imagetools inspect "$INSTALLER_TAG_REFERENCE" >/dev/null 2>&1; then
+            echo "Installer release tag already exists" >&2
+            exit 1
+          fi
+          if oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION" >/dev/null 2>&1; then
+            echo "Runtime chart release already exists" >&2
+            exit 1
+          fi
+          if oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION" >/dev/null 2>&1; then
+            echo "Installer RBAC chart release already exists" >&2
+            exit 1
+          fi
+
+      - name: Build and publish the multi-architecture installer
+        id: installer
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: ./packages/plugin-installer/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ env.INSTALLER_TAG_REFERENCE }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SOURCE_REF }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+
+      - name: Record the immutable installer reference
+        env:
+          INSTALLER_DIGEST: ${{ steps.installer.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$INSTALLER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "INSTALLER_REFERENCE=$INSTALLER_REPOSITORY@$INSTALLER_DIGEST" >> "$GITHUB_ENV"
+
+      - name: Package and publish the fixed Helm charts
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPRO_OUTPUT="$RUNNER_TEMP/enterpriseglue-plugin-charts-repro"
+          mkdir -p "$CHART_OUTPUT" "$REPRO_OUTPUT"
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-runtime \
+            --destination "$CHART_OUTPUT"
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac \
+            --destination "$CHART_OUTPUT"
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-runtime \
+            --destination "$REPRO_OUTPUT" >/dev/null
+          helm package infra/kubernetes/helm/enterpriseglue-plugin-installer-rbac \
+            --destination "$REPRO_OUTPUT" >/dev/null
+          RUNTIME_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-runtime-$TOOLCHAIN_VERSION.tgz"
+          RBAC_ARCHIVE="$CHART_OUTPUT/enterpriseglue-plugin-installer-rbac-$TOOLCHAIN_VERSION.tgz"
+          test -f "$RUNTIME_ARCHIVE"
+          test -f "$RBAC_ARCHIVE"
+          test "$(sha256sum "$RUNTIME_ARCHIVE" | cut -d' ' -f1)" = \
+            "$(sha256sum "$REPRO_OUTPUT/$(basename "$RUNTIME_ARCHIVE")" | cut -d' ' -f1)"
+          test "$(sha256sum "$RBAC_ARCHIVE" | cut -d' ' -f1)" = \
+            "$(sha256sum "$REPRO_OUTPUT/$(basename "$RBAC_ARCHIVE")" | cut -d' ' -f1)"
+          helm push "$RUNTIME_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+          helm push "$RBAC_ARCHIVE" oci://ghcr.io/enterpriseglue/charts
+          RUNTIME_DIGEST="$(oras resolve "$RUNTIME_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
+          RBAC_DIGEST="$(oras resolve "$RBAC_CHART_REPOSITORY:$TOOLCHAIN_VERSION")"
+          [[ "$RUNTIME_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$RBAC_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          {
+            echo "RUNTIME_CHART_REFERENCE=$RUNTIME_CHART_REPOSITORY@$RUNTIME_DIGEST"
+            echo "RBAC_CHART_REFERENCE=$RBAC_CHART_REPOSITORY@$RBAC_DIGEST"
+            echo "RUNTIME_CHART_ARCHIVE=$RUNTIME_ARCHIVE"
+            echo "RBAC_CHART_ARCHIVE=$RBAC_ARCHIVE"
+          } >> "$GITHUB_ENV"
+
+      - name: Sign all immutable toolchain subjects with workload identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          for subject in \
+            "$INSTALLER_REFERENCE" \
+            "$RUNTIME_CHART_REFERENCE" \
+            "$RBAC_CHART_REFERENCE"; do
+            cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+          done
+
+      - name: Attest the installer image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-name: ${{ env.INSTALLER_REPOSITORY }}
+          subject-digest: ${{ steps.installer.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify signatures, scans, tools, and exact chart payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          CERTIFICATE_IDENTITY="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/plugin-toolchain-release.yml@$GITHUB_REF"
+          for subject in \
+            "$INSTALLER_REFERENCE" \
+            "$RUNTIME_CHART_REFERENCE" \
+            "$RBAC_CHART_REFERENCE"; do
+            cosign verify \
+              --certificate-identity "$CERTIFICATE_IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$subject" >/dev/null
+          done
+          docker buildx imagetools inspect "$INSTALLER_REFERENCE" >/dev/null
+          docker pull "$INSTALLER_REFERENCE"
+          docker run --rm --entrypoint oras "$INSTALLER_REFERENCE" version
+          docker run --rm --entrypoint cosign "$INSTALLER_REFERENCE" version
+          docker run --rm --entrypoint helm "$INSTALLER_REFERENCE" version --short
+          docker run --rm --entrypoint kubectl "$INSTALLER_REFERENCE" version --client
+          docker run --rm \
+            --volume "$HOME/.docker:/root/.docker:ro" \
+            "$TRIVY_IMAGE" image --quiet --exit-code 1 \
+            --severity HIGH,CRITICAL "$INSTALLER_REFERENCE"
+
+          mkdir -p "$RUNNER_TEMP/runtime-chart-pull" "$RUNNER_TEMP/rbac-chart-pull"
+          RUNTIME_LAYER_DIGEST="$(
+            oras manifest fetch "$RUNTIME_CHART_REFERENCE" |
+              jq -er '
+                [.layers[]
+                  | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip")
+                  | .digest]
+                | if length == 1 then .[0] else error("expected exactly one Helm chart layer") end
+              '
+          )"
+          RBAC_LAYER_DIGEST="$(
+            oras manifest fetch "$RBAC_CHART_REFERENCE" |
+              jq -er '
+                [.layers[]
+                  | select(.mediaType == "application/vnd.cncf.helm.chart.content.v1.tar+gzip")
+                  | .digest]
+                | if length == 1 then .[0] else error("expected exactly one Helm chart layer") end
+              '
+          )"
+          PULLED_RUNTIME="$RUNNER_TEMP/runtime-chart-pull/$(basename "$RUNTIME_CHART_ARCHIVE")"
+          PULLED_RBAC="$RUNNER_TEMP/rbac-chart-pull/$(basename "$RBAC_CHART_ARCHIVE")"
+          oras blob fetch \
+            --output "$PULLED_RUNTIME" \
+            "${RUNTIME_CHART_REFERENCE%@*}@$RUNTIME_LAYER_DIGEST"
+          oras blob fetch \
+            --output "$PULLED_RBAC" \
+            "${RBAC_CHART_REFERENCE%@*}@$RBAC_LAYER_DIGEST"
+          test "$(sha256sum "$RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" = \
+            "$(sha256sum "$PULLED_RUNTIME" | cut -d' ' -f1)"
+          test "$(sha256sum "$RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" = \
+            "$(sha256sum "$PULLED_RBAC" | cut -d' ' -f1)"
+
+      - name: Write the immutable toolchain release receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          RECEIPT="$RUNNER_TEMP/enterpriseglue-plugin-toolchain-receipt"
+          mkdir -p "$RECEIPT"
+          cp "$RUNTIME_CHART_ARCHIVE" "$RECEIPT/"
+          cp "$RBAC_CHART_ARCHIVE" "$RECEIPT/"
+          jq -n \
+            --arg version "$TOOLCHAIN_VERSION" \
+            --arg sourceRevision "$SOURCE_REF" \
+            --arg installer "$INSTALLER_REFERENCE" \
+            --arg runtimeChart "$RUNTIME_CHART_REFERENCE" \
+            --arg runtimeChartSha256 "$(sha256sum "$RUNTIME_CHART_ARCHIVE" | cut -d' ' -f1)" \
+            --arg rbacChart "$RBAC_CHART_REFERENCE" \
+            --arg rbacChartSha256 "$(sha256sum "$RBAC_CHART_ARCHIVE" | cut -d' ' -f1)" \
+            --arg workflowRun "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{
+              schemaVersion: "enterpriseglue-plugin-toolchain-release/v1",
+              version: $version,
+              sourceRevision: $sourceRevision,
+              installer: $installer,
+              runtimeChart: {
+                subject: $runtimeChart,
+                archiveSha256: $runtimeChartSha256
+              },
+              installerRbacChart: {
+                subject: $rbacChart,
+                archiveSha256: $rbacChartSha256
+              },
+              workflowRun: $workflowRun,
+              customerCiRequired: false,
+              customerBuildRequired: false
+            }' > "$RECEIPT/release.json"
+
+      - name: Build, sign, and verify the generic air-gap toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          RECEIPT="$RUNNER_TEMP/enterpriseglue-plugin-toolchain-receipt"
+          AIRGAP="$RECEIPT/toolchain-airgap"
+          TRUSTED_ROOT="$RUNNER_TEMP/sigstore-trusted-root.json"
+          IMPORT_RECEIPT="$RECEIPT/toolchain-airgap-import-receipt.json"
+          TARGET_REGISTRY_NAME="enterpriseglue-toolchain-airgap-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          TARGET_REGISTRY="127.0.0.1:5000"
+          CERTIFICATE_IDENTITY="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/plugin-toolchain-release.yml@$GITHUB_REF"
+
+          EG_PLUGIN_TOOLCHAIN_AIRGAP_GENERATED_AT="$(
+            date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ'
+          )" node scripts/plugin-toolchain-airgap.mjs export \
+            --release "$RECEIPT/release.json" \
+            --output "$AIRGAP"
+          cosign sign-blob --yes \
+            --bundle "$AIRGAP/toolchain-airgap.sigstore.json" \
+            "$AIRGAP/toolchain-airgap.json" >/dev/null
+          cosign trusted-root create \
+            --with-default-services \
+            --out "$TRUSTED_ROOT"
+          cosign verify-blob \
+            --bundle "$AIRGAP/toolchain-airgap.sigstore.json" \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --trusted-root "$TRUSTED_ROOT" \
+            "$AIRGAP/toolchain-airgap.json" >/dev/null
+
+          cleanup_target_registry() {
+            docker rm -f "$TARGET_REGISTRY_NAME" >/dev/null 2>&1 || true
+          }
+          trap cleanup_target_registry EXIT INT TERM
+          docker run --detach \
+            --name "$TARGET_REGISTRY_NAME" \
+            --publish 127.0.0.1:5000:5000 \
+            "$ZOT_IMAGE" >/dev/null
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "http://$TARGET_REGISTRY/v2/" >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              echo "Disposable air-gap target registry did not become ready" >&2
+              exit 1
+            fi
+            sleep 0.25
+          done
+
+          node scripts/plugin-toolchain-airgap.mjs import \
+            --bundle "$AIRGAP" \
+            --target-prefix "$TARGET_REGISTRY/enterpriseglue" \
+            --certificate-identity "$CERTIFICATE_IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --trusted-root "$TRUSTED_ROOT" \
+            --target-plain-http \
+            --receipt "$IMPORT_RECEIPT" >/dev/null
+          jq -e \
+            '.schemaVersion == "enterpriseglue-plugin-toolchain-airgap-import/v1"
+              and .sourceRegistryAccessed == false
+              and .customerCiRequired == false
+              and .customerBuildRequired == false
+              and (.artifacts | length == 3)
+              and all(.artifacts[]; .signatureVerified == true)' \
+            "$IMPORT_RECEIPT" >/dev/null
+
+      - name: Retain the non-secret toolchain receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: enterpriseglue-plugin-toolchain-${{ steps.version.outputs.version }}-${{ inputs.source_ref }}
+          path: ${{ runner.temp }}/enterpriseglue-plugin-toolchain-receipt
+          if-no-files-found: error
+          retention-days: 90

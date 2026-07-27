@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enterpriseglue.io/plugins/reference-health/status-response-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "pluginId", "version", "apiRevision"],
+  "properties": {
+    "status": { "const": "ready" },
+    "pluginId": { "const": "io.enterpriseglue.reference-health" },
+    "version": { "const": "0.1.0" },
+    "apiRevision": { "const": "1" }
+  }
+}

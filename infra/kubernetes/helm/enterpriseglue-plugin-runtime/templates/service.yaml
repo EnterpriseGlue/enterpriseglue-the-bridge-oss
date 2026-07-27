@@ -1,0 +1,19 @@
+{{- range $plugin := .Values.pluginRuntime.plugins }}
+{{- $context := dict "root" $ "plugin" $plugin }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+  labels:
+    {{- include "enterpriseglue-plugin-runtime.labels" $context | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: {{ include "enterpriseglue-plugin-runtime.fullname" $context }}
+  ports:
+    - name: plugin-http
+      port: {{ $plugin.service.containerPort }}
+      targetPort: plugin-http
+      protocol: TCP
+{{- end }}

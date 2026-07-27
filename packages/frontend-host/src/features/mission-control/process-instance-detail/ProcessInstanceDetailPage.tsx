@@ -913,6 +913,7 @@ export default function ProcessInstanceDetailPage() {
           historyContext={historyContext}
           defName={defName}
           instanceId={instanceId}
+          engineRef={selectedEngineId}
           defs={defsQ.data || []}
           defKey={defKey}
           histData={histQ.data as any}
@@ -1015,6 +1016,7 @@ export default function ProcessInstanceDetailPage() {
 
       <ProcessInstanceModals
         incidentDetails={incidentDetails}
+        engineRef={selectedEngineId}
         jobById={jobById}
         onCloseIncident={() => setIncidentDetails(null)}
         editingVarKey={editingVarKey}

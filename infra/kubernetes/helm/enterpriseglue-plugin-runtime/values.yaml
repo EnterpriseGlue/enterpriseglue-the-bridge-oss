@@ -1,0 +1,40 @@
+pluginRuntime:
+  schemaVersion: 1
+  stateRevision: 0
+  plugins: []
+
+# kubernetes uses the fixed non-root UID/GID below. openshift omits fixed
+# identities so the namespace SecurityContextConstraints allocation is used.
+platform: kubernetes
+securityIdentity:
+  runAsUser: 65532
+
+# The lifecycle adapter owns schema-versioned PVCs and validates their identity.
+# Enable this only for standalone chart rendering/provisioning without that
+# adapter.
+persistentVolumeClaims:
+  create: false
+
+deploymentConfigMap: enterpriseglue-plugin-config
+deploymentConfigFilesConfigMap: enterpriseglue-plugin-config-files
+deploymentConfigFilesMountPath: /etc/enterpriseglue/plugin-config
+
+hostGateway:
+  baseUrl: http://enterpriseglue-backend:8787
+  port: 8787
+  podSelector:
+    app.kubernetes.io/name: enterpriseglue-backend
+
+invocationPublicKey:
+  configMapName: enterpriseglue-plugin-invocation-public
+  key: public.pem
+  mountPath: /etc/enterpriseglue/plugin-gateway/invocation-public.pem
+
+imagePullSecrets: []
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

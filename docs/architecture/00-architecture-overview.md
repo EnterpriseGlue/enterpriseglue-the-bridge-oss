@@ -17,6 +17,8 @@ This index provides the recommended reading order for the EnterpriseGlue OSS arc
 | 8 | `07-oss-security-and-trust-boundaries.md` | Understand trust boundaries, protection layers, and sensitive flows |
 | 9 | `08-oss-information-data-architecture.md` | Understand key information domains and persistence boundaries |
 | 10 | `10-oss-license-compliance-and-third-party-management.md` | Understand first-party Apache-2.0 alignment, third-party notice generation, and compliance controls |
+| 11 | `11-oss-custom-rbac-and-engine-registration-plan.md` | Plan the backward-compatible move to custom roles, fine-grained permissions, external engine registration, and SSO-driven engine assignments |
+| 12 | `12-plugin-platform-and-authoring.md` | Understand the reusable plugin contracts, trust boundaries, lifecycle, distribution, and new-plugin checklist |
 
 ## Document Relationship Diagram
 ```mermaid
@@ -39,6 +41,8 @@ flowchart TD
     Security[Security and Trust Boundaries]
     Data[Information and Data Architecture]
     License[License Compliance and Third-Party Management]
+    RbacPlan[Custom RBAC and Engine Registration Plan]
+    PluginPlatform[Plugin Platform and Authoring]
   end
 
   Overview --> Core
@@ -52,7 +56,12 @@ flowchart TD
   Runtime --> Security
   Runtime --> Data
   Runtime --> License
+  Runtime --> PluginPlatform
   Authz --> Security
+  Authz --> RbacPlan
+  Authz --> PluginPlatform
+  Integration --> RbacPlan
+  Integration --> PluginPlatform
   Security --> License
 ```
 
@@ -68,9 +77,11 @@ flowchart TD
 ### Security / Governance Review Path
 - `01-oss-system-context.md`
 - `09-oss-authorization-access-control-model.md`
+- `11-oss-custom-rbac-and-engine-registration-plan.md`
 - `07-oss-security-and-trust-boundaries.md`
 - `06-oss-integration-architecture.md`
 - `10-oss-license-compliance-and-third-party-management.md`
+- `12-plugin-platform-and-authoring.md`
 
 ### Platform / Runtime Review Path
 - `05-oss-application-container-architecture.md`

@@ -87,6 +87,21 @@ Audience: Developers and architects.
 | CAMUNDA_BASE_URL | No | External Camunda engine |
 | CAMUNDA_USERNAME | No | Camunda auth |
 | CAMUNDA_PASSWORD | No | Camunda auth |
+| ENTERPRISEGLUE_PLUGIN_STATE_FILE | No | Installer-rendered read-only plugin state |
+| ENTERPRISEGLUE_PLUGIN_EXECUTION_OBSERVATION_FILE | No | Installer-rendered read-only safe lifecycle observation; display-only, with workload reconciliation explicitly not checked |
+| ENTERPRISEGLUE_PLUGIN_GATEWAY_RATE_WINDOW_SECONDS | No | Shared rate window; default `60` seconds |
+| ENTERPRISEGLUE_PLUGIN_GATEWAY_SUBJECT_REQUESTS_PER_WINDOW | No | Shared subject/operation request ceiling; default `120` |
+| ENTERPRISEGLUE_PLUGIN_GATEWAY_PLUGIN_REQUESTS_PER_WINDOW | No | Shared per-plugin request ceiling; default `2000` |
+| ENTERPRISEGLUE_PLUGIN_GATEWAY_MAX_CONCURRENT_PER_OPERATION | No | Shared active operation ceiling using crash-expiring database leases; default `32` |
+| ENTERPRISEGLUE_PLUGIN_GATEWAY_CIRCUIT_FAILURE_THRESHOLD | No | Replica-local immediate circuit threshold; default `3` |
+| ENTERPRISEGLUE_PLUGIN_GATEWAY_CIRCUIT_OPEN_SECONDS | No | Replica-local circuit cooldown; default `30` seconds |
+| ENTERPRISEGLUE_PLUGIN_EVENT_MAX_OUTSTANDING_PER_PLUGIN | No | Durable active event backlog per plugin; default `10000` |
+| ENTERPRISEGLUE_PLUGIN_EVENT_MAX_OUTSTANDING_PER_SUBSCRIPTION | No | Durable active event backlog per tenant subscription; default `1000` |
+| ENTERPRISEGLUE_PLUGIN_EVENT_CIRCUIT_FAILURE_THRESHOLD | No | Deployment-wide consecutive retryable event-delivery failures before opening that tenant subscription circuit; default `3` |
+| ENTERPRISEGLUE_PLUGIN_EVENT_CIRCUIT_OPEN_SECONDS | No | Deployment-wide event-delivery circuit cooldown before one durable half-open probe; default `60` seconds |
+| ENTERPRISEGLUE_PLUGIN_ENGINE_EVENT_POLLING_ENABLED | No | `false` by default; opts into minimized incident/failed-job polling plus a daily product/version-only engine inventory event; inventory delivery still requires its explicit optional permission |
+| ENTERPRISEGLUE_PLUGIN_DIAGNOSTIC_COLLECTOR_POLICY_FILE | No | Absolute backend-only path to a deployment-owned closed collector policy |
+| ENTERPRISEGLUE_PLUGIN_DIAGNOSTIC_AUTO_COLLECTION_ENABLED | No | `false` by default; must be exactly `true` before locally filtered automatic bundles are allowed |
 | MICROSOFT_CLIENT_ID | No | Microsoft Entra ID |
 | MICROSOFT_CLIENT_SECRET | No | Microsoft Entra ID |
 | MICROSOFT_TENANT_ID | No | Microsoft Entra ID |

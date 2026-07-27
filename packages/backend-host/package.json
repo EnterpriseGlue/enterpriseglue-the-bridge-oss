@@ -11,7 +11,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc && node scripts/rewrite-modules.mjs",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "typecheck:plugin-acceptance": "tsc -p test/tsconfig.json",
+    "test:plugin-runtime": "vitest run src/plugins/pluginRuntime.test.ts src/plugins/pluginControlPlane.test.ts src/plugins/pluginControlRoutes.test.ts src/plugins/pluginDatabaseLock.test.ts src/plugins/pluginDatabaseTransaction.test.ts src/plugins/pluginEventDeliveryStore.test.ts src/plugins/pluginEventDispatcher.test.ts src/plugins/pluginEngineEventPoller.test.ts src/plugins/pluginScheduleDispatcher.test.ts src/plugins/localDiagnosticCollector.test.ts src/plugins/pluginDiagnosticMetrics.test.ts src/plugins/pluginEventMetrics.test.ts src/plugins/pluginSseProxy.test.ts src/plugins/pluginContributionAvailabilityStore.test.ts src/plugins/pluginContributionAvailabilityDispatcher.test.ts"
   },
   "files": [
     "dist/**/*.js",
@@ -25,11 +27,14 @@
     "express": "^5.2.1",
     "helmet": "^8.1.0",
     "morgan": "^1.10.0",
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
+    "@enterpriseglue/shared": "workspace:*",
     "reflect-metadata": "^0.2.2",
     "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.28",
     "typescript": "^5.8.3",
-    "undici": "^7.24.0",
+    "undici": "^7.28.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -40,7 +45,8 @@
     "@types/morgan": "^1.9.9",
     "@types/node": "^25.3.5",
     "@types/swagger-ui-express": "^4.1.8",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^4.0.18"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",

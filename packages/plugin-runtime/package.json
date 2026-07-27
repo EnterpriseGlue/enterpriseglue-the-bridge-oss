@@ -1,0 +1,73 @@
+{
+  "name": "@enterpriseglue/plugin-runtime",
+  "version": "0.1.0",
+  "description": "Plural, owner-aware runtime primitives for EnterpriseGlue OSS plugins",
+  "license": "Apache-2.0",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./frontend": {
+      "types": "./dist/frontendRegistry.d.ts",
+      "default": "./dist/frontendRegistry.js"
+    },
+    "./frontend-policy": {
+      "types": "./dist/frontendAssetPolicy.d.ts",
+      "default": "./dist/frontendAssetPolicy.js"
+    },
+    "./gateway": {
+      "types": "./dist/gateway.d.ts",
+      "default": "./dist/gateway.js"
+    },
+    "./host-broker": {
+      "types": "./dist/hostBroker.d.ts",
+      "default": "./dist/hostBroker.js"
+    },
+    "./json-schema": {
+      "types": "./dist/jsonSchema.d.ts",
+      "default": "./dist/jsonSchema.js"
+    },
+    "./secret-broker": {
+      "types": "./dist/secretBroker.d.ts",
+      "default": "./dist/secretBroker.js"
+    },
+    "./supply-chain": {
+      "types": "./dist/supplyChain.d.ts",
+      "default": "./dist/supplyChain.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "dependencies": {
+    "@enterpriseglue/plugin-sdk": "workspace:*",
+    "ajv": "^8.17.1",
+    "es-module-lexer": "2.1.0",
+    "semver": "^7.7.4"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "@types/react": "^19.2.6",
+    "@types/semver": "^7.7.1",
+    "react": "19.2.6",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss.git",
+    "directory": "packages/plugin-runtime"
+  }
+}

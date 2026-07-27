@@ -7,6 +7,7 @@ export type EnterpriseRoute = {
   children?: EnterpriseRoute[];
 };
 
+/** @deprecated Legacy singular enterprise-plugin bridge only. */
 export interface ComponentOverride {
   /** Stable extension point name (for example: `engines-page`). */
   name: string;
@@ -14,6 +15,7 @@ export interface ComponentOverride {
   component: ComponentType<Record<string, unknown>>;
 }
 
+/** @deprecated Legacy singular enterprise-plugin bridge only. */
 export interface FeatureOverride {
   /** Host feature flag identifier (for example: `multiTenant`). */
   flag: string;
@@ -134,7 +136,15 @@ export interface EnterpriseFrontendPlugin {
   tenantRoutes?: EnterpriseRoute[];
   navItems?: EnterpriseNavItem[];
   menuItems?: EnterpriseMenuItem[];
+  /**
+   * @deprecated Legacy singular enterprise-plugin bridge only. Native plugins
+   * must use typed additive slots from `@enterpriseglue/plugin-sdk`.
+   */
   componentOverrides?: ComponentOverride[];
+  /**
+   * @deprecated Legacy singular enterprise-plugin bridge only. Native plugins
+   * cannot replace host feature flags.
+   */
   featureOverrides?: FeatureOverride[];
   /** Called by the host after loading to provide shared utilities. */
   init?(context: FrontendPluginContext): void;

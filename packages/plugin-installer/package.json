@@ -1,0 +1,41 @@
+{
+  "name": "@enterpriseglue/plugin-installer",
+  "version": "0.1.0",
+  "description": "Verified no-build Compose and Helm renderer for EnterpriseGlue OSS plugins",
+  "license": "Apache-2.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "eg-plugin": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "CONTAINER_THIRD_PARTY_NOTICES.md",
+    "third_party_licenses.json"
+  ],
+  "dependencies": {
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

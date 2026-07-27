@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
+  isPluginLargeTextColumn,
+  pluginKeyColumnLength,
+} from '../pluginColumnPolicy.js';
+import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
   Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
@@ -16,6 +20,7 @@ import {
   Engine, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  pluginPlatformEntities,
 } from '../entities/index.js';
 
 const entities = [
@@ -30,7 +35,12 @@ const entities = [
   Engine, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  ...pluginPlatformEntities,
 ];
+const pluginEntityTargetNames = new Set(
+  pluginPlatformEntities.map((entity) => entity.name),
+);
+const PLUGIN_SQL_SERVER_COLLATION = 'Latin1_General_100_BIN2';
 
 /**
  * Microsoft SQL Server Database Adapter
@@ -85,9 +95,15 @@ export class SqlServerAdapter implements DatabaseAdapter {
     for (const column of metadata.columns) {
       const targetName = this.getTargetName(column.target);
       const key = `${targetName}:${column.propertyName}`;
+      const isPluginColumn = pluginEntityTargetNames.has(targetName);
 
       if (column.options.type === 'boolean') {
         column.options.type = 'bit';
+        if (column.options.default === true) {
+          column.options.default = 1;
+        } else if (column.options.default === false) {
+          column.options.default = 0;
+        }
         continue;
       }
 
@@ -99,6 +115,30 @@ export class SqlServerAdapter implements DatabaseAdapter {
         || Boolean(column.options.unique)
         || indexedColumns.has(key)
         || uniqueConstraintColumns.has(key);
+
+      if (isPluginColumn) {
+        const databaseColumnName =
+          typeof column.options.name === 'string'
+            ? column.options.name
+            : column.propertyName.replace(
+                /[A-Z]/g,
+                (character) => `_${character.toLowerCase()}`,
+              );
+        if (needsNvarchar) {
+          column.options.type = 'varchar';
+          column.options.length =
+            pluginKeyColumnLength(databaseColumnName);
+          column.options.collation = PLUGIN_SQL_SERVER_COLLATION;
+        } else {
+          column.options.type = 'nvarchar';
+          column.options.length = isPluginLargeTextColumn(
+            databaseColumnName,
+          )
+            ? 'MAX'
+            : 4000;
+        }
+        continue;
+      }
 
       if (!needsNvarchar) continue;
 
