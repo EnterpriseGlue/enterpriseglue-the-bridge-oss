@@ -7,6 +7,7 @@ const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
+const localOidcConfigureRunner = readFileSync(new URL('./configure-local-oidc-provider.sh', import.meta.url), 'utf8');
 const localLdapConfigureRunner = readFileSync(new URL('./configure-local-ldap-provider.sh', import.meta.url), 'utf8');
 const ciIdentityProtocolRehearsalRunner = readFileSync(new URL('./run-ci-identity-protocol-rehearsals.sh', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
@@ -382,6 +383,10 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcRehearsalRunner, /PLAYWRIGHT_BASE_URL:-\$\{FRONTEND_URL:-https:\/\/localhost:\$\{KEYCLOAK_HTTPS_FRONTEND_PORT:-5443\}\}/);
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_ISSUER_URL:-https:\/\/localhost:\$\{KEYCLOAK_HOST_PORT:-8180\}/);
   assert.match(localOidcRehearsalRunner, /LOCAL_OIDC_AUTHORIZATION_REHEARSAL=true[\s\\]+LOCAL_OIDC_ISSUER_URL="\$issuer_url"/);
+  assert.match(localOidcConfigureRunner, /groupClaim:"groups"/);
+  assert.match(localOidcConfigureRunner, /expectedAudience:\$clientId/);
+  assert.match(localOidcConfigureRunner, /triggers:\["login","manual"\]/);
+  assert.match(localOidcConfigureRunner, /incompleteEntitlements:"fail_closed"/);
 });
 
 test('the identity browser lifecycle runner accepts the generated local TLS CA', () => {
@@ -415,6 +420,9 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL:-\}|\$\{ADMIN_EMAIL:-\}/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_DIRECTORY_MODE/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_FILE_MODE/);
+  assert.match(localLdapConfigureRunner, /triggers:\["login","manual"\]/);
+  assert.match(localLdapConfigureRunner, /requiredForLogin:true/);
+  assert.match(localLdapConfigureRunner, /incompleteEntitlements:"fail_closed"/);
 });
 
 test('the disposable identity-protocol CI lane keeps fresh-stack inputs and useful diagnostics isolated', () => {

@@ -90,6 +90,8 @@ async function createProviderThroughUi(page: Page, providerKey: string): Promise
   await page.getByLabel('Issuer URL').fill(issuerUrl);
   await page.getByLabel('Client ID').fill('enterpriseglue-local');
   await page.getByLabel('Callback URL').fill(`${baseUrl.replace(/\/$/, '')}/api/auth/identity/callback`);
+  await page.getByLabel('Group claim (optional)').fill('groups');
+  await page.getByLabel('Expected audience (optional)').fill('enterpriseglue-local');
   // Carbon renders this toggle as a button with role=switch, not a native
   // checkbox. Keyboard activation avoids modal scrolling/overlay geometry and
   // exercises the accessible switch interaction a keyboard user receives.

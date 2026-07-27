@@ -96,7 +96,7 @@ provider_payload="$(jq -nc \
   --arg issuerUrl "$issuer_url" \
   --arg clientId "$client_id" \
   --arg callbackUrl "$callback_url" \
-  '{key:$key,protocol:"oidc",isEnabled:true,authenticationMode:"direct",configuration:{issuerUrl:$issuerUrl,clientId:$clientId,callbackUrl:$callbackUrl,scopes:["openid","profile","email"],allowVerifiedEmailLinking:true}}')"
+  '{key:$key,protocol:"oidc",isEnabled:true,authenticationMode:"direct",configuration:{issuerUrl:$issuerUrl,clientId:$clientId,callbackUrl:$callbackUrl,scopes:["openid","profile","email"],groupClaim:"groups",expectedAudience:$clientId,allowVerifiedEmailLinking:true},sync:{triggers:["login","manual"],requiredForLogin:true,incompleteEntitlements:"fail_closed",connectorCapability:"claim_only",scheduled:false}}')"
 all_cookies="$session_cookies;$csrf_cookie"
 provider_status="$(curl "${curl_args[@]}" --output /dev/null --write-out '%{http_code}' \
   --header 'Content-Type: application/json' \
