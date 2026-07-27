@@ -623,8 +623,7 @@ async function decodeBpmnEngineResponse<T>(
   }
 }
 
-export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
-  const cfg = await getEngine(engineId)
+async function camundaGetUsingConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, path: string, params?: Record<string, any>): Promise<T> {
   const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
   if (params) {
     for (const [k, v] of Object.entries(params)) {
@@ -649,8 +648,20 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
   }
 }
 
-async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
-  const cfg = await getEngine(engineId)
+/**
+ * Uses an already-authorized persisted connection rather than resolving the
+ * engine a second time. This is essential for durable operations that have
+ * just loaded the engine through their own data-source boundary.
+ */
+export async function camundaGetWithConnection<T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, params?: Record<string, any>): Promise<T> {
+  return camundaGetUsingConnection<T>(engine.id, engine, path, params)
+}
+
+export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
+  return camundaGetUsingConnection<T>(engineId, await getEngine(engineId), path, params)
+}
+
+async function camundaSendWithConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
   const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
   try {
     const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
@@ -669,9 +680,21 @@ async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT'
   }
 }
 
+/** Sends a mutation through the supplied persisted connection and shared hardened transport. */
+export async function camundaSendForConnection<T = unknown>(engine: EngineConnectionInput & { id: string }, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
+  return camundaSendWithConnection<T>(engine.id, engine, method, path, body)
+}
+
+async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
+  return camundaSendWithConnection<T>(engineId, await getEngine(engineId), method, path, body)
+}
+
 export const camundaPost = <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'POST', path, body)
 export const camundaPut =  <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'PUT', path, body)
 export const camundaDelete =  <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'DELETE', path, body)
+export const camundaPostWithConnection = <T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, body?: any) => camundaSendForConnection<T>(engine, 'POST', path, body)
+export const camundaPutWithConnection = <T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, body?: any) => camundaSendForConnection<T>(engine, 'PUT', path, body)
+export const camundaDeleteWithConnection = <T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, body?: any) => camundaSendForConnection<T>(engine, 'DELETE', path, body)
 
 // -----------------------------
 // Batch: common helpers

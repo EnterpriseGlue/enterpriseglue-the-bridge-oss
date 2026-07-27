@@ -1,4 +1,13 @@
-import { BpmnEngineOperationError, camundaDelete, camundaGet, camundaPost } from '../bpmn-engine-client.js';
+import {
+  BpmnEngineOperationError,
+  camundaDelete,
+  camundaDeleteWithConnection,
+  camundaGet,
+  camundaGetWithConnection,
+  camundaPost,
+  camundaPostWithConnection,
+  type EngineConnectionInput,
+} from '../bpmn-engine-client.js';
 import { getDataSource } from '../../db/data-source.js';
 import { Engine } from '../../infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '../../infrastructure/persistence/entities/EngineSetMaterialization.js';
@@ -37,6 +46,14 @@ export interface EngineBackstopNativeAuthorizationClient {
   deleteAuthorization(engineId: string, authorizationId: string): Promise<void>;
   /** Returns only an ID-addressed grant; it never inventories unrelated native grants. */
   readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null>;
+  /**
+   * An optional path for callers that have already resolved the persisted
+   * engine. It avoids a second data-source lookup while retaining the normal
+   * hardened BPMN transport and audit path.
+   */
+  createAuthorizationWithConnection?(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }>;
+  deleteAuthorizationWithConnection?(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<void>;
+  readAuthorizationWithConnection?(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<unknown | null>;
 }
 
 /**
@@ -50,6 +67,10 @@ export interface EngineBackstopNativeAuthorizationTransport {
   get(engineId: string, path: string): Promise<unknown>;
   delete(engineId: string, path: string): Promise<void>;
 }
+
+type BackstopEngineConnection = EngineConnectionInput & { id: string };
+type BackstopEngineConnectionCarrier = Pick<Engine, 'id' | 'baseUrl' | 'connectionMode' | 'authType' | 'username' | 'passwordEnc' | 'oauthTokenUrl' | 'oauthScopes' | 'oauthAudience'>;
+type BackstopEngineConnectionSource = BackstopEngineConnectionCarrier | BackstopEngineConnection;
 
 const bpmnNativeAuthorizationTransport: EngineBackstopNativeAuthorizationTransport = {
   post: (engineId, path, body) => camundaPost<unknown>(engineId, path, body),
@@ -90,6 +111,32 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
       throw error;
     }
   }
+
+  async createAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
+    const response = await camundaPostWithConnection(engine, '/authorization/create', {
+      type: 1,
+      permissions: ['READ'],
+      groupId: input.nativeGroupId,
+      resourceType: input.camundaResourceType,
+      resourceId: input.resourceKey,
+    });
+    const id = response && typeof response === 'object' && 'id' in response ? String((response as { id?: unknown }).id || '').trim() : '';
+    if (!id) throw new Error('Compatible engine authorization create response did not include an authorization id');
+    return { id };
+  }
+
+  async deleteAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<void> {
+    await camundaDeleteWithConnection(engine, `/authorization/${encodeURIComponent(authorizationId)}`);
+  }
+
+  async readAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<unknown | null> {
+    try {
+      return await camundaGetWithConnection(engine, `/authorization/${encodeURIComponent(authorizationId)}`);
+    } catch (error) {
+      if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return null;
+      throw error;
+    }
+  }
 }
 
 /**
@@ -110,7 +157,7 @@ export type CamundaBackstopOwnedGrant = CamundaCompatibleBackstopOwnedGrant;
 
 interface ProjectionBuild {
   /** A custom projection builder needs only the transport identity. */
-  engine: Pick<Engine, 'id' | 'connectionMode'>;
+  engine: BackstopEngineConnectionCarrier;
   tenantId: string | null;
   projection: EngineBackstopProjection;
   sourceHash: string;
@@ -222,6 +269,12 @@ function backstopError(code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED' | 'ENGINE_BA
 }
 
 export class EngineBackstopSyncService {
+  /**
+   * A preview/apply lifecycle has already resolved this connection. Keep it
+   * only in process memory; a later durable worker still reloads it so normal
+   * credential rotation takes effect.
+   */
+  private readonly connectionCache = new Map<string, BackstopEngineConnection>();
   private readonly projectionService: EngineBackstopProjectionService;
   private readonly mappingService: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
   private readonly runService: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
@@ -362,14 +415,14 @@ export class EngineBackstopSyncService {
       await this.runService.updateRun({ id: run.id, status: 'running', detailedSnapshot: { version: 1, projection, ownedGrants: owned } });
       for (const grant of desired) {
         if (existingByIdentity.has(desiredIdentity(grant))) continue;
-        const created = await nativeClient.createAuthorization(run.engineId, grant);
+        const created = await this.createAuthorization(nativeClient, built.engine, grant);
         owned = [...owned, { ...grant, id: created.id }];
         await this.runService.updateRun({ id: run.id, status: 'running', detailedSnapshot: { version: 1, projection, ownedGrants: owned } });
       }
       const retainedIds = new Set(retained.map((grant) => grant.id));
       for (const grant of priorOwned) {
         if (retainedIds.has(grant.id)) continue;
-        await nativeClient.deleteAuthorization(run.engineId, grant.id);
+        await this.deleteAuthorization(nativeClient, built.engine, grant.id);
       }
       const resultHash = hash(stableJson(owned
         .map(({ id, ...grant }) => ({ ...grant, id }))
@@ -394,8 +447,9 @@ export class EngineBackstopSyncService {
       const ownedGrants = parseOwnedGrants(detail);
       if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The rollback receipt expired; no broad native delete is permitted');
       const nativeClient = this.nativeClientForRun(rollbackRun);
+      const connection = this.usesConnection(nativeClient) ? await this.connectionForEngine(rollbackRun.engineId) : null;
       await this.runService.updateRun({ id: rollbackRun.id, status: 'running', detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
-      for (const grant of ownedGrants) await nativeClient.deleteAuthorization(rollbackRun.engineId, grant.id);
+      for (const grant of ownedGrants) await this.deleteAuthorization(nativeClient, connection, grant.id, rollbackRun.engineId);
       const resultHash = hash(stableJson(ownedGrants.map((grant) => grant.id).sort()));
       await this.runService.updateRun({ id: rollbackRun.id, status: 'rolled_back', resultHash, completed: true, detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
       await this.runService.updateRun({ id: rollbackRun.rollbackOfRunId, status: 'rolled_back', completed: true });
@@ -414,12 +468,13 @@ export class EngineBackstopSyncService {
       if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The drift-check receipt expired before it could be read');
       const ownedGrants = parseOwnedGrants(detail);
       const nativeClient = this.nativeClientForRun(observation);
+      const connection = this.usesConnection(nativeClient) ? await this.connectionForEngine(observation.engineId) : null;
       await this.runService.updateRun({ id: observation.id, status: 'running', detailedSnapshot: detail });
       let intactCount = 0;
       let missingCount = 0;
       let alteredCount = 0;
       for (const grant of ownedGrants) {
-        const nativeGrant = await nativeClient.readAuthorization(observation.engineId, grant.id);
+        const nativeGrant = await this.readAuthorization(nativeClient, connection, grant.id, observation.engineId);
         if (nativeGrant === null) missingCount += 1;
         else if (matchesOwnedGrant(nativeGrant, grant)) intactCount += 1;
         else alteredCount += 1;
@@ -460,8 +515,83 @@ export class EngineBackstopSyncService {
     return run.capability.customerSidecarTransport ? this.customerSidecarNativeClient : this.directNativeClient;
   }
 
+  private usesConnection(nativeClient: EngineBackstopNativeAuthorizationClient): boolean {
+    return Boolean(
+      nativeClient.createAuthorizationWithConnection
+      || nativeClient.deleteAuthorizationWithConnection
+      || nativeClient.readAuthorizationWithConnection,
+    );
+  }
+
+  private toConnection(engine: BackstopEngineConnectionSource | null): BackstopEngineConnection | null {
+    if (!engine?.id || !engine.baseUrl) return null;
+    return {
+      id: engine.id,
+      baseUrl: engine.baseUrl,
+      connectionMode: engine.connectionMode,
+      authType: engine.authType,
+      username: engine.username,
+      passwordEnc: engine.passwordEnc,
+      oauthTokenUrl: engine.oauthTokenUrl,
+      oauthScopes: engine.oauthScopes,
+      oauthAudience: engine.oauthAudience,
+    };
+  }
+
+  private async connectionForEngine(engineId: string): Promise<BackstopEngineConnection | null> {
+    const cached = this.connectionCache.get(engineId);
+    if (cached) return cached;
+    // Do not hydrate unrelated Engine metadata merely to execute a receipt.
+    // This keeps durable rollback/drift reads narrowly scoped and compatible
+    // with databases that pre-date non-connection Engine columns.
+    const engine = await (await getDataSource()).getRepository(Engine)
+      .createQueryBuilder('engine')
+      .select([
+        'engine.id',
+        'engine.baseUrl',
+        'engine.connectionMode',
+        'engine.authType',
+        'engine.username',
+        'engine.passwordEnc',
+        'engine.oauthTokenUrl',
+        'engine.oauthScopes',
+        'engine.oauthAudience',
+      ])
+      .where('engine.id = :engineId', { engineId })
+      .getOne();
+    const connection = this.toConnection(engine);
+    if (connection) this.connectionCache.set(connection.id, connection);
+    return connection;
+  }
+
+  private async createAuthorization(nativeClient: EngineBackstopNativeAuthorizationClient, engine: BackstopEngineConnectionSource | null, grant: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
+    const connection = this.toConnection(engine);
+    if (connection && nativeClient.createAuthorizationWithConnection) return nativeClient.createAuthorizationWithConnection(connection, grant);
+    return nativeClient.createAuthorization(connection?.id || engine?.id || '', grant);
+  }
+
+  private async deleteAuthorization(nativeClient: EngineBackstopNativeAuthorizationClient, engine: BackstopEngineConnectionSource | null, authorizationId: string, fallbackEngineId = ''): Promise<void> {
+    const connection = this.toConnection(engine);
+    if (connection && nativeClient.deleteAuthorizationWithConnection) {
+      await nativeClient.deleteAuthorizationWithConnection(connection, authorizationId);
+      return;
+    }
+    await nativeClient.deleteAuthorization(connection?.id || engine?.id || fallbackEngineId, authorizationId);
+  }
+
+  private async readAuthorization(nativeClient: EngineBackstopNativeAuthorizationClient, engine: BackstopEngineConnectionSource | null, authorizationId: string, fallbackEngineId = ''): Promise<unknown | null> {
+    const connection = this.toConnection(engine);
+    if (connection && nativeClient.readAuthorizationWithConnection) return nativeClient.readAuthorizationWithConnection(connection, authorizationId);
+    return nativeClient.readAuthorization(connection?.id || engine?.id || fallbackEngineId, authorizationId);
+  }
+
   private async buildProjection(input: { engineId: string; tenantId?: string | null }): Promise<ProjectionBuild> {
-    if (this.projectionBuilder) return this.projectionBuilder(input);
+    if (this.projectionBuilder) {
+      const built = await this.projectionBuilder(input);
+      const connection = this.toConnection(built.engine);
+      if (connection) this.connectionCache.set(connection.id, connection);
+      return built;
+    }
     const dataSource = await getDataSource();
     const engineId = input.engineId.trim();
     const engine = await dataSource.getRepository(Engine).findOne({ where: { id: engineId } });
@@ -537,7 +667,7 @@ export class EngineBackstopSyncService {
       candidates: candidates.sort((left, right) => left.sourceAssignmentId.localeCompare(right.sourceAssignmentId)),
     }));
     const desiredHash = hash(stableJson(projection.desiredGrants));
-    return {
+    const built = {
       engine,
       tenantId,
       projection,
@@ -549,6 +679,9 @@ export class EngineBackstopSyncService {
         customerSidecarTransport: engine.connectionMode === 'customer_sidecar',
       },
     };
+    const connection = this.toConnection(built.engine);
+    if (connection) this.connectionCache.set(connection.id, connection);
+    return built;
   }
 }
 

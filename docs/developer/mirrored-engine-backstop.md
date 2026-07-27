@@ -177,6 +177,7 @@ pnpm run test:camunda7-native-grant-container
 pnpm run test:operaton-native-auth-container
 pnpm run test:customer-sidecar-reference-container
 pnpm run test:operaton-sidecar-backstop-container
+pnpm run test:operaton-backstop-browser
 ```
 
 The disposable Camunda and Operaton containers validate their pinned compatible authorization REST contracts.
@@ -189,3 +190,31 @@ sent to the proxy. It also proves that a sidecar-native-write rejection fails
 closed without selecting the direct adapter. The test command temporarily
 permits loopback HTTP only for its disposable local fixture; production endpoint
 policy and HTTPS requirements remain unchanged.
+
+### Local Operaton browser acceptance
+
+`pnpm run test:operaton-backstop-browser` is an opt-in localhost acceptance
+lane for the **direct Operaton** operator workflow. It starts one disposable,
+pinned Operaton container, while reusing the already-running local
+EnterpriseGlue frontend, backend, and database. It requires those services at
+`http://localhost:5173` and `http://localhost:8787` by default.
+
+The test signs in as the disposable local administrator, registers the
+container as an `operaton` engine through the public API, reconciles a process
+and a decision runtime resource, and uses the Mission Control panel to save a
+write-only native-group mapping, preview, apply, and detect native drift. It
+then reads the disposable engine directly to prove that exactly the expected
+process-definition (`6`) and decision-definition (`10`) group `READ` grants
+exist. The native group ID is asserted absent from the panel after save. The
+browser runs at a 1440x900 MacBook-sized viewport, checks the paired mapping
+field alignment, and writes an ignored local panel screenshot under
+`.artifacts/operaton-backstop-browser/` (as well as attaching it to the
+Playwright result).
+
+The runner addresses the engine through Docker's host gateway for the
+EnterpriseGlue backend and loopback for browser-level proof. It uses only the
+container's public demo account and stores that disposable password through
+the normal write-only engine credential path; it does not relax the direct
+endpoint authentication policy. The runner deletes its engine and group rows
+and removes the Operaton container on completion. It is local evidence, not a
+customer-engine qualification.

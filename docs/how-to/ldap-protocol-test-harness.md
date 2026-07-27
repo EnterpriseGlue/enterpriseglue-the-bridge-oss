@@ -80,8 +80,17 @@ disables the mapping and archives the provider. The LDAP runner configures
 schedule-compatible nested-group synchronization (`scheduled: true`, 60-second
 interval) and invokes the same reconciliation service manually, proving that
 all three eligible directory users are processed and that a successful manual
-sync run is recorded. It does not claim to execute an autonomous scheduler;
-that deployment-owned trigger needs separate environment evidence.
+sync run is recorded.
+
+The local-only `pnpm run test:identity:contract` lane separately exercises the
+autonomous scheduler boundary: it selects only enabled LDAP providers across
+explicit tenant and platform scopes, calls reconciliation with the default
+`scheduled` trigger, stays disabled until its interval is explicitly
+configured, and prevents overlapping ticks. This protects the scheduler's
+selection and concurrency behavior without pretending that an in-process test
+is evidence of a deployed timer. A deployment qualification still needs an
+enabled provider, `SSO_DIAGNOSTICS_INTERVAL_MS`, and an observed scheduled sync
+receipt in that environment.
 
 ## Disposable OIDC, SAML, LDAP, and Entra-compatible rehearsal
 

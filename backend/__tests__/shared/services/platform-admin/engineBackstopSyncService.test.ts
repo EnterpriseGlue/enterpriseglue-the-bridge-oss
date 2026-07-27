@@ -23,6 +23,9 @@ vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn(),
   camundaPost: vi.fn(),
   camundaDelete: vi.fn(),
+  camundaGetWithConnection: vi.fn(),
+  camundaPostWithConnection: vi.fn(),
+  camundaDeleteWithConnection: vi.fn(),
 }));
 
 const sourceHash = 'a'.repeat(64);
@@ -152,6 +155,43 @@ describe('EngineBackstopSyncService', () => {
     expect(state.getDetail().ownedGrants).toEqual([{
       id: 'native-auth-1', nativeGroupId: 'camunda-operators', camundaResourceType: 6, resourceKey: 'payments',
     }]);
+  });
+
+  it('reuses the resolved Operaton connection for a native apply instead of looking the engine up again', async () => {
+    const state = setup();
+    const directNativeClient = {
+      createAuthorization: vi.fn(async () => { throw new Error('the legacy engine-id lookup must not run'); }),
+      deleteAuthorization: vi.fn(async () => undefined),
+      readAuthorization: vi.fn(async () => null),
+      createAuthorizationWithConnection: vi.fn(async () => ({ id: 'native-auth-connection' })),
+    };
+    const projectionBuilder = vi.fn(async () => ({
+      engine: {
+        id: 'engine-1', type: 'operaton', lifecycleStatus: 'active', baseUrl: 'https://operaton.example.test/engine-rest',
+        connectionMode: 'direct', authType: 'basic', username: 'backstop', passwordEnc: 'encrypted',
+        oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
+      },
+      tenantId: 'tenant-a', projection: projection(), sourceHash, desiredHash,
+      capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: true },
+    }));
+    const service = new EngineBackstopSyncService({
+      runService: state.runService as any,
+      taskService: state.taskService as any,
+      directNativeClient,
+      projectionBuilder,
+    });
+
+    await service.apply({
+      engineId: 'engine-1', tenantId: 'tenant-a', runId: 'run-1',
+      request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+    });
+
+    expect(directNativeClient.createAuthorizationWithConnection).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'engine-1', baseUrl: 'https://operaton.example.test/engine-rest', authType: 'basic', username: 'backstop', passwordEnc: 'encrypted',
+    }), {
+      nativeGroupId: 'camunda-operators', camundaResourceType: 6, resourceKey: 'payments',
+    });
+    expect(directNativeClient.createAuthorization).not.toHaveBeenCalled();
   });
 
   it('does not reach native transport after source or desired-hash drift', async () => {
