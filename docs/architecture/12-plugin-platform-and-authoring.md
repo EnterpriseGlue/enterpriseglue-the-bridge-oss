@@ -463,7 +463,15 @@ user/resource permission, engine binding, admission, circuit, and schema validat
 ## Backend interface
 
 The backend is a separate least-privilege process. It exposes fixed unauthenticated liveness and
-readiness responses containing no customer data. Every product operation must:
+readiness responses containing no customer data. Container health probes must use a bounded,
+lightweight client already present in the image and compare the exact expected response. They must
+not start Node.js, a JVM, or another application runtime for every probe. This is a release
+contract, not only an optimization: the default reference-plugin limit is 100m CPU and its
+Compose probe timeout is two seconds, so runtime-startup latency can otherwise make a healthy
+service appear unavailable under runner or node contention. Liveness says only that the process
+can serve its fixed health contract; product dependency checks belong in readiness.
+
+Every product operation must:
 
 1. match a manifest-declared method and path;
 2. validate the closed request schema;
@@ -1496,3 +1504,10 @@ through the packaged customer worker. Initial install/enable uses one 15-minute 
 installer kubeconfig; all later lifecycle work uses a distinct 15-minute replacement after the
 old local file is removed. The drill builds and loads eight immutable local images:
 the primary, secondary `0.1.0` through `0.5.0`, migration utility, and installer.
+
+The reference image also treats health-probe cost as part of this acceptance boundary. Its
+Dockerfile installs a bounded BusyBox `wget` shell probe that verifies the exact
+`{"status":"alive"}` body without starting Node.js. A source contract test prevents a
+runtime-based probe from returning, and an image-level acceptance runs with the same 100m CPU,
+128 MiB memory, read-only filesystem, dropped capabilities, and two-second probe budget used by
+the lifecycle deployment.

@@ -48,7 +48,7 @@ COPY --from=build --chown=65532:65532 /output ./
 COPY --from=build --chown=65532:65532 \
   /workspace/packages/plugin-reference/schemas ./schemas
 COPY --from=build --chown=65532:65532 --chmod=0555 \
-  /workspace/packages/plugin-reference/scripts/plugin-healthcheck.mjs \
+  /workspace/packages/plugin-reference/scripts/plugin-healthcheck.sh \
   /usr/local/bin/plugin-healthcheck
 ENV NODE_ENV=production
 ENV PORT=8080
