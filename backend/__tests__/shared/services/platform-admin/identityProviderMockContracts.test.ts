@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { ldapIdentityProviderAdapter, oidcIdentityProviderAdapter, samlIdentityProviderAdapter } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
-import { MockIdentityTestStack, MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
+import { MockEntraOidcProvider, MockIdentityTestStack, MockLdapDirectory, MockOidcProvider, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 
 describe('identity mock provider contracts', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -13,6 +13,44 @@ describe('identity mock provider contracts', () => {
     expect(new URL(request.url).searchParams.get('code_challenge_method')).toBe('S256');
     const claims = await genericOidcService.exchangeCode(provider.configuration(), { code: 'code-1', codeVerifier: request.codeVerifier, nonce: 'nonce-1' });
     expect(claims).toMatchObject({ sub: 'user-1', email: 'person@example.test', groups: ['ops'] });
+  });
+
+  it('normalizes a deterministic Entra-compatible OIDC profile with immutable IDs, groups, and app roles', async () => {
+    const provider = new MockEntraOidcProvider();
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    const request = await genericOidcService.createAuthorizationRequest(provider.configuration(), 'state-1', 'nonce-1');
+    const claims = await genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-1', codeVerifier: request.codeVerifier, nonce: 'nonce-1',
+    });
+    const identity = oidcIdentityProviderAdapter.normalizeIdentity({
+      providerKey: 'entra-compatibility',
+      subjectId: claims.sub,
+      email: claims.email,
+      username: claims.preferred_username,
+      directoryTenantId: claims.tid,
+      claims,
+    });
+
+    expect(provider.configuration()).toMatchObject({
+      issuerUrl: `https://login.microsoftonline.com/${provider.tenantId}/v2.0`,
+      expectedAudience: provider.clientId,
+    });
+    expect(claims).toMatchObject({
+      oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      tid: provider.tenantId,
+      preferred_username: 'entra-operator@example.test',
+      groups: ['group-id-operators'],
+      roles: ['enterpriseglue.engine_operator'],
+    });
+    expect(identity).toMatchObject({
+      subjectId: 'entra-subject-1',
+      directoryTenantId: provider.tenantId,
+      entitlements: expect.arrayContaining([
+        { type: 'group', externalId: 'group-id-operators' },
+        { type: 'role', externalId: 'enterpriseglue.engine_operator' },
+      ]),
+    });
   });
 
   it('normalizes SAML assertion attributes through the same entitlement envelope', () => {
@@ -102,7 +140,7 @@ describe('identity mock provider contracts', () => {
   });
 
   it('emits an Entra-style group-overage marker that authorization rejects before synchronization', async () => {
-    const provider = new MockOidcProvider();
+    const provider = new MockEntraOidcProvider();
     provider.setFailureMode('group_overage');
     vi.stubGlobal('fetch', provider.fetch.bind(provider));
 

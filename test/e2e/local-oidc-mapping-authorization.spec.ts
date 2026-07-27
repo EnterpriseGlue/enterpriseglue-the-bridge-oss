@@ -12,19 +12,31 @@ function isLocalUrl(value: string): boolean {
 }
 
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'https://localhost:5443';
-const enabled = process.env.LOCAL_OIDC_AUTHORIZATION_REHEARSAL === 'true'
-  && isLocalUrl(baseUrl)
-  && Boolean(process.env.LOCAL_OIDC_ADMIN_EMAIL)
-  && Boolean(process.env.LOCAL_OIDC_ADMIN_PASSWORD);
-const issuerUrl = process.env.LOCAL_OIDC_ISSUER_URL || 'https://localhost:8180/realms/enterpriseglue-local';
-const keycloakUsername = process.env.LOCAL_OIDC_TEST_USERNAME || 'oidc-operator';
-const keycloakPassword = process.env.LOCAL_OIDC_TEST_PASSWORD || 'local-oidc-operator';
+const profile = process.env.OIDC_REHEARSAL_PROFILE || 'keycloak';
+const realEntra = profile === 'entra-id';
+const adminEmail = process.env.OIDC_REHEARSAL_ADMIN_EMAIL || process.env.LOCAL_OIDC_ADMIN_EMAIL;
+const adminPassword = process.env.OIDC_REHEARSAL_ADMIN_PASSWORD || process.env.LOCAL_OIDC_ADMIN_PASSWORD;
+const enabled = (process.env.LOCAL_OIDC_AUTHORIZATION_REHEARSAL === 'true' || process.env.OIDC_REHEARSAL_ENABLED === 'true')
+  && (isLocalUrl(baseUrl) || (realEntra && process.env.ENTRA_ID_REHEARSAL_TEST_TENANT === 'true'))
+  && Boolean(adminEmail)
+  && Boolean(adminPassword);
+const issuerUrl = process.env.OIDC_REHEARSAL_ISSUER_URL || process.env.LOCAL_OIDC_ISSUER_URL || 'https://localhost:8180/realms/enterpriseglue-local';
+const clientId = process.env.OIDC_REHEARSAL_CLIENT_ID || process.env.LOCAL_OIDC_CLIENT_ID || 'enterpriseglue-local';
+const clientSecretRef = process.env.OIDC_REHEARSAL_CLIENT_SECRET_REF || '';
+const directoryTenantId = process.env.OIDC_REHEARSAL_DIRECTORY_TENANT_ID || process.env.LOCAL_OIDC_DIRECTORY_TENANT_ID || '';
+const oidcScopes = process.env.OIDC_REHEARSAL_SCOPES || 'openid profile email';
+const providerUsername = process.env.OIDC_REHEARSAL_USERNAME || process.env.LOCAL_OIDC_TEST_USERNAME || 'oidc-operator';
+const providerPassword = process.env.OIDC_REHEARSAL_PASSWORD || process.env.LOCAL_OIDC_TEST_PASSWORD || 'local-oidc-operator';
+const externalEntitlementType = process.env.OIDC_REHEARSAL_ENTITLEMENT_TYPE || process.env.LOCAL_OIDC_ENTITLEMENT_TYPE || 'group';
+const externalEntitlementId = process.env.OIDC_REHEARSAL_ENTITLEMENT_ID || process.env.LOCAL_OIDC_ENTITLEMENT_ID || 'operators';
+const testEngineBaseUrl = process.env.OIDC_REHEARSAL_ENGINE_BASE_URL || 'http://camunda-mock:9080/engine-rest';
+const testEngineType = process.env.OIDC_REHEARSAL_ENGINE_TYPE || 'camunda7';
 
 type Engine = { id: string; name: string };
 type Mapping = { id: string; providerKey: string; isActive: boolean };
 
 async function captureConfiguredMappingScreenshot(page: Page): Promise<void> {
-  const screenshotDirectory = process.env.LOCAL_OIDC_SCREENSHOT_DIR;
+  const screenshotDirectory = process.env.OIDC_REHEARSAL_SCREENSHOT_DIR || process.env.LOCAL_OIDC_SCREENSHOT_DIR;
   if (!screenshotDirectory) return;
 
   await mkdir(screenshotDirectory, { recursive: true });
@@ -56,8 +68,8 @@ async function requestJson<T>(page: Page, path: string, options: { method?: 'GET
 
 async function loginLocalAdministrator(page: Page): Promise<void> {
   await page.goto('/login?local=1');
-  await page.getByLabel(/email/i).fill(process.env.LOCAL_OIDC_ADMIN_EMAIL!);
-  await page.getByLabel(/password/i).fill(process.env.LOCAL_OIDC_ADMIN_PASSWORD!);
+  await page.getByLabel(/email/i).fill(adminEmail!);
+  await page.getByLabel(/password/i).fill(adminPassword!);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -68,8 +80,8 @@ async function createEngine(page: Page, csrf: string, name: string): Promise<Eng
     csrf,
     data: {
       name,
-      baseUrl: 'http://camunda-mock:9080/engine-rest',
-      type: 'camunda7',
+      baseUrl: testEngineBaseUrl,
+      type: testEngineType,
       deploymentDiscoveryEnabled: false,
     },
   });
@@ -88,10 +100,13 @@ async function createProviderThroughUi(page: Page, providerKey: string): Promise
   if (await emailLinkingToggle.getAttribute('aria-checked') !== 'true') await emailLinkingToggle.press('Space');
   await expect(emailLinkingToggle).toHaveAttribute('aria-checked', 'true');
   await page.getByLabel('Issuer URL').fill(issuerUrl);
-  await page.getByLabel('Client ID').fill('enterpriseglue-local');
+  await page.getByLabel('Client ID').fill(clientId);
+  if (clientSecretRef) await page.getByLabel('Client secret reference (optional)').fill(clientSecretRef);
+  if (directoryTenantId) await page.getByLabel('Directory tenant ID (optional)').fill(directoryTenantId);
   await page.getByLabel('Callback URL').fill(`${baseUrl.replace(/\/$/, '')}/api/auth/identity/callback`);
+  await page.getByLabel('Scopes').fill(oidcScopes);
   await page.getByLabel('Group claim (optional)').fill('groups');
-  await page.getByLabel('Expected audience (optional)').fill('enterpriseglue-local');
+  await page.getByLabel('Expected audience (optional)').fill(clientId);
   // Carbon renders this toggle as a button with role=switch, not a native
   // checkbox. Keyboard activation avoids modal scrolling/overlay geometry and
   // exercises the accessible switch interaction a keyboard user receives.
@@ -112,7 +127,10 @@ async function createMappingThroughUi(page: Page, providerKey: string, groupKey:
   await page.getByRole('button', { name: 'Add mapping', exact: true }).click();
   await page.getByRole('combobox', { name: 'Identity provider' }).click();
   await page.getByRole('option', { name: providerKey, exact: true }).click();
-  await page.getByRole('textbox', { name: 'External ID' }).fill('operators');
+  if (externalEntitlementType !== 'group') {
+    await page.locator('#identity-mapping-type').selectOption(externalEntitlementType);
+  }
+  await page.getByRole('textbox', { name: 'External ID' }).fill(externalEntitlementId);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
 
   await page.getByRole('button', { name: 'Create a new group', exact: true }).click();
@@ -130,12 +148,21 @@ async function createMappingThroughUi(page: Page, providerKey: string, groupKey:
   await expect(page.getByRole('table').filter({ hasText: providerKey }).getByText(groupKey, { exact: true })).toBeVisible();
 }
 
-async function signInWithKeycloak(context: BrowserContext, providerKey: string): Promise<Page> {
+async function signInWithProvider(context: BrowserContext, providerKey: string): Promise<Page> {
   const page = await context.newPage();
   await page.goto(`/api/auth/identity/${encodeURIComponent(providerKey)}/start`);
-  await page.locator('input[name="username"]').fill(keycloakUsername);
-  await page.locator('input[name="password"]').fill(keycloakPassword);
-  await page.getByRole('button', { name: /sign in/i }).click();
+  if (realEntra) {
+    await page.locator('input[name="loginfmt"], input[type="email"]').first().fill(providerUsername);
+    await page.getByRole('button', { name: /next/i }).click();
+    await page.locator('input[name="passwd"], input[type="password"]').first().fill(providerPassword);
+    await page.getByRole('button', { name: /sign in/i }).click();
+    const staySignedInNo = page.locator('#idBtn_Back');
+    if (await staySignedInNo.isVisible().catch(() => false)) await staySignedInNo.click();
+  } else {
+    await page.locator('input[name="username"]').fill(providerUsername);
+    await page.locator('input[name="password"]').fill(providerPassword);
+    await page.getByRole('button', { name: /sign in/i }).click();
+  }
   await expect(page).toHaveURL(new RegExp(`${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?:$|[?#])`));
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
   return page;
@@ -145,9 +172,9 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
   // This exercises browser administration, a real Keycloak redirect, and
   // fresh engine authorization decisions against Docker services.
   test.setTimeout(120_000);
-  test.skip(!enabled, 'Set LOCAL_OIDC_AUTHORIZATION_REHEARSAL=true with localhost and local administrator credentials.');
+  test.skip(!enabled, 'Enable the configured OIDC rehearsal and provide its EnterpriseGlue administrator credentials.');
 
-  test('creates a provider and atomic mapping through the UI, then proves scoped access and immediate revocation @local-oidc-live @identity-authorization-live', async ({ browser }) => {
+  test(`creates a ${profile} provider and atomic mapping through the UI, then proves scoped access and immediate revocation @local-oidc-live @identity-authorization-live`, async ({ browser }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const providerKey = `local-oidc-authz-${suffix}`;
     const groupKey = `group.local-oidc-authz-${suffix}`;
@@ -174,7 +201,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       await expect(admin.getByRole('dialog', { name: 'Add identity mapping' })).toBeHidden();
       await captureConfiguredMappingScreenshot(admin);
 
-      const operator = await signInWithKeycloak(operatorContext, providerKey);
+      const operator = await signInWithProvider(operatorContext, providerKey);
       const inventory = await requestJson<Engine[]>(operator, '/engines-api/engines');
       expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
       expect(inventory.body?.map((engine) => engine.id)).toEqual([allowedEngine.id]);

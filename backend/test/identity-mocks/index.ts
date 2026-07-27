@@ -21,6 +21,10 @@ export interface MockOidcProviderOptions {
   callbackUrl?: string;
 }
 
+export interface MockEntraOidcProviderOptions extends MockOidcProviderOptions {
+  tenantId?: string;
+}
+
 export interface MockSamlIdentityProviderOptions {
   issuer?: string;
   audience?: string;
@@ -155,6 +159,48 @@ export class MockOidcProvider {
       return Response.json({ groups: this.tokenClaims.groups || [], roles: this.tokenClaims.roles || [] });
     }
     return new Response('not found', { status: 404 });
+  }
+}
+
+/**
+ * Deterministic Microsoft Entra-compatible OIDC profile. It deliberately
+ * models the documented token and entitlement shapes that matter to
+ * EnterpriseGlue, without pretending to be a Microsoft service emulator.
+ * Product code still receives ordinary discovery, token, and JWKS requests.
+ */
+export class MockEntraOidcProvider extends MockOidcProvider {
+  readonly tenantId: string;
+
+  constructor(options: MockEntraOidcProviderOptions = {}) {
+    const tenantId = options.tenantId || '11111111-2222-3333-4444-555555555555';
+    super({
+      ...options,
+      issuer: options.issuer || `https://login.microsoftonline.com/${tenantId}/v2.0`,
+    });
+    this.tenantId = tenantId;
+    this.reset();
+  }
+
+  override configuration() {
+    return {
+      ...super.configuration(),
+      expectedAudience: this.clientId,
+    };
+  }
+
+  override reset(): void {
+    super.reset();
+    this.setTokenClaims({
+      sub: 'entra-subject-1',
+      oid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      tid: this.tenantId,
+      email: 'entra-operator@example.test',
+      email_verified: true,
+      preferred_username: 'entra-operator@example.test',
+      groups: ['group-id-operators'],
+      roles: ['enterpriseglue.engine_operator'],
+      nonce: 'nonce-1',
+    });
   }
 }
 

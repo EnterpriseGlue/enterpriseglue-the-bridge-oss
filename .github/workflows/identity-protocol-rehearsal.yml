@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/identity-protocol-rehearsal.yml'
+      - 'package.json'
       - 'backend/**'
       - 'frontend/**'
       - 'packages/**'
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   protocol-rehearsal:
-    name: Disposable OIDC, SAML, and LDAP browser rehearsal
+    name: Disposable OIDC, Entra-compatible OIDC, SAML, and LDAP browser rehearsal
     runs-on: ubuntu-latest
     # Start advisory while the new full-stack lane proves stable. Set this to
     # false when the team elects to make it a required branch-protection check.

@@ -97,7 +97,7 @@ fs.writeFileSync(envFile, `${Object.entries(values).map(([key, value]) => `${key
 const sourceRealm = JSON.parse(fs.readFileSync(`${rootDir}/infra/docker/keycloak/enterpriseglue-local-realm.json`, 'utf8'));
 const publicOrigin = `https://localhost:${tlsFrontendPort}`;
 for (const client of sourceRealm.clients || []) {
-  if (client.clientId === 'enterpriseglue-local') {
+  if (['enterpriseglue-local', 'enterpriseglue-local-entra'].includes(client.clientId)) {
     client.redirectUris = [...new Set([...(client.redirectUris || []), `${publicOrigin}/*`])];
     client.webOrigins = [...new Set([...(client.webOrigins || []), publicOrigin])];
   }
@@ -189,6 +189,9 @@ common_env=(
 echo '[identity-protocol-rehearsal] Running OIDC provider/mapping/browser authorization rehearsal.'
 env "${common_env[@]}" pnpm run test:oidc:local-rehearsal 2>&1 | tee "$artifact_dir/oidc-rehearsal.log"
 
+echo '[identity-protocol-rehearsal] Running Entra-compatible OIDC provider/mapping/browser authorization rehearsal.'
+env "${common_env[@]}" pnpm run test:entra:local-rehearsal 2>&1 | tee "$artifact_dir/entra-oidc-rehearsal.log"
+
 echo '[identity-protocol-rehearsal] Running signed SAML browser callback rehearsal.'
 env "${common_env[@]}" pnpm run test:saml:local-rehearsal 2>&1 | tee "$artifact_dir/saml-rehearsal.log"
 
@@ -199,7 +202,7 @@ node - "$artifact_dir/summary.txt" <<'NODE'
 const { writeFileSync } = require('node:fs');
 writeFileSync(process.argv[2], [
   'status=passed',
-  'protocols=oidc,saml,ldap',
+  'protocols=oidc,entra-compatible-oidc,saml,ldap',
   'scope=disposable-localhost-docker-stack',
   'artifacts=compose-status,service-logs,playwright-output,protocol-run-logs',
   'credentials=ephemeral-and-not-retained',

@@ -1,6 +1,12 @@
 {
   "realm": "enterpriseglue-local",
   "enabled": true,
+  "roles": {
+    "realm": [{
+      "name": "enterpriseglue.engine_operator",
+      "description": "Synthetic Entra-compatible app role for local authorization rehearsals"
+    }]
+  },
   "clients": [{
     "clientId": "enterpriseglue-local",
     "enabled": true,
@@ -27,6 +33,77 @@
       "config": {
         "claim.name": "groups",
         "full.path": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }]
+  }, {
+    "clientId": "enterpriseglue-local-entra",
+    "name": "EnterpriseGlue local Entra-compatible OIDC rehearsal",
+    "enabled": true,
+    "publicClient": true,
+    "standardFlowEnabled": true,
+    "attributes": {
+      "pkce.code.challenge.method": "S256"
+    },
+    "redirectUris": [
+      "http://localhost:5173/*",
+      "https://localhost:5443/*",
+      "https://localhost:15443/*"
+    ],
+    "webOrigins": [
+      "http://localhost:5173",
+      "https://localhost:5443",
+      "https://localhost:15443"
+    ],
+    "protocolMappers": [{
+      "name": "groups",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-group-membership-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "groups",
+        "full.path": "false",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }, {
+      "name": "Entra object ID",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "consentRequired": false,
+      "config": {
+        "user.attribute": "entra_oid",
+        "claim.name": "oid",
+        "jsonType.label": "String",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }, {
+      "name": "Entra tenant ID",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "consentRequired": false,
+      "config": {
+        "user.attribute": "entra_tid",
+        "claim.name": "tid",
+        "jsonType.label": "String",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "userinfo.token.claim": "true"
+      }
+    }, {
+      "name": "Entra app roles",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-realm-role-mapper",
+      "consentRequired": false,
+      "config": {
+        "claim.name": "roles",
+        "jsonType.label": "String",
+        "multivalued": "true",
         "id.token.claim": "true",
         "access.token.claim": "true",
         "userinfo.token.claim": "true"
@@ -77,6 +154,8 @@
   }],
   "groups": [{
     "name": "operators"
+  }, {
+    "name": "group-id-operators"
   }],
   "users": [{
     "username": "oidc-operator",
@@ -88,6 +167,20 @@
     "credentials": [{"type": "password", "value": "local-oidc-operator", "temporary": false}],
     "realmRoles": ["offline_access"],
     "groups": ["/operators"]
+  }, {
+    "username": "entra-operator",
+    "enabled": true,
+    "emailVerified": true,
+    "email": "entra-operator@localhost.test",
+    "firstName": "Entra",
+    "lastName": "Operator",
+    "attributes": {
+      "entra_oid": ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"],
+      "entra_tid": ["11111111-2222-3333-4444-555555555555"]
+    },
+    "credentials": [{"type": "password", "value": "local-entra-operator", "temporary": false}],
+    "realmRoles": ["enterpriseglue.engine_operator"],
+    "groups": ["/group-id-operators"]
   }, {
     "username": "saml-operator",
     "enabled": true,

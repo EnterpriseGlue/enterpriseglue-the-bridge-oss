@@ -7,6 +7,8 @@ const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
+const localEntraOidcRehearsalRunner = readFileSync(new URL('./run-local-entra-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
+const realEntraOidcRehearsalRunner = readFileSync(new URL('./run-entra-id-rehearsal.sh', import.meta.url), 'utf8');
 const localOidcConfigureRunner = readFileSync(new URL('./configure-local-oidc-provider.sh', import.meta.url), 'utf8');
 const localLdapConfigureRunner = readFileSync(new URL('./configure-local-ldap-provider.sh', import.meta.url), 'utf8');
 const ciIdentityProtocolRehearsalRunner = readFileSync(new URL('./run-ci-identity-protocol-rehearsals.sh', import.meta.url), 'utf8');
@@ -20,6 +22,7 @@ const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts',
 const e2eGlobalTeardown = readFileSync(new URL('../test/e2e/setup/global-teardown.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
 const identityProtocolRehearsalWorkflow = readFileSync(new URL('../.github/workflows/identity-protocol-rehearsal.yml', import.meta.url), 'utf8');
+const entraIdRehearsalWorkflow = readFileSync(new URL('../.github/workflows/entra-id-rehearsal.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
@@ -389,6 +392,24 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcConfigureRunner, /incompleteEntitlements:"fail_closed"/);
 });
 
+test('the Entra compatibility lanes distinguish local claim compatibility from opt-in real-tenant evidence', () => {
+  assert.match(scripts['test:entra:compatibility'], /identityProviderMockContracts\.test\.ts/);
+  assert.match(scripts['test:entra:local-rehearsal'], /run-local-entra-oidc-rehearsal-test\.sh/);
+  assert.match(scripts['test:entra:real-rehearsal'], /run-entra-id-rehearsal\.sh/);
+  assert.match(localEntraOidcRehearsalRunner, /LOCAL_OIDC_CLIENT_ID.*enterpriseglue-local-entra/);
+  assert.match(localEntraOidcRehearsalRunner, /LOCAL_OIDC_ENTITLEMENT_TYPE.*role/);
+  assert.match(localEntraOidcRehearsalRunner, /LOCAL_OIDC_ENTITLEMENT_ID.*enterpriseglue\.engine_operator/);
+  assert.match(realEntraOidcRehearsalRunner, /ENTRA_ID_REHEARSAL_ENABLED/);
+  assert.match(realEntraOidcRehearsalRunner, /ENTRA_ID_REHEARSAL_TEST_TENANT/);
+  assert.match(realEntraOidcRehearsalRunner, /ENTRA_ID_REHEARSAL_ALLOW_EXTERNAL/);
+  assert.match(realEntraOidcRehearsalRunner, /OIDC_REHEARSAL_PROFILE=entra-id/);
+  assert.match(realEntraOidcRehearsalRunner, /E2E_SEED_USER=false/);
+  assert.match(realEntraOidcRehearsalRunner, /ENTRA_ID_REHEARSAL_CLIENT_SECRET_REF/);
+  assert.match(entraIdRehearsalWorkflow, /environment: entra-id-test/);
+  assert.match(entraIdRehearsalWorkflow, /ENTRA_ID_REHEARSAL_SCHEDULED/);
+  assert.match(entraIdRehearsalWorkflow, /pnpm run test:entra:real-rehearsal/);
+});
+
 test('the identity browser lifecycle runner accepts the generated local TLS CA', () => {
   assert.match(scripts['test:e2e:identity-lifecycle'], /run-identity-browser-test\.sh/);
   assert.match(identityBrowserRunner, /PLAYWRIGHT_LOCAL_CA_FILE/);
@@ -431,6 +452,7 @@ test('the disposable identity-protocol CI lane keeps fresh-stack inputs and usef
   assert.match(ciIdentityProtocolRehearsalRunner, /randomBytes/);
   assert.match(ciIdentityProtocolRehearsalRunner, /generate-local-tls\.sh/);
   assert.match(ciIdentityProtocolRehearsalRunner, /test:oidc:local-rehearsal/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /test:entra:local-rehearsal/);
   assert.match(ciIdentityProtocolRehearsalRunner, /test:saml:local-rehearsal/);
   assert.match(ciIdentityProtocolRehearsalRunner, /test:ldap:local-rehearsal/);
   assert.match(ciIdentityProtocolRehearsalRunner, /down --volumes --remove-orphans/);
