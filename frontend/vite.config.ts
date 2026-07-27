@@ -103,6 +103,7 @@ export default defineConfig(({ mode }) => {
     '/git-api',
     '/vcs-api',
     '/health',
+    '/_enterpriseglue/plugins',
   ]
   try {
     const proxyConfig = require('@enterpriseglue/frontend-host/proxy-routes.json') as {

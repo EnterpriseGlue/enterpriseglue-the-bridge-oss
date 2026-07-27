@@ -11,6 +11,7 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { runWithBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { registerRoutes } from './routes/index.js';
+import { registerPluginPlatformRoutes } from './plugins/pluginRuntime.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
 
 interface CreateAppOptions {
@@ -27,6 +28,7 @@ export function registerBaseRoutes(
   options: { notificationTenantResolver?: NotificationTenantResolver } = {}
 ): void {
   registerRoutes(app, options);
+  registerPluginPlatformRoutes(app);
 }
 
 export function registerFinalMiddleware(
@@ -72,7 +74,14 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
         imgSrc: ["'self'", 'data:'],
         connectSrc: ["'self'"],
         fontSrc: ["'self'", 'data:'],
+        workerSrc: ["'none'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'none'"],
+        frameSrc: ["'none'"],
         frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'self'"],
+        manifestSrc: ["'self'"],
       },
     },
     hsts: {

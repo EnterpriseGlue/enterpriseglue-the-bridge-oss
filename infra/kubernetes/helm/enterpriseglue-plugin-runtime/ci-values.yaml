@@ -1,0 +1,50 @@
+pluginRuntime:
+  schemaVersion: 1
+  stateRevision: 1
+  plugins:
+    - id: io.enterpriseglue.reference
+      version: 1.0.0
+      dataSchemaVersion: 2
+      manifestSha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      bundle: registry.example/plugins/reference@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+      image: registry.example/plugins/reference-backend@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+      assets:
+        stagedPath: ./plugins/io.enterpriseglue.reference/1.0.0
+      service:
+        containerPort: 8080
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
+        tmpfsMiB: 32
+        cpuLimit: 250m
+        memoryLimitMiB: 256
+      configuration:
+        - name: EXAMPLE_ENDPOINT
+          source: deployment_config
+          reference: example-endpoint
+          required: true
+        - name: API_TOKEN
+          source: secret_reference
+          reference: example-token
+          required: true
+        - name: SIGNED_CONFIG
+          source: deployment_file
+          reference: example-signed-config.json
+          required: true
+      storage:
+        - name: data
+          mountPath: /var/lib/plugin
+          readOnly: false
+          sizeMiB: 128
+      network:
+        ingress: host-gateway-only
+        egressPolicy: none
+      probes:
+        healthPath: /_plugin/health
+        readyPath: /_plugin/ready
+        initialDelaySeconds: 2
+        periodSeconds: 10
+        timeoutSeconds: 2
+        failureThreshold: 3
+
+persistentVolumeClaims:
+  create: true

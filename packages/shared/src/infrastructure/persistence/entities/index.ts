@@ -45,6 +45,28 @@ export { PasswordResetToken } from './PasswordResetToken.js';
 export { PendingChange } from './PendingChange.js';
 export { PermissionGrant } from './PermissionGrant.js';
 export { PlatformSettings } from './PlatformSettings.js';
+export {
+  PluginPlatformState,
+  PluginEmergencyControlOperation,
+  PluginInstallation,
+  PluginBrokerReplay,
+  PluginStorageEntry,
+  PluginGatewayAdmissionState,
+  PluginGatewaySubjectBucket,
+  PluginGatewayConcurrencyLease,
+  PluginEventDelivery,
+  PluginEventSubscriptionState,
+  PluginEventQueueState,
+  PluginNotificationPublication,
+  PluginScheduledJob,
+  PluginScheduleCommand,
+  PluginContributionAvailabilityState,
+  PluginLifecycleOperation,
+  PluginPermissionGrant,
+  PluginPlatformAudit,
+  PluginTenantEnablement,
+  pluginPlatformEntities,
+} from './PluginPlatform.js';
 export { Project } from './Project.js';
 export { ProjectMember } from './ProjectMember.js';
 export { ProjectMemberRole } from './ProjectMemberRole.js';

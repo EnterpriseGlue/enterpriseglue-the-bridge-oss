@@ -1,0 +1,71 @@
+name: Plugin platform SQL Server
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
+  pull_request:
+    paths:
+      - '.github/workflows/plugin-platform-mssql.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/backend-host/package.json'
+      - 'packages/backend-host/src/plugins/**'
+      - 'packages/shared/package.json'
+      - 'packages/shared/src/db/migrations/**'
+      - 'packages/shared/src/infrastructure/persistence/adapters/SqlServerAdapter.ts'
+      - 'packages/shared/src/infrastructure/persistence/entities/PluginPlatform.ts'
+      - 'packages/shared/src/infrastructure/persistence/pluginColumnPolicy.ts'
+      - 'scripts/check-plugin-platform-mssql.*'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/plugin-platform-mssql.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/backend-host/package.json'
+      - 'packages/backend-host/src/plugins/**'
+      - 'packages/shared/package.json'
+      - 'packages/shared/src/db/migrations/**'
+      - 'packages/shared/src/infrastructure/persistence/adapters/SqlServerAdapter.ts'
+      - 'packages/shared/src/infrastructure/persistence/entities/PluginPlatform.ts'
+      - 'packages/shared/src/infrastructure/persistence/pluginColumnPolicy.ts'
+      - 'scripts/check-plugin-platform-mssql.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-platform-mssql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  connected-mssql:
+    name: Connected SQL Server plugin acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IBM_TELEMETRY_DISABLED: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 11.0.8
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install immutable dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run connected SQL Server plugin gate
+        run: pnpm test:plugin-platform:mssql

@@ -1,10 +1,9 @@
 import type { EnterpriseFrontendPlugin, FrontendPluginContext } from '@enterpriseglue/enterprise-plugin-api/frontend';
 import type { ComponentType } from 'react';
+import type { RouteObject } from 'react-router-dom';
 import { 
-  registerComponentOverride, 
-  registerFeatureOverride,
-  registerNavItem,
-  markInitialized,
+  LEGACY_ENTERPRISE_PLUGIN_OWNER,
+  replacePluginExtensions,
   type NavExtension,
 } from './extensionRegistry';
 import { apiClient, ApiError } from '../shared/api/client';
@@ -90,35 +89,6 @@ function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
 
   const plugin = pluginCandidate as FrontendPluginRuntimeShape;
 
-  // Register component overrides with extension registry
-  if (Array.isArray(plugin.componentOverrides)) {
-    for (const override of plugin.componentOverrides) {
-      if (isComponentOverrideCandidate(override)) {
-        registerComponentOverride(override.name, override.component);
-      }
-    }
-  }
-
-  // Register feature overrides from plugin
-  // The plugin already handles feature flag checking internally
-  if (Array.isArray(plugin.featureOverrides)) {
-    for (const override of plugin.featureOverrides) {
-      if (isFeatureOverrideCandidate(override)) {
-        registerFeatureOverride(override);
-      }
-    }
-  }
-
-  // Register nav items from plugin
-  // These appear in the sidebar/header menus
-  if (Array.isArray(plugin.navItems)) {
-    for (const item of plugin.navItems) {
-      if (isNavItemCandidate(item)) {
-        registerNavItem(item);
-      }
-    }
-  }
-
   // Provide shared host utilities to the plugin via dependency injection
   if (typeof plugin.init === 'function') {
     const context: FrontendPluginContext = {
@@ -138,15 +108,37 @@ function registerPlugin(pluginCandidate: unknown): EnterpriseFrontendPlugin {
     plugin.init(context);
   }
 
-  // Mark registry as initialized
-  markInitialized();
+  const routes = Array.isArray(plugin.routes) ? plugin.routes : [];
+  const tenantRoutes = Array.isArray(plugin.tenantRoutes)
+    ? plugin.tenantRoutes
+    : [];
+  const registryRoutes = routes as unknown as RouteObject[];
+  const registryTenantRoutes = tenantRoutes as unknown as RouteObject[];
+  const legacyNavItems = Array.isArray(plugin.navItems) ? plugin.navItems : [];
+  const navItems: NavExtension[] = legacyNavItems.length > 0
+    ? (legacyNavItems as unknown[]).filter(isNavItemCandidate)
+    : [];
+  const componentOverrides = Array.isArray(plugin.componentOverrides)
+    ? plugin.componentOverrides.filter(isComponentOverrideCandidate)
+    : [];
+  const featureOverrides = Array.isArray(plugin.featureOverrides)
+    ? plugin.featureOverrides.filter(isFeatureOverrideCandidate)
+    : [];
+
+  replacePluginExtensions(LEGACY_ENTERPRISE_PLUGIN_OWNER, {
+    rootRoutes: registryRoutes,
+    tenantRoutes: registryTenantRoutes,
+    navItems,
+    componentOverrides,
+    featureOverrides,
+  });
 
   console.log('[Enterprise] Frontend plugin loaded');
 
   return {
-    routes: Array.isArray(plugin.routes) ? plugin.routes : [],
-    tenantRoutes: Array.isArray(plugin.tenantRoutes) ? plugin.tenantRoutes : [],
-    navItems: Array.isArray(plugin.navItems) ? plugin.navItems : [],
+    routes,
+    tenantRoutes,
+    navItems: legacyNavItems,
     menuItems: Array.isArray(plugin.menuItems) ? plugin.menuItems : [],
   };
 }

@@ -1,0 +1,29 @@
+{
+  "ajv@8.20.0": {
+    "licenses": "MIT",
+    "repository": "ajv-validator/ajv",
+    "publisher": "Evgeny Poberezkin"
+  },
+  "es-module-lexer@2.1.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/guybedford/es-module-lexer.git",
+    "publisher": "Guy Bedford"
+  },
+  "semver@7.7.4": {
+    "licenses": "ISC",
+    "repository": "git+https://github.com/npm/node-semver.git",
+    "publisher": "GitHub Inc."
+  },
+  "yaml@2.8.4": {
+    "licenses": "ISC",
+    "repository": "github:eemeli/yaml",
+    "publisher": "Eemeli Aro",
+    "email": "eemeli@gmail.com"
+  },
+  "zod@4.4.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/colinhacks/zod.git",
+    "publisher": "Colin McDonnell",
+    "email": "zod@colinhacks.com"
+  }
+}

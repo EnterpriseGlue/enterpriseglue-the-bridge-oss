@@ -1,0 +1,61 @@
+{
+  "apiVersion": "diagnostic-collector-policy.plugin.enterpriseglue.io/v1",
+  "plugins": [
+    {
+      "pluginId": "com.example.vendor.support",
+      "enabled": false,
+      "policyRevision": "reviewed-policy-2026-07-26",
+      "signingKeyId": "customer-collector-key-1",
+      "signingPrivateKeyFile": "/run/enterpriseglue/collector/secrets/signing-key.pem",
+      "bearerTokenFile": "/run/enterpriseglue/collector/secrets/support-token",
+      "handoffEndpoint": "https://support.vendor.example/api/v1/diagnostic-bundles",
+      "timeoutMs": 10000,
+      "bundleTtlSeconds": 300,
+      "sources": [
+        {
+          "sourceId": "com.example.source.plain-engine-log",
+          "kind": "file_tail",
+          "path": "/run/enterpriseglue/collector/logs/plain/engine.log",
+          "engineRefs": [
+            "engine-plain-example"
+          ],
+          "profiles": [
+            "incident_minimal",
+            "failed_job_minimal",
+            "engine_health"
+          ],
+          "maxBytes": 65536,
+          "maxLines": 1000
+        },
+        {
+          "sourceId": "com.example.source.docker-engine-log",
+          "kind": "docker_json_file_tail",
+          "path": "/run/enterpriseglue/collector/logs/docker/engine-json.log",
+          "engineRefs": [
+            "engine-docker-example"
+          ],
+          "profiles": [
+            "incident_minimal",
+            "failed_job_minimal"
+          ],
+          "maxBytes": 65536,
+          "maxLines": 1000
+        },
+        {
+          "sourceId": "com.example.source.cri-engine-log",
+          "kind": "kubernetes_cri_file_tail",
+          "path": "/run/enterpriseglue/collector/logs/cri/engine.log",
+          "engineRefs": [
+            "engine-cri-example"
+          ],
+          "profiles": [
+            "incident_minimal",
+            "failed_job_minimal"
+          ],
+          "maxBytes": 65536,
+          "maxLines": 1000
+        }
+      ]
+    }
+  ]
+}

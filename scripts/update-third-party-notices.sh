@@ -47,22 +47,44 @@ if [[ "$CHECK_MODE" == "true" && -f THIRD_PARTY_NOTICES.md ]]; then
   fi
 fi
 
-node scripts/generate-third-party-notices.mjs
-
 generated_files=(
   THIRD_PARTY_NOTICES.md
   third_party_licenses.json
 )
 
-while IFS= read -r generated_file; do
-  generated_files+=("$generated_file")
-done < <(find backend frontend packages -mindepth 1 -maxdepth 2 -name third_party_licenses.json -print 2>/dev/null | LC_ALL=C sort)
+while IFS= read -r package_file; do
+  generated_files+=("${package_file%/package.json}/third_party_licenses.json")
+done < <(find backend frontend packages -mindepth 1 -maxdepth 2 -name package.json -print 2>/dev/null | LC_ALL=C sort)
+
+snapshot_manifest() {
+  local output_file="$1"
+  : > "$output_file"
+  for generated_file in "${generated_files[@]}"; do
+    if [[ -f "$generated_file" ]]; then
+      shasum -a 256 "$generated_file" >> "$output_file"
+    else
+      printf 'MISSING  %s\n' "$generated_file" >> "$output_file"
+    fi
+  done
+}
+
+before_manifest=""
+after_manifest=""
+if [[ "$CHECK_MODE" == "true" ]]; then
+  before_manifest="$(mktemp)"
+  after_manifest="$(mktemp)"
+  trap 'rm -f "$before_manifest" "$after_manifest"' EXIT
+  snapshot_manifest "$before_manifest"
+fi
+
+node scripts/generate-third-party-notices.mjs
 
 if [[ "$CHECK_MODE" == "true" ]]; then
-  if [[ -n "$(git status --porcelain -- "${generated_files[@]}")" ]]; then
+  snapshot_manifest "$after_manifest"
+  if ! cmp -s "$before_manifest" "$after_manifest"; then
     echo "❌ Third-party notice artifacts are out of date. Re-run:" >&2
     echo "   bash ./scripts/update-third-party-notices.sh" >&2
-    git --no-pager diff -- "${generated_files[@]}" || true
+    diff -u "$before_manifest" "$after_manifest" || true
     exit 1
   fi
   echo "✅ Third-party notice artifacts are up to date."

@@ -138,7 +138,8 @@ pnpm run prod:images:oracle:down
 - [Docker Deployment (Dev + Production)](docs/how-to/deploy-docker.md)
 - [OpenShift Deployment](docs/how-to/deploy-openshift.md)
 - [Configuration Reference](docs/reference/configuration.md)
-- [Platform Modules Overview](docs/explanation/platform-modules.md)
+- [Architecture Overview](docs/architecture/00-architecture-overview.md)
+- [OSS Plugin Platform and Authoring Guide](docs/architecture/12-plugin-platform-and-authoring.md)
 
 ## Modules (High-Level)
 - **Voyager**: UI shell and feature modules.

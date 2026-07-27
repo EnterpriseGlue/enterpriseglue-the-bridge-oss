@@ -34,6 +34,7 @@ const PlatformSettingsPage = React.lazy(() => import('../features/platform-admin
 const SsoMappings = React.lazy(() => import('../features/platform-admin/pages/SsoMappings'))
 const AuthzPolicies = React.lazy(() => import('../features/platform-admin/pages/AuthzPolicies'))
 const AuthzAuditLog = React.lazy(() => import('../features/platform-admin/pages/AuthzAuditLog'))
+const PluginManagement = React.lazy(() => import('../features/platform-admin/pages/PluginManagement'))
 
 // EE-only pages (rendered via ExtensionPage)
 import { ExtensionPage } from '../enterprise/ExtensionSlot'
@@ -158,6 +159,16 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       )
     }] : []),
     ...(!multiTenantEnabled ? [
+      {
+        path: `${pathPrefix}admin/plugins`,
+        element: (
+          <ProtectedRoute requireAdmin>
+            <LazyRoute message="Loading plugin management...">
+              <PluginManagement />
+            </LazyRoute>
+          </ProtectedRoute>
+        )
+      },
       {
         path: `${pathPrefix}admin/settings/git`,
         element: (

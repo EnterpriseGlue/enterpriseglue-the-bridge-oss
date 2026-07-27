@@ -182,7 +182,7 @@ async function writeNormalizedJson(jsonPath, data) {
 function runNpmLs(repoRoot, workspace) {
   const isPnpm = existsSync(path.join(repoRoot, 'pnpm-lock.yaml'));
   const args = isPnpm 
-    ? ['list', '--json', '--depth=0']
+    ? ['list', '--json', '--prod', '--depth=Infinity']
     : ['ls', '--omit=dev', '--all', '--json'];
   
   if (workspace) {
@@ -193,32 +193,47 @@ function runNpmLs(repoRoot, workspace) {
     }
   }
 
-  const result = spawnSync(isPnpm ? 'pnpm' : 'npm', args, {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
+  const candidates = isPnpm
+    ? [
+        { command: 'pnpm', args },
+        { command: 'corepack', args: ['pnpm', ...args] },
+      ]
+    : [{ command: 'npm', args }];
+  const failures = [];
 
-  const output = String(result.stdout || '').trim();
-  if (!output) {
-    throw new Error(`${isPnpm ? 'pnpm' : 'npm'} ls returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
-  }
-
-  const parsed = JSON.parse(output);
-  
-  // pnpm returns an array of workspace packages, npm returns a single object
-  if (isPnpm) {
-    if (workspace) {
-      // When using --filter, pnpm returns a single entry for the filtered workspace
-      if (!parsed || parsed.length === 0) {
-        throw new Error(`pnpm list: workspace ${workspace} not found`);
-      }
-      return parsed[0];
+  for (const candidate of candidates) {
+    const result = spawnSync(candidate.command, candidate.args, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+    const output = String(result.stdout || '').trim();
+    if (!output) {
+      failures.push(
+        `${candidate.command} returned no JSON: ${String(result.stderr || '').trim()}`,
+      );
+      continue;
     }
-    // For root, return the first entry (root package)
-    return parsed[0];
+
+    try {
+      const parsed = JSON.parse(output);
+      const tree = Array.isArray(parsed) ? parsed[0] : parsed;
+      if (!tree || typeof tree !== 'object' || tree.error) {
+        failures.push(
+          `${candidate.command} returned an error: ${JSON.stringify(tree?.error || tree)}`,
+        );
+        continue;
+      }
+      return tree;
+    } catch (error) {
+      failures.push(
+        `${candidate.command} returned invalid JSON: ${String(error)}`,
+      );
+    }
   }
-  
-  return parsed;
+
+  throw new Error(
+    `Unable to inspect runtime dependencies for ${workspace || 'root'}: ${failures.join('; ')}`,
+  );
 }
 
 function findInstalledPackageDir(packageName, startDir, repoRoot) {
@@ -371,7 +386,11 @@ async function buildSourceEntries(source, context, seenInternalPackages = new Se
         return nextTree;
       })();
 
-  const rootNode = source.isRoot ? tree : tree.dependencies?.[source.packageName];
+  const rootNode = source.isRoot
+    ? tree
+    : tree.name === source.packageName
+      ? tree
+      : tree.dependencies?.[source.packageName];
   const dependencyNodes = source.isRoot ? tree.dependencies || {} : rootNode?.dependencies || {};
 
   for (const dependencyName of runtimeDependencyNames) {

@@ -1,0 +1,22 @@
+{
+  "name": "@enterpriseglue/plugin-reference",
+  "version": "0.1.0",
+  "description": "Minimal independent reference plugin for the EnterpriseGlue OSS plugin platform",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/build-bundle.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@enterpriseglue/plugin-runtime": "workspace:*",
+    "@enterpriseglue/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

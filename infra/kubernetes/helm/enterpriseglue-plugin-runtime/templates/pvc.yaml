@@ -1,0 +1,24 @@
+{{- if .Values.persistentVolumeClaims.create }}
+{{- range $plugin := .Values.pluginRuntime.plugins }}
+{{- $context := dict "root" $ "plugin" $plugin }}
+{{- range $storage := $plugin.storage }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "enterpriseglue-plugin-runtime.pvcname" (dict "root" $ "plugin" $plugin "storage" $storage) }}
+  labels:
+    {{- include "enterpriseglue-plugin-runtime.labels" $context | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+    io.enterpriseglue/plugin-id: {{ $plugin.id | quote }}
+    io.enterpriseglue/data-schema: {{ printf "%d" (int $plugin.dataSchemaVersion) | quote }}
+    io.enterpriseglue/storage-name: {{ $storage.name | quote }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ printf "%dMi" (int $storage.sizeMiB) | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

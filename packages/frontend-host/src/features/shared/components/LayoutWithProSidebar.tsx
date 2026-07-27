@@ -31,6 +31,10 @@ import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot } from '../../../enterprise/ExtensionSlot'
 import { isMultiTenantEnabled, getNavItemsBySection, type NavExtension } from '../../../enterprise/extensionRegistry'
+import {
+  getNativePluginNavigationV1,
+  NativePluginSlotV1,
+} from '../../../plugins/nativePluginRuntime'
 
 interface TenantBranding {
   logoUrl: string | null;
@@ -52,6 +56,7 @@ const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 type EnterpriseNavItem = {
   label: string
   path: string
+  scope?: 'root' | 'tenant'
 }
 
 type NotificationItem = {
@@ -590,7 +595,13 @@ export default function LayoutWithProSidebar() {
     getEnterpriseFrontendPlugin()
       .then((plugin) => {
         if (cancelled) return
-        setEnterpriseNavItems(normalizeEnterpriseNavItems((plugin as any)?.navItems))
+        const legacyItems = normalizeEnterpriseNavItems((plugin as any)?.navItems)
+        const nativeItems = getNativePluginNavigationV1().map((item) => ({
+          label: item.label,
+          path: item.path,
+          scope: item.scope,
+        }))
+        setEnterpriseNavItems([...legacyItems, ...nativeItems])
       })
       .catch(() => {
         if (cancelled) return
@@ -731,9 +742,9 @@ export default function LayoutWithProSidebar() {
                     {enterpriseNavItems.map((item) => (
                       <HeaderMenuItem
                         key={`${item.path}:${item.label}`}
-                        href={toTenantPath(item.path)}
+                        href={item.scope === 'root' ? item.path : toTenantPath(item.path)}
                         isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
-                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
+                        onClick={(e) => { e.preventDefault(); navigate(item.scope === 'root' ? item.path : toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
                       >
                         {item.label}
                       </HeaderMenuItem>
@@ -790,6 +801,15 @@ export default function LayoutWithProSidebar() {
                 )}
               </HeaderNavigation>
               <HeaderGlobalBar>
+                <NativePluginSlotV1
+                  slot="global.header.actions.v1"
+                  context={{
+                    schemaVersion: 1,
+                    disabled: false,
+                    tenantRef: tenantSlug ?? undefined,
+                    theme: 'g100',
+                  }}
+                />
                 <HeaderGlobalAction
                   aria-label="Notifications"
                   tooltipAlignment="center"
