@@ -722,17 +722,41 @@ async function ensureInvocationKeyPair(output: string): Promise<void> {
       'Plugin invocation key pair is incomplete; restore both files or rotate both explicitly',
     );
   }
-  if (privateExists) return;
+  if (!privateExists) {
+    const pair = generateKeyPairSync('ed25519');
+    await atomicWrite(
+      privatePath,
+      pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
+    );
+    await atomicWrite(
+      publicPath,
+      pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+    );
+  }
 
-  const pair = generateKeyPairSync('ed25519');
-  await atomicWrite(
-    privatePath,
-    pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
-  );
-  await atomicWrite(
-    publicPath,
-    pair.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
-  );
+  const [privateDetails, publicDetails] = await Promise.all([
+    lstat(privatePath),
+    lstat(publicPath),
+  ]);
+  if (
+    !privateDetails.isFile() ||
+    privateDetails.isSymbolicLink() ||
+    !publicDetails.isFile() ||
+    publicDetails.isSymbolicLink()
+  ) {
+    throw new Error(
+      'Plugin invocation keys must be regular non-symlink files',
+    );
+  }
+
+  // The host-only signing key stays owner-readable. The public verification
+  // key is deliberately non-secret and must be readable by the fixed
+  // non-root sidecar UID when native Linux bind mounts preserve host
+  // ownership and permissions.
+  await Promise.all([
+    chmod(privatePath, 0o600),
+    chmod(publicPath, 0o644),
+  ]);
 }
 
 async function ensureSecretBrokerInputs(output: string): Promise<void> {

@@ -31,3 +31,7 @@ in the runtime image, return success only for the exact expected liveness body, 
 Node.js, a JVM, or another application runtime just to perform a probe. Keep product readiness
 logic in the readiness endpoint; the liveness probe should answer only whether the process can
 serve its fixed health contract.
+
+The host mounts its generated invocation verification key read-only. This public key is
+deliberately mode `0644`, while the corresponding host-only private key stays `0600`, so the
+fixed non-root sidecar can read the key on native Linux without weakening signing-key custody.

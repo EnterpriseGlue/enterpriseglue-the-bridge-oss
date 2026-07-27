@@ -489,6 +489,13 @@ It scopes the object; it never grants the broker permission. The broker denies t
 one of these values is absent or mismatched. Plugin conformance tests must exercise every denial,
 not only the successful path.
 
+The installer generates an Ed25519 invocation key pair for the host/sidecar boundary. The private
+signing key remains an owner-readable regular file at mode `0600`. The public verification key is
+also validated as a regular non-symlink file but is projected at mode `0644`: it is not secret,
+and the fixed UID 65532 sidecar must be able to read a native-Linux bind mount whose host owner is
+the installer account. Docker Desktop file sharing can mask an incorrect `0600` public-key mode,
+so native-Linux permission behavior is part of Compose release acceptance.
+
 The binding source is exact. `source: body` resolves only the declared nested field after the
 closed request schema passes. `source: path` requires the operation path to contain exactly one
 complete `:field` segment matching the binding field. The request must replace it with one safe
