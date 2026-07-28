@@ -80,6 +80,15 @@
   height: min(92vh, 54rem);
 }
 
+/* The provider form is intentionally dense. Without a zero minimum grid size,
+   its Carbon modal-content row expands to the form's intrinsic height instead
+   of becoming the intended scroll region. Lower OIDC/SAML/LDAP controls then
+   sit behind the fixed footer on laptop-height viewports. */
+.cds--modal-container:has(.eg-identity-provider-form) .cds--modal-content {
+  min-block-size: 0;
+  overscroll-behavior: contain;
+}
+
 @media (max-width: 66rem) {
   .eg-identity-provider-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));

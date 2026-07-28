@@ -38,8 +38,9 @@ const localOidcOperatorSubjectId = process.env.LOCAL_OIDC_TEST_SUBJECT_ID || '11
 const runsLocalIdentityRecovery = !realEntra && clientId === 'enterpriseglue-local';
 
 type Engine = { id: string; name: string };
-type Mapping = { id: string; providerKey: string; isActive: boolean };
+type Mapping = { id: string; providerKey: string; targetGroupId: string; isActive: boolean };
 type SessionUser = { id: string };
+type ProvisionedMapping = { mapping: Mapping; assignment: { id: string }; createdGroup: { id: string } | null };
 
 async function captureConfiguredMappingScreenshot(page: Page): Promise<void> {
   const screenshotDirectory = process.env.OIDC_REHEARSAL_SCREENSHOT_DIR || process.env.LOCAL_OIDC_SCREENSHOT_DIR;
@@ -96,6 +97,16 @@ async function createEngine(page: Page, csrf: string, name: string): Promise<Eng
   return result.body!;
 }
 
+async function fillProviderField(page: Page, selector: string, value: string): Promise<void> {
+  const field = page.locator(selector);
+  // Carbon's modal body is independently scrollable on laptop-height
+  // viewports. Make that keyboard-equivalent scroll explicit before filling
+  // a lower optional field, so the test proves it remains reachable above the
+  // fixed modal footer instead of relying on a larger CI viewport.
+  await field.scrollIntoViewIfNeeded();
+  await field.fill(value);
+}
+
 async function createProviderThroughUi(page: Page, providerKey: string): Promise<void> {
   await page.goto('/admin/settings');
   await page.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
@@ -105,18 +116,19 @@ async function createProviderThroughUi(page: Page, providerKey: string): Promise
   const emailLinkingToggle = page.getByLabel('Allow verified email account linking');
   if (await emailLinkingToggle.getAttribute('aria-checked') !== 'true') await emailLinkingToggle.press('Space');
   await expect(emailLinkingToggle).toHaveAttribute('aria-checked', 'true');
-  await page.getByLabel('Issuer URL').fill(issuerUrl);
-  await page.getByLabel('Client ID').fill(clientId);
-  if (clientSecretRef) await page.getByLabel('Client secret reference (optional)').fill(clientSecretRef);
-  if (directoryTenantId) await page.getByLabel('Directory tenant ID (optional)').fill(directoryTenantId);
-  await page.getByLabel('Callback URL').fill(`${baseUrl.replace(/\/$/, '')}/api/auth/identity/callback`);
-  await page.getByLabel('Scopes').fill(oidcScopes);
-  await page.getByLabel('Group claim (optional)').fill('groups');
-  await page.getByLabel('Expected audience (optional)').fill(clientId);
+  await fillProviderField(page, '#identity-provider-issuer', issuerUrl);
+  await fillProviderField(page, '#identity-provider-client-id', clientId);
+  if (clientSecretRef) await fillProviderField(page, '#identity-provider-secret-ref', clientSecretRef);
+  if (directoryTenantId) await fillProviderField(page, '#identity-provider-directory-tenant', directoryTenantId);
+  await fillProviderField(page, '#identity-provider-callback', `${baseUrl.replace(/\/$/, '')}/api/auth/identity/callback`);
+  await fillProviderField(page, '#identity-provider-scopes', oidcScopes);
+  await fillProviderField(page, '#identity-provider-group-claim', 'groups');
+  await fillProviderField(page, '#identity-provider-expected-audience', clientId);
   // Carbon renders this toggle as a button with role=switch, not a native
   // checkbox. Keyboard activation avoids modal scrolling/overlay geometry and
   // exercises the accessible switch interaction a keyboard user receives.
   const enabledToggle = page.getByLabel('Enable provider');
+  await enabledToggle.scrollIntoViewIfNeeded();
   if (await enabledToggle.getAttribute('aria-checked') !== 'true') await enabledToggle.press('Space');
   await expect(enabledToggle).toHaveAttribute('aria-checked', 'true');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -154,6 +166,38 @@ async function createMappingThroughUi(page: Page, providerKey: string, groupKey:
   await expect(page.getByRole('table').filter({ hasText: providerKey }).getByText(groupKey, { exact: true })).toBeVisible();
 }
 
+async function provisionAdditionalScopedRight(
+  page: Page,
+  csrf: string,
+  input: { providerKey: string; groupKey: string; groupName: string; engine: Engine },
+): Promise<ProvisionedMapping> {
+  // This is the public, transactional API behind the mapping wizard. Keeping
+  // the first grant in the UI and using this endpoint for the second grant
+  // proves that a headless change can add a right without replacing the first.
+  const result = await requestJson<ProvisionedMapping>(page, '/api/identity/mappings/provision-access', {
+    method: 'POST',
+    csrf,
+    data: {
+      providerKey: input.providerKey,
+      entitlementType: externalEntitlementType,
+      externalId: externalEntitlementId,
+      matchOperator: 'exact',
+      syncMode: 'authoritative',
+      newGroup: { key: input.groupKey, name: input.groupName },
+      roleId: 'system.engine.operator',
+      resourceType: 'engine',
+      resourceId: input.engine.id,
+    },
+  });
+  expect(result.status, JSON.stringify(result.body)).toBe(201);
+  expect(result.body).toMatchObject({
+    mapping: { providerKey: input.providerKey, isActive: true },
+    assignment: { id: expect.any(String) },
+    createdGroup: { id: expect.any(String) },
+  });
+  return result.body!;
+}
+
 async function signInWithProvider(context: BrowserContext, providerKey: string): Promise<Page> {
   const page = await context.newPage();
   await page.goto(`/api/auth/identity/${encodeURIComponent(providerKey)}/start`);
@@ -180,15 +224,20 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
   test.setTimeout(120_000);
   test.skip(!enabled, 'Enable the configured OIDC rehearsal and provide its EnterpriseGlue administrator credentials.');
 
-  test(`creates a ${profile} provider and atomic mapping through the UI, then proves scoped access and immediate revocation @local-oidc-live @identity-authorization-live`, async ({ browser }) => {
+  test(`creates a ${profile} provider and independently adds and removes scoped rights through the UI @local-oidc-live @identity-authorization-live`, async ({ browser }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const providerKey = `local-oidc-authz-${suffix}`;
-    const groupKey = `group.local-oidc-authz-${suffix}`;
-    const groupName = `Local OIDC authorization ${suffix}`;
+    const viewGroupKey = `group.local-oidc-view-${suffix}`;
+    const viewGroupName = `Local OIDC view authorization ${suffix}`;
+    const operateGroupKey = `group.local-oidc-operate-${suffix}`;
+    const operateGroupName = `Local OIDC operate authorization ${suffix}`;
     const adminContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
     const operatorContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
     const admin = await adminContext.newPage();
     const createdEngines: Engine[] = [];
+    const createdGroupIds: string[] = [];
+    const createdAssignmentIds: string[] = [];
+    let elevatedOperatorContext: BrowserContext | null = null;
     let recoveredOperatorContext: BrowserContext | null = null;
 
     try {
@@ -199,24 +248,47 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       createdEngines.push(allowedEngine, siblingEngine);
 
       await createProviderThroughUi(admin, providerKey);
-      await createMappingThroughUi(admin, providerKey, groupKey, groupName, allowedEngine);
+      await createMappingThroughUi(admin, providerKey, viewGroupKey, viewGroupName, allowedEngine);
 
-      const mappings = await requestJson<Mapping[]>(admin, '/api/identity/mappings');
-      expect(mappings.status).toBe(200);
-      const mapping = mappings.body?.find((candidate) => candidate.providerKey === providerKey);
-      expect(mapping).toMatchObject({ isActive: true });
+      const initialMappings = await requestJson<Mapping[]>(admin, '/api/identity/mappings');
+      expect(initialMappings.status).toBe(200);
+      const viewMapping = initialMappings.body?.find((candidate) => candidate.providerKey === providerKey);
+      expect(viewMapping).toMatchObject({ isActive: true });
+      if (viewMapping) createdGroupIds.push(viewMapping.targetGroupId);
       await expect(admin.getByRole('dialog', { name: 'Add identity mapping' })).toBeHidden();
       await captureConfiguredMappingScreenshot(admin);
 
       const operator = await signInWithProvider(operatorContext, providerKey);
-      const inventory = await requestJson<Engine[]>(operator, '/engines-api/engines');
-      expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
-      expect(inventory.body?.map((engine) => engine.id)).toEqual([allowedEngine.id]);
+      const initialInventory = await requestJson<Engine[]>(operator, '/engines-api/engines');
+      expect(initialInventory.status, JSON.stringify(initialInventory.body)).toBe(200);
+      expect(initialInventory.body?.map((engine) => engine.id)).toEqual([allowedEngine.id]);
 
       const allowed = await requestJson<Engine>(operator, `/engines-api/engines/${allowedEngine.id}`);
       expect(allowed.status).toBe(200);
-      const sibling = await requestJson(operator, `/engines-api/engines/${siblingEngine.id}`);
-      expect([403, 404]).toContain(sibling.status);
+      const initiallyDeniedSibling = await requestJson(operator, `/engines-api/engines/${siblingEngine.id}`);
+      expect([403, 404]).toContain(initiallyDeniedSibling.status);
+
+      // Add an independent right for the same upstream entitlement. A fresh
+      // sign-in is required so the mandatory reconciliation creates only this
+      // newly mapped provider membership, while retaining the existing one.
+      const provisionedRight = await provisionAdditionalScopedRight(admin, csrf, {
+        providerKey,
+        groupKey: operateGroupKey,
+        groupName: operateGroupName,
+        engine: siblingEngine,
+      });
+      createdGroupIds.push(provisionedRight.createdGroup!.id);
+      createdAssignmentIds.push(provisionedRight.assignment.id);
+      const operateMapping = provisionedRight.mapping;
+      expect(operateMapping).toMatchObject({ isActive: true });
+
+      elevatedOperatorContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
+      const elevatedOperator = await signInWithProvider(elevatedOperatorContext, providerKey);
+      const elevatedInventory = await requestJson<Engine[]>(elevatedOperator, '/engines-api/engines');
+      expect(elevatedInventory.status, JSON.stringify(elevatedInventory.body)).toBe(200);
+      expect(elevatedInventory.body?.map((engine) => engine.id).sort()).toEqual([allowedEngine.id, siblingEngine.id].sort());
+      expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${allowedEngine.id}`)).status).toBe(200);
+      expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${siblingEngine.id}`)).status).toBe(200);
 
       // Keycloak's deterministic fixture user lets this use the real recovery
       // UI and backend data instead of a browser-only identity mock. Entra's
@@ -224,7 +296,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       // provider/mapping authorization coverage above.
       let recoveredOperator: Page | null = null;
       if (runsLocalIdentityRecovery) {
-        const session = await requestJson<SessionUser>(operator, '/api/auth/me');
+        const session = await requestJson<SessionUser>(elevatedOperator, '/api/auth/me');
         expect(session.status, JSON.stringify(session.body)).toBe(200);
         expect(session.body?.id).toBeTruthy();
 
@@ -239,23 +311,38 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
         await conflictDialog.getByRole('button', { name: /Unlink external identity/ }).click();
         await expect(admin.getByText(`External identity unlinked: ${providerKey}`, { exact: true })).toBeVisible();
 
-        const unlinkedSession = await requestJson(operator, `/engines-api/engines/${allowedEngine.id}`);
+        const unlinkedSession = await requestJson(elevatedOperator, `/engines-api/engines/${allowedEngine.id}`);
         expect([401, 403, 404]).toContain(unlinkedSession.status);
 
         recoveredOperatorContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
         recoveredOperator = await signInWithProvider(recoveredOperatorContext, providerKey);
-        const recoveredAccess = await requestJson<Engine>(recoveredOperator, `/engines-api/engines/${allowedEngine.id}`);
-        expect(recoveredAccess.status, JSON.stringify(recoveredAccess.body)).toBe(200);
+        const recoveredInventory = await requestJson<Engine[]>(recoveredOperator, '/engines-api/engines');
+        expect(recoveredInventory.status, JSON.stringify(recoveredInventory.body)).toBe(200);
+        expect(recoveredInventory.body?.map((engine) => engine.id).sort()).toEqual([allowedEngine.id, siblingEngine.id].sort());
       }
 
-      const revoke = await requestJson<Mapping>(admin, `/api/identity/mappings/${mapping!.id}`, {
+      const effectiveOperator = recoveredOperator || elevatedOperator;
+      const revokeView = await requestJson<Mapping>(admin, `/api/identity/mappings/${viewMapping!.id}`, {
         method: 'PUT', csrf, data: { isActive: false },
       });
-      expect(revoke.status, JSON.stringify(revoke.body)).toBe(200);
-      expect(revoke.body).toMatchObject({ id: mapping!.id, isActive: false });
+      expect(revokeView.status, JSON.stringify(revokeView.body)).toBe(200);
+      expect(revokeView.body).toMatchObject({ id: viewMapping!.id, isActive: false });
 
-      const immediatelyRevoked = await requestJson(recoveredOperator || operator, `/engines-api/engines/${allowedEngine.id}`);
-      expect([403, 404]).toContain(immediatelyRevoked.status);
+      const afterViewRevocation = await requestJson<Engine[]>(effectiveOperator, '/engines-api/engines');
+      expect(afterViewRevocation.status, JSON.stringify(afterViewRevocation.body)).toBe(200);
+      expect(afterViewRevocation.body?.map((engine) => engine.id)).toEqual([siblingEngine.id]);
+      expect([403, 404]).toContain((await requestJson(effectiveOperator, `/engines-api/engines/${allowedEngine.id}`)).status);
+      expect((await requestJson<Engine>(effectiveOperator, `/engines-api/engines/${siblingEngine.id}`)).status).toBe(200);
+
+      const revokeOperate = await requestJson<Mapping>(admin, `/api/identity/mappings/${operateMapping!.id}`, {
+        method: 'PUT', csrf, data: { isActive: false },
+      });
+      expect(revokeOperate.status, JSON.stringify(revokeOperate.body)).toBe(200);
+      expect(revokeOperate.body).toMatchObject({ id: operateMapping!.id, isActive: false });
+      const afterFullRevocation = await requestJson<Engine[]>(effectiveOperator, '/engines-api/engines');
+      expect(afterFullRevocation.status, JSON.stringify(afterFullRevocation.body)).toBe(200);
+      expect(afterFullRevocation.body).toEqual([]);
+      expect([403, 404]).toContain((await requestJson(effectiveOperator, `/engines-api/engines/${siblingEngine.id}`)).status);
 
       if (runsLocalIdentityRecovery) {
         await admin.goto('/admin/settings');
@@ -277,12 +364,20 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
     } finally {
       const csrf = await csrfToken(admin).catch(() => null);
       const mappings = await requestJson<Mapping[]>(admin, '/api/identity/mappings').catch(() => ({ status: 0, body: null }));
-      const mapping = mappings.body?.find((candidate) => candidate.providerKey === providerKey);
-      if (csrf && mapping) await requestJson(admin, `/api/identity/mappings/${mapping.id}`, { method: 'DELETE', csrf }).catch(() => undefined);
+      for (const mapping of mappings.body?.filter((candidate) => candidate.providerKey === providerKey) || []) {
+        if (csrf) await requestJson(admin, `/api/identity/mappings/${mapping.id}`, { method: 'DELETE', csrf }).catch(() => undefined);
+      }
+      for (const assignmentId of createdAssignmentIds) {
+        if (csrf) await requestJson(admin, `/api/authz/role-assignments/${assignmentId}`, { method: 'DELETE', csrf }).catch(() => undefined);
+      }
+      for (const groupId of createdGroupIds) {
+        if (csrf) await requestJson(admin, `/api/authz/groups/${groupId}`, { method: 'DELETE', csrf }).catch(() => undefined);
+      }
       if (csrf) await requestJson(admin, `/api/identity/providers/${encodeURIComponent(providerKey)}`, { method: 'DELETE', csrf }).catch(() => undefined);
       for (const engine of createdEngines) {
         if (csrf) await requestJson(admin, `/engines-api/engines/${engine.id}`, { method: 'DELETE', csrf }).catch(() => undefined);
       }
+      await elevatedOperatorContext?.close();
       await recoveredOperatorContext?.close();
       await operatorContext.close();
       await adminContext.close();

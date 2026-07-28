@@ -129,6 +129,47 @@ describe('identity entitlement mapping', () => {
     expect(Array.from(memberships.values()).map((membership) => membership.groupId).sort()).toEqual(['local-group-new', 'local-role-new']);
   });
 
+  it.each([
+    ['oidc', { groups: ['engine-view'], roles: [] }, { groups: ['engine-view'], roles: ['deployment-operate'] }, { groups: ['engine-view'], roles: [] }, { groups: [], roles: [] }],
+    ['saml', { group: 'engine-view', role: [] }, { group: 'engine-view', role: 'deployment-operate' }, { group: 'engine-view', role: [] }, { group: [], role: [] }],
+    ['ldap', { memberOf: ['engine-view'], appRoles: [] }, { memberOf: ['engine-view'], appRoles: ['deployment-operate'] }, { memberOf: ['engine-view'], appRoles: [] }, { memberOf: [], appRoles: [] }],
+  ] as const)('reconciles %s rights through grant, elevation removal, and full revocation on successive sign-ins', async (providerType, viewClaims, elevatedClaims, viewOnlyClaims, noAccessClaims) => {
+    const providerId = `provider-${providerType}`;
+    const mappings = [
+      { id: 'view-engine', providerId, entitlementType: 'group', externalId: 'engine-view', matchOperator: 'exact', targetGroupId: 'local-engine-viewers', syncMode: 'authoritative', isActive: true },
+      { id: 'operate-deployment', providerId, entitlementType: 'role', externalId: 'deployment-operate', matchOperator: 'exact', targetGroupId: 'local-deployment-operators', syncMode: 'authoritative', isActive: true },
+    ];
+    const memberships = new Map<string, Record<string, unknown>>();
+    const membershipRepo = {
+      findOne: vi.fn(async ({ where }: { where: Record<string, unknown> }) => Array.from(memberships.values()).find((membership) =>
+        membership.userId === where.userId && membership.groupId === where.groupId && membership.source === where.source && membership.sourceRef === where.sourceRef,
+      ) || null),
+      insert: vi.fn(async (membership: Record<string, unknown>) => { memberships.set(String(membership.id), membership); }),
+      delete: vi.fn(async ({ id }: { id: string }) => { memberships.delete(id); }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? { find: vi.fn().mockResolvedValue(mappings) }
+        : entity === AuthzGroupMembership ? membershipRepo
+          : {},
+    });
+    const normalize = (claims: Record<string, unknown>, observedAt: number) => getIdentityProviderAdapter(providerType).normalizeIdentity({
+      providerKey: providerId, subjectId: 'subject-1', observedAt, claims,
+    });
+    const groupIds = () => Array.from(memberships.values()).map((membership) => membership.groupId).sort();
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', normalize(viewClaims, 1))).resolves.toEqual({ created: 1, removed: 0 });
+    expect(groupIds()).toEqual(['local-engine-viewers']);
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', normalize(elevatedClaims, 2))).resolves.toEqual({ created: 1, removed: 0 });
+    expect(groupIds()).toEqual(['local-deployment-operators', 'local-engine-viewers']);
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', normalize(viewOnlyClaims, 3))).resolves.toEqual({ created: 0, removed: 1 });
+    expect(groupIds()).toEqual(['local-engine-viewers']);
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', normalize(noAccessClaims, 4))).resolves.toEqual({ created: 0, removed: 1 });
+    expect(groupIds()).toEqual([]);
+  });
+
   it('previews aggregate proposed mapping matches from stored snapshots only', async () => {
     const providerRepo = { findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main', protocol: 'oidc' }) };
     const snapshotRepo = { find: vi.fn().mockResolvedValue([
