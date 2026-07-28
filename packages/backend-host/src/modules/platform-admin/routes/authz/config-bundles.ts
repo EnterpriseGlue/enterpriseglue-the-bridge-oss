@@ -1,6 +1,5 @@
 import { raw, type Request, type RequestHandler, type Response, type Router } from 'express';
 import { z } from 'zod';
-import { IsNull } from 'typeorm';
 import { configBundleLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { configBundleJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -19,6 +18,16 @@ import { configBundlePreviewService } from '@enterpriseglue/shared/services/plat
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 import { ConfigBundleApplyRequestSchema, ConfigBundleRemoteImportRequestSchema, ConfigBundleRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
+
+// Configuration bundle routes are platform-admin APIs, so they are mounted
+// outside the tenant-scoped router.  In OSS, their managed objects still
+// belong to the default tenant rather than the legacy platform/null scope.
+// Do this only in the data handlers: injecting request tenant context before
+// authorization would incorrectly narrow platform-wide administrator grants.
+function configBundleTenantId(req: Request): string {
+  return req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
+}
 
 function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
   let result: Record<string, unknown> = {};
@@ -54,7 +63,7 @@ export function registerConfigBundleRoutes(
   router.post('/api/authz/config-bundles/import-zip', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), raw({ type: ['application/zip', 'application/octet-stream'], limit: '1mb' }), asyncHandler(async (req: Request, res: Response) => {
     const payload = configBundleArchiveService.readZip(Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
     await logAudit({
-      tenantId: req.tenant?.tenantId || undefined,
+      tenantId: configBundleTenantId(req),
       userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
       action: 'authz.config_bundle.import_zip',
       resourceType: 'config_bundle',
@@ -67,7 +76,7 @@ export function registerConfigBundleRoutes(
   router.post('/api/authz/config-bundles/import-url', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), validateBody(ConfigBundleRemoteImportRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const result = await configBundleRemoteSourceService.import(req.body.url);
     await logAudit({
-      tenantId: req.tenant?.tenantId || undefined,
+      tenantId: configBundleTenantId(req),
       userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
       action: 'authz.config_bundle.import_url',
       resourceType: 'config_bundle',
@@ -87,7 +96,7 @@ export function registerConfigBundleRoutes(
     const settings = await platformSettingsService.get();
     const preflight = configBundleSecretPreflightService.check(req.body, settings);
     await logAudit({
-      tenantId: req.tenant?.tenantId || undefined,
+      tenantId: configBundleTenantId(req),
       userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
       action: 'authz.config_bundle.secret_preflight',
       resourceType: 'config_bundle',
@@ -105,7 +114,7 @@ export function registerConfigBundleRoutes(
 
   router.post('/api/authz/config-bundles/diff', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
-    const diff = await configBundleDiffService.diff(req.body, req.tenant?.tenantId || null, {
+    const diff = await configBundleDiffService.diff(req.body, configBundleTenantId(req), {
       ...settings,
       tenantReferenceResolver: req.app.locals.engineTenantReferenceResolver || null,
       tenantReferencePrincipalType: req.apiClient ? 'api_client' : 'user',
@@ -119,7 +128,7 @@ export function registerConfigBundleRoutes(
     const settings = await platformSettingsService.get();
     const result = await configBundleApplyService.apply({
       ...req.body,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId: configBundleTenantId(req),
       actorId,
     }, {
       ...settings,
@@ -128,7 +137,7 @@ export function registerConfigBundleRoutes(
       tenantReferencePrincipalId: req.apiClient?.id || req.user!.userId,
     });
     await logAudit({
-      tenantId: req.tenant?.tenantId || undefined,
+      tenantId: configBundleTenantId(req),
       userId: actorId,
       action: 'authz.config_bundle.apply',
       resourceType: 'config_bundle',
@@ -155,9 +164,9 @@ export function registerConfigBundleRoutes(
   }));
 
   router.get('/api/authz/config-bundles/runs', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = configBundleTenantId(req);
     const rows = await (await getDataSource()).getRepository(ConfigBundleApplyRun).find({
-      where: tenantId ? { tenantId } : { tenantId: IsNull() },
+      where: { tenantId },
       order: { createdAt: 'DESC' },
       take: Number(req.query.limit || 25),
     });
@@ -165,20 +174,20 @@ export function registerConfigBundleRoutes(
   }));
 
   router.get('/api/authz/config-bundles/runs/:id', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = configBundleTenantId(req);
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-      where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
+      where: { id: runId, tenantId },
     });
     if (!row) throw Errors.notFound('Configuration bundle apply run');
     res.json(configBundleRunResponse(row));
   }));
 
   router.get('/api/authz/config-bundles/runs/:id/identity-replay-tasks', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = configBundleTenantId(req);
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-      where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
+      where: { id: runId, tenantId },
     });
     if (!row) throw Errors.notFound('Configuration bundle apply run');
     const tasks = await configBundleIdentityReplayTaskService.listForApplyRun(runId, tenantId);
@@ -201,10 +210,10 @@ export function registerConfigBundleRoutes(
   }));
 
   router.get('/api/authz/config-bundles/runs/:id/runtime-reconciliation-tasks', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = configBundleTenantId(req);
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-      where: tenantId ? { id: runId, tenantId } : { id: runId, tenantId: IsNull() },
+      where: { id: runId, tenantId },
     });
     if (!row) throw Errors.notFound('Configuration bundle apply run');
     const tasks = await configBundleRuntimeReconciliationTaskService.listForApplyRun(runId, tenantId);
@@ -224,6 +233,6 @@ export function registerConfigBundleRoutes(
   }));
 
   router.get('/api/authz/config-bundles/export', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.export'), validateQuery(z.object({ bundleKey: z.string().min(3).max(160), tenantKey: z.string().min(1).max(160).optional() })), asyncHandler(async (req: Request, res: Response) => {
-    res.json(await configBundleExportService.exportBundle({ bundleKey: String(req.query.bundleKey), tenantKey: req.query.tenantKey ? String(req.query.tenantKey) : undefined, tenantId: req.tenant?.tenantId || null }));
+    res.json(await configBundleExportService.exportBundle({ bundleKey: String(req.query.bundleKey), tenantKey: req.query.tenantKey ? String(req.query.tenantKey) : undefined, tenantId: configBundleTenantId(req) }));
   }));
 }

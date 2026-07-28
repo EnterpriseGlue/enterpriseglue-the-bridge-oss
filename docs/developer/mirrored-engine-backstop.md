@@ -178,6 +178,7 @@ pnpm run test:operaton-native-auth-container
 pnpm run test:customer-sidecar-reference-container
 pnpm run test:operaton-sidecar-backstop-container
 pnpm run test:operaton-backstop-browser
+pnpm run test:operaton-config-backstop-browser
 ```
 
 The disposable Camunda and Operaton containers validate their pinned compatible authorization REST contracts.
@@ -186,8 +187,9 @@ owned-only cleanup, rollback, and missing/altered owned-grant detection without
 requiring customer credentials. The sidecar container test runs preview, apply,
 tracked-ID drift, and ownership-only rollback through a local bounded proxy in
 front of a real Operaton engine, and asserts that no downstream credential is
-sent to the proxy. It also proves that a sidecar-native-write rejection fails
-closed without selecting the direct adapter. The test command temporarily
+sent to the proxy. It also proves that a sidecar-native-write rejection,
+malformed create response, or bounded transport timeout fails closed without
+selecting the direct adapter. The test command temporarily
 permits loopback HTTP only for its disposable local fixture; production endpoint
 policy and HTTPS requirements remain unchanged.
 
@@ -218,3 +220,20 @@ the normal write-only engine credential path; it does not relax the direct
 endpoint authentication policy. The runner deletes its engine and group rows
 and removes the Operaton container on completion. It is local evidence, not a
 customer-engine qualification.
+
+The runner restarts the local backend after a successful native apply and
+before its drift check. This verifies that a new process reloads the persisted,
+narrow engine connection instead of relying on an in-memory direct-client
+cache.
+
+### Local JSON configuration acceptance
+
+`pnpm run test:operaton-config-backstop-browser` is the corresponding opt-in
+headless configuration lane. It injects only disposable environment references
+into a temporary local Compose overlay, provisions a dedicated Operaton engine,
+group, opaque native-group mapping, and exact process/decision assignments by
+JSON bundle, waits for the durable reconciliation receipts, and applies the
+reviewed native projection. The export assertion proves that it retains the
+`env://` reference but never returns the resolved native group ID. The runner
+recreates the backend without the overlay on exit, so the disposable secret and
+fast local pollers do not remain in a developer's normal stack.

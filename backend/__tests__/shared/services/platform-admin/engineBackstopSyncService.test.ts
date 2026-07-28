@@ -205,7 +205,23 @@ describe('EngineBackstopSyncService', () => {
   });
 
   it('blocks a shared-engine preview when a native authorization key is active in another tenant', async () => {
-    const createPreview = vi.fn(async (input) => ({ id: 'shared-preview', ...input, status: 'previewed' }));
+    let sharedRun: any;
+    let sharedDetail: any;
+    const createPreview = vi.fn(async (input) => {
+      sharedRun = {
+        id: 'shared-preview', ...input, status: 'previewed', resultHash: null, catalogVersion: 'camunda7-operaton-mirrored-backstop-v1',
+        counts: {}, classifications: [], rollbackOfRunId: null, observedOfRunId: null, detailedSnapshotAvailable: true,
+        detailedSnapshotExpiresAt: Date.now() + 60_000, completedAt: null, createdAt: Date.now(), updatedAt: Date.now(),
+      };
+      sharedDetail = { version: 1, projection: input.projection };
+      return sharedRun;
+    });
+    const updateRun = vi.fn(async ({ detailedSnapshot, ...values }) => {
+      Object.assign(sharedRun, values);
+      if (detailedSnapshot !== undefined) sharedDetail = detailedSnapshot;
+      return sharedRun;
+    });
+    const enqueue = vi.fn(async () => ({ id: 'shared-task' }));
     const engine = {
       id: 'shared-engine', type: 'operaton', lifecycleStatus: 'active', tenancyMode: 'shared', tenantId: null,
       connectionMode: 'customer_sidecar', runtimeAccessScope: 'resource_aware',
@@ -227,13 +243,23 @@ describe('EngineBackstopSyncService', () => {
         throw new Error('Unexpected repository');
       },
     } as any);
+    const directNativeClient = { createAuthorization: vi.fn(), deleteAuthorization: vi.fn(), readAuthorization: vi.fn() };
+    const customerSidecarNativeClient = { createAuthorization: vi.fn(), deleteAuthorization: vi.fn(), readAuthorization: vi.fn() };
     const service = new EngineBackstopSyncService({
       mappingService: { activeProjectionMappings: vi.fn(async () => [{ authzGroupId: 'authz-operators', nativeGroupId: 'native-operators', isActive: true }]) },
-      runService: { createPreview, getSummary: vi.fn(), getDetailedSnapshot: vi.fn(), listForEngine: vi.fn(), updateRun: vi.fn() } as any,
-      taskService: { enqueue: vi.fn(), runNext: vi.fn() } as any,
+      runService: { createPreview, getSummary: vi.fn(async () => sharedRun), getDetailedSnapshot: vi.fn(async () => sharedDetail), listForEngine: vi.fn(async () => [sharedRun]), updateRun } as any,
+      taskService: {
+        enqueue,
+        runNext: vi.fn(async (execute, { runId }) => {
+          await execute({ id: 'shared-task', engineId: 'shared-engine', tenantId: 'tenant-a', runId, sourceHash: sharedRun.sourceHash, operation: 'apply' });
+          return { taskId: 'shared-task', runId, operation: 'apply', status: 'completed', attempts: 0, nextAttemptAt: null, lastError: null };
+        }),
+      } as any,
+      directNativeClient,
+      customerSidecarNativeClient,
     });
 
-    await service.preview({ engineId: 'shared-engine', tenantId: 'tenant-a' });
+    const preview = await service.preview({ engineId: 'shared-engine', tenantId: 'tenant-a' });
 
     expect(createPreview).toHaveBeenCalledWith(expect.objectContaining({
       tenantId: 'tenant-a',
@@ -244,6 +270,14 @@ describe('EngineBackstopSyncService', () => {
         })],
       }),
     }));
+    const result = await service.apply({
+      engineId: 'shared-engine', tenantId: 'tenant-a', runId: preview.id,
+      request: { desiredHash: preview.desiredHash, acknowledgeDirectIdentityBoundary: true },
+    });
+    expect(result.run.status).toBe('succeeded');
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(directNativeClient.createAuthorization).not.toHaveBeenCalled();
+    expect(customerSidecarNativeClient.createAuthorization).not.toHaveBeenCalled();
   });
 
   it('deletes only an earlier owned authorization when the exact desired grant changes', async () => {

@@ -15,6 +15,8 @@ function allowedNativeAuthorizationOperation(method, path) {
  */
 export async function startCustomerSidecarReference(engineBaseUrl, {
   rejectNativeWrites = false,
+  malformedAuthorizationCreateResponse = false,
+  responseDelayMs = 0,
   upstreamAuthorization = null,
   listenHost = '127.0.0.1',
   listenPort = 0,
@@ -41,6 +43,9 @@ export async function startCustomerSidecarReference(engineBaseUrl, {
       response.end(JSON.stringify({ error: 'native authorization writes are denied by customer sidecar policy' }));
       return;
     }
+    if (responseDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
+    }
     const headers = body.length > 0 ? { 'content-type': request.headers['content-type'] || 'application/json' } : {};
     if (upstreamAuthorization) headers.authorization = upstreamAuthorization;
     try {
@@ -51,6 +56,11 @@ export async function startCustomerSidecarReference(engineBaseUrl, {
       });
       const upstreamBody = Buffer.from(await upstream.arrayBuffer());
       const contentType = upstream.headers.get('content-type');
+      if (malformedAuthorizationCreateResponse && request.method === 'POST' && url.pathname === '/engine-rest/authorization/create') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ accepted: true }));
+        return;
+      }
       response.writeHead(upstream.status, contentType ? { 'content-type': contentType } : undefined);
       response.end(upstreamBody);
     } catch {

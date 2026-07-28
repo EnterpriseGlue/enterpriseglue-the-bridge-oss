@@ -1,0 +1,19 @@
+services:
+  # This local-only overlay injects disposable references used by the headless
+  # config-to-Operaton acceptance test. It is never part of a deployment
+  # Compose definition and the runner recreates the backend without it when it
+  # exits.
+  backend:
+    environment:
+      OPERATON_CONFIG_BACKSTOP_PASSWORD: ${OPERATON_CONFIG_BACKSTOP_PASSWORD:?set by the local test runner}
+      OPERATON_CONFIG_BACKSTOP_NATIVE_GROUP: ${OPERATON_CONFIG_BACKSTOP_NATIVE_GROUP:?set by the local test runner}
+      # A configuration apply queues durable inventory materialization. Keep
+      # this worker enabled only for the disposable local acceptance run.
+      CONFIG_BUNDLE_RUNTIME_RECONCILIATION_INTERVAL_MS: "250"
+      CONFIG_BUNDLE_RUNTIME_RECONCILIATION_RUN_ON_START: "true"
+      # Discovery is deliberately separate from the post-apply set
+      # materializer. Enable both workers so an engine created by the JSON
+      # bundle produces its real Operaton runtime-resource inventory.
+      RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS: "250"
+      RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS: "tenant-default"
+      RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START: "true"

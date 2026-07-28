@@ -151,7 +151,14 @@ write and never displayed in a receipt. `pnpm run test:operaton-sidecar-backstop
 contract: preview, apply, tracked-ID drift, and ownership-only rollback pass
 through a bounded local customer-sidecar proxy while asserting no downstream
 engine credential is sent to that proxy. The same fixture proves a sidecar
-native-write rejection fails closed without a direct-engine fallback.
+native-write rejection, malformed success response, and timeout fail closed
+without a direct-engine fallback. `pnpm run test:operaton-native-auth-container`
+adds real direct Operaton member/non-member enforcement for exact process and
+decision grants. `pnpm run test:operaton-backstop-browser` restarts the local
+backend after direct apply before drift detection, while
+`pnpm run test:operaton-config-backstop-browser` proves a headless JSON bundle
+can provision a dedicated Operaton engine, opaque backstop mapping, runtime
+resource grants, and the corresponding native read grants end to end.
 
 This local lane does not replace direct-identity-provider certification: that
 release gate needs representative direct Camunda 7 and Operaton environments where a real

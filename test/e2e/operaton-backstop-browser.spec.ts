@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
+import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { getE2ECredentials } from './utils/credentials';
 
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
@@ -13,6 +15,8 @@ const enabled = process.env.OPERATON_BACKSTOP_BROWSER_EVIDENCE === 'true'
   && /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$)/.test(baseUrl)
   && /^http:\/\/host\.docker\.internal(?::\d+)?\/engine-rest$/.test(engineUrl)
   && /^http:\/\/(127\.0\.0\.1|localhost)(?::\d+)?\/engine-rest$/.test(operatonUrl);
+const restartBackendForDurability = process.env.OPERATON_BACKSTOP_RESTART_BACKEND === 'true';
+const execFileAsync = promisify(execFile);
 
 type CreatedEngine = { id: string; name: string };
 type RuntimeResource = { id: string; resourceKind: string; resourceKey: string };
@@ -44,6 +48,29 @@ async function login(page: Page): Promise<void> {
   await page.getByLabel(/password/i).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(/\/t\/default(?:\/|$)/);
+}
+
+async function restartLocalBackend(page: Page): Promise<void> {
+  if (!restartBackendForDurability) return;
+  const repoRoot = process.cwd();
+  await execFileAsync('docker', [
+    'compose', '--project-directory', repoRoot, '--env-file', resolve(repoRoot, '.env.docker'),
+    '-f', resolve(repoRoot, 'infra/docker/compose/docker-compose.yml'),
+    '-f', resolve(repoRoot, 'infra/docker/compose/docker-compose.backend-expose.yml'),
+    'restart', 'backend',
+  ], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await page.request.get('/api/csrf-token', { timeout: 2_000 });
+      lastStatus = response.status();
+      if (response.ok()) return;
+    } catch {
+      // The reverse proxy can briefly lose the freshly restarted backend.
+    }
+    await page.waitForTimeout(1_000);
+  }
+  throw new Error(`EnterpriseGlue backend did not become ready after its durability restart (last status ${lastStatus})`);
 }
 
 async function deployFixture(page: Page): Promise<void> {
@@ -177,6 +204,7 @@ test.describe('Operaton native authorization backstop browser workflow', () => {
           { type: 1, groupId: nativeGroupId, resourceType: 6, resourceId: 'egprocess', permissions: ['READ'] },
           { type: 1, groupId: nativeGroupId, resourceType: 10, resourceId: 'egdecision', permissions: ['READ'] },
         ]);
+        await restartLocalBackend(page);
         await page.request.delete(`${operatonUrl}/authorization/${encodeURIComponent(grants[0].id)}`);
         await backstop.getByRole('button', { name: 'Check native drift' }).click();
         await expect(backstop.getByText('Native drift detected', { exact: true })).toBeVisible();

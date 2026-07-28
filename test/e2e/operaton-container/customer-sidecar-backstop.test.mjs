@@ -229,7 +229,7 @@ function inMemoryRunAndTaskServices() {
   return { runService, taskService };
 }
 
-function customerSidecarTransport(baseUrl) {
+function customerSidecarTransport(baseUrl, { timeoutMs } = {}) {
   async function request(method, path, body) {
     const { response } = await fetchBpmnEngineEndpoint({
       id: 'operaton-sidecar-engine',
@@ -241,6 +241,7 @@ function customerSidecarTransport(baseUrl) {
       method,
       path,
       ...(body === undefined ? {} : { contentType: 'application/json' }),
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
     }, {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -317,6 +318,8 @@ test('real Operaton lifecycle applies both supported resource types through the 
   const { name, baseUrl: operatonBaseUrl } = await startOperaton();
   let sidecar;
   let rejectingSidecar;
+  let malformedSidecar;
+  let timedOutSidecar;
   try {
     const suffix = Date.now().toString(36);
     const groupId = 'egsidecaroperators';
@@ -415,7 +418,70 @@ test('real Operaton lifecycle applies both supported resource types through the 
     assert.equal(rejectingSidecar.requests.length, 1);
     assert.equal(rejectingSidecar.requests[0].headers.authorization, undefined);
     assert.equal(rejectingSidecar.requests[0].headers['x-enterpriseglue-operation-class'], 'engine.native_authorization.backstop');
+
+    malformedSidecar = await startCustomerSidecarReference(operatonBaseUrl, { malformedAuthorizationCreateResponse: true });
+    const malformedDirectCalls = [];
+    const malformedServices = inMemoryRunAndTaskServices();
+    const malformedService = new EngineBackstopSyncService({
+      ...malformedServices,
+      directNativeClient: {
+        createAuthorization: async () => { malformedDirectCalls.push('create'); throw new Error('direct adapter must not be used'); },
+        deleteAuthorization: async () => { malformedDirectCalls.push('delete'); throw new Error('direct adapter must not be used'); },
+        readAuthorization: async () => { malformedDirectCalls.push('read'); throw new Error('direct adapter must not be used'); },
+      },
+      customerSidecarNativeClient: new CustomerSidecarBackstopNativeClient(customerSidecarTransport(malformedSidecar.baseUrl)),
+      projectionBuilder: async () => ({
+        engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
+        tenantId: 'tenant-sidecar', projection: projection(`${processKey}-malformed`, `${decisionKey}-malformed`), sourceHash, desiredHash,
+        capability: { nativeAuthorizationWrite: true },
+      }),
+    });
+    const malformedPreview = await malformedService.preview({ engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar' });
+    await assert.rejects(
+      malformedService.apply({
+        engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar', runId: malformedPreview.id,
+        request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+      }),
+      /authorization create response did not include an authorization id/,
+    );
+    assert.deepEqual(malformedDirectCalls, [], 'malformed sidecar success responses must fail closed without a direct retry');
+    assert.equal(malformedSidecar.requests.length, 1);
+    assert.equal(malformedSidecar.requests[0].headers.authorization, undefined);
+
+    timedOutSidecar = await startCustomerSidecarReference(operatonBaseUrl, { responseDelayMs: 250 });
+    const timeoutDirectCalls = [];
+    const timeoutServices = inMemoryRunAndTaskServices();
+    const timeoutService = new EngineBackstopSyncService({
+      ...timeoutServices,
+      directNativeClient: {
+        createAuthorization: async () => { timeoutDirectCalls.push('create'); throw new Error('direct adapter must not be used'); },
+        deleteAuthorization: async () => { timeoutDirectCalls.push('delete'); throw new Error('direct adapter must not be used'); },
+        readAuthorization: async () => { timeoutDirectCalls.push('read'); throw new Error('direct adapter must not be used'); },
+      },
+      customerSidecarNativeClient: new CustomerSidecarBackstopNativeClient(customerSidecarTransport(timedOutSidecar.baseUrl, { timeoutMs: 100 })),
+      projectionBuilder: async () => ({
+        engine: { id: 'operaton-sidecar-engine', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' },
+        tenantId: 'tenant-sidecar', projection: projection(`${processKey}-timeout`, `${decisionKey}-timeout`), sourceHash, desiredHash,
+        capability: { nativeAuthorizationWrite: true },
+      }),
+    });
+    const timeoutPreview = await timeoutService.preview({ engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar' });
+    let timeoutError;
+    try {
+      await timeoutService.apply({
+        engineId: 'operaton-sidecar-engine', tenantId: 'tenant-sidecar', runId: timeoutPreview.id,
+        request: { desiredHash, acknowledgeDirectIdentityBoundary: true },
+      });
+    } catch (error) {
+      timeoutError = error;
+    }
+    assert.equal(timeoutError?.code, 'ENGINE_TRANSPORT_UNAVAILABLE');
+    assert.equal(timeoutError?.details?.connectionMode, 'customer_sidecar');
+    assert.deepEqual(timeoutDirectCalls, [], 'an unavailable sidecar must never fall back to the direct adapter');
+    assert.doesNotMatch(JSON.stringify(timeoutError?.toJSON?.() || timeoutError), /engine-rest|127\.0\.0\.1/);
   } finally {
+    await timedOutSidecar?.close();
+    await malformedSidecar?.close();
     await rejectingSidecar?.close();
     await sidecar?.close();
     await removeContainer(name);
