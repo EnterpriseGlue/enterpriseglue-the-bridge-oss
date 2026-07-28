@@ -181,8 +181,9 @@ async function writeNormalizedJson(jsonPath, data) {
 
 function runNpmLs(repoRoot, workspace) {
   const isPnpm = existsSync(path.join(repoRoot, 'pnpm-lock.yaml'));
-  const args = isPnpm 
-    ? ['list', '--json', '--depth=0']
+  const command = isPnpm ? 'corepack' : 'npm';
+  const args = isPnpm
+    ? ['pnpm@11.0.8', 'list', '--json', '--depth=0']
     : ['ls', '--omit=dev', '--all', '--json'];
   
   if (workspace) {
@@ -193,14 +194,14 @@ function runNpmLs(repoRoot, workspace) {
     }
   }
 
-  const result = spawnSync(isPnpm ? 'pnpm' : 'npm', args, {
+  const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: 'utf8',
   });
 
   const output = String(result.stdout || '').trim();
   if (!output) {
-    throw new Error(`${isPnpm ? 'pnpm' : 'npm'} ls returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
+    throw new Error(`${isPnpm ? 'corepack pnpm@11.0.8' : 'npm'} ls returned no JSON for ${workspace || 'root'}: ${String(result.stderr || '').trim()}`);
   }
 
   const parsed = JSON.parse(output);

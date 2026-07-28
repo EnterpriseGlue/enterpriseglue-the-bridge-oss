@@ -11,6 +11,7 @@ Generated from:
 - packages/backend-host/third_party_licenses.json
 - packages/enterprise-plugin-api/third_party_licenses.json
 - packages/frontend-host/third_party_licenses.json
+- packages/plugin-sdk/third_party_licenses.json
 - packages/shared/third_party_licenses.json
 
 ## License summary

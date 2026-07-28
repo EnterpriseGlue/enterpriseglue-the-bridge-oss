@@ -562,6 +562,43 @@ importers:
         specifier: ^4.0.18
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.1)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@1.8.0))(msw@2.14.4(@types/node@25.6.1)(typescript@5.9.3))(vite@7.3.5(@types/node@25.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.4))
 
+  packages/plugin-sdk:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.4.3
+    devDependencies:
+      '@carbon/icons-react':
+        specifier: 11.80.0
+        version: 11.80.0(react@19.2.6)
+      '@carbon/react':
+        specifier: 1.107.0
+        version: 1.107.0(react-dom@19.2.6(react@19.2.6))(react-is@18.2.0)(react@19.2.6)(sass@1.99.0)
+      '@types/react':
+        specifier: ^19.2.6
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
+      react:
+        specifier: 19.2.6
+        version: 19.2.6
+      react-dom:
+        specifier: 19.2.6
+        version: 19.2.6(react@19.2.6)
+      react-is:
+        specifier: 18.2.0
+        version: 18.2.0
+      react-router-dom:
+        specifier: 7.18.0
+        version: 7.18.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
+        version: 4.1.5(@types/node@25.6.1)(@vitest/coverage-v8@4.1.5)(jsdom@28.1.0(@noble/hashes@1.8.0))(msw@2.14.4(@types/node@25.6.1)(typescript@5.9.3))(vite@7.3.5(@types/node@25.6.1)(sass@1.99.0)(tsx@4.21.0)(yaml@2.8.4))
+
   packages/shared:
     dependencies:
       '@asteasolutions/zod-to-openapi':
