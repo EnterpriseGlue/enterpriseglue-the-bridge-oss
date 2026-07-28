@@ -256,10 +256,13 @@ equivalent evidence; SAML uses the verified assertion attributes.
 
 ### Engine tenancy rollout status
 
-Manual and external APIs accept explicit dedicated/shared tenancy. Omission
-remains compatible and creates a dedicated engine in the request tenant, or
-`tenant-default` in local OSS. Shared mode requires `resource_aware` and starts
-in fail-closed `incomplete` state.
+Manual and external APIs accept explicit dedicated/shared tenancy. Only the
+manual create flow retains omission compatibility: it creates a dedicated
+engine in the authenticated request tenant, or `tenant-default` in local OSS.
+Every external registration and idempotent external upsert must declare
+`tenancy`; an omitted declaration is rejected with HTTP 400 before
+EnterpriseGlue reads or writes engine state. Shared mode requires
+`resource_aware` and starts in fail-closed `incomplete` state.
 
 Manual/external mapping administration, shared runtime resolution, fail-closed
 Runtime Resource Set materialization, and config-bundle topology

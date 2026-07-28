@@ -39,6 +39,81 @@ Topology and runtime access are separate:
 | Shared | `resource_aware` | Yes |
 | Shared | `engine_wide` | No |
 
+## Prerequisite for a Centralized Two-Tenant Rehearsal
+
+The local OSS deployment has one canonical tenant context,
+`tenant-default`. It can validate dedicated provisioning and fail-closed shared
+resource behavior, but it cannot prove isolation between two EnterpriseGlue
+tenants. Run the centralized rehearsal only in a tenant-resolver-enabled
+deployment where the tenant platform owner has first established all of the
+following:
+
+1. Two separate tenant contexts and two representative test identities or
+   principals. Each identity must enter only its own tenant context through the
+   deployment's supported tenant-selection/sign-in flow; do not simulate a
+   tenant by submitting a raw database ID or an arbitrary request header.
+2. Two stable, portable references accepted by that deployment's tenant
+   resolver, for example `tenant.payments` and `tenant.claims`. Obtain those
+   keys from the tenant platform owner. They are deployment configuration, not
+   values an engine administrator should invent.
+3. Three disposable native runtime tenant values on a non-production shared
+   engine: one for each tenant (for example `payments` and `claims`) and one
+   intentionally unmapped value (for example `unmapped`). Do not use customer
+   identifiers in retained evidence.
+
+Before making a write, have a platform administrator authorized for both
+references submit a **dry-run** mapping batch. It must contain the two known
+portable keys and return no `rejected` row or error code. A rejected key,
+`ENGINE_TENANT_REFERENCE_FORBIDDEN`, or an ambiguous resolver result is a hard
+stop: do not substitute `tenant-default`, a raw tenant ID, or a broader role.
+Fix the tenant resolver or its authorization first.
+
+<!-- enterpriseglue-config-schema: ExternalEngineTenantMappingsUpsertRequestSchema -->
+```json
+{
+  "expectedMappingVersion": 0,
+  "dryRun": true,
+  "atomic": true,
+  "mappings": [
+    {
+      "externalTenantId": "payments",
+      "tenantRef": { "type": "key", "key": "tenant.payments" },
+      "strategy": "engine_tenant_id",
+      "sourceRef": "rehearsal/payments",
+      "active": true
+    },
+    {
+      "externalTenantId": "claims",
+      "tenantRef": { "type": "key", "key": "tenant.claims" },
+      "strategy": "engine_tenant_id",
+      "sourceRef": "rehearsal/claims",
+      "active": true
+    }
+  ]
+}
+```
+
+Apply the exact reviewed batch with `dryRun: false` and its current mapping
+version, then reconcile the disposable engine inventory. The two mapped runtime
+resources must resolve separately; the intentionally unmapped resource must
+remain quarantined. In each tenant's own test context, grant the smallest
+tenant-safe role and retain this evidence:
+
+| Test context | Expected result |
+| --- | --- |
+| Payments identity → payments resource | Allow in Effective Access and the real list/detail path |
+| Payments identity → claims resource | Deny before an upstream engine call |
+| Either identity → unmapped resource | Deny before an upstream engine call |
+| Remove the Payments assignment or deactivate its mapping while its session is open | Payments access disappears in the open tab, stale tab, refresh, direct URL, and browser history; Claims access remains unchanged |
+
+For this deliberate rehearsal, diagnostics can show the one intentionally
+unmapped resource. Do not promote that state to production. On completion,
+delete the disposable engine or restore the prior reviewed mapping batch using
+the current mapping version, reconcile again, and retain only sanitized
+mapping-version, result-code, Effective Access, and audit evidence. Stop the
+rollout if a sibling resource is visible, a denial reaches the upstream engine,
+or revocation is not immediate.
+
 ## Configure a Dedicated Engine
 
 In **Mission Control > Engines**, choose **Add engine**, then choose

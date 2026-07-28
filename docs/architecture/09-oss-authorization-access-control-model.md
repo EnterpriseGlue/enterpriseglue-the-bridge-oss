@@ -32,7 +32,17 @@ Status legend:
 
 Detailed completion evidence and the authoritative remaining checklist are maintained in [JSON-Driven Authorization And Engine Registration](11-json-driven-authz-and-engine-registration.md).
 
-Current architecture status:
+> **Historical tracker notice:** The unchecked implementation lists below are
+> preserved as the original planning record for this branch; they are not a
+> current statement of delivered capability. The authoritative current status
+> is [Authorization Program Status and Next Delivery Work](15-authorization-program-status.md),
+> and the detailed implementation record is
+> [JSON-Driven Authorization And Engine Registration](11-json-driven-authz-and-engine-registration.md).
+> In particular, configuration bundles, shared resource-aware authorization,
+> provider-neutral OIDC/SAML/LDAP, deployment reconciliation, and the focused
+> role editor have since been implemented and tested.
+
+Historical architecture snapshot:
 
 - [x] ✅ RBAC persistence, permission catalog, system roles, custom roles, custom permissions, and allow-only custom role semantics.
 - [x] ✅ Principal-scoped assignments for users, groups, API clients, and service accounts with evaluator support and Effective Access explanations.
@@ -56,7 +66,7 @@ Current architecture status:
 - [x] ✅ First-class customer-managed sidecar engine connection mode with policy-controlled endpoint authentication, normal RBAC/runtime enforcement, UI/config/OpenAPI fields, transport tests, and bounded mirrored-backstop propagation. EnterpriseGlue never receives the customer's downstream peer token.
 - [ ] ⏸ EnterpriseGlue-issued sidecar action tokens, sidecar principals/heartbeats/inventory, and `engine_native_authority` import mode. The narrow Camunda/Operaton mirrored backstop is implemented separately.
 
-### Current Remaining Work
+### Historical Remaining Work (Superseded)
 
 As of 2026-07-12, the RBAC foundation, principal-scoped assignments, custom roles/permissions, SSO engine assignments, SSO access snapshots, access-authority transition controls, Engine Sets, project-engine targets, external engine registration, Mission Control-Starbase bridge decisions, OpenAPI authz metadata, strict route inventory guards, and mounted frontend action inventory are substantially implemented.
 

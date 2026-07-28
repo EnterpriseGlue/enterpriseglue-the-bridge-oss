@@ -24,8 +24,11 @@ write no import row; split the scope and make a new read-only preview. Response:
 
 `GET /engines-api/engines/{id}/camunda-native-grants/imports`
 
-Requires `platform.camunda-native-grants.history.read`. It returns at most the
-50 newest receipts for that exact engine and tenant, newest first:
+Requires the grantable permission
+`platform:camunda-native-grants:history-view`. Its OpenAPI/action identifier is
+`platform.camunda-native-grants.history.read`; action identifiers are route
+metadata, not custom-role permission keys. The response returns at most the 50
+newest receipts for that exact engine and tenant, newest first:
 
 ```json
 { "runs": [{ "id": "import-run-id", "status": "applied", "normalizedCounts": { "total": 2 } }] }

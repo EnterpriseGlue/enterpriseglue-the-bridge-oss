@@ -20,7 +20,8 @@ every possible external IdP or customer engine is certified.
 - Mirrored Camunda 7/Operaton backstop: encrypted group mapping, exact group `READ`
   projection, hash-bound preview/apply, lease-backed retry, encrypted owned-ID
   evidence, ownership-only rollback, read-only tracked-ID drift observations,
-  OpenAPI/action contracts, and five database-adapter persistence coverage.
+  OpenAPI/action contracts, the Mission Control backstop panel, bounded
+  customer-sidecar transport, and five database-adapter persistence coverage.
 
 ## Current deliberately unsupported boundary
 
@@ -37,9 +38,9 @@ is customer/IdP-owned.
 | --- | --- | --- |
 | Backstop drift check | Read only tracked native IDs and mark altered/missing grants `out_of_sync`; never touch unrelated native grants. | Implemented: linked durable observation receipt and dedicated action/API |
 | Configuration bundles | `engine-backstop-mappings.json` supports secret references, preflight, import/apply, diff, authoritative disable, and opaque export. | Implemented |
-| Mission Control UI | Add the native-backstop panel, prerequisite guidance, receipt/history, and accessibility/browser coverage. | Next implementation slice |
+| Mission Control UI | Native-backstop panel with prerequisite guidance, sanitized receipt/history, and browser/accessibility coverage. | Implemented |
 | Direct-user certification | Prove synthetic mapped-group allow and sibling-deny against a real Camunda identity provider. | Requires local/representative IdP fixture |
-| Customer-sidecar support | Define and prove a bounded authorization-write capability before allowing sidecars. | Deferred by design |
+| Customer-sidecar support | Customer-owned downstream authentication; bounded tracked native-authorization create/read/delete calls with no direct-engine fallback. | Implemented for the reference adapter and local Operaton Docker evidence; production-like customer environment evidence remains environment-dependent |
 | `engine_native_authority` | Separate native inventory/import, precedence, identity, and reconciliation product. | Deferred; not a compatibility shortcut |
 | Extended external evidence | Run deployed OIDC, SAML, LDAP, OpenShift, and production-like sidecar evidence. | Environment-dependent |
 
