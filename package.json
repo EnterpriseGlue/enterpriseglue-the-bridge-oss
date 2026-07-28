@@ -208,6 +208,8 @@
     "guard:frontend-authz-nav-parity": "pnpm --filter ./packages/shared run build && node ./scripts/check-frontend-authz-nav-parity.mjs",
     "guard:frontend-authz": "node ./scripts/check-frontend-authz-guards.mjs",
     "guard:config-deployment-contract": "node ./scripts/check-config-deployment-contract.mjs",
+    "guard:paid-plugin-boundary": "node ./scripts/check-paid-plugin-boundary.mjs",
+    "guard:paid-plugin-image-boundary": "node ./scripts/check-paid-plugin-image-boundary.mjs",
     "guard:published-package-versions": "bash ./scripts/check-published-package-version-discipline.sh",
     "guard:plugin-api:current": "bash ./scripts/check-plugin-api-compat.sh current",
     "guard:plugin-api:next": "bash ./scripts/check-plugin-api-compat.sh next",
