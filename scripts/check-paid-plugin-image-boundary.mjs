@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,23 +12,8 @@ const allowedLegacyLoaderPackages = new Set([
   '@enterpriseglue/enterprise-backend',
   '@enterpriseglue/enterprise-frontend',
 ]);
-const ignoredDirectories = new Set(['dev', 'proc', 'sys']);
-const maxScannedFileBytes = 64 * 1024 * 1024;
-const scannedTextExtensions = new Set([
-  '.cjs',
-  '.css',
-  '.html',
-  '.js',
-  '.json',
-  '.jsx',
-  '.map',
-  '.mjs',
-  '.ts',
-  '.tsx',
-  '.txt',
-  '.yaml',
-  '.yml',
-]);
+const enterprisePackagePattern =
+  '@enterpriseglue(?:/|\\+)[A-Za-z0-9][A-Za-z0-9._-]*';
 
 function readArgument(name) {
   const index = process.argv.indexOf(name);
@@ -40,13 +25,18 @@ const images = [
     kind: 'backend',
     image:
       readArgument('--backend-image') ?? process.env.OSS_BACKEND_IMAGE_UNDER_TEST,
-    containerPath: '/app',
+    contentDirectories: [
+      '/app/dist/backend/src',
+      '/app/dist/packages/backend-host/src',
+      '/app/dist/packages/plugin-runtime/dist',
+      '/app/dist/packages/plugin-sdk/dist',
+    ],
   },
   {
     kind: 'frontend',
     image:
       readArgument('--frontend-image') ?? process.env.OSS_FRONTEND_IMAGE_UNDER_TEST,
-    containerPath: '/usr/share/nginx/html',
+    contentDirectories: ['/usr/share/nginx/html'],
   },
 ];
 
@@ -57,22 +47,6 @@ for (const image of images) {
     );
     process.exit(2);
   }
-}
-
-async function listFiles(directory) {
-  const files = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) {
-      continue;
-    }
-    const filePath = path.join(directory, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await listFiles(filePath)));
-    } else if (entry.isFile()) {
-      files.push(filePath);
-    }
-  }
-  return files;
 }
 
 async function discoverPublicPackages() {
@@ -98,6 +72,83 @@ async function discoverPublicPackages() {
   return publicPackages;
 }
 
+function collectImagePackageMarkers(directory) {
+  const result = spawnSync(
+    'rg',
+    [
+      '--text',
+      '--no-messages',
+      '--only-matching',
+      '--no-filename',
+      enterprisePackagePattern,
+      directory,
+    ],
+    {
+      encoding: 'utf8',
+      maxBuffer: 128 * 1024 * 1024,
+    },
+  );
+
+  // ripgrep returns 1 when no markers are present; that is a valid result.
+  if (result.error || (result.status !== 0 && result.status !== 1)) {
+    throw result.error ?? new Error(`rg image scan failed with exit code ${result.status}`);
+  }
+
+  return collectEnterprisePackages(result.stdout ?? '');
+}
+
+function collectImagePathPackageMarkers(kind, image) {
+  if (kind === 'backend') {
+    const nodePathWalker = String.raw`
+      import { readdir } from 'node:fs/promises';
+      const matches = new Set();
+      const pattern = /@enterpriseglue(?:\/|\+)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)/g;
+      async function walk(directory) {
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+          const entryPath = directory + '/' + entry.name;
+          for (const match of entryPath.matchAll(pattern)) matches.add('@enterpriseglue/' + match[1]);
+          if (entry.isDirectory()) await walk(entryPath);
+        }
+      }
+      await walk(process.argv[1]);
+      process.stdout.write([...matches].sort().join('\n'));
+    `;
+    const listing = execFileSync(
+      'docker',
+      [
+        'run',
+        '--rm',
+        '--entrypoint',
+        'node',
+        image,
+        '--input-type=module',
+        '-e',
+        nodePathWalker,
+        '/app',
+      ],
+      { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+    );
+    return new Set(listing.split('\n').filter(Boolean));
+  }
+
+  const listing = execFileSync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--entrypoint',
+      '/busybox/sh',
+      image,
+      '-c',
+      'find "$1" -print',
+      'sh',
+      '/usr/share/nginx/html',
+    ],
+    { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+  );
+  return collectEnterprisePackages(listing);
+}
+
 function collectEnterprisePackages(value) {
   const packages = new Set();
   const pattern =
@@ -116,7 +167,7 @@ const temporaryDirectory = await mkdtemp(
 );
 
 try {
-  for (const { kind, image, containerPath } of images) {
+  for (const { kind, image, contentDirectories } of images) {
     execFileSync('docker', ['image', 'inspect', image], { stdio: 'ignore' });
     const containerId = execFileSync('docker', ['create', image], {
       encoding: 'utf8',
@@ -124,9 +175,17 @@ try {
     const destination = path.join(temporaryDirectory, kind);
     try {
       await mkdir(destination);
-      execFileSync('docker', ['cp', `${containerId}:${containerPath}/.`, destination], {
-        stdio: 'ignore',
-      });
+      for (const sourceDirectory of contentDirectories) {
+        const contentDestination = path.join(
+          destination,
+          sourceDirectory.replace(/^\//, '').replaceAll('/', '_'),
+        );
+        await mkdir(contentDestination);
+        execFileSync(
+          'docker',
+          ['cp', `${containerId}:${sourceDirectory}/.`, contentDestination],
+        );
+      }
       const inspection = execFileSync('docker', ['image', 'inspect', image], {
         encoding: 'utf8',
       });
@@ -135,24 +194,14 @@ try {
           violations.push(`${kind} image config references ${packageName}`);
         }
       }
-      for (const filePath of await listFiles(destination)) {
-        const relativePath = path.relative(destination, filePath);
-        for (const packageName of collectEnterprisePackages(relativePath)) {
-          if (!allowedPackages.has(packageName)) {
-            violations.push(`${kind} image path ${relativePath} contains ${packageName}`);
-          }
+      for (const packageName of collectImagePathPackageMarkers(kind, image)) {
+        if (!allowedPackages.has(packageName)) {
+          violations.push(`${kind} image path references ${packageName}`);
         }
-        if (!scannedTextExtensions.has(path.extname(filePath).toLowerCase())) {
-          continue;
-        }
-        const content = await readFile(filePath);
-        if (content.byteLength > maxScannedFileBytes) {
-          continue;
-        }
-        for (const packageName of collectEnterprisePackages(content.toString('utf8'))) {
-          if (!allowedPackages.has(packageName)) {
-            violations.push(`${kind} image file ${relativePath} references ${packageName}`);
-          }
+      }
+      for (const packageName of collectImagePackageMarkers(destination)) {
+        if (!allowedPackages.has(packageName)) {
+          violations.push(`${kind} image content references ${packageName}`);
         }
       }
     } finally {

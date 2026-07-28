@@ -207,6 +207,7 @@ pnpm test:plugin-installer
 pnpm test:plugin-platform:chart
 pnpm test:plugin-platform:compose-lifecycle
 pnpm test:plugin-platform:multi-replica
+pnpm test:plugin-platform:images
 ```
 
 ## Distribution and air-gapped operation
@@ -255,14 +256,16 @@ pnpm guard:paid-plugin-boundary
 
 It discovers the public workspace package allowlist and rejects non-public EnterpriseGlue
 dependencies, lockfile markers, source imports, and unsafe production-Dockerfile inputs. The
-companion image guard scans final backend and frontend images and is intended to run in public
-image CI:
+production-image acceptance command builds both final images from a clean Docker context, imports
+the backend plugin host using its real package-resolution path, and scans final image paths and
+compiled assets for non-public package markers:
 
 ```sh
-pnpm guard:paid-plugin-image-boundary \
-  -- --backend-image <immutable-backend-digest> \
-  --frontend-image <immutable-frontend-digest>
+pnpm test:plugin-platform:images
 ```
+
+The lower-level `guard:paid-plugin-image-boundary` remains available when a release workflow has
+already built immutable backend and frontend images and wants to scan those exact references.
 
 ## Local verification evidence
 

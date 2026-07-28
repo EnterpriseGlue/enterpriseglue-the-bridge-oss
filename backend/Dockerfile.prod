@@ -10,6 +10,8 @@ RUN npm install -g pnpm@11.0.8
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
+COPY packages/plugin-sdk/package.json packages/plugin-sdk/
+COPY packages/plugin-runtime/package.json packages/plugin-runtime/
 COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
@@ -20,9 +22,13 @@ COPY frontend/package.json frontend/
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --filter webmodeler-backend... --frozen-lockfile
 
-# Build OSS packages (shared must be built before backend-host)
+# Build OSS packages in dependency order. The backend entry point compiles the
+# backend host into its output, while that host imports the generic plugin SDK
+# and runtime at execution time.
 COPY packages packages
 RUN pnpm --filter shared run build
+RUN pnpm --filter plugin-sdk run build
+RUN pnpm --filter plugin-runtime run build
 RUN pnpm --filter backend-host run build
 
 COPY backend backend
@@ -38,6 +44,8 @@ RUN npm install -g pnpm@11.0.8
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
+COPY packages/plugin-sdk/package.json packages/plugin-sdk/
+COPY packages/plugin-runtime/package.json packages/plugin-runtime/
 COPY packages/backend-host/package.json packages/backend-host/
 COPY packages/enterprise-plugin-api/package.json packages/enterprise-plugin-api/
 COPY packages/frontend-host/package.json packages/frontend-host/
@@ -79,6 +87,15 @@ COPY --from=deps /repo/packages/backend-host/node_modules ./dist/packages/backen
 COPY --from=deps /repo/packages/shared/node_modules ./dist/packages/shared/node_modules
 
 COPY --from=build /repo/backend/dist ./dist
+# pnpm workspace links in dist/node_modules resolve these public package
+# artifacts from dist/packages at runtime. Copy the built output rather than
+# the source workspace so a production image stays self-contained.
+COPY --from=build /repo/packages/plugin-sdk/package.json ./dist/packages/plugin-sdk/package.json
+COPY --from=build /repo/packages/plugin-sdk/dist ./dist/packages/plugin-sdk/dist
+COPY --from=deps /repo/packages/plugin-sdk/node_modules ./dist/packages/plugin-sdk/node_modules
+COPY --from=build /repo/packages/plugin-runtime/package.json ./dist/packages/plugin-runtime/package.json
+COPY --from=build /repo/packages/plugin-runtime/dist ./dist/packages/plugin-runtime/dist
+COPY --from=deps /repo/packages/plugin-runtime/node_modules ./dist/packages/plugin-runtime/node_modules
 COPY --from=build /repo/packages/shared/src/db/adapters/sql ./packages/shared/src/db/adapters/sql
 COPY --from=build /repo/packages/shared/src/db/migrations ./packages/shared/src/db/migrations
 
