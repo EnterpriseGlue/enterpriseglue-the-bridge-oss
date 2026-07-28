@@ -39,6 +39,7 @@ const runsLocalIdentityRecovery = !realEntra && clientId === 'enterpriseglue-loc
 
 type Engine = { id: string; name: string };
 type Mapping = { id: string; providerKey: string; targetGroupId: string; isActive: boolean };
+type RoleAssignment = { id: string; principalType: 'group'; principalId: string; roleId: string; resourceType: string | null; resourceId: string | null };
 type SessionUser = { id: string };
 type ProvisionedMapping = { mapping: Mapping; assignment: { id: string }; createdGroup: { id: string } | null };
 
@@ -224,7 +225,7 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
   test.setTimeout(120_000);
   test.skip(!enabled, 'Enable the configured OIDC rehearsal and provide its EnterpriseGlue administrator credentials.');
 
-  test(`creates a ${profile} provider and independently adds and removes scoped rights through the UI @local-oidc-live @identity-authorization-live`, async ({ browser }) => {
+  test(`creates a ${profile} provider and independently adds, revokes, and restores scoped rights through supported administration flows @local-oidc-live @identity-authorization-live`, async ({ browser }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const providerKey = `local-oidc-authz-${suffix}`;
     const viewGroupKey = `group.local-oidc-view-${suffix}`;
@@ -255,6 +256,16 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       const viewMapping = initialMappings.body?.find((candidate) => candidate.providerKey === providerKey);
       expect(viewMapping).toMatchObject({ isActive: true });
       if (viewMapping) createdGroupIds.push(viewMapping.targetGroupId);
+      const viewAssignments = await requestJson<RoleAssignment[]>(admin, `/api/authz/role-assignments?principalType=group&principalId=${encodeURIComponent(viewMapping!.targetGroupId)}&resourceType=engine&resourceId=${encodeURIComponent(allowedEngine.id)}`);
+      expect(viewAssignments.status, JSON.stringify(viewAssignments.body)).toBe(200);
+      const viewAssignment = viewAssignments.body?.find((assignment) => assignment.roleId === 'system.engine.operator');
+      expect(viewAssignment).toMatchObject({
+        principalType: 'group',
+        principalId: viewMapping!.targetGroupId,
+        resourceType: 'engine',
+        resourceId: allowedEngine.id,
+      });
+      if (viewAssignment) createdAssignmentIds.push(viewAssignment.id);
       await expect(admin.getByRole('dialog', { name: 'Add identity mapping' })).toBeHidden();
       await captureConfiguredMappingScreenshot(admin);
 
@@ -289,6 +300,37 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       expect(elevatedInventory.body?.map((engine) => engine.id).sort()).toEqual([allowedEngine.id, siblingEngine.id].sort());
       expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${allowedEngine.id}`)).status).toBe(200);
       expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${siblingEngine.id}`)).status).toBe(200);
+
+      // Removing an RBAC assignment is deliberately separate from disabling
+      // its identity mapping. The matching group membership remains, but the
+      // group no longer has a right on this engine. Restore it before testing
+      // mapping revocation below, which proves both controls independently.
+      const removeViewAssignment = await requestJson(admin, `/api/authz/role-assignments/${viewAssignment!.id}`, {
+        method: 'DELETE', csrf,
+      });
+      expect(removeViewAssignment.status, JSON.stringify(removeViewAssignment.body)).toBe(204);
+      const afterAssignmentRemoval = await requestJson<Engine[]>(elevatedOperator, '/engines-api/engines');
+      expect(afterAssignmentRemoval.status, JSON.stringify(afterAssignmentRemoval.body)).toBe(200);
+      expect(afterAssignmentRemoval.body?.map((engine) => engine.id)).toEqual([siblingEngine.id]);
+      expect([403, 404]).toContain((await requestJson(elevatedOperator, `/engines-api/engines/${allowedEngine.id}`)).status);
+      expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${siblingEngine.id}`)).status).toBe(200);
+
+      const restoredViewAssignment = await requestJson<{ id: string }>(admin, '/api/authz/role-assignments', {
+        method: 'POST', csrf,
+        data: {
+          principalType: 'group',
+          principalId: viewMapping!.targetGroupId,
+          roleId: 'system.engine.operator',
+          resourceType: 'engine',
+          resourceId: allowedEngine.id,
+        },
+      });
+      expect(restoredViewAssignment.status, JSON.stringify(restoredViewAssignment.body)).toBe(201);
+      expect(restoredViewAssignment.body?.id).toBeTruthy();
+      if (restoredViewAssignment.body) createdAssignmentIds.push(restoredViewAssignment.body.id);
+      const afterAssignmentRestore = await requestJson<Engine[]>(elevatedOperator, '/engines-api/engines');
+      expect(afterAssignmentRestore.status, JSON.stringify(afterAssignmentRestore.body)).toBe(200);
+      expect(afterAssignmentRestore.body?.map((engine) => engine.id).sort()).toEqual([allowedEngine.id, siblingEngine.id].sort());
 
       // Keycloak's deterministic fixture user lets this use the real recovery
       // UI and backend data instead of a browser-only identity mock. Entra's
