@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-07-28T03:37:50.304Z
+Generated at: 2026-07-28T03:45:04.445Z
 
 Generated from:
 - third_party_licenses.json
@@ -12,6 +12,7 @@ Generated from:
 - packages/enterprise-plugin-api/third_party_licenses.json
 - packages/frontend-host/third_party_licenses.json
 - packages/plugin-installer/third_party_licenses.json
+- packages/plugin-reference/third_party_licenses.json
 - packages/plugin-runtime/third_party_licenses.json
 - packages/plugin-sdk/third_party_licenses.json
 - packages/shared/third_party_licenses.json
