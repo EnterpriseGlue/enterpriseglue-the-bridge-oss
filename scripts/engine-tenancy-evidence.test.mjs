@@ -282,6 +282,9 @@ test('retains database-free cross-browser accessibility evidence', () => {
   assert.match(accessibilityWriter, /missingChecks: 0/);
   assert.match(accessibilityWriter, /keyboard_tab_selection_and_error_announcement/);
   assert.match(accessibilityWriter, /configuration_lock_mutation_protection/);
+  assert.match(releaseIndexWriter, /function accessibilityChecksPass/);
+  assert.match(releaseIndexWriter, /Object\.values\(checksByWorkflow\)/);
+  assert.match(releaseIndexWriter, /checkGroups\.every\(Array\.isArray\)/);
   assert.doesNotMatch(accessibilityWriter, /process\.env\.(?:JWT_SECRET|ENCRYPTION_KEY|POSTGRES_PASSWORD|ADMIN_PASSWORD)/);
 });
 

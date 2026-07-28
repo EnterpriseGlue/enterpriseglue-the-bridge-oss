@@ -90,6 +90,20 @@ function nativeGrantSanitizationPasses(value) {
     && Object.keys(value.sanitization || {}).length === fields.length;
 }
 
+function accessibilityChecksPass(value) {
+  const checksByWorkflow = value.verifiedChecks;
+  if (!checksByWorkflow || typeof checksByWorkflow !== 'object'
+    || Array.isArray(checksByWorkflow)) {
+    return false;
+  }
+
+  const checkGroups = Object.values(checksByWorkflow);
+  if (!checkGroups.every(Array.isArray)) return false;
+
+  return requiredAccessibilityChecks.every((check) =>
+    checkGroups.some((checks) => checks.includes(check)));
+}
+
 function documentationReviewEvidenceFileExists(value) {
   if (!isSafeDocumentationReviewEvidencePath(value)) return false;
   const absolutePath = path.resolve(root, value);
@@ -139,8 +153,7 @@ const gateDefinitions = [
       && value.missingChecks === 0
       && requiredBrowsers
         .every((browser) => value.verifiedTargets?.browsers?.includes(browser))
-      && requiredAccessibilityChecks
-        .every((check) => value.verifiedChecks?.includes(check)),
+      && accessibilityChecksPass(value),
   },
   {
     id: 'nativeGrantBrowser',
