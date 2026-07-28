@@ -20,11 +20,22 @@ import { ToastProvider } from './shared/notifications/ToastProvider'
 import { createAppRoutes } from './routes'
 
 import { getEnterpriseFrontendPlugin } from './enterprise/loadEnterpriseFrontendPlugin'
+import {
+  getNativePluginRoutesV1,
+  loadInstalledNativePluginsV1,
+} from './plugins/nativePluginRuntime'
 
 export async function startApp() {
   const enterprisePlugin = await getEnterpriseFrontendPlugin()
-  const enterpriseRootChildren = (enterprisePlugin.routes || []) as any[]
-  const enterpriseTenantChildren = (enterprisePlugin.tenantRoutes || []) as any[]
+  await loadInstalledNativePluginsV1()
+  const enterpriseRootChildren = [
+    ...((enterprisePlugin.routes || []) as any[]),
+    ...getNativePluginRoutesV1('root'),
+  ]
+  const enterpriseTenantChildren = [
+    ...((enterprisePlugin.tenantRoutes || []) as any[]),
+    ...getNativePluginRoutesV1('tenant'),
+  ]
 
   const qc = new QueryClient()
   const routes = createAppRoutes(enterpriseRootChildren, enterpriseTenantChildren)
@@ -45,4 +56,3 @@ export async function startApp() {
     </React.StrictMode>
   )
 }
-

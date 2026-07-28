@@ -49,6 +49,10 @@ import {
   USER_MANAGEMENT_PLATFORM_PERMISSIONS,
 } from '../../../shared/auth/permissions'
 import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
+import {
+  getNativePluginNavigationV1,
+  NativePluginSlotV1,
+} from '../../../plugins/nativePluginRuntime'
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
@@ -111,6 +115,7 @@ function normalizeEnterpriseNavItems(raw: unknown): NavExtension[] {
       id: typeof anyIt.id === 'string' ? anyIt.id : `${label}:${normalizedPath}`,
       label,
       path: normalizedPath,
+      scope: anyIt.scope === 'root' || anyIt.scope === 'tenant' ? anyIt.scope : undefined,
       order: typeof anyIt.order === 'number' ? anyIt.order : undefined,
       actionId: typeof anyIt.actionId === 'string' ? anyIt.actionId : undefined,
       actionIds: Array.isArray(anyIt.actionIds)
@@ -700,7 +705,17 @@ export default function LayoutWithProSidebar() {
     getEnterpriseFrontendPlugin()
       .then((plugin) => {
         if (cancelled) return
-        setEnterpriseNavItems(normalizeEnterpriseNavItems((plugin as any)?.navItems))
+        const legacyItems = normalizeEnterpriseNavItems((plugin as any)?.navItems)
+        const nativeItems: NavExtension[] = getNativePluginNavigationV1().map((item) => ({
+          id: `${item.pluginId}:${item.id}`,
+          label: item.label,
+          path: item.path,
+          order: item.order,
+          section: item.section === 'administration' ? 'admin' : item.section,
+          tenantOnly: item.scope === 'tenant',
+          scope: item.scope,
+        }))
+        setEnterpriseNavItems([...legacyItems, ...nativeItems])
       })
       .catch(() => {
         if (cancelled) return
@@ -844,9 +859,9 @@ export default function LayoutWithProSidebar() {
                     {visibleEnterpriseNavItems.map((item) => (
                       <HeaderMenuItem
                         key={`${item.path}:${item.label}`}
-                        href={toTenantPath(item.path)}
+                        href={item.scope === 'root' ? item.path : toTenantPath(item.path)}
                         isCurrentPage={effectivePathname === item.path || effectivePathname.startsWith(`${item.path}/`)}
-                        onClick={(e) => { e.preventDefault(); navigate(toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
+                        onClick={(e) => { e.preventDefault(); navigate(item.scope === 'root' ? item.path : toTenantPath(item.path)); (document.activeElement as HTMLElement)?.blur() }}
                       >
                         {item.label}
                       </HeaderMenuItem>
@@ -985,6 +1000,15 @@ export default function LayoutWithProSidebar() {
                 </SideNavItems>
               </SideNav>
               <HeaderGlobalBar>
+                <NativePluginSlotV1
+                  slot="global.header.actions.v1"
+                  context={{
+                    schemaVersion: 1,
+                    disabled: false,
+                    tenantRef: tenantSlug ?? undefined,
+                    theme: 'g100',
+                  }}
+                />
                 <HeaderGlobalAction
                   aria-label="Notifications"
                   tooltipAlignment="center"

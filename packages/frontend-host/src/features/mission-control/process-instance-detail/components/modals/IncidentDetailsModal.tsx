@@ -1,8 +1,10 @@
 import React from 'react'
 import { Modal } from '@carbon/react'
+import { NativePluginSlotV1 } from '../../../../../plugins/nativePluginRuntime'
 
 interface IncidentDetailsModalProps {
   incidentDetails: any | null
+  engineRef?: string
   jobById: Map<string, any>
   onClose: () => void
 }
@@ -13,12 +15,14 @@ interface IncidentDetailsModalProps {
  */
 export function IncidentDetailsModal({
   incidentDetails,
+  engineRef,
   jobById,
   onClose,
 }: IncidentDetailsModalProps) {
   if (!incidentDetails) return null
 
   const jobId = incidentDetails?.configuration || incidentDetails?.jobId || ''
+  const incidentRef = typeof incidentDetails?.id === 'string' ? incidentDetails.id : ''
   const job = jobId ? jobById.get(jobId) : null
   const due = job?.dueDate || job?.duedate
   
@@ -40,6 +44,39 @@ export function IncidentDetailsModal({
       size="lg"
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
+        {engineRef && (incidentRef || jobId) && (
+          <div
+            aria-label="Plugin incident actions"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 'var(--spacing-2)',
+            }}
+          >
+            {incidentRef && (
+              <NativePluginSlotV1
+                slot="mission-control.incident.actions.v1"
+                context={{
+                  schemaVersion: 1,
+                  disabled: false,
+                  engineRef,
+                  incidentRef,
+                }}
+              />
+            )}
+            {jobId && (
+              <NativePluginSlotV1
+                slot="mission-control.failed-job.actions.v1"
+                context={{
+                  schemaVersion: 1,
+                  disabled: false,
+                  engineRef,
+                  failedJobRef: jobId,
+                }}
+              />
+            )}
+          </div>
+        )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: 'var(--text-13)' }}>
           <div><strong>Flow node:</strong> {incidentDetails.activityId || '—'}</div>
           <div><strong>Incident type:</strong> {incidentDetails.incidentType || incidentDetails.type || '—'}</div>

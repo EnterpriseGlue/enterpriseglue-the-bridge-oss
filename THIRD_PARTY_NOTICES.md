@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-07-28T03:16:39.880Z
+Generated at: 2026-07-28T03:30:32.826Z
 
 Generated from:
 - third_party_licenses.json
@@ -24,7 +24,7 @@ Generated from:
 | BSD-2-Clause | 1 |
 | BSD-3-Clause | 1 |
 | ISC | 3 |
-| MIT | 57 |
+| MIT | 59 |
 | MIT-0 | 1 |
 | SEE LICENSE IN LICENSE | 2 |
 
@@ -89,9 +89,11 @@ Generated from:
 | pg | 8.20.0 | MIT | git://github.com/brianc/node-postgres.git | backend, frontend, packages/shared |
 | react-dom | 19.2.6 | MIT | https://github.com/facebook/react.git | frontend, packages/frontend-host |
 | react-icons | 5.6.0 | MIT | git+ssh://git@github.com:react-icons/react-icons.git | frontend |
+| react-is | 19.2.6 | MIT | https://github.com/facebook/react.git | frontend, packages/frontend-host |
 | react-loading-skeleton | 3.5.0 | MIT | https://github.com/dvtng/react-loading-skeleton.git | frontend, packages/frontend-host |
 | react-pro-sidebar | 1.1.0 | MIT | https://github.com/azouaoui-med/react-pro-sidebar.git | frontend, packages/frontend-host |
-| react-router-dom | 7.18.0 | MIT | https://github.com/remix-run/react-router | frontend, packages/frontend-host |
+| react-router-dom | 7.18.0 | MIT | https://github.com/remix-run/react-router | frontend |
+| react-router-dom | 7.18.1 | MIT | https://github.com/remix-run/react-router | frontend, packages/frontend-host |
 | react-split-pane | 3.2.0 | MIT | https://github.com/tomkp/react-split-pane | frontend, packages/frontend-host |
 | react | 19.2.6 | MIT | https://github.com/facebook/react.git | frontend, packages/frontend-host |
 | reflect-metadata | 0.2.2 | Apache-2.0 | https://github.com/rbuckton/reflect-metadata.git | backend, frontend, packages/backend-host, packages/shared |

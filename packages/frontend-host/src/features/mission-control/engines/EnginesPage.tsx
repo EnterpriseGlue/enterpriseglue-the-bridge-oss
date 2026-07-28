@@ -39,6 +39,7 @@ import CamundaNativeGrantMigrationPanel from './components/CamundaNativeGrantMig
 import EngineBackstopPanel from './components/EngineBackstopPanel'
 import { EnginePermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot, GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../shared/auth/guards'
+import { NativePluginSlotV1 } from '../../../plugins/nativePluginRuntime'
 import type { DeploymentHistoryView, DeploymentLineageView, DeploymentReceiptView } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js'
 import type {
@@ -1981,8 +1982,17 @@ export default function Engines() {
                             if (key === 'actions') {
                               return (
                                 <TableCell key={cell.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
-                                  {hasActions && (
-                                    <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                                    <NativePluginSlotV1
+                                      slot="mission-control.engine.actions.v1"
+                                      context={{
+                                        schemaVersion: 1,
+                                        disabled: !inventoryReadDecision.allowed,
+                                        engineRef: row.id,
+                                      }}
+                                    />
+                                    {hasActions && (
+                                      <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
                                       {(actions.canEdit || inventoryReadDecision.allowed) && (
                                         <GuardedOverflowMenuItem
                                           itemText={actions.canEdit ? 'Edit' : 'View details'}
@@ -2025,8 +2035,9 @@ export default function Engines() {
                                           }}
                                         />
                                       )}
-                                    </GuardedOverflowMenu>
-                                  )}
+                                      </GuardedOverflowMenu>
+                                    )}
+                                  </div>
                                 </TableCell>
                               )
                             }

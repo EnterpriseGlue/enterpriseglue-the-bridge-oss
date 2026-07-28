@@ -103,6 +103,10 @@
     "licenses": "MIT",
     "repository": "https://github.com/facebook/react.git"
   },
+  "react-is@19.2.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/facebook/react.git"
+  },
   "react-loading-skeleton@3.5.0": {
     "licenses": "MIT",
     "repository": "https://github.com/dvtng/react-loading-skeleton.git",
@@ -114,7 +118,7 @@
     "publisher": "Mohamed Azouaoui",
     "email": "azouaoui.med@gmail.com"
   },
-  "react-router-dom@7.18.0": {
+  "react-router-dom@7.18.1": {
     "licenses": "MIT",
     "repository": "https://github.com/remix-run/react-router",
     "publisher": "Remix Software",

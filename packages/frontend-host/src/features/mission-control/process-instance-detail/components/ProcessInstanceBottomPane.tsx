@@ -11,6 +11,7 @@ interface ProcessInstanceBottomPaneProps {
   historyContext: any | null
   defName?: string
   instanceId: string
+  engineRef?: string
   defs: Array<{ key: string; version: number }>
   defKey?: string
   histData?: any
@@ -112,6 +113,7 @@ export function ProcessInstanceBottomPane({
   historyContext,
   defName,
   instanceId,
+  engineRef,
   defs,
   defKey,
   histData,
@@ -149,6 +151,7 @@ export function ProcessInstanceBottomPane({
         historyContext={historyContext}
         defName={defName}
         instanceId={instanceId}
+        engineRef={engineRef}
         defs={defs}
         defKey={defKey}
         histData={histData}
