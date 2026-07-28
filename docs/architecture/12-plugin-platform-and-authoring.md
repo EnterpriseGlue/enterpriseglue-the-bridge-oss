@@ -225,6 +225,22 @@ The intended release format is:
 Release publication, registry interoperability, and customer air-gap acceptance remain required
 gates. A local implementation alone is not evidence of a supported customer distribution.
 
+The protected public release workflow is
+[`plugin-toolchain-release.yml`](../../.github/workflows/plugin-toolchain-release.yml). It is
+manual-only, accepts one exact 40-character protected OSS commit, builds a multi-architecture
+installer, packages both charts reproducibly, publishes immutable subjects, signs and verifies
+them with workload identity, scans the final installer image, writes a non-secret receipt, and
+creates a signed air-gap bundle. Its local disposable-registry counterpart is:
+
+```sh
+pnpm test:plugin-toolchain-release-policy
+pnpm test:plugin-toolchain-release:local
+```
+
+The local drill proves signed registry publication, digest re-pull, chart determinism, tamper
+rejection, bundled-tool execution, and disconnected import. It does not constitute a protected
+public publication or a customer-registry acceptance.
+
 ## Public/private boundary
 
 Public OSS contains generic host code only. A private plugin does not become an OSS workspace
@@ -273,6 +289,8 @@ contractual acceptance.
 - [x] Local focused tests, container checks, Compose lifecycle, Helm security, and two-replica
   acceptance pass.
 - [x] OSS source boundary guard rejects private plugin dependencies and imports.
+- [x] Protected generic installer/chart release workflow and a local signed OCI/air-gap drill
+  exist; no protected public execution has occurred.
 - [ ] Review and merge the stacked generic OSS slices.
 - [ ] Run protected public CI, including source and final-image boundary guards.
 - [ ] Publish immutable SDK/runtime, host images, installer image, and charts.
