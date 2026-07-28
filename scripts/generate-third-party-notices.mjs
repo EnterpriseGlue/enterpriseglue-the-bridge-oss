@@ -372,7 +372,11 @@ async function buildSourceEntries(source, context, seenInternalPackages = new Se
         return nextTree;
       })();
 
-  const rootNode = source.isRoot ? tree : tree.dependencies?.[source.packageName];
+  const rootNode = source.isRoot
+    ? tree
+    : tree.name === source.packageName
+      ? tree
+      : tree.dependencies?.[source.packageName];
   const dependencyNodes = source.isRoot ? tree.dependencies || {} : rootNode?.dependencies || {};
 
   for (const dependencyName of runtimeDependencyNames) {

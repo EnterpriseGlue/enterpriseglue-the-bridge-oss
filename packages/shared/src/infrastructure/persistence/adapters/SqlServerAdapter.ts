@@ -5,6 +5,10 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
+  isPluginLargeTextColumn,
+  pluginKeyColumnLength,
+} from '../pluginColumnPolicy.js';
+import {
   User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
   Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
@@ -17,6 +21,7 @@ import {
   Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  pluginPlatformEntities,
 } from '../entities/index.js';
 
 const entities = [
@@ -32,7 +37,12 @@ const entities = [
   Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
+  ...pluginPlatformEntities,
 ];
+const pluginEntityTargetNames = new Set(
+  pluginPlatformEntities.map((entity) => entity.name),
+);
+const PLUGIN_SQL_SERVER_COLLATION = 'Latin1_General_100_BIN2';
 
 /**
  * Microsoft SQL Server Database Adapter
@@ -105,9 +115,15 @@ export class SqlServerAdapter implements DatabaseAdapter {
     for (const column of metadata.columns) {
       const targetName = this.getTargetName(column.target);
       const key = `${targetName}:${column.propertyName}`;
+      const isPluginColumn = pluginEntityTargetNames.has(targetName);
 
       if (column.options.type === 'boolean') {
         column.options.type = 'bit';
+        if (column.options.default === true) {
+          column.options.default = 1;
+        } else if (column.options.default === false) {
+          column.options.default = 0;
+        }
         continue;
       }
 
@@ -131,6 +147,29 @@ export class SqlServerAdapter implements DatabaseAdapter {
       // comparisons. TypeORM's portable upsert uses comparisons for changed
       // values, including descriptive fields, so every shared text column
       // must use NVARCHAR.
+      if (isPluginColumn) {
+        const databaseColumnName =
+          typeof column.options.name === 'string'
+            ? column.options.name
+            : column.propertyName.replace(
+                /[A-Z]/g,
+                (character) => `_${character.toLowerCase()}`,
+              );
+        if (needsKeyLength) {
+          column.options.type = 'varchar';
+          column.options.length =
+            pluginKeyColumnLength(databaseColumnName);
+          column.options.collation = PLUGIN_SQL_SERVER_COLLATION;
+        } else {
+          column.options.type = 'nvarchar';
+          column.options.length = isPluginLargeTextColumn(
+            databaseColumnName,
+          )
+            ? 'MAX'
+            : 4000;
+        }
+        continue;
+      }
       column.options.type = 'nvarchar';
       if (column.options.length == null) {
         column.options.length = needsKeyLength ? 191 : 4000;

@@ -8,6 +8,7 @@
     "frontend",
     "packages/*"
   ],
+  "packageManager": "pnpm@11.0.8",
   "scripts": {
     "dev": "bash ./dev.sh",
     "dev:backend": "bash ./dev.sh -d backend",

@@ -1,1 +1,150 @@
-{}
+{
+  "@bpmn-io/properties-panel@3.41.3": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/bpmn-io/properties-panel.git",
+    "publisher": "Niklas Kiefer",
+    "email": "niklas.kiefer@camunda.com",
+    "url": "https://github.com/pinussilvestrus"
+  },
+  "@carbon/icons-react@11.80.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/carbon-design-system/carbon.git"
+  },
+  "@carbon/react@1.107.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/carbon-design-system/carbon.git"
+  },
+  "@carbon/styles@1.106.0": {
+    "licenses": "Apache-2.0",
+    "repository": "https://github.com/carbon-design-system/carbon.git"
+  },
+  "@tanstack/react-query@5.100.9": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/TanStack/query.git",
+    "publisher": "tannerlinsley"
+  },
+  "@tanstack/react-table@8.21.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/TanStack/table.git",
+    "publisher": "Tanner Linsley"
+  },
+  "bpmn-js-bpmnlint@0.24.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/bpmn-io/bpmn-js-bpmnlint.git",
+    "publisher": "Philipp Fromme",
+    "email": "https://github.com/philippfromme"
+  },
+  "bpmn-js-properties-panel@5.54.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/bpmn-js-properties-panel",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "bpmn-js@17.11.1": {
+    "licenses": "SEE LICENSE IN LICENSE",
+    "repository": "https://github.com/bpmn-io/bpmn-js",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "bpmnlint@11.12.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/bpmnlint",
+    "publisher": "Seif Eddine Ghezala",
+    "email": "siffogh3@gmail.com"
+  },
+  "camunda-bpmn-js@5.27.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/camunda-bpmn-js",
+    "publisher": "Niklas Kiefer",
+    "url": "https://github.com/pinussilvestrus"
+  },
+  "camunda-bpmn-moddle@7.0.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/camunda-bpmn-moddle",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "camunda-dmn-js@3.7.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/camunda/camunda-dmn-js",
+    "publisher": "Maciej Barelkowski",
+    "url": "https://github.com/barmac"
+  },
+  "clsx@2.1.1": {
+    "licenses": "MIT",
+    "repository": "lukeed/clsx",
+    "publisher": "Luke Edwards",
+    "email": "luke.edwards05@gmail.com",
+    "url": "https://lukeed.com"
+  },
+  "dmn-js-properties-panel@3.11.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/bpmn-io/dmn-js-properties-panel",
+    "publisher": "Nico Rehwaldt",
+    "url": "https://github.com/nikku"
+  },
+  "dmn-js@17.8.1": {
+    "licenses": "SEE LICENSE IN LICENSE",
+    "repository": "https://github.com/bpmn-io/dmn-js",
+    "publisher": "Sebastian Stamm",
+    "url": "https://github.com/SebastianStamm"
+  },
+  "inferno@5.6.3": {
+    "licenses": "MIT",
+    "repository": "https://github.com/infernojs/inferno",
+    "publisher": "Dominic Gannaway",
+    "email": "dg@domgan.com"
+  },
+  "jspdf@4.2.1": {
+    "licenses": "MIT",
+    "repository": "https://github.com/parallax/jsPDF.git"
+  },
+  "react-dom@19.2.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/facebook/react.git"
+  },
+  "react-loading-skeleton@3.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/dvtng/react-loading-skeleton.git",
+    "publisher": "David Tang"
+  },
+  "react-pro-sidebar@1.1.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/azouaoui-med/react-pro-sidebar.git",
+    "publisher": "Mohamed Azouaoui",
+    "email": "azouaoui.med@gmail.com"
+  },
+  "react-router-dom@7.18.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/remix-run/react-router",
+    "publisher": "Remix Software",
+    "email": "hello@remix.run"
+  },
+  "react-split-pane@3.2.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/tomkp/react-split-pane",
+    "publisher": "tomkp",
+    "email": "tom@tomkp.com"
+  },
+  "react@19.2.6": {
+    "licenses": "MIT",
+    "repository": "https://github.com/facebook/react.git"
+  },
+  "svg2pdf.js@2.7.0": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/yWorks/svg2pdf.js.git",
+    "publisher": "yFiles for HTML Support Team",
+    "email": "yfileshtml@yworks.com",
+    "url": "https://www.yworks.com/yfileshtml"
+  },
+  "tailwind-merge@3.5.0": {
+    "licenses": "MIT",
+    "repository": "https://github.com/dcastil/tailwind-merge.git",
+    "publisher": "Dany Castillo"
+  },
+  "zustand@5.0.13": {
+    "licenses": "MIT",
+    "repository": "git+https://github.com/pmndrs/zustand.git",
+    "publisher": "Paul Henschel"
+  }
+}
