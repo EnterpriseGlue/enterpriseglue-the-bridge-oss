@@ -7,10 +7,12 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import type {
-  IdentityProviderAuthenticationMode as SchemaIdentityProviderAuthenticationMode,
-  IdentityProviderType as SchemaIdentityProviderProtocol,
+import {
+  normalizeIdentityProviderSyncForMandatoryLogin,
+  type IdentityProviderAuthenticationMode as SchemaIdentityProviderAuthenticationMode,
+  type IdentityProviderType as SchemaIdentityProviderProtocol,
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
@@ -36,6 +38,12 @@ export interface IdentityProviderInput {
 }
 
 export type IdentityConnectorCapability = 'claim_only' | 'ldap_directory' | 'scim' | 'graph';
+
+function isDirectLoginProvider(provider: IdentityProvider): boolean {
+  return provider.isEnabled
+    && provider.authenticationMode === 'direct'
+    && (provider.protocol === 'oidc' || provider.protocol === 'saml' || provider.protocol === 'ldap');
+}
 
 export interface IdentityProviderArchiveResult {
   providerId: string;
@@ -106,6 +114,15 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
 
 function ensureSync(sync: Record<string, unknown> | undefined): void {
   if (!sync) return;
+  if (sync.triggers !== undefined && (!Array.isArray(sync.triggers) || sync.triggers.some((trigger) => !['login', 'scheduled', 'manual'].includes(String(trigger))))) {
+    throw Errors.validation('Identity provider synchronization triggers are invalid');
+  }
+  if (Array.isArray(sync.triggers) && !sync.triggers.includes('login')) {
+    throw Errors.validation('Sign-in reconciliation is mandatory');
+  }
+  if (sync.requiredForLogin !== undefined && sync.requiredForLogin !== true) {
+    throw Errors.validation('Sign-in reconciliation is mandatory');
+  }
   const connector = sync.connectorCapability;
   if (connector !== undefined && !['claim_only', 'ldap_directory', 'scim', 'graph'].includes(String(connector))) {
     throw Errors.validation('Unsupported identity connector capability');
@@ -182,17 +199,40 @@ class IdentityProviderServiceClass {
     return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: normalized(tenantId) ? { id: id.trim(), tenantId: normalized(tenantId)! } : { id: id.trim(), tenantId: IsNull() } });
   }
   async listEnabledDirectLoginProviders(tenantId?: string | null): Promise<IdentityProvider[]> {
-    return (await this.list(tenantId)).filter((provider) => provider.isEnabled && provider.authenticationMode === 'direct' && (provider.protocol === 'oidc' || provider.protocol === 'saml' || provider.protocol === 'ldap'));
+    return (await this.list(tenantId)).filter(isDirectLoginProvider);
+  }
+  /**
+   * A logged-out OSS browser has no request tenant yet. Prefer providers in
+   * its canonical default tenant and retain platform rows as a compatibility
+   * fallback for older provider records. Provider ids, rather than keys, are
+   * used to begin the selected flow, so same-key rows cannot cross scopes.
+   */
+  async listEnabledDirectLoginProvidersForUnauthenticatedLogin(): Promise<IdentityProvider[]> {
+    const [defaultTenantProviders, platformProviders] = await Promise.all([
+      this.listEnabledDirectLoginProviders(OSS_DEFAULT_TENANT_ID),
+      this.listEnabledDirectLoginProviders(null),
+    ]);
+    const defaultKeys = new Set(defaultTenantProviders.map((provider) => provider.key));
+    return [...defaultTenantProviders, ...platformProviders.filter((provider) => !defaultKeys.has(provider.key))];
+  }
+  async getDirectLoginProviderByKey(key: string, tenantId?: string | null): Promise<IdentityProvider | null> {
+    if (normalized(tenantId)) return this.getByKey(key, tenantId);
+    return await this.getByKey(key, OSS_DEFAULT_TENANT_ID) || await this.getByKey(key, null);
+  }
+  async getDirectLoginProviderById(id: string, tenantId?: string | null): Promise<IdentityProvider | null> {
+    if (normalized(tenantId)) return this.getById(id, tenantId);
+    return await this.getById(id, OSS_DEFAULT_TENANT_ID) || await this.getById(id, null);
   }
   async upsert(input: IdentityProviderInput, store?: DataSource | EntityManager): Promise<IdentityProvider> {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();
     if (!key) throw Errors.validation('Identity provider key is required');
     ensureConfig(input.protocol, input.configuration);
     ensureSync(input.sync);
+    const sync = normalizeIdentityProviderSyncForMandatoryLogin(input.sync);
     const repo = (store || await getDataSource()).getRepository(IdentityProvider); const now = Date.now();
     const providerKeyIdentity = identityProviderKeyIdentity(tenantId, key);
     const existing = await repo.findOne({ where: { providerKeyIdentity } });
-    const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(input.sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), sourceHash: input.sourceHash ?? null, lastAppliedAt: input.lastAppliedAt ?? null, driftStatus: input.driftStatus ?? null, updatedAt: now };
+    const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), sourceHash: input.sourceHash ?? null, lastAppliedAt: input.lastAppliedAt ?? null, driftStatus: input.driftStatus ?? null, updatedAt: now };
     if (existing) { await repo.update({ id: existing.id }, values); return { ...existing, ...values } as IdentityProvider; }
     const provider = { id: generateId(), tenantId, key, providerKeyIdentity, ...values, createdAt: now } as unknown as IdentityProvider;
     await repo.insert(provider); return provider;

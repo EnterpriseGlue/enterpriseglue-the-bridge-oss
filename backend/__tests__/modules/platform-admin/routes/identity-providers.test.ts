@@ -192,14 +192,23 @@ describe('identity provider routes', () => {
         issuerUrl: 'https://login.example.test', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'],
         allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'], groupClaim: 'groups', expectedAudience: 'enterpriseglue',
       },
-      sync: { triggers: ['manual'], requiredForLogin: false, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+      sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
     });
     expect(response.status).toBe(200);
     expect(service.upsert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'entra', protocol: 'oidc', isEnabled: false,
       configuration: expect.objectContaining({ allowVerifiedEmailLinking: true, expectedAudience: 'enterpriseglue' }),
-      sync: expect.objectContaining({ triggers: ['manual'], incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph' }),
+      sync: expect.objectContaining({ triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph' }),
     }));
+  });
+
+  it('rejects a provider update that attempts to disable mandatory sign-in reconciliation', async () => {
+    const response = await request(app).put('/api/identity/providers/entra').send({
+      sync: { triggers: ['manual'], requiredForLogin: false, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+    });
+
+    expect(response.status).toBe(400);
+    expect(service.upsert).not.toHaveBeenCalled();
   });
 
   it('archives instead of deleting provider history', async () => {

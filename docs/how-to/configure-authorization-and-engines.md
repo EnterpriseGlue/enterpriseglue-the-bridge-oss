@@ -4,7 +4,7 @@ Summary: Target operator workflow for configuring EnterpriseGlue roles, groups, 
 
 Audience: Platform administrators, identity administrators, engine operators, and deployment engineers.
 
-Status: **Incremental implementation guide for the RBAC/config refactor.** Platform Settings, Access Control, SSO, Engines, JSON bundle preview/apply/export, runtime-resource sets, provider-neutral identity mapping foundations, engine ingestion controls, and customer-sidecar transport are implemented in this worktree. Provider API reconciliation for every protocol, deployment startup automation, and other unchecked roadmap items remain target work; use only the documented implemented routes/settings in production.
+Status: **Incremental implementation guide for the RBAC/config refactor.** Platform Settings, Access Control, SSO, Engines, JSON bundle preview/apply/export, runtime-resource sets, provider-neutral identity mapping foundations, mandatory sign-in reconciliation for OIDC/SAML/LDAP, engine ingestion controls, and customer-sidecar transport are implemented in this worktree. Deployment startup automation and other unchecked roadmap items remain target work; use only the documented implemented routes/settings in production.
 
 Current UI progress: Access Control includes modular Effective Access, SSO diagnostics, assignment-source ownership tags, and role-assignment form logic isolated for continued component extraction. See the live implementation tracker in [the architecture plan](../architecture/11-json-driven-authz-and-engine-registration.md).
 
@@ -219,6 +219,15 @@ Required sequence:
 5. Enable the provider while retaining a break-glass local administrator.
 6. Reconcile existing external identities before enforcing SSO.
 
+Every direct provider session executes step 6 again with fresh upstream
+evidence before the session is issued. `sync.triggers` must include `login`
+and `sync.requiredForLogin` is always `true`; the direct API, configuration
+bundle schema, and portal do not permit turning this off. Authoritative
+mappings replace stale provider-managed memberships after an upstream group or
+role change, while additive mappings, manual memberships, and memberships from
+other providers remain intact. Scheduled LDAP directory reconciliation and
+manual replay are additional refresh paths for users who have not signed in.
+
 An `exists` mapping to a normal internal group represents default access for every authenticated user. Do not configure a provider-level default role.
 
 ### Clean-Slate Identity Providers
@@ -237,6 +246,11 @@ LDAP changes the authentication adapter, not RBAC:
 - `claims_only`: a trusted upstream login layer authenticates the user and provides verified identity attributes.
 
 LDAP groups map to the same internal groups used by OIDC and SAML. Store stable group identifiers or normalized DNs, not mutable display labels where a stable id is available.
+
+LDAP direct sign-in binds/authenticates the user, reads their current groups,
+and completes the same mandatory reconciliation before a session is issued.
+For OIDC providers such as Entra ID, the fresh verified token claims are the
+equivalent evidence; SAML uses the verified assertion attributes.
 
 ## Configure Engines
 

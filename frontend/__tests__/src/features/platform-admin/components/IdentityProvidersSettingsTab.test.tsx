@@ -164,6 +164,9 @@ describe('IdentityProvidersSettingsTab', () => {
     fireEvent.change(within(modal).getByLabelText('Group claim (optional)'), { target: { value: 'groups' } });
     fireEvent.change(within(modal).getByLabelText('Expected audience (optional)'), { target: { value: 'enterpriseglue-web' } });
     fireEvent.change(within(modal).getByLabelText('Connector capability'), { target: { value: 'graph' } });
+    expect(within(modal).getByText('Sign-in reconciliation is mandatory')).toBeInTheDocument();
+    expect(within(modal).queryByLabelText('Synchronize on sign-in')).not.toBeInTheDocument();
+    expect(within(modal).queryByLabelText('Synchronization required for sign-in')).not.toBeInTheDocument();
     fireEvent.click(within(modal).getByRole('button', { name: /^Add$/ }));
 
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({

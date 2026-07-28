@@ -960,8 +960,8 @@ describe('configBundleDiffService', () => {
     ]));
   });
 
-  it('diffs supported config-owned group assignments by canonical identity and expiration', async () => {
-    const role = { id: 'role-operator', tenantId: 'tenant-a', key: 'system.engine.operator', source: 'system', sourceRef: null };
+  it('diffs tenant-scoped assignments to platform-seeded system roles by canonical identity and expiration', async () => {
+    const role = { id: 'role-operator', tenantId: null, key: 'system.engine.operator', source: 'system', sourceRef: 'rbac-foundation' };
     const group = {
       id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
       source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,

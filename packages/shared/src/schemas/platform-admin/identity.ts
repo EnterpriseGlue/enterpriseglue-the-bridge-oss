@@ -14,15 +14,40 @@ export const IdentityProviderSecretReferenceSchema = z.string()
   .max(512)
   .regex(/^[A-Za-z][A-Za-z0-9_.:/-]*$/, 'Secret references must be opaque identifiers');
 
-/** Synchronization behavior shared by direct API and configuration-bundle providers. */
+/**
+ * Sign-in reconciliation is a security boundary: a browser session is issued
+ * only after the provider's fresh identity evidence has updated the local
+ * entitlement snapshot and authoritative mapped memberships.
+ */
 export const IdentityProviderSyncConfigurationSchema = z.object({
-  triggers: z.array(z.enum(['login', 'scheduled', 'manual'])).min(1),
+  triggers: z.array(z.enum(['login', 'scheduled', 'manual']))
+    .min(1)
+    .refine((triggers) => triggers.includes('login'), 'Sign-in reconciliation is mandatory'),
   intervalSeconds: z.number().int().min(60).max(86_400).optional(),
-  requiredForLogin: z.boolean().default(true),
+  requiredForLogin: z.literal(true).default(true),
   incompleteEntitlements: z.enum(['fail_closed', 'preserve_previous']).default('fail_closed'),
   connectorCapability: z.enum(['claim_only', 'ldap_directory', 'scim', 'graph']).default('claim_only'),
   scheduled: z.boolean().default(false),
 }).strict();
+
+/**
+ * Repairs pre-mandatory persisted records while preserving their optional
+ * scheduled/manual settings. Request and bundle schemas remain strict; this
+ * helper is only for safely reading older stored JSON during an update.
+ */
+export function normalizeIdentityProviderSyncForMandatoryLogin(value: unknown): Record<string, unknown> {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const triggers = Array.isArray(source.triggers)
+    ? source.triggers.filter((trigger): trigger is 'login' | 'scheduled' | 'manual' => trigger === 'login' || trigger === 'scheduled' || trigger === 'manual')
+    : [];
+  return {
+    ...source,
+    triggers: ['login', ...triggers.filter((trigger) => trigger !== 'login')],
+    requiredForLogin: true,
+  };
+}
 
 const IdentityProviderAuthorizationConfigurationSchema = z.object({
   // This is optional in a protocol configuration because config bundles keep

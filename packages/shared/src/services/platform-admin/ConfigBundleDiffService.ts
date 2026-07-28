@@ -317,7 +317,14 @@ class ConfigBundleDiffService {
     }
     const tenantRoles = roles.filter((role) => (role.tenantId || null) === normalizedTenantId);
     const tenantGroups = groups.filter((group) => (group.tenantId || null) === normalizedTenantId);
-    const rolesByKey = new Map(tenantRoles.map((role) => [role.key, role]));
+    // System roles are platform-seeded templates (tenantId null) but may be
+    // assigned to groups in a tenant-scoped configuration bundle. Do not let
+    // this cross tenant boundaries for custom roles: only the fixed system
+    // role catalog is available as a fallback, and a tenant-local role still
+    // wins if one is ever present.
+    const systemRoleKeys = new Set(SystemRoleDefinitions.map((role) => role.key));
+    const platformSystemRoles = roles.filter((role) => (role.tenantId || null) === null && systemRoleKeys.has(role.key));
+    const rolesByKey = new Map([...platformSystemRoles, ...tenantRoles].map((role) => [role.key, role]));
     const groupsByKey = new Map(tenantGroups.map((group) => [group.key, group]));
     const tenantEngines = engines.filter((engine) =>
       (engine.tenantId || null) === normalizedTenantId

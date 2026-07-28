@@ -8,7 +8,10 @@ import { MockOidcProvider } from '../../../../test/identity-mocks/index.js';
 const identityProviderService = vi.hoisted(() => ({
   getByKey: vi.fn(),
   getById: vi.fn(),
+  getDirectLoginProviderByKey: vi.fn(),
+  getDirectLoginProviderById: vi.fn(),
   listEnabledDirectLoginProviders: vi.fn(),
+  listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn(),
 }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
@@ -63,7 +66,10 @@ describe('provider-neutral OIDC browser flow', () => {
     const byKey = new Map([[providerA.key, providerA], [providerB.key, providerB]]);
     identityProviderService.getById.mockImplementation(async (id: string) => byId.get(id) || null);
     identityProviderService.getByKey.mockImplementation(async (key: string) => byKey.get(key) || null);
+    identityProviderService.getDirectLoginProviderById.mockImplementation(async (id: string) => byId.get(id) || null);
+    identityProviderService.getDirectLoginProviderByKey.mockImplementation(async (key: string) => byKey.get(key) || null);
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([providerA, providerB]);
+    identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin.mockResolvedValue([providerA, providerB]);
     identityProviderProvisioningService.reconcileOidcLogin.mockImplementation(async (provider: typeof providerA, claims: { email?: string }) => ({
       id: `user-for-${provider.id}`,
       email: claims.email || 'person@example.test',
@@ -138,8 +144,8 @@ describe('provider-neutral OIDC browser flow', () => {
       .redirects(0);
     expect(callbackB.status).toBe(302);
 
-    expect(identityProviderService.getById).toHaveBeenCalledWith(providerA.id, null);
-    expect(identityProviderService.getById).toHaveBeenCalledWith(providerB.id, null);
+    expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith(providerA.id, null);
+    expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith(providerB.id, null);
     expect(identityProviderService.getByKey).toHaveBeenCalledWith(providerA.key, null);
     expect(identityProviderService.getByKey).toHaveBeenCalledWith(providerB.key, null);
     expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenNthCalledWith(

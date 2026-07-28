@@ -8,15 +8,16 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { identityProviderKeyIdentity, identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
 
 describe('identityProviderService', () => {
-  const findOne = vi.fn(); const insert = vi.fn(); const update = vi.fn();
+  const find = vi.fn(); const findOne = vi.fn(); const insert = vi.fn(); const update = vi.fn();
   beforeEach(() => {
-    vi.clearAllMocks(); findOne.mockResolvedValue(null); insert.mockResolvedValue(undefined);
+    vi.clearAllMocks(); findOne.mockResolvedValue(null); find.mockResolvedValue([]); insert.mockResolvedValue(undefined);
     (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => {
-      if (entity === IdentityProvider) return { findOne, insert, update, find: vi.fn() };
+      if (entity === IdentityProvider) return { find, findOne, insert, update };
       throw new Error('Unexpected repository');
     }});
   });
@@ -24,12 +25,48 @@ describe('identityProviderService', () => {
     const provider = await identityProviderService.upsert({ key: 'entra', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client', clientSecretRef: 'EG_ENTRA_SECRET' } });
     expect(provider.key).toBe('entra');
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc', providerKeyIdentity: 'platform:entra', configurationJson: expect.stringContaining('clientSecretRef') }));
+    expect(JSON.parse(insert.mock.calls[0][0].syncJson)).toEqual({ triggers: ['login'], requiredForLogin: true });
+  });
+
+  it('requires reconciliation before sign-in even when a service caller bypasses the API schema', async () => {
+    const configuration = { issuerUrl: 'https://login.example.test', clientId: 'client' };
+    await expect(identityProviderService.upsert({ key: 'manual-only', protocol: 'oidc', configuration, sync: { triggers: ['manual'] } })).rejects.toThrow('Sign-in reconciliation is mandatory');
+    await expect(identityProviderService.upsert({ key: 'not-required', protocol: 'oidc', configuration, sync: { triggers: ['login'], requiredForLogin: false } })).rejects.toThrow('Sign-in reconciliation is mandatory');
+    expect(insert).not.toHaveBeenCalled();
   });
   it('uses a non-null tenant-plus-key identity for provider lookup and writes', async () => {
     await identityProviderService.upsert({ tenantId: 'tenant-a', key: 'identity.main', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client' } });
     expect(findOne).toHaveBeenCalledWith({ where: { providerKeyIdentity: 'tenant-a:identity.main' } });
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ providerKeyIdentity: 'tenant-a:identity.main' }));
     expect(identityProviderKeyIdentity(null, 'identity.main')).toBe('platform:identity.main');
+  });
+  it('prefers canonical OSS default-tenant direct providers while retaining platform rows as a compatibility fallback', async () => {
+    const defaultProvider = { id: 'default-provider', key: 'entra', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct' } as IdentityProvider;
+    const platformProvider = { id: 'platform-provider', key: 'legacy-saml', protocol: 'saml', isEnabled: true, authenticationMode: 'direct' } as IdentityProvider;
+    const duplicatePlatformProvider = { id: 'old-provider', key: 'entra', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct' } as IdentityProvider;
+    find.mockImplementation(({ where }: { where: { tenantId?: string } }) => (
+      where.tenantId === OSS_DEFAULT_TENANT_ID
+        ? Promise.resolve([defaultProvider])
+        : Promise.resolve([duplicatePlatformProvider, platformProvider])
+    ));
+
+    await expect(identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin()).resolves.toEqual([
+      defaultProvider,
+      platformProvider,
+    ]);
+    expect(find).toHaveBeenCalledTimes(2);
+  });
+  it('uses the canonical default tenant before legacy platform records for an unauthenticated provider start', async () => {
+    const defaultProvider = { id: 'default-provider', key: 'entra', protocol: 'oidc' } as IdentityProvider;
+    findOne.mockImplementation(({ where }: { where: { providerKeyIdentity?: string; id?: string; tenantId?: string } }) => (
+      where.providerKeyIdentity === `${OSS_DEFAULT_TENANT_ID}:entra` || (where.id === 'default-provider' && where.tenantId === OSS_DEFAULT_TENANT_ID)
+        ? Promise.resolve(defaultProvider)
+        : Promise.resolve(null)
+    ));
+
+    await expect(identityProviderService.getDirectLoginProviderByKey('entra')).resolves.toBe(defaultProvider);
+    await expect(identityProviderService.getDirectLoginProviderById('default-provider')).resolves.toBe(defaultProvider);
+    expect(findOne).not.toHaveBeenCalledWith({ where: { providerKeyIdentity: 'platform:entra' } });
   });
   it('persists config provenance through a supplied transaction manager', async () => {
     const transactionInsert = vi.fn().mockResolvedValue(undefined);

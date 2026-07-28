@@ -109,12 +109,14 @@ async function authenticateDirectLdap(req: Request, res: Response, provider: Ide
 }
 
 router.get('/api/auth/providers/enabled', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const providers = await identityProviderService.listEnabledDirectLoginProviders(req.tenant?.tenantId || null);
+  const providers = req.tenant?.tenantId
+    ? await identityProviderService.listEnabledDirectLoginProviders(req.tenant.tenantId)
+    : await identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin();
   res.json(providers.map((provider) => ({ id: provider.id, key: provider.key, protocol: provider.protocol, loginMethod: provider.protocol === 'ldap' ? 'password' : 'redirect' })));
 }));
 
 router.get('/api/auth/providers/:providerId/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
-  const provider = await identityProviderService.getById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
+  const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   if (provider.protocol === 'saml') await startSamlLogin(req, res, provider);
   else await startOidcLogin(req, res, provider);
@@ -123,7 +125,7 @@ router.get('/api/auth/providers/:providerId/start', apiLimiter, asyncHandler(asy
 router.get('/api/auth/identity/:key/start', apiLimiter, asyncHandler(async (req: Request, res: Response) => {
   const providerKey = typeof req.params.key === 'string' ? req.params.key : '';
   if (!providerKey) throw Errors.validation('Identity provider key is required');
-  const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
+  const provider = await identityProviderService.getDirectLoginProviderByKey(providerKey, req.tenant?.tenantId || null);
   if (!provider) throw Errors.notFound('Identity provider not found');
   if (provider.protocol === 'saml') await startSamlLogin(req, res, provider);
   else await startOidcLogin(req, res, provider);
@@ -183,13 +185,13 @@ router.post('/api/auth/providers/saml/callback', apiLimiter, asyncHandler(async 
 router.post('/api/auth/identity/:key/ldap/login', apiLimiter, authLimiter, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {
   const providerKey = typeof req.params.key === 'string' ? req.params.key : '';
   if (!providerKey) throw Errors.validation('Identity provider key is required');
-  const provider = await identityProviderService.getByKey(providerKey, req.tenant?.tenantId || null);
+  const provider = await identityProviderService.getDirectLoginProviderByKey(providerKey, req.tenant?.tenantId || null);
   if (!provider) throw Errors.unauthorized('Invalid directory credentials');
   await authenticateDirectLdap(req, res, provider);
 }));
 
 router.post('/api/auth/providers/:providerId/login', apiLimiter, authLimiter, validateBody(ldapLoginSchema), asyncHandler(async (req: Request, res: Response) => {
-  const provider = await identityProviderService.getById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
+  const provider = await identityProviderService.getDirectLoginProviderById(String(req.params.providerId || ''), req.tenant?.tenantId || null);
   if (!provider) throw Errors.unauthorized('Invalid directory credentials');
   await authenticateDirectLdap(req, res, provider);
 }));

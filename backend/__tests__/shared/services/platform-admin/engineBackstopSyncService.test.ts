@@ -79,7 +79,11 @@ function setup(input: { builtProjection?: ReturnType<typeof projection>; sourceH
     readAuthorization: vi.fn(async () => ({ type: 1, permissions: ['READ'], groupId: 'camunda-operators', resourceType: 6, resourceId: 'payments' })),
   };
   const projectionBuilder = vi.fn(async () => ({
-    engine: { id: 'engine-1', type: 'camunda7', lifecycleStatus: 'active', connectionMode: 'direct' }, tenantId: 'tenant-a',
+    engine: {
+      id: 'engine-1', type: 'camunda7', lifecycleStatus: 'active', connectionMode: 'direct',
+      baseUrl: 'https://engine.example.test/engine-rest', authType: 'basic', username: 'service-account', passwordEnc: 'encrypted',
+      oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
+    }, tenantId: 'tenant-a',
     projection: input.builtProjection || projection(), sourceHash: input.sourceHash || sourceHash, desiredHash: input.desiredHash || desiredHash,
     capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: true },
   }));
@@ -128,7 +132,11 @@ describe('EngineBackstopSyncService', () => {
       runService: { createPreview, getSummary: vi.fn(), getDetailedSnapshot: vi.fn(), listForEngine: vi.fn(), updateRun: vi.fn() } as any,
       taskService: { enqueue: vi.fn(), runNext: vi.fn() } as any,
       projectionBuilder: async () => ({
-        engine: { id: 'engine-preview', type: 'operaton', lifecycleStatus: 'active', connectionMode } as any,
+        engine: {
+          id: 'engine-preview', type: 'operaton', lifecycleStatus: 'active', connectionMode,
+          baseUrl: 'https://engine.example.test/engine-rest', authType: 'basic', username: 'service-account', passwordEnc: 'encrypted',
+          oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
+        },
         tenantId: 'tenant-a', projection: projection(), sourceHash, desiredHash,
         capability: { nativeAuthorizationWrite: true },
       }),

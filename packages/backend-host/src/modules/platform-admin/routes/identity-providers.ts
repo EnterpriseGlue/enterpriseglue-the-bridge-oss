@@ -13,6 +13,7 @@ import { directLdapIdentityService } from '@enterpriseglue/shared/services/platf
 import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { samlMetadataService } from '@enterpriseglue/shared/services/platform-admin/SamlMetadataService.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { normalizeIdentityProviderSyncForMandatoryLogin } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { identityAdminLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
@@ -114,7 +115,7 @@ router.put('/api/identity/providers/:key', requireAuth, identityAdminLimiter, re
     authenticationMode: existing.authenticationMode,
     directoryTenantId: existing.directoryTenantId,
     configuration: JSON.parse(existing.configurationJson),
-    sync: JSON.parse(existing.syncJson),
+    sync: normalizeIdentityProviderSyncForMandatoryLogin(JSON.parse(existing.syncJson)),
     ownershipMode: existing.ownershipMode,
     sourceRef: existing.sourceRef,
     ...req.body,

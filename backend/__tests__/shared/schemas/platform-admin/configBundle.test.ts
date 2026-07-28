@@ -19,8 +19,17 @@ import {
   canonicalizeConfigJson,
   hashCanonicalConfig,
 } from '@enterpriseglue/shared/services/platform-admin/config-bundle-hash.js';
+import { IdentityProviderSyncConfigurationSchema } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 
 describe('EnterpriseGlue configuration bundle contracts', () => {
+  it('requires every provider protocol to reconcile before sign-in', () => {
+    expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['manual'], requiredForLogin: true }).success).toBe(false);
+    expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login'], requiredForLogin: false }).success).toBe(false);
+    expect(IdentityProviderSyncConfigurationSchema.parse({ triggers: ['login', 'scheduled'] })).toMatchObject({
+      triggers: ['login', 'scheduled'], requiredForLogin: true,
+    });
+  });
+
   it('documents sanitized Docker secret preflight failures without accepting secret bytes', () => {
     expect(ConfigBundleSecretReferenceStatusSchema.parse({
       reference: 'docker://oidc-client-secret',

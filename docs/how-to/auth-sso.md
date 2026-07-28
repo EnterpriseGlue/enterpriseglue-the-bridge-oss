@@ -23,6 +23,34 @@ Create an enabled direct OIDC, SAML, or LDAP provider with secret references onl
 
 Create **Identity Mappings** from stable upstream entitlements to internal groups, then grant platform, project, engine, or runtime-resource roles to those groups. Test the connection and perform a controlled sign-in before enabling SSO enforcement.
 
+### Mandatory sign-in reconciliation
+
+Every successful direct OIDC (including Microsoft Entra ID), SAML, and LDAP
+sign-in is a reconciliation run. EnterpriseGlue verifies the provider response,
+updates the identity snapshot and mapped memberships, and only then issues the
+browser session. The `login` trigger and `requiredForLogin: true` are mandatory
+in both the API and JSON configuration; the portal displays this as a fixed
+security property rather than a toggle.
+
+For an `authoritative` identity mapping, an upstream group or app-role removal
+removes only the corresponding provider-managed local membership on the user's
+next successful sign-in. An `additive` mapping only adds memberships. Manual
+memberships and memberships sourced from another provider are unaffected. If
+reconciliation fails, EnterpriseGlue fails closed and issues no session.
+
+Scheduled LDAP directory reconciliation and manual replay are supplementary
+ways to refresh identities that have not signed in; they do not replace the
+mandatory fresh reconciliation at sign-in. OIDC/Entra obtains fresh verified
+claims through the sign-in flow. A future Graph or SCIM poller would be a
+separate background capability, not an opt-out from this requirement.
+
+In local OSS, the logged-out provider chooser reads the canonical
+`tenant-default` providers first and then legacy platform-scoped provider rows
+as a compatibility fallback. In a tenant-aware deployment, discovery and the
+selected provider start are scoped to the resolved tenant; EnterpriseGlue never
+enumerates providers from other tenants. The signed OIDC/SAML state records the
+selected provider and tenant, so the callback cannot switch scope.
+
 When any direct SSO provider is enabled, password login remains disabled for
 ordinary local accounts. The break-glass exception is limited to an active local
 account that still has a password and an active canonical Platform Administrator
@@ -245,6 +273,8 @@ non-standard `groups` OAuth scope unless that provider explicitly requires it;
 the portable default remains `openid`, `profile`, and `email`. The local
 Entra-compatible and optional real-tenant rehearsals are documented in
 [Identity Protocol Rehearsal and LDAP Test Harness](./ldap-protocol-test-harness.md).
+An Entra group or app-role change takes effect on the user's next successful
+sign-in, when its fresh token claims complete the mandatory reconciliation.
 
 ## Email (Optional)
 - Seed the default email configuration with `EMAIL_*` variables on first deploy so verification/reset flows work out of the box.

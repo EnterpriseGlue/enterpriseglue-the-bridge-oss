@@ -94,6 +94,41 @@ describe('identity entitlement mapping', () => {
     expect(matchesIdentityEntitlement({ entitlementType: 'scope', externalId: 'engine.read', matchOperator: 'exact' }, normalized)).toBe(true);
   });
 
+  it.each([
+    ['oidc', { groups: ['group-old'], roles: ['role-old'] }, { groups: ['group-new'], roles: ['role-new'] }],
+    ['saml', { group: 'group-old', role: 'role-old' }, { group: 'group-new', role: 'role-new' }],
+    ['ldap', { memberOf: ['group-old'], appRoles: ['role-old'] }, { memberOf: ['group-new'], appRoles: ['role-new'] }],
+  ] as const)('reconciles fresh %s group and role changes by replacing stale authoritative access', async (providerType, initialClaims, changedClaims) => {
+    const providerId = `provider-${providerType}`;
+    const mappings = [
+      { id: 'group-old', providerId, entitlementType: 'group', externalId: 'group-old', matchOperator: 'exact', targetGroupId: 'local-group-old', syncMode: 'authoritative', isActive: true },
+      { id: 'role-old', providerId, entitlementType: 'role', externalId: 'role-old', matchOperator: 'exact', targetGroupId: 'local-role-old', syncMode: 'authoritative', isActive: true },
+      { id: 'group-new', providerId, entitlementType: 'group', externalId: 'group-new', matchOperator: 'exact', targetGroupId: 'local-group-new', syncMode: 'authoritative', isActive: true },
+      { id: 'role-new', providerId, entitlementType: 'role', externalId: 'role-new', matchOperator: 'exact', targetGroupId: 'local-role-new', syncMode: 'authoritative', isActive: true },
+    ];
+    const memberships = new Map<string, Record<string, unknown>>();
+    const membershipRepo = {
+      findOne: vi.fn(async ({ where }: { where: Record<string, unknown> }) => Array.from(memberships.values()).find((membership) =>
+        membership.userId === where.userId && membership.groupId === where.groupId && membership.source === where.source && membership.sourceRef === where.sourceRef,
+      ) || null),
+      insert: vi.fn(async (membership: Record<string, unknown>) => { memberships.set(String(membership.id), membership); }),
+      delete: vi.fn(async ({ id }: { id: string }) => { memberships.delete(id); }),
+      update: vi.fn(),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === IdentityEntitlementMapping ? { find: vi.fn().mockResolvedValue(mappings) }
+        : entity === AuthzGroupMembership ? membershipRepo
+          : {},
+    });
+    const adapter = getIdentityProviderAdapter(providerType);
+    const initial = adapter.normalizeIdentity({ providerKey: providerId, subjectId: 'subject-1', observedAt: 1, claims: initialClaims });
+    const changed = adapter.normalizeIdentity({ providerKey: providerId, subjectId: 'subject-1', observedAt: 2, claims: changedClaims });
+
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', initial)).resolves.toEqual({ created: 2, removed: 0 });
+    await expect(identityEntitlementMappingService.syncMemberships('user-1', 'tenant-a', changed)).resolves.toEqual({ created: 2, removed: 2 });
+    expect(Array.from(memberships.values()).map((membership) => membership.groupId).sort()).toEqual(['local-group-new', 'local-role-new']);
+  });
+
   it('previews aggregate proposed mapping matches from stored snapshots only', async () => {
     const providerRepo = { findOne: vi.fn().mockResolvedValue({ id: 'provider-1', key: 'identity.oidc.main', protocol: 'oidc' }) };
     const snapshotRepo = { find: vi.fn().mockResolvedValue([

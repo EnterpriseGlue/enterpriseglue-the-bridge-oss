@@ -4,7 +4,7 @@ import express from 'express';
 import request from 'supertest';
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
 
-const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), listEnabledDirectLoginProviders: vi.fn() }));
+const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), getDirectLoginProviderByKey: vi.fn(), getDirectLoginProviderById: vi.fn(), listEnabledDirectLoginProviders: vi.fn(), listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn() }));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
 const genericSamlService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), validatePostResponse: vi.fn(), extractUserClaims: vi.fn() }));
 const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
@@ -36,7 +36,10 @@ describe('provider-neutral OIDC routes', () => {
     vi.clearAllMocks();
     identityProviderService.getByKey.mockResolvedValue(provider);
     identityProviderService.getById.mockResolvedValue(provider);
+    identityProviderService.getDirectLoginProviderByKey.mockResolvedValue(provider);
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(provider);
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([provider]);
+    identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin.mockResolvedValue([provider]);
     genericOidcService.createAuthorizationRequest.mockResolvedValue({ url: 'https://issuer.example.test/authorize', codeVerifier: 'verifier' });
     genericOidcService.exchangeCode.mockResolvedValue({ sub: 'subject-1', email: 'person@example.test', nonce: 'nonce' });
     identityProviderProvisioningService.reconcileOidcLogin.mockResolvedValue({ id: 'user-1', email: 'person@example.test', isActive: true, authSessionVersion: 7 });
@@ -70,7 +73,7 @@ describe('provider-neutral OIDC routes', () => {
   });
 
   it('rejects claims-only providers from direct browser login', async () => {
-    identityProviderService.getByKey.mockResolvedValue({ ...provider, authenticationMode: 'claims_only' });
+    identityProviderService.getDirectLoginProviderByKey.mockResolvedValue({ ...provider, authenticationMode: 'claims_only' });
     const response = await request(app).get('/api/auth/identity/identity.oidc.main/start');
     expect(response.status).toBe(403);
     expect(genericOidcService.createAuthorizationRequest).not.toHaveBeenCalled();
@@ -80,12 +83,13 @@ describe('provider-neutral OIDC routes', () => {
     const response = await request(app).get('/api/auth/providers/enabled');
     expect(response.status).toBe(200);
     expect(response.body).toEqual([{ id: 'provider-1', key: 'identity.oidc.main', protocol: 'oidc', loginMethod: 'redirect' }]);
+    expect(identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin).toHaveBeenCalledWith();
   });
 
   it('starts OIDC login through the exact provider id', async () => {
     const response = await request(app).get('/api/auth/providers/provider-1/start').redirects(0);
     expect(response.status).toBe(302);
-    expect(identityProviderService.getById).toHaveBeenCalledWith('provider-1', null);
+    expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith('provider-1', null);
     expect(response.headers.location).toBe('https://issuer.example.test/authorize');
   });
 
@@ -98,6 +102,8 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
     expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: 'nonce' });
+    expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc' }), expect.objectContaining({ sub: 'subject-1', email: 'person@example.test' }));
+    expect(identityProviderProvisioningService.reconcileOidcLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
@@ -122,7 +128,7 @@ describe('provider-neutral OIDC routes', () => {
   });
 
   it('authenticates a direct LDAP provider without returning directory credentials', async () => {
-    identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    identityProviderService.getDirectLoginProviderByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
     const response = await request(app).post('/api/auth/identity/identity.oidc.main/ldap/login').send({ username: 'person@example.test', password: 'directory-password' });
     expect(response.status).toBe(200);
     expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
@@ -132,19 +138,23 @@ describe('provider-neutral OIDC routes', () => {
       tenant: { id: null },
     });
     expect(response.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('accessToken='), expect.stringContaining('refreshToken=')]));
+    expect(identityProviderProvisioningService.reconcileLdapLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), expect.objectContaining({
+      subjectId: 'ldap-user-1', claims: { sub: 'ldap-user-1', email: 'person@example.test', groups: ['ops'] },
+    }));
+    expect(identityProviderProvisioningService.reconcileLdapLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 
   it('authenticates direct LDAP through the exact provider id', async () => {
-    identityProviderService.getById.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
     const response = await request(app).post('/api/auth/providers/provider-1/login').send({ username: 'person@example.test', password: 'directory-password' });
     expect(response.status).toBe(200);
-    expect(identityProviderService.getById).toHaveBeenCalledWith('provider-1', null);
+    expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith('provider-1', null);
     expect(directLdapIdentityService.authenticate).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'ldap' }), 'person@example.test', 'directory-password');
   });
 
   it('does not expose LDAP transport failures during direct sign-in', async () => {
-    identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    identityProviderService.getDirectLoginProviderByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
     directLdapIdentityService.authenticate.mockRejectedValue(new Error('ETIMEDOUT ldaps://directory.internal:636 bind password=directory-password'));
 
     const response = await request(app)
@@ -165,7 +175,7 @@ describe('provider-neutral OIDC routes', () => {
       protocol: 'saml',
       configurationJson: JSON.stringify({ entityId: 'enterpriseglue', callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'EG_SAML_CERT' }),
     };
-    identityProviderService.getById.mockResolvedValue(samlProvider);
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(samlProvider);
     identityProviderService.getByKey.mockResolvedValue(samlProvider);
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([samlProvider]);
 
@@ -184,6 +194,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response');
     expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-1', tenantId: null, samlResponse: 'signed-response' });
     expect(identityProviderProvisioningService.reconcileSamlLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
+    expect(identityProviderProvisioningService.reconcileSamlLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
     expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
   });
 

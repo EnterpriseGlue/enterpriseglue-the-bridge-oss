@@ -291,7 +291,7 @@ describe('configBundleApplyService', () => {
         identityProviders: [{
           key: 'identity.corporate-oidc', type: 'oidc', enabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory',
           allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'],
-          sync: { triggers: ['login', 'manual'], requiredForLogin: false, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
           oidc: { issuerUrl: 'https://login.example.test/tenant/v2.0', clientId: 'enterpriseglue-web', clientSecretRef: 'env://CORPORATE_OIDC_CLIENT_SECRET', callbackUrl: 'https://enterpriseglue.example.test/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue-web' },
           ownershipMode: 'config_warn',
         }],
