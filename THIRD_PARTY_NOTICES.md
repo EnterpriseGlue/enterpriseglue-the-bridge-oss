@@ -2,7 +2,7 @@
 
 This project includes software developed by third parties. The following notices are provided for attribution purposes.
 
-Generated at: 2026-07-28T03:30:32.826Z
+Generated at: 2026-07-28T03:37:50.304Z
 
 Generated from:
 - third_party_licenses.json
@@ -11,6 +11,7 @@ Generated from:
 - packages/backend-host/third_party_licenses.json
 - packages/enterprise-plugin-api/third_party_licenses.json
 - packages/frontend-host/third_party_licenses.json
+- packages/plugin-installer/third_party_licenses.json
 - packages/plugin-runtime/third_party_licenses.json
 - packages/plugin-sdk/third_party_licenses.json
 - packages/shared/third_party_licenses.json
@@ -23,7 +24,7 @@ Generated from:
 | Apache-2.0 | 10 |
 | BSD-2-Clause | 1 |
 | BSD-3-Clause | 1 |
-| ISC | 3 |
+| ISC | 4 |
 | MIT | 59 |
 | MIT-0 | 1 |
 | SEE LICENSE IN LICENSE | 2 |
@@ -108,6 +109,7 @@ Generated from:
 | typescript | 5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript.git | packages/backend-host |
 | undici | 7.28.0 | MIT | git+https://github.com/nodejs/undici.git | backend, frontend, packages/backend-host, packages/shared |
 | uuid | 14.0.0 | MIT | https://github.com/uuidjs/uuid.git | backend, frontend, packages/shared, root |
+| yaml | 2.8.4 | ISC | github:eemeli/yaml | packages/plugin-installer |
 | zod | 4.4.3 | MIT | git+https://github.com/colinhacks/zod.git | backend, frontend, packages/backend-host, packages/plugin-sdk, packages/shared, root |
 | zustand | 5.0.13 | MIT | git+https://github.com/pmndrs/zustand.git | frontend, packages/frontend-host |
 

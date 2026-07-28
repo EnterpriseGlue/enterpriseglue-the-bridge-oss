@@ -416,6 +416,12 @@
     "licenses": "MIT",
     "repository": "https://github.com/uuidjs/uuid.git"
   },
+  "yaml@2.8.4": {
+    "licenses": "ISC",
+    "repository": "github:eemeli/yaml",
+    "publisher": "Eemeli Aro",
+    "email": "eemeli@gmail.com"
+  },
   "zod@4.4.3": {
     "licenses": "MIT",
     "repository": "git+https://github.com/colinhacks/zod.git",

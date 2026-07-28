@@ -1,0 +1,244 @@
+#!/bin/sh
+set -eu
+
+image="${EG_PLUGIN_INSTALLER_IMAGE:-}"
+
+case "$image" in
+  *@sha256:[0-9a-f][0-9a-f]*)
+    ;;
+  *)
+    echo "EG_PLUGIN_INSTALLER_IMAGE must be an immutable OCI reference containing @sha256:" >&2
+    exit 2
+    ;;
+esac
+
+if [ "${1:-}" = "install-oci" ] || [ "${1:-}" = "upgrade-oci" ] || [ "${1:-}" = "import-airgap" ]; then
+  network="${EG_PLUGIN_OCI_NETWORK:-bridge}"
+  case "$network" in
+    ''|*[!A-Za-z0-9_.-]*)
+      echo "EG_PLUGIN_OCI_NETWORK contains unsupported characters" >&2
+      exit 2
+      ;;
+  esac
+  workspace="$(pwd)"
+  acquisition_tmp="$(mktemp -d "${TMPDIR:-/tmp}/enterpriseglue-plugin-acquisition.XXXXXX")"
+  chmod 700 "$acquisition_tmp"
+  mkdir -m 700 "$acquisition_tmp/home"
+  # shellcheck disable=SC2329
+  cleanup_acquisition() {
+    rm -rf "$acquisition_tmp"
+  }
+  trap cleanup_acquisition EXIT INT TERM
+
+  registry_config="${EG_PLUGIN_REGISTRY_CONFIG:-}"
+  if [ -z "$registry_config" ]; then
+    docker_config_root="${DOCKER_CONFIG:-$HOME/.docker}"
+    if [ -f "$docker_config_root/config.json" ] && [ ! -L "$docker_config_root/config.json" ]; then
+      registry_config="$docker_config_root/config.json"
+    else
+      registry_config="$acquisition_tmp/empty-registry-config.json"
+      umask 077
+      printf '%s\n' '{"auths":{}}' > "$registry_config"
+    fi
+  fi
+  if [ ! -f "$registry_config" ] || [ -L "$registry_config" ]; then
+    echo "EG_PLUGIN_REGISTRY_CONFIG must identify a regular, non-symlinked Docker/OCI config file" >&2
+    exit 2
+  fi
+
+  registry_ca="${EG_PLUGIN_REGISTRY_CA:-}"
+  if [ -n "$registry_ca" ] && { [ ! -f "$registry_ca" ] || [ -L "$registry_ca" ]; }; then
+    echo "EG_PLUGIN_REGISTRY_CA must identify a regular, non-symlinked CA file" >&2
+    exit 2
+  fi
+
+  registry_proxy="${EG_PLUGIN_REGISTRY_PROXY:-}"
+  registry_no_proxy="${EG_PLUGIN_REGISTRY_NO_PROXY:-}"
+  carriage_return="$(printf '\r')"
+  case "$registry_proxy$registry_no_proxy" in
+    *'
+'*|*"$carriage_return"*)
+      echo "Registry proxy settings must not contain carriage returns or newlines" >&2
+      exit 2
+      ;;
+  esac
+  proxy_env_file=""
+  if [ -n "$registry_proxy" ]; then
+    proxy_env_file="$acquisition_tmp/registry-proxy.env"
+    umask 077
+    {
+      printf 'HTTPS_PROXY=%s\n' "$registry_proxy"
+      printf 'HTTP_PROXY=%s\n' "$registry_proxy"
+      if [ -n "$registry_no_proxy" ]; then
+        printf 'NO_PROXY=%s\n' "$registry_no_proxy"
+      fi
+    } > "$proxy_env_file"
+    chmod 600 "$proxy_env_file"
+  fi
+
+  if [ -n "$registry_ca" ]; then
+    if [ -n "$proxy_env_file" ]; then
+      docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        --network "$network" \
+        --read-only \
+        --cap-drop ALL \
+        --security-opt no-new-privileges \
+        --mount "type=bind,src=$workspace,dst=$workspace" \
+        --mount "type=bind,src=$acquisition_tmp,dst=/acquisition" \
+        --mount "type=bind,src=$registry_config,dst=/run/enterpriseglue/registry/config.json,readonly" \
+        --mount "type=bind,src=$registry_ca,dst=/run/enterpriseglue/registry/ca.pem,readonly" \
+        --env-file "$proxy_env_file" \
+        --env "HOME=/acquisition/home" \
+        --env "TMPDIR=/acquisition" \
+        --workdir "$workspace" \
+        "$image" \
+        "$@" \
+        --registry-config /run/enterpriseglue/registry/config.json \
+        --registry-ca /run/enterpriseglue/registry/ca.pem
+    else
+      docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        --network "$network" \
+        --read-only \
+        --cap-drop ALL \
+        --security-opt no-new-privileges \
+        --mount "type=bind,src=$workspace,dst=$workspace" \
+        --mount "type=bind,src=$acquisition_tmp,dst=/acquisition" \
+        --mount "type=bind,src=$registry_config,dst=/run/enterpriseglue/registry/config.json,readonly" \
+        --mount "type=bind,src=$registry_ca,dst=/run/enterpriseglue/registry/ca.pem,readonly" \
+        --env "HOME=/acquisition/home" \
+        --env "TMPDIR=/acquisition" \
+        --workdir "$workspace" \
+        "$image" \
+        "$@" \
+        --registry-config /run/enterpriseglue/registry/config.json \
+        --registry-ca /run/enterpriseglue/registry/ca.pem
+    fi
+  else
+    if [ -n "$proxy_env_file" ]; then
+      docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        --network "$network" \
+        --read-only \
+        --cap-drop ALL \
+        --security-opt no-new-privileges \
+        --mount "type=bind,src=$workspace,dst=$workspace" \
+        --mount "type=bind,src=$acquisition_tmp,dst=/acquisition" \
+        --mount "type=bind,src=$registry_config,dst=/run/enterpriseglue/registry/config.json,readonly" \
+        --env-file "$proxy_env_file" \
+        --env "HOME=/acquisition/home" \
+        --env "TMPDIR=/acquisition" \
+        --workdir "$workspace" \
+        "$image" \
+        "$@" \
+        --registry-config /run/enterpriseglue/registry/config.json
+    else
+      docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        --network "$network" \
+        --read-only \
+        --cap-drop ALL \
+        --security-opt no-new-privileges \
+        --mount "type=bind,src=$workspace,dst=$workspace" \
+        --mount "type=bind,src=$acquisition_tmp,dst=/acquisition" \
+        --mount "type=bind,src=$registry_config,dst=/run/enterpriseglue/registry/config.json,readonly" \
+        --env "HOME=/acquisition/home" \
+        --env "TMPDIR=/acquisition" \
+        --workdir "$workspace" \
+        "$image" \
+        "$@" \
+        --registry-config /run/enterpriseglue/registry/config.json
+    fi
+  fi
+  exit $?
+fi
+
+if [ "${1:-}" = "apply-compose" ]; then
+  socket="${EG_PLUGIN_DOCKER_SOCKET:-/var/run/docker.sock}"
+  if [ ! -S "$socket" ]; then
+    echo "EG_PLUGIN_DOCKER_SOCKET must identify the local Docker Unix socket" >&2
+    exit 2
+  fi
+  if [ "$(uname -s)" = "Darwin" ]; then
+    socket_gid="$(stat -f %g "$socket")"
+    # Docker Desktop presents the bind-mounted socket as root:root even when
+    # the macOS-side forwarding socket belongs to the current user.
+    socket_group_args="--group-add $socket_gid --group-add 0"
+  else
+    socket_gid="$(stat -c %g "$socket")"
+    socket_group_args="--group-add $socket_gid"
+  fi
+  workspace="$(pwd)"
+  # The group arguments are generated only from numeric stat output above.
+  # shellcheck disable=SC2086
+  exec docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    $socket_group_args \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+    --mount "type=bind,src=$workspace,dst=$workspace" \
+    --mount "type=bind,src=$socket,dst=/var/run/docker.sock" \
+    --env "DOCKER_HOST=unix:///var/run/docker.sock" \
+    --env "EG_PLUGIN_INSTALLER_IMAGE=$image" \
+    --workdir "$workspace" \
+    "$image" \
+    "$@"
+fi
+
+if [ "${1:-}" = "apply-kubernetes" ]; then
+  kubeconfig="${EG_PLUGIN_KUBECONFIG:-${KUBECONFIG:-$HOME/.kube/config}}"
+  if [ ! -f "$kubeconfig" ] || [ -L "$kubeconfig" ]; then
+    echo "EG_PLUGIN_KUBECONFIG must identify a regular, non-symlinked kubeconfig file" >&2
+    exit 2
+  fi
+  case "$kubeconfig" in
+    *:*)
+      echo "EG_PLUGIN_KUBECONFIG must identify one self-contained kubeconfig file" >&2
+      exit 2
+      ;;
+  esac
+  kubernetes_network="${EG_PLUGIN_KUBERNETES_NETWORK:-bridge}"
+  case "$kubernetes_network" in
+    ''|*[!A-Za-z0-9_.-]*)
+      echo "EG_PLUGIN_KUBERNETES_NETWORK contains unsupported characters" >&2
+      exit 2
+      ;;
+  esac
+  workspace="$(pwd)"
+  exec docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    --network "$kubernetes_network" \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+    --mount "type=bind,src=$workspace,dst=$workspace" \
+    --mount "type=bind,src=$kubeconfig,dst=/run/enterpriseglue/kubeconfig,readonly" \
+    --env "HOME=/tmp/home" \
+    --env "KUBECONFIG=/run/enterpriseglue/kubeconfig" \
+    --env "HELM_CACHE_HOME=/tmp/helm/cache" \
+    --env "HELM_CONFIG_HOME=/tmp/helm/config" \
+    --env "HELM_DATA_HOME=/tmp/helm/data" \
+    --env "HELM_DRIVER=configmap" \
+    --env "EG_PLUGIN_INSTALLER_IMAGE=$image" \
+    --workdir "$workspace" \
+    "$image" \
+    "$@"
+fi
+
+exec docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  --network none \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
+  --mount "type=bind,src=$(pwd),dst=/workspace" \
+  --env "ENTERPRISEGLUE_PLUGIN_HOST_ROOT=$(pwd)" \
+  --workdir /workspace \
+  "$image" \
+  "$@"
