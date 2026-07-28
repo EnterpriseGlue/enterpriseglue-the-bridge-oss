@@ -149,4 +149,3 @@ The test proves allowed operations, route rejection, header isolation,
 sidecar-policy rejection, downstream-authentication failure, no direct-engine
 fallback, both supported resource types, live group-member enforcement, drift,
 and ownership-only rollback.
-
