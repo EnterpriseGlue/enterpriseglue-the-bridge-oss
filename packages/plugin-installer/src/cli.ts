@@ -669,10 +669,14 @@ async function stageVerifiedPackage(
     throw error;
   }
 
-  const relativePath = relative(resolve(process.cwd()), destination).replaceAll(
-    '\\',
-    '/',
-  );
+  // Compare resolved filesystem identities instead of textual paths. In particular, macOS can
+  // expose the same mounted workspace through both /var and /private/var; a package output below
+  // that workspace must not be rejected solely because the caller used the other spelling.
+  const [workspaceRoot, stagedDestination] = await Promise.all([
+    realpath(resolve(process.cwd())),
+    realpath(destination),
+  ]);
+  const relativePath = relative(workspaceRoot, stagedDestination).replaceAll('\\', '/');
   if (
     !relativePath ||
     relativePath === '..' ||

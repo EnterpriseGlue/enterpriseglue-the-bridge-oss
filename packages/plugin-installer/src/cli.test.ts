@@ -892,6 +892,47 @@ describe('eg-plugin CLI', () => {
         ),
       ]);
 
+      const mountedWorkspace = resolve(directory, 'mounted-workspace');
+      const mountedWorkspaceAlias = resolve(
+        directory,
+        'mounted-workspace-alias',
+      );
+      const aliasedOutput = resolve(mountedWorkspaceAlias, 'output');
+      await mkdir(mountedWorkspace, { recursive: true });
+      await symlink(
+        mountedWorkspace,
+        mountedWorkspaceAlias,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+      const callerWorkingDirectory = process.cwd();
+      try {
+        process.chdir(mountedWorkspace);
+        await expect(
+          runPluginInstallerCliV1([
+            'install-package',
+            '--package',
+            packageRoot,
+            '--trust',
+            trustPath,
+            '--host-version',
+            '0.4.6',
+            '--output',
+            aliasedOutput,
+          ]),
+        ).resolves.toBe(0);
+      } finally {
+        process.chdir(callerWorkingDirectory);
+      }
+      expect(
+        await readFile(
+          resolve(
+            aliasedOutput,
+            'plugin-assets/io.enterpriseglue.packaged-example/1.0.0/frontend/index.js',
+          ),
+          'utf8',
+        ),
+      ).toBe(frontendBytes.toString('utf8'));
+
       await expect(
         runPluginInstallerCliV1([
           'install-package',

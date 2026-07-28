@@ -57,7 +57,10 @@ OSS host repeats this check after its own entry digest verification.
 Only verified runtime files are staged; SBOM, provenance, vulnerability, license, malware,
 secret-scan, and documentation evidence remains outside the host-served asset tree.
 If no permission-grant file is supplied, only the manifest's required
-permissions are granted.
+permissions are granted. The `--output` directory must resolve below the mounted customer
+workspace so generated asset paths stay portable for Compose and Helm. This check uses resolved
+filesystem identity, so equivalent macOS `/var` and `/private/var` workspace spellings are
+accepted without allowing an output outside the mounted workspace.
 
 The lower-level `install` and `upgrade` commands accept individually supplied
 catalog, manifest, resource, and permission files for controlled publisher and
