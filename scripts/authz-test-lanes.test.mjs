@@ -22,6 +22,7 @@ const accessibilityMatrixRunner = readFileSync(new URL('./run-authz-accessibilit
 const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-evidence.mjs', import.meta.url), 'utf8');
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const e2eGlobalTeardown = readFileSync(new URL('../test/e2e/setup/global-teardown.ts', import.meta.url), 'utf8');
+const engineTenancyLocalEnforcement = readFileSync(new URL('../test/e2e/engine-tenancy-local-enforcement.spec.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
 const ciCoreWorkflow = readFileSync(new URL('../.github/workflows/ci-core-reusable.yml', import.meta.url), 'utf8');
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
@@ -234,6 +235,8 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
   assert.match(e2eGlobalSetup, /process\.env\.E2E_SEED_FILE/);
   assert.match(e2eGlobalSetup, /const runtimeEngineBaseUrl = process\.env\.E2E_CAMUNDA_BASE_URL\s*\|\|\s*process\.env\.CAMUNDA_BASE_URL\s*\|\|\s*'http:\/\/camunda-mock:9080\/engine-rest'/);
+  assert.match(engineTenancyLocalEnforcement, /const engineBaseUrl = process\.env\.E2E_CAMUNDA_BASE_URL\s*\|\|\s*process\.env\.CAMUNDA_BASE_URL\s*\|\|\s*'http:\/\/camunda-mock:9080\/engine-rest'/);
+  assert.doesNotMatch(engineTenancyLocalEnforcement, /baseUrl: 'http:\/\/camunda-mock:9080\/engine-rest'/);
   assert.match(e2eGlobalSetup, /assertLocalUrl\(API_BASE_URL\)/);
   assert.match(e2eGlobalSetup, /assertLocalDatabaseTarget\(\)/);
   assert.match(e2eGlobalTeardown, /assertLocalUrl\(API_BASE_URL\)/);

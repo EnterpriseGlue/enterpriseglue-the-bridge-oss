@@ -42,6 +42,12 @@ function isLocalUrl(value: string): boolean {
 
 const baseUrl = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173';
 const apiUrl = process.env.ENGINE_TENANCY_API_URL || 'http://localhost:8787';
+// The API creates these records, so this endpoint must be reachable from the
+// backend process. Docker rehearsals supply its Compose-network URL; host-run
+// CI supplies the localhost mock endpoint.
+const engineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL
+  || process.env.CAMUNDA_BASE_URL
+  || 'http://camunda-mock:9080/engine-rest';
 const enabled = process.env.ENGINE_TENANCY_LOCAL_EVIDENCE === 'true'
   && isLocalUrl(baseUrl)
   && isLocalUrl(apiUrl)
@@ -194,7 +200,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
       const unsafeShared = await page.request.post('/engines-api/engines', {
         ...mutationOptions(token, {
           name: `tenancy-evidence-unsafe-${suffix}`,
-          baseUrl: 'http://camunda-mock:9080/engine-rest',
+          baseUrl: engineBaseUrl,
           type: 'camunda7',
           deploymentDiscoveryEnabled: false,
           tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
@@ -210,7 +216,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
         await page.request.post('/engines-api/engines', {
           ...mutationOptions(token, {
             name: `tenancy-evidence-dedicated-${suffix}`,
-            baseUrl: 'http://camunda-mock:9080/engine-rest',
+            baseUrl: engineBaseUrl,
             type: 'camunda7',
             deploymentDiscoveryEnabled: false,
           }),
@@ -229,7 +235,7 @@ test.describe('Local engine-tenancy enforcement evidence', () => {
         await page.request.post('/engines-api/engines', {
           ...mutationOptions(token, {
             name: `tenancy-evidence-shared-${suffix}`,
-            baseUrl: 'http://camunda-mock:9080/engine-rest',
+            baseUrl: engineBaseUrl,
             type: 'camunda7',
             runtimeAccessScope: 'resource_aware',
             deploymentDiscoveryEnabled: false,
