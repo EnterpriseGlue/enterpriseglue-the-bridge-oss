@@ -117,6 +117,9 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /pnpm run test:authz:decision-coverage/);
   assert.match(authzPrWorkflow, /pnpm --filter frontend-host run build/);
   assert.match(authzPrWorkflow, /curl -sf http:\/\/localhost:5173\/src\/main\.tsx/);
+  assert.match(authzPrWorkflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
+  assert.match(authzPrWorkflow, /curl -sf http:\/\/localhost:9080\/health/);
+  assert.doesNotMatch(authzPrWorkflow, /local-docs\/ING\/api-specs\/Mission-Control-Camunda-API\.postman_collection\.json/);
   assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);
   assert.match(authzPrWorkflow, /\["firefox", "webkit"\]/);

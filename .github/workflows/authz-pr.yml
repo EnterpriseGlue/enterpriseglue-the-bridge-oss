@@ -152,7 +152,7 @@ jobs:
       - name: Start Camunda mock server
         run: |
           mkdir -p .artifacts/authz-pr
-          npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 > .artifacts/authz-pr/camunda-mock.log 2>&1 &
+          node test/e2e/mock-camunda/server.mjs > .artifacts/authz-pr/camunda-mock.log 2>&1 &
 
       - name: Start backend
         run: pnpm --filter webmodeler-backend run start:compiled > .artifacts/authz-pr/backend.log 2>&1 &
@@ -167,7 +167,8 @@ jobs:
           for i in {1..45}; do
             if curl -sf http://localhost:8787/health >/dev/null \
               && curl -sf http://localhost:5173/login >/dev/null \
-              && curl -sf http://localhost:5173/src/main.tsx >/dev/null; then
+              && curl -sf http://localhost:5173/src/main.tsx >/dev/null \
+              && curl -sf http://localhost:9080/health >/dev/null; then
               exit 0
             fi
             sleep 2
@@ -175,6 +176,7 @@ jobs:
           curl -sf http://localhost:8787/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
           curl -sf http://localhost:5173/src/main.tsx >/dev/null
+          curl -sf http://localhost:9080/health >/dev/null
 
       - name: Run ${{ matrix.browser }} fine-grained authorization smoke
         shell: bash
