@@ -30,6 +30,7 @@ import {
   type ConfigBundleChangeRisk,
   type ConfigBundleDiffChange,
 } from './configBundleDiff';
+import GovernanceOwnershipPanel from './GovernanceOwnershipPanel';
 
 const placeholder = '{\n  "bundle": {\n    "apiVersion": "enterpriseglue.ai/v1alpha1",\n    "kind": "EnterpriseGlueConfigBundle",\n    "metadata": { "key": "example.authz", "owner": "platform" },\n    "tenantKey": "default",\n    "mode": "preview_only",\n    "settings": {},\n    "imports": ["./groups.json"]\n  },\n  "files": { "./groups.json": { "groups": [] } }\n}';
 const ciCommand = `export ENTERPRISEGLUE_API_URL="https://enterpriseglue.example"\nexport ENTERPRISEGLUE_API_TOKEN="$EG_CONFIG_TOKEN"\nexport ENTERPRISEGLUE_CONFIG_EXPECTED_TENANT_SCOPE="<tenant-id>"\n\npnpm authz:config preview ./enterpriseglue-config.json\npnpm authz:config apply ./enterpriseglue-config.json`;
@@ -247,5 +248,6 @@ export default function ConfigurationBundleSettingsTab() {
       {runtimeReconciliationTasks.length > 0 && <div style={{ marginTop: 'var(--spacing-4)' }}><h5 style={{ margin: 0 }}>Stored runtime reconciliation</h5>{runtimeReconciliationTasks.map((task) => <div key={task.id} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={task.status === 'completed' ? 'green' : 'warm-gray'}>{task.status}</Tag><span style={{ color: 'var(--cds-text-secondary)' }}>{task.engineSetIds.length} Engine Sets, {task.runtimeResourceSetIds.length} runtime resource sets, {task.engineIds.length} engines</span>{task.attempts > 0 && <Tag type="purple">Retries: {task.attempts}</Tag>}{task.nextAttemptAt && <span style={{ color: 'var(--cds-text-secondary)' }}>Next attempt {new Date(task.nextAttemptAt).toLocaleString()}</span>}{task.lastError && <span style={{ color: 'var(--cds-text-error)' }}>{task.lastError}</span>}</div>)}</div>}
       {selectedRun.changes?.length ? <div>{selectedRun.changes.map((change) => <div key={`${change.objectType}:${change.key}`} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-3)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={change.operation === 'conflict' ? 'red' : change.operation === 'archive' ? 'warm-gray' : 'blue'}>{change.operation}</Tag><Tag type="cool-gray">{formatConfigBundleObjectType(change.objectType)}</Tag><strong>{change.key}</strong><span style={{ color: 'var(--cds-text-secondary)', flex: '1 1 16rem' }}>{change.reason}</span></div>)}</div> : <InlineNotification kind="info" title="No object changes were recorded for this run" hideCloseButton lowContrast style={{ marginTop: 'var(--spacing-3)' }} />}
     </section>}
+    <GovernanceOwnershipPanel />
   </Tile>;
 }

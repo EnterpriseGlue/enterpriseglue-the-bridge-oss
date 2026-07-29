@@ -1,5 +1,6 @@
 import { raw, type Request, type RequestHandler, type Response, type Router } from 'express';
 import { z } from 'zod';
+import { Not } from 'typeorm';
 import { configBundleLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { configBundleJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -17,7 +18,17 @@ import { configBundleRuntimeReconciliationTaskService } from '@enterpriseglue/sh
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
-import { ConfigBundleApplyRequestSchema, ConfigBundleRemoteImportRequestSchema, ConfigBundleRequestSchema } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import {
+  GOVERNANCE_OWNERSHIP_RECEIPT_API_VERSION,
+  governanceOwnershipService,
+} from '@enterpriseglue/shared/services/platform-admin/GovernanceOwnershipService.js';
+import {
+  ConfigBundleApplyRequestSchema,
+  ConfigBundleRemoteImportRequestSchema,
+  ConfigBundleRequestSchema,
+  GovernanceOwnershipApplyRequestSchema,
+  GovernanceOwnershipRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 // Configuration bundle routes are platform-admin APIs, so they are mounted
@@ -163,10 +174,72 @@ export function registerConfigBundleRoutes(
     res.status(reconciliationQueued ? 202 : 200).json(result);
   }));
 
+  router.get('/api/authz/config-bundles/governance-ownership', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), asyncHandler(async (_req: Request, res: Response) => {
+    res.json(await governanceOwnershipService.getCurrentState());
+  }));
+
+  router.post('/api/authz/config-bundles/governance-ownership/preview', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(GovernanceOwnershipRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+    const preview = await governanceOwnershipService.preview(req.body);
+    await logAudit({
+      tenantId: configBundleTenantId(req),
+      userId: req.apiClient?.createdById || req.apiClient?.id || req.user!.userId,
+      action: 'authz.governance_ownership.preview',
+      resourceType: 'platform_settings',
+      resourceId: 'default',
+      details: {
+        operation: preview.operation,
+        currentSourceRef: preview.current.sourceRef,
+        desiredSourceRef: preview.desired.sourceRef,
+        conflicts: preview.conflicts.map(({ code }) => code),
+        previewHash: preview.previewHash,
+        previewExpiresAt: preview.previewExpiresAt,
+        actorType: req.apiClient ? 'api_client' : 'user',
+      },
+    });
+    res.status(preview.conflicts.length > 0 ? 409 : 200).json(preview);
+  }));
+
+  router.post('/api/authz/config-bundles/governance-ownership/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), configBundleJsonPayloadLimit, validateBody(GovernanceOwnershipApplyRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+    const actorId = req.apiClient?.createdById || req.apiClient?.id || req.user!.userId;
+    const receipt = await governanceOwnershipService.apply(req.body, {
+      tenantId: configBundleTenantId(req),
+      actorId,
+    });
+    await logAudit({
+      tenantId: configBundleTenantId(req),
+      userId: actorId,
+      action: 'authz.governance_ownership.apply',
+      resourceType: 'platform_settings',
+      resourceId: 'default',
+      details: {
+        receiptId: receipt.id,
+        operation: receipt.operation,
+        currentSourceRef: receipt.current.sourceRef,
+        desiredSourceRef: receipt.desired.sourceRef,
+        previewHash: receipt.previewHash,
+        idempotencyKey: receipt.idempotencyKey,
+        idempotent: receipt.idempotent === true,
+        preservedObjectTypes: receipt.preservedObjectTypes,
+        actorType: req.apiClient ? 'api_client' : 'user',
+      },
+    });
+    res.json(receipt);
+  }));
+
+  router.get('/api/authz/config-bundles/governance-ownership/receipts', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
+    res.json(await governanceOwnershipService.listReceipts(configBundleTenantId(req), Number(req.query.limit || 25)));
+  }));
+
+  router.get('/api/authz/config-bundles/governance-ownership/receipts/:id', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateParams(z.object({ id: z.string().min(1).max(255) })), asyncHandler(async (req: Request, res: Response) => {
+    const receipt = await governanceOwnershipService.getReceipt(String(req.params.id), configBundleTenantId(req));
+    if (!receipt) throw Errors.notFound('Governance ownership receipt');
+    res.json(receipt);
+  }));
+
   router.get('/api/authz/config-bundles/runs', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.view'), validateQuery(z.object({ limit: z.coerce.number().int().min(1).max(100).default(25) })), asyncHandler(async (req: Request, res: Response) => {
     const tenantId = configBundleTenantId(req);
     const rows = await (await getDataSource()).getRepository(ConfigBundleApplyRun).find({
-      where: { tenantId },
+      where: { tenantId, bundleApiVersion: Not(GOVERNANCE_OWNERSHIP_RECEIPT_API_VERSION) },
       order: { createdAt: 'DESC' },
       take: Number(req.query.limit || 25),
     });
@@ -177,7 +250,7 @@ export function registerConfigBundleRoutes(
     const tenantId = configBundleTenantId(req);
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-      where: { id: runId, tenantId },
+      where: { id: runId, tenantId, bundleApiVersion: Not(GOVERNANCE_OWNERSHIP_RECEIPT_API_VERSION) },
     });
     if (!row) throw Errors.notFound('Configuration bundle apply run');
     res.json(configBundleRunResponse(row));
@@ -187,7 +260,7 @@ export function registerConfigBundleRoutes(
     const tenantId = configBundleTenantId(req);
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-      where: { id: runId, tenantId },
+      where: { id: runId, tenantId, bundleApiVersion: Not(GOVERNANCE_OWNERSHIP_RECEIPT_API_VERSION) },
     });
     if (!row) throw Errors.notFound('Configuration bundle apply run');
     const tasks = await configBundleIdentityReplayTaskService.listForApplyRun(runId, tenantId);
@@ -213,7 +286,7 @@ export function registerConfigBundleRoutes(
     const tenantId = configBundleTenantId(req);
     const runId = String(req.params.id);
     const row = await (await getDataSource()).getRepository(ConfigBundleApplyRun).findOne({
-      where: { id: runId, tenantId },
+      where: { id: runId, tenantId, bundleApiVersion: Not(GOVERNANCE_OWNERSHIP_RECEIPT_API_VERSION) },
     });
     if (!row) throw Errors.notFound('Configuration bundle apply run');
     const tasks = await configBundleRuntimeReconciliationTaskService.listForApplyRun(runId, tenantId);

@@ -103,6 +103,8 @@ import type {
   ConfigBundleRuntimeReconciliation,
   ConfigBundleRuntimeReconciliationTask,
   ConfigBundleSecretPreflightResponse,
+  GovernanceOwnershipReceipt,
+  GovernanceOwnershipState,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import type {
   IdentityProviderAuthenticationMode,
@@ -126,6 +128,8 @@ export type {
   ConfigBundleRuntimeReconciliation,
   ConfigBundleRuntimeReconciliationTask,
   ConfigBundleSecretPreflightResponse,
+  GovernanceOwnershipReceipt,
+  GovernanceOwnershipState,
 };
 
 // Types
@@ -270,6 +274,8 @@ export const authzQueryKeys = {
   configBundleRun: (id?: string) => ['platform-admin', 'authz', 'config-bundles', 'runs', id] as const,
   configBundleIdentityReplayTasks: (runId?: string) => ['platform-admin', 'authz', 'config-bundles', 'runs', runId, 'identity-replay-tasks'] as const,
   configBundleRuntimeReconciliationTasks: (runId?: string) => ['platform-admin', 'authz', 'config-bundles', 'runs', runId, 'runtime-reconciliation-tasks'] as const,
+  governanceOwnership: ['platform-admin', 'authz', 'config-bundles', 'governance-ownership'] as const,
+  governanceOwnershipReceipts: (limit = 25) => ['platform-admin', 'authz', 'config-bundles', 'governance-ownership', 'receipts', limit] as const,
   projectEngineTargets: (params?: Record<string, any>) => ['platform-admin', 'authz', 'project-engine-targets', params] as const,
   projectEngineTarget: (id?: string) => ['platform-admin', 'authz', 'project-engine-targets', id] as const,
   policies: ['platform-admin', 'authz', 'policies'] as const,
@@ -770,6 +776,23 @@ export function useConfigBundleRuntimeReconciliationTasks(runId?: string, option
     queryKey: authzQueryKeys.configBundleRuntimeReconciliationTasks(runId),
     queryFn: () => apiClient.get<ConfigBundleRuntimeReconciliationTask[]>(`/api/authz/config-bundles/runs/${encodeURIComponent(runId!)}/runtime-reconciliation-tasks`),
     enabled: (options.enabled ?? true) && Boolean(runId),
+  });
+}
+
+export function useGovernanceOwnership(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: authzQueryKeys.governanceOwnership,
+    queryFn: () => apiClient.get<GovernanceOwnershipState>('/api/authz/config-bundles/governance-ownership'),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useGovernanceOwnershipReceipts(options: { limit?: number; enabled?: boolean } = {}) {
+  const limit = options.limit ?? 10;
+  return useQuery({
+    queryKey: authzQueryKeys.governanceOwnershipReceipts(limit),
+    queryFn: () => apiClient.get<GovernanceOwnershipReceipt[]>(`/api/authz/config-bundles/governance-ownership/receipts?limit=${limit}`),
+    enabled: options.enabled ?? true,
   });
 }
 

@@ -16,6 +16,8 @@ import {
   ConfigRolesFileSchema,
   ConfigRoleSchema,
   EnterpriseGlueConfigBundleSchema,
+  GovernanceOwnershipApplyRequestSchema,
+  GovernanceOwnershipRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import {
   UpdatePlatformSettingsRequest,
@@ -56,6 +58,8 @@ const SCHEMAS: Record<string, z.ZodType> = {
   EnterpriseGlueConfigBundleSchema,
   ExternalEngineRegistrationRequestSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
+  GovernanceOwnershipApplyRequestSchema,
+  GovernanceOwnershipRequestSchema,
   UpdatePlatformSettingsRequest,
   UpdateEngineRequestSchema,
 };

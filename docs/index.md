@@ -25,6 +25,7 @@ Audience: Developers and architects.
 - [Configuration Matrix](reference/configuration-matrix.md)
 - [Access Governance and Headless Configuration API](reference/access-governance-and-headless-api.md)
 - [Access Governance Operational Hardening Plan](architecture/16-access-governance-operational-hardening-plan.md)
+- [Migrate Governance Settings Ownership](how-to/migrate-governance-settings-ownership.md)
 - [Customer Sidecar Backstop Adapter API](reference/customer-sidecar-backstop-adapter-api.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)

@@ -35,6 +35,7 @@ Related guides:
 
 - [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md)
 - [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
+- [Migrate Governance Settings Ownership](./migrate-governance-settings-ownership.md)
 - [Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md)
 - [Docker Compose Deployment](./deploy-docker.md)
 - [OpenShift Deployment](./deploy-openshift.md)
@@ -72,6 +73,16 @@ ownership, hash, apply-time, and drift columns non-destructively. Existing
 installations retain their current five mode values and begin with
 `access_governance_ownership_mode = 'manual'`; no portal setting becomes
 configuration-owned until a bundle explicitly declares one of those modes.
+
+Moving those settings to another bundle, returning them to manual ownership,
+or retiring their current bundle ownership is a separate preview/hash/apply
+workflow. Use the Governance ownership panel or the
+`/api/authz/config-bundles/governance-ownership` API family. It updates only
+the five settings' provenance and writes an immutable receipt; it never
+deletes or transfers engines, roles, assignments, groups, identity
+configuration, or deployment targets. See
+[Migrate Governance Settings Ownership](./migrate-governance-settings-ownership.md)
+for preconditions, exact success criteria, retry behavior, and rollback.
 
 For a Camunda 7 or Operaton mirrored authorization backstop, a bundle may also import
 `./engine-backstop-mappings.json`. Each mapping references a bundle-owned
@@ -573,6 +584,11 @@ Deployment rollback sequence:
 
 Normal rollback never deletes manual, API, identity-provider, or system-owned records because they are absent from the config bundle.
 
+Governance ownership rollback is also a new forward operation. Preview and
+apply a transfer back to the prior bundle, or release the settings to manual
+ownership. Reuse an idempotency key only when retrying the identical preview;
+the previous ownership receipt remains available for audit.
+
 ## Documentation And Artifact Update Matrix
 
 | Artifact | Required update |
@@ -603,6 +619,7 @@ Normal rollback never deletes manual, API, identity-provider, or system-owned re
 - [ ] ⬜ CI preview/apply/reapply/rollback with idempotency and sanitized receipts.
 - [ ] ⬜ Standalone, OIDC, SAML, LDAP, multiple-provider, and standalone-to-SSO scenarios.
 - [ ] ⬜ Distributed engine, central engine, externally registered engine, and customer-sidecar engine scenarios.
-- [ ] ⬜ Manual records survive config apply and rollback unless ownership transfer was explicitly previewed.
+- [x] ✅ Governance ownership transfer/release/retire changes only the five settings' provenance, preserves managed and manual records, rejects stale previews, and writes an idempotent receipt.
+- [ ] ⬜ Manual records survive ordinary config apply and rollback unless their own source-scoped lifecycle was explicitly previewed.
 - [ ] ⬜ Config-owned drift follows `report`, `fail`, and `reconcile` behavior.
 - [ ] ⬜ No secret or identity token appears in exported bundles, API responses, logs, audits, or CI artifacts.

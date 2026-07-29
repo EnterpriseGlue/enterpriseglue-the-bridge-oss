@@ -28,6 +28,12 @@ describe('ConfigurationBundleSettingsTab', () => {
   beforeEach(() => {
     authState.permissions = { userId: 'admin-1', tenantId: null, platform: ['platform:config-bundles:view', 'platform:config-bundles:preview', 'platform:config-bundles:apply', 'platform:config-bundles:export'], projects: [], engines: [], authorizationVersion: 'test-authz-v1', generatedAt: 1 };
     authState.refreshPermissions.mockClear();
+    server.use(
+      http.get('/api/authz/config-bundles/governance-ownership', () => HttpResponse.json({
+        sourceRef: null, ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+      })),
+      http.get('/api/authz/config-bundles/governance-ownership/receipts', () => HttpResponse.json([])),
+    );
   });
 
   it('previews then applies the exact reviewed configuration hash', async () => {
@@ -106,5 +112,67 @@ describe('ConfigurationBundleSettingsTab', () => {
 
     await waitFor(() => expect(requestedUrl).toBe('https://raw.githubusercontent.com/acme/config/main/bundle.json'));
     expect((screen.getByLabelText('Configuration bundle JSON') as HTMLTextAreaElement).value).toContain('remote.authz');
+  });
+
+  it('previews and applies a settings-only governance ownership transfer with all acknowledgements', async () => {
+    let previewBody: Record<string, unknown> | null = null;
+    let applyBody: Record<string, unknown> | null = null;
+    const current = {
+      sourceRef: 'config_bundle:old.authz', ownershipMode: 'config_locked', sourceHash: 'old-hash',
+      lastAppliedAt: 1000, driftStatus: 'in_sync',
+    };
+    const desired = {
+      sourceRef: 'config_bundle:new.authz', ownershipMode: 'config_warn', sourceHash: null,
+      lastAppliedAt: null, driftStatus: 'drifted',
+    };
+    const affectedFields = ['engineOnboardingMode', 'projectEngineTargetMode', 'engineAccessAuthority', 'projectAccessAuthority', 'engineRuntimeAuthorizationMode'];
+    const preservedObjectTypes = ['engines', 'roles', 'role_assignments', 'identity_providers', 'identity_mappings'];
+    const requiredAcknowledgements = ['governance.settings-only', 'governance.preserve-managed-objects', 'governance.transfer-to-new-bundle'];
+    server.use(
+      http.get('/api/authz/config-bundles/governance-ownership', () => HttpResponse.json(current)),
+      http.post('/api/authz/config-bundles/governance-ownership/preview', async ({ request }) => {
+        previewBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({
+          operation: 'transfer', current, desired, affectedFields, preservedObjectTypes, conflicts: [],
+          requiredAcknowledgements, noChanges: false, previewHash: 'a'.repeat(64), previewExpiresAt: Date.now() + 600_000,
+        });
+      }),
+      http.post('/api/authz/config-bundles/governance-ownership/apply', async ({ request }) => {
+        applyBody = await request.json() as Record<string, unknown>;
+        return HttpResponse.json({
+          id: 'governance-receipt-1', tenantId: 'tenant-default', operation: 'transfer', actorId: 'admin-1',
+          reason: 'Move governance to the new reviewed bundle.', idempotencyKey: 'generated', previewHash: 'a'.repeat(64),
+          current, desired, affectedFields, preservedObjectTypes, appliedAt: Date.now(),
+        });
+      }),
+    );
+
+    renderTab();
+    expect(await screen.findByText('config_bundle:old.authz')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('New bundle key'), { target: { value: 'new.authz' } });
+    fireEvent.change(screen.getByLabelText('Operational reason'), { target: { value: 'Move governance to the new reviewed bundle.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preview ownership change' }));
+
+    expect(await screen.findByRole('region', { name: 'Governance ownership preview' })).toHaveTextContent('5 governance settings');
+    expect(screen.getByRole('region', { name: 'Governance ownership preview' })).toHaveTextContent('5 object types preserved');
+    expect(previewBody).toMatchObject({
+      operation: 'transfer',
+      expectedCurrentSourceRef: 'config_bundle:old.authz',
+      desiredBundleKey: 'new.authz',
+      desiredOwnershipMode: 'config_warn',
+    });
+    fireEvent.click(screen.getByLabelText(/changes only the five platform governance settings/i));
+    fireEvent.click(screen.getByLabelText(/engines, roles, assignments, groups/i));
+    fireEvent.click(screen.getByLabelText(/transfer governance settings to the named configuration bundle/i));
+    fireEvent.click(screen.getByRole('button', { name: /Apply exact ownership preview/ }));
+
+    expect(await screen.findByText('Governance ownership updated')).toBeInTheDocument();
+    await waitFor(() => expect(applyBody).not.toBeNull());
+    expect(applyBody).toMatchObject({
+      previewHash: 'a'.repeat(64),
+      acknowledgements: requiredAcknowledgements,
+    });
+    expect((applyBody as Record<string, unknown>).idempotencyKey).toEqual(expect.any(String));
+    expect(authState.refreshPermissions).toHaveBeenCalledTimes(1);
   });
 });

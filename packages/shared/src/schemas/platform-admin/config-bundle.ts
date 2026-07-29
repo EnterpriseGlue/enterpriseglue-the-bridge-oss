@@ -298,6 +298,101 @@ export const ConfigBundleApplyRunSchema = z.object({
   bootstrap: ConfigBundleBootstrapStatusSchema.optional(),
 });
 
+export const GovernanceOwnershipOperationSchema = z.enum(['transfer', 'release', 'retire']);
+export const GovernanceOwnershipAcknowledgementSchema = z.enum([
+  'governance.settings-only',
+  'governance.preserve-managed-objects',
+  'governance.transfer-to-new-bundle',
+  'governance.release-to-manual',
+  'governance.retire-bundle-without-deleting-objects',
+]);
+const GovernanceOwnershipRequestObjectSchema = z.object({
+  operation: GovernanceOwnershipOperationSchema,
+  expectedCurrentSourceRef: z.string().min(1).max(500).nullable(),
+  desiredBundleKey: ConfigReferenceKeySchema.optional(),
+  desiredOwnershipMode: z.enum(['config_locked', 'config_warn']).optional(),
+  reason: z.string().trim().min(10).max(1000),
+}).strict();
+
+function validateGovernanceOwnershipRequest(
+  value: z.infer<typeof GovernanceOwnershipRequestObjectSchema>,
+  ctx: z.RefinementCtx,
+): void {
+  if (value.operation === 'transfer') {
+    if (!value.desiredBundleKey) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['desiredBundleKey'], message: 'Transfer requires desiredBundleKey' });
+    }
+    if (!value.desiredOwnershipMode) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['desiredOwnershipMode'], message: 'Transfer requires desiredOwnershipMode' });
+    }
+  } else {
+    if (value.desiredBundleKey !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['desiredBundleKey'], message: `${value.operation} does not accept desiredBundleKey` });
+    }
+    if (value.desiredOwnershipMode !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['desiredOwnershipMode'], message: `${value.operation} does not accept desiredOwnershipMode` });
+    }
+  }
+}
+
+export const GovernanceOwnershipRequestSchema = GovernanceOwnershipRequestObjectSchema
+  .superRefine(validateGovernanceOwnershipRequest);
+
+export const GovernanceOwnershipStateSchema = z.object({
+  sourceRef: z.string().nullable(),
+  ownershipMode: z.enum(['manual', 'config_locked', 'config_warn']),
+  sourceHash: z.string().nullable(),
+  lastAppliedAt: z.number().nullable(),
+  driftStatus: z.enum(['in_sync', 'drifted']).nullable(),
+}).strict();
+
+export const GovernanceOwnershipConflictSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+}).strict();
+
+export const GovernanceOwnershipPreviewResponseSchema = z.object({
+  operation: GovernanceOwnershipOperationSchema,
+  current: GovernanceOwnershipStateSchema,
+  desired: GovernanceOwnershipStateSchema,
+  affectedFields: z.array(z.enum([
+    'engineOnboardingMode',
+    'projectEngineTargetMode',
+    'engineAccessAuthority',
+    'projectAccessAuthority',
+    'engineRuntimeAuthorizationMode',
+  ])),
+  preservedObjectTypes: z.array(z.string()),
+  conflicts: z.array(GovernanceOwnershipConflictSchema),
+  requiredAcknowledgements: z.array(GovernanceOwnershipAcknowledgementSchema),
+  noChanges: z.boolean(),
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  previewExpiresAt: z.number().int().positive(),
+}).strict();
+
+export const GovernanceOwnershipApplyRequestSchema = GovernanceOwnershipRequestObjectSchema.extend({
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  previewExpiresAt: z.number().int().positive(),
+  acknowledgements: z.array(GovernanceOwnershipAcknowledgementSchema),
+  idempotencyKey: z.string().min(8).max(255),
+}).strict().superRefine(validateGovernanceOwnershipRequest);
+
+export const GovernanceOwnershipReceiptSchema = z.object({
+  id: z.string(),
+  tenantId: z.string().nullable(),
+  operation: GovernanceOwnershipOperationSchema,
+  actorId: z.string().nullable(),
+  reason: z.string(),
+  idempotencyKey: z.string(),
+  previewHash: z.string(),
+  current: GovernanceOwnershipStateSchema,
+  desired: GovernanceOwnershipStateSchema,
+  affectedFields: GovernanceOwnershipPreviewResponseSchema.shape.affectedFields,
+  preservedObjectTypes: z.array(z.string()),
+  appliedAt: z.number().int(),
+  idempotent: z.boolean().optional(),
+}).strict();
+
 export const ConfigBundleIdentityReplayTaskSchema = z.object({
   id: z.string(),
   providerId: z.string(),
@@ -753,6 +848,13 @@ export type ConfigBundleApplyReconciliation = z.infer<typeof ConfigBundleApplyRe
 export type ConfigBundleApplyResult = z.infer<typeof ConfigBundleApplyResultSchema>;
 export type ConfigBundleApplyRunChange = z.infer<typeof ConfigBundleApplyRunChangeSchema>;
 export type ConfigBundleApplyRun = z.infer<typeof ConfigBundleApplyRunSchema>;
+export type GovernanceOwnershipOperation = z.infer<typeof GovernanceOwnershipOperationSchema>;
+export type GovernanceOwnershipAcknowledgement = z.infer<typeof GovernanceOwnershipAcknowledgementSchema>;
+export type GovernanceOwnershipRequest = z.infer<typeof GovernanceOwnershipRequestSchema>;
+export type GovernanceOwnershipState = z.infer<typeof GovernanceOwnershipStateSchema>;
+export type GovernanceOwnershipPreviewResponse = z.infer<typeof GovernanceOwnershipPreviewResponseSchema>;
+export type GovernanceOwnershipApplyRequest = z.infer<typeof GovernanceOwnershipApplyRequestSchema>;
+export type GovernanceOwnershipReceipt = z.infer<typeof GovernanceOwnershipReceiptSchema>;
 export type ConfigBundleIdentityReplayTask = z.infer<typeof ConfigBundleIdentityReplayTaskSchema>;
 export type ConfigBundleRuntimeReconciliationTask = z.infer<typeof ConfigBundleRuntimeReconciliationTaskSchema>;
 export type ConfigRole = z.infer<typeof ConfigRoleSchema>;

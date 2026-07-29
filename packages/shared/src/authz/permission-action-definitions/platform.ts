@@ -60,6 +60,9 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'GET', route: '/api/authz/config-bundles/runs/{id}', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/authz/config-bundles/runs/{id}/identity-replay-tasks', resourceResolver: 'platform.self' },
         { method: 'GET', route: '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/authz/config-bundles/governance-ownership', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/authz/config-bundles/governance-ownership/receipts', resourceResolver: 'platform.self' },
+        { method: 'GET', route: '/api/authz/config-bundles/governance-ownership/receipts/{id}', resourceResolver: 'platform.self' },
       ],
     },
   {
@@ -78,6 +81,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
         { method: 'POST', route: '/api/authz/config-bundles/import-zip', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/import-url', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/authz/config-bundles/diff', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/authz/config-bundles/governance-ownership/preview', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback/preview', resourceResolver: 'platform.self' },
       ],
     },
@@ -93,6 +97,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       ui: [{ surfaceId: 'admin.configuration-bundles.apply', behavior: 'disable' }],
       routes: [
         { method: 'POST', route: '/api/authz/config-bundles/apply', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/authz/config-bundles/governance-ownership/apply', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback', resourceResolver: 'platform.self' },
       ],

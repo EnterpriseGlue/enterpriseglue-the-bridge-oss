@@ -22,6 +22,7 @@ export * from './DeploymentEligibilityService.js';
 export * from './EnvironmentTagService.js';
 export * from './PlatformSettingsService.js';
 export * from './ActionAvailabilityService.js';
+export * from './GovernanceOwnershipService.js';
 export * from './AccessAuthorityService.js';
 export * from './AuthzGroupService.js';
 export * from './EngineSetService.js';

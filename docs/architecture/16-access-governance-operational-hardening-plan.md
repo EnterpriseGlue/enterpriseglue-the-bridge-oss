@@ -87,33 +87,33 @@ remain unchanged.
 
 ### API
 
-- [ ] Add a strict preview request for:
+- [x] Add a strict preview request for:
   - transfer to another bundle;
   - release governance settings to editable/manual ownership; and
   - retire a bundle's governance ownership.
-- [ ] Return current source, desired source, affected governance fields,
+- [x] Return current source, desired source, affected governance fields,
   conflicts, required acknowledgements, preview hash, and expiry.
-- [ ] Add an apply endpoint requiring the exact preview hash, expiry,
+- [x] Add an apply endpoint requiring the exact preview hash, expiry,
   acknowledgements, and idempotency key.
-- [ ] Persist an immutable transfer receipt and expose it through a read API.
-- [ ] Audit preview and apply without serializing configuration secrets.
+- [x] Persist an immutable transfer receipt and expose it through a read API.
+- [x] Audit preview and apply without serializing configuration secrets.
 
 ### Safety
 
-- [ ] Lock the settings row during apply.
-- [ ] Reject stale previews and source-owner mismatches.
-- [ ] Never delete engines, roles, groups, assignments, providers, mappings, or
+- [x] Lock the settings row during apply.
+- [x] Reject stale previews and source-owner mismatches.
+- [x] Never delete engines, roles, groups, assignments, providers, mappings, or
   project targets as a side effect of governance-settings transfer.
-- [ ] Retiring settings ownership changes only governance provenance and
+- [x] Retiring settings ownership changes only governance provenance and
   ownership; source-owned objects require their existing explicit lifecycle.
-- [ ] Support idempotent retry and fail closed after partial-state or hash
+- [x] Support idempotent retry and fail closed after partial-state or hash
   mismatch.
 
 ### UI and documentation
 
-- [ ] Add a bounded ownership panel to Configuration Bundles.
-- [ ] Present transfer/release/retire consequences before acknowledgement.
-- [ ] Update operator recovery, API, and migration documentation.
+- [x] Add a bounded ownership panel to Configuration Bundles.
+- [x] Present transfer/release/retire consequences before acknowledgement.
+- [x] Update operator recovery, API, and migration documentation.
 
 ## Slice 3: Deployment-Grade CI Evidence Matrix
 

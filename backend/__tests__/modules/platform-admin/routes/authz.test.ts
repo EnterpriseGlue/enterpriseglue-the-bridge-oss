@@ -29,6 +29,41 @@ const configBundleIdentityReplayTaskMock = vi.hoisted(() => ({
 const configBundleRuntimeReconciliationTaskMock = vi.hoisted(() => ({
   listForApplyRun: vi.fn().mockResolvedValue([{ id: 'runtime-task-1', status: 'queued', attempts: 0, nextAttemptAt: null, engineSetIdsJson: '[]', runtimeResourceSetIdsJson: '["runtime-set-1"]', engineIdsJson: '["engine-1"]', lastError: null, completedAt: null, createdAt: 1, updatedAt: 1 }]),
 }));
+const governanceOwnershipMock = vi.hoisted(() => {
+  const preview = {
+    operation: 'transfer',
+    current: { sourceRef: null, ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null },
+    desired: { sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', sourceHash: null, lastAppliedAt: null, driftStatus: 'drifted' },
+    affectedFields: ['engineOnboardingMode', 'projectEngineTargetMode', 'engineAccessAuthority', 'projectAccessAuthority', 'engineRuntimeAuthorizationMode'],
+    preservedObjectTypes: ['engines', 'roles', 'role_assignments', 'identity_providers', 'identity_mappings'],
+    conflicts: [],
+    requiredAcknowledgements: ['governance.settings-only', 'governance.preserve-managed-objects', 'governance.transfer-to-new-bundle'],
+    noChanges: false,
+    previewHash: 'a'.repeat(64),
+    previewExpiresAt: 2_000_000_000_000,
+  };
+  const receipt = {
+    id: 'governance-receipt-1',
+    tenantId: 'tenant-default',
+    operation: 'transfer',
+    actorId: 'user-1',
+    reason: 'Transfer settings governance to the reviewed bundle.',
+    idempotencyKey: 'governance-transfer-2026-07-29',
+    previewHash: preview.previewHash,
+    current: preview.current,
+    desired: preview.desired,
+    affectedFields: preview.affectedFields,
+    preservedObjectTypes: preview.preservedObjectTypes,
+    appliedAt: 1_700_000_000_000,
+  };
+  return {
+    getCurrentState: vi.fn().mockResolvedValue(preview.current),
+    preview: vi.fn().mockResolvedValue(preview),
+    apply: vi.fn().mockResolvedValue(receipt),
+    listReceipts: vi.fn().mockResolvedValue([receipt]),
+    getReceipt: vi.fn().mockResolvedValue(receipt),
+  };
+});
 const configBundleSecretPreflightMock = vi.hoisted(() => ({
   check: vi.fn().mockReturnValue({
     valid: true,
@@ -108,6 +143,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityRepl
 }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js', () => ({
   configBundleRuntimeReconciliationTaskService: configBundleRuntimeReconciliationTaskMock,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/GovernanceOwnershipService.js', () => ({
+  GOVERNANCE_OWNERSHIP_RECEIPT_API_VERSION: 'governance-ownership/v1',
+  governanceOwnershipService: governanceOwnershipMock,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js', () => ({
@@ -2446,6 +2485,137 @@ describe('platform-admin authz routes', () => {
       requiredAcknowledgements: [],
       affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 },
     });
+  });
+
+  it('previews governance ownership transfer as a settings-only operation and records audit evidence', async () => {
+    const input = {
+      operation: 'transfer',
+      expectedCurrentSourceRef: null,
+      desiredBundleKey: 'acme.authz',
+      desiredOwnershipMode: 'config_warn',
+      reason: 'Transfer settings governance to the reviewed bundle.',
+    };
+    const response = await request(app)
+      .post('/api/authz/config-bundles/governance-ownership/preview')
+      .send(input);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      operation: 'transfer',
+      desired: { sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn' },
+      preservedObjectTypes: expect.arrayContaining(['engines', 'roles', 'role_assignments']),
+      conflicts: [],
+      previewHash: 'a'.repeat(64),
+    });
+    expect(governanceOwnershipMock.preview).toHaveBeenCalledWith(input);
+    expect(auditLogMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.governance_ownership.preview',
+      tenantId: 'tenant-default',
+      details: expect.objectContaining({
+        operation: 'transfer',
+        currentSourceRef: null,
+        desiredSourceRef: 'config_bundle:acme.authz',
+        previewHash: 'a'.repeat(64),
+      }),
+    }));
+  });
+
+  it('returns current governance ownership through the configuration read permission', async () => {
+    const response = await request(app).get('/api/authz/config-bundles/governance-ownership');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      sourceRef: null,
+      ownershipMode: 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
+    });
+    expect(governanceOwnershipMock.getCurrentState).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a conflict preview when the current governance owner does not match', async () => {
+    governanceOwnershipMock.preview.mockResolvedValueOnce({
+      ...(await governanceOwnershipMock.preview.getMockImplementation()!({
+        operation: 'transfer',
+        expectedCurrentSourceRef: null,
+        desiredBundleKey: 'acme.authz',
+        desiredOwnershipMode: 'config_warn',
+        reason: 'Transfer settings governance to the reviewed bundle.',
+      })),
+      conflicts: [{ code: 'governance_source_owner_mismatch', message: 'Owner changed.' }],
+    });
+
+    const response = await request(app)
+      .post('/api/authz/config-bundles/governance-ownership/preview')
+      .send({
+        operation: 'transfer',
+        expectedCurrentSourceRef: null,
+        desiredBundleKey: 'acme.authz',
+        desiredOwnershipMode: 'config_warn',
+        reason: 'Transfer settings governance to the reviewed bundle.',
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.conflicts).toEqual([
+      expect.objectContaining({ code: 'governance_source_owner_mismatch' }),
+    ]);
+  });
+
+  it('applies an exact governance ownership preview and keeps receipt lineage', async () => {
+    const response = await request(app)
+      .post('/api/authz/config-bundles/governance-ownership/apply')
+      .send({
+        operation: 'transfer',
+        expectedCurrentSourceRef: null,
+        desiredBundleKey: 'acme.authz',
+        desiredOwnershipMode: 'config_warn',
+        reason: 'Transfer settings governance to the reviewed bundle.',
+        previewHash: 'a'.repeat(64),
+        previewExpiresAt: 2_000_000_000_000,
+        acknowledgements: [
+          'governance.settings-only',
+          'governance.preserve-managed-objects',
+          'governance.transfer-to-new-bundle',
+        ],
+        idempotencyKey: 'governance-transfer-2026-07-29',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'governance-receipt-1',
+      tenantId: 'tenant-default',
+      operation: 'transfer',
+      desired: { sourceRef: 'config_bundle:acme.authz' },
+    });
+    expect(governanceOwnershipMock.apply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previewHash: 'a'.repeat(64),
+        idempotencyKey: 'governance-transfer-2026-07-29',
+      }),
+      { tenantId: 'tenant-default', actorId: 'user-1' },
+    );
+    expect(auditLogMock).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.governance_ownership.apply',
+      details: expect.objectContaining({
+        receiptId: 'governance-receipt-1',
+        preservedObjectTypes: expect.arrayContaining(['engines', 'roles']),
+      }),
+    }));
+  });
+
+  it('lists and retrieves immutable governance ownership receipts within the current tenant', async () => {
+    const [listResponse, detailResponse] = await Promise.all([
+      request(app).get('/api/authz/config-bundles/governance-ownership/receipts?limit=10'),
+      request(app).get('/api/authz/config-bundles/governance-ownership/receipts/governance-receipt-1'),
+    ]);
+
+    expect(listResponse.status).toBe(200);
+    expect(listResponse.body).toEqual([expect.objectContaining({ id: 'governance-receipt-1' })]);
+    expect(detailResponse.status).toBe(200);
+    expect(detailResponse.body).toMatchObject({ id: 'governance-receipt-1', operation: 'transfer' });
+    expect(governanceOwnershipMock.listReceipts).toHaveBeenCalledWith('tenant-default', 10);
+    expect(governanceOwnershipMock.getReceipt).toHaveBeenCalledWith('governance-receipt-1', 'tenant-default');
   });
 
   it('applies a configuration bundle only through the hash-bound apply contract', async () => {

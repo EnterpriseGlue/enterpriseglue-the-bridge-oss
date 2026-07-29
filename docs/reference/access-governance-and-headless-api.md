@@ -213,6 +213,89 @@ Settings and verify `accessGovernanceSourceRef`,
 `accessGovernanceOwnershipMode`, `accessGovernanceDriftStatus`, and
 `governanceBehavior`.
 
+## Governance Settings Ownership API
+
+Do not edit `accessGovernance*` database columns to change which bundle owns
+the five governance settings. Use the same bounded workflow available in
+**Platform Settings > Configuration Bundles > Governance ownership**:
+
+```text
+GET  /api/authz/config-bundles/governance-ownership
+POST /api/authz/config-bundles/governance-ownership/preview
+POST /api/authz/config-bundles/governance-ownership/apply
+GET  /api/authz/config-bundles/governance-ownership/receipts
+GET  /api/authz/config-bundles/governance-ownership/receipts/{id}
+```
+
+The operations are deliberately distinct:
+
+| Operation | Desired owner | Intended use | Objects changed |
+| --- | --- | --- | --- |
+| `transfer` | `config_bundle:<desiredBundleKey>` with `config_warn` or `config_locked` | Move the governance-settings source of truth to a reviewed bundle | The five governance settings' provenance only |
+| `release` | Manual portal/API ownership | Stop configuration management of the five settings | The five governance settings' provenance only |
+| `retire` | Manual portal/API ownership | Record retirement of the bundle that currently owns the five settings | The five governance settings' provenance only |
+
+`release` and `retire` reach the same desired settings state but preserve
+different operator intent in audit and receipt history. `retire` is accepted
+only when the current source is a configuration bundle. None of these
+operations deletes or transfers engines, Engine Sets, runtime resources,
+runtime-resource sets, roles, assignments, groups, memberships, identity
+providers, identity mappings, or project-engine targets.
+
+Read the current owner, then send it back as the concurrency precondition:
+
+<!-- enterpriseglue-config-schema: GovernanceOwnershipRequestSchema -->
+```json
+{
+  "operation": "transfer",
+  "expectedCurrentSourceRef": "config_bundle:old.authz",
+  "desiredBundleKey": "new.authz",
+  "desiredOwnershipMode": "config_warn",
+  "reason": "Move governance settings to the reviewed platform bundle."
+}
+```
+
+Preview returns the current and desired states, exactly five affected fields,
+the preserved object types, conflicts, required acknowledgements, a SHA-256
+preview hash, and a ten-minute expiry. Apply the same request without changing
+it and add the exact preview evidence:
+
+<!-- enterpriseglue-config-schema: GovernanceOwnershipApplyRequestSchema -->
+```json
+{
+  "operation": "transfer",
+  "expectedCurrentSourceRef": "config_bundle:old.authz",
+  "desiredBundleKey": "new.authz",
+  "desiredOwnershipMode": "config_warn",
+  "reason": "Move governance settings to the reviewed platform bundle.",
+  "previewHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "previewExpiresAt": 1785325200000,
+  "acknowledgements": [
+    "governance.settings-only",
+    "governance.preserve-managed-objects",
+    "governance.transfer-to-new-bundle"
+  ],
+  "idempotencyKey": "governance-transfer-change-1842"
+}
+```
+
+The authenticated principal needs `platform:config-bundles:view` to read the
+current state and receipts, `platform:config-bundles:preview` to preview, and
+`platform:config-bundles:apply` to apply. A configuration-scoped API client
+still needs both its machine scope and the corresponding RBAC permission.
+Unknown fields are rejected. Preview and apply audit events contain only
+operation metadata, source references, hashes, conflict codes, receipt IDs,
+and preserved object-type names; they never serialize bundle contents or
+secrets.
+
+Apply locks the settings row, recomputes the preview, rejects expiry or source
+drift, updates only governance provenance, and writes the receipt in the same
+transaction. Retrying the same idempotency key and preview hash returns the
+existing receipt. Reusing that key with another preview fails closed.
+
+See [Migrate Governance Settings Ownership](../how-to/migrate-governance-settings-ownership.md)
+for operator success criteria, rollback, and failure recovery.
+
 ## External Registry API
 
 `POST /engines-api/external/engines` is for a CMDB, operator, or external
@@ -246,7 +329,8 @@ strict and reject unknown fields.
 - Use `config_warn` only for reviewed emergency edits; it records drift.
 - `ownershipMode: "manual"` permits portal edits while retaining bundle
   provenance. It does not silently erase the source reference.
-- Fully releasing bundle provenance requires an explicit ownership-transfer or
-  retirement workflow; do not simulate that operation with a database update.
+- Fully releasing bundle provenance requires an explicit `release` or `retire`
+  ownership operation; moving it requires `transfer`. Do not simulate these
+  operations with a database update.
 - Never remove a configuration lock directly in the database.
 - A mode change never requires re-adding an existing engine.

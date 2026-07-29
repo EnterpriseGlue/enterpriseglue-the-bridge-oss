@@ -295,6 +295,7 @@ export class PlatformSettingsService {
       ownershipMode?: 'manual' | 'config_locked' | 'config_warn';
       sourceHash?: string | null;
       lastAppliedAt?: number | null;
+      driftStatus?: AccessGovernanceDriftStatus | null;
       bypassOwnership?: boolean;
     },
   ): Promise<void> {
@@ -337,6 +338,7 @@ export class PlatformSettingsService {
     if (options?.ownershipMode !== undefined) updateData.accessGovernanceOwnershipMode = options.ownershipMode;
     if (options?.sourceHash !== undefined) updateData.accessGovernanceSourceHash = options.sourceHash;
     if (options?.lastAppliedAt !== undefined) updateData.accessGovernanceLastAppliedAt = options.lastAppliedAt;
+    if (options?.driftStatus !== undefined) updateData.accessGovernanceDriftStatus = options.driftStatus;
 
     if (data.defaultEnvironmentTagId !== undefined) {
       updateData.defaultEnvironmentTagId = data.defaultEnvironmentTagId;
@@ -462,7 +464,9 @@ export class PlatformSettingsService {
         accessGovernanceOwnershipMode: options?.ownershipMode ?? 'manual',
         accessGovernanceSourceHash: options?.sourceHash ?? null,
         accessGovernanceLastAppliedAt: options?.lastAppliedAt ?? null,
-        accessGovernanceDriftStatus: options?.sourceRef ? 'in_sync' : null,
+        accessGovernanceDriftStatus: options?.driftStatus !== undefined
+          ? options.driftStatus
+          : options?.sourceRef ? 'in_sync' : null,
         credentiallessCustomerSidecarsEnabled: data.credentiallessCustomerSidecarsEnabled ?? false,
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),

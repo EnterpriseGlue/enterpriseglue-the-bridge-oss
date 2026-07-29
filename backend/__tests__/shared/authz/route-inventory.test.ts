@@ -216,15 +216,15 @@ describe('authorization route inventory validation', () => {
     const expectedActions = [
       {
         actionId: 'platform.config-bundles.view', permissionId: 'platform:config-bundles:view', operation: 'read', risk: 'low', audit: false,
-        routes: [['GET', '/api/authz/config-bundles/runs'], ['GET', '/api/authz/config-bundles/runs/{id}'], ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks'], ['GET', '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks']],
+        routes: [['GET', '/api/authz/config-bundles/runs'], ['GET', '/api/authz/config-bundles/runs/{id}'], ['GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks'], ['GET', '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks'], ['GET', '/api/authz/config-bundles/governance-ownership'], ['GET', '/api/authz/config-bundles/governance-ownership/receipts'], ['GET', '/api/authz/config-bundles/governance-ownership/receipts/{id}']],
       },
       {
         actionId: 'platform.config-bundles.preview', permissionId: 'platform:config-bundles:preview', operation: 'read', risk: 'medium', audit: true,
-        routes: [['POST', '/api/authz/config-bundles/preview'], ['POST', '/api/authz/config-bundles/validate-secret-refs'], ['POST', '/api/authz/config-bundles/import-zip'], ['POST', '/api/authz/config-bundles/import-url'], ['POST', '/api/authz/config-bundles/diff'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback/preview']],
+        routes: [['POST', '/api/authz/config-bundles/preview'], ['POST', '/api/authz/config-bundles/validate-secret-refs'], ['POST', '/api/authz/config-bundles/import-zip'], ['POST', '/api/authz/config-bundles/import-url'], ['POST', '/api/authz/config-bundles/diff'], ['POST', '/api/authz/config-bundles/governance-ownership/preview'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback/preview']],
       },
       {
         actionId: 'platform.config-bundles.apply', permissionId: 'platform:config-bundles:apply', operation: 'manage', risk: 'high', audit: true,
-        routes: [['POST', '/api/authz/config-bundles/apply'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback']],
+        routes: [['POST', '/api/authz/config-bundles/apply'], ['POST', '/api/authz/config-bundles/governance-ownership/apply'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/apply'], ['POST', '/engines-api/engines/{id}/camunda-native-grants/imports/{runId}/rollback']],
       },
       {
         actionId: 'platform.config-bundles.export', permissionId: 'platform:config-bundles:export', operation: 'read', risk: 'medium', audit: true,
