@@ -107,7 +107,7 @@ mapping itself stays platform-wide.
 <!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
 ```json
 {
-  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "apiVersion": "enterpriseglue.ai/v1beta1",
   "kind": "EnterpriseGlueConfigBundle",
   "metadata": {
     "key": "bundle.corporate-sso",
@@ -115,13 +115,13 @@ mapping itself stays platform-wide.
   },
   "tenantKey": "platform",
   "mode": "authoritative",
-  "settings": {
-    "engineAccessAuthority": "sso_managed",
-    "projectAccessAuthority": "manual",
-    "engineOnboardingMode": "manual_allowed",
-    "projectEngineTargetMode": "manual_allowed",
-    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-    "ownershipMode": "config_locked"
+  "governance": {
+    "engineMembershipAuthority": "sso_managed",
+    "projectMembershipAuthority": "manual",
+    "engineRegistrationPolicy": "manual_allowed",
+    "projectEngineTargetPolicy": "manual_allowed",
+    "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+    "governanceSettingsOwnership": "config_locked"
   },
   "imports": [
     "./roles.json",

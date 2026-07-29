@@ -3,7 +3,11 @@ import {
   ConfigAssignmentsFileSchema, ConfigEnginesFileSchema, ConfigEngineBackstopMappingsFileSchema, ConfigEngineSetsFileSchema, ConfigEngineTenantMappingsFileSchema, ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema, ConfigIdentityProvidersFileSchema, ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema, ConfigRuntimeResourceSetsFileSchema, EnterpriseGlueConfigBundleSchema,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1, ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
+  configBundleContractMetadataForApiVersion,
+  normalizeEnterpriseGlueConfigBundle,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import type { ConfigBundleContractMetadata } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import { PermissionCatalog, SystemRoleDefinitions, rolePermissionDependencyError } from './permissions.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
@@ -47,6 +51,7 @@ export interface ConfigBundlePolicyContext {
   externalEngineReferences?: ConfigBundleExternalEngineReference[];
 }
 export interface ConfigBundleValidationIssue {
+  code?: string;
   path: string;
   message: string;
   severity: 'error';
@@ -56,6 +61,7 @@ export interface ConfigBundleValidationIssue {
 export interface ConfigBundlePreview {
   valid: boolean;
   canonicalHash?: string;
+  contract?: ConfigBundleContractMetadata;
   errors: ConfigBundleValidationIssue[];
   counts: Record<string, number>;
   /** Explicit effective permissions for copied config roles; never a runtime authorization source. */
@@ -368,12 +374,45 @@ function validateExpandedRolePermissionDependencies(
 
 class ConfigBundlePreviewService {
   compile(input: ConfigBundlePreviewInput, policy: ConfigBundlePolicyContext = { credentiallessCustomerSidecarsEnabled: false }): ConfigBundleCompilation {
+    const inputApiVersion = input.bundle && typeof input.bundle === 'object' && !Array.isArray(input.bundle)
+      ? (input.bundle as Record<string, unknown>).apiVersion
+      : undefined;
+    if (
+      inputApiVersion !== ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1
+      && inputApiVersion !== ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1
+    ) {
+      return {
+        preview: {
+          valid: false,
+          errors: [{
+            code: 'CONFIG_BUNDLE_API_VERSION_UNSUPPORTED',
+            path: 'bundle.apiVersion',
+            message: `Unsupported configuration apiVersion: ${typeof inputApiVersion === 'string' ? inputApiVersion : 'missing'}.`,
+            severity: 'error',
+            remediation: `Use ${ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1}; ${ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1} is accepted only for compatibility.`,
+          }],
+          counts: {},
+        },
+      };
+    }
     const parsedBundle = EnterpriseGlueConfigBundleSchema.safeParse(input.bundle);
-    if (!parsedBundle.success) return { preview: { valid: false, errors: enrichIssues(issues('bundle', parsedBundle.error), input), counts: {} } };
+    if (!parsedBundle.success) {
+      const governanceAliasesPresent = inputApiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1
+        && Object.prototype.hasOwnProperty.call(input.bundle as Record<string, unknown>, 'settings');
+      return {
+        preview: {
+          valid: false,
+          contract: configBundleContractMetadataForApiVersion(inputApiVersion, governanceAliasesPresent),
+          errors: enrichIssues(issues('bundle', parsedBundle.error), input),
+          counts: {},
+        },
+      };
+    }
+    const normalized = normalizeEnterpriseGlueConfigBundle(parsedBundle.data);
     const errors: RawValidationIssue[] = [];
     const counts: Record<string, number> = {};
     const normalizedFiles: Record<string, unknown> = {};
-    for (const path of parsedBundle.data.imports) {
+    for (const path of normalized.bundle.imports) {
       if (!(path in input.files)) { errors.push({ path, message: 'Imported file is missing' }); continue; }
       const parsed = FILE_SCHEMAS[path].safeParse(input.files[path]);
       if (!parsed.success) { errors.push(...issues(path, parsed.error)); continue; }
@@ -381,7 +420,7 @@ class ConfigBundlePreviewService {
       const firstArray = Object.values(parsed.data as Record<string, unknown>).find(Array.isArray);
       counts[path] = Array.isArray(firstArray) ? firstArray.length : 0;
     }
-    for (const path of Object.keys(input.files)) if (!parsedBundle.data.imports.includes(path as never)) errors.push({ path, message: 'File is not declared in bundle imports' });
+    for (const path of Object.keys(input.files)) if (!normalized.bundle.imports.includes(path as never)) errors.push({ path, message: 'File is not declared in bundle imports' });
     let expandedRolePermissions: Record<string, string[]> | undefined;
     let roleTemplateBaselines: ConfigBundlePreview['roleTemplateBaselines'];
     if (errors.length === 0) {
@@ -395,17 +434,18 @@ class ConfigBundlePreviewService {
         roleTemplateBaselines = expanded.roleTemplateBaselines;
       }
     }
-    if (errors.length > 0) return { preview: { valid: false, errors: enrichIssues(errors, input), counts } };
+    if (errors.length > 0) return { preview: { valid: false, contract: normalized.contract, errors: enrichIssues(errors, input), counts } };
     return {
       preview: {
         valid: true,
-        canonicalHash: hashCanonicalConfig({ bundle: parsedBundle.data, files: normalizedFiles, expandedRolePermissions, roleTemplateBaselines }),
+        canonicalHash: hashCanonicalConfig({ bundle: normalized.bundle, files: normalizedFiles, expandedRolePermissions, roleTemplateBaselines }),
+        contract: normalized.contract,
         errors: [],
         counts,
         expandedRolePermissions,
         roleTemplateBaselines,
       },
-      manifest: parsedBundle.data,
+      manifest: normalized.bundle,
       files: normalizedFiles,
     };
   }

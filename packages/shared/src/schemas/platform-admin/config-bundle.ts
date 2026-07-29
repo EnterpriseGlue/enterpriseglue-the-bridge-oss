@@ -22,8 +22,53 @@ import {
   EngineTenancyConfigurationSchema,
 } from '../mission-control/engine.js';
 
-export const ENTERPRISEGLUE_CONFIG_API_VERSION = 'enterpriseglue.ai/v1alpha1' as const;
+export const ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1 = 'enterpriseglue.ai/v1alpha1' as const;
+export const ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1 = 'enterpriseglue.ai/v1beta1' as const;
+/** Default version for newly generated bundles and exports. */
+export const ENTERPRISEGLUE_CONFIG_API_VERSION = ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1;
 export const ENTERPRISEGLUE_CONFIG_KIND = 'EnterpriseGlueConfigBundle' as const;
+export const EnterpriseGlueConfigApiVersionSchema = z.enum([
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
+]);
+
+export const ConfigBundleContractWarningSchema = z.object({
+  code: z.enum([
+    'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED',
+    'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED',
+  ]),
+  message: z.string(),
+}).strict();
+
+export const ConfigBundleContractMetadataSchema = z.object({
+  inputApiVersion: EnterpriseGlueConfigApiVersionSchema,
+  normalizedApiVersion: z.literal(ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1),
+  warnings: z.array(ConfigBundleContractWarningSchema),
+}).strict();
+
+export function configBundleContractMetadataForApiVersion(
+  apiVersion: z.infer<typeof EnterpriseGlueConfigApiVersionSchema>,
+  governanceAliasesPresent = apiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1,
+): z.infer<typeof ConfigBundleContractMetadataSchema> {
+  const warnings: z.infer<typeof ConfigBundleContractWarningSchema>[] = [];
+  if (apiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1) {
+    warnings.push({
+      code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED',
+      message: 'enterpriseglue.ai/v1alpha1 is deprecated; migrate this bundle to enterpriseglue.ai/v1beta1.',
+    });
+    if (governanceAliasesPresent) {
+      warnings.push({
+        code: 'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED',
+        message: 'v1alpha1 settings aliases were normalized to the v1beta1 governance contract.',
+      });
+    }
+  }
+  return {
+    inputApiVersion: apiVersion,
+    normalizedApiVersion: ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
+    warnings,
+  };
+}
 
 const ConfigKeySchema = z.string()
   .min(3)
@@ -90,6 +135,7 @@ export const ConfigBundleRuntimeReconciliationStatusSchema = z.enum(['not_needed
 export const ConfigBundleRequestSchema = z.object({
   bundle: z.unknown(),
   files: z.record(z.string(), z.unknown()),
+  contract: ConfigBundleContractMetadataSchema.optional(),
 }).strict();
 
 /**
@@ -102,6 +148,7 @@ export const ConfigBundleRemoteImportRequestSchema = z.object({
 }).strict();
 
 export const ConfigBundleValidationIssueSchema = z.object({
+  code: z.string().optional(),
   path: z.string(),
   message: z.string(),
   severity: z.literal('error'),
@@ -119,6 +166,7 @@ export const ConfigBundleRoleTemplateBaselineSchema = z.object({
 export const ConfigBundlePreviewResponseSchema = z.object({
   valid: z.boolean(),
   canonicalHash: z.string().optional(),
+  contract: ConfigBundleContractMetadataSchema.optional(),
   errors: z.array(ConfigBundleValidationIssueSchema),
   counts: z.record(z.string(), z.number().int().nonnegative()),
   expandedRolePermissions: z.record(z.string(), z.array(z.string())).optional(),
@@ -144,6 +192,7 @@ export const ConfigBundleSecretReferenceStatusSchema = z.object({
 export const ConfigBundleSecretPreflightResponseSchema = z.object({
   valid: z.boolean(),
   canonicalHash: z.string().optional(),
+  contract: ConfigBundleContractMetadataSchema.optional(),
   availabilityHash: z.string().optional(),
   available: z.boolean(),
   errors: z.array(ConfigBundleValidationIssueSchema),
@@ -269,6 +318,7 @@ export const ConfigBundleApplyRunChangeSchema = z.object({
 
 export const ConfigBundleApplyResultSchema = z.object({
   canonicalHash: z.string(),
+  contract: ConfigBundleContractMetadataSchema.optional(),
   created: z.number().int().nonnegative(),
   updated: z.number().int().nonnegative(),
   archived: z.number().int().nonnegative(),
@@ -289,6 +339,7 @@ export const ConfigBundleApplyRunSchema = z.object({
   completedAt: z.number().nullable(),
   createdAt: z.number(),
   canonicalHash: z.string(),
+  contract: ConfigBundleContractMetadataSchema.optional(),
   created: z.number().int().nonnegative().optional(),
   updated: z.number().int().nonnegative().optional(),
   archived: z.number().int().nonnegative().optional(),
@@ -441,8 +492,45 @@ export const ConfigBundleSettingsSchema = z.object({
     .describe('Ownership of this settings block only, not ownership of engine, member, group, or assignment rows.'),
 }).strict();
 
-export const EnterpriseGlueConfigBundleSchema = z.object({
-  apiVersion: z.literal(ENTERPRISEGLUE_CONFIG_API_VERSION),
+/**
+ * v1beta1 separates membership, inventory, target, runtime, and settings
+ * ownership terminology. These names are the public contract; the v1alpha1
+ * aliases are accepted only by the versioned compatibility schema below.
+ */
+export const ConfigBundleGovernanceV1Beta1Schema = z.object({
+  engineMembershipAuthority: AccessAuthorityModeSchema.default('manual')
+    .describe('Authority for engine membership and scoped engine assignments only.'),
+  projectMembershipAuthority: AccessAuthorityModeSchema.default('manual')
+    .describe('Authority for project membership and scoped project assignments only.'),
+  engineRegistrationPolicy: EngineOnboardingModeSchema.default('manual_allowed')
+    .describe('Policy for registering engine inventory; unrelated to membership authority.'),
+  projectEngineTargetPolicy: ProjectEngineTargetPolicyModeSchema.default('manual_allowed')
+    .describe('Policy for managing project-to-engine deployment targets.'),
+  runtimeAuthorizationAuthority: EngineRuntimeAuthorizationModeSchema.default('enterpriseglue_authoritative')
+    .describe('Authority for runtime-resource authorization decisions.'),
+  governanceSettingsOwnership: ConfigOwnershipModeSchema.default('config_locked')
+    .describe('Ownership of this governance block only, never ownership of managed object rows.'),
+}).strict();
+
+const configBundleSettingsDefaults = {
+  engineAccessAuthority: 'manual',
+  projectAccessAuthority: 'manual',
+  engineOnboardingMode: 'manual_allowed',
+  projectEngineTargetMode: 'manual_allowed',
+  engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+  ownershipMode: 'config_locked',
+} as const;
+
+const configBundleGovernanceDefaults = {
+  engineMembershipAuthority: 'manual',
+  projectMembershipAuthority: 'manual',
+  engineRegistrationPolicy: 'manual_allowed',
+  projectEngineTargetPolicy: 'manual_allowed',
+  runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+  governanceSettingsOwnership: 'config_locked',
+} as const;
+
+const EnterpriseGlueConfigBundleCommonShape = {
   kind: z.literal(ENTERPRISEGLUE_CONFIG_KIND),
   metadata: z.object({
     key: ConfigKeySchema,
@@ -451,17 +539,13 @@ export const EnterpriseGlueConfigBundleSchema = z.object({
   }).strict(),
   tenantKey: ReferenceKeySchema,
   mode: ConfigBundleModeSchema,
-  settings: ConfigBundleSettingsSchema.default({
-    engineAccessAuthority: 'manual',
-    projectAccessAuthority: 'manual',
-    engineOnboardingMode: 'manual_allowed',
-    projectEngineTargetMode: 'manual_allowed',
-    engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
-    ownershipMode: 'config_locked',
-  })
-    .describe('Optional platform governance settings. Omit this field for an engine-only bundle that must not claim or reset platform governance.'),
   imports: z.array(z.enum(AllowedImportPaths)).min(1),
-}).strict().superRefine((bundle, ctx) => {
+} as const;
+
+function validateConfigBundleImports(
+  bundle: { imports: readonly string[] },
+  ctx: z.RefinementCtx,
+): void {
   const duplicates = bundle.imports.filter((entry, index) => bundle.imports.indexOf(entry) !== index);
   if (duplicates.length > 0) {
     ctx.addIssue({
@@ -479,7 +563,73 @@ export const EnterpriseGlueConfigBundleSchema = z.object({
       });
     }
   }
-});
+}
+
+export const EnterpriseGlueConfigBundleV1Alpha1Schema = z.object({
+  apiVersion: z.literal(ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1),
+  ...EnterpriseGlueConfigBundleCommonShape,
+  settings: ConfigBundleSettingsSchema.default(configBundleSettingsDefaults)
+    .describe('Deprecated v1alpha1 governance aliases. Use the v1beta1 governance block for new bundles.'),
+}).strict().superRefine(validateConfigBundleImports);
+
+export const EnterpriseGlueConfigBundleV1Beta1Schema = z.object({
+  apiVersion: z.literal(ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1),
+  ...EnterpriseGlueConfigBundleCommonShape,
+  governance: ConfigBundleGovernanceV1Beta1Schema.default(configBundleGovernanceDefaults)
+    .describe('Optional platform governance policy. Omit it when this bundle must not claim or reset governance settings.'),
+}).strict().superRefine(validateConfigBundleImports);
+
+/** Public version-discriminated input contract. */
+export const EnterpriseGlueConfigBundleSchema = z.discriminatedUnion('apiVersion', [
+  EnterpriseGlueConfigBundleV1Alpha1Schema,
+  EnterpriseGlueConfigBundleV1Beta1Schema,
+]);
+
+/**
+ * Canonical internal manifest. Persistence services use the established
+ * internal field names after the version boundary has normalized them.
+ */
+export const NormalizedEnterpriseGlueConfigBundleSchema = z.object({
+  apiVersion: z.literal(ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1),
+  ...EnterpriseGlueConfigBundleCommonShape,
+  settings: ConfigBundleSettingsSchema.default(configBundleSettingsDefaults),
+}).strict().superRefine(validateConfigBundleImports);
+
+export function normalizeEnterpriseGlueConfigBundle(
+  input: z.infer<typeof EnterpriseGlueConfigBundleSchema>,
+): {
+  bundle: z.infer<typeof NormalizedEnterpriseGlueConfigBundleSchema>;
+  contract: z.infer<typeof ConfigBundleContractMetadataSchema>;
+} {
+  if (input.apiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1) {
+    return {
+      bundle: NormalizedEnterpriseGlueConfigBundleSchema.parse({
+        ...input,
+        apiVersion: ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
+        settings: input.settings,
+      }),
+      contract: configBundleContractMetadataForApiVersion(
+        input.apiVersion,
+        Object.prototype.hasOwnProperty.call(input, 'settings'),
+      ),
+    };
+  }
+  const { governance, ...common } = input;
+  return {
+    bundle: NormalizedEnterpriseGlueConfigBundleSchema.parse({
+      ...common,
+      settings: {
+        engineAccessAuthority: governance.engineMembershipAuthority,
+        projectAccessAuthority: governance.projectMembershipAuthority,
+        engineOnboardingMode: governance.engineRegistrationPolicy,
+        projectEngineTargetMode: governance.projectEngineTargetPolicy,
+        engineRuntimeAuthorizationMode: governance.runtimeAuthorizationAuthority,
+        ownershipMode: governance.governanceSettingsOwnership,
+      },
+    }),
+    contract: configBundleContractMetadataForApiVersion(input.apiVersion, false),
+  };
+}
 
 function uniqueKeys<T extends { key: string }>(items: T[], ctx: z.RefinementCtx, path: string): void {
   const keys = new Set<string>();
@@ -828,7 +978,15 @@ export const IdentityMockFixturesSchema = z.object({
 }).strict();
 
 export type EnterpriseGlueConfigBundle = z.infer<typeof EnterpriseGlueConfigBundleSchema>;
+export type EnterpriseGlueConfigBundleV1Alpha1 = z.infer<typeof EnterpriseGlueConfigBundleV1Alpha1Schema>;
+export type EnterpriseGlueConfigBundleV1Beta1 = z.infer<typeof EnterpriseGlueConfigBundleV1Beta1Schema>;
+export type NormalizedEnterpriseGlueConfigBundle = z.infer<typeof NormalizedEnterpriseGlueConfigBundleSchema>;
+export type ConfigBundleContractMetadata = z.infer<typeof ConfigBundleContractMetadataSchema>;
+export type ConfigBundleContractWarning = z.infer<typeof ConfigBundleContractWarningSchema>;
 export type ConfigBundleRequest = z.infer<typeof ConfigBundleRequestSchema>;
+export type ConfigBundleV1Beta1Request = Omit<ConfigBundleRequest, 'bundle'> & {
+  bundle: z.input<typeof EnterpriseGlueConfigBundleV1Beta1Schema>;
+};
 export type ConfigBundleRemoteImportRequest = z.infer<typeof ConfigBundleRemoteImportRequestSchema>;
 export type ConfigBundleCiProvenance = z.infer<typeof ConfigBundleCiProvenanceSchema>;
 export type ConfigBundleApplyRequest = z.infer<typeof ConfigBundleApplyRequestSchema>;

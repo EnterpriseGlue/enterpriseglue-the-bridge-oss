@@ -120,7 +120,7 @@ governance declares all five fields and an ownership mode:
 <!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
 ```json
 {
-  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "apiVersion": "enterpriseglue.ai/v1beta1",
   "kind": "EnterpriseGlueConfigBundle",
   "metadata": {
     "key": "platform.operaton-estate",
@@ -128,13 +128,13 @@ governance declares all five fields and an ownership mode:
   },
   "tenantKey": "default",
   "mode": "authoritative",
-  "settings": {
-    "engineAccessAuthority": "sso_managed",
-    "projectAccessAuthority": "manual",
-    "engineOnboardingMode": "external_only",
-    "projectEngineTargetMode": "hybrid",
-    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-    "ownershipMode": "config_locked"
+  "governance": {
+    "engineMembershipAuthority": "sso_managed",
+    "projectMembershipAuthority": "manual",
+    "engineRegistrationPolicy": "external_only",
+    "projectEngineTargetPolicy": "hybrid",
+    "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+    "governanceSettingsOwnership": "config_locked"
   },
   "imports": ["./engines.json"]
 }
@@ -173,13 +173,13 @@ Secret fields accept references only. The full transport envelope example is
 
 ### Engine-Only Bundle
 
-Omit `settings` when a bundle should add or update engines without claiming or
+Omit `governance` when a bundle should add or update engines without claiming or
 resetting platform governance:
 
 <!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
 ```json
 {
-  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "apiVersion": "enterpriseglue.ai/v1beta1",
   "kind": "EnterpriseGlueConfigBundle",
   "metadata": {
     "key": "inventory.operaton-estate",
@@ -192,10 +192,47 @@ resetting platform governance:
 ```
 
 Parsing supplies safe defaults internally, but diff/apply checks the raw
-manifest. An omitted `settings` field—or the historical `settings: {}`—does
+manifest. An omitted `governance` field does
 not claim the settings row and does not overwrite portal choices.
-Bundle export follows the same rule: it includes `settings` only when the
+For a legacy `v1alpha1` bundle, an omitted `settings` field—or
+`settings: {}`—has the same non-owning behavior. Bundle export follows the
+same rule: it includes `governance` only when the
 requested bundle owns the current governance row; otherwise it omits the field.
+
+### Contract Versions and Compatibility
+
+`enterpriseglue.ai/v1beta1` is the default for exports, portal-generated
+templates, CLI examples, and new documentation. The public beta names make
+each governance axis explicit:
+
+| `v1alpha1` compatibility alias | `v1beta1` field |
+| --- | --- |
+| `settings.engineAccessAuthority` | `governance.engineMembershipAuthority` |
+| `settings.projectAccessAuthority` | `governance.projectMembershipAuthority` |
+| `settings.engineOnboardingMode` | `governance.engineRegistrationPolicy` |
+| `settings.projectEngineTargetMode` | `governance.projectEngineTargetPolicy` |
+| `settings.engineRuntimeAuthorizationMode` | `governance.runtimeAuthorizationAuthority` |
+| `settings.ownershipMode` | `governance.governanceSettingsOwnership` |
+
+`v1alpha1` remains accepted for at least two minor releases and 180 days after
+the release that introduces `v1beta1`, whichever is longer. Accepted alpha
+input is normalized before validation, semantic hashing, diff, and apply.
+Equivalent alpha and beta manifests therefore produce the same canonical
+hash. Preview, secret preflight, diff, apply, export, and apply-run receipts
+include a `contract` object with the input version, normalized version, and
+stable warnings. Exports always produce `v1beta1`.
+
+Alpha and beta governance names cannot be mixed in one manifest. An
+unsupported version is rejected with
+`CONFIG_BUNDLE_API_VERSION_UNSUPPORTED`. Removal of alpha input requires a
+release note, migration tooling, expiration of the compatibility window, and
+evidence that stored apply-run receipts remain readable.
+
+Downgrading a beta document is a manual field rename using the table above;
+future beta-only fields cannot be represented in alpha and must be removed
+before downgrade. Automation should upgrade by previewing the renamed bundle,
+checking that its canonical hash is unchanged, and then applying the beta
+document with the reviewed hash.
 
 The headless lifecycle is:
 

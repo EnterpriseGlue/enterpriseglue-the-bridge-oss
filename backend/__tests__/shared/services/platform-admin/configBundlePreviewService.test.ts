@@ -10,6 +10,69 @@ describe('configBundlePreviewService', () => {
     expect(first).toMatchObject({ valid: true, counts: { './groups.json': 1 }, canonicalHash: expect.any(String) });
     expect(configBundlePreviewService.preview(input).canonicalHash).toBe(first.canonicalHash);
   });
+  it('normalizes equivalent alpha and beta governance contracts to one canonical hash', () => {
+    const files = { './groups.json': { groups: [{ key: 'group.ops', name: 'Ops' }] } };
+    const alpha = configBundlePreviewService.preview({
+      bundle: {
+        ...bundle,
+        settings: {
+          engineAccessAuthority: 'sso_managed',
+          projectAccessAuthority: 'manual',
+          engineOnboardingMode: 'external_only',
+          projectEngineTargetMode: 'hybrid',
+          engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+          ownershipMode: 'config_locked',
+        },
+      },
+      files,
+    });
+    const beta = configBundlePreviewService.preview({
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1beta1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: bundle.metadata,
+        tenantKey: bundle.tenantKey,
+        mode: bundle.mode,
+        governance: {
+          engineMembershipAuthority: 'sso_managed',
+          projectMembershipAuthority: 'manual',
+          engineRegistrationPolicy: 'external_only',
+          projectEngineTargetPolicy: 'hybrid',
+          runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+          governanceSettingsOwnership: 'config_locked',
+        },
+        imports: bundle.imports,
+      },
+      files,
+    });
+
+    expect(alpha.canonicalHash).toBe(beta.canonicalHash);
+    expect(alpha.contract).toMatchObject({
+      inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: [
+        { code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' },
+        { code: 'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED' },
+      ],
+    });
+    expect(beta.contract).toEqual({
+      inputApiVersion: 'enterpriseglue.ai/v1beta1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: [],
+    });
+  });
+  it('rejects unsupported future versions with a stable error code', () => {
+    const result = configBundlePreviewService.preview({
+      bundle: { ...bundle, apiVersion: 'enterpriseglue.ai/v2' },
+      files: { './groups.json': { groups: [] } },
+    });
+
+    expect(result).toMatchObject({ valid: false });
+    expect(result.errors).toEqual([expect.objectContaining({
+      code: 'CONFIG_BUNDLE_API_VERSION_UNSUPPORTED',
+      path: 'bundle.apiVersion',
+    })]);
+  });
   it('rejects missing and undeclared files before apply can mutate state', () => {
     expect(configBundlePreviewService.preview({ bundle, files: { './roles.json': { roles: [] } } })).toMatchObject({ valid: false });
   });

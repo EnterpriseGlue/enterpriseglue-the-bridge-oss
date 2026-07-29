@@ -1,6 +1,7 @@
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput, type ConfigBundleValidationIssue } from './ConfigBundlePreviewService.js';
 import { secretResolver, type SecretReferenceAvailability } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
+import type { ConfigBundleContractMetadata } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 export interface ConfigBundleSecretReferenceStatus extends SecretReferenceAvailability {
   reference: string;
@@ -10,6 +11,7 @@ export interface ConfigBundleSecretReferenceStatus extends SecretReferenceAvaila
 export interface ConfigBundleSecretPreflight {
   valid: boolean;
   canonicalHash?: string;
+  contract?: ConfigBundleContractMetadata;
   availabilityHash?: string;
   available: boolean;
   errors: ConfigBundleValidationIssue[];
@@ -43,6 +45,7 @@ class ConfigBundleSecretPreflightService {
     if (!compilation.preview.valid || !compilation.files || !compilation.preview.canonicalHash) {
       return {
         valid: false,
+        ...(compilation.preview.contract ? { contract: compilation.preview.contract } : {}),
         available: false,
         errors: compilation.preview.errors,
         references: [],
@@ -64,6 +67,7 @@ class ConfigBundleSecretPreflightService {
     return {
       valid: true,
       canonicalHash: compilation.preview.canonicalHash,
+      contract: compilation.preview.contract,
       availabilityHash: hashCanonicalConfig({
         canonicalHash: compilation.preview.canonicalHash,
         references: references.map(({ reference, available, reason }) => ({ reference, available, reason: reason || null })),

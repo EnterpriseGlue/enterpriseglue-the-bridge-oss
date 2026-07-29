@@ -150,9 +150,9 @@ test.describe('Operaton headless configuration backstop workflow', () => {
     const mappingKey = `engine-backstop-mapping.operaton-config-${suffix}`;
     const baseBundle = {
       bundle: {
-        apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
+        apiVersion: 'enterpriseglue.ai/v1beta1', kind: 'EnterpriseGlueConfigBundle',
         metadata: { key: bundleKey, owner: 'local-operaton-config-rehearsal' },
-        tenantKey: 'default', mode: 'authoritative', settings: {},
+        tenantKey: 'default', mode: 'authoritative',
       },
     };
     const engine = {

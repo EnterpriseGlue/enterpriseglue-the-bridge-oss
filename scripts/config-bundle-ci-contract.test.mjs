@@ -33,6 +33,8 @@ test('the CLI re-previews exact input, sends its canonical hash and idempotency 
   assert.match(cli, /ciProvenance/);
   assert.match(cli, /reconciliationWaitState/);
   assert.match(cli, /toSanitizedJson/);
+  assert.match(cli, /v1beta1/);
+  assert.match(cli, /v1alpha1 remains accepted/);
   assert.match(output, /\[REDACTED\]/);
 });
 

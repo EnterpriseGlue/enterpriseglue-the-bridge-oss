@@ -155,25 +155,33 @@ or emulation cannot satisfy that receipt.
 
 ### Versioning
 
-- [ ] Accept both `enterpriseglue.ai/v1alpha1` and
+- [x] Accept both `enterpriseglue.ai/v1alpha1` and
   `enterpriseglue.ai/v1beta1`.
-- [ ] Make `v1beta1` the default for new exports, UI-generated templates,
+- [x] Make `v1beta1` the default for new exports, UI-generated templates,
   examples, and CLI help.
-- [ ] Preserve `v1alpha1` parsing with a normalized compatibility adapter and
+- [x] Preserve `v1alpha1` parsing with a normalized compatibility adapter and
   explicit deprecation metadata.
-- [ ] Reject unsupported future versions with a stable error.
+- [x] Reject unsupported future versions with a stable error.
 
 ### Contract cleanup
 
-- [ ] Publish unambiguous `v1beta1` governance field names while accepting
+- [x] Publish unambiguous `v1beta1` governance field names while accepting
   deliberate `v1alpha1` aliases only at the compatibility boundary.
-- [ ] Preserve strict engine, tenancy, runtime-scope, provider, mapping,
+- [x] Preserve strict engine, tenancy, runtime-scope, provider, mapping,
   assignment, and secret-reference validation.
-- [ ] Include contract version and normalization warnings in preview, diff,
+- [x] Include contract version and normalization warnings in preview, diff,
   apply, export, and apply-run receipts.
-- [ ] Add canonical fixtures and generated TypeScript contract checks for the
+- [x] Add canonical fixtures and generated TypeScript contract checks for the
   CLI and frontend.
-- [ ] Document upgrade, downgrade, compatibility-window, and removal rules.
+- [x] Document upgrade, downgrade, compatibility-window, and removal rules.
+
+Implementation note: accepted manifests normalize to one beta-shaped internal
+contract before semantic hashing, so equivalent alpha and beta fixtures retain
+the same review hash. New exports, portal templates, local bootstrap
+rehearsals, developer examples, and browser configuration journeys use beta.
+The dedicated alpha fixtures and service/route tests remain as compatibility
+evidence. ZIP and OpenAPI ingress now advertise the same complete production
+file set, including mirrored-engine-backstop mappings.
 
 ## Verification and Commit Strategy
 

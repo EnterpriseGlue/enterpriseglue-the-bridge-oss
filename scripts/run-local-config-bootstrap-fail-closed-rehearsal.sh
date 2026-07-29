@@ -44,12 +44,11 @@ const { writeFileSync } = require('node:fs');
 const [bundlePath, includeMissingSecret] = process.argv.slice(2);
 const bundle = {
   bundle: {
-    apiVersion: 'enterpriseglue.ai/v1alpha1',
+    apiVersion: 'enterpriseglue.ai/v1beta1',
     kind: 'EnterpriseGlueConfigBundle',
     metadata: { key: 'local.bootstrap.fail-closed', owner: 'local-rehearsal' },
     tenantKey: 'local',
     mode: 'preview_only',
-    settings: {},
     imports: includeMissingSecret === 'true' ? ['./engines.json'] : [],
   },
   files: includeMissingSecret === 'true' ? {

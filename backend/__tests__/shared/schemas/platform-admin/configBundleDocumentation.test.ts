@@ -114,9 +114,11 @@ describe('published machine-readable JSON examples', () => {
 
     const bundle = EnterpriseGlueConfigBundleSchema.parse(envelope.bundle);
     expect(bundle.imports).toEqual(['./engines.json']);
-    expect(bundle.settings).toMatchObject({
-      engineOnboardingMode: 'external_only',
-      ownershipMode: 'config_locked',
+    expect(bundle.apiVersion).toBe('enterpriseglue.ai/v1beta1');
+    if (bundle.apiVersion !== 'enterpriseglue.ai/v1beta1') throw new Error('Expected v1beta1 bundle');
+    expect(bundle.governance).toMatchObject({
+      engineRegistrationPolicy: 'external_only',
+      governanceSettingsOwnership: 'config_locked',
     });
 
     const enginesFile = ConfigEnginesFileSchema.parse(envelope.files['./engines.json']);

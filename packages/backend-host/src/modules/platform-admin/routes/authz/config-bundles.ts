@@ -26,6 +26,9 @@ import {
   ConfigBundleApplyRequestSchema,
   ConfigBundleRemoteImportRequestSchema,
   ConfigBundleRequestSchema,
+  configBundleContractMetadataForApiVersion,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
   GovernanceOwnershipApplyRequestSchema,
   GovernanceOwnershipRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
@@ -43,6 +46,11 @@ function configBundleTenantId(req: Request): string {
 function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unknown> {
   let result: Record<string, unknown> = {};
   try { result = row.resultJson ? JSON.parse(row.resultJson) as Record<string, unknown> : {}; } catch { /* preserve run-history availability */ }
+  const contract = result.contract
+    || (row.bundleApiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1
+      || row.bundleApiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1
+      ? configBundleContractMetadataForApiVersion(row.bundleApiVersion)
+      : undefined);
   return {
     id: row.id,
     bundleKey: row.bundleKey,
@@ -55,6 +63,7 @@ function configBundleRunResponse(row: ConfigBundleApplyRun): Record<string, unkn
     completedAt: row.completedAt,
     createdAt: row.createdAt,
     ...result,
+    ...(contract ? { contract } : {}),
   };
 }
 
@@ -155,6 +164,7 @@ export function registerConfigBundleRoutes(
       resourceId: String((req.body.bundle as { metadata?: { key?: string } })?.metadata?.key || 'unknown'),
       details: {
         canonicalHash: result.canonicalHash,
+        contract: result.contract || null,
         created: result.created,
         updated: result.updated,
         archived: result.archived,

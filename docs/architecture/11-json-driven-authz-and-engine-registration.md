@@ -188,7 +188,7 @@ The root manifest imports the other files and defines apply mode.
 
 ```json
 {
-  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "apiVersion": "enterpriseglue.ai/v1beta1",
   "kind": "EnterpriseGlueConfigBundle",
   "metadata": {
     "key": "acme-prod-authz",
@@ -197,13 +197,13 @@ The root manifest imports the other files and defines apply mode.
   },
   "tenantKey": "default",
   "mode": "authoritative",
-  "settings": {
-    "engineAccessAuthority": "sso_managed",
-    "projectAccessAuthority": "manual",
-    "engineOnboardingMode": "external_only",
-    "projectEngineTargetMode": "hybrid",
-    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-    "ownershipMode": "config_locked"
+  "governance": {
+    "engineMembershipAuthority": "sso_managed",
+    "projectMembershipAuthority": "manual",
+    "engineRegistrationPolicy": "external_only",
+    "projectEngineTargetPolicy": "hybrid",
+    "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+    "governanceSettingsOwnership": "config_locked"
   },
   "imports": [
     "./engines.json",
@@ -221,33 +221,33 @@ The root manifest imports the other files and defines apply mode.
 
 ### Platform Settings In The Bundle
 
-The `settings` block owns five independent platform policies: engine access
+The `v1beta1` `governance` block owns five independent platform policies: engine access
 authority, project access authority, manual engine onboarding, manual
 project-engine target changes, and runtime authorization authority. It does not
 own engine records, project records, identity-provider login configuration, or
 individual group/member/assignment rows. Those objects retain their own
-source and ownership fields. Apply the settings block with the same
+source and ownership fields. Apply the governance block with the same
 preview/diff discipline as roles, groups, and engines.
 
 ```json
-"settings": {
-  "engineAccessAuthority": "sso_managed",
-  "projectAccessAuthority": "manual",
-  "engineOnboardingMode": "external_only",
-  "projectEngineTargetMode": "hybrid",
-  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-  "ownershipMode": "config_locked"
+"governance": {
+  "engineMembershipAuthority": "sso_managed",
+  "projectMembershipAuthority": "manual",
+  "engineRegistrationPolicy": "external_only",
+  "projectEngineTargetPolicy": "hybrid",
+  "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+  "governanceSettingsOwnership": "config_locked"
 }
 ```
 
-`ownershipMode` controls the settings row, not engine or project membership.
+`governanceSettingsOwnership` controls the settings row, not engine or project membership.
 `config_locked` makes these five Platform Settings controls read-only and
 rejects the corresponding manual settings API write. `config_warn` allows a
 manual change but records settings drift until the bundle is applied again.
 `manual` leaves settings editable in the portal while retaining recorded bundle
-provenance. Omit `settings` for a role-only, engine-only, or identity-only
-bundle that must not claim or replace current governance. The historical empty
-`settings: {}` block remains non-claiming for compatibility.
+provenance. Omit `governance` for a role-only, engine-only, or identity-only
+bundle that must not claim or replace current governance. The historical
+`v1alpha1` empty `settings: {}` block remains non-claiming for compatibility.
 
 For the complete mode matrix, derived API behavior, and executable headless
 examples, see
@@ -372,13 +372,13 @@ engine visible to user
 This example:
 
 ```json
-"settings": {
-  "engineAccessAuthority": "sso_managed",
-  "projectAccessAuthority": "manual",
-  "engineOnboardingMode": "external_only",
-  "projectEngineTargetMode": "hybrid",
-  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-  "ownershipMode": "config_locked"
+"governance": {
+  "engineMembershipAuthority": "sso_managed",
+  "projectMembershipAuthority": "manual",
+  "engineRegistrationPolicy": "external_only",
+  "projectEngineTargetPolicy": "hybrid",
+  "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+  "governanceSettingsOwnership": "config_locked"
 }
 ```
 

@@ -7,8 +7,8 @@ const canonicalHash = 'a'.repeat(64);
 
 const bundle = {
   bundle: {
-    apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
-    metadata: { key: 'e2e.identity.lifecycle', owner: 'platform' }, tenantKey: 'default', mode: 'authoritative', settings: {},
+    apiVersion: 'enterpriseglue.ai/v1beta1', kind: 'EnterpriseGlueConfigBundle',
+    metadata: { key: 'e2e.identity.lifecycle', owner: 'platform' }, tenantKey: 'default', mode: 'authoritative',
     imports: ['./groups.json', './identity-providers.json', './identity-mappings.json'],
   },
   files: {

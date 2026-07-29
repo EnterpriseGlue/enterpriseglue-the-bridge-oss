@@ -1,0 +1,33 @@
+{
+  "bundle": {
+    "apiVersion": "enterpriseglue.ai/v1alpha1",
+    "kind": "EnterpriseGlueConfigBundle",
+    "metadata": {
+      "key": "fixture.access-governance",
+      "owner": "platform"
+    },
+    "tenantKey": "default",
+    "mode": "authoritative",
+    "settings": {
+      "engineAccessAuthority": "sso_managed",
+      "projectAccessAuthority": "manual",
+      "engineOnboardingMode": "external_only",
+      "projectEngineTargetMode": "hybrid",
+      "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+      "ownershipMode": "config_locked"
+    },
+    "imports": [
+      "./groups.json"
+    ]
+  },
+  "files": {
+    "./groups.json": {
+      "groups": [
+        {
+          "key": "group.operators",
+          "name": "Operators"
+        }
+      ]
+    }
+  }
+}

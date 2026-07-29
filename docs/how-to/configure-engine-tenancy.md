@@ -529,7 +529,7 @@ For GitOps-managed engines, declare both files in `bundle.json`:
 <!-- enterpriseglue-config-schema: EnterpriseGlueConfigBundleSchema -->
 ```json
 {
-  "apiVersion": "enterpriseglue.ai/v1alpha1",
+  "apiVersion": "enterpriseglue.ai/v1beta1",
   "kind": "EnterpriseGlueConfigBundle",
   "metadata": {
     "key": "bundle.engine-tenancy",
@@ -537,7 +537,6 @@ For GitOps-managed engines, declare both files in `bundle.json`:
   },
   "tenantKey": "tenant.team-a",
   "mode": "authoritative",
-  "settings": {},
   "imports": [
     "./engines.json",
     "./engine-tenant-mappings.json"

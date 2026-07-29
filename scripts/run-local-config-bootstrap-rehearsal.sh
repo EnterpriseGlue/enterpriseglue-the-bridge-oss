@@ -39,12 +39,11 @@ const bundlePath = process.argv[2];
 const bootstrapMode = process.argv[3];
 const payload = {
   bundle: {
-    apiVersion: 'enterpriseglue.ai/v1alpha1',
+    apiVersion: 'enterpriseglue.ai/v1beta1',
     kind: 'EnterpriseGlueConfigBundle',
     metadata: { key: 'local.bootstrap.validation', owner: 'local-rehearsal' },
     tenantKey: 'local',
     mode: bootstrapMode === 'apply' ? 'additive' : 'preview_only',
-    settings: {},
     imports: ['./groups.json'],
   },
   files: {

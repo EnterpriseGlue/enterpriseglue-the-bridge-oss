@@ -291,7 +291,6 @@ export default function LayoutWithProSidebar() {
         'platform.authz.roles.manage',
         'platform.sso.engine-assignments.read',
         'platform.sso.engine-assignments.manage',
-        'platform.sso.platform-role-mappings.read',
         'platform.authz.policies.read',
         'platform.audit.read',
       ],

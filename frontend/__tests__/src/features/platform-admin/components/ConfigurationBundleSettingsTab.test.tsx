@@ -172,7 +172,7 @@ describe('ConfigurationBundleSettingsTab', () => {
       previewHash: 'a'.repeat(64),
       acknowledgements: requiredAcknowledgements,
     });
-    expect((applyBody as Record<string, unknown>).idempotencyKey).toEqual(expect.any(String));
+    expect((applyBody as unknown as Record<string, unknown>).idempotencyKey).toEqual(expect.any(String));
     expect(authState.refreshPermissions).toHaveBeenCalledTimes(1);
   });
 });

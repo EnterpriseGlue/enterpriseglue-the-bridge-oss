@@ -1934,7 +1934,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const token = await csrfToken(page);
     const envelope = {
       bundle: {
-        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        apiVersion: 'enterpriseglue.ai/v1beta1',
         kind: 'EnterpriseGlueConfigBundle',
         metadata: {
           key: bundleKey,
@@ -1942,7 +1942,6 @@ test.describe('Engine tenancy provisioning journeys', () => {
         },
         tenantKey: 'default',
         mode: 'authoritative',
-        settings: {},
         imports: ['./engines.json'],
       },
       files: {
@@ -2056,7 +2055,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         'export applied dedicated configuration bundle',
       );
       expect(exported.bundle).toMatchObject({
-        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        apiVersion: 'enterpriseglue.ai/v1beta1',
         kind: 'EnterpriseGlueConfigBundle',
         metadata: { key: bundleKey },
         tenantKey: 'default',
@@ -3231,7 +3230,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
       'resolve journey 7 configuration test principal',
     );
     const bundle = {
-      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      apiVersion: 'enterpriseglue.ai/v1beta1',
       kind: 'EnterpriseGlueConfigBundle',
       metadata: {
         key: bundleKey,
@@ -3239,7 +3238,6 @@ test.describe('Engine tenancy provisioning journeys', () => {
       },
       tenantKey: 'default',
       mode: 'authoritative',
-      settings: {},
       imports: ['./engines.json'],
     };
     const enginesFile = {
@@ -3738,7 +3736,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
         'export configuration-mapped shared lifecycle',
       );
       expect(exported.bundle).toMatchObject({
-        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        apiVersion: 'enterpriseglue.ai/v1beta1',
         kind: 'EnterpriseGlueConfigBundle',
         metadata: { key: bundleKey },
         tenantKey: 'default',

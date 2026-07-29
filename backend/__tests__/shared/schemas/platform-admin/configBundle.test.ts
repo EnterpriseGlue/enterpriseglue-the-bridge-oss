@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   ConfigBundleApplyRequestSchema,
   ConfigBundleApplyResultSchema,
@@ -14,6 +16,7 @@ import {
   ConfigProjectEngineTargetsFileSchema,
   ConfigRolesFileSchema,
   EnterpriseGlueConfigBundleSchema,
+  normalizeEnterpriseGlueConfigBundle,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import {
   canonicalizeConfigJson,
@@ -22,6 +25,18 @@ import {
 import { IdentityProviderSyncConfigurationSchema } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
 
 describe('EnterpriseGlue configuration bundle contracts', () => {
+  it('keeps canonical alpha and beta fixtures semantically equivalent', () => {
+    const root = resolve(import.meta.dirname, '../../../../..');
+    const alpha = JSON.parse(readFileSync(resolve(root, 'test/authz/config-bundle-v1alpha1.fixture.json'), 'utf8'));
+    const beta = JSON.parse(readFileSync(resolve(root, 'test/authz/config-bundle-v1beta1.fixture.json'), 'utf8'));
+    const alphaBundle = normalizeEnterpriseGlueConfigBundle(EnterpriseGlueConfigBundleSchema.parse(alpha.bundle));
+    const betaBundle = normalizeEnterpriseGlueConfigBundle(EnterpriseGlueConfigBundleSchema.parse(beta.bundle));
+
+    expect(alphaBundle.bundle).toEqual(betaBundle.bundle);
+    expect(alphaBundle.contract.warnings).toHaveLength(2);
+    expect(betaBundle.contract.warnings).toEqual([]);
+  });
+
   it('requires every provider protocol to reconcile before sign-in', () => {
     expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['manual'], requiredForLogin: true }).success).toBe(false);
     expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login'], requiredForLogin: false }).success).toBe(false);
@@ -39,7 +54,7 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     })).toMatchObject({ reference: 'docker://oidc-client-secret', reason: 'docker_secret_unavailable' });
   });
 
-  it('accepts a deterministic production manifest with only declared imports', () => {
+  it('accepts a v1alpha1 manifest only through the deprecated normalization boundary', () => {
     const result = EnterpriseGlueConfigBundleSchema.parse({
       apiVersion: 'enterpriseglue.ai/v1alpha1',
       kind: 'EnterpriseGlueConfigBundle',
@@ -60,7 +75,53 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     });
 
     expect(result.metadata.key).toBe('acme-prod-authz');
+    expect(result.apiVersion).toBe('enterpriseglue.ai/v1alpha1');
+    if (result.apiVersion !== 'enterpriseglue.ai/v1alpha1') throw new Error('Expected v1alpha1 bundle');
     expect(result.settings.engineRuntimeAuthorizationMode).toBe('enterpriseglue_authoritative');
+    const normalized = normalizeEnterpriseGlueConfigBundle(result);
+    expect(normalized.bundle.apiVersion).toBe('enterpriseglue.ai/v1beta1');
+    expect(normalized.contract.warnings.map((warning) => warning.code)).toEqual([
+      'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED',
+      'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED',
+    ]);
+  });
+
+  it('accepts the unambiguous v1beta1 governance contract and rejects cross-version aliases', () => {
+    const beta = {
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      kind: 'EnterpriseGlueConfigBundle',
+      metadata: { key: 'acme-prod-authz', owner: 'iam-platform-team' },
+      tenantKey: 'default',
+      mode: 'authoritative',
+      governance: {
+        engineMembershipAuthority: 'sso_managed',
+        projectMembershipAuthority: 'manual',
+        engineRegistrationPolicy: 'external_only',
+        projectEngineTargetPolicy: 'hybrid',
+        runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+        governanceSettingsOwnership: 'config_locked',
+      },
+      imports: ['./roles.json'],
+    } as const;
+    const parsed = EnterpriseGlueConfigBundleSchema.parse(beta);
+    expect(parsed.apiVersion).toBe('enterpriseglue.ai/v1beta1');
+    expect(normalizeEnterpriseGlueConfigBundle(parsed)).toMatchObject({
+      bundle: {
+        settings: {
+          engineAccessAuthority: 'sso_managed',
+          engineOnboardingMode: 'external_only',
+        },
+      },
+      contract: { warnings: [] },
+    });
+    expect(EnterpriseGlueConfigBundleSchema.safeParse({
+      ...beta,
+      settings: { engineAccessAuthority: 'manual' },
+    }).success).toBe(false);
+    expect(EnterpriseGlueConfigBundleSchema.safeParse({
+      ...beta,
+      apiVersion: 'enterpriseglue.ai/v1alpha1',
+    }).success).toBe(false);
   });
 
   it('allows an engine-only bundle to omit governance settings without losing parsed defaults', () => {
@@ -76,6 +137,8 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
       imports: ['./engines.json'],
     });
 
+    expect(result.apiVersion).toBe('enterpriseglue.ai/v1alpha1');
+    if (result.apiVersion !== 'enterpriseglue.ai/v1alpha1') throw new Error('Expected v1alpha1 bundle');
     expect(result.settings).toEqual({
       engineAccessAuthority: 'manual',
       projectAccessAuthority: 'manual',

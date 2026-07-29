@@ -24,6 +24,7 @@ import { identityEntitlementMappingService } from './IdentityEntitlementMappingS
 import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
 import { engineTenancyProvisioningService } from './EngineTenancyProvisioningService.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
+import type { ConfigBundleContractMetadata } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
@@ -136,6 +137,7 @@ export interface ConfigBundleAffectedPrincipalSummary {
 export interface ConfigBundleDiff {
   valid: boolean;
   canonicalHash?: string;
+  contract?: ConfigBundleContractMetadata;
   errors: Array<{ path: string; message: string }>;
   changes: ConfigBundleDiffChange[];
   warnings: ConfigBundleDiffWarning[];
@@ -281,15 +283,25 @@ function broadConfigurationWarnings(files: Record<string, unknown>): ConfigBundl
 
 function hasExplicitGovernanceSettings(bundle: unknown): boolean {
   if (!bundle || typeof bundle !== 'object') return false;
-  const settings = (bundle as Record<string, unknown>).settings;
+  const value = bundle as Record<string, unknown>;
+  const settings = value.apiVersion === 'enterpriseglue.ai/v1beta1' ? value.governance : value.settings;
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return false;
-  return [
-    'engineAccessAuthority',
-    'projectAccessAuthority',
-    'engineOnboardingMode',
-    'projectEngineTargetMode',
-    'engineRuntimeAuthorizationMode',
-  ].some((key) => Object.prototype.hasOwnProperty.call(settings, key));
+  const keys = value.apiVersion === 'enterpriseglue.ai/v1beta1'
+    ? [
+        'engineMembershipAuthority',
+        'projectMembershipAuthority',
+        'engineRegistrationPolicy',
+        'projectEngineTargetPolicy',
+        'runtimeAuthorizationAuthority',
+      ]
+    : [
+        'engineAccessAuthority',
+        'projectAccessAuthority',
+        'engineOnboardingMode',
+        'projectEngineTargetMode',
+        'engineRuntimeAuthorizationMode',
+      ];
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(settings, key));
 }
 
 /**
@@ -300,7 +312,7 @@ class ConfigBundleDiffService {
   async diff(input: ConfigBundlePreviewInput, tenantId?: string | null, policy?: ConfigBundlePolicyContext): Promise<ConfigBundleDiff> {
     const compilation = configBundlePreviewService.compile(input, policy);
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
-      return { valid: false, errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [], affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 } };
+      return { valid: false, ...(compilation.preview.contract ? { contract: compilation.preview.contract } : {}), errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [], affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 } };
     }
 
     const manifest = compilation.manifest as {
@@ -1207,6 +1219,7 @@ class ConfigBundleDiffService {
     return {
       valid: true,
       canonicalHash: compilation.preview.canonicalHash,
+      contract: compilation.preview.contract,
       errors: [],
       changes,
       warnings,

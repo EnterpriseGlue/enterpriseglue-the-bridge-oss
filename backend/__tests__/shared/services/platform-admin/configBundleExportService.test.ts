@@ -301,13 +301,19 @@ describe('configBundleExportService', () => {
 
     const result = await configBundleExportService.exportBundle({ bundleKey: 'acme.authz' });
 
-    expect(result.bundle.settings).toEqual({
-      engineAccessAuthority: 'manual',
-      projectAccessAuthority: 'manual',
-      engineOnboardingMode: 'manual_allowed',
-      projectEngineTargetMode: 'manual_allowed',
-      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
-      ownershipMode: 'config_locked',
+    expect(result.bundle).toMatchObject({ apiVersion: 'enterpriseglue.ai/v1beta1' });
+    expect(result.bundle.governance).toEqual({
+      engineMembershipAuthority: 'manual',
+      projectMembershipAuthority: 'manual',
+      engineRegistrationPolicy: 'manual_allowed',
+      projectEngineTargetPolicy: 'manual_allowed',
+      runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+      governanceSettingsOwnership: 'config_locked',
+    });
+    expect(result.contract).toEqual({
+      inputApiVersion: 'enterpriseglue.ai/v1beta1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: [],
     });
     expect(result.files).toMatchObject({
       './engine-sets.json': { engineSets: [expect.objectContaining({ key: 'engines.central', selector: { mode: 'engine_ids', engineKeys: ['engine.central'] } })] },

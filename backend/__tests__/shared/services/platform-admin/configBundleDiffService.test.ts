@@ -456,7 +456,18 @@ describe('configBundleDiffService', () => {
       },
     }, 'tenant-a');
 
-    expect(result).toMatchObject({ valid: true, canonicalHash: expect.any(String) });
+    expect(result).toMatchObject({
+      valid: true,
+      canonicalHash: expect.any(String),
+      contract: {
+        inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+        normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+        warnings: [
+          expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' }),
+          expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED' }),
+        ],
+      },
+    });
     expect(result.changes).toEqual(expect.arrayContaining([
       expect.objectContaining({ objectType: 'role', key: 'custom.engine.deployer', operation: 'create' }),
       expect.objectContaining({ objectType: 'group', key: 'group.deployers', operation: 'create' }),

@@ -20,6 +20,20 @@ const sharedPermissionServiceMock = vi.hoisted(() => ({
 const configBundleApplyMock = vi.hoisted(() => ({
   apply: vi.fn().mockResolvedValue({
     canonicalHash: 'preview-hash', created: 2, updated: 0, archived: 0, changes: [],
+    contract: {
+      inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: [
+        {
+          code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED',
+          message: 'enterpriseglue.ai/v1alpha1 is deprecated; migrate this bundle to enterpriseglue.ai/v1beta1.',
+        },
+        {
+          code: 'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED',
+          message: 'v1alpha1 settings aliases were normalized to the v1beta1 governance contract.',
+        },
+      ],
+    },
     reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
   }),
 }));
@@ -532,6 +546,7 @@ describe('platform-admin authz routes', () => {
           const run = {
             id: 'config-run-1',
             bundleKey: 'acme.authz',
+            bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
             canonicalHash: 'preview-hash',
             idempotencyKey: 'config-apply-2026-07-13',
             actorId: 'user-1',
@@ -2635,6 +2650,14 @@ describe('platform-admin authz routes', () => {
     expect(response.body).toMatchObject({
       canonicalHash: 'preview-hash',
       created: 2,
+      contract: {
+        inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+        normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+        warnings: [
+          expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' }),
+          expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED' }),
+        ],
+      },
       reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
     });
     expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
@@ -2727,8 +2750,17 @@ describe('platform-admin authz routes', () => {
       expect.objectContaining({
         id: 'config-run-1',
         bundleKey: 'acme.authz',
+        bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
         idempotencyKey: 'config-apply-2026-07-13',
         status: 'succeeded',
+        contract: {
+          inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+          normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+          warnings: [
+            expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' }),
+            expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_GOVERNANCE_ALIASES_NORMALIZED' }),
+          ],
+        },
         created: 2,
         updated: 1,
         reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ status: 'completed', scanned: 2 }) }),
@@ -2744,6 +2776,11 @@ describe('platform-admin authz routes', () => {
     expect(response.body).toMatchObject({
       id: 'config-run-1',
       bundleKey: 'acme.authz',
+      bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
+      contract: {
+        inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+        normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      },
       changes: [expect.objectContaining({ objectType: 'group', key: 'group.ops', operation: 'create' })],
       reconciliation: expect.objectContaining({ identitySnapshot: expect.objectContaining({ scanned: 2 }) }),
       bootstrap: expect.objectContaining({ status: 'applied', secretPreflight: 'passed' }),

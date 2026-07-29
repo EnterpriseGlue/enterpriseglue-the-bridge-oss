@@ -63,7 +63,7 @@ describe('system role configuration export', () => {
 
     expect(exported).toEqual({
       bundle: {
-        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        apiVersion: 'enterpriseglue.ai/v1beta1',
         kind: 'EnterpriseGlueConfigBundle',
         metadata: { key: 'acme.authz', owner: 'platform' },
         tenantKey: 'acme',

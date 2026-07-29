@@ -49,9 +49,15 @@ import { secretResolver } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 import type {
+  ConfigBundleContractMetadata as SchemaConfigBundleContractMetadata,
   ConfigBundleApplyReconciliation as SchemaConfigBundleApplyReconciliation,
   ConfigBundleCiProvenance as SchemaConfigBundleCiProvenance,
   ConfigBundleIdentityReconciliationMode as SchemaConfigBundleIdentityReconciliationMode,
+} from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import {
+  configBundleContractMetadataForApiVersion,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 
 /** Compatibility alias for consumers of the apply service. */
@@ -71,6 +77,7 @@ export interface ConfigBundleApplyInput extends ConfigBundlePreviewInput {
 
 export interface ConfigBundleApplyResult {
   canonicalHash: string;
+  contract?: SchemaConfigBundleContractMetadata;
   created: number;
   updated: number;
   archived: number;
@@ -196,13 +203,20 @@ function parseStoredReconciliation(value: unknown): ConfigBundleApplyResult['rec
   };
 }
 
-function parseStoredResult(value: string | null): ConfigBundleApplyResult | null {
+function parseStoredResult(value: string | null, bundleApiVersion?: string | null): ConfigBundleApplyResult | null {
   if (!value) return null;
   try {
     const parsed = JSON.parse(value) as Partial<ConfigBundleApplyResult>;
     if (!parsed || typeof parsed.canonicalHash !== 'string' || !Array.isArray(parsed.changes)) return null;
+    const storedContract = parsed.contract && typeof parsed.contract === 'object'
+      ? parsed.contract as SchemaConfigBundleContractMetadata
+      : bundleApiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1ALPHA1
+        || bundleApiVersion === ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1
+        ? configBundleContractMetadataForApiVersion(bundleApiVersion)
+        : undefined;
     return {
       canonicalHash: parsed.canonicalHash,
+      ...(storedContract ? { contract: storedContract } : {}),
       created: Number(parsed.created || 0),
       updated: Number(parsed.updated || 0),
       archived: Number(parsed.archived || 0),
@@ -239,7 +253,7 @@ function replayExistingApplyRun(run: ConfigBundleApplyRun, canonicalHash: string
     return fail('Idempotency key is already associated with a different configuration bundle', 409);
   }
   if (run.status === 'succeeded') {
-    const result = parseStoredResult(run.resultJson);
+    const result = parseStoredResult(run.resultJson, run.bundleApiVersion);
     if (!result) return fail('Configuration apply receipt is unavailable for this idempotency key', 409);
     return { ...result, idempotent: true, applyRunId: run.id };
   }
@@ -296,6 +310,8 @@ class ConfigBundleApplyService {
         ownershipMode: 'manual' | 'config_locked' | 'config_warn';
       };
     };
+    const contract = compilation.preview.contract;
+    if (!contract) return fail('Configuration bundle contract metadata is unavailable', 422);
     if (manifest.mode === 'preview_only') {
       return fail('A preview_only bundle cannot be applied', 422);
     }
@@ -349,7 +365,7 @@ class ConfigBundleApplyService {
         tenantId,
         tenantScopeKey: scopeKey,
         bundleKey: manifest.metadata.key,
-        bundleApiVersion: manifest.apiVersion,
+        bundleApiVersion: contract.inputApiVersion,
         canonicalHash: diff.canonicalHash,
         idempotencyKey,
         actorId: input.actorId,
@@ -1183,6 +1199,7 @@ class ConfigBundleApplyService {
 
       const result = {
         canonicalHash: diff.canonicalHash,
+        contract,
         created,
         updated,
         archived,

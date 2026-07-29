@@ -59,15 +59,16 @@ fail-closed; mapping rows are source-owned, versioned, re-resolve known
 inventory atomically, and schedule bounded reconciliation. Always preview
 mapping archives and conflicts before hash-bound apply.
 
-The manifest may also declare all five platform governance modes in
-`bundle.settings`. Include `ownershipMode: "config_locked"` when CI/CD must be
+The `v1beta1` manifest may also declare all five platform governance modes in
+`bundle.governance`. Include `governanceSettingsOwnership: "config_locked"` when CI/CD must be
 the source of truth: Platform Settings renders those controls read-only and the
 manual settings API rejects changes. Use `config_warn` when emergency local
 edits are permitted but must be reported as drift. A subsequent exact bundle
 apply restores the declared values and marks the row `in_sync`. For backward
-compatibility, an empty `settings: {}` block does not claim the current settings
-row and does not reset existing portal choices. An engine-only or identity-only
-bundle may omit `settings` entirely with the same non-claiming behavior.
+compatibility, an empty `settings: {}` block in a `v1alpha1` manifest does not
+claim the current settings row and does not reset existing portal choices. An
+engine-only or identity-only `v1beta1` bundle may omit `governance` entirely
+with the same non-claiming behavior.
 
 Database migration `1700000000105` adds the governance-settings source,
 ownership, hash, apply-time, and drift columns non-destructively. Existing

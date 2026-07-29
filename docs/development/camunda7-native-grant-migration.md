@@ -23,12 +23,12 @@ The engine route accepts only a new migration base:
 ```json
 {
   "bundle": {
-    "apiVersion": "enterpriseglue.ai/v1alpha1",
+    "apiVersion": "enterpriseglue.ai/v1beta1",
     "kind": "EnterpriseGlueConfigBundle",
     "metadata": { "key": "migration.camunda-native-example", "owner": "camunda-native-grant-migration" },
     "tenantKey": "default",
     "mode": "additive",
-    "settings": { "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative" },
+    "governance": { "runtimeAuthorizationAuthority": "enterpriseglue_authoritative" },
     "imports": ["./groups.json"]
   },
   "files": { "./groups.json": { "groups": [] } }

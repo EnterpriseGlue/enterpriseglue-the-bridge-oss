@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useActionDecision } from '../../../../shared/auth/guards'
+import type { ConfigBundleV1Beta1Request } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js'
 
 type PreviewRun = {
   id: string
@@ -42,10 +43,10 @@ function stableKeyPart(value: string, fallback: string): string {
   return normalized || fallback
 }
 
-function draftBase(runId: string, bundleKey: string, tenantKey: string) {
+function draftBase(runId: string, bundleKey: string, tenantKey: string): ConfigBundleV1Beta1Request {
   return {
     bundle: {
-      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      apiVersion: 'enterpriseglue.ai/v1beta1',
       kind: 'EnterpriseGlueConfigBundle',
       metadata: {
         key: bundleKey,
@@ -54,7 +55,7 @@ function draftBase(runId: string, bundleKey: string, tenantKey: string) {
       },
       tenantKey,
       mode: 'additive',
-      settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' },
+      governance: { runtimeAuthorizationAuthority: 'enterpriseglue_authoritative' },
       imports: ['./groups.json'],
     },
     files: { './groups.json': { groups: [] } },

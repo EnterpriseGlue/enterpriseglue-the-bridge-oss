@@ -284,6 +284,13 @@ describe('configBundleApplyService', () => {
     expect(configRunRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
     }));
+    expect(result.contract).toMatchObject({
+      inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: expect.arrayContaining([
+        expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' }),
+      ]),
+    });
     expect(platformSettingsRepo.insert).not.toHaveBeenCalled();
     expect(platformSettingsRepo.update).not.toHaveBeenCalled();
   });
@@ -292,13 +299,14 @@ describe('configBundleApplyService', () => {
     const { platformSettingsRepo } = setupDataSource();
     const governedBundle = {
       ...bundle,
-      settings: {
-        engineAccessAuthority: 'sso_managed',
-        projectAccessAuthority: 'manual',
-        engineOnboardingMode: 'hybrid',
-        projectEngineTargetMode: 'manual_allowed',
-        engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
-        ownershipMode: 'config_locked',
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      governance: {
+        engineMembershipAuthority: 'sso_managed',
+        projectMembershipAuthority: 'manual',
+        engineRegistrationPolicy: 'hybrid',
+        projectEngineTargetPolicy: 'manual_allowed',
+        runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+        governanceSettingsOwnership: 'config_locked',
       },
     };
     const preview = configBundlePreviewService.preview({ bundle: governedBundle, files });
@@ -312,6 +320,11 @@ describe('configBundleApplyService', () => {
     });
 
     expect(result.created).toBe(3);
+    expect(result.contract).toEqual({
+      inputApiVersion: 'enterpriseglue.ai/v1beta1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: [],
+    });
     expect(platformSettingsRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       engineAccessAuthority: 'sso_managed',
       projectAccessAuthority: 'manual',

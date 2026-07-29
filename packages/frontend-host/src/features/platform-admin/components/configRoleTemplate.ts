@@ -23,7 +23,7 @@ export function configRoleKeyFromSystemRoleKey(systemRoleKey: string): string {
   return `custom.${suffix || 'role'}`;
 }
 
-export function buildSystemRoleConfigBundle(input: ConfigRoleTemplateInput) {
+export function buildSystemRoleConfigBundle(input: ConfigRoleTemplateInput): ConfigBundleV1Beta1Request {
   if (!isStableConfigKey(input.bundleKey)) throw new Error('Bundle key must be a stable lowercase configuration key.');
   if (!isStableConfigKey(input.tenantKey)) throw new Error('Tenant key must be a stable lowercase configuration key.');
   if (!isStableConfigKey(input.roleKey) || !input.roleKey.startsWith('custom.')) throw new Error('Configuration role key must use the custom.* namespace.');
@@ -33,7 +33,7 @@ export function buildSystemRoleConfigBundle(input: ConfigRoleTemplateInput) {
 
   return {
     bundle: {
-      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      apiVersion: 'enterpriseglue.ai/v1beta1',
       kind: 'EnterpriseGlueConfigBundle',
       metadata: { key: input.bundleKey, owner: 'platform' },
       tenantKey: input.tenantKey,
@@ -54,3 +54,4 @@ export function buildSystemRoleConfigBundle(input: ConfigRoleTemplateInput) {
     },
   };
 }
+import type { ConfigBundleV1Beta1Request } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';

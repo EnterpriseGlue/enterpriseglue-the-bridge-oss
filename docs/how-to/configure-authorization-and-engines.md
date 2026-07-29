@@ -124,24 +124,24 @@ When a bundle explicitly declares the five platform governance settings, it
 also owns their portal edit behavior:
 
 ```text
-"settings": {
-  "engineAccessAuthority": "sso_managed",
-  "projectAccessAuthority": "manual",
-  "engineOnboardingMode": "external_only",
-  "projectEngineTargetMode": "hybrid",
-  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-  "ownershipMode": "config_locked"
+"governance": {
+  "engineMembershipAuthority": "sso_managed",
+  "projectMembershipAuthority": "manual",
+  "engineRegistrationPolicy": "external_only",
+  "projectEngineTargetPolicy": "hybrid",
+  "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+  "governanceSettingsOwnership": "config_locked"
 }
 ```
 
-`config_locked` makes those settings read-only in Platform Settings and rejects
+`governanceSettingsOwnership: "config_locked"` makes those settings read-only in Platform Settings and rejects
 manual settings API writes. `config_warn` permits a temporary portal/API edit
 and marks the settings drifted; the next reviewed apply restores the declared
 values and `in_sync` state. `manual` permits portal/API edits while retaining
-the recorded bundle provenance. An older bundle with `settings: {}` does not
+the recorded bundle provenance. An older `v1alpha1` bundle with `settings: {}` does not
 claim ownership or overwrite current values.
 
-Engine-only bundles may now omit `settings` entirely. Omission is the preferred
+Engine-only `v1beta1` bundles may omit `governance` entirely. Omission is the preferred
 headless contract when the bundle should manage inventory without changing
 platform governance. See the
 [API reference](../reference/access-governance-and-headless-api.md#engine-only-bundle)

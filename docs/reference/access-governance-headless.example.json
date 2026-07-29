@@ -1,6 +1,6 @@
 {
   "bundle": {
-    "apiVersion": "enterpriseglue.ai/v1alpha1",
+    "apiVersion": "enterpriseglue.ai/v1beta1",
     "kind": "EnterpriseGlueConfigBundle",
     "metadata": {
       "key": "platform.operaton-estate",
@@ -9,13 +9,13 @@
     },
     "tenantKey": "default",
     "mode": "authoritative",
-    "settings": {
-      "engineAccessAuthority": "manual",
-      "projectAccessAuthority": "manual",
-      "engineOnboardingMode": "external_only",
-      "projectEngineTargetMode": "manual_allowed",
-      "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
-      "ownershipMode": "config_locked"
+    "governance": {
+      "engineMembershipAuthority": "manual",
+      "projectMembershipAuthority": "manual",
+      "engineRegistrationPolicy": "external_only",
+      "projectEngineTargetPolicy": "manual_allowed",
+      "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+      "governanceSettingsOwnership": "config_locked"
     },
     "imports": [
       "./engines.json"

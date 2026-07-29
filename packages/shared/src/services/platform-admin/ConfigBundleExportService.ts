@@ -16,6 +16,11 @@ import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructur
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
 import { EngineTenantReferenceSchema } from '../../schemas/mission-control/engine.js';
+import {
+  configBundleContractMetadataForApiVersion,
+  ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
+  type ConfigBundleContractMetadata,
+} from '../../schemas/platform-admin/config-bundle.js';
 
 function json(value: string | null | undefined): Record<string, unknown> {
   try { const parsed = value ? JSON.parse(value) : {}; return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
@@ -74,7 +79,7 @@ function exportedTenantReference(
 }
 
 class ConfigBundleExportService {
-  async exportBundle(input: { bundleKey: string; tenantId?: string | null; tenantKey?: string }): Promise<{ bundle: Record<string, unknown>; files: Record<string, unknown> }> {
+  async exportBundle(input: { bundleKey: string; tenantId?: string | null; tenantKey?: string }): Promise<{ bundle: Record<string, unknown>; files: Record<string, unknown>; contract: ConfigBundleContractMetadata }> {
     const dataSource = await getDataSource();
     const tenantId = input.tenantId || null;
     const sourceRef = `config_bundle:${input.bundleKey}`;
@@ -269,28 +274,29 @@ class ConfigBundleExportService {
       return { projectRef: { id: target.projectId }, engineRef: { engineKey }, status: target.status, allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport, ownershipMode: target.ownershipMode || 'config_locked' };
     }) };
     const imports = Object.keys(files);
-    const settings = platformSettings?.accessGovernanceSourceRef === sourceRef
+    const governance = platformSettings?.accessGovernanceSourceRef === sourceRef
       ? {
-          engineAccessAuthority: platformSettings.engineAccessAuthority || 'manual',
-          projectAccessAuthority: platformSettings.projectAccessAuthority || 'manual',
-          engineOnboardingMode: platformSettings.engineOnboardingMode || 'manual_allowed',
-          projectEngineTargetMode: platformSettings.projectEngineTargetMode || 'manual_allowed',
-          engineRuntimeAuthorizationMode: platformSettings.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative',
-          ownershipMode: platformSettings.accessGovernanceOwnershipMode || 'config_locked',
+          engineMembershipAuthority: platformSettings.engineAccessAuthority || 'manual',
+          projectMembershipAuthority: platformSettings.projectAccessAuthority || 'manual',
+          engineRegistrationPolicy: platformSettings.engineOnboardingMode || 'manual_allowed',
+          projectEngineTargetPolicy: platformSettings.projectEngineTargetMode || 'manual_allowed',
+          runtimeAuthorizationAuthority: platformSettings.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative',
+          governanceSettingsOwnership: platformSettings.accessGovernanceOwnershipMode || 'config_locked',
         }
       : undefined;
     return withoutUndefined({
       bundle: {
-        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        apiVersion: ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
         kind: 'EnterpriseGlueConfigBundle',
         metadata: { key: input.bundleKey, owner: 'platform' },
         tenantKey: input.tenantKey || 'default',
         mode: 'authoritative',
-        ...(settings ? { settings } : {}),
+        ...(governance ? { governance } : {}),
         imports,
       },
       files,
-    }) as { bundle: Record<string, unknown>; files: Record<string, unknown> };
+      contract: configBundleContractMetadataForApiVersion(ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1),
+    }) as { bundle: Record<string, unknown>; files: Record<string, unknown>; contract: ConfigBundleContractMetadata };
   }
 }
 

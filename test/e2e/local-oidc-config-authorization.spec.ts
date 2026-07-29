@@ -107,12 +107,11 @@ function bundleFor(input: { bundleKey: string; providerKey: string; groupKey: st
   const imports = ['./groups.json', './engines.json', './assignments.json', './identity-providers.json', './identity-mappings.json'];
   return {
     bundle: {
-      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      apiVersion: 'enterpriseglue.ai/v1beta1',
       kind: 'EnterpriseGlueConfigBundle',
       metadata: { key: input.bundleKey, owner: 'local-oidc-rehearsal' },
       tenantKey: 'default',
       mode: 'authoritative',
-      settings: {},
       imports,
     },
     files: {

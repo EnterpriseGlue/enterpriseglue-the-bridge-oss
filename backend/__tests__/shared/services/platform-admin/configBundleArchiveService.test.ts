@@ -9,12 +9,11 @@ function archive(entries: Record<string, unknown | Buffer>): Buffer {
 }
 
 const bundle = {
-  apiVersion: 'enterpriseglue.ai/v1alpha1',
+  apiVersion: 'enterpriseglue.ai/v1beta1',
   kind: 'EnterpriseGlueConfigBundle',
   metadata: { key: 'acme.authz', owner: 'platform' },
   tenantKey: 'acme',
   mode: 'preview_only',
-  settings: {},
   imports: ['./groups.json'],
 };
 
@@ -33,6 +32,22 @@ describe('configBundleArchiveService', () => {
       files: {
         './groups.json': { groups: [{ key: 'group.ops', name: 'Operations' }] },
         './engine-tenant-mappings.json': { engineTenantMappings: [] },
+      },
+    });
+  });
+
+  it('accepts every production engine mapping file advertised by the public contract', () => {
+    const mappingBundle = {
+      ...bundle,
+      imports: ['./engine-backstop-mappings.json'],
+    };
+    expect(configBundleArchiveService.readZip(archive({
+      'bundle.json': mappingBundle,
+      'engine-backstop-mappings.json': { engineBackstopMappings: [] },
+    }))).toEqual({
+      bundle: mappingBundle,
+      files: {
+        './engine-backstop-mappings.json': { engineBackstopMappings: [] },
       },
     });
   });
