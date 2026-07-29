@@ -166,11 +166,8 @@ export function EnginesSettingsSection({
   const engineRuntimeAuthorizationMode = settings?.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative'
   const settingsDisabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
   const governanceSettingsDisabledReason = governanceSettingsUnavailableReason || settingsDisabledReason
-  const engineAccessManaged = selectedEngineAccessAuthority === 'sso_managed'
-  const governanceAssignDisabledReason = engineAccessManaged
-    ? 'Engine access is SSO-managed. Owners and delegates must come from an SSO mapping or managed configuration.'
-    : governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
-  const canAssignGovernance = canReadGovernance && canManageGovernance && !engineAccessManaged
+  const governanceAssignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
+  const canAssignGovernance = canReadGovernance && canManageGovernance
 
   return (
     <PlatformGrid style={{ paddingInline: 0, alignItems: 'stretch' }}>
@@ -319,7 +316,7 @@ export function EnginesSettingsSection({
               />
             )}
 
-            {canReadGovernance && (!canManageGovernance || engineAccessManaged) && (
+            {canReadGovernance && !canManageGovernance && (
               <InlineNotification
                 kind="warning"
                 title="Engine governance is read-only"

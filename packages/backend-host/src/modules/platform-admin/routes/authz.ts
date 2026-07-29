@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { In } from 'typeorm';
 import {
   OSS_DEFAULT_TENANT_ID,
   normalizeTenantIdForPersistence,
@@ -29,6 +31,8 @@ import {
   Permission,
   EvaluationContext,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
+import { calculateCurrentUserActionAvailability } from '@enterpriseglue/shared/services/platform-admin/ActionAvailabilityService.js';
 import {
   AuthzCheckBatchRequestSchema,
   AuthzCheckRequestSchema,
@@ -192,6 +196,24 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
   try {
     const tenantId = effectiveTenantId(req);
     const snapshot = await permissionService.getCurrentUserPermissions(req.user!.userId, tenantId);
+    const [settings, engines] = await Promise.all([
+      platformSettingsService.get(),
+      snapshot.engines.length > 0
+        ? (await getDataSource()).getRepository(Engine).find({
+            where: { id: In(snapshot.engines.map(({ resourceId }) => resourceId)) },
+            select: {
+              id: true,
+              registrationSource: true,
+              sourceRef: true,
+              ownershipMode: true,
+              lifecycleStatus: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const availability = calculateCurrentUserActionAvailability(snapshot, settings, engines);
+    const projectAvailability = new Map(availability.projects.map((item) => [item.resourceId, item.actionAvailability]));
+    const engineAvailability = new Map(availability.engines.map((item) => [item.resourceId, item.actionAvailability]));
     // Runtime-resource visibility is resolved server-side per request. Keep
     // this client snapshot deliberately coarse so process/decision keys and
     // tenant lineage cannot become a second authorization authority.
@@ -203,9 +225,19 @@ router.get('/api/authz/me/permissions', apiLimiter, requireAuth, asyncHandler(as
       // tenant and invalidate the principal-bound frontend snapshot.
       tenantId: req.tenant?.tenantId || null,
       platform: snapshot.platform,
-      projects: snapshot.projects.map(({ resourceId, permissions }) => ({ resourceId, permissions })),
-      engines: snapshot.engines.map(({ resourceId, permissions, runtimePermissions }) => ({ resourceId, permissions, runtimePermissions })),
-      authorizationVersion: snapshot.authorizationVersion,
+      platformActionAvailability: availability.platformActionAvailability,
+      projects: snapshot.projects.map(({ resourceId, permissions }) => ({
+        resourceId,
+        permissions,
+        actionAvailability: projectAvailability.get(resourceId),
+      })),
+      engines: snapshot.engines.map(({ resourceId, permissions, runtimePermissions }) => ({
+        resourceId,
+        permissions,
+        runtimePermissions,
+        actionAvailability: engineAvailability.get(resourceId),
+      })),
+      authorizationVersion: `${snapshot.authorizationVersion}:actions:${availability.version}`,
       generatedAt: snapshot.generatedAt,
     }));
   } catch (error: any) {

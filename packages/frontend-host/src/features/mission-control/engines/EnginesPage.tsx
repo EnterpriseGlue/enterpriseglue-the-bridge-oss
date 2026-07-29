@@ -121,17 +121,25 @@ type EnginePermissionCheck = (engineId: string | null | undefined, permission: s
 type EngineActionCheck = (engineId: string | null | undefined, actionId: string) => boolean
 type EngineActionSubject = Pick<AccessibleEngineSummary, 'id'> | null | undefined
 
-export function getEngineActionPermissions(engine: EngineActionSubject, hasPermission: EnginePermissionCheck, hasAction?: EngineActionCheck) {
+export function getEngineActionPermissions(
+  engine: EngineActionSubject,
+  hasPermission: EnginePermissionCheck,
+  hasAction?: EngineActionCheck,
+  useServerActionAvailability = false,
+) {
   const engineId = engine?.id
   const hasActionDecision = (actionId: string) => Boolean(engineId && hasAction?.(engineId, actionId))
   const hasPermissionOrAction = (permission: string, actionId?: string) =>
-    hasPermission(engineId, permission) || Boolean(actionId && hasActionDecision(actionId))
+    actionId && useServerActionAvailability
+      ? hasActionDecision(actionId)
+      : hasPermission(engineId, permission) || Boolean(actionId && hasActionDecision(actionId))
   const canManageMembers = hasPermissionOrAction(EnginePermission.MEMBERS_MANAGE)
+  const canManageMembersForMutation = useServerActionAvailability ? false : canManageMembers
   const canLookupMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_LOOKUP, 'engine.members.lookup')
-  const canInviteMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_INVITE, 'engine.members.invite')
-  const canAddMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_ADD, 'engine.members.add')
-  const canUpdateMemberRoles = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_UPDATE_ROLE, 'engine.members.update-role')
-  const canRemoveMembers = canManageMembers || hasPermissionOrAction(EnginePermission.MEMBERS_REMOVE, 'engine.members.remove')
+  const canInviteMembers = canManageMembersForMutation || hasPermissionOrAction(EnginePermission.MEMBERS_INVITE, 'engine.members.invite')
+  const canAddMembers = canManageMembersForMutation || hasPermissionOrAction(EnginePermission.MEMBERS_ADD, 'engine.members.add')
+  const canUpdateMemberRoles = canManageMembersForMutation || hasPermissionOrAction(EnginePermission.MEMBERS_UPDATE_ROLE, 'engine.members.update-role')
+  const canRemoveMembers = canManageMembersForMutation || hasPermissionOrAction(EnginePermission.MEMBERS_REMOVE, 'engine.members.remove')
   const canManageDelegate = hasPermissionOrAction(EnginePermission.DELEGATE_MANAGE, 'engine.delegate.manage')
   const canViewProjectAccess = canManageMembers || hasPermissionOrAction(EnginePermission.PROJECT_ACCESS_VIEW, 'engine.project-access.requests.read')
   const canApproveProjectAccess = canManageMembers || hasPermissionOrAction(EnginePermission.PROJECT_ACCESS_APPROVE, 'engine.project-access.requests.approve')
@@ -146,7 +154,7 @@ export function getEngineActionPermissions(engine: EngineActionSubject, hasPermi
   const canViewSecrets = hasPermissionOrAction(EnginePermission.SECRETS_VIEW, 'engine.secrets.view') || canManageSecrets
 
   return {
-    canEdit: hasPermissionOrAction(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
+    canEdit: hasPermissionOrAction(EnginePermission.ENGINE_EDIT, 'engine.inventory.configuration.update'),
     canDelete: hasPermissionOrAction(EnginePermission.ENGINE_DELETE, 'engine.inventory.delete'),
     canTest: hasPermissionOrAction(EnginePermission.ENGINE_EDIT, 'engine.inventory.update'),
     canViewSecrets,
@@ -1310,12 +1318,17 @@ export default function Engines() {
   })
   const engineOnboardingMode = platformSettingsQ.data?.engineOnboardingMode || 'manual_allowed'
   const engineAccessAuthority = platformSettingsQ.data?.engineAccessAuthority || 'manual'
-  const manualEngineOnboardingAllowed = platformSettingsQ.data?.governanceBehavior?.manualEngineRegistrationAllowed
+  const legacyManualEngineOnboardingAllowed = platformSettingsQ.data?.governanceBehavior?.manualEngineRegistrationAllowed
     ?? isManualEngineOnboardingAllowed(engineOnboardingMode)
-  const createEngineUnavailableReason = manualEngineOnboardingAllowed
+  const hasServerPlatformActionAvailability = Boolean(permissions?.platformActionAvailability)
+  const manualEngineOnboardingAllowed = hasServerPlatformActionAvailability
+    ? createEngineDecision.allowed
+    : legacyManualEngineOnboardingAllowed
+  const canCreateEngine = createEngineDecision.allowed
+    && manualEngineOnboardingAllowed
+  const createEngineUnavailableReason = canCreateEngine || hasServerPlatformActionAvailability
     ? createEngineDecision.reason
     : 'Manual engine registration is disabled by the current onboarding policy.'
-  const canCreateEngine = createEngineDecision.allowed && manualEngineOnboardingAllowed
   const engineModal = useModal<EngineMutationForm>()
   const { notify } = useToast()
   const [editing, setEditing] = React.useState<EngineInventory | null>(null)
@@ -1491,7 +1504,10 @@ export default function Engines() {
   }, [permissions])
 
   function getActionsForEngine(engine: EngineActionSubject) {
-    return getEngineActionPermissions(engine, hasEnginePermission, hasEngineAction)
+    const useServerActionAvailability = Boolean(
+      engine?.id && permissions?.engines.find((item) => item.resourceId === engine.id)?.actionAvailability,
+    )
+    return getEngineActionPermissions(engine, hasEnginePermission, hasEngineAction, useServerActionAvailability)
   }
 
   const editingActions = editing ? getActionsForEngine(editing) : null

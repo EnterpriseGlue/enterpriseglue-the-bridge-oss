@@ -297,6 +297,7 @@ export const CustomPermissionCreateSchema = z.object({
 export const EffectiveResourcePermissionsSchema = z.object({
   resourceId: z.string(),
   permissions: z.array(z.string()),
+  actionAvailability: z.lazy(() => ActionAvailabilitySnapshotSchema).optional(),
 });
 
 export const EffectiveEngineResourcePermissionsSchema = EffectiveResourcePermissionsSchema.extend({
@@ -305,10 +306,23 @@ export const EffectiveEngineResourcePermissionsSchema = EffectiveResourcePermiss
   runtimePermissions: z.array(z.string()).default([]),
 });
 
+export const ActionAvailabilityRestrictionSchema = z.object({
+  reasonCode: z.string(),
+  reason: z.string(),
+  managementSource: z.enum(['configuration', 'external_api', 'sso', 'platform_policy', 'system']),
+  sourceRef: z.string().nullable().optional(),
+}).strict();
+
+export const ActionAvailabilitySnapshotSchema = z.object({
+  allowedActions: z.array(z.string()),
+  restrictions: z.record(z.string(), ActionAvailabilityRestrictionSchema),
+}).strict();
+
 export const CurrentUserPermissionsSchema = z.object({
   userId: z.string(),
   tenantId: z.string().nullable(),
   platform: z.array(z.string()),
+  platformActionAvailability: ActionAvailabilitySnapshotSchema.optional(),
   projects: z.array(EffectiveResourcePermissionsSchema),
   engines: z.array(EffectiveEngineResourcePermissionsSchema),
   authorizationVersion: z.string(),
@@ -1421,6 +1435,8 @@ export type PermissionCatalogEntry = z.infer<typeof PermissionCatalogEntrySchema
 export type CustomPermissionCreate = z.infer<typeof CustomPermissionCreateSchema>;
 export type EffectiveResourcePermissions = z.infer<typeof EffectiveResourcePermissionsSchema>;
 export type EffectiveEngineResourcePermissions = z.infer<typeof EffectiveEngineResourcePermissionsSchema>;
+export type ActionAvailabilityRestriction = z.infer<typeof ActionAvailabilityRestrictionSchema>;
+export type ActionAvailabilitySnapshot = z.infer<typeof ActionAvailabilitySnapshotSchema>;
 export type CurrentUserPermissions = z.infer<typeof CurrentUserPermissionsSchema>;
 export type RoleSummary = z.infer<typeof RoleSummarySchema>;
 export type RoleDetail = z.infer<typeof RoleDetailSchema>;

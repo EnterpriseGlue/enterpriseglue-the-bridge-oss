@@ -621,6 +621,7 @@ describe('EnginesPage', () => {
   it('enables actions from registry-backed action decisions', () => {
     const noScopedPermissions = () => false;
     const actionDecisions = new Set([
+      'engine.inventory.configuration.update',
       'engine.inventory.update',
       'engine.inventory.delete',
       'engine.secrets.view',

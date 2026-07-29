@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ProjectsSettingsSection } from '@src/features/platform-admin/components/ProjectsSettingsSection';
 
 describe('ProjectsSettingsSection', () => {
-  it('keeps project governance visible but disables mutations in SSO-managed mode', () => {
+  it('keeps project governance visible but honors the server-calculated read-only decision', () => {
     render(
       <ProjectsSettingsSection
         allProjects={[]}
@@ -23,7 +23,8 @@ describe('ProjectsSettingsSection', () => {
         onAssignOwner={vi.fn()}
         onAssignDelegate={vi.fn()}
         canReadGovernance
-        canManageGovernance
+        canManageGovernance={false}
+        governanceManageUnavailableReason="Project access is SSO-managed. Owners and delegates must come from managed configuration."
         projectAccessAuthority="sso_managed"
       />,
     );

@@ -247,9 +247,8 @@ export const ProjectMembersModal = ({
     email: invite.email,
   }))
   const tableRows = [...pendingRows, ...visibleRows]
-  const manualProjectAccessEnabled = projectAccessAuthority !== 'sso_managed'
-  const canOpenAddMember = manualProjectAccessEnabled && (canAddMembers || canInviteMembers)
-  const canUseScopedAssignmentControls = manualProjectAccessEnabled && canAssignScopedAccess
+  const canOpenAddMember = canAddMembers || canInviteMembers
+  const canUseScopedAssignmentControls = canAssignScopedAccess
   const canonicalProjectOwnerMemberIds = React.useMemo(
     () => getCanonicalProjectOwnerMemberIds(scopedRoleAssignments),
     [scopedRoleAssignments],
@@ -377,7 +376,6 @@ export const ProjectMembersModal = ({
                                 member &&
                                 !pendingInvite &&
                                 !isOwner &&
-                                manualProjectAccessEnabled &&
                                 (canUpdateMemberRoles || (isDeployGrantEligible && canManageMemberDeployGrant) || canTransferOwnership || canRemoveMembers)
                               )
 
@@ -533,7 +531,7 @@ export const ProjectMembersModal = ({
                                 {assignment.source}
                               </Tag>
                             </div>
-                            {assignment.source === 'manual' && manualProjectAccessEnabled && onRemoveScopedAssignment ? (
+                            {assignment.source === 'manual' && canUseScopedAssignmentControls && onRemoveScopedAssignment ? (
                               <Button
                                 kind="ghost"
                                 size="sm"

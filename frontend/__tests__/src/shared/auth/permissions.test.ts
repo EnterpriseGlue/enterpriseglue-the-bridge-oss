@@ -156,4 +156,54 @@ describe('frontend permission helpers', () => {
     expect(allowed.resourceId).toBeNull();
     expect(denied.allowed).toBe(false);
   });
+
+  it('prefers server-calculated availability and preserves its source-aware denial reason', () => {
+    const decision = evaluateActionSnapshot(
+      {
+        ...baseSnapshot,
+        engines: [{
+          resourceId: 'engine-1',
+          permissions: [EnginePermission.MEMBERS_ADD],
+          runtimePermissions: [],
+          actionAvailability: {
+            allowedActions: [],
+            restrictions: {
+              'engine.members.add': {
+                reasonCode: 'engine_access_sso_managed',
+                reason: 'Engine access is SSO-managed.',
+                managementSource: 'sso',
+                sourceRef: 'bundle:workforce',
+              },
+            },
+          },
+        }],
+      },
+      'engine.members.add',
+      { type: 'engine', id: 'engine-1' },
+    );
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      state: 'disabled',
+      reason: 'Engine access is SSO-managed.',
+      reasonCode: 'engine_access_sso_managed',
+      managementSource: 'sso',
+      sourceRef: 'bundle:workforce',
+    });
+  });
+
+  it('uses legacy permission evaluation when action availability is absent', () => {
+    expect(evaluateActionSnapshot(
+      {
+        ...baseSnapshot,
+        engines: [{
+          resourceId: 'engine-1',
+          permissions: [EnginePermission.MEMBERS_ADD],
+          runtimePermissions: [],
+        }],
+      },
+      'engine.members.add',
+      { type: 'engine', id: 'engine-1' },
+    ).allowed).toBe(true);
+  });
 });

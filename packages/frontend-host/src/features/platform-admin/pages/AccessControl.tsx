@@ -1630,8 +1630,6 @@ export default function AccessControl() {
                 pending={assignRoleM.isPending || removeAssignmentM.isPending}
                 canCreate={assignmentsCreateDecision.allowed}
                 canDelete={assignmentsDeleteDecision.allowed}
-                engineAccessAuthority={platformSettingsQ.data?.engineAccessAuthority || 'manual'}
-                projectAccessAuthority={platformSettingsQ.data?.projectAccessAuthority || 'manual'}
               />
               </div>
             )}

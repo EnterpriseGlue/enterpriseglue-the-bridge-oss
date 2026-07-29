@@ -14,10 +14,16 @@ const allowedDecision = {
   reason: 'Allowed by test permission snapshot',
 }
 
-const useActionDecision = vi.fn(() => allowedDecision)
+const useActionDecision = vi.fn<
+  (_actionId?: unknown, _resource?: unknown) => {
+    allowed: boolean
+    state: 'allowed' | 'hidden' | 'disabled'
+    reason: string
+  }
+>(() => allowedDecision)
 
 vi.mock('@src/shared/auth/guards', () => ({
-  useActionDecision: (...args: unknown[]) => useActionDecision(...args),
+  useActionDecision,
 }))
 
 function renderPanel() {

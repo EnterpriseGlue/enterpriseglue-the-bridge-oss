@@ -14,6 +14,7 @@ import {
 import { TrashCan } from '@carbon/icons-react';
 import type { ApiClient, AuthzGroup, ExternalEngineSystem, RoleAssignment, ServiceAccount } from '../../hooks/useAuthzApi';
 import { AssignmentSourceTag } from './AssignmentSourceTag';
+import { useActionDecision } from '../../../../shared/auth/guards';
 
 const headers = [
   { key: 'principal', header: 'Principal' }, { key: 'role', header: 'Role' },
@@ -44,14 +45,12 @@ export function RoleAssignmentsTable({
   loading,
   canDelete,
   onRemove,
-  engineAccessAuthority,
-  projectAccessAuthority,
 }: {
   assignments: RoleAssignment[]; apiClients: ApiClient[]; groups: AuthzGroup[]; serviceAccounts: ServiceAccount[]; externalSystems: ExternalEngineSystem[];
   loading: boolean; canDelete: boolean; onRemove: (assignmentId: string) => void;
-  engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
-  projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
 }) {
+  const engineAccessDeleteDecision = useActionDecision('platform.authz.assignments.delete.engine-access', { type: 'platform' });
+  const projectAccessDeleteDecision = useActionDecision('platform.authz.assignments.delete.project-access', { type: 'platform' });
   if (loading) return <DataTableSkeleton headers={headers} rowCount={5} />;
   const rows = assignments.map((assignment) => ({
     id: assignment.id,
@@ -72,10 +71,13 @@ export function RoleAssignmentsTable({
           }
           if (cell.info.header === 'actions') {
             const engineScoped = ['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(String(assignment?.scopeType || assignment?.resourceType || ''));
-            const authorityManaged = (engineScoped && engineAccessAuthority === 'sso_managed')
-              || ((assignment?.scopeType || assignment?.resourceType) === 'project' && projectAccessAuthority === 'sso_managed');
-            const canRemove = canDelete && !authorityManaged;
-            return <TableCell key={cell.id}>{(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canRemove} title={authorityManaged ? 'Access is SSO-managed' : canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />}</TableCell>;
+            const scopedDecision = engineScoped
+              ? engineAccessDeleteDecision
+              : (assignment?.scopeType || assignment?.resourceType) === 'project'
+                ? projectAccessDeleteDecision
+                : null;
+            const canRemove = canDelete && (scopedDecision?.allowed ?? true);
+            return <TableCell key={cell.id}>{(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canRemove} title={!scopedDecision?.allowed ? scopedDecision?.reason : canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />}</TableCell>;
           }
           return <TableCell key={cell.id}>{cell.value}</TableCell>;
         })}</TableRow>;

@@ -115,6 +115,40 @@ export function evaluateActionSnapshot(
   const resourceId = resource?.id ?? null;
   const behavior = action.ui[0]?.behavior ?? 'disable';
   let allowed = false;
+  const availability = resourceType === 'platform'
+    ? snapshot?.platformActionAvailability
+    : resourceType === 'project' && resourceId
+      ? snapshot?.projects.find((item) => item.resourceId === resourceId)?.actionAvailability
+      : resourceType === 'engine' && resourceId
+        ? snapshot?.engines.find((item) => item.resourceId === resourceId)?.actionAvailability
+        : undefined;
+
+  if (availability) {
+    const restriction = availability.restrictions[actionId];
+    allowed = availability.allowedActions.includes(actionId);
+    return {
+      actionId,
+      permissionId: action.permissionId,
+      resourceType,
+      resourceId,
+      allowed,
+      state: stateForBehavior(behavior, allowed),
+      reason: allowed
+        ? 'Allowed by current server-calculated action snapshot'
+        : restriction?.reason || `Missing permission ${action.permissionId}`,
+      reasonCode: restriction?.reasonCode,
+      managementSource: restriction?.managementSource,
+      sourceRef: restriction?.sourceRef,
+      diagnostics: allowed
+        ? undefined
+        : {
+            explainUrl: '/admin/access-control?tab=effective-access',
+            remediation: restriction
+              ? ['Change access through the authoritative management source shown above.']
+              : ['Ask a platform administrator to review effective access.'],
+          },
+    };
+  }
 
   if (resourceType === 'platform') {
     allowed = hasPlatformPermission(snapshot, action.permissionId);

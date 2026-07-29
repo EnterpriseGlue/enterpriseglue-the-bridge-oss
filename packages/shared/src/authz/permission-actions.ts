@@ -131,6 +131,9 @@ export interface UiAuthzDecision {
   allowed: boolean;
   state: 'allowed' | 'hidden' | 'disabled' | 'redacted' | 'denied';
   reason: string;
+  reasonCode?: string;
+  managementSource?: 'configuration' | 'external_api' | 'sso' | 'platform_policy' | 'system';
+  sourceRef?: string | null;
   diagnostics?: {
     explainUrl?: string;
     remediation?: string[];

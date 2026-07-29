@@ -316,7 +316,6 @@ export default function EngineMembersModal({
   const assignmentModal = useModal()
   const childModalOpen = addMemberModal.isOpen || assignmentModal.isOpen
   const ssoManagedAccess = engineAccessAuthority === 'sso_managed'
-  const manualEngineAccessEnabled = !ssoManagedAccess
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -348,11 +347,11 @@ export default function EngineMembersModal({
   const trimmedMemberEmail = memberEmail.trim()
   const normalizedMemberEmail = trimmedMemberEmail.toLowerCase()
   const isMemberEmailValid = isValidEmail(trimmedMemberEmail)
-  const effectiveCanInviteMembers = manualEngineAccessEnabled && canInviteMembers
-  const effectiveCanAddMembers = manualEngineAccessEnabled && canAddMembers
-  const effectiveCanUpdateMemberRoles = manualEngineAccessEnabled && canUpdateMemberRoles
-  const effectiveCanRemoveMembers = manualEngineAccessEnabled && canRemoveMembers
-  const effectiveCanManageDelegate = manualEngineAccessEnabled && canManageDelegate
+  const effectiveCanInviteMembers = canInviteMembers
+  const effectiveCanAddMembers = canAddMembers
+  const effectiveCanUpdateMemberRoles = canUpdateMemberRoles
+  const effectiveCanRemoveMembers = canRemoveMembers
+  const effectiveCanManageDelegate = canManageDelegate
   const canAssignDelegate = effectiveCanManageDelegate
   const canOpenInviteUser = canLookupMembers && effectiveCanInviteMembers
   const canOpenDelegateAssignment = canLookupMembers && canAssignDelegate

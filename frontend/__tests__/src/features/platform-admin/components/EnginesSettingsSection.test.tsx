@@ -16,6 +16,18 @@ const baseSettings: PlatformSettings = {
   engineAccessAuthority: 'manual',
   projectAccessAuthority: 'manual',
   engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+  accessGovernanceSourceRef: null,
+  accessGovernanceOwnershipMode: 'manual',
+  accessGovernanceSourceHash: null,
+  accessGovernanceLastAppliedAt: null,
+  accessGovernanceDriftStatus: null,
+  governanceBehavior: {
+    manualEngineAccessMutationsAllowed: true,
+    manualProjectAccessMutationsAllowed: true,
+    manualEngineRegistrationAllowed: false,
+    manualProjectEngineTargetMutationsAllowed: true,
+    governanceSettingsMutations: 'allowed',
+  },
   inviteAllowAllDomains: true,
   inviteAllowedDomains: [],
   ssoAutoRedirectSingleProvider: false,
@@ -120,7 +132,7 @@ describe('EnginesSettingsSection', () => {
     expect(screen.getByRole('combobox', { name: 'Runtime authorization mode' })).toBeDisabled();
   });
 
-  it('keeps engine governance visible but disables owner and delegate changes in SSO-managed mode', () => {
+  it('keeps engine governance visible but honors the server-calculated read-only decision', () => {
     renderSection({
       settings: { ...baseSettings, engineAccessAuthority: 'sso_managed' },
       selectedEngine: {
@@ -134,7 +146,8 @@ describe('EnginesSettingsSection', () => {
         createdAt: 1,
       },
       canReadGovernance: true,
-      canManageGovernance: true,
+      canManageGovernance: false,
+      governanceManageUnavailableReason: 'Engine access is SSO-managed. Owners and delegates must come from an SSO mapping.',
     });
 
     expect(screen.getByText('Engine governance is read-only')).toBeInTheDocument();

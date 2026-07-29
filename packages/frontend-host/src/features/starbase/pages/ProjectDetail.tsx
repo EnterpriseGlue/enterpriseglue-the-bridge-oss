@@ -441,7 +441,8 @@ export default function ProjectDetail() {
   const anySyncEnabled = (platformSettings?.syncPushEnabled ?? true) ||
                          (platformSettings?.syncPullEnabled ?? false)
   const projectAccessAuthority = platformSettings?.projectAccessAuthority || 'manual'
-  const manualProjectAccessEnabled = projectAccessAuthority !== 'sso_managed'
+  const projectActionAvailability = permissions?.projects.find((item) => item.resourceId === projectId)?.actionAvailability
+  const legacyManualProjectAccessEnabled = projectAccessAuthority !== 'sso_managed'
 
   // Fetch project-level Git connection info (for token warning banner)
   const gitConnectionQ = useQuery({
@@ -781,9 +782,10 @@ export default function ProjectDetail() {
   ), [hasProjectPermission, projectId])
 
   const hasProjectPermissionOrAction = React.useCallback((permission: string, actionId: string) => (
-    hasProjectPermission(projectId, permission) ||
-    hasProjectAction(actionId)
-  ), [hasProjectAction, hasProjectPermission, projectId])
+    projectActionAvailability
+      ? hasProjectAction(actionId)
+      : hasProjectPermission(projectId, permission) || hasProjectAction(actionId)
+  ), [hasProjectAction, hasProjectPermission, projectActionAvailability, projectId])
 
   const canViewFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_VIEW)
   const canCreateFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_CREATE)
@@ -792,13 +794,15 @@ export default function ProjectDetail() {
   const canViewMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_VIEW) ||
     hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
   const canManageMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
+  const canManageMembersForMutation = projectActionAvailability ? false : canManageMembers
   const canSearchMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_SEARCH, 'project.members.search')
-  const canInviteMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_INVITE, 'project.members.invite')
-  const canAddMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_ADD, 'project.members.add')
-  const canUpdateMemberRoles = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_UPDATE_ROLE, 'project.members.update-role')
-  const canRemoveMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_REMOVE, 'project.members.remove')
-  const canManageMemberDeployGrant = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT, 'project.members.deploy-grant.manage')
+  const canInviteMembers = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_INVITE, 'project.members.invite')
+  const canAddMembers = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_ADD, 'project.members.add')
+  const canUpdateMemberRoles = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_UPDATE_ROLE, 'project.members.update-role')
+  const canRemoveMembers = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_REMOVE, 'project.members.remove')
+  const canManageMemberDeployGrant = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT, 'project.members.deploy-grant.manage')
   const canTransferOwnership = hasProjectPermissionOrAction(ProjectPermission.OWNERSHIP_TRANSFER, 'project.ownership.transfer')
+  const manualProjectAccessEnabled = projectActionAvailability ? true : legacyManualProjectAccessEnabled
   const canOpenAddMember = manualProjectAccessEnabled && canSearchMembers && (canAddMembers || canInviteMembers)
   const canAssignScopedProjectAccess = manualProjectAccessEnabled && (canAddMembers || canUpdateMemberRoles)
   const canAssignDelegate = hasProjectPermissionForCurrentUser(ProjectPermission.DELEGATE_MANAGE)
@@ -825,11 +829,31 @@ export default function ProjectDetail() {
   const canReadScopedProjectEngineTargets = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_VIEW) ||
     hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
   const canManageScopedProjectEngineTargets = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
+  const scopedDeploymentTargetManageDecision = evaluateActionSnapshot(
+    permissions,
+    'project.deployment-targets.manage',
+    { type: 'project', id: projectId || null },
+  )
+  const platformDeploymentTargetManageDecision = evaluateActionSnapshot(
+    permissions,
+    'platform.project-engine-targets.manage',
+    { type: 'platform', id: null },
+  )
   const canReadProjectEngineTargets = canReadScopedProjectEngineTargets || canReadPlatformProjectEngineTargets
-  const canManageProjectEngineTargets = canManageScopedProjectEngineTargets || canManagePlatformProjectEngineTargets
   const deploymentTargetsApiScope = canManageScopedProjectEngineTargets || (canReadScopedProjectEngineTargets && !canReadPlatformProjectEngineTargets)
     ? 'project'
     : 'platform'
+  const deploymentTargetManageDecision = deploymentTargetsApiScope === 'project'
+    ? scopedDeploymentTargetManageDecision
+    : platformDeploymentTargetManageDecision
+  const hasServerDeploymentTargetAvailability = deploymentTargetsApiScope === 'project'
+    ? Boolean(projectActionAvailability)
+    : Boolean(permissions?.platformActionAvailability)
+  const legacyDeploymentTargetPolicyAllowed = platformSettings?.projectEngineTargetMode !== 'external_only'
+  const canManageProjectEngineTargets = (canManageScopedProjectEngineTargets || canManagePlatformProjectEngineTargets)
+    && (hasServerDeploymentTargetAvailability
+      ? deploymentTargetManageDecision.allowed
+      : legacyDeploymentTargetPolicyAllowed)
 
   const getProjectPermissionUnavailableReason = React.useCallback((permission: string): string | null => (
     hasProjectPermissionForCurrentUser(permission) ? null : `Missing permission ${permission}`
@@ -896,7 +920,11 @@ export default function ProjectDetail() {
     : `Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_VIEW} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW}`
   const deploymentTargetsManageUnavailableReason = canManageProjectEngineTargets
     ? null
-    : `Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_MANAGE} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE}`
+    : hasServerDeploymentTargetAvailability
+      ? deploymentTargetManageDecision.reason
+      : !legacyDeploymentTargetPolicyAllowed
+        ? 'Project deployment targets are externally managed by platform policy'
+        : `Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_MANAGE} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE}`
 
   const customProjectRolesQ = useQuery({
     queryKey: ['project-members', projectId, 'custom-roles'],

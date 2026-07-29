@@ -140,10 +140,7 @@ export function ProjectDeploymentTargetsModal({
   const manageReason = canManageTargets
     ? null
     : manageTargetsUnavailableReason || `Missing permission ${PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE}`
-  const targetPolicyReason = projectEngineTargetMode === 'external_only'
-    ? 'Project deployment targets are externally managed by platform policy'
-    : null
-  const createOrSyncReason = manageReason || targetPolicyReason
+  const createOrSyncReason = manageReason
   const firstAuthzDiagnosticDecision =
     buildDeploymentTargetDiagnosticDecision(projectId, apiScope, 'read', readReason) ||
     buildDeploymentTargetDiagnosticDecision(projectId, apiScope, 'manage', manageReason)
@@ -257,9 +254,6 @@ export function ProjectDeploymentTargetsModal({
           {!readReason && manageReason && (
             <InlineNotification lowContrast kind="info" title="Deployment target changes unavailable" subtitle={manageReason} hideCloseButton />
           )}
-          {!readReason && !manageReason && targetPolicyReason && (
-            <InlineNotification lowContrast kind="info" title="Manual deployment target changes unavailable" subtitle={targetPolicyReason} hideCloseButton />
-          )}
           {firstAuthzDiagnosticDecision ? (
             <div style={{ fontSize: 12 }}>
               <WhyUnavailableLink decision={firstAuthzDiagnosticDecision} />
@@ -307,7 +301,7 @@ export function ProjectDeploymentTargetsModal({
                   <TableBody>
                     {targets.map((target) => {
                       const sourceOwned = isSourceOwnedTarget(target)
-                      const targetManageReason = manageReason || (sourceOwned ? sourceOwnedTargetReason(target) : targetPolicyReason)
+                      const targetManageReason = manageReason || (sourceOwned ? sourceOwnedTargetReason(target) : null)
                       return (
                         <TableRow key={target.id}>
                           <TableCell>

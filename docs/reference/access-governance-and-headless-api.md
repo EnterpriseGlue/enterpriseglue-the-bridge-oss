@@ -29,9 +29,25 @@ of `projectAccessAuthority`.
 
 ## Effective UI and API Behavior
 
+Authenticated `GET /api/authz/me/permissions` is the canonical UI contract.
+In addition to the effective permission arrays, it returns:
+
+- `platformActionAvailability`;
+- `actionAvailability` on every visible project; and
+- `actionAvailability` on every visible engine.
+
+Each availability object contains `allowedActions` and a `restrictions` map
+keyed by action id. A restriction includes a stable `reasonCode`, a
+human-readable `reason`, a `managementSource`, and an optional redacted
+`sourceRef`. The server combines effective RBAC permissions with SSO
+authority, external-only policy, configuration ownership, and engine
+lifecycle. Frontends must prefer this contract when it is present. During a
+mixed-version rollout, a frontend may fall back to its existing permission and
+settings checks when action availability is absent.
+
 `GET /api/admin/settings` and authenticated
-`GET /api/auth/platform-settings` return a read-only `governanceBehavior`
-object. Clients should use it instead of duplicating comparisons:
+`GET /api/auth/platform-settings` also return a read-only
+`governanceBehavior` object:
 
 | Response field | `true` or allowed means |
 | --- | --- |
@@ -41,10 +57,19 @@ object. Clients should use it instead of duplicating comparisons:
 | `manualProjectEngineTargetMutationsAllowed` | Manual project-engine target controls may be enabled if the user also has permission |
 | `governanceSettingsMutations` | `allowed`, `allowed_marks_drift`, or `blocked` for the five governance fields |
 
-Permission checks still apply. These fields describe platform policy, not the
-current principal's RBAC grants. Per-record ownership can impose an additional
-restriction: for example, an external or configuration-locked engine remains
-source-owned even when manual engine onboarding is generally allowed.
+These fields describe platform policy, not the current principal's RBAC
+grants. They are useful for diagnostics, non-interactive clients, and
+compatibility with older permission snapshots. Interactive controls should use
+the server-calculated action availability because per-record ownership can
+impose an additional restriction: for example, an external or
+configuration-locked engine remains source-owned even when manual engine
+onboarding is generally allowed.
+
+Action availability is explanatory, not an enforcement substitute. Protected
+routes still evaluate authorization and source ownership at mutation time.
+Runtime-resource names and keys are deliberately not expanded into the browser
+snapshot; runtime collections remain authoritatively filtered by their backend
+routes.
 
 In `sso_managed`, existing manual rows are not deleted or ignored. They stay
 visible and continue to authorize until deliberately cleaned up in

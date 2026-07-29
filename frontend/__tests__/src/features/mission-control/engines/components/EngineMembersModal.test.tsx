@@ -476,11 +476,11 @@ describe('EngineMembersModal', () => {
 
     renderModal({
       canLookupMembers: true,
-      canInviteMembers: true,
-      canAddMembers: true,
-      canUpdateMemberRoles: true,
-      canRemoveMembers: true,
-      canManageDelegate: true,
+      canInviteMembers: false,
+      canAddMembers: false,
+      canUpdateMemberRoles: false,
+      canRemoveMembers: false,
+      canManageDelegate: false,
       engineAccessAuthority: 'sso_managed',
     });
 

@@ -617,9 +617,13 @@ describe('platform-admin authz routes', () => {
       platform: ['platform:authz:check'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
       engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'], runtimePermissions: [] }],
-      authorizationVersion: 'authz:123:test',
       generatedAt: 123,
     });
+    expect(response.body.authorizationVersion).toMatch(/^authz:123:test:actions:[a-f0-9]{16}$/);
+    expect(response.body.platformActionAvailability).toEqual(expect.objectContaining({
+      allowedActions: expect.any(Array),
+      restrictions: expect.any(Object),
+    }));
   });
 
   it('uses the default tenant for a current-user snapshot when middleware has no tenant context', async () => {
@@ -691,15 +695,15 @@ describe('platform-admin authz routes', () => {
     const response = await request(app).get('/api/authz/me/permissions');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       userId: 'user-1',
       tenantId: 'tenant-default',
       platform: ['platform:authz:check'],
       projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
       engines: [{ resourceId: 'engine-central', permissions: [], runtimePermissions: ['engine:instance:view'] }],
-      authorizationVersion: 'authz:123:test',
       generatedAt: 123,
     });
+    expect(response.body.authorizationVersion).toMatch(/^authz:123:test:actions:[a-f0-9]{16}$/);
     expect(JSON.stringify(response.body)).not.toContain('payments-order');
     expect(JSON.stringify(response.body)).not.toContain('tenant-a');
   });

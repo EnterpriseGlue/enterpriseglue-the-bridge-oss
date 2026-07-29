@@ -128,14 +128,14 @@ describe('ProjectMembersModal', () => {
     expect(onAssignAccess).toHaveBeenCalled();
   });
 
-  it('hides manual member controls in SSO-managed project access mode', async () => {
+  it('hides manual member controls when server-calculated action decisions deny mutations', async () => {
     renderMembersModal({
       projectAccessAuthority: 'sso_managed',
-      canAddMembers: true,
-      canInviteMembers: true,
-      canAssignScopedAccess: true,
-      canUpdateMemberRoles: true,
-      canRemoveMembers: true,
+      canAddMembers: false,
+      canInviteMembers: false,
+      canAssignScopedAccess: false,
+      canUpdateMemberRoles: false,
+      canRemoveMembers: false,
     });
 
     expect(screen.getByText('Project access is SSO-managed')).toBeInTheDocument();
@@ -148,6 +148,7 @@ describe('ProjectMembersModal', () => {
     const onRemoveScopedAssignment = vi.fn();
     renderMembersModal({
       scopedAssignmentsVisible: true,
+      canAssignScopedAccess: true,
       scopedRoleNamesById: new Map([['custom.project.reviewer', 'Project Reviewer']]),
       scopedRoleAssignments: [
         scopedAssignment({

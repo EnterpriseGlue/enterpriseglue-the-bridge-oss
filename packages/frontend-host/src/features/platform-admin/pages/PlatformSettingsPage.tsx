@@ -127,6 +127,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const settingsManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.settings.manage', platformResource);
   const governanceReadDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.read', platformResource);
   const governanceManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.manage', platformResource);
+  const governanceSettingsManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.settings.manage', platformResource);
+  const engineAccessManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.engine-access.manage', platformResource);
+  const projectAccessManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.project-access.manage', platformResource);
   const gitProvidersManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.git.providers.manage', platformResource);
   const canViewPlatformSettingsHub = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS);
   const canReadSettings = !hasPermissionSnapshot || settingsReadDecision.allowed;
@@ -169,12 +172,26 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const gitProvidersManageUnavailableReason = hasPermissionSnapshot && !gitProvidersManageDecision.allowed ? gitProvidersManageDecision.reason : null;
 
   const { data: settings, isLoading, error } = usePlatformSettings({ enabled: canReadSettings });
-  const governanceSettingsConfigLocked = settings?.governanceBehavior?.governanceSettingsMutations === 'blocked'
+  const hasServerActionAvailability = Boolean(permissionSnapshot?.platformActionAvailability);
+  const legacyGovernanceSettingsConfigLocked = settings?.governanceBehavior?.governanceSettingsMutations === 'blocked'
     || settings?.accessGovernanceOwnershipMode === 'config_locked';
-  const canManageGovernanceSettings = canManageSettings && !governanceSettingsConfigLocked;
-  const governanceSettingsUnavailableReason = governanceSettingsConfigLocked
-    ? `Managed by ${settings?.accessGovernanceSourceRef || 'configuration'}`
-    : settingsManageUnavailableReason;
+  const canManageGovernanceSettings = canManageSettings
+    && (hasServerActionAvailability ? governanceSettingsManageDecision.allowed : !legacyGovernanceSettingsConfigLocked);
+  const governanceSettingsUnavailableReason = hasServerActionAvailability
+    ? governanceSettingsManageDecision.reason
+    : legacyGovernanceSettingsConfigLocked
+      ? `Managed by ${settings?.accessGovernanceSourceRef || 'configuration'}`
+      : settingsManageUnavailableReason;
+  const canManageEngineGovernance = canManageGovernance
+    && (!hasServerActionAvailability || engineAccessManageDecision.allowed);
+  const canManageProjectGovernance = canManageGovernance
+    && (!hasServerActionAvailability || projectAccessManageDecision.allowed);
+  const engineGovernanceUnavailableReason = hasServerActionAvailability && !engineAccessManageDecision.allowed
+    ? engineAccessManageDecision.reason
+    : governanceManageUnavailableReason;
+  const projectGovernanceUnavailableReason = hasServerActionAvailability && !projectAccessManageDecision.allowed
+    ? projectAccessManageDecision.reason
+    : governanceManageUnavailableReason;
   const { data: envTags, isLoading: envLoading } = useEnvironmentTags({ enabled: canReadSettings });
   const { data: gitProviders, isLoading: gitProvidersLoading } = useAdminGitProviders({ enabled: canManageGitProviders });
   const updateSettings = useUpdatePlatformSettings();
@@ -310,9 +327,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   // Governance handlers
   const openAssignModal = (type: typeof assignModalType, target: { id: string; name: string }) => {
-    if (!canManageGovernance) return;
-    if ((type === 'engineOwner' || type === 'engineDelegate') && settings?.engineAccessAuthority === 'sso_managed') return;
-    if ((type === 'projectOwner' || type === 'projectDelegate') && settings?.projectAccessAuthority === 'sso_managed') return;
+    const canAssign = type === 'engineOwner' || type === 'engineDelegate'
+      ? canManageEngineGovernance
+      : canManageProjectGovernance;
+    if (!canAssign) return;
     setAssignModalType(type);
     setAssignTarget(target);
     setSelectedUser(null);
@@ -329,9 +347,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const handleAssign = () => {
-    if (!canManageGovernance || !assignTarget || !selectedUser || !assignReason.trim()) return;
-    if ((assignModalType === 'engineOwner' || assignModalType === 'engineDelegate') && settings?.engineAccessAuthority === 'sso_managed') return;
-    if ((assignModalType === 'projectOwner' || assignModalType === 'projectDelegate') && settings?.projectAccessAuthority === 'sso_managed') return;
+    const canAssign = assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+      ? canManageEngineGovernance
+      : canManageProjectGovernance;
+    if (!canAssign || !assignTarget || !selectedUser || !assignReason.trim()) return;
 
     const payload = { userId: selectedUser.id, reason: assignReason };
     const onSuccess = () => closeAssignModal();
@@ -433,9 +452,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       onAssignOwner={(target) => openAssignModal('projectOwner', target)}
       onAssignDelegate={(target) => openAssignModal('projectDelegate', target)}
       canReadGovernance={canReadGovernance}
-      canManageGovernance={canManageGovernance}
+      canManageGovernance={canManageProjectGovernance}
       governanceReadUnavailableReason={governanceReadUnavailableReason}
-      governanceManageUnavailableReason={governanceManageUnavailableReason}
+      governanceManageUnavailableReason={projectGovernanceUnavailableReason}
       projectAccessAuthority={settings?.projectAccessAuthority || 'manual'}
     />
   );
@@ -509,9 +528,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       canManageGovernanceSettings={canManageGovernanceSettings}
       governanceSettingsUnavailableReason={governanceSettingsUnavailableReason}
       canReadGovernance={canReadGovernance}
-      canManageGovernance={canManageGovernance}
+      canManageGovernance={canManageEngineGovernance}
       governanceReadUnavailableReason={governanceReadUnavailableReason}
-      governanceManageUnavailableReason={governanceManageUnavailableReason}
+      governanceManageUnavailableReason={engineGovernanceUnavailableReason}
     />
   );
 
@@ -936,7 +955,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         primaryButtonText={isAssigning ? 'Assigning...' : 'Assign'}
         secondaryButtonText="Cancel"
         onRequestSubmit={handleAssign}
-        primaryButtonDisabled={!selectedUser || !assignReason.trim() || isAssigning || !canManageGovernance}
+        primaryButtonDisabled={!selectedUser || !assignReason.trim() || isAssigning || (
+          assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+            ? !canManageEngineGovernance
+            : !canManageProjectGovernance
+        )}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
           <ComboBox
@@ -949,7 +972,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
               item ? `${item.firstName || ''} ${item.lastName || ''} (${item.email})`.trim() : ''
             }
             selectedItem={selectedUser}
-            disabled={!canManageGovernance}
+            disabled={assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+              ? !canManageEngineGovernance
+              : !canManageProjectGovernance}
             onChange={({ selectedItem }: { selectedItem?: UserListItem | null }) => {
               setSelectedUser(selectedItem ?? null);
             }}
@@ -973,7 +998,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
             value={assignReason}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAssignReason(e.target.value)}
             rows={3}
-            disabled={!canManageGovernance}
+            disabled={assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+              ? !canManageEngineGovernance
+              : !canManageProjectGovernance}
           />
         </div>
       </Modal>

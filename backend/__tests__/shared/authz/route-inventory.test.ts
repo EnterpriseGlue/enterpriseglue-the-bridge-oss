@@ -500,6 +500,7 @@ describe('authorization route inventory validation', () => {
         routes: [
           ['POST', '/api/identity/mappings', 'platform.self'],
           ['POST', '/api/identity/mappings/provision-access', 'platform.self'],
+          ['POST', '/api/identity/mappings/{id}/access', 'platform.self'],
           ['PUT', '/api/identity/mappings/{id}', 'platform.self'],
           ['DELETE', '/api/identity/mappings/{id}', 'platform.self'],
           ['POST', '/api/identity/mappings/test', 'platform.self'],

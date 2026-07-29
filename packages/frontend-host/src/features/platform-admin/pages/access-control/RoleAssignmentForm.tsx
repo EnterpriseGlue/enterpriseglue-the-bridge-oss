@@ -22,6 +22,7 @@ import {
 } from './assignmentFormOptions';
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
 import type { RuntimeResourceEngineOption } from './runtimeResourceOptions';
+import { useActionDecision } from '../../../../shared/auth/guards';
 
 export function RoleAssignmentForm({
   roles,
@@ -34,8 +35,6 @@ export function RoleAssignmentForm({
   onAssign,
   pending,
   canCreate,
-  engineAccessAuthority,
-  projectAccessAuthority,
 }: {
   roles: RoleSummary[];
   apiClients: ApiClient[];
@@ -47,8 +46,6 @@ export function RoleAssignmentForm({
   onAssign: (form: AssignmentFormValues) => void;
   pending: boolean;
   canCreate: boolean;
-  engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
-  projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
 }) {
   const { form, setForm } = useAssignmentFormState();
   const activeApiClients = apiClients.filter((client) => client.isActive);
@@ -79,11 +76,16 @@ export function RoleAssignmentForm({
 
   const canAssign = canSubmitAssignment(form, pending);
   const engineScoped = ['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(form.resourceType);
-  const authorityReason = engineScoped && engineAccessAuthority === 'sso_managed'
-    ? 'Engine access is SSO-managed. Create this assignment through an identity mapping or managed configuration.'
-    : form.resourceType === 'project' && projectAccessAuthority === 'sso_managed'
-      ? 'Project access is SSO-managed. Create this assignment through an identity mapping or managed configuration.'
+  const engineAccessDecision = useActionDecision('platform.authz.assignments.create.engine-access', { type: 'platform' });
+  const projectAccessDecision = useActionDecision('platform.authz.assignments.create.project-access', { type: 'platform' });
+  const scopedAvailabilityDecision = engineScoped
+    ? engineAccessDecision
+    : form.resourceType === 'project'
+      ? projectAccessDecision
       : null;
+  const authorityReason = scopedAvailabilityDecision && !scopedAvailabilityDecision.allowed
+    ? scopedAvailabilityDecision.reason
+    : null;
 
   return (
     <>

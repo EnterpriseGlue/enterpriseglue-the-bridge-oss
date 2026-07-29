@@ -333,6 +333,17 @@ export const ENGINE_AUTHZ_ACTIONS = [
       ],
     },
   {
+      actionId: 'engine.inventory.configuration.update',
+      permissionId: 'engine:edit',
+      resourceType: 'engine',
+      operation: 'update',
+      risk: 'high',
+      audit: false,
+      category: 'Engine Inventory',
+      description: 'Edit fields owned by the EnterpriseGlue engine inventory UI.',
+      ui: [{ surfaceId: 'engines.edit.configuration', behavior: 'disable' }],
+    },
+  {
       actionId: 'engine.secrets.view',
       permissionId: 'engine:secrets:view',
       resourceType: 'engine',

@@ -35,11 +35,8 @@ export function ProjectsSettingsSection({
   governanceManageUnavailableReason,
   projectAccessAuthority = 'manual',
 }: ProjectsSettingsSectionProps) {
-  const projectAccessManaged = projectAccessAuthority === 'sso_managed'
-  const assignDisabledReason = projectAccessManaged
-    ? 'Project access is SSO-managed. Owners and delegates must come from managed configuration.'
-    : governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
-  const canAssign = canReadGovernance && canManageGovernance && !projectAccessManaged
+  const assignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
+  const canAssign = canReadGovernance && canManageGovernance
 
   return (
     <PlatformGrid style={{ paddingInline: 0 }}>
@@ -68,7 +65,7 @@ export function ProjectsSettingsSection({
               />
             )}
 
-            {canReadGovernance && (!canManageGovernance || projectAccessManaged) && (
+            {canReadGovernance && !canManageGovernance && (
               <InlineNotification
                 kind="warning"
                 title="Project governance is read-only"
