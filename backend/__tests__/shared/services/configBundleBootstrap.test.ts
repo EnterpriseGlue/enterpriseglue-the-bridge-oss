@@ -9,8 +9,10 @@ const config = vi.hoisted(() => ({
   configRequireSecretPreflight: false,
   configMaxBytes: 1024 * 1024,
 }));
+const open = vi.hoisted(() => vi.fn());
 const stat = vi.hoisted(() => vi.fn());
 const readFile = vi.hoisted(() => vi.fn());
+const close = vi.hoisted(() => vi.fn());
 const preview = vi.hoisted(() => vi.fn());
 const apply = vi.hoisted(() => vi.fn());
 const secretPreflight = vi.hoisted(() => vi.fn());
@@ -26,7 +28,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({ getRepository: () => ({ findOne: findApplyRun, update: updateApplyRun }) }),
 }));
 vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({ logger: bootstrapLogger }));
-vi.mock('node:fs/promises', () => ({ stat, readFile }));
+vi.mock('node:fs/promises', () => ({ open }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js', () => ({
   configBundlePreviewService: { preview },
 }));
@@ -59,6 +61,8 @@ describe('configBundleBootstrap', () => {
     config.configMaxBytes = 1024 * 1024;
     stat.mockResolvedValue({ isFile: () => true, size: 2 });
     readFile.mockResolvedValue('{}');
+    close.mockResolvedValue(undefined);
+    open.mockResolvedValue({ stat, readFile, close });
     preview.mockReturnValue({ valid: true, canonicalHash: 'preview-hash', errors: [] });
     secretPreflight.mockReturnValue({ valid: true, available: true, canonicalHash: 'preview-hash', availabilityHash: 'secret-preflight-hash', errors: [] });
     getPlatformSettings.mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false });
@@ -74,8 +78,7 @@ describe('configBundleBootstrap', () => {
 
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ mode: 'disabled', status: 'disabled', hash: null });
 
-    expect(stat).not.toHaveBeenCalled();
-    expect(readFile).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
     expect(preview).not.toHaveBeenCalled();
   });
 
