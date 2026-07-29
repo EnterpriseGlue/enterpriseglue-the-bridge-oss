@@ -184,7 +184,7 @@ LOCAL_SAML_CA_FILE="$tls_dir/ca.crt" \
 LOCAL_SAML_SIGNING_CERT_FILE="$identity_secret_dir/keycloak-saml-signing.crt" \
   "$root_dir/scripts/prepare-local-keycloak-saml-certificate.sh"
 chmod 644 "$identity_secret_dir/keycloak-saml-signing.crt"
-run_compose exec -T backend test -r /etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt
+run_compose exec -T backend node -e "require('node:fs').accessSync('/etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt')"
 
 common_env=(
   LOCAL_OIDC_ADMIN_ENV_FILE="$env_file"
