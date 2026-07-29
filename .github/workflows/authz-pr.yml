@@ -125,9 +125,10 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
-      - name: Build shared package and backend
+      - name: Build shared package, frontend host, and backend
         run: |
           pnpm --filter shared run build
+          pnpm --filter frontend-host run build
           pnpm --filter webmodeler-backend run build:skip-generate
 
       - name: Create PostgreSQL schema
@@ -164,13 +165,16 @@ jobs:
         run: |
           set -euo pipefail
           for i in {1..45}; do
-            if curl -sf http://localhost:8787/health >/dev/null && curl -sf http://localhost:5173/login >/dev/null; then
+            if curl -sf http://localhost:8787/health >/dev/null \
+              && curl -sf http://localhost:5173/login >/dev/null \
+              && curl -sf http://localhost:5173/src/main.tsx >/dev/null; then
               exit 0
             fi
             sleep 2
           done
           curl -sf http://localhost:8787/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
+          curl -sf http://localhost:5173/src/main.tsx >/dev/null
 
       - name: Run ${{ matrix.browser }} fine-grained authorization smoke
         shell: bash

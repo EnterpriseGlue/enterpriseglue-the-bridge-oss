@@ -115,6 +115,8 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /pnpm run test:authz:pr/);
   assert.match(authzPrWorkflow, /pnpm run test:authz:mutation/);
   assert.match(authzPrWorkflow, /pnpm run test:authz:decision-coverage/);
+  assert.match(authzPrWorkflow, /pnpm --filter frontend-host run build/);
+  assert.match(authzPrWorkflow, /curl -sf http:\/\/localhost:5173\/src\/main\.tsx/);
   assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);
   assert.match(authzPrWorkflow, /\["firefox", "webkit"\]/);
@@ -493,6 +495,7 @@ test('the disposable identity-protocol CI lane keeps fresh-stack inputs and usef
   assert.match(ciIdentityProtocolRehearsalRunner, /chmod 644 "\$tls_dir\/ca\.crt" "\$tls_dir\/server\.crt" "\$tls_dir\/server\.key"/);
   assert.match(identityProtocolRehearsalCompose, /dockerfile: backend\/Dockerfile\.prod/);
   assert.match(identityProtocolRehearsalCompose, /command: \["dist\/backend\/src\/server\.js"\]/);
+  assert.match(identityProtocolRehearsalCompose, /host\.docker\.internal:host-gateway/);
   assert.match(identityProtocolRehearsalCompose, /volumes: !override/);
 
   assert.match(identityProtocolRehearsalWorkflow, /name: Identity Protocol Rehearsal \(Advisory\)/);
