@@ -119,9 +119,9 @@ remain unchanged.
 
 ### Evidence manifest
 
-- [ ] Add a machine-readable matrix with stable lane ids, prerequisites,
+- [x] Add a machine-readable matrix with stable lane ids, prerequisites,
   commands, artifacts, success criteria, and environment classification.
-- [ ] Cover:
+- [x] Cover:
   - no-bundle startup;
   - preview/apply/reapply and idempotency;
   - failed apply and rollback safety;
@@ -137,14 +137,19 @@ remain unchanged.
 
 ### CI
 
-- [ ] Add a fast pull-request contract gate for the manifest, schemas,
+- [x] Add a fast pull-request contract gate for the manifest, schemas,
   documentation, action decisions, bundle lifecycle, and secret boundaries.
-- [ ] Add container/emulator lanes for locally reproducible identity and
+- [x] Add container/emulator lanes for locally reproducible identity and
   Operaton scenarios.
-- [ ] Add an explicit environment gate for real OpenShift rollout evidence.
-- [ ] Publish sanitized evidence indexes and mark incomplete external evidence
+- [x] Add an explicit environment gate for real OpenShift rollout evidence.
+- [x] Publish sanitized evidence indexes and mark incomplete external evidence
   as pending rather than passed.
-- [ ] Add contract tests preventing required lanes from being silently skipped.
+- [x] Add contract tests preventing required lanes from being silently skipped.
+
+Implementation note: the matrix and all locally executable gates are complete.
+The real OpenShift lane intentionally remains pending until a clean release
+candidate is exercised in the protected external environment; local rendering
+or emulation cannot satisfy that receipt.
 
 ## Slice 4: `v1beta1` Headless Contract
 

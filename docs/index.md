@@ -19,6 +19,7 @@ Audience: Developers and architects.
 - [OpenShift Deployment](how-to/deploy-openshift.md)
 - [Deployment Runbook](how-to/deployment-runbook.md)
 - [Deploy Authorization Configuration (Target)](how-to/deploy-authorization-config.md)
+- [Collect Access-Governance Deployment Evidence](how-to/collect-access-governance-deployment-evidence.md)
 
 ## Configuration
 - [Configuration Reference](reference/configuration.md)

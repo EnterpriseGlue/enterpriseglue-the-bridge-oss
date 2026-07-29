@@ -36,6 +36,7 @@ Related guides:
 - [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md)
 - [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
 - [Migrate Governance Settings Ownership](./migrate-governance-settings-ownership.md)
+- [Collect Access-Governance Deployment Evidence](./collect-access-governance-deployment-evidence.md)
 - [Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md)
 - [Docker Compose Deployment](./deploy-docker.md)
 - [OpenShift Deployment](./deploy-openshift.md)
@@ -205,6 +206,14 @@ Required changes:
 The OpenShift deploy script now validates the rendered overlay before mutation, injects the verified bundle path/hash into the runtime ConfigMap before triggering rollout, and supports either environment-created Secrets or pre-existing controller-managed Secrets via `OPENSHIFT_SECRET_SOURCE=external`. The External Secrets Operator example targets the exact `enterpriseglue-secrets` and `enterpriseglue-config-secrets` names consumed by the deployment.
 
 ## CI/CD Apply Flow
+
+The repository's release evidence is defined by
+`test/authz/deployment-evidence-matrix.json`, not by an informal checklist.
+Run `pnpm run test:deployment-evidence:pr` for the contract gate or
+`pnpm run test:deployment-evidence:local` for every locally reproducible
+emulator and container lane. Real OpenShift failed-rollout retention remains a
+separate protected environment receipt. See
+[Collect Access-Governance Deployment Evidence](./collect-access-governance-deployment-evidence.md).
 
 The implemented API-driven pipeline stages are:
 

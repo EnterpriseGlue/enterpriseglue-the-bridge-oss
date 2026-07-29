@@ -43,6 +43,7 @@ is customer/IdP-owned.
 | Customer-sidecar support | Customer-owned downstream authentication; bounded tracked native-authorization create/read/delete calls with no direct-engine fallback. | Implemented for the reference adapter and local Operaton Docker evidence; production-like customer environment evidence remains environment-dependent |
 | `engine_native_authority` | Separate native inventory/import, precedence, identity, and reconciliation product. | Deferred; not a compatibility shortcut |
 | Extended external evidence | Run deployed OIDC, SAML, LDAP, OpenShift, and production-like sidecar evidence. | Environment-dependent |
+| Deployment evidence matrix | Stable PR, identity-emulator, Docker/Operaton, and protected real-OpenShift lanes with sanitized same-commit receipts. | Implemented; external OpenShift receipt remains pending until exercised against a clean candidate |
 
 ## Delivery gate
 
@@ -51,3 +52,6 @@ The mode remains `enterpriseglue_authoritative` by default. Enabling
 receipt, and each individual apply independently rechecks the source and
 desired hashes. No compatibility path, existing engine row, or customer native
 grant is removed by this program.
+
+The executable evidence contract and exact external handoff are documented in
+[Collect Access-Governance Deployment Evidence](../how-to/collect-access-governance-deployment-evidence.md).
