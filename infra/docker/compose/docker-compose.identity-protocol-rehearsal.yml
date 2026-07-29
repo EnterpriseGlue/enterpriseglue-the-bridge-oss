@@ -1,0 +1,14 @@
+# The disposable identity-protocol rehearsal needs a production-shaped backend
+# image. The development Compose service bind-mounts the source tree and builds
+# shared artifacts at startup; that makes a non-root backend unable to write to
+# a GitHub Actions checkout owned by the runner. This override keeps the test
+# hermetic and exercises the compiled non-root backend instead.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    working_dir: /app
+    command: ["dist/backend/src/server.js"]
+    volumes: !override
+      - git_repos:/app/data/repos

@@ -12,6 +12,7 @@ const realEntraOidcRehearsalRunner = readFileSync(new URL('./run-entra-id-rehear
 const localOidcConfigureRunner = readFileSync(new URL('./configure-local-oidc-provider.sh', import.meta.url), 'utf8');
 const localLdapConfigureRunner = readFileSync(new URL('./configure-local-ldap-provider.sh', import.meta.url), 'utf8');
 const ciIdentityProtocolRehearsalRunner = readFileSync(new URL('./run-ci-identity-protocol-rehearsals.sh', import.meta.url), 'utf8');
+const identityProtocolRehearsalCompose = readFileSync(new URL('../infra/docker/compose/docker-compose.identity-protocol-rehearsal.yml', import.meta.url), 'utf8');
 const localAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-login-test.sh', import.meta.url), 'utf8');
 const localSeededAuthzSmokeRunner = readFileSync(new URL('./run-authz-local-seeded-smoke.sh', import.meta.url), 'utf8');
 const localCrossBrowserAuthzRunner = readFileSync(new URL('./run-authz-local-seeded-cross-browser.sh', import.meta.url), 'utf8');
@@ -477,6 +478,10 @@ test('the disposable identity-protocol CI lane keeps fresh-stack inputs and usef
   assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_SAML_SKIP_SIGNING_CERTIFICATE_FETCH=true/);
   assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_LDAP_SECRET_FILE_MODE=644/);
   assert.match(ciIdentityProtocolRehearsalRunner, /test -r \/etc\/enterpriseglue\/local-identity-secrets\/keycloak-saml-signing\.crt/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /docker-compose\.identity-protocol-rehearsal\.yml/);
+  assert.match(identityProtocolRehearsalCompose, /dockerfile: backend\/Dockerfile\.prod/);
+  assert.match(identityProtocolRehearsalCompose, /command: \["dist\/backend\/src\/server\.js"\]/);
+  assert.match(identityProtocolRehearsalCompose, /volumes: !override/);
 
   assert.match(identityProtocolRehearsalWorkflow, /name: Identity Protocol Rehearsal \(Advisory\)/);
   assert.match(identityProtocolRehearsalWorkflow, /continue-on-error: true/);

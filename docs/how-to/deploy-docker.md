@@ -201,4 +201,5 @@ Docker creates persistent volumes for:
 - `infra/docker/compose/docker-compose.prod.yml` (production base)
 - `infra/docker/compose/docker-compose.images.yml` (published image overlay)
 - `infra/docker/compose/docker-compose.backend-expose.yml` (optional backend host publish)
+- `infra/docker/compose/docker-compose.identity-protocol-rehearsal.yml` (test-only production-image override for the disposable identity-protocol rehearsal)
 - `infra/docker/compose/docker-compose.ci.yml` (CI-specific overrides)

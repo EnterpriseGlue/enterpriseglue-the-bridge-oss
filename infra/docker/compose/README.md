@@ -15,6 +15,7 @@ The optional authorization config-bundle override is `docker-compose.config-bund
 - `docker-compose.keycloak.yml` - disposable local Keycloak realm for OIDC protocol rehearsal
 - `docker-compose.keycloak-tls.yml` - opt-in local-CA overlay for an HTTPS OIDC rehearsal
 - `docker-compose.keycloak-saml.yml` - opt-in file-reference secret mount for the HTTPS Keycloak SAML and disposable LDAPS browser rehearsals
+- `docker-compose.identity-protocol-rehearsal.yml` - test-only production-image override for the disposable OIDC, Entra-compatible OIDC, SAML, and LDAP rehearsal
 - `docker-compose.ci.yml` - CI-specific overrides
 - `docker-compose.prod.yml` - production base stack
 - `docker-compose.images.yml` - published-image deployment overlay

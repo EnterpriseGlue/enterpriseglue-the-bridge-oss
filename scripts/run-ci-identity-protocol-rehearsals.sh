@@ -126,6 +126,7 @@ compose=(
   --project-directory "$root_dir"
   --env-file "$env_file"
   -f "$root_dir/infra/docker/compose/docker-compose.yml"
+  -f "$root_dir/infra/docker/compose/docker-compose.identity-protocol-rehearsal.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.e2e-mission-control.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.backend-expose.yml"
   -f "$root_dir/infra/docker/compose/docker-compose.keycloak.yml"
