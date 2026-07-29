@@ -125,6 +125,8 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /core\.setOutput\('should_run', String\(relevant\)\)/);
   assert.match(authzPrWorkflow, /needs\.adapter-backstop-changes\.outputs\.should_run == 'true'/);
   assert.match(authzPrWorkflow, /adapter-backstop:/);
+  assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?services:[\s\S]*?image: postgres:17/);
+  assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?POSTGRES_HOST: localhost/);
   assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/);
   assert.match(authzPrWorkflow, /test:authz:adapter-backstop/);
   assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);
