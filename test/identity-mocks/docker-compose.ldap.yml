@@ -17,7 +17,10 @@ services:
       # the generated CA but are not issued a client certificate by this fixture.
       LDAP_TLS_VERIFY_CLIENT: never
     ports:
-      - "127.0.0.1::636"
+      # Local runs remain loopback-only. The disposable CI rehearsal can opt
+      # into a Docker-network attachment instead of routing LDAPS through the
+      # runner host.
+      - "${EG_LDAP_TEST_PUBLISH_HOST:-127.0.0.1}::636"
     volumes:
       # The image adjusts certificate ownership during startup. This is a
       # generated temporary directory, removed by the harness on exit.

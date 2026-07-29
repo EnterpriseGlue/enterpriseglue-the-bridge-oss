@@ -11,8 +11,8 @@ services:
     working_dir: /app
     command: ["dist/backend/src/server.js"]
     # Docker Desktop provides this name automatically, while Linux Docker
-    # (including GitHub Actions) does not. The direct LDAP fixture runs on
-    # the host so the compiled backend must have one portable route to it.
+    # (including GitHub Actions) does not. Keep the compatibility route for
+    # local fixtures that deliberately run on the Docker host.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes: !override

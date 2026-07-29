@@ -201,6 +201,12 @@ common_env=(
   LOCAL_LDAP_SECRET_DIR="$identity_secret_dir"
   LOCAL_LDAP_SECRET_DIRECTORY_MODE=755
   LOCAL_LDAP_SECRET_FILE_MODE=644
+  # The LDAP fixture stays on the isolated Docker network. This avoids
+  # depending on host-gateway access to a loopback-only random fixture port on
+  # Linux CI runners while preserving localhost-only developer defaults.
+  EG_LDAP_TEST_DOCKER_NETWORK="${project_name}_enterpriseglue-network"
+  LOCAL_LDAP_DIRECTORY_HOST=openldap
+  LOCAL_LDAP_DIRECTORY_PORT=636
 )
 
 echo '[identity-protocol-rehearsal] Running OIDC provider, configuration, mapping, and browser authorization rehearsal.'

@@ -463,10 +463,14 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL:-\}|\$\{ADMIN_EMAIL:-\}/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_DIRECTORY_MODE/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_FILE_MODE/);
+  assert.match(localLdapConfigureRunner, /LOCAL_LDAP_DIRECTORY_PORT/);
+  assert.match(localLdapConfigureRunner, /\$1" == 'openldap'/);
   assert.match(ldapProtocolMockRunner, /container_cert_dir="\$tmp_dir\/server-certs"/);
   assert.match(ldapProtocolMockRunner, /client_ca_cert="\$tmp_dir\/ldap-client-ca\.crt"/);
   assert.match(ldapProtocolMockRunner, /cp "\$container_cert_dir\/ldap\.crt" "\$client_ca_cert"/);
   assert.match(ldapProtocolMockRunner, /exec -T --user root openldap/);
+  assert.match(ldapProtocolMockRunner, /EG_LDAP_TEST_DOCKER_NETWORK/);
+  assert.match(ldapProtocolMockRunner, /docker network connect --alias/);
   assert.match(localLdapConfigureRunner, /triggers:\["login","manual","scheduled"\]/);
   assert.match(localLdapConfigureRunner, /scheduled:true,intervalSeconds:60/);
   assert.match(localLdapConfigureRunner, /requiredForLogin:true/);
@@ -488,6 +492,9 @@ test('the disposable identity-protocol CI lane keeps fresh-stack inputs and usef
   assert.match(ciIdentityProtocolRehearsalRunner, /KEYCLOAK_REALM_IMPORT_FILE/);
   assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_SAML_SKIP_SIGNING_CERTIFICATE_FETCH=true/);
   assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_LDAP_SECRET_FILE_MODE=644/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /EG_LDAP_TEST_DOCKER_NETWORK="\$\{project_name\}_enterpriseglue-network"/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_LDAP_DIRECTORY_HOST=openldap/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_LDAP_DIRECTORY_PORT=636/);
   assert.match(ciIdentityProtocolRehearsalRunner, /run_compose exec -T backend node -e/);
   assert.match(ciIdentityProtocolRehearsalRunner, /accessSync\('\/etc\/enterpriseglue\/local-identity-secrets\/keycloak-saml-signing\.crt'\)/);
   assert.match(ciIdentityProtocolRehearsalRunner, /chmod 711 "\$identity_secret_dir"/);

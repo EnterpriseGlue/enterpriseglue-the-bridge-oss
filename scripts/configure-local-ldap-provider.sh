@@ -5,6 +5,7 @@ base_url="${LOCAL_LDAP_APP_URL:-https://localhost:5443}"
 ca_file="${LOCAL_LDAP_APP_CA_FILE:-.local/docker/keycloak-tls/ca.crt}"
 provider_key="${LOCAL_LDAP_PROVIDER_KEY:-local-openldap}"
 directory_host="${LOCAL_LDAP_DIRECTORY_HOST:-host.docker.internal}"
+directory_port="${LOCAL_LDAP_DIRECTORY_PORT:-}"
 secret_dir="${LOCAL_LDAP_SECRET_DIR:-.local/docker/identity-secrets}"
 secret_dir_mode="${LOCAL_LDAP_SECRET_DIRECTORY_MODE:-700}"
 secret_file_mode="${LOCAL_LDAP_SECRET_FILE_MODE:-600}"
@@ -26,7 +27,7 @@ NODE
 }
 
 is_local_directory_host() {
-  [[ "$1" == 'host.docker.internal' || "$1" == 'localhost' || "$1" == '127.0.0.1' || "$1" == '::1' || "$1" == *.local ]]
+  [[ "$1" == 'host.docker.internal' || "$1" == 'localhost' || "$1" == '127.0.0.1' || "$1" == '::1' || "$1" == 'openldap' || "$1" == *.local ]]
 }
 
 cookie_values() {
@@ -74,12 +75,18 @@ if [[ ! "$secret_dir_mode" =~ ^(700|750|755)$ ]] || [[ ! "$secret_file_mode" =~ 
   exit 2
 fi
 
-ldap_port="$(node --input-type=module - "$EG_LDAP_TEST_URL" <<'NODE'
+if [[ -z "$directory_port" ]]; then
+  directory_port="$(node --input-type=module - "$EG_LDAP_TEST_URL" <<'NODE'
 const url = new URL(process.argv[2]);
 if (url.protocol !== 'ldaps:' || !url.port) process.exit(1);
 process.stdout.write(url.port);
 NODE
 )"
+fi
+if ! [[ "$directory_port" =~ ^[1-9][0-9]{0,4}$ ]] || (( directory_port > 65535 )); then
+  echo 'LOCAL_LDAP_DIRECTORY_PORT must be a valid LDAPS port.' >&2
+  exit 2
+fi
 
 mkdir -p "$secret_dir"
 chmod "$secret_dir_mode" "$secret_dir"
@@ -109,7 +116,7 @@ fi
 
 provider_payload="$(jq -nc \
   --arg key "$provider_key" \
-  --arg url "ldaps://${directory_host}:${ldap_port}" \
+  --arg url "ldaps://${directory_host}:${directory_port}" \
   --arg bindDn "$EG_LDAP_TEST_BIND_DN" \
   --arg bindPasswordRef "file://${container_secret_root}/local-openldap-bind-password" \
   --arg tlsTrustRef "file://${container_secret_root}/local-openldap-ca.crt" \

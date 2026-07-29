@@ -15,6 +15,8 @@ domain="identity-mock.test"
 base_dn="dc=identity-mock,dc=test"
 bind_dn="cn=admin,$base_dn"
 ready_timeout_seconds="${EG_LDAP_TEST_READY_TIMEOUT_SECONDS:-90}"
+docker_network="${EG_LDAP_TEST_DOCKER_NETWORK:-}"
+docker_network_alias="${EG_LDAP_TEST_DOCKER_ALIAS:-openldap}"
 
 if ! [[ "$ready_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
   echo 'EG_LDAP_TEST_READY_TIMEOUT_SECONDS must be a positive whole number.' >&2
@@ -49,7 +51,7 @@ export EG_LDAP_TEST_BROWSER_USER_PASSWORD="$(random_secret)"
 
 openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
   -keyout "$container_cert_dir/ldap.key" -out "$container_cert_dir/ldap.crt" \
-  -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,DNS:host.docker.internal,IP:127.0.0.1' >/dev/null 2>&1
+  -subj '/CN=localhost' -addext "subjectAltName=DNS:localhost,DNS:host.docker.internal,DNS:${docker_network_alias},IP:127.0.0.1" >/dev/null 2>&1
 chmod 600 "$container_cert_dir/ldap.key"
 # Keep a host-owned client trust copy outside the mount that OpenLDAP mutates.
 # It is a public CA certificate, but it remains private to this temporary run.
@@ -59,6 +61,22 @@ chmod 600 "$client_ca_cert"
 if ! docker compose -p "$project" -f "$compose_file" up --detach --wait; then
   docker compose -p "$project" -f "$compose_file" logs --no-color >&2 || true
   exit 1
+fi
+
+# CI may run the application in a separate Compose project. Attach this
+# disposable directory fixture directly to that project's network so the
+# backend reaches LDAPS by service DNS rather than via a host-published port.
+# Normal developer runs leave this unset and retain the loopback-only mapping.
+if [[ -n "$docker_network" ]]; then
+  ldap_container_id="$(docker compose -p "$project" -f "$compose_file" ps -q openldap)"
+  if [[ -z "$ldap_container_id" ]] || ! docker network inspect "$docker_network" >/dev/null 2>&1; then
+    echo 'LDAP test harness could not attach to the requested Docker network.' >&2
+    exit 1
+  fi
+  if ! docker network connect --alias "$docker_network_alias" "$docker_network" "$ldap_container_id"; then
+    echo 'LDAP test harness could not attach its fixture to the requested Docker network.' >&2
+    exit 1
+  fi
 fi
 
 for _attempt in $(seq 1 "$ready_timeout_seconds"); do
