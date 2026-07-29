@@ -119,6 +119,11 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /PLAYWRIGHT_BROWSERS=\$\{\{ matrix\.browser \}\}/);
   assert.match(authzPrWorkflow, /fine-grained-access-local\.spec\.ts/);
   assert.match(authzPrWorkflow, /variable-access-control-local\.spec\.ts/);
+  assert.match(authzPrWorkflow, /adapter-backstop-changes:/);
+  assert.match(authzPrWorkflow, /pull-requests: read/);
+  assert.match(authzPrWorkflow, /github\.paginate\(github\.rest\.pulls\.listFiles/);
+  assert.match(authzPrWorkflow, /core\.setOutput\('should_run', String\(relevant\)\)/);
+  assert.match(authzPrWorkflow, /needs\.adapter-backstop-changes\.outputs\.should_run == 'true'/);
   assert.match(authzPrWorkflow, /adapter-backstop:/);
   assert.match(authzPrWorkflow, /test:authz:adapter-backstop/);
   assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);

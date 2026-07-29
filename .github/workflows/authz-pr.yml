@@ -9,12 +9,53 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: authorization-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  adapter-backstop-changes:
+    name: Detect adapter/backstop relevance
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.detect.outputs.should_run }}
+    steps:
+      - name: Select relevant pull-request changes
+        id: detect
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('should_run', 'true');
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const relevantPatterns = [
+              /^\.github\/workflows\/authz-pr\.yml$/,
+              /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/,
+              /^test\/e2e\/(?:operaton-container|camunda7-container|mock-camunda)\//,
+              /^test\/e2e\/(?:operaton|camunda-native-grant)/,
+              /^scripts\/(?:run-(?:operaton|camunda-native)|write-camunda-native)/,
+              /^packages\/shared\/src\/schemas\/(?:mission-control\/engine|platform-admin\/(?:engine-backstop|camunda-native-grants))/,
+              /^packages\/shared\/src\/services\/(?:bpmn-engine-client|platform-admin\/(?:EngineBackstop|ConfigBundle|EngineService))/,
+              /^packages\/shared\/src\/db\/migrations\/.*(?:backstop|native-grant|sidecar)/,
+              /^packages\/shared\/src\/infrastructure\/persistence\/(?:entities|migrations)\/.*(?:Backstop|backstop|native-grant|sidecar)/,
+              /^packages\/frontend-host\/src\/features\/mission-control\/engines\/components\/EngineBackstopPanel/,
+              /^backend\/__tests__\/(?:shared\/(?:db\/engineBackstop|schemas\/customerSidecar|services\/(?:bpmn-engine-client|platform-admin\/EngineBackstop))|modules\/mission-control\/engines\/routes)/,
+            ];
+            const relevant = files.some(({ filename }) =>
+              relevantPatterns.some((pattern) => pattern.test(filename)));
+            core.info(`Adapter/backstop matrix selected: ${relevant}`);
+            core.setOutput('should_run', String(relevant));
+
   authorization:
     name: Authorization decisions and ${{ matrix.browser }} smoke
     runs-on: ubuntu-latest
@@ -213,7 +254,8 @@ jobs:
   adapter-backstop:
     name: Camunda and Operaton mirrored-backstop matrix
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    needs: adapter-backstop-changes
+    if: needs.adapter-backstop-changes.outputs.should_run == 'true'
     timeout-minutes: 35
 
     steps:
