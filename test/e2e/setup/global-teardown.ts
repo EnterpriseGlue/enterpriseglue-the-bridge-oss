@@ -33,6 +33,14 @@ function assertLocalDatabaseTarget(): void {
   throw new Error(`E2E teardown refuses to change a non-local database host: ${host}`);
 }
 
+async function tenantMembershipsSupported(pool: import('pg').Pool, schema: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'tenant_memberships'`,
+    [schema],
+  );
+  return (result.rowCount || 0) > 0;
+}
+
 async function loadBackendEnv() {
   try {
     const envPath = path.resolve(process.cwd(), 'backend/.env');
@@ -212,6 +220,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
     options: `-c search_path=${schema}`,
   });
+  const hasTenantMemberships = await tenantMembershipsSupported(pool, schema);
 
   if (membershipSourceRef) {
     const [engineSetRows, runtimeResourceSetRows] = await Promise.all([
@@ -240,7 +249,9 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
       await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [roleIds]);
     }
   }
-  await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [userId]);
+  if (hasTenantMemberships) {
+    await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [userId]);
+  }
 
   const projectIdsResult = await pool.query(
     `SELECT id FROM ${schema}.projects WHERE owner_id = $1`,
@@ -320,7 +331,9 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
       `DELETE FROM ${schema}.invitations WHERE user_id = ANY($1::text[]) OR email LIKE ANY($2::text[])`,
       [staleUserIds, staleUserEmailPatterns]
     );
-    await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    if (hasTenantMemberships) {
+      await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    }
   }
   const staleEngineIdsResult = await pool.query(
     `SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%'`
@@ -477,7 +490,9 @@ export default async function globalTeardown() {
         ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
         options: `-c search_path=${schema}`,
       });
-      await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [data.adminUserId]);
+      if (await tenantMembershipsSupported(pool, schema)) {
+        await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [data.adminUserId]);
+      }
       await pool.query(`DELETE FROM ${schema}.users WHERE id = $1`, [data.adminUserId]);
       await pool.end();
     }

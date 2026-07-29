@@ -184,6 +184,10 @@ LOCAL_SAML_CA_FILE="$tls_dir/ca.crt" \
 LOCAL_SAML_SIGNING_CERT_FILE="$identity_secret_dir/keycloak-saml-signing.crt" \
   "$root_dir/scripts/prepare-local-keycloak-saml-certificate.sh"
 chmod 644 "$identity_secret_dir/keycloak-saml-signing.crt"
+# The runtime container is non-root. Let it traverse only this disposable
+# directory (without listing it) so it can read the explicitly mounted public
+# signing certificate; the enclosing temporary directory remains private.
+chmod 711 "$identity_secret_dir"
 run_compose exec -T backend node -e "require('node:fs').accessSync('/etc/enterpriseglue/local-identity-secrets/keycloak-saml-signing.crt')"
 
 common_env=(

@@ -112,6 +112,24 @@ export default async function globalSetup() {
     options: `-c search_path=${schema}`,
   });
 
+  // The OSS default tenant is resolved by its compatibility middleware; only
+  // the EE plugin installs durable tenant-membership records. Seed them when
+  // an EE-shaped local database exposes the table, but do not make the OSS
+  // browser evidence depend on an EE-only schema extension.
+  const tenantMembershipsResult = await pool.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'tenant_memberships'`,
+    [schema],
+  );
+  const tenantMembershipsSupported = tenantMembershipsResult.rowCount > 0;
+  const addTenantMembership = async (memberUserId: string, createdAt: number) => {
+    if (!tenantMembershipsSupported) return;
+    await pool.query(
+      `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [randomUUID(), 'tenant-default', memberUserId, 'member', createdAt],
+    );
+  };
+
   if (!adminEmail || !adminPassword) {
     adminEmail = `e2e-admin-${Date.now()}-${suffix}@example.com`;
     adminPassword = `E2eAdmin-${suffix}-Pass1!`;
@@ -184,14 +202,7 @@ export default async function globalSetup() {
     ]
   );
 
-  // Tenant-scoped browser routes require an active tenant membership. Keep it
-  // at the lowest collaboration level; platform administration below is
-  // granted only by canonical system-group memberships.
-  await pool.query(
-    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [randomUUID(), 'tenant-default', userId, 'member', now]
-  );
+  await addTenantMembership(userId, now);
 
   // Keep the disposable E2E administrator aligned with the canonical
   // authorization model. SSO-enforced local break-glass login is granted by
@@ -343,11 +354,7 @@ export default async function globalSetup() {
       true, false, 0, null, true, null, null, now, now, null, adminUserId,
     ]
   );
-  await pool.query(
-    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [randomUUID(), 'tenant-default', scopedUserId, 'member', now]
-  );
+  await addTenantMembership(scopedUserId, now);
   await pool.query(
     `INSERT INTO ${schema}.authz_group_memberships
       (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
@@ -422,11 +429,7 @@ export default async function globalSetup() {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [variableUserId, variableEmail, 'local', variablePasswordHash, 'E2E', `Variable ${kind}`, true, false, 0, null, true, null, null, now, now, null, adminUserId],
     );
-    await pool.query(
-      `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [randomUUID(), 'tenant-default', variableUserId, 'member', now],
-    );
+    await addTenantMembership(variableUserId, now);
     await pool.query(
       `INSERT INTO ${schema}.authz_group_memberships
         (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
@@ -569,11 +572,7 @@ export default async function globalSetup() {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
     [runtimeScopedUserId, runtimeScopedEmail, 'local', runtimeScopedPasswordHash, 'E2E', 'Runtime Scoped', true, false, 0, null, true, null, null, now, now, null, adminUserId]
   );
-  await pool.query(
-    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [randomUUID(), 'tenant-default', runtimeScopedUserId, 'member', now]
-  );
+  await addTenantMembership(runtimeScopedUserId, now);
   await pool.query(
     `INSERT INTO ${schema}.authz_group_memberships
       (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
@@ -745,11 +744,7 @@ export default async function globalSetup() {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [persona.userId, persona.email, 'local', personaHash, 'E2E', `Assignment ${kind}`, true, false, 0, null, true, null, null, now, now, null, adminUserId],
     );
-    await pool.query(
-      `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [randomUUID(), 'tenant-default', persona.userId, 'member', now],
-    );
+    await addTenantMembership(persona.userId, now);
     await pool.query(
       `INSERT INTO ${schema}.authz_group_memberships
         (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
@@ -781,11 +776,7 @@ export default async function globalSetup() {
       true, false, 0, null, true, null, null, now, now, null, adminUserId,
     ]
   );
-  await pool.query(
-    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [randomUUID(), 'tenant-default', groupScopedUserId, 'member', now]
-  );
+  await addTenantMembership(groupScopedUserId, now);
   await pool.query(
     `INSERT INTO ${schema}.authz_groups
       (id, tenant_id, key, group_key_identity, name, description, source, source_ref,
@@ -846,11 +837,7 @@ export default async function globalSetup() {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
     [expiredUserId, expiredEmail, 'local', expiredPasswordHash, 'E2E', 'Expired', true, false, 0, null, true, null, null, now, now, null, adminUserId]
   );
-  await pool.query(
-    `INSERT INTO ${schema}.tenant_memberships (id, tenant_id, user_id, role, created_at)
-     VALUES ($1,$2,$3,$4,$5)`,
-    [randomUUID(), 'tenant-default', expiredUserId, 'member', now]
-  );
+  await addTenantMembership(expiredUserId, now);
   await pool.query(
     `INSERT INTO ${schema}.authz_group_memberships
       (id, tenant_id, group_id, user_id, source, source_ref, expires_at, created_by_id, created_at, updated_at)
