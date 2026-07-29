@@ -257,6 +257,8 @@ jobs:
     needs: adapter-backstop-changes
     if: needs.adapter-backstop-changes.outputs.should_run == 'true'
     timeout-minutes: 35
+    env:
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
     steps:
       - name: Checkout
