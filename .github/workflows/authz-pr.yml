@@ -302,6 +302,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build shared package and backend
+        run: |
+          pnpm --filter shared run build
+          pnpm --filter webmodeler-backend run build:skip-generate
+
+      - name: Create PostgreSQL schema
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+
+      - name: Sync database schema
+        run: pnpm --filter webmodeler-backend run db:schema:sync
+
       - name: Run Camunda and Operaton adapter/backstop matrix
         run: pnpm run test:authz:adapter-backstop
 
