@@ -63,4 +63,11 @@ describe('configBundleArchiveService', () => {
       'groups.json': Buffer.from('{"groups":[],"groups":[]}'),
     }))).toThrow('duplicate JSON key "groups"');
   });
+
+  it('rejects invalid maximum archive sizes before reading the input', () => {
+    const input = archive({ 'bundle.json': bundle });
+    for (const maxBytes of [0, -1, 1.5, Number.POSITIVE_INFINITY]) {
+      expect(() => configBundleArchiveService.readZip(input, maxBytes)).toThrow('maximum size must be a positive safe integer');
+    }
+  });
 });
