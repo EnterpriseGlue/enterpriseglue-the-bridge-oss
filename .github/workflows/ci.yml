@@ -398,8 +398,7 @@ jobs:
 
       - name: Start Camunda mock server
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
-        run: |
-          npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 &
+        run: node test/e2e/mock-camunda/server.mjs &
 
       - name: Start backend
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -413,13 +412,15 @@ jobs:
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: |
           for i in {1..45}; do
-            if curl -sf http://localhost:8787/health >/dev/null; then
+            if curl -sf http://localhost:8787/health >/dev/null \
+              && curl -sf http://localhost:9080/health >/dev/null; then
               break
             fi
             sleep 2
           done
           curl -sf http://localhost:8787/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
+          curl -sf http://localhost:9080/health >/dev/null
 
       - name: Run smoke e2e
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'

@@ -287,13 +287,7 @@ jobs:
 
       - name: Start Camunda mock server
         if: matrix.database == 'postgres' && inputs.run_e2e
-        run: |
-          MOCK_SPEC="local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json"
-          if [ -f "$MOCK_SPEC" ]; then
-            npx --yes @stoplight/prism-cli mock "$MOCK_SPEC" -p 9080 &
-          else
-            echo "Camunda mock spec not found — skipping (EE repo)"
-          fi
+        run: node test/e2e/mock-camunda/server.mjs &
 
       - name: Start backend
         if: matrix.database == 'postgres' && inputs.run_e2e
@@ -307,12 +301,14 @@ jobs:
         if: matrix.database == 'postgres' && inputs.run_e2e
         run: |
           for i in {1..45}; do
-            if curl -sf http://localhost:8787/health >/dev/null; then
+            if curl -sf http://localhost:8787/health >/dev/null \
+              && curl -sf http://localhost:9080/health >/dev/null; then
               break
             fi
             sleep 2
           done
           curl -sf http://localhost:8787/health >/dev/null
+          curl -sf http://localhost:9080/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
 
       - name: Run smoke e2e

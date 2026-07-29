@@ -23,6 +23,8 @@ const browserEvidenceWriter = readFileSync(new URL('./write-authz-browser-eviden
 const e2eGlobalSetup = readFileSync(new URL('../test/e2e/setup/global-setup.ts', import.meta.url), 'utf8');
 const e2eGlobalTeardown = readFileSync(new URL('../test/e2e/setup/global-teardown.ts', import.meta.url), 'utf8');
 const authzPrWorkflow = readFileSync(new URL('../.github/workflows/authz-pr.yml', import.meta.url), 'utf8');
+const ciCoreWorkflow = readFileSync(new URL('../.github/workflows/ci-core-reusable.yml', import.meta.url), 'utf8');
+const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const identityProtocolRehearsalWorkflow = readFileSync(new URL('../.github/workflows/identity-protocol-rehearsal.yml', import.meta.url), 'utf8');
 const entraIdRehearsalWorkflow = readFileSync(new URL('../.github/workflows/entra-id-rehearsal.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
@@ -120,6 +122,11 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
   assert.match(authzPrWorkflow, /curl -sf http:\/\/localhost:9080\/health/);
   assert.doesNotMatch(authzPrWorkflow, /local-docs\/ING\/api-specs\/Mission-Control-Camunda-API\.postman_collection\.json/);
+  for (const workflow of [ciCoreWorkflow, ciWorkflow]) {
+    assert.match(workflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
+    assert.match(workflow, /curl -sf http:\/\/localhost:9080\/health/);
+    assert.doesNotMatch(workflow, /local-docs\/ING\/api-specs\/Mission-Control-Camunda-API\.postman_collection\.json/);
+  }
   assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);
   assert.match(authzPrWorkflow, /\["firefox", "webkit"\]/);
