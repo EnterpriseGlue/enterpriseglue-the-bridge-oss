@@ -3,6 +3,7 @@ import { Button, Checkbox, InlineLoading, InlineNotification, Tag, TextInput } f
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
+import { useActionDecision } from '../../../../shared/auth/guards'
 
 type PreviewRun = {
   id: string
@@ -65,6 +66,12 @@ function draftBase(runId: string, bundleKey: string, tenantKey: string) {
  * is fetched only after the operator has the dedicated sensitive-detail grant.
  */
 export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineId: string }) {
+  const previewDecision = useActionDecision('platform.camunda-native-grants.preview', { type: 'platform' })
+  const historyDecision = useActionDecision('platform.camunda-native-grants.history.read', { type: 'platform' })
+  const sensitiveReadDecision = useActionDecision('platform.camunda-native-grants.sensitive.read', { type: 'platform' })
+  const draftDecision = useActionDecision('platform.camunda-native-grants.draft', { type: 'platform' })
+  const configPreviewDecision = useActionDecision('platform.config-bundles.preview', { type: 'platform' })
+  const configApplyDecision = useActionDecision('platform.config-bundles.apply', { type: 'platform' })
   const [run, setRun] = React.useState<PreviewRun | null>(null)
   const [mappings, setMappings] = React.useState<GroupMapping[]>([])
   const [bundleKey, setBundleKey] = React.useState('migration.camunda-native')
@@ -77,6 +84,7 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
   const history = useQuery({
     queryKey: ['camunda-native-grant-history', engineId],
     queryFn: () => apiClient.get<{ runs: PreviewRun[] }>(`/engines-api/engines/${encodeURIComponent(engineId)}/camunda-native-grants/imports`, undefined, { credentials: 'include' }),
+    enabled: historyDecision.allowed,
     retry: false,
   })
 
@@ -178,6 +186,9 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
     setBundleKey(`migration.camunda-native-${stableKeyPart(historyRun.id, 'run')}`)
   }
   const canMapProposedGroups = run?.status === 'previewed'
+  const canGenerateDraft = draftDecision.allowed && sensitiveReadDecision.allowed
+  const canApplyDraft = canGenerateDraft && configApplyDecision.allowed
+  const canPreviewRollback = canGenerateDraft && configPreviewDecision.allowed
 
   return (
     <section style={{ display: 'grid', gap: 12, borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 16 }}>
@@ -186,7 +197,7 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
         <p style={{ margin: '6px 0 0', color: 'var(--cds-text-secondary)' }}>Reads Camunda 7 authorizations only. EnterpriseGlue remains authoritative; this workflow never changes native grants, engine connection settings, or engine tenancy.</p>
       </div>
       {preview.error && <InlineNotification kind="error" title="Could not create migration preview" subtitle={getUiErrorMessage(preview.error, 'Check the engine connection and migration permission.')} hideCloseButton />}
-      {history.error && <InlineNotification kind="warning" title="Migration history unavailable" subtitle={getUiErrorMessage(history.error, 'You need the separate migration-history permission to resume a prior rollback.')} hideCloseButton />}
+      {historyDecision.allowed && history.error && <InlineNotification kind="warning" title="Migration history unavailable" subtitle={getUiErrorMessage(history.error, 'You need the separate migration-history permission to resume a prior rollback.')} hideCloseButton />}
       {!run && history.data?.runs?.length ? <div style={{ display: 'grid', gap: 8 }}>
         <h4 style={{ margin: 0 }}>Recent sanitized migration receipts</h4>
         {history.data.runs.map((historyRun) => <div key={historyRun.id} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -195,14 +206,14 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
           {historyRun.status === 'applied' && <Button size="sm" kind="secondary" onClick={() => resumeRun(historyRun)}>Resume rollback</Button>}
         </div>)}
       </div> : null}
-      {!run && <Button size="sm" kind="secondary" disabled={preview.isPending} onClick={() => preview.mutate()}>{preview.isPending ? 'Reading grants…' : 'Read native grants'}</Button>}
+      {!run && <Button size="sm" kind="secondary" disabled={!previewDecision.allowed || preview.isPending} title={!previewDecision.allowed ? previewDecision.reason : undefined} onClick={() => preview.mutate()}>{preview.isPending ? 'Reading grants…' : 'Read native grants'}</Button>}
       {preview.isPending && <InlineLoading description="Reading Camunda authorizations without changing them" />}
       {run && <>
         <InlineNotification kind="info" title="Sanitized preview created" subtitle="Review counts first. Source group names are requested only after the sensitive-detail permission is granted." hideCloseButton />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {Object.entries(run.normalizedCounts || {}).sort(([a], [b]) => a.localeCompare(b)).map(([key, count]) => <Tag key={key} type={key === 'blocked' ? 'red' : key === 'manual_required' ? 'magenta' : key === 'approval_required' ? 'warm-gray' : 'green'}>{key.replace(/_/g, ' ')}: {count}</Tag>)}
         </div>
-        {canMapProposedGroups && !mappings.length && <>
+        {canMapProposedGroups && sensitiveReadDecision.allowed && !mappings.length && <>
           {detail.error && <InlineNotification kind="error" title="Could not reveal proposed group mappings" subtitle={getUiErrorMessage(detail.error, 'You need the sensitive-detail permission, and the 30-day migration snapshot must still be available.')} hideCloseButton />}
           <Button size="sm" kind="secondary" disabled={detail.isPending || !run.detailedSnapshotAvailable} onClick={() => detail.mutate()}>{detail.isPending ? 'Loading protected mappings…' : 'Map proposed groups'}</Button>
         </>}
@@ -218,13 +229,15 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
             <TextInput id="camunda-native-tenant-key" labelText="Tenant key" value={tenantKey} onChange={(event) => { setTenantKey(event.target.value); setDraft(null); setApplied(null) }} helperText="Use the stable EnterpriseGlue tenant configuration key (default is suitable for decentralized single-tenant installations)." />
           </div>
           {generate.error && <InlineNotification kind="error" title="Could not generate migration draft" subtitle={getUiErrorMessage(generate.error, 'Correct the group, configuration, or tenant keys and try again.')} hideCloseButton />}
-          <Button size="sm" kind="primary" disabled={generate.isPending || !mappingIsValid || bundleKey.trim().length < 3 || tenantKey.trim().length < 3} onClick={() => generate.mutate()}>{generate.isPending ? 'Generating draft…' : 'Generate reviewed draft'}</Button>
+          {!canGenerateDraft && <InlineNotification kind="info" title="Draft generation unavailable" subtitle={sensitiveReadDecision.allowed ? (draftDecision.reason || 'You need migration-draft permission.') : (sensitiveReadDecision.reason || 'You need sensitive-detail permission.')} hideCloseButton />}
+          <Button size="sm" kind="primary" disabled={!canGenerateDraft || generate.isPending || !mappingIsValid || bundleKey.trim().length < 3 || tenantKey.trim().length < 3} title={!canGenerateDraft ? (draftDecision.reason || sensitiveReadDecision.reason) : undefined} onClick={() => generate.mutate()}>{generate.isPending ? 'Generating draft…' : 'Generate reviewed draft'}</Button>
         </div>}
         {draft && <div style={{ display: 'grid', gap: 8 }}>
           <InlineNotification kind="success" title="Hash-bound draft generated" subtitle={`Creates ${draft.generated.groupCount} group(s), ${draft.generated.roleCount} role(s), ${draft.generated.runtimeResourceSetCount} exact Runtime Resource Set(s), and ${draft.generated.assignmentCount} assignment(s).`} hideCloseButton />
           {draft.manualWorkAuthorizationIds.length > 0 && <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: 13 }}>{draft.manualWorkAuthorizationIds.length} source authorization(s) remain manual and are not included in the draft.</p>}
           {apply.error && <InlineNotification kind="error" title="Could not apply reviewed draft" subtitle={getUiErrorMessage(apply.error, 'The draft, source ownership, tenant scope, or current configuration may have changed. Create a new preview if the evidence expired.')} hideCloseButton />}
-          {!applied && <Button size="sm" kind="danger" disabled={apply.isPending} onClick={() => apply.mutate()}>{apply.isPending ? 'Applying reviewed draft…' : 'Apply reviewed draft'}</Button>}
+          {!canApplyDraft && <InlineNotification kind="info" title="Draft apply unavailable" subtitle={configApplyDecision.allowed ? (draftDecision.reason || sensitiveReadDecision.reason || 'You need all migration permissions.') : (configApplyDecision.reason || 'You need configuration-apply permission.')} hideCloseButton />}
+          {!applied && <Button size="sm" kind="danger" disabled={!canApplyDraft || apply.isPending} title={!canApplyDraft ? (configApplyDecision.reason || draftDecision.reason || sensitiveReadDecision.reason) : undefined} onClick={() => apply.mutate()}>{apply.isPending ? 'Applying reviewed draft…' : 'Apply reviewed draft'}</Button>}
         </div>}
         {(applied || run.status === 'applied') && !rolledBack && <div style={{ display: 'grid', gap: 8 }}>
           {applied
@@ -232,13 +245,13 @@ export default function CamundaNativeGrantMigrationPanel({ engineId }: { engineI
             : <InlineNotification kind="info" title="Applied migration resumed" subtitle={`Configuration apply receipt ${run.appliedConfigBundleRunId || 'recorded'} was loaded from the sanitized history. Preview rollback before removing the import-owned configuration.`} hideCloseButton />}
           {!rollback && <>
             {previewRollback.error && <InlineNotification kind="error" title="Could not preview rollback" subtitle={getUiErrorMessage(previewRollback.error, 'The encrypted draft may have expired or the import is no longer eligible for rollback.')} hideCloseButton />}
-            <Button size="sm" kind="secondary" disabled={previewRollback.isPending} onClick={() => previewRollback.mutate()}>{previewRollback.isPending ? 'Previewing rollback…' : 'Preview rollback'}</Button>
+            <Button size="sm" kind="secondary" disabled={!canPreviewRollback || previewRollback.isPending} title={!canPreviewRollback ? (configPreviewDecision.reason || draftDecision.reason || sensitiveReadDecision.reason) : undefined} onClick={() => previewRollback.mutate()}>{previewRollback.isPending ? 'Previewing rollback…' : 'Preview rollback'}</Button>
           </>}
           {rollback && <div style={{ display: 'grid', gap: 8 }}>
             <InlineNotification kind="warning" title="Rollback removes only import-owned configuration" subtitle={`${rollback.changes.filter((change) => change.operation === 'archive').length} configuration record(s) will be archived. The engine and native Camunda grants are not changed.`} hideCloseButton />
             <Checkbox id="camunda-native-rollback-acknowledgement" labelText="I understand that this will remove the EnterpriseGlue groups, role, resource sets, and assignments created by this import." checked={rollbackAcknowledged} onChange={(_event, data) => setRollbackAcknowledged(data.checked)} />
             {applyRollback.error && <InlineNotification kind="error" title="Could not roll back imported configuration" subtitle={getUiErrorMessage(applyRollback.error, 'Refresh the rollback preview and review every archive acknowledgement before trying again.')} hideCloseButton />}
-            <Button size="sm" kind="danger" disabled={applyRollback.isPending || !rollbackAcknowledged} onClick={() => applyRollback.mutate()}>{applyRollback.isPending ? 'Rolling back imported configuration…' : 'Roll back imported configuration'}</Button>
+            <Button size="sm" kind="danger" disabled={!canApplyDraft || applyRollback.isPending || !rollbackAcknowledged} title={!canApplyDraft ? (configApplyDecision.reason || draftDecision.reason || sensitiveReadDecision.reason) : undefined} onClick={() => applyRollback.mutate()}>{applyRollback.isPending ? 'Rolling back imported configuration…' : 'Roll back imported configuration'}</Button>
           </div>}
         </div>}
         {rolledBack && <InlineNotification kind="success" title="Imported configuration rolled back" subtitle={`Rollback receipt ${rolledBack.applyRunId || 'recorded'}: ${rolledBack.archived} import-owned record(s) archived. Native Camunda grants and the engine registration were not changed.`} hideCloseButton />}

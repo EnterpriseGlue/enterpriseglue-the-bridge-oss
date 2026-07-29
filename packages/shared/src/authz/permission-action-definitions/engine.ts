@@ -186,7 +186,7 @@ export const ENGINE_AUTHZ_ACTIONS = [
       audit: false,
       category: 'Engine Inventory',
       description: 'Read the cross-engine tenancy migration classification report.',
-      ui: [{ surfaceId: 'engines.tenancy.classification', behavior: 'hide' }],
+      ui: [{ surfaceId: 'engines.tenancy.classification-report', behavior: 'hide', coverage: 'api-only' }],
       routes: [
         {
           method: 'GET',

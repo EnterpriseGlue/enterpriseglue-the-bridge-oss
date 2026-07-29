@@ -8,6 +8,18 @@ vi.mock('@src/shared/api/client', () => ({
   apiClient: { get: vi.fn(), post: vi.fn() },
 }))
 
+const allowedDecision = {
+  allowed: true,
+  state: 'allowed' as const,
+  reason: 'Allowed by test permission snapshot',
+}
+
+const useActionDecision = vi.fn(() => allowedDecision)
+
+vi.mock('@src/shared/auth/guards', () => ({
+  useActionDecision: (...args: unknown[]) => useActionDecision(...args),
+}))
+
 function renderPanel() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -20,7 +32,22 @@ function renderPanel() {
 }
 
 describe('CamundaNativeGrantMigrationPanel', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useActionDecision.mockReturnValue(allowedDecision)
+  })
+
+  it('does not call protected APIs and renders unavailable controls from the permission snapshot', async () => {
+    useActionDecision.mockImplementation((actionId: unknown) => actionId === 'platform.camunda-native-grants.history.read'
+      ? { allowed: false, state: 'hidden' as const, reason: 'Missing history permission' }
+      : { allowed: false, state: 'disabled' as const, reason: `Missing ${String(actionId)}` })
+
+    renderPanel()
+
+    expect(screen.getByRole('button', { name: 'Read native grants' })).toBeDisabled()
+    expect(apiClient.get).not.toHaveBeenCalled()
+    expect(apiClient.post).not.toHaveBeenCalled()
+  })
 
   it('keeps identities out of the initial preview, maps protected groups, and applies only the returned draft hash', async () => {
     const draftHash = 'a'.repeat(64)
