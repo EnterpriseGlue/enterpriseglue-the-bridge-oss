@@ -562,7 +562,12 @@ export default async function globalSetup() {
   const runtimeCustomRoleName = `E2E Runtime Reader ${suffix}`;
   const runtimeAllowedDefinitionId = 'invoice-process:3:mock-process-definition';
   const runtimeSiblingDefinitionId = 'invoice-sequential-review:1:mock-process-definition';
-  const runtimeEngineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL || 'http://camunda-mock:9080/engine-rest';
+  // The seeded resource-aware engine must be reachable from whichever process
+  // hosts the backend. Docker rehearsals supply the Compose-network override;
+  // host-run CI supplies CAMUNDA_BASE_URL instead.
+  const runtimeEngineBaseUrl = process.env.E2E_CAMUNDA_BASE_URL
+    || process.env.CAMUNDA_BASE_URL
+    || 'http://camunda-mock:9080/engine-rest';
   await pool.query(
     `INSERT INTO ${schema}.users
       (id, email, auth_provider, password_hash, first_name, last_name,

@@ -220,6 +220,7 @@ test('seeded local authorization smoke confines temporary fixtures to the local 
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/access-control-local\.spec\.ts/);
   assert.match(localSeededAuthzSmokeRunner, /test\/e2e\/smoke\/fine-grained-access-local\.spec\.ts/);
   assert.match(e2eGlobalSetup, /process\.env\.E2E_SEED_FILE/);
+  assert.match(e2eGlobalSetup, /const runtimeEngineBaseUrl = process\.env\.E2E_CAMUNDA_BASE_URL\s*\|\|\s*process\.env\.CAMUNDA_BASE_URL\s*\|\|\s*'http:\/\/camunda-mock:9080\/engine-rest'/);
   assert.match(e2eGlobalSetup, /assertLocalUrl\(API_BASE_URL\)/);
   assert.match(e2eGlobalSetup, /assertLocalDatabaseTarget\(\)/);
   assert.match(e2eGlobalTeardown, /assertLocalUrl\(API_BASE_URL\)/);
