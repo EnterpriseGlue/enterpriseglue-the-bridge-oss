@@ -479,6 +479,8 @@ test('the disposable identity-protocol CI lane keeps fresh-stack inputs and usef
   assert.match(ciIdentityProtocolRehearsalRunner, /LOCAL_LDAP_SECRET_FILE_MODE=644/);
   assert.match(ciIdentityProtocolRehearsalRunner, /test -r \/etc\/enterpriseglue\/local-identity-secrets\/keycloak-saml-signing\.crt/);
   assert.match(ciIdentityProtocolRehearsalRunner, /docker-compose\.identity-protocol-rehearsal\.yml/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /chmod 755 "\$tls_dir"/);
+  assert.match(ciIdentityProtocolRehearsalRunner, /chmod 644 "\$tls_dir\/ca\.crt" "\$tls_dir\/server\.crt" "\$tls_dir\/server\.key"/);
   assert.match(identityProtocolRehearsalCompose, /dockerfile: backend\/Dockerfile\.prod/);
   assert.match(identityProtocolRehearsalCompose, /command: \["dist\/backend\/src\/server\.js"\]/);
   assert.match(identityProtocolRehearsalCompose, /volumes: !override/);

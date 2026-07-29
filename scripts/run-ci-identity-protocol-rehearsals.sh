@@ -161,6 +161,12 @@ trap cleanup EXIT
 
 cd "$root_dir"
 KEYCLOAK_TLS_DIR="$tls_dir" ./infra/docker/keycloak/generate-local-tls.sh
+# Keycloak and the TLS frontend run as non-root users whose UIDs differ from
+# the GitHub runner. The material remains inside the mode-0700 temporary
+# parent directory and is destroyed during cleanup; make only the mounted
+# directory and disposable server material readable to those containers.
+chmod 755 "$tls_dir"
+chmod 644 "$tls_dir/ca.crt" "$tls_dir/server.crt" "$tls_dir/server.key"
 
 echo "[identity-protocol-rehearsal] Starting disposable local Docker stack ($project_name)."
 run_compose up --build -d --wait db backend frontend frontend-tls keycloak camunda-mock
