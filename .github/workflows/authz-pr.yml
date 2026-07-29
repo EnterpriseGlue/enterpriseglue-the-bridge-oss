@@ -210,7 +210,7 @@ jobs:
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
-            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts test/e2e/smoke/variable-access-control-local.spec.ts --config test/e2e/playwright.config.ts && pnpm run test:engine-tenancy:enforcement"
+            bash -lc "npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts test/e2e/smoke/variable-access-control-local.spec.ts --config test/e2e/playwright.config.ts && corepack pnpm run test:engine-tenancy:enforcement"
 
       - name: Upload engine tenancy enforcement evidence
         if: always()
