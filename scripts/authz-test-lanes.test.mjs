@@ -130,6 +130,7 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/);
   assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?Create PostgreSQL schema/);
   assert.match(authzPrWorkflow, /adapter-backstop:[\s\S]*?Sync database schema/);
+  assert.match(authzPrWorkflow, /Upload adapter\/backstop diagnostics[\s\S]*?if: failure\(\)/);
   assert.match(authzPrWorkflow, /test:authz:adapter-backstop/);
   assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);
   assert.match(authzPrWorkflow, /test\/results/);
