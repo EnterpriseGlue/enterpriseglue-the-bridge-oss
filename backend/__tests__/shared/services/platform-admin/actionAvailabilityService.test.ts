@@ -47,6 +47,28 @@ describe('calculateCurrentUserActionAvailability', () => {
     expect(result.engines[0].actionAvailability.allowedActions).toContain('engine.members.add');
   });
 
+  it('publishes platform-permission actions whose audit resource is a platform-admin subresource', () => {
+    const result = calculateCurrentUserActionAvailability({
+      platform: [
+        'platform:sso-assignments:view',
+        'platform:sso-assignments:manage',
+        'platform:engine-sets:view',
+        'platform:api-clients:view',
+      ],
+      projects: [],
+      engines: [],
+    }, {});
+
+    expect(result.platformActionAvailability.allowedActions).toEqual(expect.arrayContaining([
+      'platform.sso.engine-assignments.read',
+      'platform.sso.engine-assignments.manage',
+      'platform.sso.group-mappings.read',
+      'platform.sso.group-mappings.manage',
+      'platform.engine-sets.read',
+      'platform.api-clients.read',
+    ]));
+  });
+
   it('turns SSO-managed membership changes into source-aware restrictions', () => {
     const result = calculateCurrentUserActionAvailability(snapshot, {
       engineAccessAuthority: 'sso_managed',

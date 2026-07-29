@@ -5,7 +5,7 @@ import {
   getIdentityProviderAdapter,
 } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, PlatformSettings, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
+import { AuthzGroup, AuthzGroupMembership, IdentityEntitlementMapping, IdentityProvider, PlatformSettings, RbacRoleAssignment, SsoNormalizedIdentity } from '@enterpriseglue/shared/db/entities/index.js';
 import { vi, type Mock } from 'vitest';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
@@ -400,15 +400,27 @@ describe('identity entitlement mapping', () => {
     }));
   });
 
-  it('removes only memberships created by a manually managed mapping', async () => {
+  it('removes memberships and SSO assignments owned by a manually managed mapping', async () => {
     const mappingRepo = { findOne: vi.fn().mockResolvedValue({ id: 'mapping-1', providerId: 'provider-1', sourceRef: null }), delete: vi.fn().mockResolvedValue(undefined) };
     const membershipRepo = { delete: vi.fn().mockResolvedValue(undefined) };
-    const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo : entity === AuthzGroupMembership ? membershipRepo : {};
+    const assignmentRepo = { delete: vi.fn().mockResolvedValue(undefined) };
+    const repositories = (entity: unknown) => entity === IdentityEntitlementMapping ? mappingRepo
+      : entity === AuthzGroupMembership ? membershipRepo
+        : entity === RbacRoleAssignment ? assignmentRepo
+          : {};
     (getDataSource as unknown as Mock).mockResolvedValue({ transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })) });
     await identityEntitlementMappingService.remove('mapping-1', 'tenant-a');
     expect(membershipRepo.delete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', source: 'identity_provider' }));
     expect(membershipRepo.delete.mock.calls[0][0].sourceRef.value).toEqual([
       identityProviderMembershipSourceRef('provider-1', 'mapping-1'), 'identity_mapping:mapping-1',
+    ]);
+    expect(assignmentRepo.delete).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      source: 'sso',
+    }));
+    expect(assignmentRepo.delete.mock.calls[0][0].sourceRef.value).toEqual([
+      'identity_mapping:mapping-1',
+      'identity_entitlement_mapping:mapping-1',
     ]);
     expect(mappingRepo.delete).toHaveBeenCalledWith({ id: 'mapping-1' });
   });

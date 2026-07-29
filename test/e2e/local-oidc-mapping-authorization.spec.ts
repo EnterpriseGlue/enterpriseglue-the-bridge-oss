@@ -301,36 +301,39 @@ test.describe('Local OIDC mapping authorization rehearsal', () => {
       expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${allowedEngine.id}`)).status).toBe(200);
       expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${siblingEngine.id}`)).status).toBe(200);
 
-      // Removing an RBAC assignment is deliberately separate from disabling
-      // its identity mapping. The matching group membership remains, but the
-      // group no longer has a right on this engine. Restore it before testing
-      // mapping revocation below, which proves both controls independently.
-      const removeViewAssignment = await requestJson(admin, `/api/authz/role-assignments/${viewAssignment!.id}`, {
+      // Mapping-provisioned assignments are source-owned. The generic manual
+      // assignment endpoint must not bypass that ownership boundary.
+      const removeViewAssignmentDirectly = await requestJson<{ error?: string }>(admin, `/api/authz/role-assignments/${viewAssignment!.id}`, {
         method: 'DELETE', csrf,
       });
-      expect(removeViewAssignment.status, JSON.stringify(removeViewAssignment.body)).toBe(204);
+      expect(removeViewAssignmentDirectly.status, JSON.stringify(removeViewAssignmentDirectly.body)).toBe(400);
+      expect(removeViewAssignmentDirectly.body?.error).toBe('Only manual role assignments can be removed here');
+
+      // Revoke and restore through the owning identity mapping. Disabling
+      // removes the provider-derived membership immediately; enabling becomes
+      // effective after the mandatory reconciliation on the next sign-in.
+      const disableViewMapping = await requestJson<Mapping>(admin, `/api/identity/mappings/${viewMapping!.id}`, {
+        method: 'PUT', csrf, data: { isActive: false },
+      });
+      expect(disableViewMapping.status, JSON.stringify(disableViewMapping.body)).toBe(200);
+      expect(disableViewMapping.body).toMatchObject({ id: viewMapping!.id, isActive: false });
       const afterAssignmentRemoval = await requestJson<Engine[]>(elevatedOperator, '/engines-api/engines');
       expect(afterAssignmentRemoval.status, JSON.stringify(afterAssignmentRemoval.body)).toBe(200);
       expect(afterAssignmentRemoval.body?.map((engine) => engine.id)).toEqual([siblingEngine.id]);
       expect([403, 404]).toContain((await requestJson(elevatedOperator, `/engines-api/engines/${allowedEngine.id}`)).status);
       expect((await requestJson<Engine>(elevatedOperator, `/engines-api/engines/${siblingEngine.id}`)).status).toBe(200);
 
-      const restoredViewAssignment = await requestJson<{ id: string }>(admin, '/api/authz/role-assignments', {
-        method: 'POST', csrf,
-        data: {
-          principalType: 'group',
-          principalId: viewMapping!.targetGroupId,
-          roleId: 'system.engine.operator',
-          resourceType: 'engine',
-          resourceId: allowedEngine.id,
-        },
+      const restoreViewMapping = await requestJson<Mapping>(admin, `/api/identity/mappings/${viewMapping!.id}`, {
+        method: 'PUT', csrf, data: { isActive: true },
       });
-      expect(restoredViewAssignment.status, JSON.stringify(restoredViewAssignment.body)).toBe(201);
-      expect(restoredViewAssignment.body?.id).toBeTruthy();
-      if (restoredViewAssignment.body) createdAssignmentIds.push(restoredViewAssignment.body.id);
-      const afterAssignmentRestore = await requestJson<Engine[]>(elevatedOperator, '/engines-api/engines');
+      expect(restoreViewMapping.status, JSON.stringify(restoreViewMapping.body)).toBe(200);
+      expect(restoreViewMapping.body).toMatchObject({ id: viewMapping!.id, isActive: true });
+      const restoredContext = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
+      const restoredOperator = await signInWithProvider(restoredContext, providerKey);
+      const afterAssignmentRestore = await requestJson<Engine[]>(restoredOperator, '/engines-api/engines');
       expect(afterAssignmentRestore.status, JSON.stringify(afterAssignmentRestore.body)).toBe(200);
       expect(afterAssignmentRestore.body?.map((engine) => engine.id).sort()).toEqual([allowedEngine.id, siblingEngine.id].sort());
+      await restoredContext.close();
 
       // Keycloak's deterministic fixture user lets this use the real recovery
       // UI and backend data instead of a browser-only identity mock. Entra's

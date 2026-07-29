@@ -69,7 +69,19 @@ function isFrontendAction(action: AuthzActionDefinition): boolean {
 }
 
 function candidateActions(resourceType: AuthzResourceType): AuthzActionDefinition[] {
-  return listAuthzActions().filter((action) => action.resourceType === resourceType && isFrontendAction(action));
+  return listAuthzActions().filter((action) =>
+    isFrontendAction(action)
+    && (
+      action.resourceType === resourceType
+      // The current-user snapshot has one platform bucket for every
+      // platform-admin capability. Some actions deliberately use a more
+      // specific audit/resource type (for example sso_mapping, engine_set,
+      // or api_client) while still being authorized by a platform
+      // permission. Include those actions in the platform bucket so the
+      // canonical server snapshot and the UI permission fallback agree.
+      || (resourceType === 'platform' && action.permissionId.startsWith('platform:'))
+    )
+  );
 }
 
 function ssoRestriction(domain: 'Engine' | 'Project', sourceRef?: string | null): ActionAvailabilityRestriction {

@@ -5,6 +5,7 @@ import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/pers
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import {
@@ -327,6 +328,14 @@ class IdentityEntitlementMappingService {
       if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration; edit or disable a config-warning mapping instead');
       await manager.getRepository(AuthzGroupMembership).delete({
         ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(mapping.providerId, mapping.id)),
+      } as any);
+      await manager.getRepository(RbacRoleAssignment).delete({
+        ...tenantWhere(tenantId),
+        source: 'sso',
+        sourceRef: In([
+          `identity_mapping:${mapping.id}`,
+          `identity_entitlement_mapping:${mapping.id}`,
+        ]),
       } as any);
       await repo.delete({ id: mapping.id });
     });
