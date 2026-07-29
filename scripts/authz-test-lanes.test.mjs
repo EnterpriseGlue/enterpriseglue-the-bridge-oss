@@ -7,6 +7,7 @@ const scripts = packageJson.scripts;
 const localOidcRehearsalRunner = readFileSync(new URL('./run-local-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const localSamlRehearsalRunner = readFileSync(new URL('./run-local-saml-rehearsal-test.sh', import.meta.url), 'utf8');
 const localLdapRehearsalRunner = readFileSync(new URL('./run-local-ldap-rehearsal-test.sh', import.meta.url), 'utf8');
+const ldapProtocolMockRunner = readFileSync(new URL('./run-ldap-protocol-mock.sh', import.meta.url), 'utf8');
 const localEntraOidcRehearsalRunner = readFileSync(new URL('./run-local-entra-oidc-rehearsal-test.sh', import.meta.url), 'utf8');
 const realEntraOidcRehearsalRunner = readFileSync(new URL('./run-entra-id-rehearsal.sh', import.meta.url), 'utf8');
 const localOidcConfigureRunner = readFileSync(new URL('./configure-local-oidc-provider.sh', import.meta.url), 'utf8');
@@ -459,6 +460,10 @@ test('the live local LDAP rehearsal is opt-in, fixture-backed, and guarded to lo
   assert.match(localLdapRehearsalRunner, /LOCAL_LDAP_ADMIN_EMAIL:-\}|\$\{ADMIN_EMAIL:-\}/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_DIRECTORY_MODE/);
   assert.match(localLdapConfigureRunner, /LOCAL_LDAP_SECRET_FILE_MODE/);
+  assert.match(ldapProtocolMockRunner, /container_cert_dir="\$tmp_dir\/server-certs"/);
+  assert.match(ldapProtocolMockRunner, /client_ca_cert="\$tmp_dir\/ldap-client-ca\.crt"/);
+  assert.match(ldapProtocolMockRunner, /cp "\$container_cert_dir\/ldap\.crt" "\$client_ca_cert"/);
+  assert.match(ldapProtocolMockRunner, /exec -T --user root openldap/);
   assert.match(localLdapConfigureRunner, /triggers:\["login","manual","scheduled"\]/);
   assert.match(localLdapConfigureRunner, /scheduled:true,intervalSeconds:60/);
   assert.match(localLdapConfigureRunner, /requiredForLogin:true/);
