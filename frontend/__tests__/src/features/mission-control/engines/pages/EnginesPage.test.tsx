@@ -180,6 +180,32 @@ describe('EnginesPage', () => {
     });
   });
 
+  it('uses the server-derived governance behavior for manual engine creation', async () => {
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/auth/platform-settings') {
+        return {
+          engineOnboardingMode: 'manual_allowed',
+          projectEngineTargetMode: 'manual_allowed',
+          governanceBehavior: {
+            manualEngineAccessMutationsAllowed: true,
+            manualProjectAccessMutationsAllowed: true,
+            manualEngineRegistrationAllowed: false,
+            manualProjectEngineTargetMutationsAllowed: true,
+            governanceSettingsMutations: 'allowed',
+          },
+        };
+      }
+      if (url === '/engines-api/environment-tags') return [];
+      if (url === '/engines-api/engines') return [];
+      return [];
+    });
+
+    renderPage();
+
+    expect(await screen.findByText(/engines are registered by external systems/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add your first engine/i })).not.toBeInTheDocument();
+  });
+
   it('disables manual engine creation when the platform create action is denied', async () => {
     authState.permissions = {
       userId: 'user-1',

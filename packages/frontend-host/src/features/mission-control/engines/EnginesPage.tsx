@@ -104,7 +104,7 @@ export type EngineMutationForm = {
 
 type EngineMutationPayload = CreateEngineRequest | UpdateEngineRequest
 type EngineOnboardingSettings = Pick<PlatformSettings,
-  'engineOnboardingMode' | 'engineAccessAuthority' | 'credentiallessCustomerSidecarsEnabled'>
+  'engineOnboardingMode' | 'engineAccessAuthority' | 'credentiallessCustomerSidecarsEnabled' | 'governanceBehavior'>
 
 const ENGINE_TYPE_LABELS: Record<EngineTypeId, string> = {
   ion: 'ION-Engine',
@@ -1310,7 +1310,8 @@ export default function Engines() {
   })
   const engineOnboardingMode = platformSettingsQ.data?.engineOnboardingMode || 'manual_allowed'
   const engineAccessAuthority = platformSettingsQ.data?.engineAccessAuthority || 'manual'
-  const manualEngineOnboardingAllowed = isManualEngineOnboardingAllowed(engineOnboardingMode)
+  const manualEngineOnboardingAllowed = platformSettingsQ.data?.governanceBehavior?.manualEngineRegistrationAllowed
+    ?? isManualEngineOnboardingAllowed(engineOnboardingMode)
   const createEngineUnavailableReason = manualEngineOnboardingAllowed
     ? createEngineDecision.reason
     : 'Manual engine registration is disabled by the current onboarding policy.'

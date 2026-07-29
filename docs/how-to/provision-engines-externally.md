@@ -9,6 +9,11 @@ Status: Dedicated/shared registration and atomic shared tenant mapping are
 implemented. Shared runtime resources remain unavailable until reconciliation
 resolves each resource to exactly one tenant.
 
+This API owns engine inventory only. It never changes SSO/access authority,
+project creation, or platform governance settings and never grants a user or
+group access to the engine. For those independent controls, see
+[Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md).
+
 These contracts have the same persisted engine-tenancy behavior on
 PostgreSQL, MySQL, SQL Server, Oracle, and Spanner. The supported adapter
 matrix covers clean install, both upgrade baselines, retry, schema

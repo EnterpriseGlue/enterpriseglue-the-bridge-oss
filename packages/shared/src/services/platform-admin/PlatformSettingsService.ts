@@ -7,13 +7,17 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
 import {
+  AccessGovernanceDriftStatusSchema,
   AccessAuthorityModeSchema,
+  derivePlatformGovernanceBehavior,
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
   ProjectEngineTargetPolicyModeSchema,
   type AccessAuthorityMode,
+  type AccessGovernanceDriftStatus,
   type EngineOnboardingMode,
   type EngineRuntimeAuthorizationMode,
+  type PlatformGovernanceBehavior,
   type ProjectEngineTargetPolicyMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
@@ -46,6 +50,11 @@ export function normalizeEngineRuntimeAuthorizationMode(value: unknown): EngineR
   return parsed.success ? parsed.data : DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE;
 }
 
+export function normalizeAccessGovernanceDriftStatus(value: unknown): AccessGovernanceDriftStatus | null {
+  const parsed = AccessGovernanceDriftStatusSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
 export interface PlatformSettingsData {
   defaultEnvironmentTagId: string | null;
   syncPushEnabled: boolean;
@@ -61,7 +70,8 @@ export interface PlatformSettingsData {
   accessGovernanceOwnershipMode: 'manual' | 'config_locked' | 'config_warn';
   accessGovernanceSourceHash: string | null;
   accessGovernanceLastAppliedAt: number | null;
-  accessGovernanceDriftStatus: string | null;
+  accessGovernanceDriftStatus: AccessGovernanceDriftStatus | null;
+  governanceBehavior: PlatformGovernanceBehavior;
   credentiallessCustomerSidecarsEnabled: boolean;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
@@ -116,6 +126,13 @@ export class PlatformSettingsService {
         accessGovernanceSourceHash: null,
         accessGovernanceLastAppliedAt: null,
         accessGovernanceDriftStatus: null,
+        governanceBehavior: derivePlatformGovernanceBehavior({
+          engineOnboardingMode: DEFAULT_ENGINE_ONBOARDING_MODE,
+          projectEngineTargetMode: DEFAULT_PROJECT_ENGINE_TARGET_MODE,
+          engineAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
+          projectAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
+          accessGovernanceOwnershipMode: 'manual',
+        }),
         credentiallessCustomerSidecarsEnabled: false,
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
@@ -142,26 +159,41 @@ export class PlatformSettingsService {
       };
     }
 
+    const engineOnboardingMode = normalizeEngineOnboardingMode((settings as any).engineOnboardingMode);
+    const projectEngineTargetMode = normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode);
+    const engineAccessAuthority = normalizeAccessAuthorityMode((settings as any).engineAccessAuthority);
+    const projectAccessAuthority = normalizeAccessAuthorityMode((settings as any).projectAccessAuthority);
+    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String((settings as any).accessGovernanceOwnershipMode))
+      ? (settings as any).accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
+      : 'manual';
+
     return {
       defaultEnvironmentTagId: settings.defaultEnvironmentTagId,
       syncPushEnabled: settings.syncPushEnabled,
       syncPullEnabled: settings.syncPullEnabled,
       gitProjectTokenSharingEnabled: (settings as any).gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles: JSON.parse(settings.defaultDeployRoles),
-      engineOnboardingMode: normalizeEngineOnboardingMode((settings as any).engineOnboardingMode),
-      projectEngineTargetMode: normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode),
-      engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
-      projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
+      engineOnboardingMode,
+      projectEngineTargetMode,
+      engineAccessAuthority,
+      projectAccessAuthority,
       engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
       accessGovernanceSourceRef: (settings as any).accessGovernanceSourceRef ?? null,
-      accessGovernanceOwnershipMode: ['config_locked', 'config_warn'].includes(String((settings as any).accessGovernanceOwnershipMode))
-        ? (settings as any).accessGovernanceOwnershipMode
-        : 'manual',
+      accessGovernanceOwnershipMode,
       accessGovernanceSourceHash: (settings as any).accessGovernanceSourceHash ?? null,
       accessGovernanceLastAppliedAt: (settings as any).accessGovernanceLastAppliedAt === null || (settings as any).accessGovernanceLastAppliedAt === undefined
         ? null
         : Number((settings as any).accessGovernanceLastAppliedAt),
-      accessGovernanceDriftStatus: (settings as any).accessGovernanceDriftStatus ?? null,
+      accessGovernanceDriftStatus: normalizeAccessGovernanceDriftStatus(
+        (settings as any).accessGovernanceDriftStatus,
+      ),
+      governanceBehavior: derivePlatformGovernanceBehavior({
+        engineOnboardingMode,
+        projectEngineTargetMode,
+        engineAccessAuthority,
+        projectAccessAuthority,
+        accessGovernanceOwnershipMode,
+      }),
       credentiallessCustomerSidecarsEnabled: (settings as any).credentiallessCustomerSidecarsEnabled ?? false,
       inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
       inviteAllowedDomains: (() => {

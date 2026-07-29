@@ -278,9 +278,17 @@ class ConfigBundleExportService {
           engineRuntimeAuthorizationMode: platformSettings.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative',
           ownershipMode: platformSettings.accessGovernanceOwnershipMode || 'config_locked',
         }
-      : {};
+      : undefined;
     return withoutUndefined({
-      bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: input.bundleKey, owner: 'platform' }, tenantKey: input.tenantKey || 'default', mode: 'authoritative', settings, imports },
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1alpha1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: input.bundleKey, owner: 'platform' },
+        tenantKey: input.tenantKey || 'default',
+        mode: 'authoritative',
+        ...(settings ? { settings } : {}),
+        imports,
+      },
       files,
     }) as { bundle: Record<string, unknown>; files: Record<string, unknown> };
   }

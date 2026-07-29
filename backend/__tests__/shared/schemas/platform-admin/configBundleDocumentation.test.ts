@@ -18,6 +18,9 @@ import {
   EnterpriseGlueConfigBundleSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import {
+  UpdatePlatformSettingsRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import {
   CreateEngineRequestSchema,
   EngineTenancyConfigurationSchema,
   EngineTenancyErrorResponseSchema,
@@ -53,6 +56,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   EnterpriseGlueConfigBundleSchema,
   ExternalEngineRegistrationRequestSchema,
   ExternalEngineTenantMappingsUpsertRequestSchema,
+  UpdatePlatformSettingsRequest,
   UpdateEngineRequestSchema,
 };
 
@@ -67,6 +71,7 @@ const DOCUMENTS = [
   ...howToDocuments,
   'docs/reference/engine-tenancy-and-provisioning-api.md',
   'docs/reference/engine-tenancy-data-model.md',
+  'docs/reference/access-governance-and-headless-api.md',
 ].sort();
 
 describe('published machine-readable JSON examples', () => {
@@ -95,4 +100,30 @@ describe('published machine-readable JSON examples', () => {
       }
     });
   }
+
+  it('keeps the complete headless governance and engine envelope executable', () => {
+    const examplePath = resolve(repoRoot, 'docs/reference/access-governance-headless.example.json');
+    const envelope = JSON.parse(readFileSync(examplePath, 'utf8')) as {
+      bundle: unknown;
+      files: Record<string, unknown>;
+    };
+
+    const bundle = EnterpriseGlueConfigBundleSchema.parse(envelope.bundle);
+    expect(bundle.imports).toEqual(['./engines.json']);
+    expect(bundle.settings).toMatchObject({
+      engineOnboardingMode: 'external_only',
+      ownershipMode: 'config_locked',
+    });
+
+    const enginesFile = ConfigEnginesFileSchema.parse(envelope.files['./engines.json']);
+    expect(enginesFile.engines).toEqual([
+      expect.objectContaining({
+        type: 'operaton',
+        auth: expect.objectContaining({
+          passwordRef: 'env://OPERATON_ENGINE_PASSWORD',
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(envelope)).not.toContain('"password":');
+  });
 });

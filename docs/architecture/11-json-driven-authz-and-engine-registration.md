@@ -221,7 +221,13 @@ The root manifest imports the other files and defines apply mode.
 
 ### Platform Settings In The Bundle
 
-The `settings` block controls who owns engine inventory, project-to-engine relationships, and human access assignments. These settings are platform-wide defaults and should be applied with the same preview/diff discipline as roles, groups, and engines.
+The `settings` block owns five independent platform policies: engine access
+authority, project access authority, manual engine onboarding, manual
+project-engine target changes, and runtime authorization authority. It does not
+own engine records, project records, identity-provider login configuration, or
+individual group/member/assignment rows. Those objects retain their own
+source and ownership fields. Apply the settings block with the same
+preview/diff discipline as roles, groups, and engines.
 
 ```json
 "settings": {
@@ -238,8 +244,14 @@ The `settings` block controls who owns engine inventory, project-to-engine relat
 `config_locked` makes these five Platform Settings controls read-only and
 rejects the corresponding manual settings API write. `config_warn` allows a
 manual change but records settings drift until the bundle is applied again.
-`manual` leaves the settings portal-owned. Bundles that retain the historical
-empty `settings: {}` block do not claim ownership or replace current settings.
+`manual` leaves settings editable in the portal while retaining recorded bundle
+provenance. Omit `settings` for a role-only, engine-only, or identity-only
+bundle that must not claim or replace current governance. The historical empty
+`settings: {}` block remains non-claiming for compatibility.
+
+For the complete mode matrix, derived API behavior, and executable headless
+examples, see
+[Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md).
 
 #### `engineAccessAuthority`
 

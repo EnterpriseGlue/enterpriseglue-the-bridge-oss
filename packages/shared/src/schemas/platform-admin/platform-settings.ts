@@ -3,13 +3,19 @@ import { z } from 'zod';
 const PiiProviderTypeSchema = z.enum(['presidio', 'gcp_dlp', 'aws_comprehend', 'azure_pii']);
 const PiiScopeSchema = z.enum(['processDetails', 'history', 'logs', 'errors', 'audit']);
 const BrandingHexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
-export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
-export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid']);
-export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed']);
+export const EngineOnboardingModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid'])
+  .describe('Controls manual engine inventory lifecycle operations. Configuration bundles and the external registration API retain their own source-owned paths.');
+export const ProjectEngineTargetPolicyModeSchema = z.enum(['manual_allowed', 'external_only', 'hybrid'])
+  .describe('Controls manual project-to-engine deployment-target changes independently from project creation and engine access.');
+export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 'sso_managed'])
+  .describe('Controls manual membership and scoped role-assignment mutations. SSO-managed mode preserves existing rows as effective, view-only access.');
+export const AccessGovernanceOwnershipModeSchema = z.enum(['manual', 'config_locked', 'config_warn'])
+  .describe('Declares whether the five governance settings are portal-owned, configuration-locked, or editable with drift tracking.');
+export const AccessGovernanceDriftStatusSchema = z.enum(['in_sync', 'drifted']);
 export const UnsupportedEngineRuntimeAuthorizationModeMessage = 'Unsupported runtime authorization mode';
 export const EngineRuntimeAuthorizationModeSchema = z.enum(['enterpriseglue_authoritative', 'mirrored_engine_backstop'], {
   error: UnsupportedEngineRuntimeAuthorizationModeMessage,
-});
+}).describe('Controls runtime authorization authority independently from authentication, engine onboarding, and membership management.');
 export const UnsupportedEngineRuntimeAuthorizationModeErrorSchema = z.object({
   error: z.literal('Validation failed'),
   issues: z.array(z.object({
@@ -55,6 +61,42 @@ export const UpdatePlatformBrandingRequestSchema = z.object({
   faviconUrl: z.string().nullable().optional(),
 });
 
+/**
+ * Derived, read-only behavior for API clients and frontend surfaces. Consumers
+ * should use this object instead of reimplementing mode comparisons.
+ */
+export const PlatformGovernanceBehaviorSchema = z.object({
+  manualEngineAccessMutationsAllowed: z.boolean(),
+  manualProjectAccessMutationsAllowed: z.boolean(),
+  manualEngineRegistrationAllowed: z.boolean(),
+  manualProjectEngineTargetMutationsAllowed: z.boolean(),
+  governanceSettingsMutations: z.enum(['allowed', 'allowed_marks_drift', 'blocked']),
+}).strict();
+
+type PlatformGovernanceBehaviorInput = {
+  engineAccessAuthority: z.infer<typeof AccessAuthorityModeSchema>;
+  projectAccessAuthority: z.infer<typeof AccessAuthorityModeSchema>;
+  engineOnboardingMode: z.infer<typeof EngineOnboardingModeSchema>;
+  projectEngineTargetMode: z.infer<typeof ProjectEngineTargetPolicyModeSchema>;
+  accessGovernanceOwnershipMode: z.infer<typeof AccessGovernanceOwnershipModeSchema>;
+};
+
+export function derivePlatformGovernanceBehavior(
+  input: PlatformGovernanceBehaviorInput,
+): z.infer<typeof PlatformGovernanceBehaviorSchema> {
+  return {
+    manualEngineAccessMutationsAllowed: input.engineAccessAuthority !== 'sso_managed',
+    manualProjectAccessMutationsAllowed: input.projectAccessAuthority !== 'sso_managed',
+    manualEngineRegistrationAllowed: input.engineOnboardingMode !== 'external_only',
+    manualProjectEngineTargetMutationsAllowed: input.projectEngineTargetMode !== 'external_only',
+    governanceSettingsMutations: input.accessGovernanceOwnershipMode === 'config_locked'
+      ? 'blocked'
+      : input.accessGovernanceOwnershipMode === 'config_warn'
+        ? 'allowed_marks_drift'
+        : 'allowed',
+  };
+}
+
 // Select schema (read responses)
 export const PlatformSettingsSchema = z.object({
   defaultEnvironmentTagId: z.string().nullable(),
@@ -67,11 +109,12 @@ export const PlatformSettingsSchema = z.object({
   engineAccessAuthority: AccessAuthorityModeSchema,
   projectAccessAuthority: AccessAuthorityModeSchema,
   engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema,
-  accessGovernanceSourceRef: z.string().nullable().optional(),
-  accessGovernanceOwnershipMode: z.enum(['manual', 'config_locked', 'config_warn']).optional(),
-  accessGovernanceSourceHash: z.string().nullable().optional(),
-  accessGovernanceLastAppliedAt: z.number().nullable().optional(),
-  accessGovernanceDriftStatus: z.string().nullable().optional(),
+  accessGovernanceSourceRef: z.string().nullable(),
+  accessGovernanceOwnershipMode: AccessGovernanceOwnershipModeSchema,
+  accessGovernanceSourceHash: z.string().nullable(),
+  accessGovernanceLastAppliedAt: z.number().nullable(),
+  accessGovernanceDriftStatus: AccessGovernanceDriftStatusSchema.nullable(),
+  governanceBehavior: PlatformGovernanceBehaviorSchema,
   credentiallessCustomerSidecarsEnabled: z.boolean(),
   inviteAllowAllDomains: z.boolean(),
   inviteAllowedDomains: z.array(z.string()),
@@ -108,6 +151,7 @@ export const PublicPlatformSettingsSchema = PlatformSettingsSchema.pick({
   engineAccessAuthority: true,
   projectAccessAuthority: true,
   engineRuntimeAuthorizationMode: true,
+  governanceBehavior: true,
   credentiallessCustomerSidecarsEnabled: true,
   ssoAllEnginesAssignmentMappingsEnabled: true,
   ssoEngineOwnerAssignmentMappingsEnabled: true,
@@ -154,7 +198,7 @@ export const UpdatePlatformSettingsRequest = z.object({
   piiRedactionStyle: z.string().optional(),
   piiScopes: z.array(PiiScopeSchema).optional(),
   piiMaxPayloadSizeBytes: z.number().optional(),
-});
+}).strict();
 
 // Types
 export type PlatformSettings = z.infer<typeof PlatformSettingsSchema>;
@@ -166,4 +210,7 @@ export type UpdatePlatformBrandingRequest = z.infer<typeof UpdatePlatformBrandin
 export type EngineOnboardingMode = z.infer<typeof EngineOnboardingModeSchema>;
 export type ProjectEngineTargetPolicyMode = z.infer<typeof ProjectEngineTargetPolicyModeSchema>;
 export type AccessAuthorityMode = z.infer<typeof AccessAuthorityModeSchema>;
+export type AccessGovernanceOwnershipMode = z.infer<typeof AccessGovernanceOwnershipModeSchema>;
+export type AccessGovernanceDriftStatus = z.infer<typeof AccessGovernanceDriftStatusSchema>;
+export type PlatformGovernanceBehavior = z.infer<typeof PlatformGovernanceBehaviorSchema>;
 export type EngineRuntimeAuthorizationMode = z.infer<typeof EngineRuntimeAuthorizationModeSchema>;

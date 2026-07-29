@@ -11,6 +11,10 @@ administration, diagnostics, and runtime reconciliation are implemented.
 Classification, topology transition APIs, and configuration-owned mapping
 reconciliation are implemented.
 
+Engine tenancy and inventory are independent from SSO/access authority. See
+[Access Governance and Headless Configuration API](./access-governance-and-headless-api.md)
+for Platform Settings, read-only UI behavior, and headless bundle ownership.
+
 ## Request Contract
 
 Manual create, manual update, and external registration requests accept the

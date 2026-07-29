@@ -38,7 +38,6 @@ export function buildSystemRoleConfigBundle(input: ConfigRoleTemplateInput) {
       metadata: { key: input.bundleKey, owner: 'platform' },
       tenantKey: input.tenantKey,
       mode: 'preview_only',
-      settings: {},
       imports: ['./roles.json'],
     },
     files: {

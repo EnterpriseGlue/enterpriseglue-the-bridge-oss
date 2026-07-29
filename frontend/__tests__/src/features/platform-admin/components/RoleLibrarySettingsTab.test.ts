@@ -68,7 +68,6 @@ describe('system role configuration export', () => {
         metadata: { key: 'acme.authz', owner: 'platform' },
         tenantKey: 'acme',
         mode: 'preview_only',
-        settings: {},
         imports: ['./roles.json'],
       },
       files: {

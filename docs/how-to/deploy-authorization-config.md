@@ -34,6 +34,7 @@ For implementation completion and verification status across authorization, iden
 Related guides:
 
 - [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md)
+- [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
 - [Configure Dedicated and Shared Engine Tenancy](./configure-engine-tenancy.md)
 - [Docker Compose Deployment](./deploy-docker.md)
 - [OpenShift Deployment](./deploy-openshift.md)
@@ -63,7 +64,8 @@ manual settings API rejects changes. Use `config_warn` when emergency local
 edits are permitted but must be reported as drift. A subsequent exact bundle
 apply restores the declared values and marks the row `in_sync`. For backward
 compatibility, an empty `settings: {}` block does not claim the current settings
-row and does not reset existing portal choices.
+row and does not reset existing portal choices. An engine-only or identity-only
+bundle may omit `settings` entirely with the same non-claiming behavior.
 
 Database migration `1700000000105` adds the governance-settings source,
 ownership, hash, apply-time, and drift columns non-destructively. Existing

@@ -13,6 +13,7 @@ Related design:
 - [Authorization and Access Control](../architecture/09-oss-authorization-access-control-model.md)
 - [JSON-Driven Authorization and Engine Registration](../architecture/11-json-driven-authz-and-engine-registration.md)
 - [Deploy Authorization Configuration](./deploy-authorization-config.md)
+- [Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md)
 
 ## Configuration Model
 
@@ -38,7 +39,7 @@ The UI, JSON bundles, CI/CD API, and identity synchronization must all write the
 | Engine access authority | `manual`, `transition_to_sso`, `sso_managed` | `manual` for standalone, then explicit transition |
 | Project access authority | `manual`, `transition_to_sso`, `sso_managed` | `manual` unless projects are centrally governed |
 | Engine onboarding | `manual_allowed`, `external_only`, `hybrid` | `manual_allowed` for local use; `external_only` for registry-controlled estates |
-| Project-engine targets | `manual`, `external`, `hybrid` | `hybrid` when projects remain local but targets are partly centrally managed |
+| Project-engine targets | `manual_allowed`, `external_only`, `hybrid` | `hybrid` when projects remain local but targets are partly centrally managed |
 | Runtime scope | `engine_wide`, `resource_aware` | `engine_wide` for distributed engines; `resource_aware` only for central engines |
 | Engine connection | `direct`, `customer_sidecar` | `direct`; select `customer_sidecar` only for an explicit customer gateway endpoint |
 
@@ -136,8 +137,15 @@ also owns their portal edit behavior:
 `config_locked` makes those settings read-only in Platform Settings and rejects
 manual settings API writes. `config_warn` permits a temporary portal/API edit
 and marks the settings drifted; the next reviewed apply restores the declared
-values and `in_sync` state. `manual` leaves them portal-owned. An older bundle
-with `settings: {}` does not claim ownership or overwrite current values.
+values and `in_sync` state. `manual` permits portal/API edits while retaining
+the recorded bundle provenance. An older bundle with `settings: {}` does not
+claim ownership or overwrite current values.
+
+Engine-only bundles may now omit `settings` entirely. Omission is the preferred
+headless contract when the bundle should manage inventory without changing
+platform governance. See the
+[API reference](../reference/access-governance-and-headless-api.md#engine-only-bundle)
+for an executable manifest and transport envelope.
 
 For a direct or customer-sidecar Camunda 7 or Operaton defense-in-depth mapping, add
 `engine-backstop-mappings.json`. Each entry references a configured compatible

@@ -44,7 +44,7 @@ describe('configBundleExportService', () => {
       key: 'engine.prod', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false,
       auth: { type: 'basic', username: 'eg', passwordRef: 'PROD_ENGINE_PASSWORD' },
     })] });
-    expect(result.bundle.settings).toEqual({});
+    expect(result.bundle).not.toHaveProperty('settings');
     expect(JSON.stringify(result.files)).not.toContain('ref:PROD_ENGINE_PASSWORD');
   });
 

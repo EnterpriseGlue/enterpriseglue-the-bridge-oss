@@ -22,6 +22,11 @@ describe('engine registration OpenAPI contracts', () => {
       });
     }
     expect(schemas?.UpdateEngineRequest?.required).toBeUndefined();
+
+    expect(document.paths?.['/engines-api/engines']?.post?.description)
+      .toContain('does not grant engine membership');
+    expect(document.paths?.['/engines-api/external/engines']?.post?.description)
+      .toContain('does not grant any user or group engine access');
   });
 
   it('documents sanitized transport diagnostics and endpoint-policy errors on every registration path', () => {

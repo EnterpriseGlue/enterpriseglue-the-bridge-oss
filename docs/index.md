@@ -23,6 +23,7 @@ Audience: Developers and architects.
 ## Configuration
 - [Configuration Reference](reference/configuration.md)
 - [Configuration Matrix](reference/configuration-matrix.md)
+- [Access Governance and Headless Configuration API](reference/access-governance-and-headless-api.md)
 - [Customer Sidecar Backstop Adapter API](reference/customer-sidecar-backstop-adapter-api.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
 - [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)

@@ -44,6 +44,13 @@ describe('PlatformSettingsService', () => {
     expect(settings.engineOnboardingMode).toBe('manual_allowed');
     expect(settings.projectEngineTargetMode).toBe('manual_allowed');
     expect(settings.engineRuntimeAuthorizationMode).toBe('enterpriseglue_authoritative');
+    expect(settings.governanceBehavior).toEqual({
+      manualEngineAccessMutationsAllowed: true,
+      manualProjectAccessMutationsAllowed: true,
+      manualEngineRegistrationAllowed: true,
+      manualProjectEngineTargetMutationsAllowed: true,
+      governanceSettingsMutations: 'allowed',
+    });
     expect(settings.credentiallessCustomerSidecarsEnabled).toBe(false);
     expect(settings.ssoAllEnginesAssignmentMappingsEnabled).toBe(true);
     expect(settings.ssoEngineOwnerAssignmentMappingsEnabled).toBe(false);
@@ -53,6 +60,43 @@ describe('PlatformSettingsService', () => {
     expect(settings.ssoSecretViewMappingsEnabled).toBe(false);
     expect(settings.ssoUnredactedAuditMappingsEnabled).toBe(false);
     expect(settings.ssoPermanentDeleteMappingsEnabled).toBe(false);
+  });
+
+  it('returns derived behavior for independent access, onboarding, target, and ownership modes', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'default',
+        defaultEnvironmentTagId: null,
+        syncPushEnabled: true,
+        syncPullEnabled: false,
+        gitProjectTokenSharingEnabled: false,
+        defaultDeployRoles: JSON.stringify(['owner']),
+        engineOnboardingMode: 'external_only',
+        projectEngineTargetMode: 'hybrid',
+        engineAccessAuthority: 'sso_managed',
+        projectAccessAuthority: 'manual',
+        engineRuntimeAuthorizationMode: 'mirrored_engine_backstop',
+        accessGovernanceOwnershipMode: 'config_warn',
+        accessGovernanceDriftStatus: 'drifted',
+      }),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const settings = await service.get();
+    expect(settings.governanceBehavior).toEqual({
+      manualEngineAccessMutationsAllowed: false,
+      manualProjectAccessMutationsAllowed: true,
+      manualEngineRegistrationAllowed: false,
+      manualProjectEngineTargetMutationsAllowed: true,
+      governanceSettingsMutations: 'allowed_marks_drift',
+    });
+    expect(settings.accessGovernanceDriftStatus).toBe('drifted');
   });
 
   it('inserts new settings when absent', async () => {

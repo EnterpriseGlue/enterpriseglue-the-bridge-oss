@@ -169,8 +169,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const gitProvidersManageUnavailableReason = hasPermissionSnapshot && !gitProvidersManageDecision.allowed ? gitProvidersManageDecision.reason : null;
 
   const { data: settings, isLoading, error } = usePlatformSettings({ enabled: canReadSettings });
-  const governanceSettingsConfigLocked = settings?.accessGovernanceOwnershipMode === 'config_locked'
-    && Boolean(settings.accessGovernanceSourceRef);
+  const governanceSettingsConfigLocked = settings?.governanceBehavior?.governanceSettingsMutations === 'blocked'
+    || settings?.accessGovernanceOwnershipMode === 'config_locked';
   const canManageGovernanceSettings = canManageSettings && !governanceSettingsConfigLocked;
   const governanceSettingsUnavailableReason = governanceSettingsConfigLocked
     ? `Managed by ${settings?.accessGovernanceSourceRef || 'configuration'}`

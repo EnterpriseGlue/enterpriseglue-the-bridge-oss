@@ -330,14 +330,20 @@ export const ConfigBundleRuntimeReconciliationTaskSchema = z.object({
 });
 
 export const ConfigBundleSettingsSchema = z.object({
-  engineAccessAuthority: AccessAuthorityModeSchema.default('manual'),
-  projectAccessAuthority: AccessAuthorityModeSchema.default('manual'),
-  engineOnboardingMode: EngineOnboardingModeSchema.default('manual_allowed'),
-  projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema.default('manual_allowed'),
+  engineAccessAuthority: AccessAuthorityModeSchema.default('manual')
+    .describe('Engine membership and scoped assignment authority. This does not register engines or change runtime scope.'),
+  projectAccessAuthority: AccessAuthorityModeSchema.default('manual')
+    .describe('Project membership and scoped assignment authority. This does not control project creation.'),
+  engineOnboardingMode: EngineOnboardingModeSchema.default('manual_allowed')
+    .describe('Manual engine inventory policy. Engine records remain in ./engines.json or the external registration API.'),
+  projectEngineTargetMode: ProjectEngineTargetPolicyModeSchema.default('manual_allowed')
+    .describe('Manual project-engine target policy. This is separate from engine membership and project creation.'),
   // Other modes are deliberately not accepted until their corresponding
   // engine-native synchronization design is implemented.
-  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema.default('enterpriseglue_authoritative'),
-  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
+  engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema.default('enterpriseglue_authoritative')
+    .describe('Runtime authorization authority; runtimeAccessScope remains a per-engine field in ./engines.json.'),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked')
+    .describe('Ownership of this settings block only, not ownership of engine, member, group, or assignment rows.'),
 }).strict();
 
 export const EnterpriseGlueConfigBundleSchema = z.object({
@@ -350,7 +356,15 @@ export const EnterpriseGlueConfigBundleSchema = z.object({
   }).strict(),
   tenantKey: ReferenceKeySchema,
   mode: ConfigBundleModeSchema,
-  settings: ConfigBundleSettingsSchema,
+  settings: ConfigBundleSettingsSchema.default({
+    engineAccessAuthority: 'manual',
+    projectAccessAuthority: 'manual',
+    engineOnboardingMode: 'manual_allowed',
+    projectEngineTargetMode: 'manual_allowed',
+    engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+    ownershipMode: 'config_locked',
+  })
+    .describe('Optional platform governance settings. Omit this field for an engine-only bundle that must not claim or reset platform governance.'),
   imports: z.array(z.enum(AllowedImportPaths)).min(1),
 }).strict().superRefine((bundle, ctx) => {
   const duplicates = bundle.imports.filter((entry, index) => bundle.imports.indexOf(entry) !== index);

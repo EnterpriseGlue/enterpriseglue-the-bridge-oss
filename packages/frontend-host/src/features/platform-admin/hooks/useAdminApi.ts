@@ -3,7 +3,14 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { platformAdminApi, type PlatformSettings, type EnvironmentTag, type ProjectGovernanceItem, type EngineGovernanceItem } from '../../../api/platform-admin';
+import {
+  platformAdminApi,
+  type PlatformSettings,
+  type UpdatePlatformSettings,
+  type EnvironmentTag,
+  type ProjectGovernanceItem,
+  type EngineGovernanceItem,
+} from '../../../api/platform-admin';
 import type { CreateEnvironmentTag, UpdateEnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
 import type { UpdateGitProviderRequest } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 // Query keys
@@ -30,7 +37,7 @@ export function useUpdatePlatformSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: Partial<PlatformSettings>) => platformAdminApi.updateSettings(data),
+    mutationFn: (data: UpdatePlatformSettings) => platformAdminApi.updateSettings(data),
     // Optimistic update - immediately reflect the change
     onMutate: async (newData) => {
       await queryClient.cancelQueries({ queryKey: adminQueryKeys.settings });

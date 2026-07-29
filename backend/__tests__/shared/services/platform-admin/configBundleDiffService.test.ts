@@ -33,7 +33,6 @@ const bundle = {
   metadata: { key: 'acme.authz', owner: 'platform' },
   tenantKey: 'acme',
   mode: 'authoritative',
-  settings: {},
   imports: ['./roles.json', './groups.json'],
 };
 

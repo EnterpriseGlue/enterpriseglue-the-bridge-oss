@@ -63,6 +63,29 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     expect(result.settings.engineRuntimeAuthorizationMode).toBe('enterpriseglue_authoritative');
   });
 
+  it('allows an engine-only bundle to omit governance settings without losing parsed defaults', () => {
+    const result = EnterpriseGlueConfigBundleSchema.parse({
+      apiVersion: 'enterpriseglue.ai/v1alpha1',
+      kind: 'EnterpriseGlueConfigBundle',
+      metadata: {
+        key: 'acme-engine-inventory',
+        owner: 'platform-engineering',
+      },
+      tenantKey: 'default',
+      mode: 'additive',
+      imports: ['./engines.json'],
+    });
+
+    expect(result.settings).toEqual({
+      engineAccessAuthority: 'manual',
+      projectAccessAuthority: 'manual',
+      engineOnboardingMode: 'manual_allowed',
+      projectEngineTargetMode: 'manual_allowed',
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+      ownershipMode: 'config_locked',
+    });
+  });
+
   it('rejects duplicate and test-only manifest imports', () => {
     const input = {
       apiVersion: 'enterpriseglue.ai/v1alpha1',

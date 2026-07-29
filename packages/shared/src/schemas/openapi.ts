@@ -1064,7 +1064,7 @@ registry.registerPath({
   method: 'post',
   path: '/engines-api/engines',
   summary: 'Register an engine or customer sidecar',
-  description: customerSidecarRegistrationDescription,
+  description: `${customerSidecarRegistrationDescription} This is the manual inventory channel and is disabled when engineOnboardingMode is external_only. It does not grant engine membership or change engineAccessAuthority.`,
   ...authzExtension('engine.inventory.create', 'POST', '/engines-api/engines'),
   request: {
     body: {
@@ -1075,7 +1075,7 @@ registry.registerPath({
   responses: {
     201: { description: 'Created', content: { 'application/json': { schema: EngineSchema } } },
     400: { description: 'Endpoint or tenancy policy rejected the engine registration', content: { 'application/json': { schema: z.union([EndpointAuthenticationPolicyErrorSchema, EngineTenancyErrorResponseSchema]) } } },
-    403: { description: 'Tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
+    403: { description: 'Manual engine onboarding is disabled or the tenant reference is not authorized', content: { 'application/json': { schema: EngineTenancyErrorResponseSchema } } },
   },
 })
 
@@ -1083,7 +1083,7 @@ registry.registerPath({
   method: 'post',
   path: '/engines-api/external/engines',
   summary: 'Externally register an engine or customer sidecar',
-  description: customerSidecarRegistrationDescription,
+  description: `${customerSidecarRegistrationDescription} This source-owned inventory channel remains independent from engineAccessAuthority and does not grant any user or group engine access.`,
   ...authzExtension('engine.external-registration.upsert', 'POST', '/engines-api/external/engines'),
   request: {
     body: {
@@ -1942,6 +1942,9 @@ const {
   PlatformSettingsSchema,
   PublicPlatformSettingsSchema,
   UpdatePlatformSettingsRequest,
+  AccessAuthorityModeSchema,
+  AccessGovernanceOwnershipModeSchema,
+  PlatformGovernanceBehaviorSchema,
   PlatformBrandingSchema,
   PublicPlatformBrandingSchema,
   UpdatePlatformBrandingRequestSchema,
@@ -1969,6 +1972,7 @@ const {
   ConfigBundlePreviewResponseSchema,
   ConfigBundleSecretPreflightResponseSchema,
   ConfigBundleValidationIssueSchema,
+  ConfigBundleSettingsSchema,
   ProjectEngineTargetPolicyModeSchema,
   ProjectMemberSchema,
   ProjectMembersResponseSchema,
@@ -2085,13 +2089,20 @@ registry.registerPath({
 });
 
 // Platform Settings
+registry.register('AccessAuthorityMode', AccessAuthorityModeSchema);
+registry.register('AccessGovernanceOwnershipMode', AccessGovernanceOwnershipModeSchema);
+registry.register('PlatformGovernanceBehavior', PlatformGovernanceBehaviorSchema);
 registry.register('EngineRuntimeAuthorizationMode', EngineRuntimeAuthorizationModeSchema);
+registry.register('EngineOnboardingMode', EngineOnboardingModeSchema);
+registry.register('ProjectEngineTargetPolicyMode', ProjectEngineTargetPolicyModeSchema);
 registry.register('UnsupportedEngineRuntimeAuthorizationModeError', UnsupportedEngineRuntimeAuthorizationModeErrorSchema);
 registry.register('PlatformSettings', PlatformSettingsSchema);
 registry.register('PublicPlatformSettings', PublicPlatformSettingsSchema);
 registry.registerPath({
   method: 'get',
   path: '/api/admin/settings',
+  summary: 'Read platform settings and effective governance behavior',
+  description: 'Returns the five independent governance axes, configuration ownership/provenance, and derived read-only behavior that API clients should use when enabling or disabling manual controls.',
   ...authzExtension('platform.settings.read', 'GET', '/api/admin/settings'),
   responses: { 200: { description: 'Platform settings', content: { 'application/json': { schema: PlatformSettingsSchema } } } },
 });
@@ -2099,8 +2110,26 @@ registry.registerPath({
 registry.registerPath({
   method: 'put',
   path: '/api/admin/settings',
+  summary: 'Update portal-owned platform settings',
+  description: 'Updates only supplied fields. The five governance fields are rejected when their settings block is configuration-locked. This endpoint does not register engines, create projects, configure SSO providers, or change individual memberships.',
   ...authzExtension('platform.settings.manage', 'PUT', '/api/admin/settings'),
-  request: { body: { content: { 'application/json': { schema: UpdatePlatformSettingsRequest } } } },
+  request: {
+    body: {
+      description: 'Partial update. Use the configuration-bundle API when governance settings are managed headlessly.',
+      content: {
+        'application/json': {
+          schema: UpdatePlatformSettingsRequest,
+          example: {
+            engineAccessAuthority: 'sso_managed',
+            projectAccessAuthority: 'manual',
+            engineOnboardingMode: 'external_only',
+            projectEngineTargetMode: 'hybrid',
+            engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+          },
+        },
+      },
+    },
+  },
   responses: {
     200: { description: 'Updated', content: { 'application/json': { schema: SuccessResponseSchema } } },
     400: { description: 'Unsupported runtime authorization mode', content: { 'application/json': { schema: UnsupportedEngineRuntimeAuthorizationModeErrorSchema } } },
@@ -3071,6 +3100,8 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/api/auth/platform-settings',
+  summary: 'Read non-secret settings and effective governance behavior for the authenticated UI',
+  description: 'Returns policy modes plus derived read-only behavior. The behavior describes platform policy only; clients must still enforce the current principal permission snapshot and per-record ownership.',
   ...authzExemption('GET', '/api/auth/platform-settings'),
   responses: { 200: { description: 'Public platform settings', content: { 'application/json': { schema: PublicPlatformSettingsSchema } } } },
 });
@@ -3382,6 +3413,7 @@ const ConfigBundleFilesOpenApiSchema = z.object({
   './identity-mappings.json': ConfigIdentityMappingsFileSchema.optional(),
 }).strict();
 registry.register('ConfigEngineRegistration', ConfigEngineSchema);
+registry.register('ConfigBundleGovernanceSettings', ConfigBundleSettingsSchema);
 
 const ConfigBundleRequestOpenApiSchema = z.object({
   bundle: EnterpriseGlueConfigBundleSchema,
@@ -3426,15 +3458,15 @@ registry.registerPath({ method: 'put', path: '/api/authz/roles/{id}', ...authzEx
 registry.registerPath({ method: 'delete', path: '/api/authz/roles/{id}', ...authzExtension('platform.authz.roles.manage', 'DELETE', '/api/authz/roles/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Custom role archived' } } });
 registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/import-zip', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/import-zip'), request: { body: { content: { 'application/zip': { schema: z.string() }, 'application/octet-stream': { schema: z.string() } } } }, responses: { 200: { description: 'Convert a validated folder-style configuration ZIP into the standard bundle envelope', content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } }, 422: { description: 'Invalid configuration ZIP archive' } } });
 registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/import-url', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/import-url'), request: { body: { content: { 'application/json': { schema: ConfigBundleRemoteImportRequestSchema } } } }, responses: { 200: { description: 'Import a bounded GitHub or GitLab raw JSON/ZIP configuration file into the standard bundle envelope', content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } }, 422: { description: 'Unsupported or invalid remote configuration source' } } });
-registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/preview', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/preview'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Validated config bundle preview', content: { 'application/json': { schema: ConfigBundlePreviewResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle preview', content: { 'application/json': { schema: ConfigBundlePreviewResponseOpenApiSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/preview', summary: 'Preview a headless authorization and engine configuration bundle', description: 'Validates the manifest and imported object files without persistence. Omit bundle.settings for engine-only or identity-only bundles that must not claim platform governance settings.', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/preview'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Validated config bundle preview', content: { 'application/json': { schema: ConfigBundlePreviewResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle preview', content: { 'application/json': { schema: ConfigBundlePreviewResponseOpenApiSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/validate-secret-refs', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/validate-secret-refs'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Secret-reference availability without secret values', content: { 'application/json': { schema: ConfigBundleSecretPreflightResponseOpenApiSchema } } }, 422: { description: 'Invalid configuration bundle', content: { 'application/json': { schema: ConfigBundleSecretPreflightResponseOpenApiSchema } } } } });
-registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/diff', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/diff'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Persisted config bundle diff', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle input', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } } } });
-registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/apply', ...authzExtension('platform.config-bundles.apply', 'POST', '/api/authz/config-bundles/apply'), request: { body: { content: { 'application/json': { schema: ConfigBundleApplyRequestOpenApiSchema } } } }, responses: { 200: { description: 'Applied config bundle with all requested reconciliation complete', content: { 'application/json': { schema: ConfigBundleApplyResponseOpenApiSchema } } }, 202: { description: 'Applied config bundle with durable identity or runtime reconciliation queued; inspect applyRunId and task receipts', content: { 'application/json': { schema: ConfigBundleApplyResponseOpenApiSchema } } }, 409: { description: 'Preview hash or ownership conflict' }, 422: { description: 'Invalid or unsupported config bundle' } } });
+registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/diff', summary: 'Diff a headless configuration bundle against persisted state', description: 'Reports persisted changes without mutation. Platform governance appears only when the raw manifest explicitly declares at least one governance field.', ...authzExtension('platform.config-bundles.preview', 'POST', '/api/authz/config-bundles/diff'), request: { body: { content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } }, responses: { 200: { description: 'Persisted config bundle diff', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } }, 422: { description: 'Invalid config bundle input', content: { 'application/json': { schema: ConfigBundleDiffResponseOpenApiSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/authz/config-bundles/apply', summary: 'Apply an exact reviewed headless configuration preview', description: 'Applies the exact canonical preview hash. Platform governance is changed only when the raw manifest explicitly declares at least one governance setting; omitted settings never claim or reset portal-owned values.', ...authzExtension('platform.config-bundles.apply', 'POST', '/api/authz/config-bundles/apply'), request: { body: { content: { 'application/json': { schema: ConfigBundleApplyRequestOpenApiSchema } } } }, responses: { 200: { description: 'Applied config bundle with all requested reconciliation complete', content: { 'application/json': { schema: ConfigBundleApplyResponseOpenApiSchema } } }, 202: { description: 'Applied config bundle with durable identity or runtime reconciliation queued; inspect applyRunId and task receipts', content: { 'application/json': { schema: ConfigBundleApplyResponseOpenApiSchema } } }, 409: { description: 'Preview hash or ownership conflict' }, 422: { description: 'Invalid or unsupported config bundle' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs', ...authzExtension('platform.config-bundles.view', 'GET', '/api/authz/config-bundles/runs'), request: { query: z.object({ limit: z.coerce.number().int().min(1).max(100).optional() }) }, responses: { 200: { description: 'Recent hash-bound configuration bundle applies', content: { 'application/json': { schema: z.array(ConfigBundleApplyRunOpenApiSchema) } } } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs/{id}', ...authzExtension('platform.config-bundles.view', 'GET', '/api/authz/config-bundles/runs/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'One hash-bound configuration bundle apply receipt', content: { 'application/json': { schema: ConfigBundleApplyRunOpenApiSchema } } }, 404: { description: 'Configuration bundle apply run not found' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs/{id}/identity-replay-tasks', ...authzExtension('platform.config-bundles.view', 'GET', '/api/authz/config-bundles/runs/{id}/identity-replay-tasks'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Durable stored identity replay continuation tasks for one configuration apply, cross-linked to their SSO sync runs', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), providerId: z.string(), syncRunId: z.string().nullable(), status: z.enum(['queued', 'running', 'completed', 'cancelled']), attempts: z.number().int().nonnegative(), nextAttemptAt: z.number().int().nullable(), scanned: z.number().int().nonnegative(), created: z.number().int().nonnegative(), removed: z.number().int().nonnegative(), failed: z.number().int().nonnegative(), lastError: z.string().nullable(), completedAt: z.number().int().nullable(), createdAt: z.number().int(), updatedAt: z.number().int() })) } } }, 404: { description: 'Configuration bundle apply run not found' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks', ...authzExtension('platform.config-bundles.view', 'GET', '/api/authz/config-bundles/runs/{id}/runtime-reconciliation-tasks'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Durable post-apply Engine Set and runtime-resource reconciliation tasks for one configuration apply', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), status: z.enum(['queued', 'running', 'completed']), attempts: z.number().int().nonnegative(), nextAttemptAt: z.number().int().nullable(), engineSetIds: z.array(z.string()), runtimeResourceSetIds: z.array(z.string()), engineIds: z.array(z.string()), lastError: z.string().nullable(), completedAt: z.number().int().nullable(), createdAt: z.number().int(), updatedAt: z.number().int() })) } } }, 404: { description: 'Configuration bundle apply run not found' } } });
-registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/export', ...authzExtension('platform.config-bundles.export', 'GET', '/api/authz/config-bundles/export'), request: { query: z.object({ bundleKey: z.string(), tenantKey: z.string().optional() }) }, responses: { 200: { description: 'Export all apply-supported config-owned authorization, identity, engine, and deployment-target records for a bundle key', content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } } });
+registry.registerPath({ method: 'get', path: '/api/authz/config-bundles/export', summary: 'Export source-owned records as a reusable headless bundle', description: 'Exports apply-supported configuration-owned authorization, identity, engine, and deployment-target records. The settings block is included only when this bundle owns the current platform-governance row; otherwise it is omitted.', ...authzExtension('platform.config-bundles.export', 'GET', '/api/authz/config-bundles/export'), request: { query: z.object({ bundleKey: z.string(), tenantKey: z.string().optional() }) }, responses: { 200: { description: 'Reusable configuration bundle envelope', content: { 'application/json': { schema: ConfigBundleRequestOpenApiSchema } } } } });
 registry.registerPath({
   method: 'get',
   path: '/api/authz/role-assignments',

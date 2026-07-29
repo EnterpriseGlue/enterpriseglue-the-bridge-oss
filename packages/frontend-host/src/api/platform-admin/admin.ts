@@ -37,6 +37,7 @@ export type {
   GovernanceProjectSummary,
   PlatformSettings,
   ProjectEngineTargetPolicyMode,
+  UpdatePlatformSettings,
   UserListItem,
   UserSearchResult,
 };

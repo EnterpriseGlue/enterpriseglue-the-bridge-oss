@@ -9,6 +9,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import {
+  derivePlatformGovernanceBehavior,
   PublicPlatformBrandingSchema,
   PublicPlatformSettingsSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
@@ -204,6 +205,13 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         engineAccessAuthority: 'manual',
         projectAccessAuthority: 'manual',
         engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+        governanceBehavior: derivePlatformGovernanceBehavior({
+          engineOnboardingMode: 'manual_allowed',
+          projectEngineTargetMode: 'manual_allowed',
+          engineAccessAuthority: 'manual',
+          projectAccessAuthority: 'manual',
+          accessGovernanceOwnershipMode: 'manual',
+        }),
         credentiallessCustomerSidecarsEnabled: false,
         ssoAllEnginesAssignmentMappingsEnabled: true,
         ssoEngineOwnerAssignmentMappingsEnabled: false,
@@ -225,16 +233,31 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       }
     })();
 
+    const engineOnboardingMode = normalizeEngineOnboardingMode((settings as any).engineOnboardingMode);
+    const projectEngineTargetMode = normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode);
+    const engineAccessAuthority = normalizeAccessAuthorityMode((settings as any).engineAccessAuthority);
+    const projectAccessAuthority = normalizeAccessAuthorityMode((settings as any).projectAccessAuthority);
+    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String((settings as any).accessGovernanceOwnershipMode))
+      ? (settings as any).accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
+      : 'manual';
+
     res.json(PublicPlatformSettingsSchema.parse({
       syncPushEnabled: settings.syncPushEnabled ?? true,
       syncPullEnabled: settings.syncPullEnabled ?? false,
       gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles,
-      engineOnboardingMode: normalizeEngineOnboardingMode((settings as any).engineOnboardingMode),
-      projectEngineTargetMode: normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode),
-      engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
-      projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
+      engineOnboardingMode,
+      projectEngineTargetMode,
+      engineAccessAuthority,
+      projectAccessAuthority,
       engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
+      governanceBehavior: derivePlatformGovernanceBehavior({
+        engineOnboardingMode,
+        projectEngineTargetMode,
+        engineAccessAuthority,
+        projectAccessAuthority,
+        accessGovernanceOwnershipMode,
+      }),
       credentiallessCustomerSidecarsEnabled: (settings as any).credentiallessCustomerSidecarsEnabled ?? false,
       ssoAllEnginesAssignmentMappingsEnabled: (settings as any).ssoAllEnginesAssignmentMappingsEnabled ?? true,
       ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,

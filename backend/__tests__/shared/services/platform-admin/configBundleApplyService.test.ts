@@ -102,7 +102,6 @@ const bundle = {
   metadata: { key: 'acme.authz', owner: 'platform' },
   tenantKey: 'acme',
   mode: 'authoritative',
-  settings: {},
   imports: ['./roles.json', './groups.json'],
 };
 const files = {
@@ -225,7 +224,14 @@ describe('configBundleApplyService', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('applies a hash-bound role and group bundle through one transaction with audit records', async () => {
-    const { roleInsert, groupInsert, permissionInsert, auditInsert, configRunRepo } = setupDataSource();
+    const {
+      roleInsert,
+      groupInsert,
+      permissionInsert,
+      auditInsert,
+      configRunRepo,
+      platformSettingsRepo,
+    } = setupDataSource();
     const preview = configBundlePreviewService.preview({ bundle, files });
 
     const result = await configBundleApplyService.apply({
@@ -278,6 +284,8 @@ describe('configBundleApplyService', () => {
     expect(configRunRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
     }));
+    expect(platformSettingsRepo.insert).not.toHaveBeenCalled();
+    expect(platformSettingsRepo.update).not.toHaveBeenCalled();
   });
 
   it('applies explicitly declared governance modes and claims config ownership atomically', async () => {

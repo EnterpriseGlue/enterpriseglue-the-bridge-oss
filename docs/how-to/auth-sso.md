@@ -6,6 +6,11 @@ Audience: Developers and architects.
 
 EnterpriseGlue supports provider-neutral OIDC, SAML, and LDAP identity providers. Configure them in **Platform Settings → Identity Providers** or through configuration bundles. For configuration-bundle schemas and entitlement-to-group assignments, see [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
 
+Provider enablement and login enforcement are separate from access authority.
+For the exact REST/headless settings contract and the UI behavior of
+`manual`, `transition_to_sso`, and `sso_managed`, see
+[Access Governance and Headless Configuration API](../reference/access-governance-and-headless-api.md).
+
 ## JWT and Admin Bootstrap
 Required variables:
 - `JWT_SECRET`
