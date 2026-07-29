@@ -2104,6 +2104,7 @@ registry.registerPath({
   responses: {
     200: { description: 'Updated', content: { 'application/json': { schema: SuccessResponseSchema } } },
     400: { description: 'Unsupported runtime authorization mode', content: { 'application/json': { schema: UnsupportedEngineRuntimeAuthorizationModeErrorSchema } } },
+    403: { description: 'Governance settings are configuration-locked or the caller lacks permission' },
   },
 });
 
@@ -2129,7 +2130,7 @@ registry.registerPath({
   path: '/api/admin/projects/{projectId}/assign-owner',
   ...authzExtension('platform.governance.manage', 'POST', '/api/admin/projects/{projectId}/assign-owner'),
   request: { params: z.object({ projectId: z.string().uuid() }), body: { content: { 'application/json': { schema: AssignOwnerRequest } } } },
-  responses: { 200: { description: 'Owner assigned', content: { 'application/json': { schema: SuccessResponseSchema } } } },
+  responses: { 200: { description: 'Owner assigned', content: { 'application/json': { schema: SuccessResponseSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2137,7 +2138,7 @@ registry.registerPath({
   path: '/api/admin/projects/{projectId}/assign-delegate',
   ...authzExtension('platform.governance.manage', 'POST', '/api/admin/projects/{projectId}/assign-delegate'),
   request: { params: z.object({ projectId: z.string().uuid() }), body: { content: { 'application/json': { schema: AssignOwnerRequest } } } },
-  responses: { 200: { description: 'Delegate assigned', content: { 'application/json': { schema: SuccessResponseSchema } } } },
+  responses: { 200: { description: 'Delegate assigned', content: { 'application/json': { schema: SuccessResponseSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2145,7 +2146,7 @@ registry.registerPath({
   path: '/api/admin/engines/{engineId}/assign-owner',
   ...authzExtension('platform.governance.manage', 'POST', '/api/admin/engines/{engineId}/assign-owner'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: AssignOwnerRequest } } } },
-  responses: { 200: { description: 'Owner assigned', content: { 'application/json': { schema: SuccessResponseSchema } } } },
+  responses: { 200: { description: 'Owner assigned', content: { 'application/json': { schema: SuccessResponseSchema } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2153,7 +2154,7 @@ registry.registerPath({
   path: '/api/admin/engines/{engineId}/assign-delegate',
   ...authzExtension('platform.governance.manage', 'POST', '/api/admin/engines/{engineId}/assign-delegate'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: AssignOwnerRequest } } } },
-  responses: { 200: { description: 'Delegate assigned', content: { 'application/json': { schema: z.object({ success: z.boolean(), engineId: z.string(), delegateId: z.string().nullable(), previousDelegateId: z.string().nullable() }) } } } },
+  responses: { 200: { description: 'Delegate assigned', content: { 'application/json': { schema: z.object({ success: z.boolean(), engineId: z.string(), delegateId: z.string().nullable(), previousDelegateId: z.string().nullable() }) } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 // Admin Users
@@ -2280,6 +2281,7 @@ registry.register('IdentityMapping', identityMappingSchemas.IdentityMappingRespo
 registry.registerPath({ method: 'get', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.read', 'GET', '/api/identity/mappings'), responses: { 200: { description: 'List provider-neutral identity mappings', content: { 'application/json': { schema: z.array(identityMappingSchemas.IdentityMappingResponseSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/api/identity/mappings', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingRequestSchema } } } }, responses: { 201: { description: 'Identity mapping created', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingResponseSchema } } } } });
 registry.registerPath({ method: 'post', path: '/api/identity/mappings/provision-access', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/provision-access'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingProvisionAccessRequestSchema } } } }, responses: { 201: { description: 'Identity mapping, optional new group, and scoped group access provisioned atomically', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingProvisionAccessResponseSchema } } } } });
+registry.registerPath({ method: 'post', path: '/api/identity/mappings/{id}/access', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/{id}/access'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingAccessGrantRequestSchema } } } }, responses: { 201: { description: 'SSO-lineage access assignment granted to the mapping target group', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingAccessGrantResponseSchema } } }, 403: { description: 'Identity mapping is configuration-locked or the caller lacks permission' }, 404: { description: 'Active identity mapping not found' } } });
 registry.registerPath({ method: 'put', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'PUT', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingUpdateSchema } } } }, responses: { 200: { description: 'Identity mapping updated', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingResponseSchema } } } } });
 registry.registerPath({ method: 'delete', path: '/api/identity/mappings/{id}', ...authzExtension('platform.sso.group-mappings.manage', 'DELETE', '/api/identity/mappings/{id}'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Identity mapping removed' } } });
 registry.registerPath({ method: 'post', path: '/api/identity/mappings/test', ...authzExtension('platform.sso.group-mappings.manage', 'POST', '/api/identity/mappings/test'), request: { body: { content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingTestRequestSchema } } } }, responses: { 200: { description: 'Identity mapping test result', content: { 'application/json': { schema: identityMappingSchemas.IdentityMappingTestResponseSchema } } } } });
@@ -2319,7 +2321,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/members/{userId}/deploy-permission',
   ...authzExtension('project.members.deploy-grant.manage', 'PUT', '/starbase-api/projects/{projectId}/members/{userId}/deploy-permission'),
   request: { params: z.object({ projectId: z.string().uuid(), userId: z.string().uuid() }), body: { content: { 'application/json': { schema: UpdateProjectDeployGrantRequestSchema } } } },
-  responses: { 200: { description: 'Deploy permission grant updated', content: { 'application/json': { schema: ProjectDeployGrantResponseSchema } } } },
+  responses: { 200: { description: 'Deploy permission grant updated', content: { 'application/json': { schema: ProjectDeployGrantResponseSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2335,7 +2337,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/pending-invites/{invitationId}/reissue',
   ...authzExtension('project.members.invite', 'POST', '/starbase-api/projects/{projectId}/pending-invites/{invitationId}/reissue'),
   request: { params: z.object({ projectId: z.string().uuid(), invitationId: z.string().uuid() }) },
-  responses: { 200: { description: 'Manual project invitation reissued', content: { 'application/json': { schema: ReissuedManualProjectInvitationSchema } } } },
+  responses: { 200: { description: 'Manual project invitation reissued', content: { 'application/json': { schema: ReissuedManualProjectInvitationSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2343,7 +2345,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/members',
   ...authzExtension('project.members.add', 'POST', '/starbase-api/projects/{projectId}/members'),
   request: { params: z.object({ projectId: z.string().uuid() }), body: { content: { 'application/json': { schema: AddProjectMemberRequest } } } },
-  responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: ProjectMemberAddResponseSchema } } } },
+  responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: ProjectMemberAddResponseSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2351,7 +2353,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/members/{userId}',
   ...authzExtension('project.members.update-role', 'PATCH', '/starbase-api/projects/{projectId}/members/{userId}'),
   request: { params: z.object({ projectId: z.string().uuid(), userId: z.string().uuid() }), body: { content: { 'application/json': { schema: UpdateProjectMemberRoleRequest } } } },
-  responses: { 200: { description: 'Role updated', content: { 'application/json': { schema: z.object({ message: z.string() }) } } } },
+  responses: { 200: { description: 'Role updated', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2359,7 +2361,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/members/{userId}',
   ...authzExtension('project.members.remove', 'DELETE', '/starbase-api/projects/{projectId}/members/{userId}'),
   request: { params: z.object({ projectId: z.string().uuid(), userId: z.string().uuid() }) },
-  responses: { 204: { description: 'Member removed' } },
+  responses: { 204: { description: 'Member removed' }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2367,7 +2369,7 @@ registry.registerPath({
   path: '/starbase-api/projects/{projectId}/transfer-ownership',
   ...authzExtension('project.ownership.transfer', 'POST', '/starbase-api/projects/{projectId}/transfer-ownership'),
   request: { params: z.object({ projectId: z.string().uuid() }), body: { content: { 'application/json': { schema: TransferProjectOwnershipRequest } } } },
-  responses: { 200: { description: 'Ownership transferred', content: { 'application/json': { schema: z.object({ message: z.string() }) } } } },
+  responses: { 200: { description: 'Ownership transferred', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2428,7 +2430,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/members',
   ...authzExtension('engine.members.add', 'POST', '/engines-api/engines/{engineId}/members'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: AddEngineMemberRequest } } } },
-  responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: EngineMemberAddResponseSchema } } } },
+  responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: EngineMemberAddResponseSchema } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2436,7 +2438,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/members/{userId}',
   ...authzExtension('engine.members.update-role', 'PATCH', '/engines-api/engines/{engineId}/members/{userId}'),
   request: { params: z.object({ engineId: z.string(), userId: z.string().uuid() }), body: { content: { 'application/json': { schema: UpdateEngineMemberRoleRequest } } } },
-  responses: { 200: { description: 'Role updated', content: { 'application/json': { schema: z.object({ message: z.string() }) } } } },
+  responses: { 200: { description: 'Role updated', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2444,7 +2446,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/members/{userId}',
   ...authzExtension('engine.members.remove', 'DELETE', '/engines-api/engines/{engineId}/members/{userId}'),
   request: { params: z.object({ engineId: z.string(), userId: z.string().uuid() }) },
-  responses: { 204: { description: 'Member removed' } },
+  responses: { 204: { description: 'Member removed' }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2452,7 +2454,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/pending-invites/{invitationId}/reissue',
   ...authzExtension('engine.members.invite', 'POST', '/engines-api/engines/{engineId}/pending-invites/{invitationId}/reissue'),
   request: { params: z.object({ engineId: z.string(), invitationId: z.string().uuid() }) },
-  responses: { 200: { description: 'Manual invitation reissued', content: { 'application/json': { schema: ReissuedManualEngineInvitationSchema } } } },
+  responses: { 200: { description: 'Manual invitation reissued', content: { 'application/json': { schema: ReissuedManualEngineInvitationSchema } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2460,7 +2462,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/delegate',
   ...authzExtension('engine.delegate.manage', 'POST', '/engines-api/engines/{engineId}/delegate'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: AssignDelegateRequest } } } },
-  responses: { 200: { description: 'Delegate assigned', content: { 'application/json': { schema: z.object({ message: z.string() }) } } } },
+  responses: { 200: { description: 'Delegate assigned', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2468,7 +2470,7 @@ registry.registerPath({
   path: '/engines-api/engines/{engineId}/transfer-ownership',
   ...authzExtension('engine.ownership.transfer', 'POST', '/engines-api/engines/{engineId}/transfer-ownership'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: TransferEngineOwnershipRequest } } } },
-  responses: { 200: { description: 'Ownership transferred', content: { 'application/json': { schema: z.object({ message: z.string() }) } } } },
+  responses: { 200: { description: 'Ownership transferred', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
 });
 
 registry.registerPath({
@@ -2934,7 +2936,7 @@ registry.registerPath({
   path: '/api/auth/complete-onboarding',
   ...authzExemption('POST', '/api/auth/complete-onboarding'),
   request: { body: { content: { 'application/json': { schema: CompleteOnboardingRequestSchema } } } },
-  responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: AuthenticatedSessionOnboardingResponseSchema } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' } },
+  responses: { 200: { description: 'Onboarding completed and session established', content: { 'application/json': { schema: AuthenticatedSessionOnboardingResponseSchema } } }, 400: { description: 'Invalid onboarding input or token' }, 401: { description: 'Invalid onboarding token' }, 403: { description: 'The invitation targets an engine or project whose access became SSO-managed' } },
 });
 
 // POST /api/auth/logout
@@ -3305,6 +3307,8 @@ const {
   ExternalEngineSystemUpdateSchema,
   IdentityMappingProvisionAccessRequestSchema,
   IdentityMappingProvisionAccessResponseSchema,
+  IdentityMappingAccessGrantRequestSchema,
+  IdentityMappingAccessGrantResponseSchema,
   IdentityMappingRequestSchema,
   IdentityMappingResponseSchema,
   IdentityMappingStoredSnapshotPreviewRequestSchema,
@@ -3448,8 +3452,8 @@ registry.registerPath({
   },
   responses: { 200: { description: 'List role assignments', content: { 'application/json': { schema: z.array(RoleAssignmentSchema) } } } },
 });
-registry.registerPath({ method: 'post', path: '/api/authz/role-assignments', ...authzExtension('platform.authz.assignments.create', 'POST', '/api/authz/role-assignments'), request: { body: { content: { 'application/json': { schema: RoleAssignmentCreateSchema } } } }, responses: { 201: { description: 'Role assignment created', content: { 'application/json': { schema: RoleAssignmentCreateResponseSchema } } } } });
-registry.registerPath({ method: 'delete', path: '/api/authz/role-assignments/{id}', ...authzExtension('platform.authz.assignments.delete', 'DELETE', '/api/authz/role-assignments/:id'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Manual role assignment removed' } } });
+registry.registerPath({ method: 'post', path: '/api/authz/role-assignments', ...authzExtension('platform.authz.assignments.create', 'POST', '/api/authz/role-assignments'), request: { body: { content: { 'application/json': { schema: RoleAssignmentCreateSchema } } } }, responses: { 201: { description: 'Role assignment created', content: { 'application/json': { schema: RoleAssignmentCreateResponseSchema } } }, 403: { description: 'The selected engine/project access domain is SSO-managed or the caller lacks permission' } } });
+registry.registerPath({ method: 'delete', path: '/api/authz/role-assignments/{id}', ...authzExtension('platform.authz.assignments.delete', 'DELETE', '/api/authz/role-assignments/:id'), request: { params: z.object({ id: z.string() }) }, responses: { 204: { description: 'Manual role assignment removed' }, 403: { description: 'The assignment access domain is SSO-managed, source-owned, or the caller lacks permission' } } });
 registry.registerPath({ method: 'get', path: '/api/authz/groups', ...authzExtension('platform.authz.groups.read', 'GET', '/api/authz/groups'), request: { query: z.object({ includeArchived: z.enum(['true', 'false']).optional() }) }, responses: { 200: { description: 'List authorization groups', content: { 'application/json': { schema: z.array(AuthzGroupSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/groups', ...authzExtension('platform.authz.groups.manage', 'POST', '/api/authz/groups'), request: { body: { content: { 'application/json': { schema: AuthzGroupCreateSchema } } } }, responses: { 201: { description: 'Authorization group created', content: { 'application/json': { schema: AuthzCreatedIdResponseSchema } } } } });
 registry.registerPath({ method: 'put', path: '/api/authz/groups/{id}', ...authzExtension('platform.authz.groups.manage', 'PUT', '/api/authz/groups/:id'), request: { params: z.object({ id: z.string() }), body: { content: { 'application/json': { schema: AuthzGroupUpdateSchema } } } }, responses: { 200: { description: 'Authorization group updated', content: { 'application/json': { schema: AuthzMutationSuccessResponseSchema } } } } });

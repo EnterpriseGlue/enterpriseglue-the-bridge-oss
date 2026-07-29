@@ -316,6 +316,7 @@ export default function EngineMembersModal({
   const assignmentModal = useModal()
   const childModalOpen = addMemberModal.isOpen || assignmentModal.isOpen
   const ssoManagedAccess = engineAccessAuthority === 'sso_managed'
+  const manualEngineAccessEnabled = !ssoManagedAccess
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -347,10 +348,21 @@ export default function EngineMembersModal({
   const trimmedMemberEmail = memberEmail.trim()
   const normalizedMemberEmail = trimmedMemberEmail.toLowerCase()
   const isMemberEmailValid = isValidEmail(trimmedMemberEmail)
-  const canAssignDelegate = canManageDelegate
-  const canOpenInviteUser = canLookupMembers && canInviteMembers
+  const effectiveCanInviteMembers = manualEngineAccessEnabled && canInviteMembers
+  const effectiveCanAddMembers = manualEngineAccessEnabled && canAddMembers
+  const effectiveCanUpdateMemberRoles = manualEngineAccessEnabled && canUpdateMemberRoles
+  const effectiveCanRemoveMembers = manualEngineAccessEnabled && canRemoveMembers
+  const effectiveCanManageDelegate = manualEngineAccessEnabled && canManageDelegate
+  const canAssignDelegate = effectiveCanManageDelegate
+  const canOpenInviteUser = canLookupMembers && effectiveCanInviteMembers
   const canOpenDelegateAssignment = canLookupMembers && canAssignDelegate
-  const canManageScopedAccess = canAddMembers || canUpdateMemberRoles
+  const canManageScopedAccess = effectiveCanAddMembers || effectiveCanUpdateMemberRoles
+  const canInspectScopedAccess = canViewMembers
+  const sourceManagedEngineAccessReason = ssoManagedAccess
+    ? 'Engine access is managed by SSO. Manual invitations, member changes, delegates, and scoped role assignments are disabled.'
+    : engineAccessAuthority === 'transition_to_sso'
+      ? 'Engine access is transitioning to SSO. Manual and source-managed access are shown together.'
+      : null
   const assignmentPrincipalId = assignmentPrincipalType === 'user'
     ? selectedAssignmentUser?.id || ''
     : assignmentPrincipalIdInput.trim()
@@ -375,7 +387,7 @@ export default function EngineMembersModal({
       resourceType: 'engine',
       resourceId: engine!.id,
     }, { credentials: 'include' }),
-    enabled: !!engine?.id && open && canManageScopedAccess,
+    enabled: !!engine?.id && open && canInspectScopedAccess,
   })
 
   const roleAssignmentsQ = useQuery({
@@ -384,7 +396,7 @@ export default function EngineMembersModal({
       resourceType: 'engine',
       resourceId: engine!.id,
     }, { credentials: 'include' }),
-    enabled: !!engine?.id && open && canManageScopedAccess,
+    enabled: !!engine?.id && open && canInspectScopedAccess,
   })
 
   const usersQ = useQuery({
@@ -412,7 +424,7 @@ export default function EngineMembersModal({
   const memberCapabilitiesQ = useQuery({
     queryKey: ['engine-members', engine?.id, 'capabilities'],
     queryFn: () => getEngineMemberCapabilities(engine!.id),
-    enabled: addMemberModal.isOpen && memberFlow === 'invite' && !!engine?.id && canInviteMembers,
+    enabled: addMemberModal.isOpen && memberFlow === 'invite' && !!engine?.id && effectiveCanInviteMembers,
   })
 
   const memberLookupQ = useQuery({
@@ -473,7 +485,7 @@ export default function EngineMembersModal({
 
   const deleteMemberMutation = useMutation({
     mutationFn: async (memberId: string) => {
-      if (!canRemoveMembers) throw new Error('Missing permission to remove engine members')
+      if (!effectiveCanRemoveMembers) throw new Error('Manual engine member removal is unavailable')
       await removeEngineMember(engine!.id, memberId)
     },
     onSuccess: async (_result, memberId) => {
@@ -486,7 +498,7 @@ export default function EngineMembersModal({
 
   const assignDelegateM = useMutation({
     mutationFn: (email: string | null) => {
-      if (!canManageDelegate) throw new Error('Missing permission to manage engine delegates')
+      if (!effectiveCanManageDelegate) throw new Error('Manual engine delegate changes are unavailable')
       return assignEngineDelegate(engine!.id, email)
     },
     onSuccess: async (_result, email) => {
@@ -499,7 +511,7 @@ export default function EngineMembersModal({
 
   const updateMemberRoleM = useMutation({
     mutationFn: ({ userId, role }: { userId: string; role: 'operator' | 'deployer' }) => {
-      if (!canUpdateMemberRoles) throw new Error('Missing permission to update engine member roles')
+      if (!effectiveCanUpdateMemberRoles) throw new Error('Manual engine role changes are unavailable')
       return updateEngineMemberRole(engine!.id, userId, role)
     },
     onSuccess: async () => {
@@ -511,7 +523,7 @@ export default function EngineMembersModal({
 
   const reissuePendingInviteM = useMutation({
     mutationFn: (invite: PendingEngineInvite) => {
-      if (!canInviteMembers) throw new Error('Missing permission to invite engine members')
+      if (!effectiveCanInviteMembers) throw new Error('Manual engine invitations are unavailable')
       return reissueManualEngineInvitation(engine!.id, invite.invitationId)
     },
     onSuccess: async (result, invite) => {
@@ -820,7 +832,7 @@ export default function EngineMembersModal({
     }
 
     if (memberLookupMode === 'invite') {
-      if (!canInviteMembers) {
+      if (!effectiveCanInviteMembers) {
         setMemberError('Your role can search users, but cannot invite new users to this engine')
         return
       }
@@ -949,6 +961,16 @@ export default function EngineMembersModal({
               </div>
             ) : (
               <div style={{ height: '60vh', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                {sourceManagedEngineAccessReason ? (
+                  <InlineNotification
+                    lowContrast
+                    kind={ssoManagedAccess ? 'info' : 'warning'}
+                    title={ssoManagedAccess ? 'Engine access is SSO-managed' : 'Engine access transition'}
+                    subtitle={sourceManagedEngineAccessReason}
+                    hideCloseButton
+                    style={{ marginBottom: 'var(--spacing-3)' }}
+                  />
+                ) : null}
                 <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                   <DataTable rows={tableRows} headers={memberHeaders}>
                     {({ rows, headers, getHeaderProps, getRowProps, getTableProps, getToolbarProps }) => {
@@ -1001,18 +1023,18 @@ export default function EngineMembersModal({
                             </TableHead>
                             <TableBody>
                               {rows.map((row) => {
-                                const rowProps: any = getRowProps({ row })
+                                const { key: rowKey, ...rowProps }: any = getRowProps({ row })
                                 const pendingInvite = row.id.startsWith('invite:')
                                   ? visiblePendingInvites.find((invite) => `invite:${invite.invitationId}` === row.id)
                                   : null
                                 const member = pendingInvite ? null : members.find((item) => item.userId === row.id)
                                 const isGovernanceMember = isGovernanceEngineMember(member, canonicalGovernanceMemberIds)
                                 const canReissuePendingInvite = Boolean(
-                                  canInviteMembers && pendingInvite && pendingInvite.deliveryMethod === 'manual' && pendingInvite.status !== 'onboarding'
+                                  effectiveCanInviteMembers && pendingInvite && pendingInvite.deliveryMethod === 'manual' && pendingInvite.status !== 'onboarding'
                                 )
-                                const canEditCustomRoles = customRoles.length > 0 && canUpdateMemberRoles
-                                const canChangeMemberRole = Boolean(member && !isGovernanceMember && canUpdateMemberRoles)
-                                const canRemoveMember = Boolean(member && !isGovernanceMember && canRemoveMembers)
+                                const canEditCustomRoles = customRoles.length > 0 && effectiveCanUpdateMemberRoles
+                                const canChangeMemberRole = Boolean(member && !isGovernanceMember && effectiveCanUpdateMemberRoles)
+                                const canRemoveMember = Boolean(member && !isGovernanceMember && effectiveCanRemoveMembers)
                                 const canShowMemberActions = Boolean(
                                   member &&
                                   !isGovernanceMember &&
@@ -1020,7 +1042,7 @@ export default function EngineMembersModal({
                                 )
 
                                 return (
-                                  <TableRow key={rowProps.key} {...rowProps}>
+                                  <TableRow key={rowKey} {...rowProps}>
                                     <TableCell style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1106,7 +1128,7 @@ export default function EngineMembersModal({
                     }}
                   </DataTable>
 
-                  {canManageScopedAccess ? (
+                  {canInspectScopedAccess ? (
                     <div style={{ marginTop: 'var(--spacing-5)', padding: 'var(--spacing-4)', background: 'var(--cds-layer-02)', borderRadius: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
                         <div>
@@ -1205,7 +1227,7 @@ export default function EngineMembersModal({
                                       {assignment.source}
                                     </Tag>
                                   </div>
-                                  {assignment.source === 'manual' ? (
+                                  {assignment.source === 'manual' && canManageScopedAccess ? (
                                     <Button
                                       kind="ghost"
                                       size="sm"
@@ -1217,7 +1239,7 @@ export default function EngineMembersModal({
                                   ) : assignment.source === 'sso' && ssoManagedAccess ? (
                                     <Tag type="purple" size="sm">Managed by SSO mapping</Tag>
                                   ) : (
-                                    <Tag type="gray" size="sm">managed</Tag>
+                                    <Tag type="gray" size="sm">{ssoManagedAccess ? 'View only' : 'managed'}</Tag>
                                   )}
                                   <div style={{ gridColumn: '1 / -1', color: 'var(--cds-text-secondary)', fontSize: 12, overflowWrap: 'anywhere' }}>
                                     Lineage: {formatScopedAssignmentSourceLineage(assignment)}
@@ -1252,7 +1274,7 @@ export default function EngineMembersModal({
           (memberFlow === 'invite' && memberCapabilitiesQ.isLoading) ||
           memberLookupMode === 'existing-member' ||
           (memberFlow === 'invite' && memberLookupMode !== 'invite') ||
-          (memberFlow === 'invite' && !canInviteMembers) ||
+          (memberFlow === 'invite' && !effectiveCanInviteMembers) ||
           (memberFlow === 'delegate' && memberLookupMode !== 'direct-add') ||
           (memberFlow === 'invite' && noInviteDeliveryOptions)
         }
@@ -1276,7 +1298,7 @@ export default function EngineMembersModal({
                 hideCloseButton
               />
             )}
-            {memberFlow === 'invite' && memberLookupMode === 'invite' && !canInviteMembers && (
+            {memberFlow === 'invite' && memberLookupMode === 'invite' && !effectiveCanInviteMembers && (
               <InlineNotification
                 kind="warning"
                 title="Cannot create invitation"

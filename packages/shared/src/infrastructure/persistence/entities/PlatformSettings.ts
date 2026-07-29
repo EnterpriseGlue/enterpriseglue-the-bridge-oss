@@ -38,6 +38,21 @@ export class PlatformSettings {
   @Column({ name: 'engine_runtime_authorization_mode', type: 'text', default: 'enterpriseglue_authoritative' })
   engineRuntimeAuthorizationMode!: 'enterpriseglue_authoritative' | 'mirrored_engine_backstop';
 
+  @Column({ name: 'access_governance_source_ref', type: 'text', nullable: true })
+  accessGovernanceSourceRef!: string | null;
+
+  @Column({ name: 'access_governance_ownership_mode', type: 'text', default: 'manual' })
+  accessGovernanceOwnershipMode!: 'manual' | 'config_locked' | 'config_warn';
+
+  @Column({ name: 'access_governance_source_hash', type: 'text', nullable: true })
+  accessGovernanceSourceHash!: string | null;
+
+  @Column({ name: 'access_governance_last_applied_at', type: 'bigint', nullable: true })
+  accessGovernanceLastAppliedAt!: number | null;
+
+  @Column({ name: 'access_governance_drift_status', type: 'text', nullable: true })
+  accessGovernanceDriftStatus!: string | null;
+
   @Column({ name: 'credentialless_customer_sidecars_enabled', type: 'boolean', default: false })
   credentiallessCustomerSidecarsEnabled!: boolean;
 

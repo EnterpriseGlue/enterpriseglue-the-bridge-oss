@@ -3,6 +3,13 @@ import request from 'supertest';
 import express from 'express';
 import governanceRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/governance.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import {
+  engineService,
+  projectMemberService,
+} from '@enterpriseglue/shared/services/platform-admin/index.js';
+
+const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -13,10 +20,21 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
-  requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requirePermission: () => (req: any, _res: unknown, next: () => void) => {
+    req.user = { userId: 'admin-1' };
+    next();
+  },
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
+  getAccessAuthorityDecision: accessAuthorityDecisionMock,
+  projectMemberService: {
+    addMember: vi.fn().mockResolvedValue(undefined),
+  },
+  engineService: {
+    transferOwnership: vi.fn().mockResolvedValue(undefined),
+    assignDelegate: vi.fn().mockResolvedValue(undefined),
+  },
   policyService: {
     listPolicies: vi.fn().mockResolvedValue([]),
   },
@@ -30,7 +48,9 @@ describe('platform-admin governance routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(governanceRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
+    accessAuthorityDecisionMock.mockResolvedValue(null);
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: () => ({
@@ -63,5 +83,57 @@ describe('platform-admin governance routes', () => {
       id: 'user-1', email: 'owner@example.test', firstName: 'Owner', lastName: null,
     }]);
     expect(response.body[0]).not.toHaveProperty('passwordHash');
+  });
+
+  it('keeps project governance readable but rejects owner assignment when project access is SSO-managed', async () => {
+    accessAuthorityDecisionMock.mockImplementation(async (resourceType) => resourceType === 'project'
+      ? {
+          domain: 'project',
+          mode: 'sso_managed',
+          manualMutationsAllowed: false,
+          reason: 'Project access is SSO-managed; manual access changes are disabled',
+        }
+      : null);
+    const qb = {
+      orderBy: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([]),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ createQueryBuilder: vi.fn().mockReturnValue(qb) }),
+    });
+
+    const listResponse = await request(app).get('/projects');
+    expect(listResponse.status).toBe(200);
+
+    const mutationResponse = await request(app)
+      .post('/projects/00000000-0000-4000-8000-000000000001/assign-owner')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000002',
+        reason: 'Recovery',
+      });
+
+    expect(mutationResponse.status).toBe(403);
+    expect(projectMemberService.addMember).not.toHaveBeenCalled();
+  });
+
+  it('rejects engine governance assignment when engine access is SSO-managed', async () => {
+    accessAuthorityDecisionMock.mockImplementation(async (resourceType) => resourceType === 'engine'
+      ? {
+          domain: 'engine',
+          mode: 'sso_managed',
+          manualMutationsAllowed: false,
+          reason: 'Engine access is SSO-managed; manual access changes are disabled',
+        }
+      : null);
+
+    const response = await request(app)
+      .post('/engines/engine-1/assign-owner')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000002',
+        reason: 'Recovery',
+      });
+
+    expect(response.status).toBe(403);
+    expect(engineService.transferOwnership).not.toHaveBeenCalled();
   });
 });

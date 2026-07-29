@@ -13,6 +13,7 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '../../authz/tenant-scope.js';
 import { EngineTenantReferenceSchema } from '../../schemas/mission-control/engine.js';
 
@@ -81,7 +82,7 @@ class ConfigBundleExportService {
     const mappingSourcePrefix = `${sourceRef}:engine_tenant_mapping:`;
     const where = { sourceRef, ...(tenantId ? { tenantId } : { tenantId: IsNull() }) };
     const engineScopePrefix = `${tenantId || 'platform'}:`;
-    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources] = await Promise.all([
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, assignments, projectEngineTargets, identityProviders, identityMappings, runtimeResources, platformSettings] = await Promise.all([
       dataSource.getRepository(RbacRole).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(AuthzGroup).find({ where: { ...where, isArchived: false } }),
       dataSource.getRepository(Engine).find({
@@ -108,6 +109,7 @@ class ConfigBundleExportService {
       dataSource.getRepository(IdentityProvider).find({ where }),
       dataSource.getRepository(IdentityEntitlementMapping).find({ where: { ...where, isActive: true } }),
       dataSource.getRepository(RuntimeResource).find({ where: tenantId ? { tenantId } : { tenantId: IsNull() } }),
+      dataSource.getRepository(PlatformSettings).findOneBy({ id: 'default' }),
     ]);
     const permissions = roles.length
       ? await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: In(roles.map((role) => role.id)) } })
@@ -267,8 +269,18 @@ class ConfigBundleExportService {
       return { projectRef: { id: target.projectId }, engineRef: { engineKey }, status: target.status, allowManualDeploy: target.allowManualDeploy, allowCiDeploy: target.allowCiDeploy, allowApiDeploy: target.allowApiDeploy, allowImport: target.allowImport, ownershipMode: target.ownershipMode || 'config_locked' };
     }) };
     const imports = Object.keys(files);
+    const settings = platformSettings?.accessGovernanceSourceRef === sourceRef
+      ? {
+          engineAccessAuthority: platformSettings.engineAccessAuthority || 'manual',
+          projectAccessAuthority: platformSettings.projectAccessAuthority || 'manual',
+          engineOnboardingMode: platformSettings.engineOnboardingMode || 'manual_allowed',
+          projectEngineTargetMode: platformSettings.projectEngineTargetMode || 'manual_allowed',
+          engineRuntimeAuthorizationMode: platformSettings.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative',
+          ownershipMode: platformSettings.accessGovernanceOwnershipMode || 'config_locked',
+        }
+      : {};
     return withoutUndefined({
-      bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: input.bundleKey, owner: 'platform' }, tenantKey: input.tenantKey || 'default', mode: 'authoritative', settings: {}, imports },
+      bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: input.bundleKey, owner: 'platform' }, tenantKey: input.tenantKey || 'default', mode: 'authoritative', settings, imports },
       files,
     }) as { bundle: Record<string, unknown>; files: Record<string, unknown> };
   }

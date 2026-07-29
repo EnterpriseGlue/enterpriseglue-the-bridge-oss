@@ -327,12 +327,27 @@ describe('AccessControl roles and permissions', () => {
       ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
       expiresAt: null, lastSeenAt: 1, createdById: null, createdAt: 1, updatedAt: 1,
     };
-    render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} />);
+    render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} engineAccessAuthority="manual" projectAccessAuthority="manual" />);
 
     const row = screen.getByText('provider-user').closest('tr');
     expect(row).toBeTruthy();
     expect(within(row!).getByTitle(/SSO assignment mapping/)).toBeInTheDocument();
     expect(within(row!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
+  });
+
+  it('keeps manual engine assignments visible but read-only in SSO-managed mode', () => {
+    const assignment: RoleAssignment = {
+      id: 'assignment-manual', tenantId: null, userId: 'manual-user', principalType: 'user', principalId: 'manual-user',
+      roleId: 'system.engine.operator', roleKey: 'system.engine.operator', roleName: 'Engine Operator', roleScope: 'engine',
+      resourceType: 'engine', resourceId: 'engine-1', scopeType: 'engine', scopeId: 'engine-1',
+      source: 'manual', sourceRef: null, ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
+      expiresAt: null, lastSeenAt: 1, createdById: null, createdAt: 1, updatedAt: 1,
+    };
+    render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} engineAccessAuthority="sso_managed" projectAccessAuthority="manual" />);
+
+    expect(screen.getByText('manual-user')).toBeInTheDocument();
+    expect(screen.getByLabelText('Remove assignment')).toBeDisabled();
+    expect(screen.getByTitle('Access is SSO-managed')).toBeInTheDocument();
   });
 
   it('identifies locally overridable config assignments without hiding their removal affordance', () => {

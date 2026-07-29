@@ -42,6 +42,38 @@ The UI, JSON bundles, CI/CD API, and identity synchronization must all write the
 | Runtime scope | `engine_wide`, `resource_aware` | `engine_wide` for distributed engines; `resource_aware` only for central engines |
 | Engine connection | `direct`, `customer_sidecar` | `direct`; select `customer_sidecar` only for an explicit customer gateway endpoint |
 
+These controls are independent. Enabling an identity provider does not by
+itself lock a member screen, and registering an engine from JSON does not by
+itself make its access SSO-managed. Evaluate each UI action against the setting
+that owns that action:
+
+| UI or API action | Governing setting | Local mode | Transition or hybrid mode | Managed or external-only mode |
+| --- | --- | --- | --- | --- |
+| Add, change, or remove engine members and engine-scoped role assignments | `engineAccessAuthority` | Editable with permission | Editable; manual and SSO lineage are shown together | Existing access stays visible, but normal manual mutation controls and write APIs are read-only/403 |
+| Add, change, or remove project members and project-scoped role assignments | `projectAccessAuthority` | Editable with permission | Editable; both sources remain visible | Existing access stays visible, but normal manual mutation controls and write APIs are read-only/403 |
+| Add an engine | `engineOnboardingMode` | Portal and API/config allowed | Manual and source-owned engine rows coexist | Portal creation is unavailable; config or the external registration API owns onboarding |
+| Change project-engine deployment targets | `projectEngineTargetMode` | Manual target management allowed | Manual and source-owned targets coexist | Only config/external target changes are allowed |
+| Edit the five settings above in Platform Settings | `settings.ownershipMode` in the applied bundle | Portal-owned | `config_warn` permits the edit and records drift | `config_locked` renders the controls read-only and rejects the settings write API |
+| Create a project | `project:create` platform permission | Allowed when granted; the creator receives project owner access | Same | Same; project creation is not an engine-access grant |
+| Read or operate on runtime resources | `engineRuntimeAuthorizationMode`, scoped roles, resource sets, and policy | EnterpriseGlue decision | EnterpriseGlue decision, optionally mirrored | Independent from login, onboarding, and member-screen ownership |
+
+The normal recommendation is `engineAccessAuthority = sso_managed` and
+`projectAccessAuthority = manual`: SSO decides which engines a person may use,
+while authorized organization users can create projects and project owners
+manage their collaborators locally. Grant `project:create` through a platform
+role to the intended self-service population. A new project is not visible to
+every user; its creator receives owner access and can then add collaborators.
+
+Changing an authority to `sso_managed` is non-destructive. Existing manual rows
+continue to participate in authorization and remain visible for review, but
+the ordinary member and generic assignment write endpoints no longer change
+them. Platform Settings owner/delegate recovery actions become read-only too,
+and a pending manual project/engine invitation cannot create a new grant after
+the cutover. Use transition mode to reconcile duplicates, finish or revoke
+pending invitations, and remove unwanted manual grants before the cutover.
+Return temporarily to transition/manual only through the reviewed settings
+channel if an intentional manual repair is required.
+
 ## Configuration Channels
 
 ### Platform UI
@@ -86,6 +118,26 @@ enterpriseglue-config/
 `bundle.json` declares schema version, bundle id, imports, expected object files, and optional expected hash. This is the manifest name required inside a folder-style ZIP. A mounted single-file bundle instead uses an outer JSON envelope with `bundle` and `files` properties; its file name is arbitrary. Secret values are never stored in either form; provider and engine objects contain secret references only.
 
 Every configurable object has a stable `key`. Config apply resolves keys to database ids, records `source = config`, `sourceRef`, source hash, apply run, and ownership mode, then runtime authorization reads the database. For identity mappings, use the default `config_locked` mode to make the bundle authoritative, or `config_warn` to allow a temporary local edit marked as drift. A subsequent bundle apply restores the reviewed provider, entitlement, target group, sync mode, and ownership state; configuration-managed mappings cannot be deleted from the UI.
+
+When a bundle explicitly declares the five platform governance settings, it
+also owns their portal edit behavior:
+
+```text
+"settings": {
+  "engineAccessAuthority": "sso_managed",
+  "projectAccessAuthority": "manual",
+  "engineOnboardingMode": "external_only",
+  "projectEngineTargetMode": "hybrid",
+  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+  "ownershipMode": "config_locked"
+}
+```
+
+`config_locked` makes those settings read-only in Platform Settings and rejects
+manual settings API writes. `config_warn` permits a temporary portal/API edit
+and marks the settings drifted; the next reviewed apply restores the declared
+values and `in_sync` state. `manual` leaves them portal-owned. An older bundle
+with `settings: {}` does not claim ownership or overwrite current values.
 
 For a direct or customer-sidecar Camunda 7 or Operaton defense-in-depth mapping, add
 `engine-backstop-mappings.json`. Each entry references a configured compatible

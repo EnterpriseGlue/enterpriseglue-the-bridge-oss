@@ -202,7 +202,8 @@ The root manifest imports the other files and defines apply mode.
     "projectAccessAuthority": "manual",
     "engineOnboardingMode": "external_only",
     "projectEngineTargetMode": "hybrid",
-    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative"
+    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+    "ownershipMode": "config_locked"
   },
   "imports": [
     "./engines.json",
@@ -228,9 +229,17 @@ The `settings` block controls who owns engine inventory, project-to-engine relat
   "projectAccessAuthority": "manual",
   "engineOnboardingMode": "external_only",
   "projectEngineTargetMode": "hybrid",
-  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative"
+  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+  "ownershipMode": "config_locked"
 }
 ```
+
+`ownershipMode` controls the settings row, not engine or project membership.
+`config_locked` makes these five Platform Settings controls read-only and
+rejects the corresponding manual settings API write. `config_warn` allows a
+manual change but records settings drift until the bundle is applied again.
+`manual` leaves the settings portal-owned. Bundles that retain the historical
+empty `settings: {}` block do not claim ownership or replace current settings.
 
 #### `engineAccessAuthority`
 
@@ -240,11 +249,17 @@ Controls how engine access assignments are managed in the UI and cleanup workflo
 | --- | --- | --- | --- |
 | `manual` | Manual engine access is the primary operating mode. | Admins can add, update, and remove manual engine access. SSO-derived rows may be visible for diagnostics if mappings exist. | Standalone installs or early setup before SSO is authoritative. |
 | `transition_to_sso` | Manual and SSO-derived engine access coexist while the customer moves to SSO. | UI shows both manual and SSO rows, highlights duplicates, and enables explicit cleanup preview/apply for duplicate manual rows. | Migration from manually managed access to Entra/OIDC/SAML managed access. |
-| `sso_managed` | SSO is the intended authority for engine access. | SSO-owned rows are source-owned and not directly removable in normal member management. Manual rows may remain for break-glass or explicitly selected exceptions. | Enterprise deployments where engine access is governed by identity provider claims and config. |
+| `sso_managed` | SSO/config mappings are the authority for normal engine access changes. | All existing rows, including manual rows, remain visible. Invite, add, role-change, delegate, ownership-transfer, removal, and generic manual-assignment controls are read-only; the corresponding write APIs reject manual mutation. | Enterprise deployments where engine access is governed by identity provider claims and config. |
 
 Important rules:
 
 - `sso_managed` must not delete manual access automatically.
+- Existing manual access continues to authorize until it is deliberately
+  cleaned up in transition/manual mode; `sso_managed` freezes it rather than
+  silently revoking it.
+- Platform governance owner/delegate recovery writes and completion of pending
+  manual engine invitations are governed by the same setting; their read
+  surfaces remain available.
 - Cleanup of duplicate manual access must go through explicit transition cleanup preview/apply.
 - SSO-derived access rows should show lineage to the claim, mapping, group, role, and engine or Engine Set.
 
@@ -256,9 +271,19 @@ Controls how project membership/access is managed. Project access can remain man
 | --- | --- | --- | --- |
 | `manual` | Project access is owned by project owners, delegates, or platform admins. | Project member dialogs allow manual add/update/remove according to permissions. | Most teams where projects are created and staffed inside EnterpriseGlue. |
 | `transition_to_sso` | Manual and SSO-derived project access coexist during migration. | UI can show both sources and support duplicate diagnostics when SSO project mappings are introduced. | Customers gradually moving project access to IdP groups. |
-| `sso_managed` | SSO/config is the intended project access authority. | SSO-owned rows are not normally removable in project member UI; manual controls are restricted to manual exceptions. | Enterprises where project access is centrally governed. |
+| `sso_managed` | SSO/config is the authority for normal project access changes. | Existing members and scoped assignments remain visible, but manual invite/add, role, deploy-grant, ownership-transfer, removal, and generic assignment controls are read-only and their write APIs reject mutation. | Enterprises where project access is centrally governed. |
 
 For the near-term roadmap, engine access is the stronger SSO use case. Project access may intentionally stay `manual` because many customers want project teams to be managed locally while engine access is governed centrally.
+
+Project creation is a separate platform capability. Grant `project:create` to
+the normal organization role when self-service projects are desired; the
+creator becomes that project's owner. Neither `projectAccessAuthority` nor
+engine access automatically grants project creation.
+
+Platform governance owner/delegate recovery writes and completion of pending
+manual project invitations are also blocked in project `sso_managed` mode.
+Existing project members, pending-invitation diagnostics, and assignment
+lineage remain readable.
 
 #### `engineOnboardingMode`
 
@@ -340,7 +365,8 @@ This example:
   "projectAccessAuthority": "manual",
   "engineOnboardingMode": "external_only",
   "projectEngineTargetMode": "hybrid",
-  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative"
+  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+  "ownershipMode": "config_locked"
 }
 ```
 
@@ -351,6 +377,8 @@ means:
 - Project membership remains managed inside EnterpriseGlue.
 - Project-to-engine deployment targets can be centrally configured, but manual project targets may also exist where permitted.
 - Runtime resource authorization is decided by EnterpriseGlue, including central-engine process/decision resource sets and route-level checks.
+- The five governance settings themselves are changed through the bundle;
+  Platform Settings shows them read-only.
 
 This is a good fit for customers who want centralized control over runtime engines while still allowing teams to manage project collaboration locally.
 

@@ -7,9 +7,13 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
-import { projectMemberService, engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  projectMemberService,
+  engineService,
+  getAccessAuthorityDecision,
+} from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -33,6 +37,13 @@ const assignOwnerSchema = z.object({
   userId: z.string().uuid(),
   reason: z.string().min(1),
 });
+
+async function assertManualGovernanceAllowed(resourceType: 'project' | 'engine'): Promise<void> {
+  const decision = await getAccessAuthorityDecision(resourceType);
+  if (decision && !decision.manualMutationsAllowed) {
+    throw Errors.forbidden(decision.reason || `Manual ${resourceType} access changes are disabled`);
+  }
+}
 
 // ============ User Search (for assigning owners) ============
 
@@ -158,6 +169,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('project');
       const projectId = String(req.params.projectId);
       const { userId, reason } = req.body;
 
@@ -176,6 +188,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Assign project owner error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign project owner');
     }
   })
@@ -192,6 +205,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('project');
       const projectId = String(req.params.projectId);
       const { userId, reason } = req.body;
 
@@ -210,6 +224,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Assign project delegate error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign delegate');
     }
   })
@@ -226,6 +241,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('engine');
       const engineId = String(req.params.engineId);
       const { userId, reason } = req.body;
 
@@ -244,6 +260,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Assign engine owner error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign engine owner');
     }
   })
@@ -260,6 +277,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('engine');
       const engineId = String(req.params.engineId);
       const { userId, reason } = req.body;
       const adminUserId = req.user!.userId;
@@ -323,6 +341,7 @@ router.post(
       });
     } catch (error) {
       logger.error('Assign engine delegate error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign delegate');
     }
   })

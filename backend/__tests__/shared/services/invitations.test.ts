@@ -11,6 +11,8 @@ import { engineService } from '@enterpriseglue/shared/services/platform-admin/En
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
 import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index.js';
 
+const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
@@ -35,6 +37,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () =>
   engineService: {
     addEngineMember: vi.fn(),
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.js', () => ({
+  getAccessAuthorityDecision: accessAuthorityDecisionMock,
 }));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
@@ -80,6 +86,7 @@ describe('InvitationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    accessAuthorityDecisionMock.mockResolvedValue(null);
     vi.spyOn(Date, 'now').mockReturnValue(now);
 
     const defaultExecute = vi.fn().mockResolvedValue({ affected: 1 });
@@ -493,5 +500,36 @@ describe('InvitationService', () => {
       managerInvitationRepo.update.mock.invocationCallOrder[0],
     );
     expect(projectMemberService.addMember).not.toHaveBeenCalled();
+  });
+
+  it('does not activate a pending resource invitation after access becomes SSO-managed', async () => {
+    invitationRepo.findOneBy.mockResolvedValue({
+      id: 'inv-1',
+      userId: 'user-1',
+      email: 'invitee@example.com',
+      tenantSlug: 'default',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+      resourceRole: 'operator',
+      resourceRolesJson: null,
+      status: 'otp_verified',
+      otpVerifiedAt: now - 1000,
+      revokedAt: null,
+      completedAt: null,
+    });
+    accessAuthorityDecisionMock.mockResolvedValue({
+      domain: 'engine',
+      mode: 'sso_managed',
+      manualMutationsAllowed: false,
+      reason: 'Engine access is SSO-managed; manual access changes are disabled',
+    });
+
+    await expect(service.completeInvitation('inv-1', 'StrongPass!123'))
+      .rejects.toMatchObject({ statusCode: 403 });
+
+    expect(hashPassword).not.toHaveBeenCalled();
+    expect(engineService.addEngineMember).not.toHaveBeenCalled();
+    expect(managerUserRepo.update).not.toHaveBeenCalled();
+    expect(managerInvitationRepo.update).not.toHaveBeenCalled();
   });
 });

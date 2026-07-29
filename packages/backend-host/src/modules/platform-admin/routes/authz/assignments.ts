@@ -15,6 +15,7 @@ import {
   PlatformPermissions,
   ProjectPermissions,
   SYSTEM_ROLE_IDS,
+  getAccessAuthorityDecision,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import {
   AuthzGroupCreateSchema,
@@ -144,6 +145,10 @@ async function assertCanViewRoleAssignments(req: Request, resource: ScopedAssign
 }
 
 async function assertCanAssignScopedRole(req: Request, input: z.infer<typeof RoleAssignmentCreateSchema>): Promise<void> {
+  const authority = await getAccessAuthorityDecision(input.scopeType || input.resourceType);
+  if (authority && !authority.manualMutationsAllowed) {
+    throw Errors.forbidden(authority.reason || 'Manual access changes are disabled');
+  }
   if (await hasPlatformPermission(req, PlatformPermissions.AUTHZ_ROLES_MANAGE)) return;
   const resource = toScopedAssignmentResource(input.resourceType, input.resourceId);
   if (!resource || !await canManageScopedAssignments(req, resource)) throw Errors.adminRequired();
@@ -156,9 +161,14 @@ async function assertCanAssignScopedRole(req: Request, input: z.infer<typeof Rol
 }
 
 async function assertCanRemoveScopedAssignment(req: Request, id: string): Promise<void> {
-  if (await hasPlatformPermission(req, PlatformPermissions.AUTHZ_ROLES_MANAGE)) return;
   const assignment = await (await getDataSource()).getRepository(RbacRoleAssignment).findOne({ where: { id } });
   if (!assignment) throw Errors.notFound('Role assignment');
+
+  const authority = await getAccessAuthorityDecision(assignment.scopeType);
+  if (authority && !authority.manualMutationsAllowed) {
+    throw Errors.forbidden(authority.reason || 'Manual access changes are disabled');
+  }
+  if (await hasPlatformPermission(req, PlatformPermissions.AUTHZ_ROLES_MANAGE)) return;
 
   const resource = toScopedAssignmentResource(
     assignment.scopeType,

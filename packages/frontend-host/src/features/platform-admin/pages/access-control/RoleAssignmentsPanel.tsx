@@ -27,6 +27,8 @@ export function RoleAssignmentsPanel({
   pending,
   canCreate,
   canDelete,
+  engineAccessAuthority,
+  projectAccessAuthority,
 }: {
   roles: RoleSummary[];
   assignments: RoleAssignment[];
@@ -42,6 +44,8 @@ export function RoleAssignmentsPanel({
   pending: boolean;
   canCreate: boolean;
   canDelete: boolean;
+  engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
+  projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
 }) {
   return (
     <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
@@ -56,6 +60,8 @@ export function RoleAssignmentsPanel({
         onAssign={onAssign}
         pending={pending}
         canCreate={canCreate}
+        engineAccessAuthority={engineAccessAuthority}
+        projectAccessAuthority={projectAccessAuthority}
       />
       <RoleAssignmentsTable
         assignments={assignments}
@@ -66,6 +72,8 @@ export function RoleAssignmentsPanel({
         loading={loading}
         canDelete={canDelete}
         onRemove={onRemove}
+        engineAccessAuthority={engineAccessAuthority}
+        projectAccessAuthority={projectAccessAuthority}
       />
     </div>
   );

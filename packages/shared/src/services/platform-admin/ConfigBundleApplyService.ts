@@ -15,6 +15,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { engineSetKeyIdentity, engineSetService } from './EngineSetService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
@@ -43,6 +44,7 @@ import { runtimeResourceSetService } from './RuntimeResourceSetService.js';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { engineTenantMappingService } from './EngineTenantMappingService.js';
 import { engineBackstopGroupMappingService } from './EngineBackstopGroupMappingService.js';
+import { platformSettingsService } from './PlatformSettingsService.js';
 import { secretResolver } from './SecretResolver.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
@@ -281,7 +283,19 @@ class ConfigBundleApplyService {
     if (!compilation.preview.valid || !compilation.manifest || !compilation.files || !compilation.preview.canonicalHash) {
       return fail('Configuration bundle is invalid', 422);
     }
-    const manifest = compilation.manifest as { apiVersion: string; metadata: { key: string }; mode: string };
+    const manifest = compilation.manifest as {
+      apiVersion: string;
+      metadata: { key: string };
+      mode: string;
+      settings: {
+        engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
+        projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
+        engineOnboardingMode: 'manual_allowed' | 'external_only' | 'hybrid';
+        projectEngineTargetMode: 'manual_allowed' | 'external_only' | 'hybrid';
+        engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' | 'mirrored_engine_backstop';
+        ownershipMode: 'manual' | 'config_locked' | 'config_warn';
+      };
+    };
     if (manifest.mode === 'preview_only') {
       return fail('A preview_only bundle cannot be applied', 422);
     }
@@ -393,6 +407,39 @@ class ConfigBundleApplyService {
 
       for (const change of diff.changes) {
         if (change.operation === 'noop' || change.operation === 'conflict') continue;
+        if (change.objectType === 'platform_settings') {
+          const sourceRef = `config_bundle:${manifest.metadata.key}`;
+          await platformSettingsService.update({
+            engineAccessAuthority: manifest.settings.engineAccessAuthority,
+            projectAccessAuthority: manifest.settings.projectAccessAuthority,
+            engineOnboardingMode: manifest.settings.engineOnboardingMode,
+            projectEngineTargetMode: manifest.settings.projectEngineTargetMode,
+            engineRuntimeAuthorizationMode: manifest.settings.engineRuntimeAuthorizationMode,
+          }, input.actorId, {
+            store: manager,
+            sourceRef,
+            ownershipMode: manifest.settings.ownershipMode,
+            sourceHash: objectFingerprint('platform_settings', 'access-governance', manifest.settings),
+            lastAppliedAt: now,
+            bypassOwnership: true,
+          });
+          await manager.getRepository(PlatformSettings).update({ id: 'default' }, {
+            accessGovernanceDriftStatus: 'in_sync',
+          });
+          await writeAudit(manager, {
+            tenantId,
+            actorId: input.actorId,
+            action: change.operation === 'create'
+              ? 'authz.config_bundle.platform_settings.create'
+              : 'authz.config_bundle.platform_settings.update',
+            resourceType: 'platform_settings',
+            resourceId: 'default',
+            details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash },
+          });
+          if (change.operation === 'create') created += 1;
+          else updated += 1;
+          continue;
+        }
         if (change.objectType === 'role') {
           const desired = desiredRoles.get(change.key);
           const sourceHash = desired ? objectFingerprint('role', desired.key, desired) : objectFingerprint('role', change.key, { archived: true });

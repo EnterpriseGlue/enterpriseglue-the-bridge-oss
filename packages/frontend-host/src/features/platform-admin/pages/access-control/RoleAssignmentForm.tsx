@@ -34,6 +34,8 @@ export function RoleAssignmentForm({
   onAssign,
   pending,
   canCreate,
+  engineAccessAuthority,
+  projectAccessAuthority,
 }: {
   roles: RoleSummary[];
   apiClients: ApiClient[];
@@ -45,6 +47,8 @@ export function RoleAssignmentForm({
   onAssign: (form: AssignmentFormValues) => void;
   pending: boolean;
   canCreate: boolean;
+  engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
+  projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
 }) {
   const { form, setForm } = useAssignmentFormState();
   const activeApiClients = apiClients.filter((client) => client.isActive);
@@ -74,6 +78,12 @@ export function RoleAssignmentForm({
   }, [assignableRoles, form.roleId, setForm]);
 
   const canAssign = canSubmitAssignment(form, pending);
+  const engineScoped = ['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(form.resourceType);
+  const authorityReason = engineScoped && engineAccessAuthority === 'sso_managed'
+    ? 'Engine access is SSO-managed. Create this assignment through an identity mapping or managed configuration.'
+    : form.resourceType === 'project' && projectAccessAuthority === 'sso_managed'
+      ? 'Project access is SSO-managed. Create this assignment through an identity mapping or managed configuration.'
+      : null;
 
   return (
     <>
@@ -216,8 +226,14 @@ export function RoleAssignmentForm({
         />
       </div>
       <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
-        {!canAssign && <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Choose a principal, scope, resource, and role to enable assignment.</p>}
-        <Button disabled={!canAssign || !canCreate} title={canCreate ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onAssign(form)}>
+        {authorityReason
+          ? <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>{authorityReason}</p>
+          : !canAssign && <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Choose a principal, scope, resource, and role to enable assignment.</p>}
+        <Button
+          disabled={!canAssign || !canCreate || Boolean(authorityReason)}
+          title={authorityReason || (canCreate ? undefined : 'Missing permission platform:authz:roles:manage')}
+          onClick={() => onAssign(form)}
+        >
           Assign Role
         </Button>
       </div>

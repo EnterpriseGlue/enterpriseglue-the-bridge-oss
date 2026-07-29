@@ -474,11 +474,40 @@ describe('EngineMembersModal', () => {
       return [];
     });
 
-    renderModal({ canAddMembers: true, engineAccessAuthority: 'sso_managed' });
+    renderModal({
+      canLookupMembers: true,
+      canInviteMembers: true,
+      canAddMembers: true,
+      canUpdateMemberRoles: true,
+      canRemoveMembers: true,
+      canManageDelegate: true,
+      engineAccessAuthority: 'sso_managed',
+    });
 
     expect(await screen.findByText('Group: group-ops')).toBeInTheDocument();
+    expect(screen.getByText('Engine access is SSO-managed')).toBeInTheDocument();
     expect(screen.getByText('Managed by SSO mapping')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /invite user/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /assign access/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /assign delegate/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /remove/i })).toBeNull();
+  });
+
+  it('keeps manual engine controls available during transition mode', async () => {
+    renderModal({
+      canLookupMembers: true,
+      canInviteMembers: true,
+      canAddMembers: true,
+      canUpdateMemberRoles: true,
+      canRemoveMembers: true,
+      canManageDelegate: true,
+      engineAccessAuthority: 'transition_to_sso',
+    });
+
+    expect(await screen.findByText('Engine access transition')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /invite user/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /assign access/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /assign delegate/i })).toBeInTheDocument();
   });
 
   it('shows manual invitation reissue only for invite permission', async () => {

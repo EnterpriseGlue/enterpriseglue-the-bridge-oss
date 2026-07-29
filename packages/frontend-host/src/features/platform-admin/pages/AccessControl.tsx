@@ -75,6 +75,7 @@ import { ProjectEngineTargetsTab } from './access-control/ProjectEngineTargetsTa
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { ByPrincipalPanel, ByResourcePanel } from './access-control/PrincipalResourcePanels';
 import { ExternalRegistrationTab } from './access-control/ExternalRegistrationTab';
+import { usePlatformSettings } from '../hooks/useAdminApi';
 import type { ResourceSummary } from './access-control/principalResourcePresentation';
 import {
   filterPermissions,
@@ -650,6 +651,7 @@ export function filterRoles(roles: RoleSummary[], searchQuery: string, scopeFilt
 
 
 export default function AccessControl() {
+  const platformSettingsQ = usePlatformSettings();
   const [searchParams, setSearchParams] = useSearchParams();
   const rolesQ = useRbacRoles();
   const permissionsQ = usePermissionCatalog();
@@ -1628,6 +1630,8 @@ export default function AccessControl() {
                 pending={assignRoleM.isPending || removeAssignmentM.isPending}
                 canCreate={assignmentsCreateDecision.allowed}
                 canDelete={assignmentsDeleteDecision.allowed}
+                engineAccessAuthority={platformSettingsQ.data?.engineAccessAuthority || 'manual'}
+                projectAccessAuthority={platformSettingsQ.data?.projectAccessAuthority || 'manual'}
               />
               </div>
             )}

@@ -154,6 +154,7 @@ export const ConfigBundleDiffOperationSchema = z.enum(['create', 'update', 'noop
 export const ConfigBundleDiffObjectTypeSchema = z.enum([
   'role', 'group', 'engine', 'engine_tenant_mapping', 'engine_set', 'runtime_resource_set',
   'engine_backstop_mapping', 'identity_provider', 'identity_mapping', 'project_engine_target', 'assignment',
+  'platform_settings',
 ]);
 const ConfigBundleRuntimeResourceReferenceSchema = z.object({
   resourceKind: z.string(),
@@ -336,6 +337,7 @@ export const ConfigBundleSettingsSchema = z.object({
   // Other modes are deliberately not accepted until their corresponding
   // engine-native synchronization design is implemented.
   engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationModeSchema.default('enterpriseglue_authoritative'),
+  ownershipMode: ConfigOwnershipModeSchema.default('config_locked'),
 }).strict();
 
 export const EnterpriseGlueConfigBundleSchema = z.object({

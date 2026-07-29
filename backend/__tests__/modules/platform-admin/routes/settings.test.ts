@@ -4,6 +4,7 @@ import express from 'express';
 import settingsRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/settings.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -14,11 +15,21 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
-  requirePermission: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requirePermission: () => (req: any, _res: unknown, next: () => void) => {
+    req.user = { userId: 'admin-1' };
+    next();
+  },
 }));
 
 describe('platform-admin settings routes', () => {
   let app: express.Application;
+  let platformSettingsRepo: {
+    findOne: Mock;
+    findOneBy: Mock;
+    save: Mock;
+    insert: Mock;
+    update: Mock;
+  };
 
   beforeEach(() => {
     app = express();
@@ -26,14 +37,18 @@ describe('platform-admin settings routes', () => {
     app.locals.enterprisePluginLoaded = false;
     app.use(express.json());
     app.use(settingsRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
-    const platformSettingsRepo = {
+    platformSettingsRepo = {
       findOne: vi.fn().mockResolvedValue({
         id: 'default',
         appName: 'Test Platform',
       }),
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
       save: vi.fn().mockResolvedValue({ id: 'default' }),
+      insert: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockResolvedValue(undefined),
     };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -70,5 +85,42 @@ describe('platform-admin settings routes', () => {
         code: 'invalid_value',
       }],
     });
+  });
+
+  it('rejects portal changes to config-locked governance settings', async () => {
+    platformSettingsRepo.findOneBy.mockResolvedValue({
+      id: 'default',
+      accessGovernanceSourceRef: 'config_bundle:acme.authz',
+      accessGovernanceOwnershipMode: 'config_locked',
+    });
+
+    const response = await request(app).put('/').send({
+      engineAccessAuthority: 'sso_managed',
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain('managed by configuration');
+    expect(platformSettingsRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('allows config-warning governance edits and marks the settings drifted', async () => {
+    platformSettingsRepo.findOneBy.mockResolvedValue({
+      id: 'default',
+      accessGovernanceSourceRef: 'config_bundle:acme.authz',
+      accessGovernanceOwnershipMode: 'config_warn',
+    });
+
+    const response = await request(app).put('/').send({
+      engineAccessAuthority: 'transition_to_sso',
+    });
+
+    expect(response.status).toBe(200);
+    expect(platformSettingsRepo.update).toHaveBeenCalledWith(
+      { id: 'default' },
+      expect.objectContaining({
+        engineAccessAuthority: 'transition_to_sso',
+        accessGovernanceDriftStatus: 'drifted',
+      }),
+    );
   });
 });

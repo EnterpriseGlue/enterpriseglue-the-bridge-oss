@@ -272,8 +272,9 @@ Do not require a sidecar principal, heartbeat, inventory, JWKS, nonce store, or 
 - [x] ✅ Migrate setup-complete checks to platform settings permission evaluation.
 - [x] ✅ Gate Engines page edit, delete, test-connection, and member row actions with engine-scoped permission snapshots while preserving legacy owner/delegate/operator fallbacks.
 - [x] ✅ Gate Engine members modal add, invite reissue, role update, removal, delegate removal, and project access-request actions with operation-specific engine permissions while preserving `engine:members:manage` fallback.
-- [x] ✅ Distinguish manual, SSO-managed, and transition access in Engine members and Project members modal flows; SSO-managed rows are shown as source-managed and not directly removable.
-- [x] ✅ Disable normal manual project member management when `projectAccessAuthority = sso_managed` while allowing transition mode to show manual and source-managed access together.
+- [x] ✅ Distinguish manual, SSO-managed, and transition access in Engine members and Project members modal flows; SSO-managed mode keeps every source visible but removes all normal manual mutation controls.
+- [x] ✅ Enforce `engineAccessAuthority` and `projectAccessAuthority` on the backend member and generic assignment write paths as well as the UI. `sso_managed` returns view-only/403 without deleting existing manual rows; transition mode keeps manual and source-managed access editable and visible together.
+- [x] ✅ Persist config ownership, hash, apply time, and drift for the five governance settings. `config_locked` settings are read-only in Platform Settings and its write API, while `config_warn` records a manual edit as drift until reviewed bundle reapply.
 - [x] ✅ Gate online project import-from-engine options with engine-scoped `engine:deploy:view` permission snapshots while preserving legacy engine role fallback.
 - [x] ✅ Gate Git versions deployment-history UI with engine-scoped `engine:deploy:view` permission snapshots while preserving legacy engine role fallback.
 - [x] ✅ Gate Mission Control-to-Starbase and Starbase-to-Mission-Control bridge actions through backend composite bridge decisions, surfacing denial reasons without hiding the current side's content.

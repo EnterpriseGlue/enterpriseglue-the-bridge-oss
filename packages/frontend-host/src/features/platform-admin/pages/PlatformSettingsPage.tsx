@@ -169,6 +169,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const gitProvidersManageUnavailableReason = hasPermissionSnapshot && !gitProvidersManageDecision.allowed ? gitProvidersManageDecision.reason : null;
 
   const { data: settings, isLoading, error } = usePlatformSettings({ enabled: canReadSettings });
+  const governanceSettingsConfigLocked = settings?.accessGovernanceOwnershipMode === 'config_locked'
+    && Boolean(settings.accessGovernanceSourceRef);
+  const canManageGovernanceSettings = canManageSettings && !governanceSettingsConfigLocked;
+  const governanceSettingsUnavailableReason = governanceSettingsConfigLocked
+    ? `Managed by ${settings?.accessGovernanceSourceRef || 'configuration'}`
+    : settingsManageUnavailableReason;
   const { data: envTags, isLoading: envLoading } = useEnvironmentTags({ enabled: canReadSettings });
   const { data: gitProviders, isLoading: gitProvidersLoading } = useAdminGitProviders({ enabled: canManageGitProviders });
   const updateSettings = useUpdatePlatformSettings();
@@ -305,6 +311,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   // Governance handlers
   const openAssignModal = (type: typeof assignModalType, target: { id: string; name: string }) => {
     if (!canManageGovernance) return;
+    if ((type === 'engineOwner' || type === 'engineDelegate') && settings?.engineAccessAuthority === 'sso_managed') return;
+    if ((type === 'projectOwner' || type === 'projectDelegate') && settings?.projectAccessAuthority === 'sso_managed') return;
     setAssignModalType(type);
     setAssignTarget(target);
     setSelectedUser(null);
@@ -322,6 +330,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   const handleAssign = () => {
     if (!canManageGovernance || !assignTarget || !selectedUser || !assignReason.trim()) return;
+    if ((assignModalType === 'engineOwner' || assignModalType === 'engineDelegate') && settings?.engineAccessAuthority === 'sso_managed') return;
+    if ((assignModalType === 'projectOwner' || assignModalType === 'projectDelegate') && settings?.projectAccessAuthority === 'sso_managed') return;
 
     const payload = { userId: selectedUser.id, reason: assignReason };
     const onSuccess = () => closeAssignModal();
@@ -360,27 +370,27 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const handleEngineOnboardingModeChange = (mode: EngineOnboardingMode) => {
-    if (!canManageSettings) return;
+    if (!canManageGovernanceSettings) return;
     updateSettings.mutate({ engineOnboardingMode: mode });
   };
 
   const handleProjectEngineTargetModeChange = (mode: ProjectEngineTargetPolicyMode) => {
-    if (!canManageSettings) return;
+    if (!canManageGovernanceSettings) return;
     updateSettings.mutate({ projectEngineTargetMode: mode });
   };
 
   const handleEngineAccessAuthorityChange = (mode: AccessAuthorityMode) => {
-    if (!canManageSettings) return;
+    if (!canManageGovernanceSettings) return;
     updateSettings.mutate({ engineAccessAuthority: mode });
   };
 
   const handleProjectAccessAuthorityChange = (mode: AccessAuthorityMode) => {
-    if (!canManageSettings) return;
+    if (!canManageGovernanceSettings) return;
     updateSettings.mutate({ projectAccessAuthority: mode });
   };
 
   const handleEngineRuntimeAuthorizationModeChange = (mode: EngineRuntimeAuthorizationMode) => {
-    if (!canManageSettings) return;
+    if (!canManageGovernanceSettings) return;
     updateSettings.mutate({ engineRuntimeAuthorizationMode: mode });
   };
 
@@ -426,6 +436,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       canManageGovernance={canManageGovernance}
       governanceReadUnavailableReason={governanceReadUnavailableReason}
       governanceManageUnavailableReason={governanceManageUnavailableReason}
+      projectAccessAuthority={settings?.projectAccessAuthority || 'manual'}
     />
   );
 
@@ -495,6 +506,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       onDragEnd={handleDragEnd}
       canManageSettings={canManageSettings}
       settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageGovernanceSettings={canManageGovernanceSettings}
+      governanceSettingsUnavailableReason={governanceSettingsUnavailableReason}
       canReadGovernance={canReadGovernance}
       canManageGovernance={canManageGovernance}
       governanceReadUnavailableReason={governanceReadUnavailableReason}

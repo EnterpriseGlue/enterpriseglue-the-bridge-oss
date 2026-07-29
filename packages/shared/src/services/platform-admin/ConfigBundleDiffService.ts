@@ -14,6 +14,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
@@ -27,7 +28,7 @@ import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/s
 export type ConfigBundleDiffOperation = 'create' | 'update' | 'noop' | 'archive' | 'conflict';
 
 export interface ConfigBundleDiffChange {
-  objectType: 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment';
+  objectType: 'role' | 'group' | 'engine' | 'engine_backstop_mapping' | 'engine_tenant_mapping' | 'engine_set' | 'runtime_resource_set' | 'identity_provider' | 'identity_mapping' | 'project_engine_target' | 'assignment' | 'platform_settings';
   key: string;
   operation: ConfigBundleDiffOperation;
   reason: string;
@@ -278,6 +279,19 @@ function broadConfigurationWarnings(files: Record<string, unknown>): ConfigBundl
   return warnings;
 }
 
+function hasExplicitGovernanceSettings(bundle: unknown): boolean {
+  if (!bundle || typeof bundle !== 'object') return false;
+  const settings = (bundle as Record<string, unknown>).settings;
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return false;
+  return [
+    'engineAccessAuthority',
+    'projectAccessAuthority',
+    'engineOnboardingMode',
+    'projectEngineTargetMode',
+    'engineRuntimeAuthorizationMode',
+  ].some((key) => Object.prototype.hasOwnProperty.call(settings, key));
+}
+
 /**
  * Produces a persisted-state diff for the currently supported config-owned
  * objects. It is intentionally read-only and must be used before apply.
@@ -289,11 +303,23 @@ class ConfigBundleDiffService {
       return { valid: false, errors: compilation.preview.errors, changes: [], warnings: [], requiredAcknowledgements: [], affectedPrincipals: { affectedGroupCount: 0, affectedUserCount: 0, externalIdentityMappingChangeCount: 0 } };
     }
 
-    const manifest = compilation.manifest as { metadata: { key: string }; mode: string };
+    const manifest = compilation.manifest as {
+      metadata: { key: string };
+      mode: string;
+      settings: {
+        engineAccessAuthority: string;
+        projectAccessAuthority: string;
+        engineOnboardingMode: string;
+        projectEngineTargetMode: string;
+        engineRuntimeAuthorizationMode: string;
+        ownershipMode: 'manual' | 'config_locked' | 'config_warn';
+      };
+    };
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
+    const explicitGovernanceSettings = hasExplicitGovernanceSettings(input.bundle);
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
-    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships] = await Promise.all([
+    const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships, platformSettings] = await Promise.all([
       dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(AuthzGroup).find(),
       dataSource.getRepository(Engine).find(),
@@ -310,6 +336,9 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RuntimeResource).find(),
       dataSource.getRepository(Project).find(),
       dataSource.getRepository(AuthzGroupMembership).find(),
+      explicitGovernanceSettings
+        ? dataSource.getRepository(PlatformSettings).findOneBy({ id: 'default' })
+        : Promise.resolve(null),
     ]);
     const rolePermissionsByRoleId = new Map<string, string[]>();
     for (const permission of rolePermissions) {
@@ -390,6 +419,50 @@ class ConfigBundleDiffService {
     const tenantGroupMemberships = groupMemberships.filter((membership) => (membership.tenantId || null) === normalizedTenantId);
     const changes: ConfigBundleDiffChange[] = [];
     const warnings = broadConfigurationWarnings(compilation.files);
+    const desiredSettings = manifest.settings;
+    if (explicitGovernanceSettings && !platformSettings) {
+      changes.push({
+        objectType: 'platform_settings',
+        key: 'access-governance',
+        operation: 'create',
+        reason: 'Platform governance settings have not been persisted yet',
+      });
+    } else if (explicitGovernanceSettings && platformSettings!.accessGovernanceSourceRef && platformSettings!.accessGovernanceSourceRef !== sourceRef) {
+      changes.push({
+        objectType: 'platform_settings',
+        key: 'access-governance',
+        operation: 'conflict',
+        currentId: platformSettings!.id,
+        reason: 'Platform governance settings are owned by another configuration bundle',
+      });
+    } else if (explicitGovernanceSettings && (
+      platformSettings!.engineAccessAuthority !== desiredSettings.engineAccessAuthority
+      || platformSettings!.projectAccessAuthority !== desiredSettings.projectAccessAuthority
+      || platformSettings!.engineOnboardingMode !== desiredSettings.engineOnboardingMode
+      || platformSettings!.projectEngineTargetMode !== desiredSettings.projectEngineTargetMode
+      || platformSettings!.engineRuntimeAuthorizationMode !== desiredSettings.engineRuntimeAuthorizationMode
+      || platformSettings!.accessGovernanceSourceRef !== sourceRef
+      || (platformSettings!.accessGovernanceOwnershipMode || 'manual') !== desiredSettings.ownershipMode
+      || platformSettings!.accessGovernanceDriftStatus !== 'in_sync'
+    )) {
+      changes.push({
+        objectType: 'platform_settings',
+        key: 'access-governance',
+        operation: 'update',
+        currentId: platformSettings!.id,
+        reason: platformSettings!.accessGovernanceSourceRef
+          ? 'Config-owned platform governance settings differ from the desired state'
+          : 'Persisted platform governance settings will be adopted by this configuration bundle',
+      });
+    } else if (explicitGovernanceSettings) {
+      changes.push({
+        objectType: 'platform_settings',
+        key: 'access-governance',
+        operation: 'noop',
+        currentId: platformSettings!.id,
+        reason: 'Config-owned platform governance settings already match the desired state',
+      });
+    }
     const desiredAssignmentGroupIds = new Map<string, string>();
     const desiredIdentityMappingGroupIds = new Map<string, string>();
 

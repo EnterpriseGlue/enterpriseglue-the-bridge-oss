@@ -17,6 +17,8 @@ import {
   type ProjectEngineTargetPolicyMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
+import type { DataSource, EntityManager } from 'typeorm';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 const DEFAULT_PII_SCOPES = ['processDetails', 'history', 'logs', 'errors', 'audit'];
 export const DEFAULT_ENGINE_ONBOARDING_MODE: EngineOnboardingMode = 'manual_allowed';
@@ -55,6 +57,11 @@ export interface PlatformSettingsData {
   engineAccessAuthority: AccessAuthorityMode;
   projectAccessAuthority: AccessAuthorityMode;
   engineRuntimeAuthorizationMode: EngineRuntimeAuthorizationMode;
+  accessGovernanceSourceRef: string | null;
+  accessGovernanceOwnershipMode: 'manual' | 'config_locked' | 'config_warn';
+  accessGovernanceSourceHash: string | null;
+  accessGovernanceLastAppliedAt: number | null;
+  accessGovernanceDriftStatus: string | null;
   credentiallessCustomerSidecarsEnabled: boolean;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
@@ -104,6 +111,11 @@ export class PlatformSettingsService {
         engineAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
         projectAccessAuthority: DEFAULT_ACCESS_AUTHORITY_MODE,
         engineRuntimeAuthorizationMode: DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE,
+        accessGovernanceSourceRef: null,
+        accessGovernanceOwnershipMode: 'manual',
+        accessGovernanceSourceHash: null,
+        accessGovernanceLastAppliedAt: null,
+        accessGovernanceDriftStatus: null,
         credentiallessCustomerSidecarsEnabled: false,
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
@@ -141,6 +153,15 @@ export class PlatformSettingsService {
       engineAccessAuthority: normalizeAccessAuthorityMode((settings as any).engineAccessAuthority),
       projectAccessAuthority: normalizeAccessAuthorityMode((settings as any).projectAccessAuthority),
       engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
+      accessGovernanceSourceRef: (settings as any).accessGovernanceSourceRef ?? null,
+      accessGovernanceOwnershipMode: ['config_locked', 'config_warn'].includes(String((settings as any).accessGovernanceOwnershipMode))
+        ? (settings as any).accessGovernanceOwnershipMode
+        : 'manual',
+      accessGovernanceSourceHash: (settings as any).accessGovernanceSourceHash ?? null,
+      accessGovernanceLastAppliedAt: (settings as any).accessGovernanceLastAppliedAt === null || (settings as any).accessGovernanceLastAppliedAt === undefined
+        ? null
+        : Number((settings as any).accessGovernanceLastAppliedAt),
+      accessGovernanceDriftStatus: (settings as any).accessGovernanceDriftStatus ?? null,
       credentiallessCustomerSidecarsEnabled: (settings as any).credentiallessCustomerSidecarsEnabled ?? false,
       inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
       inviteAllowedDomains: (() => {
@@ -235,11 +256,32 @@ export class PlatformSettingsService {
       piiScopes: string[];
       piiMaxPayloadSizeBytes: number;
     }>,
-    updatedById: string
+    updatedById: string,
+    options?: {
+      store?: DataSource | EntityManager;
+      sourceRef?: string | null;
+      ownershipMode?: 'manual' | 'config_locked' | 'config_warn';
+      sourceHash?: string | null;
+      lastAppliedAt?: number | null;
+      bypassOwnership?: boolean;
+    },
   ): Promise<void> {
-    const dataSource = await getDataSource();
+    const dataSource = options?.store || await getDataSource();
     const settingsRepo = dataSource.getRepository(PlatformSettings);
     const now = Date.now();
+    const existing = await settingsRepo.findOneBy({ id: this.DEFAULT_ID });
+    const governanceKeys = [
+      'engineOnboardingMode',
+      'projectEngineTargetMode',
+      'engineAccessAuthority',
+      'projectAccessAuthority',
+      'engineRuntimeAuthorizationMode',
+    ] as const;
+    const changesGovernance = governanceKeys.some((key) => data[key] !== undefined);
+    const existingOwnershipMode = existing?.accessGovernanceOwnershipMode || 'manual';
+    if (changesGovernance && !options?.bypassOwnership && existingOwnershipMode === 'config_locked') {
+      throw Errors.forbidden('Engine and access governance settings are managed by configuration');
+    }
 
     if (data.engineRuntimeAuthorizationMode === 'mirrored_engine_backstop') {
       const successfulRun = await dataSource.getRepository(EngineBackstopSyncRun).findOne({
@@ -256,6 +298,13 @@ export class PlatformSettingsService {
       updatedAt: now,
       updatedById,
     };
+    if (changesGovernance && existingOwnershipMode === 'config_warn' && !options?.bypassOwnership) {
+      updateData.accessGovernanceDriftStatus = 'drifted';
+    }
+    if (options?.sourceRef !== undefined) updateData.accessGovernanceSourceRef = options.sourceRef;
+    if (options?.ownershipMode !== undefined) updateData.accessGovernanceOwnershipMode = options.ownershipMode;
+    if (options?.sourceHash !== undefined) updateData.accessGovernanceSourceHash = options.sourceHash;
+    if (options?.lastAppliedAt !== undefined) updateData.accessGovernanceLastAppliedAt = options.lastAppliedAt;
 
     if (data.defaultEnvironmentTagId !== undefined) {
       updateData.defaultEnvironmentTagId = data.defaultEnvironmentTagId;
@@ -363,9 +412,6 @@ export class PlatformSettingsService {
       updateData.piiMaxPayloadSizeBytes = data.piiMaxPayloadSizeBytes;
     }
 
-    // Check if record exists
-    const existing = await settingsRepo.findOneBy({ id: this.DEFAULT_ID });
-
     if (!existing) {
       // Insert new record
       await settingsRepo.insert({
@@ -380,6 +426,11 @@ export class PlatformSettingsService {
         engineAccessAuthority: data.engineAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
         projectAccessAuthority: data.projectAccessAuthority ?? DEFAULT_ACCESS_AUTHORITY_MODE,
         engineRuntimeAuthorizationMode: data.engineRuntimeAuthorizationMode ?? DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE,
+        accessGovernanceSourceRef: options?.sourceRef ?? null,
+        accessGovernanceOwnershipMode: options?.ownershipMode ?? 'manual',
+        accessGovernanceSourceHash: options?.sourceHash ?? null,
+        accessGovernanceLastAppliedAt: options?.lastAppliedAt ?? null,
+        accessGovernanceDriftStatus: options?.sourceRef ? 'in_sync' : null,
         credentiallessCustomerSidecarsEnabled: data.credentiallessCustomerSidecarsEnabled ?? false,
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),

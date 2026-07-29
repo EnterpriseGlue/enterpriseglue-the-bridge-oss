@@ -26,6 +26,7 @@ import { In, IsNull, Not, Raw } from 'typeorm';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 import { permissionService, ProjectPermissions, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { getAccessAuthorityDecision } from '@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -189,6 +190,13 @@ async function canPerformProjectMemberAction(req: any, projectId: string, permis
 
 async function canManageProjectDelegates(req: any, projectId: string): Promise<boolean> {
   return hasProjectPermission(req, projectId, ProjectPermissions.DELEGATE_MANAGE);
+}
+
+async function assertManualProjectAccessAllowed(): Promise<void> {
+  const decision = await getAccessAuthorityDecision('project');
+  if (decision && !decision.manualMutationsAllowed) {
+    throw Errors.forbidden(decision.reason || 'Manual project access changes are disabled');
+  }
 }
 
 const uuidLikeSchema = z.string().regex(
@@ -371,6 +379,7 @@ router.put(
   requireAction('project.members.deploy-grant.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
@@ -499,6 +508,7 @@ router.post(
   requireAction('project.members.invite', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const invitationId = String(req.params.invitationId);
       const requesterId = req.user!.userId;
@@ -585,6 +595,7 @@ router.post(
   validateBody(addMemberSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const { email, role, roles, deliveryMethod } = req.body as { email: string; role?: ProjectRole; roles?: ProjectRole[]; deliveryMethod?: 'email' | 'manual' };
       const inviterId = req.user!.userId;
@@ -729,6 +740,7 @@ router.patch(
   requireAction('project.members.update-role', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const targetUserId = String(req.params.userId);
       const { role, roles } = req.body as { role?: ProjectRole; roles?: ProjectRole[] };
@@ -787,6 +799,7 @@ router.delete(
   validateParams(memberIdSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
@@ -845,6 +858,7 @@ router.post(
   requireAction('project.ownership.transfer', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const { newOwnerId } = req.body;
 

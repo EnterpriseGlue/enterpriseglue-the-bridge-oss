@@ -21,6 +21,7 @@ export * from './ProjectEngineTargetService.js';
 export * from './DeploymentEligibilityService.js';
 export * from './EnvironmentTagService.js';
 export * from './PlatformSettingsService.js';
+export * from './AccessAuthorityService.js';
 export * from './AuthzGroupService.js';
 export * from './EngineSetService.js';
 export * from './permissions.js';

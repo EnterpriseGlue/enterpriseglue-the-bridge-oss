@@ -4,7 +4,7 @@ import type { EntityManager } from 'typeorm';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
+import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { identityEntitlementMappingService } from '@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
@@ -13,11 +13,13 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { identityAdminLimiter, reconciliationLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { identityAdminJsonPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
 import {
   IdentityMappingProvisionAccessRequestSchema,
+  IdentityMappingAccessGrantRequestSchema,
   IdentityMappingRequestSchema,
   IdentityMappingStoredSnapshotPreviewRequestSchema,
   IdentityMappingTestRequestSchema,
@@ -105,11 +107,57 @@ router.post('/api/identity/mappings/provision-access', requireAuth, identityAdmi
       roleId: req.body.roleId,
       resourceType: req.body.resourceType,
       resourceId: req.body.resourceId || null,
+      source: 'sso',
+      sourceRef: `identity_mapping:${mapping.id}`,
     }, manager);
     return { mapping, assignment, createdGroup };
   });
   await logAudit({ action: 'identity.mapping.provision_access', userId: req.user!.userId, resourceType: 'identity_entitlement_mapping', resourceId: result.mapping.id, details: { targetGroupKey: result.mapping.targetGroupKey, createdGroupId: result.createdGroup?.id || null, roleId: req.body.roleId, resourceType: req.body.resourceType, resourceId: req.body.resourceId } });
   res.status(201).json(result);
+}));
+router.post('/api/identity/mappings/:id/access', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.manage'), requireAction('platform.authz.roles.manage'), validateParams(z.object({ id: idSchema })), identityAdminJsonPayloadLimit, validateBody(IdentityMappingAccessGrantRequestSchema), asyncHandler(async (req, res) => {
+  const id = String(req.params.id);
+  const tenantId = req.tenant?.tenantId || null;
+  const dataSource = await getDataSource();
+  const assignment = await dataSource.transaction(async (manager) => {
+    const mapping = await manager.getRepository(IdentityEntitlementMapping).findOne({
+      where: tenantId ? { id, tenantId } : { id, tenantId: null } as any,
+    });
+    if (!mapping || !mapping.isActive) throw Errors.notFound('Active identity mapping');
+    if (mapping.sourceRef && mapping.ownershipMode !== 'config_warn') {
+      throw Errors.forbidden('This identity mapping is managed by configuration');
+    }
+    const assignmentTenantId = await resolveProvisioningAssignmentTenant(
+      manager,
+      tenantId,
+      req.body.resourceType,
+      req.body.resourceId,
+    );
+    return permissionService.assignRole({
+      tenantId: assignmentTenantId,
+      createdById: req.user!.userId,
+      principalType: 'group',
+      principalId: mapping.targetGroupId,
+      roleId: req.body.roleId,
+      resourceType: req.body.resourceType,
+      resourceId: req.body.resourceId,
+      source: 'sso',
+      sourceRef: `identity_mapping:${mapping.id}`,
+    }, manager);
+  });
+  await logAudit({
+    action: 'identity.mapping.grant_access',
+    userId: req.user!.userId,
+    resourceType: 'identity_entitlement_mapping',
+    resourceId: id,
+    details: {
+      assignmentId: assignment.id,
+      roleId: req.body.roleId,
+      resourceType: req.body.resourceType,
+      resourceId: req.body.resourceId,
+    },
+  });
+  res.status(201).json(assignment);
 }));
 router.put('/api/identity/mappings/:id', requireAuth, identityAdminLimiter, requireAction('platform.sso.group-mappings.manage'), identityAdminJsonPayloadLimit, validateBody(IdentityMappingUpdateSchema), asyncHandler(async (req, res) => {
   const id = idSchema.parse(req.params.id);

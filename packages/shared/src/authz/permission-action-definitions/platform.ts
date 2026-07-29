@@ -407,6 +407,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       routes: [
         { method: 'POST', route: '/api/identity/mappings', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/mappings/provision-access', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/identity/mappings/{id}/access', resourceResolver: 'platform.self' },
         { method: 'PUT', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
         { method: 'DELETE', route: '/api/identity/mappings/{id}', resourceResolver: 'platform.self' },
         { method: 'POST', route: '/api/identity/mappings/test', resourceResolver: 'platform.self' },

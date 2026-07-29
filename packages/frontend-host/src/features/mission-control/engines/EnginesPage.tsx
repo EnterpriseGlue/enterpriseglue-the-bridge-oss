@@ -1956,7 +1956,11 @@ export default function Engines() {
                                         }}
                                       />
                                       <GuardedOverflowMenuItem
-                                        itemText={actions.canManageMembers || actions.canAddMembers || actions.canInviteMembers || actions.canUpdateMemberRoles || actions.canRemoveMembers || actions.canManageDelegate ? 'Manage members' : 'View members'}
+                                        itemText={engineAccessAuthority === 'sso_managed'
+                                          ? 'View access'
+                                          : actions.canManageMembers || actions.canAddMembers || actions.canInviteMembers || actions.canUpdateMemberRoles || actions.canRemoveMembers || actions.canManageDelegate
+                                            ? 'Manage access'
+                                            : 'View access'}
                                         unavailableReason={membersUnavailableReason}
                                         onClick={() => {
                                           if (engine) openMembersPanel(engine)

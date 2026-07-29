@@ -20,6 +20,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
@@ -183,6 +184,11 @@ function setupDataSource() {
   const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
   const groupMembershipRepo = { find: vi.fn().mockResolvedValue([]), delete: vi.fn().mockResolvedValue(undefined) };
   const auditRepo = { insert: auditInsert };
+  const platformSettingsRepo = {
+    findOneBy: vi.fn().mockResolvedValue(null),
+    insert: vi.fn().mockResolvedValue(undefined),
+    update: vi.fn().mockResolvedValue(undefined),
+  };
   const repositories = (entity: unknown) => {
     if (entity === RbacRole) return roleRepo;
     if (entity === RbacPermission) return catalogPermissionRepo;
@@ -204,6 +210,7 @@ function setupDataSource() {
     if (entity === RbacRolePermission) return permissionRepo;
     if (entity === AuditLog) return auditRepo;
     if (entity === ConfigBundleApplyRun) return configRunRepo;
+    if (entity === PlatformSettings) return platformSettingsRepo;
     throw new Error('Unexpected repository');
   };
   const dataSource = {
@@ -211,7 +218,7 @@ function setupDataSource() {
     transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
   };
   (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
-  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, dataSource };
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, platformSettingsRepo, dataSource };
 }
 
 describe('configBundleApplyService', () => {
@@ -270,6 +277,40 @@ describe('configBundleApplyService', () => {
     }));
     expect(configRunRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
+    }));
+  });
+
+  it('applies explicitly declared governance modes and claims config ownership atomically', async () => {
+    const { platformSettingsRepo } = setupDataSource();
+    const governedBundle = {
+      ...bundle,
+      settings: {
+        engineAccessAuthority: 'sso_managed',
+        projectAccessAuthority: 'manual',
+        engineOnboardingMode: 'hybrid',
+        projectEngineTargetMode: 'manual_allowed',
+        engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+        ownershipMode: 'config_locked',
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: governedBundle, files });
+
+    const result = await configBundleApplyService.apply({
+      bundle: governedBundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.created).toBe(3);
+    expect(platformSettingsRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineAccessAuthority: 'sso_managed',
+      projectAccessAuthority: 'manual',
+      engineOnboardingMode: 'hybrid',
+      accessGovernanceSourceRef: 'config_bundle:acme.authz',
+      accessGovernanceOwnershipMode: 'config_locked',
+      accessGovernanceDriftStatus: 'in_sync',
     }));
   });
 

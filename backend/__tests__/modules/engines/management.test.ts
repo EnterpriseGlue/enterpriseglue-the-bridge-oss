@@ -16,6 +16,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 const permissionServiceMock = vi.hoisted(() => ({
   hasPermission: vi.fn().mockResolvedValue(false),
 }));
+const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -74,6 +75,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/UserService.js', () => (
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
+  getAccessAuthorityDecision: accessAuthorityDecisionMock,
   engineService: {
     canManageEngine: vi.fn().mockResolvedValue(true),
     canViewEngine: vi.fn().mockResolvedValue(true),
@@ -169,6 +171,7 @@ describe('engines management routes', () => {
     app.use(managementRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    accessAuthorityDecisionMock.mockResolvedValue(null);
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     (engineService.getEngineRole as any).mockResolvedValue(null);
     (engineService.addEngineMember as any).mockResolvedValue({ id: 'em1', userId: 'target-1', role: 'operator' });
@@ -277,6 +280,25 @@ describe('engines management routes', () => {
       action: 'engine.member.added',
       resourceType: 'engine',
     }));
+  });
+
+  it('keeps engine members readable but rejects manual changes when engine access is SSO-managed', async () => {
+    accessAuthorityDecisionMock.mockResolvedValue({
+      domain: 'engine',
+      mode: 'sso_managed',
+      manualMutationsAllowed: false,
+      reason: 'Engine access is SSO-managed; manual access changes are disabled',
+    });
+
+    const listResponse = await request(app).get('/engines-api/engines/e1/members');
+    expect(listResponse.status).toBe(200);
+
+    const createResponse = await request(app)
+      .post('/engines-api/engines/e1/members')
+      .send({ email: 'target@example.com', role: 'operator' });
+
+    expect(createResponse.status).toBe(403);
+    expect(engineService.addEngineMember).not.toHaveBeenCalled();
   });
 
   it('adds an engine member through scoped members-add permission without legacy manage role', async () => {

@@ -11,7 +11,11 @@ import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.j
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { engineService, engineAccessService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import {
+  engineService,
+  engineAccessService,
+  getAccessAuthorityDecision,
+} from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { EnginePermissions, permissionService, type EnginePermission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
@@ -79,6 +83,13 @@ async function canPerformEngineMemberAction(req: Request, engineId: string, perm
     resourceType: 'engine',
     resourceId: engineId,
   });
+}
+
+async function assertManualEngineAccessAllowed(): Promise<void> {
+  const decision = await getAccessAuthorityDecision('engine');
+  if (decision && !decision.manualMutationsAllowed) {
+    throw Errors.forbidden(decision.reason || 'Manual engine access changes are disabled');
+  }
 }
 
 // Validation schemas
@@ -332,6 +343,7 @@ router.post(
   validateBody(addMemberSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualEngineAccessAllowed();
       const engineId = String(req.params.engineId);
       const { email, role, deliveryMethod } = req.body;
       const granterId = req.user!.userId;
@@ -461,6 +473,7 @@ router.patch(
   requireAction('engine.members.update-role', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualEngineAccessAllowed();
       const engineId = String(req.params.engineId);
       const targetUserId = String(req.params.userId);
       const { role: newRole } = req.body;
@@ -499,6 +512,7 @@ router.delete(
   requireAction('engine.members.remove', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualEngineAccessAllowed();
       const engineId = String(req.params.engineId);
       const targetUserId = String(req.params.userId);
 
@@ -535,6 +549,7 @@ router.post(
   requireAction('engine.members.invite', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualEngineAccessAllowed();
       const engineId = String(req.params.engineId);
       const invitationId = String(req.params.invitationId);
       const requesterId = req.user!.userId;
@@ -623,6 +638,7 @@ router.post(
   requireAction('engine.delegate.manage', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualEngineAccessAllowed();
       const engineId = String(req.params.engineId);
       const { email } = req.body;
 
@@ -669,6 +685,7 @@ router.post(
   requireAction('engine.ownership.transfer', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualEngineAccessAllowed();
       const engineId = String(req.params.engineId);
       const { newOwnerEmail } = req.body;
 

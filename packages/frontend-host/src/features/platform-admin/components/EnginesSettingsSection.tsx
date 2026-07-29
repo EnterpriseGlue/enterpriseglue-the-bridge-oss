@@ -43,6 +43,8 @@ interface EnginesSettingsSectionProps {
   onDragEnd: () => void
   canManageSettings?: boolean
   settingsUnavailableReason?: string | null
+  canManageGovernanceSettings?: boolean
+  governanceSettingsUnavailableReason?: string | null
   canReadGovernance?: boolean
   canManageGovernance?: boolean
   governanceReadUnavailableReason?: string | null
@@ -101,7 +103,7 @@ const ACCESS_AUTHORITY_MODE_ITEMS: Array<{ id: AccessAuthorityMode; label: strin
   {
     id: 'sso_managed',
     label: 'SSO-managed access',
-    description: 'SSO-owned access is treated as source-owned in the UI; manual controls remain available only for manual rows.',
+    description: 'Access remains visible for review, but manual membership and scoped role-assignment changes are disabled. Changes must come from SSO mappings or managed configuration.',
   },
 ]
 
@@ -149,6 +151,8 @@ export function EnginesSettingsSection({
   onDragEnd,
   canManageSettings = true,
   settingsUnavailableReason,
+  canManageGovernanceSettings = canManageSettings,
+  governanceSettingsUnavailableReason,
   canReadGovernance = true,
   canManageGovernance = true,
   governanceReadUnavailableReason,
@@ -161,8 +165,12 @@ export function EnginesSettingsSection({
   const selectedProjectAccessAuthority = settings?.projectAccessAuthority || 'manual'
   const engineRuntimeAuthorizationMode = settings?.engineRuntimeAuthorizationMode || 'enterpriseglue_authoritative'
   const settingsDisabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
-  const governanceAssignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
-  const canAssignGovernance = canReadGovernance && canManageGovernance
+  const governanceSettingsDisabledReason = governanceSettingsUnavailableReason || settingsDisabledReason
+  const engineAccessManaged = selectedEngineAccessAuthority === 'sso_managed'
+  const governanceAssignDisabledReason = engineAccessManaged
+    ? 'Engine access is SSO-managed. Owners and delegates must come from an SSO mapping or managed configuration.'
+    : governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
+  const canAssignGovernance = canReadGovernance && canManageGovernance && !engineAccessManaged
 
   return (
     <PlatformGrid style={{ paddingInline: 0, alignItems: 'stretch' }}>
@@ -178,11 +186,11 @@ export function EnginesSettingsSection({
                 </p>
               </div>
             </div>
-            {!canManageSettings && (
+            {!canManageGovernanceSettings && (
               <InlineNotification
                 kind="warning"
                 title="Engine onboarding settings are read-only"
-                subtitle={settingsDisabledReason}
+                subtitle={governanceSettingsDisabledReason}
                 hideCloseButton
                 lowContrast
                 style={{ marginBottom: 'var(--spacing-4)' }}
@@ -201,7 +209,7 @@ export function EnginesSettingsSection({
                 }}
                 helperText={ENGINE_ONBOARDING_MODE_ITEMS.find((item) => item.id === selectedOnboardingMode)?.description}
                 size="md"
-                disabled={!canManageSettings}
+                disabled={!canManageGovernanceSettings}
               />
               <Dropdown
                 id="project-engine-target-mode"
@@ -215,7 +223,7 @@ export function EnginesSettingsSection({
                 }}
                 helperText={PROJECT_ENGINE_TARGET_MODE_ITEMS.find((item) => item.id === selectedProjectEngineTargetMode)?.description}
                 size="md"
-                disabled={!canManageSettings}
+                disabled={!canManageGovernanceSettings}
               />
               <Dropdown
                 id="engine-access-authority"
@@ -229,7 +237,7 @@ export function EnginesSettingsSection({
                 }}
                 helperText={ACCESS_AUTHORITY_MODE_ITEMS.find((item) => item.id === selectedEngineAccessAuthority)?.description}
                 size="md"
-                disabled={!canManageSettings}
+                disabled={!canManageGovernanceSettings}
               />
               <Dropdown
                 id="project-access-authority"
@@ -243,7 +251,7 @@ export function EnginesSettingsSection({
                 }}
                 helperText={ACCESS_AUTHORITY_MODE_ITEMS.find((item) => item.id === selectedProjectAccessAuthority)?.description}
                 size="md"
-                disabled={!canManageSettings}
+                disabled={!canManageGovernanceSettings}
               />
               <Dropdown
                 id="engine-runtime-authorization-mode"
@@ -257,7 +265,7 @@ export function EnginesSettingsSection({
                 }}
                 helperText={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS.find((item) => item.id === engineRuntimeAuthorizationMode)?.description}
                 size="md"
-                disabled={!canManageSettings}
+                disabled={!canManageGovernanceSettings}
               />
               {engineRuntimeAuthorizationMode === 'mirrored_engine_backstop' && (
                 <InlineNotification
@@ -311,7 +319,7 @@ export function EnginesSettingsSection({
               />
             )}
 
-            {canReadGovernance && !canManageGovernance && (
+            {canReadGovernance && (!canManageGovernance || engineAccessManaged) && (
               <InlineNotification
                 kind="warning"
                 title="Engine governance is read-only"

@@ -16,6 +16,7 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
 import { configBundleDiffService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js';
 
@@ -71,6 +72,7 @@ function mockDataSource(
       if (entity === RuntimeResource) return { find: vi.fn().mockResolvedValue(runtimeResources) };
       if (entity === Project) return { find: vi.fn().mockResolvedValue(projects) };
       if (entity === AuthzGroupMembership) return { find: vi.fn().mockResolvedValue(groupMemberships) };
+      if (entity === PlatformSettings) return { findOneBy: vi.fn().mockResolvedValue(null) };
       throw new Error('Unexpected repository');
     },
   });

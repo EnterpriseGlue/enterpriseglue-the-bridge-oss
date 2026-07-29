@@ -103,4 +103,44 @@ describe('EnginesSettingsSection', () => {
     expect(screen.getByText('Mirrored backstop enabled')).toBeInTheDocument();
     expect(screen.getByText(/receipt-bound lifecycle/)).toBeInTheDocument();
   });
+
+  it('renders governance controls read-only when configuration owns the settings', () => {
+    renderSection({
+      canManageSettings: true,
+      canManageGovernanceSettings: false,
+      governanceSettingsUnavailableReason: 'Managed by config_bundle:acme.authz',
+    });
+
+    expect(screen.getByText('Engine onboarding settings are read-only')).toBeInTheDocument();
+    expect(screen.getByText('Managed by config_bundle:acme.authz')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Onboarding mode' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Project deployment target mode' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Engine access authority' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Project access authority' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Runtime authorization mode' })).toBeDisabled();
+  });
+
+  it('keeps engine governance visible but disables owner and delegate changes in SSO-managed mode', () => {
+    renderSection({
+      settings: { ...baseSettings, engineAccessAuthority: 'sso_managed' },
+      selectedEngine: {
+        id: 'engine-1',
+        name: 'Payments',
+        type: 'operaton',
+        ownerEmail: null,
+        ownerName: null,
+        delegateEmail: null,
+        delegateName: null,
+        createdAt: 1,
+      },
+      canReadGovernance: true,
+      canManageGovernance: true,
+    });
+
+    expect(screen.getByText('Engine governance is read-only')).toBeInTheDocument();
+    expect(screen.getByText(/Owners and delegates must come from an SSO mapping/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Assign Owner' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Assign Delegate' })).toBeDisabled();
+    expect(screen.getByText('Payments')).toBeInTheDocument();
+  });
 });

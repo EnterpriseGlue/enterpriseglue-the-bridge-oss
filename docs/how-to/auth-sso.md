@@ -110,7 +110,14 @@ mapping itself stays platform-wide.
   },
   "tenantKey": "platform",
   "mode": "authoritative",
-  "settings": {},
+  "settings": {
+    "engineAccessAuthority": "sso_managed",
+    "projectAccessAuthority": "manual",
+    "engineOnboardingMode": "manual_allowed",
+    "projectEngineTargetMode": "manual_allowed",
+    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+    "ownershipMode": "config_locked"
+  },
   "imports": [
     "./roles.json",
     "./groups.json",
@@ -234,6 +241,23 @@ provider's own IaC—not in EnterpriseGlue's bundle.
 For CI, supply `CORPORATE_OIDC_CLIENT_SECRET` through the configured secret
 provider, run secret preflight, then apply the exact preview hash. Never put
 the value itself in JSON or commit it to the repository.
+
+In this example, an administrator can still view existing engine members and
+their source lineage, but cannot add, edit, or remove engine access through the
+normal member or generic assignment UI/API. New engine access must come from an
+identity mapping to a group assignment. Project collaboration stays manual.
+The settings themselves are bundle-owned and therefore read-only in Platform
+Settings. Use `transition_to_sso` before cutover if manual engine grants need
+cleanup; switching to `sso_managed` preserves and freezes remaining manual
+rows rather than deleting them.
+
+The mapping wizard creates mapping-derived access atomically. For an existing
+mapping, the dedicated `POST /api/identity/mappings/{id}/access` endpoint adds
+the selected group role with `source = "sso"` and mapping lineage. It is the
+supported portal/API path while engine access is SSO-managed; the generic
+manual role-assignment endpoint remains intentionally blocked. A deployment
+that deliberately makes project access SSO-managed should declare the
+mapping's target-group project assignment in the managed configuration bundle.
 
 Identity mappings support the same explicit ownership modes as other
 configuration-managed access objects. `config_locked` (the default) prevents

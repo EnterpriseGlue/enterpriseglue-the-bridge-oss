@@ -1199,6 +1199,17 @@ export const IdentityMappingProvisionAccessResponseSchema = z.object({
   createdGroup: z.object({ id: z.string() }).nullable(),
 });
 
+export const IdentityMappingAccessGrantRequestSchema = z.object({
+  roleId: z.string().min(1).max(160),
+  resourceType: z.enum(['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set']),
+  resourceId: z.string().min(1).max(160),
+}).strict();
+
+export const IdentityMappingAccessGrantResponseSchema = z.object({
+  id: z.string(),
+  warnings: z.array(z.string()),
+});
+
 /** Backward-compatible names for the shared provider-neutral sync contracts. */
 export const SsoSyncRunSchema = IdentitySyncRunSchema;
 export const SsoSyncEventSchema = IdentitySyncEventSchema;
@@ -1483,6 +1494,8 @@ export type IdentityMappingStoredSnapshotPreviewRequest = z.input<typeof Identit
 export type IdentityMappingStoredSnapshotPreviewResponse = z.infer<typeof IdentityMappingStoredSnapshotPreviewResponseSchema>;
 export type IdentityMappingProvisionAccessRequest = z.input<typeof IdentityMappingProvisionAccessRequestSchema>;
 export type IdentityMappingProvisionAccessResponse = z.infer<typeof IdentityMappingProvisionAccessResponseSchema>;
+export type IdentityMappingAccessGrantRequest = z.infer<typeof IdentityMappingAccessGrantRequestSchema>;
+export type IdentityMappingAccessGrantResponse = z.infer<typeof IdentityMappingAccessGrantResponseSchema>;
 export type IdentityProviderResponse = z.infer<typeof IdentityProviderResponseSchema>;
 export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityProviderMembershipReplayResponseSchema>;
 export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof IdentityProviderExternalIdentityUnlinkResponseSchema>;

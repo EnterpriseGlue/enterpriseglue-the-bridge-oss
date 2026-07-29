@@ -35,9 +35,22 @@ function formatResource(assignment: RoleAssignment, externalSystems: ExternalEng
   return `${assignment.resourceType || ''}:${assignment.resourceId || ''}`;
 }
 
-export function RoleAssignmentsTable({ assignments, apiClients, groups, serviceAccounts, externalSystems, loading, canDelete, onRemove }: {
+export function RoleAssignmentsTable({
+  assignments,
+  apiClients,
+  groups,
+  serviceAccounts,
+  externalSystems,
+  loading,
+  canDelete,
+  onRemove,
+  engineAccessAuthority,
+  projectAccessAuthority,
+}: {
   assignments: RoleAssignment[]; apiClients: ApiClient[]; groups: AuthzGroup[]; serviceAccounts: ServiceAccount[]; externalSystems: ExternalEngineSystem[];
   loading: boolean; canDelete: boolean; onRemove: (assignmentId: string) => void;
+  engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
+  projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
 }) {
   if (loading) return <DataTableSkeleton headers={headers} rowCount={5} />;
   const rows = assignments.map((assignment) => ({
@@ -57,7 +70,13 @@ export function RoleAssignmentsTable({ assignments, apiClients, groups, serviceA
             const configWarning = assignment?.source === 'config' && assignment.ownershipMode === 'config_warn';
             return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} configWarning={configWarning} /></TableCell>;
           }
-          if (cell.info.header === 'actions') return <TableCell key={cell.id}>{(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canDelete} title={canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />}</TableCell>;
+          if (cell.info.header === 'actions') {
+            const engineScoped = ['engine', 'engine_set', 'engine_runtime_resource', 'engine_runtime_resource_set'].includes(String(assignment?.scopeType || assignment?.resourceType || ''));
+            const authorityManaged = (engineScoped && engineAccessAuthority === 'sso_managed')
+              || ((assignment?.scopeType || assignment?.resourceType) === 'project' && projectAccessAuthority === 'sso_managed');
+            const canRemove = canDelete && !authorityManaged;
+            return <TableCell key={cell.id}>{(assignment?.source === 'manual' || (assignment?.source === 'config' && assignment.ownershipMode === 'config_warn')) && <Button kind="ghost" size="sm" renderIcon={TrashCan} hasIconOnly iconDescription="Remove assignment" disabled={!canRemove} title={authorityManaged ? 'Access is SSO-managed' : canDelete ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onRemove(assignment.id)} />}</TableCell>;
+          }
           return <TableCell key={cell.id}>{cell.value}</TableCell>;
         })}</TableRow>;
       })}

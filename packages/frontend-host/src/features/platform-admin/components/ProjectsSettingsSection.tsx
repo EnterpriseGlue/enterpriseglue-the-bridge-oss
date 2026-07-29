@@ -2,7 +2,7 @@ import React from 'react'
 import { Button, ComboBox, InlineNotification, Tile } from '@carbon/react'
 import { Folder, UserAvatar } from '@carbon/icons-react'
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid'
-import type { ProjectGovernanceItem } from '../../../api/platform-admin'
+import type { AccessAuthorityMode, ProjectGovernanceItem } from '../../../api/platform-admin'
 
 interface ProjectsSettingsSectionProps {
   allProjects: ProjectGovernanceItem[] | undefined
@@ -17,6 +17,7 @@ interface ProjectsSettingsSectionProps {
   canManageGovernance?: boolean
   governanceReadUnavailableReason?: string | null
   governanceManageUnavailableReason?: string | null
+  projectAccessAuthority?: AccessAuthorityMode
 }
 
 export function ProjectsSettingsSection({
@@ -32,9 +33,13 @@ export function ProjectsSettingsSection({
   canManageGovernance = true,
   governanceReadUnavailableReason,
   governanceManageUnavailableReason,
+  projectAccessAuthority = 'manual',
 }: ProjectsSettingsSectionProps) {
-  const assignDisabledReason = governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
-  const canAssign = canReadGovernance && canManageGovernance
+  const projectAccessManaged = projectAccessAuthority === 'sso_managed'
+  const assignDisabledReason = projectAccessManaged
+    ? 'Project access is SSO-managed. Owners and delegates must come from managed configuration.'
+    : governanceManageUnavailableReason || 'Missing permission platform:governance:manage'
+  const canAssign = canReadGovernance && canManageGovernance && !projectAccessManaged
 
   return (
     <PlatformGrid style={{ paddingInline: 0 }}>
@@ -63,7 +68,7 @@ export function ProjectsSettingsSection({
               />
             )}
 
-            {canReadGovernance && !canManageGovernance && (
+            {canReadGovernance && (!canManageGovernance || projectAccessManaged) && (
               <InlineNotification
                 kind="warning"
                 title="Project governance is read-only"

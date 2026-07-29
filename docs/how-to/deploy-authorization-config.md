@@ -56,6 +56,21 @@ fail-closed; mapping rows are source-owned, versioned, re-resolve known
 inventory atomically, and schedule bounded reconciliation. Always preview
 mapping archives and conflicts before hash-bound apply.
 
+The manifest may also declare all five platform governance modes in
+`bundle.settings`. Include `ownershipMode: "config_locked"` when CI/CD must be
+the source of truth: Platform Settings renders those controls read-only and the
+manual settings API rejects changes. Use `config_warn` when emergency local
+edits are permitted but must be reported as drift. A subsequent exact bundle
+apply restores the declared values and marks the row `in_sync`. For backward
+compatibility, an empty `settings: {}` block does not claim the current settings
+row and does not reset existing portal choices.
+
+Database migration `1700000000105` adds the governance-settings source,
+ownership, hash, apply-time, and drift columns non-destructively. Existing
+installations retain their current five mode values and begin with
+`access_governance_ownership_mode = 'manual'`; no portal setting becomes
+configuration-owned until a bundle explicitly declares one of those modes.
+
 For a Camunda 7 or Operaton mirrored authorization backstop, a bundle may also import
 `./engine-backstop-mappings.json`. Each mapping references a bundle-owned
 Camunda 7 or Operaton engine (direct or `customer_sidecar`) and an

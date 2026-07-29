@@ -49,6 +49,7 @@ const configBundleRemoteSourceMock = vi.hoisted(() => ({
 const platformSettingsServiceMock = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue({ credentiallessCustomerSidecarsEnabled: false }),
 }));
+const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const auditLogMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const apiClientAuthMock = vi.hoisted(() => ({
   requireApiClientAction: vi.fn(() => (req: any, _res: any, next: any) => {
@@ -120,6 +121,7 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
+  getAccessAuthorityDecision: accessAuthorityDecisionMock,
   policyService: {
     evaluateAndLog: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'User is admin' }),
     evaluate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'role:platform:admin' }),
@@ -357,6 +359,7 @@ describe('platform-admin authz routes', () => {
     app.use(express.json({ limit: '2mb' }));
     app.use(authzRouter);
     vi.clearAllMocks();
+    accessAuthorityDecisionMock.mockResolvedValue(null);
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity.name === 'ExternalEngineRegistration') {
@@ -827,6 +830,34 @@ describe('platform-admin authz routes', () => {
 
     const deleteResponse = await request(app).delete('/api/authz/role-assignments/00000000-0000-4000-8000-000000000020');
     expect(deleteResponse.status).toBe(204);
+  });
+
+  it.each([
+    'engine',
+    'engine_set',
+    'engine_runtime_resource',
+    'engine_runtime_resource_set',
+  ] as const)('rejects generic manual %s assignments when engine access is SSO-managed', async (resourceType) => {
+    accessAuthorityDecisionMock.mockResolvedValue({
+      domain: 'engine',
+      mode: 'sso_managed',
+      manualMutationsAllowed: false,
+      reason: 'Engine access is SSO-managed; manual access changes are disabled',
+    });
+
+    const response = await request(app)
+      .post('/api/authz/role-assignments')
+      .send({
+        principalType: 'user',
+        principalId: '00000000-0000-4000-8000-000000000001',
+        roleId: 'system.engine.operator',
+        resourceType,
+        resourceId: `${resourceType}-1`,
+      });
+
+    expect(response.status).toBe(403);
+    expect(accessAuthorityDecisionMock).toHaveBeenCalledWith(resourceType);
+    expect(permissionService.assignRole).not.toHaveBeenCalled();
   });
 
   it('binds tenant role assignments to the authenticated tenant instead of a caller-supplied tenant id', async () => {

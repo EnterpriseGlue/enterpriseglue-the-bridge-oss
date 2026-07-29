@@ -17,6 +17,7 @@ const authMocks = vi.hoisted(() => ({
   currentUser: { userId: 'owner-1', email: 'owner@example.com' } as any,
   tenantId: null as string | null,
 }));
+const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 const projectId = '00000000-0000-0000-0000-000000000001';
 
@@ -116,6 +117,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.js', () => ({
+  getAccessAuthorityDecision: accessAuthorityDecisionMock,
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
   permissionService: {
     hasPermission: vi.fn().mockResolvedValue(false),
@@ -168,6 +173,7 @@ describe('starbase members routes', () => {
     app.use(membersRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    accessAuthorityDecisionMock.mockResolvedValue(null);
     authMocks.currentUser = { userId: 'owner-1', email: 'owner@example.com' };
     authMocks.tenantId = null;
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
@@ -308,6 +314,25 @@ describe('starbase members routes', () => {
       action: 'project.member.added',
       resourceType: 'project',
     }));
+  });
+
+  it('keeps project members readable but rejects manual changes when project access is SSO-managed', async () => {
+    accessAuthorityDecisionMock.mockResolvedValue({
+      domain: 'project',
+      mode: 'sso_managed',
+      manualMutationsAllowed: false,
+      reason: 'Project access is SSO-managed; manual access changes are disabled',
+    });
+
+    const listResponse = await request(app).get(`/starbase-api/projects/${projectId}/members`);
+    expect(listResponse.status).toBe(200);
+
+    const createResponse = await request(app)
+      .post(`/starbase-api/projects/${projectId}/members`)
+      .send({ email: 'target@example.com', roles: ['viewer'] });
+
+    expect(createResponse.status).toBe(403);
+    expect(projectMemberService.addMember).not.toHaveBeenCalled();
   });
 
   it('lists project members through scoped members-view permission without legacy membership', async () => {

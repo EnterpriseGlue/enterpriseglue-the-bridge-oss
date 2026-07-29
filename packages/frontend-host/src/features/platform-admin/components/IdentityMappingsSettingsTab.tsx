@@ -12,6 +12,8 @@ import type {
   IdentityMappingRequest,
   IdentityMappingProvisionAccessRequest,
   IdentityMappingProvisionAccessResponse,
+  IdentityMappingAccessGrantRequest,
+  IdentityMappingAccessGrantResponse,
   IdentityMappingResponse,
   IdentityMappingStoredSnapshotPreviewRequest,
   IdentityMappingStoredSnapshotPreviewResponse,
@@ -115,9 +117,18 @@ export default function IdentityMappingsSettingsTab() {
   const remove = useMutation({ mutationFn: (id: string) => apiClient.delete(`/api/identity/mappings/${encodeURIComponent(id)}`), onSuccess: () => { queryClient.invalidateQueries({ queryKey: authzQueryKeys.identityEntitlementMappings }); setRemoveTarget(null); } });
   const grantEngineAccess = useMutation({
     mutationFn: () => {
-      const group = groups.find((item) => item.key === accessTarget?.targetGroupKey);
-      if (!group || !accessRoleId || !accessEngineId) throw new Error('Select an active group, engine role, and access target');
-      return apiClient.post('/api/authz/role-assignments', { principalType: 'group', principalId: group.id, roleId: accessRoleId, resourceType: accessScopeType, resourceId: accessEngineId });
+      if (!accessTarget || !groups.some((item) => item.key === accessTarget.targetGroupKey) || !accessRoleId || !accessEngineId) {
+        throw new Error('Select an active group, engine role, and access target');
+      }
+      const request: IdentityMappingAccessGrantRequest = {
+        roleId: accessRoleId,
+        resourceType: accessScopeType,
+        resourceId: accessEngineId,
+      };
+      return apiClient.post<IdentityMappingAccessGrantResponse>(
+        `/api/identity/mappings/${encodeURIComponent(accessTarget.id)}/access`,
+        request,
+      );
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['platform-admin', 'authz', 'role-assignments'] }); setAccessTarget(null); setAccessRoleId(''); setAccessEngineId(''); },
     onError: (value: unknown) => setError(parseApiError(value, 'Unable to grant engine access').message),

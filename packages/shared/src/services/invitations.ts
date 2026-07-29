@@ -10,6 +10,7 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { sendInvitationEmail } from './email/index.js';
 import { projectMemberService } from './platform-admin/ProjectMemberService.js';
 import { engineService } from './platform-admin/EngineService.js';
+import { getAccessAuthorityDecision } from './platform-admin/AccessAuthorityService.js';
 import type { User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
 import { getActivePlatformAdministratorUserIds } from './platform-admin/PlatformAdministratorMembershipService.js';
 import type { Repository } from 'typeorm';
@@ -413,6 +414,15 @@ export class InvitationService {
 
     if (invitation.status !== 'otp_verified' || !invitation.otpVerifiedAt) {
       throw Errors.validation('One-time password verification is required before setting a password');
+    }
+
+    if (invitation.resourceType === 'project' || invitation.resourceType === 'engine') {
+      const authority = await getAccessAuthorityDecision(invitation.resourceType);
+      if (authority && !authority.manualMutationsAllowed) {
+        throw Errors.forbidden(
+          authority.reason || `Manual ${invitation.resourceType} access changes are disabled`,
+        );
+      }
     }
 
     const user = await userRepo.findOneBy({ id: invitation.userId });

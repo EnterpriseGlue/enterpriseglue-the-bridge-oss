@@ -154,6 +154,52 @@ describe('PlatformSettingsService', () => {
     }));
   });
 
+  it('rejects portal governance changes when configuration owns the settings', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'default',
+        accessGovernanceSourceRef: 'config_bundle:acme.authz',
+        accessGovernanceOwnershipMode: 'config_locked',
+      }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.update({ engineAccessAuthority: 'sso_managed' }, 'admin-1'))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
+  it('allows config-warning governance changes and records drift', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'default',
+        accessGovernanceSourceRef: 'config_bundle:acme.authz',
+        accessGovernanceOwnershipMode: 'config_warn',
+      }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({ engineAccessAuthority: 'transition_to_sso' }, 'admin-1');
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      engineAccessAuthority: 'transition_to_sso',
+      accessGovernanceDriftStatus: 'drifted',
+    }));
+  });
+
   it('persists the authoritative runtime authorization mode without a backstop prerequisite', async () => {
     const repo = {
       findOneBy: vi.fn().mockResolvedValue({ id: 'default' }),
