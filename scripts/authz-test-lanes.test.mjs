@@ -121,7 +121,9 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /curl -sf http:\/\/localhost:5173\/src\/main\.tsx/);
   assert.match(authzPrWorkflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
   assert.match(authzPrWorkflow, /curl -sf http:\/\/localhost:9080\/health/);
-  assert.match(authzPrWorkflow, /corepack pnpm run test:engine-tenancy:enforcement/);
+  assert.match(authzPrWorkflow, /corepack enable --install-directory \/tmp\/corepack-bin pnpm/);
+  assert.match(authzPrWorkflow, /export PATH="\/tmp\/corepack-bin:\$PATH"/);
+  assert.match(authzPrWorkflow, /pnpm run test:engine-tenancy:enforcement/);
   assert.doesNotMatch(authzPrWorkflow, /local-docs\/ING\/api-specs\/Mission-Control-Camunda-API\.postman_collection\.json/);
   for (const workflow of [ciCoreWorkflow, ciWorkflow]) {
     assert.match(workflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
