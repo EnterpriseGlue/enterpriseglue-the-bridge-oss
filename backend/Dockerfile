@@ -5,6 +5,11 @@ WORKDIR /repo
 # Install pnpm globally
 RUN npm install -g pnpm@11.0.8
 
+# pnpm 11 aborts asking for interactive confirmation before purging old node_modules;
+# there's no TTY in a non-interactive `docker compose up`, so it just hangs/fails.
+# CI=true makes it proceed without interaction
+ENV CI=true
+
 # Copy workspace manifests for pnpm install
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=node:node backend/package.json backend/
