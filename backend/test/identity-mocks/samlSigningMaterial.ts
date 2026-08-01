@@ -3,6 +3,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { isIP } from 'node:net';
 
 export interface SamlSigningMaterial {
   privateKey: string;
@@ -28,6 +29,7 @@ export function createEphemeralTestCertificate(commonName: string): SamlSigningM
     execFileSync('openssl', [
       'req', '-x509', '-new', '-key', privateKeyPath,
       '-sha256', '-days', '1', '-subj', `/CN=${commonName}`,
+      '-addext', `subjectAltName=${isIP(commonName) ? 'IP' : 'DNS'}:${commonName}`,
       '-out', certificatePath,
     ], { stdio: 'pipe' });
 

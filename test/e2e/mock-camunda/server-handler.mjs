@@ -272,16 +272,16 @@ export function createMockCamundaHandler() {
           sendJson(res, 400, { message: 'Variable modifications are required' })
           return
         }
-        const nextVariables = { ...(processInstanceVariables.get(id) || {}) }
+        const nextVariables = new Map(Object.entries(processInstanceVariables.get(id) || {}))
         for (const [name, variable] of Object.entries(modifications)) {
           if (!name) continue
           if (variable === null) {
-            delete nextVariables[name]
+            nextVariables.delete(name)
           } else {
-            nextVariables[name] = variable
+            nextVariables.set(name, variable)
           }
         }
-        processInstanceVariables.set(id, nextVariables)
+        processInstanceVariables.set(id, Object.fromEntries(nextVariables))
         sendNoContent(res)
         return
       }

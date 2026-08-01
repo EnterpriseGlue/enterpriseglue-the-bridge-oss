@@ -1488,7 +1488,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
       ? 'dirty-development-run'
       : 'clean';
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const originalName = `journey-01-dedicated-${suffix}`;
     const updatedName = `${originalName}-updated`;
     let engineId: string | null = null;
@@ -1672,7 +1672,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
       ? 'dirty-development-run'
       : 'clean';
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const originalName = `e2e-journey-02-dedicated-${suffix}`;
     const updatedName = `${originalName}-updated`;
     const externalId = `e2e/journey-02/${suffix}`;
@@ -1923,7 +1923,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
       ? 'dirty-development-run'
       : 'clean';
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const bundleKey = `e2e.journey03.${suffix}`;
     const engineKey = `engine.journey03.${suffix}`;
     const engineName = `e2e-journey-03-dedicated-${suffix}`;
@@ -2290,7 +2290,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
       ? 'dirty-development-run'
       : 'clean';
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const dedicatedName = `e2e-journey-07-manual-dedicated-${suffix}`;
     const sharedName = `e2e-journey-07-manual-shared-${suffix}`;
     const runtimeBaseUrl = 'http://camunda-mock:9080/e2e-shared-engine-rest';
@@ -2713,7 +2713,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
       ? 'dirty-development-run'
       : 'clean';
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const dedicatedExternalId = `e2e-j07-dedicated-${suffix}`;
     const sharedExternalId = `e2e-j07-shared-${suffix}`;
     const runtimeBaseUrl = 'http://camunda-mock.example.test:9080/e2e-shared-engine-rest';
@@ -3205,7 +3205,7 @@ test.describe('Engine tenancy provisioning journeys', () => {
     const sourceState = git(['status', '--porcelain', '--untracked-files=no'])
       ? 'dirty-development-run'
       : 'clean';
-    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const suffix = `${Date.now()}-${randomUUID().slice(0, 8)}`;
     const bundleKey = `e2e.journey07.${suffix}`;
     const dedicatedKey = `engine.journey07.dedicated.${suffix}`;
     const sharedKey = `engine.journey07.shared.${suffix}`;

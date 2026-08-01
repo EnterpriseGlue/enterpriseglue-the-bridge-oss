@@ -92,7 +92,7 @@ export default async function globalSetup() {
   assertLocalUrl(API_BASE_URL);
   assertLocalDatabaseTarget();
 
-  const suffix = Math.random().toString(36).slice(2, 8);
+  const suffix = randomUUID().slice(0, 8);
   let adminEmail = process.env.E2E_ADMIN_EMAIL || process.env.ADMIN_EMAIL;
   let adminPassword = process.env.E2E_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
   let adminUserId: string | null = null;

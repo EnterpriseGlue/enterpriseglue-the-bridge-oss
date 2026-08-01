@@ -1,4 +1,4 @@
-import { createHash, generateKeyPairSync, randomBytes } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { createServer as createHttpsServer, request as httpsRequest, type Server } from 'node:https';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -87,7 +87,7 @@ export class MockOidcProvider {
   }
 
   rotateSigningMaterial(): void {
-    const kid = `identity-mock-key-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const kid = `identity-mock-key-${Date.now()}-${randomUUID()}`;
     this.previousSigningMaterial = this.signingMaterial;
     this.signingMaterial = createSigningMaterial(kid);
   }
@@ -96,7 +96,7 @@ export class MockOidcProvider {
     this.failureMode = 'none';
     this.tokenClaims = { sub: 'user-1', email: 'person@example.test', email_verified: true, groups: ['ops'], nonce: 'nonce-1' };
     this.previousSigningMaterial = null;
-    this.signingMaterial = createSigningMaterial(`identity-mock-key-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    this.signingMaterial = createSigningMaterial(`identity-mock-key-${Date.now()}-${randomUUID()}`);
   }
 
   issueIdToken(
@@ -318,6 +318,7 @@ export class MockOidcHttpsServer {
   private server: Server | null = null;
   provider: MockOidcProvider | null = null;
   private issuerUrl: string | null = null;
+  private trustedCertificate: string | null = null;
 
   get issuer(): string {
     if (!this.issuerUrl) throw new Error('OIDC mock server is not running');
@@ -327,6 +328,7 @@ export class MockOidcHttpsServer {
   async start(): Promise<void> {
     if (this.server) return;
     const tls = createEphemeralTestCertificate('127.0.0.1');
+    this.trustedCertificate = tls.certificate;
     this.server = createHttpsServer({ key: tls.privateKey, cert: tls.certificate }, (request, response) => {
       void this.handle(request, response);
     });
@@ -347,6 +349,7 @@ export class MockOidcHttpsServer {
     this.server = null;
     this.provider = null;
     this.issuerUrl = null;
+    this.trustedCertificate = null;
     if (!server) return;
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -359,13 +362,15 @@ export class MockOidcHttpsServer {
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     const url = new URL(String(input));
     if (url.origin !== this.issuer) return globalThis.fetch(input, init);
+    const trustedCertificate = this.trustedCertificate;
+    if (!trustedCertificate) throw new Error('OIDC mock server certificate is unavailable');
     const headers = new Headers(init?.headers);
     const body = init?.body instanceof URLSearchParams ? init.body.toString() : init?.body;
     return new Promise<Response>((resolve, reject) => {
       const request = httpsRequest(url, {
         method: init?.method || 'GET',
         headers: Object.fromEntries(headers.entries()),
-        rejectUnauthorized: false,
+        ca: trustedCertificate,
       }, (response) => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
@@ -481,6 +486,7 @@ export class MockSamlHttpsServer {
   private server: Server | null = null;
   provider: MockSamlIdentityProvider | null = null;
   private issuerUrl: string | null = null;
+  private trustedCertificate: string | null = null;
 
   get issuer(): string {
     if (!this.issuerUrl) throw new Error('SAML mock server is not running');
@@ -490,6 +496,7 @@ export class MockSamlHttpsServer {
   async start(): Promise<void> {
     if (this.server) return;
     const tls = createEphemeralTestCertificate('127.0.0.1');
+    this.trustedCertificate = tls.certificate;
     this.server = createHttpsServer({ key: tls.privateKey, cert: tls.certificate }, (request, response) => {
       this.handle(request, response);
     });
@@ -510,6 +517,7 @@ export class MockSamlHttpsServer {
     this.server = null;
     this.provider = null;
     this.issuerUrl = null;
+    this.trustedCertificate = null;
     if (!server) return;
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -517,12 +525,14 @@ export class MockSamlHttpsServer {
   async fetch(input: string | URL, init?: RequestInit): Promise<Response> {
     const url = new URL(String(input));
     if (url.origin !== this.issuer) return globalThis.fetch(input, init);
+    const trustedCertificate = this.trustedCertificate;
+    if (!trustedCertificate) throw new Error('SAML mock server certificate is unavailable');
     const headers = new Headers(init?.headers);
     return new Promise<Response>((resolve, reject) => {
       const request = httpsRequest(url, {
         method: init?.method || 'GET',
         headers: Object.fromEntries(headers.entries()),
-        rejectUnauthorized: false,
+        ca: trustedCertificate,
       }, (response) => {
         const chunks: Buffer[] = [];
         response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));

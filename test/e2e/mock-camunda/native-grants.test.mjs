@@ -77,3 +77,30 @@ test('synthetic Camunda process variables support an isolated modification round
     assert.deepEqual((await after.json()).browserEvidence, { type: 'String', value: 'persisted-in-mock' });
   });
 });
+
+test('synthetic process-variable updates keep prototype-shaped names as inert data', async () => {
+  await withServer(async (baseUrl) => {
+    const instanceId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+    const update = await fetch(`${baseUrl}/engine-rest/process-instance/${instanceId}/variables`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"modifications":{"__proto__":{"type":"Json","value":{"polluted":true}},"constructor":{"type":"String","value":"inert"}}}',
+    });
+    assert.equal(update.status, 204);
+    assert.equal({}.polluted, undefined);
+
+    const response = await fetch(`${baseUrl}/engine-rest/process-instance/${instanceId}/variables`);
+    const variables = await response.json();
+    assert.equal(Object.getPrototypeOf(variables), Object.prototype);
+    assert.equal(Object.hasOwn(variables, '__proto__'), true);
+    assert.deepEqual(Object.getOwnPropertyDescriptor(variables, '__proto__').value, { type: 'Json', value: { polluted: true } });
+    assert.deepEqual(Object.getOwnPropertyDescriptor(variables, 'constructor').value, { type: 'String', value: 'inert' });
+
+    const cleanup = await fetch(`${baseUrl}/engine-rest/process-instance/${instanceId}/variables`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"modifications":{"__proto__":null,"constructor":null}}',
+    });
+    assert.equal(cleanup.status, 204);
+  });
+});
