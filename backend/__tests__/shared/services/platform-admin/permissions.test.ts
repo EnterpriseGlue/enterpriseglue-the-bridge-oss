@@ -2919,6 +2919,159 @@ describe('permissionService', () => {
     })]);
   });
 
+  it('presents every canonical principal and resource scope with readable labels', async () => {
+    const assignment = (
+      id: string,
+      principalType: 'user' | 'group' | 'api_client' | 'service_account',
+      principalId: string,
+      scopeType: string,
+      scopeId: string | null,
+    ) => ({
+      id,
+      tenantId: 'tenant-a',
+      principalType,
+      principalId,
+      roleId: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+      scopeType,
+      scopeId,
+      source: 'manual',
+      sourceRef: null,
+      ownershipMode: 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      driftStatus: null,
+      expiresAt: null,
+      lastSeenAt: null,
+      createdById: 'admin-1',
+      createdAt: 10,
+      updatedAt: 11,
+    });
+    const assignmentQb = {
+      orderBy: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([
+        assignment('platform', 'user', 'user-1', 'platform', null),
+        assignment('current-tenant', 'group', 'group-1', 'tenant', null),
+        assignment('tenant', 'api_client', 'client-1', 'tenant', 'tenant-a'),
+        assignment('engine', 'service_account', 'service-1', 'engine', 'engine-direct'),
+        assignment('missing-engine', 'group', 'group-1', 'engine', 'engine-missing'),
+        assignment('project', 'user', 'user-1', 'project', 'project-1'),
+        assignment('engine-set', 'group', 'group-1', 'engine_set', 'engine-set-1'),
+        assignment('runtime', 'api_client', 'client-1', 'engine_runtime_resource', 'runtime-1'),
+        assignment('runtime-set', 'service_account', 'service-1', 'engine_runtime_resource_set', 'runtime-set-1'),
+        assignment('external', 'group', 'group-1', 'external_engine_system', 'external-1'),
+        assignment('future', 'service_account', 'service-1', 'future_scope', 'future-1'),
+      ]),
+    };
+    const engineFind = vi.fn()
+      .mockResolvedValueOnce([{ id: 'engine-direct', name: 'Direct Engine' }])
+      .mockResolvedValueOnce([{ id: 'runtime-engine-1', name: 'Runtime Engine' }]);
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === RbacRoleAssignment) return { createQueryBuilder: vi.fn().mockReturnValue(assignmentQb) };
+        if (entity === RbacRole) return { find: vi.fn().mockResolvedValue([{
+          id: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+          key: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+          name: 'Operator',
+          scope: 'engine',
+        }]) };
+        if (entity === User) return { find: vi.fn().mockResolvedValue([{
+          id: 'user-1',
+          email: '',
+          firstName: 'Ursula',
+          lastName: 'User',
+        }]) };
+        if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([{
+          id: 'group-1',
+          name: 'Operations',
+          key: 'ops',
+        }]) };
+        if (entity === ApiClient) return { find: vi.fn().mockResolvedValue([{
+          id: 'client-1',
+          name: 'Deployment client',
+        }]) };
+        if (entity === ServiceAccount) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Engine) return { find: engineFind };
+        if (entity === Project) return { find: vi.fn().mockResolvedValue([{
+          id: 'project-1',
+          name: 'Order automation',
+        }]) };
+        if (entity === EngineSet) return { find: vi.fn().mockResolvedValue([{
+          id: 'engine-set-1',
+          name: 'Production engines',
+          key: 'production',
+        }]) };
+        if (entity === RuntimeResource) return { find: vi.fn().mockResolvedValue([{
+          id: 'runtime-1',
+          engineId: 'runtime-engine-1',
+          resourceKey: 'order-process',
+          resourceKind: 'process_definition',
+        }]) };
+        if (entity === RuntimeResourceSet) return { find: vi.fn().mockResolvedValue([{
+          id: 'runtime-set-1',
+          engineId: 'runtime-engine-2',
+          name: 'Critical resources',
+          key: 'critical',
+        }]) };
+        if (entity === ExternalEngineSystem) return { find: vi.fn().mockResolvedValue([{
+          id: 'external-1',
+          name: 'Customer sidecar',
+          key: 'customer-sidecar',
+        }]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const results = await permissionService.listRoleAssignments({ tenantId: 'tenant-a' });
+    const byId = new Map(results.map((result) => [result.id, result]));
+
+    expect(byId.get('platform')).toMatchObject({
+      principalDisplayName: 'Ursula User',
+      principalSecondary: 'Ursula User · user-1',
+      resourceDisplayName: 'Platform',
+      resourceSecondary: null,
+    });
+    expect(byId.get('current-tenant')).toMatchObject({
+      principalDisplayName: 'Operations',
+      principalSecondary: 'ops · group-1',
+      resourceDisplayName: 'Current tenant',
+      resourceSecondary: null,
+    });
+    expect(byId.get('tenant')).toMatchObject({
+      principalDisplayName: 'Deployment client',
+      resourceDisplayName: 'Tenant',
+      resourceSecondary: 'tenant-a',
+    });
+    expect(byId.get('engine')).toMatchObject({
+      principalDisplayName: 'service-1',
+      resourceDisplayName: 'Direct Engine',
+      resourceSecondary: 'engine:engine-direct',
+    });
+    expect(byId.get('missing-engine')?.resourceDisplayName).toBe('engine-missing');
+    expect(byId.get('project')?.resourceDisplayName).toBe('Order automation');
+    expect(byId.get('engine-set')).toMatchObject({
+      resourceDisplayName: 'Production engines',
+      resourceSecondary: 'production · engine-set-1',
+    });
+    expect(byId.get('runtime')).toMatchObject({
+      resourceDisplayName: 'order-process · Runtime Engine',
+      resourceSecondary: 'process_definition · runtime-1',
+    });
+    expect(byId.get('runtime-set')).toMatchObject({
+      resourceDisplayName: 'Critical resources',
+      resourceSecondary: 'critical · runtime-set-1',
+    });
+    expect(byId.get('external')).toMatchObject({
+      resourceDisplayName: 'Customer sidecar',
+      resourceSecondary: 'customer-sidecar · external-1',
+    });
+    expect(byId.get('future')).toMatchObject({
+      resourceDisplayName: 'future-1',
+      resourceSecondary: 'future_scope:future-1',
+    });
+  });
+
   it('uses canonical scope fields for legacy resource filters', async () => {
     const assignmentQb = {
       orderBy: vi.fn().mockReturnThis(),
