@@ -5,14 +5,9 @@
  * Controlled via environment variables for safe rollout.
  */
 
-import dotenv from 'dotenv';
-
-// `config/index` owns explicit environment-file selection. Loading the default
-// `.env` here first would let a self-hosted database override a caller's
-// intentionally isolated test configuration.
-if (!process.env.EG_ENV_FILE) {
-  dotenv.config();
-}
+// Environment files are loaded once by `config/index` at the application
+// boundary. This leaf module reads only the established process environment,
+// keeping tests and library consumers independent of a developer's `.env`.
 
 export interface FeatureFlags {
   // Phase 2: Project Collaboration

@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "vite  --host 0.0.0.0 --port 5173",
     "typecheck": "tsc -p tsconfig.json --noEmit",

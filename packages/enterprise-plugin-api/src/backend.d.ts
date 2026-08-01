@@ -1,5 +1,7 @@
 /**
- * Database-agnostic connection pool interface
+ * Legacy raw-SQL connection pool. SQL and placeholder syntax are driver
+ * specific, so new plugins should use EnterpriseDatabaseContext instead.
+ * @deprecated Use EnterpriseBackendContext.database.
  */
 export interface ConnectionPool {
   query<T = unknown>(
@@ -8,6 +10,18 @@ export interface ConnectionPool {
   ): Promise<{ rows: T[]; rowCount: number }>;
   close(): Promise<void>;
   getNativePool(): unknown;
+}
+
+export type EnterpriseDatabaseType = 'postgres' | 'oracle' | 'mysql' | 'mssql' | 'spanner';
+
+/** Portable TypeORM command boundary exposed by the OSS host. */
+export interface EnterpriseDatabaseContext {
+  kind: 'typeorm';
+  databaseType: EnterpriseDatabaseType;
+  /** Resolve the initialized TypeORM DataSource without exposing raw driver pools. */
+  getDataSource<TDataSource = unknown>(): Promise<TDataSource>;
+  /** Execute a unit of work in a TypeORM transaction on every supported adapter. */
+  transaction<TResult>(work: (manager: unknown) => Promise<TResult>): Promise<TResult>;
 }
 
 export interface NotificationTenantResolveContext {
@@ -132,6 +146,8 @@ export interface EnterpriseBackendAuthzContext {
 }
 
 export interface EnterpriseBackendContext {
+  database: EnterpriseDatabaseContext;
+  /** @deprecated Use database for portable TypeORM access. */
   connectionPool: ConnectionPool;
   config: unknown;
   authz: EnterpriseBackendAuthzContext;

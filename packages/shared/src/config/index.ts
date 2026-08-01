@@ -4,22 +4,30 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-// Load the first matching env file before reading any environment variables.
-// Prefer self-host config so a single .env.selfhost file can drive the runtime.
-const envFileCandidates = [
-  process.env.EG_ENV_FILE,
-  path.resolve(process.cwd(), '.env.selfhost'),
-  path.resolve(process.cwd(), '..', '.env.selfhost'),
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(process.cwd(), '..', '.env'),
-];
+// Tests are hermetic by default: a developer's .env or .env.selfhost must not
+// change unit behavior or leak infrastructure metadata into CI output. A
+// protocol rehearsal may explicitly opt in with EG_LOAD_ENV_IN_TESTS=true.
+const shouldLoadEnvironmentFile = process.env.NODE_ENV !== 'test'
+  || process.env.EG_LOAD_ENV_IN_TESTS === 'true';
 
-const envFilePath = envFileCandidates.find(candidate => candidate && fs.existsSync(candidate));
+if (shouldLoadEnvironmentFile) {
+  // Load the first matching env file before reading any environment variables.
+  // Prefer self-host config so a single .env.selfhost file can drive the runtime.
+  const envFileCandidates = [
+    process.env.EG_ENV_FILE,
+    path.resolve(process.cwd(), '.env.selfhost'),
+    path.resolve(process.cwd(), '..', '.env.selfhost'),
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '..', '.env'),
+  ];
 
-if (envFilePath) {
-  dotenv.config({ path: envFilePath });
-} else {
-  dotenv.config();
+  const envFilePath = envFileCandidates.find(candidate => candidate && fs.existsSync(candidate));
+
+  if (envFilePath) {
+    dotenv.config({ path: envFilePath });
+  } else {
+    dotenv.config();
+  }
 }
 
 /**
@@ -348,7 +356,8 @@ if (config.enterpriseSchema) {
   }
 }
 
-// Log configuration on startup (excluding sensitive data)
+// Log configuration on runtime startup, but keep tests quiet and hermetic.
+if (config.nodeEnv !== 'test') {
 console.log('✅ Configuration loaded:');
 console.log(`  - Port: ${config.port}`);
 console.log(`  - Database Type: ${config.databaseType}`);
@@ -389,6 +398,7 @@ if (config.nodeEnv === 'development') {
 }
 if (config.camundaBaseUrl) {
   console.log(`  - Camunda URL: ${config.camundaBaseUrl}`);
+}
 }
 
 // Re-export feature flags for convenience

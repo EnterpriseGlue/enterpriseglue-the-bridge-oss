@@ -41,6 +41,14 @@
     {
       "id": "engine_tenancy_foundation_v1",
       "description": "Foundation schema before the tenant-reference round-trip migration."
+    },
+    {
+      "id": "pre_access_governance_ownership",
+      "description": "Populated identity mappings and platform settings immediately before ownership metadata migrations 0104 and 0105."
+    },
+    {
+      "id": "pre_login_experience",
+      "description": "Populated identity providers and platform settings immediately before login-experience migrations 0106 and 0107."
     }
   ],
   "requiredStages": [
@@ -99,6 +107,26 @@
       "applied_config_bundle_run_id",
       "rollback_config_bundle_run_id",
       "rolled_back_at"
+    ],
+    "identity_entitlement_mappings": [
+      "ownership_mode"
+    ],
+    "identity_providers": [
+      "display_name",
+      "organization",
+      "display_order",
+      "is_preferred",
+      "preferred_scope_identity",
+      "login_domains_json"
+    ],
+    "platform_settings": [
+      "access_governance_source_ref",
+      "access_governance_ownership_mode",
+      "access_governance_source_hash",
+      "access_governance_last_applied_at",
+      "access_governance_drift_status",
+      "local_password_login_mode",
+      "sso_provider_selection_mode"
     ]
   },
   "requiredIndexes": {
@@ -117,6 +145,9 @@
       "idx_camunda_native_grant_import_engine_created",
       "idx_camunda_native_grant_import_snapshot_expiry",
       "idx_camunda_native_grant_import_status_updated"
+    ],
+    "identity_providers": [
+      "uq_identity_providers_preferred_scope_identity"
     ]
   }
 }

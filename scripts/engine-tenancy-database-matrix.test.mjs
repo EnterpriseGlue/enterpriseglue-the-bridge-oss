@@ -31,24 +31,38 @@ const stages = [
   'cleanup',
 ];
 
-test('declares the exact five-adapter, two-baseline, seven-stage denominator', () => {
+test('declares the exact five-adapter, four-baseline, seven-stage denominator', () => {
   assert.equal(contract.schemaVersion, 1);
   assert.deepEqual(Object.keys(contract.databases), databases);
   assert.deepEqual(contract.requiredStages, stages);
   assert.deepEqual(
     contract.upgradeBaselines.map(({ id }) => id),
-    ['pre_engine_tenancy', 'engine_tenancy_foundation_v1'],
+    [
+      'pre_engine_tenancy',
+      'engine_tenancy_foundation_v1',
+      'pre_access_governance_ownership',
+      'pre_login_experience',
+    ],
   );
   assert.ok(contract.requiredTables.engines.includes('tenancy_mode'));
   assert.ok(contract.requiredTables.engine_tenant_mappings.includes('tenant_reference_json'));
   assert.ok(contract.requiredTables.runtime_resources.includes('tenant_resolution_details_json'));
   assert.ok(contract.requiredTables.camunda_native_grant_import_runs.includes('rollback_config_bundle_run_id'));
   assert.ok(contract.requiredTables.camunda_native_grant_import_runs.includes('rolled_back_at'));
+  assert.ok(contract.requiredTables.identity_entitlement_mappings.includes('ownership_mode'));
+  assert.ok(contract.requiredTables.identity_providers.includes('display_name'));
+  assert.ok(contract.requiredTables.identity_providers.includes('login_domains_json'));
+  assert.ok(contract.requiredTables.platform_settings.includes('access_governance_ownership_mode'));
+  assert.ok(contract.requiredTables.platform_settings.includes('local_password_login_mode'));
+  assert.ok(contract.requiredTables.platform_settings.includes('sso_provider_selection_mode'));
   assert.ok(contract.requiredIndexes.runtime_resources.includes(
     'idx_runtime_resources_tenant_resolution',
   ));
   assert.ok(contract.requiredIndexes.camunda_native_grant_import_runs.includes(
     'idx_camunda_native_grant_import_status_updated',
+  ));
+  assert.ok(contract.requiredIndexes.identity_providers.includes(
+    'uq_identity_providers_preferred_scope_identity',
   ));
 });
 
@@ -61,6 +75,13 @@ test('runs every database in an isolated disposable localhost container', () => 
     packageJson.scripts['test:engine-tenancy:database-matrix'],
     /run-engine-tenancy-database-matrix\.mjs/,
   );
+  assert.match(
+    packageJson.scripts['test:engine-tenancy:database-matrix'],
+    /test:database-portability:unit/,
+  );
+  assert.match(packageJson.scripts['test:database-portability:unit'], /guard:no-raw-sql/);
+  assert.match(packageJson.scripts['test:database-portability:unit'], /migrationPortability\.test\.ts/);
+  assert.match(packageJson.scripts['test:database-portability:unit'], /lazyConnectionPool\.test\.ts/);
   for (const database of databases) {
     assert.match(runner, new RegExp(`database === '${database}'|prepare${{
       postgres: 'Postgres',
@@ -80,6 +101,9 @@ test('runs every database in an isolated disposable localhost container', () => 
   assert.match(runner, /new sql\.ConnectionPool\(serverConfig\)/);
   assert.doesNotMatch(runner, /sql\.connect\(serverConfig\)/);
   assert.match(workflow, /pnpm run test:engine-tenancy:database-matrix/);
+  assert.match(workflow, /backend\/scripts\/check-no-raw-sql\.ts/);
+  assert.match(workflow, /packages\/backend-host\/src\/server\.ts/);
+  assert.match(workflow, /packages\/shared\/src\/infrastructure\/persistence\/migrations\/\*\*/);
   assert.match(workflow, /test\/results\/engine-tenancy-release\/database-matrix\.json/);
   assert.match(workflow, /if: always\(\)/);
 });
@@ -87,6 +111,7 @@ test('runs every database in an isolated disposable localhost container', () => 
 test('executes every stage against the real adapter and service transaction', () => {
   for (const requiredFunction of [
     'qualifyUpgradeBaselines',
+    'qualifyRecentMigrationBaselines',
     'qualifyInterruptedRetry',
     'logicalSchema',
     'qualifyServiceBehavior',
@@ -102,6 +127,14 @@ test('executes every stage against the real adapter and service transaction', ()
   assert.match(worker, /tenantResolutionDetailsJson/);
   assert.match(worker, /AddCamundaNativeGrantImportRuns1700000000098/);
   assert.match(worker, /AddCamundaNativeGrantRollbackReceipt1700000000099/);
+  assert.match(worker, /AddIdentityMappingOwnershipMode1700000000104/);
+  assert.match(worker, /AddPlatformGovernanceSettingsOwnership1700000000105/);
+  assert.match(worker, /AddLoginExperienceMetadata1700000000106/);
+  assert.match(worker, /ConsolidateLoginProviderPreference1700000000107/);
+  assert.match(worker, /mapping\.ownershipMode, 'config_locked'/);
+  assert.match(worker, /provider\.displayName, ids\.migrationProvider/);
+  assert.match(worker, /settings\.ssoProviderSelectionMode, 'auto_redirect_single'/);
+  assert.match(worker, /provider\.preferredScopeIdentity/);
   assert.match(worker, /rollbackConfigBundleRunId/);
   assert.match(worker, /ownedRowsRemaining: 0/);
   assert.match(worker, /cleanInstallEqualsAllUpgradePaths: true/);

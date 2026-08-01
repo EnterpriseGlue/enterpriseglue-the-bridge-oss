@@ -16,7 +16,7 @@ The complete denominator is:
 
 - five database adapters;
 - seven required stages per adapter, or **35/35 stage cells**;
-- two supported upgrade baselines per adapter, or **10/10 baseline
+- four supported upgrade baselines per adapter, or **20/20 baseline
   observations**; and
 - one equivalent logical-schema fingerprint across all five adapters.
 
@@ -30,9 +30,12 @@ The required stages are:
 6. `rollback`; and
 7. `cleanup`.
 
-The supported baselines are the schema immediately before the engine-tenancy
-foundation migration and the foundation schema immediately before the portable
-tenant-reference migration.
+The supported baselines are the schemas immediately before the engine-tenancy
+foundation migration, the portable tenant-reference migration, the access
+governance ownership migrations, and login-experience migrations `0106` and
+`0107`. The last baseline proves deterministic duplicate-preference cleanup,
+the portable per-scope preferred-provider unique index, removal of the obsolete
+redirect flag, and idempotent interrupted retry on all five adapters.
 
 The same contract also qualifies the Camunda 7 native-grant import receipt:
 migrations `0098` and `0099` create, remove, recreate, and retry its opaque
@@ -133,13 +136,13 @@ The worker uses the canonical `runMigrations` path and the real
 `EngineTenantMappingService` transaction. It proves the engine-tenancy schema
 and service lifecycle against each adapter, including a deliberate failed
 transaction and an idempotent retry. It also verifies the native-grant receipt
-schema is equivalent after a clean install, both applicable upgrade paths, and
+schema is equivalent after a clean install, all four applicable upgrade paths, and
 the `0098`/`0099` add/remove/retry sequence.
 
 The lane intentionally does not run unrelated application seed catalogs.
 Those have their own ownership and qualification scope. Therefore,
 **100% database qualification here means 35/35 engine-tenancy lifecycle stage
-cells, 10/10 supported-baseline observations, and one equivalent schema—not
+cells, 20/20 supported-baseline observations, and one equivalent schema—not
 100% of unrelated monorepo database behavior.**
 
 ## Stop, Roll Back, and Recover
@@ -147,7 +150,7 @@ cells, 10/10 supported-baseline observations, and one equivalent schema—not
 Stop the release candidate when:
 
 - any target or stage fails;
-- clean install and either upgrade path produce different logical schemas;
+- clean install and any supported upgrade path produce different logical schemas;
 - an interrupted retry duplicates state;
 - the service result differs by adapter;
 - rollback loses its reason or other explanatory metadata;

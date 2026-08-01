@@ -50,6 +50,7 @@ Audience: Developers and architects.
 
 ## Development and Verification
 - [Mirrored Engine Backstop Developer Guide](developer/mirrored-engine-backstop.md)
+- [Enterprise Backend Plugin Database API](reference/enterprise-backend-plugin-database-api.md)
 - [Customer Sidecar Backstop Test Report](development/customer-sidecar-backstop-test-report.md)
 - [Identity Protocol, Entra Compatibility, and LDAP Test Harness](how-to/ldap-protocol-test-harness.md)
 

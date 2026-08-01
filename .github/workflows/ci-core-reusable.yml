@@ -37,6 +37,49 @@ permissions:
   contents: read
 
 jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@enterpriseglue'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Run workspace typecheck
+        run: pnpm run typecheck
+
+      - name: Lint workspace and architecture boundaries
+        run: pnpm run lint
+
+      - name: Verify CI change-detection contracts
+        run: pnpm run test:ci-change-detection
+
+      - name: Verify workspace runtime contract
+        run: pnpm run test:workspace-runtime-contract
+
+      - name: Verify packed backend-host runtime dependencies
+        run: pnpm run guard:published-package-runtime
+
   compose-render:
     runs-on: ubuntu-latest
     if: inputs.run_tests

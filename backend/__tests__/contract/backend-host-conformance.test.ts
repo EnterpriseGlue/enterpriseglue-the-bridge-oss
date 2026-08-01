@@ -60,6 +60,16 @@ describe('Backend host contract conformance', () => {
     };
 
     const hostContext: EnterpriseBackendContext = {
+      database: {
+        kind: 'typeorm',
+        databaseType: 'postgres',
+        async getDataSource<TDataSource = unknown>() {
+          return {} as TDataSource;
+        },
+        async transaction(work) {
+          return work({});
+        },
+      },
       connectionPool: mockPool,
       config: {},
       authz: {
@@ -72,6 +82,9 @@ describe('Backend host contract conformance', () => {
 
     // Runtime shape checks — if the contract adds a required property,
     // this test will fail at the type level (tsc) AND runtime level.
+    expect(hostContext.database.kind).toBe('typeorm');
+    expect(typeof hostContext.database.getDataSource).toBe('function');
+    expect(typeof hostContext.database.transaction).toBe('function');
     expect(hostContext.connectionPool).toBeDefined();
     expect(typeof hostContext.connectionPool.query).toBe('function');
     expect(typeof hostContext.connectionPool.close).toBe('function');

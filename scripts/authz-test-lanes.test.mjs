@@ -427,6 +427,8 @@ test('the live local OIDC rehearsal is opt-in and guarded to local browser targe
   assert.match(localOidcConfigureRunner, /expectedAudience:\$clientId/);
   assert.match(localOidcConfigureRunner, /triggers:\["login","manual"\]/);
   assert.match(localOidcConfigureRunner, /incompleteEntitlements:"fail_closed"/);
+  assert.match(localOidcConfigureRunner, /\/api\/auth\/recovery\/login/);
+  assert.match(localLdapConfigureRunner, /\/api\/auth\/recovery\/login/);
 });
 
 test('the Entra compatibility lanes distinguish local claim compatibility from opt-in real-tenant evidence', () => {

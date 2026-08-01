@@ -4,6 +4,9 @@
   "type": "module",
   "version": "0.1.0",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "dotenv run node dist/backend/src/server.js",

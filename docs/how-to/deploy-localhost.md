@@ -9,8 +9,8 @@ Audience: Developers and architects.
 - You are not using Docker Compose, or want to validate the production build pipeline locally.
 
 ## Prerequisites
-- Node.js (LTS recommended)
-- pnpm
+- Node.js 24 (the workspace enforces `>=24 <25`)
+- pnpm 11.0.8 through Corepack (the workspace `packageManager` field is authoritative)
 - PostgreSQL accessible locally or remotely
 - Backend and frontend environment files configured
 
@@ -361,9 +361,12 @@ the authorized Runtime Resources, SSO Engine Assignments, and Effective Access t
 available for targeted reruns. Omit `PLAYWRIGHT_LOCAL_CA_FILE` and use
 `http://localhost:5173` when the TLS overlay is not running.
 
-The smoke opens the local-login bypass URL (`/login?local=1`) so a configured
-single-provider auto-redirect cannot hide the break-glass form. The backend
-still enforces who may use local credentials when SSO policy is active.
+The seeded smoke temporarily disables direct providers in the isolated local
+database, so `localPassword: auto` exposes the ordinary local form. For a
+local stack that keeps SSO enabled, test the canonical administrator only at
+`/admin-recovery`; a query parameter on `/login` cannot bypass login policy.
+The backend checks active local credentials and canonical Platform
+Administrator membership on every recovery attempt.
 
 The Access Control smoke also evaluates one catalog platform permission for the
 authenticated local administrator through the Effective Access UI. This proves

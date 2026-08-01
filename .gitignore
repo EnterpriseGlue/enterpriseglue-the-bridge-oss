@@ -32,9 +32,9 @@ coverage/
 # Test results (Playwright)
 /test/results/
 /test/e2e/mock-camunda/.generated/
-# Disposable identity protocol-rehearsal diagnostics are uploaded by CI but
-# must never become repository content (they can contain request identifiers).
-/.artifacts/identity-protocol-rehearsal/
+# Disposable local and CI diagnostics are retained outside Git and may contain
+# request identifiers, browser traces, videos, or generated screenshots.
+/.artifacts/
 
 # Env & secrets
 .env

@@ -6,9 +6,12 @@ on:
       - ".github/workflows/engine-tenancy-database.yml"
       - "backend/test/integration/engine-tenancy-database-qualification.mjs"
       - "backend/__tests__/shared/db/**"
+      - "backend/scripts/check-no-raw-sql.ts"
+      - "packages/backend-host/src/server.ts"
       - "packages/shared/src/db/**"
       - "packages/shared/src/infrastructure/persistence/adapters/**"
       - "packages/shared/src/infrastructure/persistence/entities/**"
+      - "packages/shared/src/infrastructure/persistence/migrations/**"
       - "scripts/engine-tenancy-database-matrix.test.mjs"
       - "scripts/run-engine-tenancy-database-matrix.mjs"
       - "scripts/engine-tenancy-evidence.test.mjs"
@@ -21,9 +24,13 @@ on:
     paths:
       - ".github/workflows/engine-tenancy-database.yml"
       - "backend/test/integration/engine-tenancy-database-qualification.mjs"
+      - "backend/__tests__/shared/db/**"
+      - "backend/scripts/check-no-raw-sql.ts"
+      - "packages/backend-host/src/server.ts"
       - "packages/shared/src/db/**"
       - "packages/shared/src/infrastructure/persistence/adapters/**"
       - "packages/shared/src/infrastructure/persistence/entities/**"
+      - "packages/shared/src/infrastructure/persistence/migrations/**"
       - "scripts/run-engine-tenancy-database-matrix.mjs"
       - "test/database/**"
       - "package.json"
@@ -42,7 +49,7 @@ concurrency:
 
 jobs:
   database-matrix:
-    name: Five-adapter engine-tenancy matrix
+    name: Five-adapter migration and runtime portability
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -78,7 +85,7 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
-      - name: Run database qualification
+      - name: Run portability guards, migration tests, and database qualification
         run: pnpm run test:engine-tenancy:database-matrix
 
       - name: Upload database evidence

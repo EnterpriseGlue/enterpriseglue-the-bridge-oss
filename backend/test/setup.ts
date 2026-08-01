@@ -1,4 +1,37 @@
 process.env.NODE_ENV = 'test';
+process.env.EG_LOAD_ENV_IN_TESTS = 'false';
+
+// Deterministic, loopback-only defaults. Explicit test-runner values may
+// override these before setup executes (for example a disposable Docker DB).
+process.env.DATABASE_TYPE ??= 'postgres';
+process.env.POSTGRES_HOST ??= '127.0.0.1';
+process.env.POSTGRES_PORT ??= '5432';
+process.env.POSTGRES_USER ??= 'enterpriseglue_test';
+process.env.POSTGRES_PASSWORD ??= 'enterpriseglue_test';
+process.env.POSTGRES_DATABASE ??= 'enterpriseglue_test';
+process.env.POSTGRES_SCHEMA ??= 'main';
+process.env.JWT_SECRET ??= 'test-only-jwt-secret-000000000000000000000000';
+process.env.ADMIN_PASSWORD ??= 'test-only-admin-password';
+process.env.ENCRYPTION_KEY ??= '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
+const databaseHostByType: Partial<Record<string, string | undefined>> = {
+  postgres: process.env.POSTGRES_HOST,
+  mysql: process.env.MYSQL_HOST,
+  mssql: process.env.MSSQL_HOST,
+  oracle: process.env.ORACLE_HOST,
+};
+const configuredTestHost = databaseHostByType[process.env.DATABASE_TYPE || 'postgres'];
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '::1']);
+if (
+  configuredTestHost
+  && !loopbackHosts.has(configuredTestHost)
+  && process.env.EG_ALLOW_REMOTE_TEST_DATABASES !== 'true'
+) {
+  throw new Error(
+    `Refusing to run the test lane against non-loopback ${process.env.DATABASE_TYPE} host ${configuredTestHost}. `
+      + 'Set EG_ALLOW_REMOTE_TEST_DATABASES=true only for an intentional disposable test target.',
+  );
+}
 
 import { vi } from 'vitest';
 

@@ -24,6 +24,7 @@ import type {
   EnterpriseBackendContext,
   EnterpriseBackendRouteAuthz,
   ConnectionPool,
+  EnterpriseDatabaseContext,
 } from '@enterpriseglue/enterprise-plugin-api/backend';
 
 // ---------------------------------------------------------------------------
@@ -147,7 +148,19 @@ const connectionPool: ConnectionPool = {
   },
 };
 
+const database: EnterpriseDatabaseContext = {
+  kind: 'typeorm',
+  databaseType: 'postgres',
+  async getDataSource<TDataSource = unknown>() {
+    return {} as TDataSource;
+  },
+  async transaction(work) {
+    return work({});
+  },
+};
+
 export const backendContextFixture: EnterpriseBackendContext = {
+  database,
   connectionPool,
   config: {},
   authz: {

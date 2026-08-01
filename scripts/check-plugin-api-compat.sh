@@ -51,11 +51,12 @@ assert_contains "$BACKEND_DTS" "requireAction" "backend authz requireAction help
 assert_contains "$BACKEND_DTS" "requireDeclaredAction" "backend authz manifest-derived route helper"
 assert_contains "$BACKEND_DTS" "buildOpenApiAuthzMetadata" "backend authz OpenAPI metadata helper"
 assert_contains "$BACKEND_DTS" "migrateEnterpriseDatabase" "backend migrateEnterpriseDatabase hook"
+assert_contains "$BACKEND_DTS" "EnterpriseDatabaseContext" "portable TypeORM database context"
 assert_contains "$BACKEND_DTS" "getNotificationTenantResolver" "backend notification tenant resolver hook"
 
 if [[ "$MODE" == "current" ]]; then
   assert_contains "$PKG_JSON" '"private": false' "non-private plugin-api package"
-  assert_contains "$PKG_JSON" '"version": "0.2.2"' "plugin-api baseline version"
+  assert_contains "$PKG_JSON" '"version": "0.3.0"' "plugin-api baseline version"
 
   # pnpm v9 doesn't support --dry-run; pack and clean up tarball instead
   if ! pnpm --dir packages/enterprise-plugin-api pack >/dev/null 2>&1; then

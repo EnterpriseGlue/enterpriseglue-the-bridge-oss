@@ -13,7 +13,9 @@ import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configB
 import { startConfigBundleRuntimeReconciliationPollerIfEnabled } from './poller/configBundleRuntimeReconciliationPoller.js';
 import { startCamundaNativeGrantSnapshotRetentionPoller } from './poller/camundaNativeGrantSnapshotRetentionPoller.js';
 import { getConfigBootstrapStatus, runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
-import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
+import { createLazyConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
+import type { EnterpriseBackendContext } from '@enterpriseglue/enterprise-plugin-api/backend';
+import { createEnterpriseDatabaseContext } from './services/enterpriseDatabaseContext.js';
 import {
   buildEnterpriseBackendRouteOpenApiAuthzMetadata,
   loadEnterpriseBackendPlugin,
@@ -33,8 +35,9 @@ export async function startServer() {
   app.locals.requireCompositeAction = requireCompositeAction;
 
   const enterprisePlugin = await loadEnterpriseBackendPlugin();
-  const enterpriseContext = {
-    connectionPool: getConnectionPool(),
+  const enterpriseContext: EnterpriseBackendContext = {
+    database: createEnterpriseDatabaseContext({ databaseType: config.databaseType }),
+    connectionPool: createLazyConnectionPool(),
     config,
     authz: {
       requireAction: (actionId: string, options?: Record<string, unknown>) =>
@@ -44,7 +47,7 @@ export async function startServer() {
       requireDeclaredAction: requireDeclaredEnterpriseBackendRouteAction,
       buildOpenApiAuthzMetadata: buildEnterpriseBackendRouteOpenApiAuthzMetadata,
     },
-  } as any;
+  };
   const notificationTenantResolver = await enterprisePlugin.getNotificationTenantResolver?.(enterpriseContext);
   const engineTenantReferenceResolver = await enterprisePlugin.getEngineTenantReferenceResolver?.(enterpriseContext);
   app.locals.engineTenantReferenceResolver = engineTenantReferenceResolver;
@@ -65,7 +68,8 @@ export async function startServer() {
   );
 
   try {
-    // Pass database-agnostic connection pool to enterprise plugin
+    // Pass the portable TypeORM context plus the deprecated lazy raw-pool
+    // compatibility path to the enterprise plugin.
     await enterprisePlugin.registerRoutes?.(app as any, enterpriseContext);
   } catch (error) {
     console.error('Failed to register enterprise routes:', error);
@@ -126,7 +130,6 @@ export async function startServer() {
   }
 
   app.listen(config.port, () => {
-    // eslint-disable-next-line no-console
     console.log(`Voyager API listening on http://localhost:${config.port}`);
     console.log(`API docs: http://localhost:${config.port}/api/docs`);
 

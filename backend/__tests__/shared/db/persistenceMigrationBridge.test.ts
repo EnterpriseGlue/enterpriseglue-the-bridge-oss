@@ -31,6 +31,14 @@ import { AddEngineBackstopFoundation1700000000101 as DbEngineBackstopFoundationM
 import { AddEngineBackstopFoundation1700000000101 as PersistenceEngineBackstopFoundationMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000101-add-engine-backstop-foundation.js';
 import { AddEngineBackstopDriftObservations1700000000102 as DbEngineBackstopDriftObservationsMigration } from '@enterpriseglue/shared/db/migrations/1700000000102-add-engine-backstop-drift-observations.js';
 import { AddEngineBackstopDriftObservations1700000000102 as PersistenceEngineBackstopDriftObservationsMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000102-add-engine-backstop-drift-observations.js';
+import { AddIdentityMappingOwnershipMode1700000000104 as DbIdentityMappingOwnershipMigration } from '@enterpriseglue/shared/db/migrations/1700000000104-add-identity-mapping-ownership-mode.js';
+import { AddIdentityMappingOwnershipMode1700000000104 as PersistenceIdentityMappingOwnershipMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000104-add-identity-mapping-ownership-mode.js';
+import { AddPlatformGovernanceSettingsOwnership1700000000105 as DbPlatformGovernanceOwnershipMigration } from '@enterpriseglue/shared/db/migrations/1700000000105-add-platform-governance-settings-ownership.js';
+import { AddPlatformGovernanceSettingsOwnership1700000000105 as PersistencePlatformGovernanceOwnershipMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000105-add-platform-governance-settings-ownership.js';
+import { AddLoginExperienceMetadata1700000000106 as DbLoginExperienceMigration } from '@enterpriseglue/shared/db/migrations/1700000000106-add-login-experience-metadata.js';
+import { AddLoginExperienceMetadata1700000000106 as PersistenceLoginExperienceMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000106-add-login-experience-metadata.js';
+import { ConsolidateLoginProviderPreference1700000000107 as DbLoginProviderPreferenceMigration } from '@enterpriseglue/shared/db/migrations/1700000000107-consolidate-login-provider-preference.js';
+import { ConsolidateLoginProviderPreference1700000000107 as PersistenceLoginProviderPreferenceMigration } from '@enterpriseglue/shared/infrastructure/persistence/migrations/1700000000107-consolidate-login-provider-preference.js';
 
 describe('persistence migration bridges', () => {
   it('re-exports the identity-provider and deployment-receipt migrations from the canonical persistence path', () => {
@@ -50,5 +58,9 @@ describe('persistence migration bridges', () => {
     expect(PersistenceCamundaNativeGrantRollbackReceiptMigration).toBe(DbCamundaNativeGrantRollbackReceiptMigration);
     expect(PersistenceEngineBackstopFoundationMigration).toBe(DbEngineBackstopFoundationMigration);
     expect(PersistenceEngineBackstopDriftObservationsMigration).toBe(DbEngineBackstopDriftObservationsMigration);
+    expect(PersistenceIdentityMappingOwnershipMigration).toBe(DbIdentityMappingOwnershipMigration);
+    expect(PersistencePlatformGovernanceOwnershipMigration).toBe(DbPlatformGovernanceOwnershipMigration);
+    expect(PersistenceLoginExperienceMigration).toBe(DbLoginExperienceMigration);
+    expect(PersistenceLoginProviderPreferenceMigration).toBe(DbLoginProviderPreferenceMigration);
   });
 });

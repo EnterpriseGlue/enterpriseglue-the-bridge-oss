@@ -9,6 +9,9 @@
     "directory": "packages/backend-host"
   },
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "build": "tsc && node scripts/rewrite-modules.mjs",
     "clean": "rm -rf dist"
@@ -18,6 +21,8 @@
     "dist/**/*.d.ts"
   ],
   "dependencies": {
+    "@enterpriseglue/enterprise-plugin-api": "workspace:*",
+    "@enterpriseglue/shared": "workspace:*",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",

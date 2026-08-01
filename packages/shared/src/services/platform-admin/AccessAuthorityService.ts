@@ -15,7 +15,6 @@ export function accessAuthorityDomainForResourceType(resourceType: unknown): Acc
   if (typeof resourceType === 'string' && ENGINE_ACCESS_RESOURCE_TYPES.has(resourceType)) return 'engine';
   return null;
 }
-
 export interface AccessAuthorityDecision {
   domain: AccessAuthorityDomain;
   mode: AccessAuthorityMode;
@@ -49,4 +48,3 @@ export async function getAccessAuthorityDecision(
       : `${domain === 'engine' ? 'Engine' : 'Project'} access is SSO-managed; manual access changes are disabled`,
   };
 }
-

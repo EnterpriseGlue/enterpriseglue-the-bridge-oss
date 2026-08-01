@@ -26,10 +26,26 @@ import {
 import {
   WidenCamundaNativeGrantEvidence1700000000100,
 } from '@enterpriseglue/shared/db/migrations/1700000000100-widen-camunda-native-grant-evidence.js';
+import {
+  AddIdentityMappingOwnershipMode1700000000104,
+} from '@enterpriseglue/shared/db/migrations/1700000000104-add-identity-mapping-ownership-mode.js';
+import {
+  AddPlatformGovernanceSettingsOwnership1700000000105,
+} from '@enterpriseglue/shared/db/migrations/1700000000105-add-platform-governance-settings-ownership.js';
+import {
+  AddLoginExperienceMetadata1700000000106,
+} from '@enterpriseglue/shared/db/migrations/1700000000106-add-login-experience-metadata.js';
+import {
+  ConsolidateLoginProviderPreference1700000000107,
+} from '@enterpriseglue/shared/db/migrations/1700000000107-consolidate-login-provider-preference.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import {
   engineTenantMappingService,
 } from '@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js';
@@ -73,6 +89,9 @@ const ids = {
   serviceResource: `${runId}-service-resource`,
   rollbackMapping: `${runId}-rollback-mapping`,
   rollbackImportRun: `${runId}-rollback-import-run`,
+  migrationProvider: `${runId}-migration-provider`,
+  migrationGroup: `${runId}-migration-group`,
+  migrationMapping: `${runId}-migration-mapping`,
 };
 
 function normalizeName(value) {
@@ -127,6 +146,9 @@ async function logicalSchema(queryRunner, dataSource) {
       await tableDetails(queryRunner, dataSource, EngineTenantMapping, 'engine_tenant_mappings'),
       await tableDetails(queryRunner, dataSource, RuntimeResource, 'runtime_resources'),
       await tableDetails(queryRunner, dataSource, CamundaNativeGrantImportRun, 'camunda_native_grant_import_runs'),
+      await tableDetails(queryRunner, dataSource, IdentityEntitlementMapping, 'identity_entitlement_mappings'),
+      await tableDetails(queryRunner, dataSource, IdentityProvider, 'identity_providers'),
+      await tableDetails(queryRunner, dataSource, PlatformSettings, 'platform_settings'),
     ],
   };
   value.tables.sort((left, right) => left.table.localeCompare(right.table));
@@ -228,6 +250,146 @@ async function seedLegacyRows(dataSource) {
   ));
 }
 
+function entityRowWithDefaults(dataSource, entity, overrides) {
+  const row = { ...overrides };
+  for (const column of dataSource.getMetadata(entity).columns) {
+    const property = column.propertyName;
+    if (Object.prototype.hasOwnProperty.call(row, property)) continue;
+    if (column.isNullable) {
+      row[property] = null;
+      continue;
+    }
+    if (column.default !== undefined) {
+      row[property] = typeof column.default === 'function'
+        ? column.default()
+        : column.default;
+      continue;
+    }
+    throw new Error(`${database}: qualification seed has no value for ${entity.name}.${property}`);
+  }
+  return row;
+}
+
+async function seedRecentMigrationRows(dataSource) {
+  const now = Date.now();
+  await dataSource.getRepository(AuthzGroup).insert({
+    id: ids.migrationGroup,
+    tenantId: null,
+    key: ids.migrationGroup,
+    groupKeyIdentity: `default:${ids.migrationGroup}`,
+    name: 'Migration qualification group',
+    description: null,
+    source: 'database_qualification',
+    sourceRef: runId,
+    ownershipMode: 'manual',
+    sourceHash: null,
+    lastAppliedAt: null,
+    driftStatus: null,
+    isSystem: false,
+    isArchived: false,
+    createdById: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await dataSource.getRepository(IdentityProvider).insert({
+    id: ids.migrationProvider,
+    tenantId: null,
+    key: ids.migrationProvider,
+    displayName: 'Discarded pre-migration display name',
+    organization: 'Qualification',
+    displayOrder: 99,
+    isPreferred: true,
+    preferredScopeIdentity: 'preferred:platform',
+    loginDomainsJson: '["before.invalid"]',
+    providerKeyIdentity: `default:${ids.migrationProvider}`,
+    protocol: 'oidc',
+    isEnabled: false,
+    authenticationMode: 'claims_only',
+    directoryTenantId: null,
+    configurationJson: '{}',
+    syncJson: '{}',
+    ownershipMode: 'manual',
+    sourceRef: runId,
+    sourceHash: null,
+    lastAppliedAt: null,
+    driftStatus: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await dataSource.getRepository(IdentityEntitlementMapping).insert({
+    id: ids.migrationMapping,
+    tenantId: null,
+    providerId: ids.migrationProvider,
+    configKey: ids.migrationMapping,
+    configKeyIdentity: `default:${ids.migrationMapping}`,
+    sourceRef: runId,
+    ownershipMode: 'manual',
+    sourceHash: null,
+    lastAppliedAt: null,
+    driftStatus: null,
+    entitlementType: 'group',
+    externalId: 'qualification-group',
+    matchOperator: 'exact',
+    targetGroupId: ids.migrationGroup,
+    syncMode: 'authoritative',
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await dataSource.getRepository(PlatformSettings).insert(entityRowWithDefaults(
+    dataSource,
+    PlatformSettings,
+    { id: 'default', updatedAt: now, updatedById: null },
+  ));
+}
+
+async function qualifyRecentMigrationBaselines(queryRunner, dataSource, expectedFingerprint) {
+  const mappingOwnership = new AddIdentityMappingOwnershipMode1700000000104();
+  const governanceOwnership = new AddPlatformGovernanceSettingsOwnership1700000000105();
+  const loginExperience = new AddLoginExperienceMetadata1700000000106();
+  const providerPreference = new ConsolidateLoginProviderPreference1700000000107();
+
+  await seedRecentMigrationRows(dataSource);
+  await providerPreference.down(queryRunner);
+  await loginExperience.down(queryRunner);
+  await governanceOwnership.down(queryRunner);
+  await mappingOwnership.down(queryRunner);
+
+  await assertColumn(queryRunner, dataSource, IdentityEntitlementMapping, 'ownership_mode', false);
+  await assertColumn(queryRunner, dataSource, PlatformSettings, 'access_governance_ownership_mode', false);
+  await assertColumn(queryRunner, dataSource, IdentityProvider, 'display_name', false);
+  await assertColumn(queryRunner, dataSource, IdentityProvider, 'preferred_scope_identity', false);
+  await assertColumn(queryRunner, dataSource, PlatformSettings, 'local_password_login_mode', false);
+
+  await mappingOwnership.up(queryRunner);
+  await governanceOwnership.up(queryRunner);
+  await loginExperience.up(queryRunner);
+  await providerPreference.up(queryRunner);
+
+  const mapping = await dataSource.getRepository(IdentityEntitlementMapping).findOneByOrFail({
+    id: ids.migrationMapping,
+  });
+  const provider = await dataSource.getRepository(IdentityProvider).findOneByOrFail({
+    id: ids.migrationProvider,
+  });
+  const settings = await dataSource.getRepository(PlatformSettings).findOneByOrFail({ id: 'default' });
+  assert.equal(mapping.ownershipMode, 'config_locked');
+  assert.equal(provider.displayName, ids.migrationProvider);
+  assert.equal(provider.organization, null);
+  assert.equal(Number(provider.displayOrder), 0);
+  assert.equal(provider.isPreferred, false);
+  assert.equal(provider.preferredScopeIdentity, `provider:${ids.migrationProvider}`);
+  assert.equal(provider.loginDomainsJson, '[]');
+  assert.equal(settings.accessGovernanceOwnershipMode, 'manual');
+  assert.equal(settings.localPasswordLoginMode, 'auto');
+  assert.equal(settings.ssoProviderSelectionMode, 'auto_redirect_single');
+  assert.equal(
+    fingerprint(await logicalSchema(queryRunner, dataSource)),
+    expectedFingerprint,
+    `${database}: recent authorization/login upgrade schema differs from clean install`,
+  );
+}
+
 async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerprint) {
   const foundation = new AddEngineTenancyFoundation1700000000096();
   const reference = new AddEngineTenantMappingReference1700000000097();
@@ -235,6 +397,7 @@ async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerpr
   const rollbackReceipt = new AddCamundaNativeGrantRollbackReceipt1700000000099();
   const widenEvidence = new WidenCamundaNativeGrantEvidence1700000000100();
   await seedLegacyRows(dataSource);
+  await qualifyRecentMigrationBaselines(queryRunner, dataSource, expectedFingerprint);
 
   // Simulate an upgrade from immediately before the native-grant importer,
   // including the idempotent receipt-column follow-up migration.
@@ -296,6 +459,10 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   const importRuns = new AddCamundaNativeGrantImportRuns1700000000098();
   const rollbackReceipt = new AddCamundaNativeGrantRollbackReceipt1700000000099();
   const widenEvidence = new WidenCamundaNativeGrantEvidence1700000000100();
+  const mappingOwnership = new AddIdentityMappingOwnershipMode1700000000104();
+  const governanceOwnership = new AddPlatformGovernanceSettingsOwnership1700000000105();
+  const loginExperience = new AddLoginExperienceMetadata1700000000106();
+  const providerPreference = new ConsolidateLoginProviderPreference1700000000107();
   const engines = await queryRunner.getTable(metadataPath(dataSource, Engine));
   const resources = await queryRunner.getTable(metadataPath(dataSource, RuntimeResource));
   const engineIndex = engines?.indices.find((candidate) =>
@@ -317,6 +484,28 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   await importRuns.up(queryRunner);
   await rollbackReceipt.up(queryRunner);
   await widenEvidence.up(queryRunner);
+
+  // Simulate an interrupted recent upgrade after only a subset of columns was
+  // committed. This is especially important for adapters whose DDL is not
+  // transactionally rolled back (Oracle and Spanner).
+  await providerPreference.down(queryRunner);
+  await queryRunner.dropColumn(metadataPath(dataSource, IdentityEntitlementMapping), 'ownership_mode');
+  await queryRunner.dropColumn(metadataPath(dataSource, PlatformSettings), 'access_governance_source_hash');
+  await queryRunner.dropColumn(metadataPath(dataSource, IdentityProvider), 'organization');
+  await queryRunner.dropColumn(metadataPath(dataSource, PlatformSettings), 'sso_provider_selection_mode');
+  await mappingOwnership.up(queryRunner);
+  await governanceOwnership.up(queryRunner);
+  await loginExperience.up(queryRunner);
+  await providerPreference.up(queryRunner);
+  await mappingOwnership.up(queryRunner);
+  await governanceOwnership.up(queryRunner);
+  await loginExperience.up(queryRunner);
+  await providerPreference.up(queryRunner);
+
+  const recoveredMapping = await dataSource.getRepository(IdentityEntitlementMapping).findOneByOrFail({
+    id: ids.migrationMapping,
+  });
+  assert.equal(recoveredMapping.ownershipMode, 'config_locked');
   assert.equal(
     fingerprint(await logicalSchema(queryRunner, dataSource)),
     expectedFingerprint,
@@ -324,7 +513,7 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   );
   observation.stages.interrupted_retry = {
     status: 'passed',
-    simulatedInterruption: 'foundation indexes absent after column/table changes',
+    simulatedInterruption: 'foundation indexes and recent ownership/login columns absent after partial DDL',
     retryExecutions: 2,
   };
 }
@@ -498,16 +687,27 @@ async function qualifyCleanup(dataSource) {
   const mappingRepository = dataSource.getRepository(EngineTenantMapping);
   const resourceRepository = dataSource.getRepository(RuntimeResource);
   const engineRepository = dataSource.getRepository(Engine);
+  const identityMappingRepository = dataSource.getRepository(IdentityEntitlementMapping);
+  const identityProviderRepository = dataSource.getRepository(IdentityProvider);
+  const groupRepository = dataSource.getRepository(AuthzGroup);
+  const settingsRepository = dataSource.getRepository(PlatformSettings);
   await mappingRepository.delete({ engineId: ids.serviceEngine });
   await resourceRepository.delete({ id: ids.serviceResource });
   await engineRepository.delete({ id: ids.serviceEngine });
   await resourceRepository.delete({ id: ids.legacyResource });
   await engineRepository.delete({ id: ids.legacyEngine });
+  await identityMappingRepository.delete({ id: ids.migrationMapping });
+  await identityProviderRepository.delete({ id: ids.migrationProvider });
+  await groupRepository.delete({ id: ids.migrationGroup });
+  await settingsRepository.delete({ id: 'default' });
   assert.equal(await mappingRepository.countBy({ engineId: ids.serviceEngine }), 0);
   assert.equal(await resourceRepository.countBy({ id: ids.serviceResource }), 0);
   assert.equal(await engineRepository.countBy({ id: ids.serviceEngine }), 0);
   assert.equal(await resourceRepository.countBy({ id: ids.legacyResource }), 0);
   assert.equal(await engineRepository.countBy({ id: ids.legacyEngine }), 0);
+  assert.equal(await identityMappingRepository.countBy({ id: ids.migrationMapping }), 0);
+  assert.equal(await identityProviderRepository.countBy({ id: ids.migrationProvider }), 0);
+  assert.equal(await groupRepository.countBy({ id: ids.migrationGroup }), 0);
   observation.stages.cleanup = {
     status: 'passed',
     ownedRowsRemaining: 0,

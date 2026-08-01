@@ -9,6 +9,9 @@
     "directory": "packages/frontend-host"
   },
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "build:shared": "pnpm --filter shared run build",
     "typecheck": "pnpm run build:shared && tsc -p tsconfig.build.json --noEmit",
