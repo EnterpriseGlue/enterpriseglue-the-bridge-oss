@@ -110,12 +110,13 @@ function parseJson(path: string, value: Buffer): unknown {
  * normal preview/diff/apply services afterwards.
  */
 class ConfigBundleArchiveService {
-  readZip(buffer: Buffer, maxBytes = DEFAULT_MAX_ARCHIVE_BYTES): ConfigBundlePreviewInput {
+  readZip(input: unknown, maxBytes = DEFAULT_MAX_ARCHIVE_BYTES): ConfigBundlePreviewInput {
     if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
       throw Errors.validation('Configuration ZIP archive maximum size must be a positive safe integer');
     }
-    if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw Errors.validation('Configuration ZIP archive is required');
-    if (buffer.length > maxBytes) throw Errors.validation(`Configuration ZIP archive exceeds ${maxBytes} bytes`);
+    if (!Buffer.isBuffer(input) || input.byteLength === 0) throw Errors.validation('Configuration ZIP archive is required');
+    const buffer = Buffer.from(input);
+    if (buffer.byteLength > maxBytes) throw Errors.validation(`Configuration ZIP archive exceeds ${maxBytes} bytes`);
 
     let archive: any;
     try {

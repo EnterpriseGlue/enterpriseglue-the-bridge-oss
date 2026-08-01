@@ -40,6 +40,33 @@ describe('configBundleRemoteSourceService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('reconstructs every accepted URL from a fixed trusted origin', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify(payload), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await configBundleRemoteSourceService.import('https://raw.githubusercontent.com/acme/config/main/folder%20name/bundle.json');
+    await configBundleRemoteSourceService.import('https://gitlab.com/acme/config/-/raw/main/folder%20name/bundle.json');
+
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://raw.githubusercontent.com/acme/config/main/folder%20name/bundle.json',
+      'https://gitlab.com/acme/config/-/raw/main/folder%20name/bundle.json',
+    ]);
+  });
+
+  it.each([
+    'http://raw.githubusercontent.com/acme/config/main/bundle.json',
+    'https://raw.githubusercontent.com:444/acme/config/main/bundle.json',
+    'https://raw.githubusercontent.com/acme/config/main/bundle.json?redirect=https://evil.test',
+    'https://raw.githubusercontent.com/acme/config/main/%2f%2fevil.test/bundle.json',
+    'https://gitlab.com/acme/config/-/blob/main/bundle.json',
+  ])('rejects an unsafe remote bundle URL before fetch: %s', async (url) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(configBundleRemoteSourceService.import(url)).rejects.toThrow('Configuration Git URL');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects redirects, oversized responses, and invalid bundle envelopes', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://evil.test/config.json' } }))

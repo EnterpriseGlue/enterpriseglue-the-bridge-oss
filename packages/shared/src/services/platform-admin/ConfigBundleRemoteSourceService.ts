@@ -17,6 +17,25 @@ function invalidUrl(message: string): never {
   throw Errors.validation(`Configuration Git URL ${message}`);
 }
 
+function canonicalPathSegments(input: URL): string[] {
+  return input.pathname.split('/').filter(Boolean).map((segment) => {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return invalidUrl('contains invalid path encoding');
+    }
+    if (!decoded || decoded === '.' || decoded === '..' || decoded.includes('/') || decoded.includes('\\')) {
+      return invalidUrl('contains an invalid path segment');
+    }
+    return encodeURIComponent(decoded);
+  });
+}
+
+function trustedRemoteUrl(origin: 'https://raw.githubusercontent.com' | 'https://gitlab.com', segments: string[]): URL {
+  return new URL(`/${segments.join('/')}`, origin);
+}
+
 function normalizeGitRawUrl(value: string): URL {
   let input: URL;
   try {
@@ -31,15 +50,20 @@ function normalizeGitRawUrl(value: string): URL {
   if (input.search || input.hash) return invalidUrl('must not include query parameters or fragments');
 
   const host = input.hostname.toLowerCase();
-  const segments = input.pathname.split('/').filter(Boolean);
-  if (host === 'raw.githubusercontent.com' && segments.length >= 4) return input;
+  const segments = canonicalPathSegments(input);
+  if (host === 'raw.githubusercontent.com' && segments.length >= 4) {
+    return trustedRemoteUrl('https://raw.githubusercontent.com', segments);
+  }
 
   if (host === 'github.com' && segments.length >= 5 && segments[2] === 'raw') {
     const rawSegments = [...segments.slice(0, 2), ...segments.slice(3)];
-    return new URL(`https://raw.githubusercontent.com/${rawSegments.map(encodeURIComponent).join('/')}`);
+    return trustedRemoteUrl('https://raw.githubusercontent.com', rawSegments);
   }
 
-  if (host === 'gitlab.com' && input.pathname.includes('/-/raw/')) return input;
+  const gitlabRawMarker = segments.findIndex((segment, index) => segment === '-' && segments[index + 1] === 'raw');
+  if (host === 'gitlab.com' && gitlabRawMarker >= 2 && segments.length >= gitlabRawMarker + 4) {
+    return trustedRemoteUrl('https://gitlab.com', segments);
+  }
 
   return invalidUrl('must be a GitHub or GitLab raw-file URL');
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { sanitizeConfigBundleError, toSanitizedJson } from './lib/config-bundle-output.mjs';
 import { ConfigBundleExitCode, classifyConfigBundleHttpFailure, reconciliationExitCode, reconciliationWaitState } from './lib/config-bundle-exit.mjs';
 
@@ -20,6 +20,7 @@ const ciProvenance = (() => {
 })();
 const reconciliationTimeoutMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIATION_TIMEOUT_MS || 300_000);
 const reconciliationPollMs = Number(process.env.ENTERPRISEGLUE_CONFIG_RECONCILIATION_POLL_MS || 1_000);
+const maxBundleBytes = 1024 * 1024;
 const knownSecrets = [token];
 const needsFile = command === 'validate' || command === 'preview' || command === 'apply';
 const needsBundleKey = command === 'export';
@@ -36,6 +37,20 @@ const usage = [
   'Use explicit dedicated/shared tenancy; shared engines require resource_aware access and deny unmapped resources.',
   'Examples: docs/how-to/configure-engine-tenancy.md',
 ];
+
+async function readBundleFile(filePath, encoding) {
+  const handle = await open(filePath, 'r');
+  try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile()) throw new Error('Configuration bundle path must identify a regular file');
+    if (metadata.size > maxBundleBytes) throw new Error(`Configuration bundle exceeds ${maxBundleBytes} bytes`);
+    const contents = await handle.readFile();
+    if (contents.byteLength > maxBundleBytes) throw new Error(`Configuration bundle exceeds ${maxBundleBytes} bytes`);
+    return encoding ? contents.toString(encoding) : contents;
+  } finally {
+    await handle.close();
+  }
+}
 
 if (helpRequested) {
   console.log(usage.join('\n'));
@@ -74,13 +89,13 @@ if (helpRequested) {
           const response = await fetch(`${apiUrl}/api/authz/config-bundles/import-zip`, {
             method: 'POST',
             headers: { authorization: `Bearer ${token}`, 'content-type': 'application/zip' },
-            body: await readFile(argument),
+            body: await readBundleFile(argument),
           });
           const result = await response.json().catch(() => ({}));
           if (!response.ok) { const error = new Error(result.message || result.error || `ZIP import failed: ${response.status}`, { cause: { exitCode: classifyConfigBundleHttpFailure(response.status, 'zip_import') } }); error.exitCode = classifyConfigBundleHttpFailure(response.status, 'zip_import'); throw error; }
           return result;
         })()
-        : JSON.parse(await readFile(argument, 'utf8'));
+        : JSON.parse(await readBundleFile(argument, 'utf8'));
       const previewRequest = await request('/api/authz/config-bundles/preview', { method: 'POST', body: JSON.stringify(payload) });
       console.log(toSanitizedJson(previewRequest.result, knownSecrets));
       if (!previewRequest.response.ok || !previewRequest.result.valid || !previewRequest.result.canonicalHash) {

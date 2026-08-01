@@ -61,9 +61,21 @@ export function normalizeLocalPasswordLoginMode(value: unknown): LocalPasswordLo
   return parsed.success ? parsed.data : DEFAULT_LOCAL_PASSWORD_LOGIN_MODE;
 }
 
+function requireLocalPasswordLoginMode(value: unknown): LocalPasswordLoginMode {
+  const parsed = LocalPasswordLoginModeSchema.safeParse(value);
+  if (!parsed.success) throw Errors.validation('Invalid local password login mode');
+  return parsed.data;
+}
+
 export function normalizeSsoProviderSelectionMode(value: unknown): SsoProviderSelectionMode {
   const parsed = SsoProviderSelectionModeSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_SSO_PROVIDER_SELECTION_MODE;
+}
+
+function requireSsoProviderSelectionMode(value: unknown): SsoProviderSelectionMode {
+  const parsed = SsoProviderSelectionModeSchema.safeParse(value);
+  if (!parsed.success) throw Errors.validation('Invalid SSO provider selection mode');
+  return parsed.data;
 }
 
 export function normalizeAccessGovernanceDriftStatus(value: unknown): AccessGovernanceDriftStatus | null {
@@ -400,10 +412,10 @@ export class PlatformSettingsService {
       updateData.inviteAllowedDomains = JSON.stringify(data.inviteAllowedDomains);
     }
     if (data.localPasswordLoginMode !== undefined) {
-      updateData.localPasswordLoginMode = normalizeLocalPasswordLoginMode(data.localPasswordLoginMode);
+      updateData.localPasswordLoginMode = requireLocalPasswordLoginMode(data.localPasswordLoginMode);
     }
     if (data.ssoProviderSelectionMode !== undefined) {
-      updateData.ssoProviderSelectionMode = normalizeSsoProviderSelectionMode(data.ssoProviderSelectionMode);
+      updateData.ssoProviderSelectionMode = requireSsoProviderSelectionMode(data.ssoProviderSelectionMode);
     }
     if (data.ssoAllEnginesAssignmentMappingsEnabled !== undefined) {
       updateData.ssoAllEnginesAssignmentMappingsEnabled = data.ssoAllEnginesAssignmentMappingsEnabled;

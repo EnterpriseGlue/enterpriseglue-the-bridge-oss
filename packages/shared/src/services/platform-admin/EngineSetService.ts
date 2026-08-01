@@ -14,6 +14,7 @@ import type {
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { engineTenancyVisibilityWhere } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { In, IsNull, type DataSource, type EntityManager, type Repository } from 'typeorm';
 
 export type EngineSetSource = SharedEngineSetSummary['source'];
@@ -82,12 +83,7 @@ function normalizeTenantId(tenantId?: string | null): string | null {
 }
 
 function keyFromName(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 96);
+  return slugifyIdentifier(value, { maxLength: 96 });
 }
 
 function parseJsonObject(value: string | null | undefined): Record<string, unknown> {

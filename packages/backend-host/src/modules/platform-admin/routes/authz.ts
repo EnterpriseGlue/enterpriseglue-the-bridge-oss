@@ -265,17 +265,29 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
 
     let resolvedResourceId = resourceId;
     let resolvedRuntimeResource: Record<string, unknown> | undefined;
-    if (runtimeResource) {
+    if (resourceType === 'engine_runtime_resource') {
+      if (!runtimeResource && !resourceId) {
+        throw Errors.validation('Runtime resource ID or selector is required');
+      }
+      const visibleTenantIds = tenantIdsForAuthz(tenantId);
+      const where = runtimeResource
+        ? visibleTenantIds.map((visibleTenantId) => ({
+            engineId: runtimeResource.engineId,
+            resourceKind: runtimeResource.resourceKind,
+            resourceKey: runtimeResource.resourceKey,
+            runtimeTenantId: runtimeResource.runtimeTenantId || '',
+            isActive: true,
+            tenantId: visibleTenantId,
+            tenantResolutionStatus: 'resolved' as const,
+          }))
+        : visibleTenantIds.map((visibleTenantId) => ({
+            id: resourceId!,
+            isActive: true,
+            tenantId: visibleTenantId,
+            tenantResolutionStatus: 'resolved' as const,
+          }));
       const runtime = await (await getDataSource()).getRepository(RuntimeResource).findOne({
-        where: tenantIdsForAuthz(tenantId).map((visibleTenantId) => ({
-          engineId: runtimeResource.engineId,
-          resourceKind: runtimeResource.resourceKind,
-          resourceKey: runtimeResource.resourceKey,
-          runtimeTenantId: runtimeResource.runtimeTenantId || '',
-          isActive: true,
-          tenantId: visibleTenantId,
-          tenantResolutionStatus: 'resolved',
-        })),
+        where,
       });
       if (!runtime) {
         throw Errors.notFound('Runtime resource');

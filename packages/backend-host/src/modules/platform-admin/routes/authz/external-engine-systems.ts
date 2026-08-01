@@ -9,6 +9,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import {
   externalEngineFieldOwnershipToJson,
@@ -38,10 +39,11 @@ export interface ExternalEngineSystemRouteDependencies {
 }
 
 function normalizeExternalSystemKey(name: string): string {
-  return name.trim().toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 255) || 'external-engine-system';
+  return slugifyIdentifier(name, {
+    preserve: '._-',
+    maxLength: 255,
+    fallback: 'external-engine-system',
+  });
 }
 
 function serializeExternalEngineSystem(system: ExternalEngineSystem) {

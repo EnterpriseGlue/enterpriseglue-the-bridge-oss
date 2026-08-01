@@ -308,6 +308,9 @@ test('automates documentation checks without self-approving independent reviews'
   assert.match(documentationReviewRunner, /git', \['ls-files', 'docs\/\*\*\/\*\.md'/);
   assert.match(documentationReviewRunner, /preserveDocumentationReviews/);
   assert.match(documentationReviewRunner, /finalizeDocumentationReviewEvidence/);
+  assert.match(documentationReviewRunner, /writeFileSync\(temporaryOutputPath/);
+  assert.match(documentationReviewRunner, /renameSync\(temporaryOutputPath, outputPath\)/);
+  assert.doesNotMatch(documentationReviewRunner, /existsSync\(outputPath\)/);
   assert.doesNotMatch(documentationReviewRunner, /status: 'approved'/);
   assert.match(documentationReviewRunner, /Documentation-review evidence must be run from a clean worktree/);
   assert.match(documentationReviewRunner, /scripts\/local-safe-test\.env/);

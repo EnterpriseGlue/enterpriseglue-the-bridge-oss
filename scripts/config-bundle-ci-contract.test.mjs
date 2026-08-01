@@ -32,6 +32,9 @@ test('the CLI re-previews exact input, sends its canonical hash and idempotency 
   assert.match(cli, /ENTERPRISEGLUE_CONFIG_SOURCE_REPOSITORY/);
   assert.match(cli, /ciProvenance/);
   assert.match(cli, /reconciliationWaitState/);
+  assert.match(cli, /const handle = await open\(filePath, 'r'\)/);
+  assert.match(cli, /metadata\.isFile\(\)/);
+  assert.match(cli, /contents\.byteLength > maxBundleBytes/);
   assert.match(cli, /toSanitizedJson/);
   assert.match(cli, /v1beta1/);
   assert.match(cli, /v1alpha1 remains accepted/);

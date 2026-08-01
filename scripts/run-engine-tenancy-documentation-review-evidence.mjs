@@ -5,9 +5,12 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
   finalizeDocumentationReviewEvidence,
@@ -128,17 +131,19 @@ if (startCommit !== endCommit || (!allowDirty && endChanges)) {
 
 const automatedChecksPassed = broken.length === 0;
 let existingEvidence = null;
-if (existsSync(outputPath)) {
-  try {
-    existingEvidence = JSON.parse(readFileSync(outputPath, 'utf8'));
-  } catch {
-    existingEvidence = null;
-  }
+try {
+  existingEvidence = JSON.parse(readFileSync(outputPath, 'utf8'));
+} catch {
+  existingEvidence = null;
 }
 const evidenceExists = (value) => {
   if (!isSafeDocumentationReviewEvidencePath(value)) return false;
   const absolutePath = path.resolve(root, value);
-  return existsSync(absolutePath) && statSync(absolutePath).isFile();
+  try {
+    return statSync(absolutePath).isFile();
+  } catch {
+    return false;
+  }
 };
 const evidence = finalizeDocumentationReviewEvidence({
   schemaVersion: 2,
@@ -185,7 +190,14 @@ const evidence = finalizeDocumentationReviewEvidence({
 }, evidenceExists);
 
 mkdirSync(outputDirectory, { recursive: true });
-writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`);
+const temporaryOutputPath = path.join(outputDirectory, `.documentation-review-${randomUUID()}.tmp`);
+try {
+  writeFileSync(temporaryOutputPath, `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  renameSync(temporaryOutputPath, outputPath);
+} catch (error) {
+  try { unlinkSync(temporaryOutputPath); } catch { /* Temporary file was not created or was already removed. */ }
+  throw error;
+}
 const approvedReviewCount = Object.values(evidence.reviews)
   .filter((review) => review.status === 'approved').length;
 console.log(

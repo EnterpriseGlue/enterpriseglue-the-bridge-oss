@@ -293,6 +293,9 @@ export class UserService {
       const nextIsActive = updateData.isActive ?? existing.isActive;
       if (nextIsActive) {
         await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, id);
+      } else if (existing.isActive || input.isActive === false) {
+        await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, id);
+        await manager.getRepository(RefreshToken).update({ userId: id }, { revokedAt: updateData.updatedAt });
       }
       if (input.platformRole !== undefined) {
         if (normalizeRoleValue(input.platformRole) === 'admin') {
@@ -324,6 +327,7 @@ export class UserService {
         isActive: false,
         updatedAt: now,
       });
+      await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, id);
       await manager.getRepository(RefreshToken).update({ userId: id }, { revokedAt: now });
     });
   }

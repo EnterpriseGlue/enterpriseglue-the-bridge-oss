@@ -14,6 +14,7 @@ import type {
   AuthzOwnershipMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, type DataSource, type EntityManager } from 'typeorm';
 
@@ -152,11 +153,7 @@ function normalizeTenantId(tenantId?: string | null): string | null {
 }
 
 function groupKeyFromName(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  return slugifyIdentifier(value);
 }
 
 function toGroupView(group: AuthzGroup): AuthzGroupView {
@@ -524,6 +521,20 @@ export class AuthzGroupService {
       DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
       userId,
       AUTHENTICATED_USER_BASELINE_SOURCE_REF
+    );
+  }
+
+  async removeAuthenticatedUserMembershipWithManager(
+    manager: EntityManager,
+    userId: string
+  ): Promise<{ removed: boolean }> {
+    return this.removeSystemGroupMembershipWithManager(
+      manager,
+      DEFAULT_PLATFORM_GROUP_IDS.AUTHENTICATED_USERS,
+      userId,
+      AUTHENTICATED_USER_BASELINE_SOURCE_REF,
+      'system',
+      'authz.group_membership.authenticated_user_remove'
     );
   }
 

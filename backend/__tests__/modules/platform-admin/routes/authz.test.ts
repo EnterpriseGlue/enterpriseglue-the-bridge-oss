@@ -1728,6 +1728,64 @@ describe('platform-admin authz routes', () => {
     });
   });
 
+  it('validates a direct runtime-resource ID against the active tenant inventory before evaluating access', async () => {
+    const findOne = vi.fn().mockResolvedValue({
+      id: 'runtime-resource-direct',
+      tenantId: 'tenant-default',
+      engineId: 'engine-1',
+      resourceKind: 'process_definition',
+      resourceKey: 'invoice',
+      runtimeTenantId: '',
+      tenantMappingId: null,
+      tenantMappingVersion: 0,
+      isActive: true,
+    });
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne }) });
+
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        permission: 'engine:instance:view',
+        resourceType: 'engine_runtime_resource',
+        resourceId: 'runtime-resource-direct',
+      });
+
+    expect(response.status).toBe(200);
+    expect(findOne).toHaveBeenCalledWith({
+      where: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'runtime-resource-direct',
+          tenantId: 'tenant-default',
+          tenantResolutionStatus: 'resolved',
+          isActive: true,
+        }),
+      ]),
+    });
+    expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
+      'engine:instance:view',
+      expect.objectContaining({ resourceId: 'runtime-resource-direct', tenantId: 'tenant-default' }),
+    );
+  });
+
+  it('rejects a direct runtime-resource ID outside the active tenant inventory', async () => {
+    const findOne = vi.fn().mockResolvedValue(null);
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne }) });
+    vi.mocked(permissionService.evaluatePermission).mockClear();
+
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        permission: 'engine:instance:view',
+        resourceType: 'engine_runtime_resource',
+        resourceId: 'runtime-resource-from-another-tenant',
+      });
+
+    expect(response.status).toBe(404);
+    expect(permissionService.evaluatePermission).not.toHaveBeenCalled();
+  });
+
   it('uses the default tenant for runtime-resource evaluation when middleware has no tenant context', async () => {
     const findOne = vi.fn().mockResolvedValue({
       id: 'runtime-resource-1',

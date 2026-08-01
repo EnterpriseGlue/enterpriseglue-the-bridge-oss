@@ -18,6 +18,11 @@ const bundle = {
 };
 
 describe('configBundleArchiveService', () => {
+  it('rejects non-buffer archive input before inspecting its size', () => {
+    expect(() => configBundleArchiveService.readZip('not-a-buffer')).toThrow('Configuration ZIP archive is required');
+    expect(() => configBundleArchiveService.readZip(new Uint8Array([1, 2, 3]))).toThrow('Configuration ZIP archive is required');
+  });
+
   it('converts a folder-style ZIP into the existing configuration envelope', () => {
     const mappingBundle = {
       ...bundle,

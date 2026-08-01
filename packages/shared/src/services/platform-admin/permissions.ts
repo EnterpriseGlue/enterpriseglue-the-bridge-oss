@@ -34,6 +34,7 @@ import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persis
 import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
 import { normalizeTenantIdForPersistence, tenantIdsForAuthz } from '../../authz/tenant-scope.js';
@@ -1654,14 +1655,7 @@ export interface GrantPermissionInput {
 }
 
 function slugifyRoleName(name: string): string {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48)
-    .replace(/-+$/g, '');
-  return slug || 'role';
+  return slugifyIdentifier(name, { maxLength: 48, fallback: 'role' });
 }
 
 async function recordAuthzAudit(

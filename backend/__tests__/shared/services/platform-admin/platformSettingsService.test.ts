@@ -232,6 +232,24 @@ describe('PlatformSettingsService', () => {
     }));
   });
 
+  it('rejects an invalid local-login mode at the service boundary', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({ id: 'default', accessGovernanceOwnershipMode: 'manual' }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.update({ localPasswordLoginMode: 'unexpected' as never }, 'admin-1'))
+      .rejects.toThrow('Invalid local password login mode');
+    expect(repo.update).not.toHaveBeenCalled();
+  });
+
   it('rejects portal governance changes when configuration owns the settings', async () => {
     const repo = {
       findOneBy: vi.fn().mockResolvedValue({

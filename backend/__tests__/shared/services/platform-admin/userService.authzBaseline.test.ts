@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const dataSource = vi.hoisted(() => ({ transaction: vi.fn() }));
 const authzGroupService = vi.hoisted(() => ({
   ensureAuthenticatedUserMembershipWithManager: vi.fn(),
+  removeAuthenticatedUserMembershipWithManager: vi.fn(),
   ensureManualPlatformAdministratorMembershipWithManager: vi.fn(),
   removeManualPlatformAdministratorMembershipWithManager: vi.fn(),
 }));
@@ -21,11 +22,13 @@ import { userService } from '@enterpriseglue/shared/services/platform-admin/User
 import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 
 describe('UserService authorization baseline', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authzGroupService.ensureAuthenticatedUserMembershipWithManager.mockResolvedValue({ id: 'baseline-1', created: true });
+    authzGroupService.removeAuthenticatedUserMembershipWithManager.mockResolvedValue({ removed: true });
     authzGroupService.ensureManualPlatformAdministratorMembershipWithManager.mockResolvedValue({ id: 'admin-1', created: true });
     authzGroupService.removeManualPlatformAdministratorMembershipWithManager.mockResolvedValue({ removed: true });
   });
@@ -57,11 +60,16 @@ describe('UserService authorization baseline', () => {
         ? [{ userId: 'user-1', expiresAt: null }]
         : []),
     };
+    const refreshTokenRepo = { update: vi.fn() };
     const manager = {
-      getRepository: vi.fn((entity: unknown) => entity === AuthzGroupMembership ? membershipRepo : userRepo),
+      getRepository: vi.fn((entity: unknown) => {
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        return userRepo;
+      }),
     };
     dataSource.transaction.mockImplementation(async (callback: (transactionManager: typeof manager) => unknown) => callback(manager));
-    return { manager, userRepo };
+    return { manager, userRepo, refreshTokenRepo };
   }
 
   it('creates a baseline system-group membership for a normal pending local user', async () => {
@@ -110,6 +118,30 @@ describe('UserService authorization baseline', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     expect(authzGroupService.removeManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+  });
+
+  it('removes baseline access and revokes refresh tokens when update deactivates a user', async () => {
+    const { manager, userRepo, refreshTokenRepo } = mockCreateTransaction('user');
+    userRepo.findOneBy
+      .mockResolvedValueOnce({
+        id: 'user-1', email: 'person@example.test', firstName: null, lastName: null,
+        authProvider: 'local', isActive: true, isEmailVerified: true, mustResetPassword: false,
+        createdAt: 1, updatedAt: 1, lastLoginAt: null, createdByUserId: 'actor-1',
+      })
+      .mockResolvedValueOnce({
+        id: 'user-1', email: 'person@example.test', firstName: null, lastName: null,
+        authProvider: 'local', isActive: false, isEmailVerified: true, mustResetPassword: false,
+        createdAt: 1, updatedAt: 2, lastLoginAt: null, createdByUserId: 'actor-1',
+      });
+
+    await userService.updateUser('user-1', { isActive: false });
+
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.removeAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
+    expect(refreshTokenRepo.update).toHaveBeenCalledWith(
+      { userId: 'user-1' },
+      { revokedAt: expect.any(Number) },
+    );
   });
 
   it('derives displayed platform administration from active canonical memberships', async () => {
