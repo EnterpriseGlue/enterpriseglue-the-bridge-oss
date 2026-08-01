@@ -130,11 +130,23 @@ test('the pull-request workflow retains browser and database evidence when autho
     assert.match(workflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
     assert.match(workflow, /curl -sf http:\/\/localhost:9080\/health/);
     assert.doesNotMatch(workflow, /local-docs\/ING\/api-specs\/Mission-Control-Camunda-API\.postman_collection\.json/);
-    assert.equal(
-      (workflow.match(/-e ENCRYPTION_KEY/g) || []).length,
-      3,
-      'every Playwright container must receive the validated encryption key',
-    );
+    for (const variable of [
+      'DATABASE_TYPE',
+      'POSTGRES_HOST',
+      'POSTGRES_PORT',
+      'POSTGRES_USER',
+      'POSTGRES_PASSWORD',
+      'POSTGRES_DATABASE',
+      'POSTGRES_SCHEMA',
+      'POSTGRES_SSL_REJECT_UNAUTHORIZED',
+      'ENCRYPTION_KEY',
+    ]) {
+      assert.equal(
+        (workflow.match(new RegExp(`-e ${variable}`, 'g')) || []).length,
+        3,
+        `every Playwright container must receive ${variable}`,
+      );
+    }
   }
   assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);

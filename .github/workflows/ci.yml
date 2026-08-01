@@ -436,6 +436,7 @@ jobs:
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_API_BASE_URL=http://localhost:8787 \
             -e CAMUNDA_BASE_URL \
+            -e DATABASE_TYPE \
             -e POSTGRES_HOST \
             -e POSTGRES_PORT \
             -e POSTGRES_USER \
@@ -465,6 +466,14 @@ jobs:
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_SEED_USER=false \
             -e IDENTITY_TEST_EVIDENCE_PATH=test/results/identity-lifecycle-evidence.json \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
             -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
@@ -493,6 +502,14 @@ jobs:
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_SEED_USER=false \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
             -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
