@@ -28,6 +28,7 @@ const ciCoreWorkflow = readFileSync(new URL('../.github/workflows/ci-core-reusab
 const ciWorkflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const identityProtocolRehearsalWorkflow = readFileSync(new URL('../.github/workflows/identity-protocol-rehearsal.yml', import.meta.url), 'utf8');
 const entraIdRehearsalWorkflow = readFileSync(new URL('../.github/workflows/entra-id-rehearsal.yml', import.meta.url), 'utf8');
+const codeqlWorkflow = readFileSync(new URL('../.github/workflows/codeql.yml', import.meta.url), 'utf8');
 const identityBrowserRunner = readFileSync(new URL('./run-identity-browser-test.sh', import.meta.url), 'utf8');
 const authzRefactorRunner = readFileSync(new URL('./run-local-safe-authz-refactor.sh', import.meta.url), 'utf8');
 const authzMutationRunner = readFileSync(new URL('./run-authz-mutation-tests.mjs', import.meta.url), 'utf8');
@@ -170,6 +171,14 @@ test('the pull-request workflow retains browser and database evidence when autho
   assert.match(authzPrWorkflow, /Capture database diagnostics on failure/);
   assert.match(authzPrWorkflow, /test\/results/);
   assert.match(authzPrWorkflow, /backend\/coverage\/authz-decisions/);
+});
+
+test('the CodeQL gate queries every alert for the pull request instead of an unindexed merge SHA', () => {
+  assert.match(codeqlWorkflow, /--paginate/);
+  assert.match(codeqlWorkflow, /-F pr="\$\{PR_NUMBER\}"/);
+  assert.match(codeqlWorkflow, /-f tool_name=CodeQL/);
+  assert.match(codeqlWorkflow, /jq -s 'map\(length\) \| add \/\/ 0'/);
+  assert.doesNotMatch(codeqlWorkflow, /ref=\$\{GITHUB_SHA\}/);
 });
 
 test('machine-principal services retain literal 100 percent source coverage', () => {

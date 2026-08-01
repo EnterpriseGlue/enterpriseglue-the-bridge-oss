@@ -52,18 +52,37 @@ jobs:
       security-events: read
       contents: read
     steps:
-      - name: Fail if open CodeQL alerts exist for this SHA
+      - name: Fail if open CodeQL alerts exist for this change
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
         run: |
           set -euo pipefail
 
-          alert_count="$(gh api "repos/${GITHUB_REPOSITORY}/code-scanning/alerts?state=open&ref=${GITHUB_SHA}&per_page=100" --jq 'length')"
-          echo "Open CodeQL alerts for ${GITHUB_SHA}: ${alert_count}"
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            if [[ ! "${PR_NUMBER}" =~ ^[0-9]+$ ]]; then
+              echo "CodeQL Gate failed: pull-request number is missing or invalid."
+              exit 1
+            fi
+            target="PR #${PR_NUMBER}"
+            alert_count="$(
+              gh api --method GET --paginate "repos/${GITHUB_REPOSITORY}/code-scanning/alerts" \
+                -f state=open -F pr="${PR_NUMBER}" -f tool_name=CodeQL -F per_page=100 \
+                | jq -s 'map(length) | add // 0'
+            )"
+          else
+            target="ref ${GITHUB_REF}"
+            alert_count="$(
+              gh api --method GET --paginate "repos/${GITHUB_REPOSITORY}/code-scanning/alerts" \
+                -f state=open -f ref="${GITHUB_REF}" -f tool_name=CodeQL -F per_page=100 \
+                | jq -s 'map(length) | add // 0'
+            )"
+          fi
+          echo "Open CodeQL alerts for ${target}: ${alert_count}"
 
           if [ "${alert_count}" -gt 0 ]; then
-            echo "CodeQL Gate failed: open code scanning alerts exist for ${GITHUB_SHA}."
+            echo "CodeQL Gate failed: open CodeQL alerts exist for ${target}."
             exit 1
           fi
 
-          echo "CodeQL Gate passed: no open code scanning alerts for ${GITHUB_SHA}."
+          echo "CodeQL Gate passed: no open CodeQL alerts for ${target}."
