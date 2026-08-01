@@ -1199,7 +1199,7 @@ export default function ProcessesOverviewPage() {
         <Pane size={splitSize} minSize={200} style={{ overflow: 'hidden' }}>
         <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', position: 'relative', overflow: 'hidden', height: '100%', width: '100%' }}>
           {!currentKey && (
-            <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To view a Diagram, select a Process in the Filters panel</div>
+            <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To view a diagram, select a process in the Filters panel.</div>
           )}
           {currentKey && selectedVersion === null && (
             <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To see a Diagram, select a single Version</div>

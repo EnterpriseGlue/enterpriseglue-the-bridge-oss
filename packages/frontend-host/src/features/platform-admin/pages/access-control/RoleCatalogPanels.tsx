@@ -16,7 +16,7 @@ export function RoleCatalogPanel({ roles, loading, failed, onCreate, onEdit, onD
   roles: RoleSummary[]; loading: boolean; failed: boolean; onCreate: () => void; onEdit: (role: RoleSummary) => void; onDuplicate: (role: RoleSummary) => void; onArchive: (role: RoleSummary) => void; canManage: boolean; filterRoles: (roles: RoleSummary[], search: string, scope: RoleScopeFilter) => RoleSummary[];
 }) {
   if (failed) return <CatalogLoadError title="Unable to load roles" />;
-  return <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}><RolesTable roles={roles} loading={loading} onCreate={onCreate} onEdit={onEdit} onDuplicate={onDuplicate} onArchive={onArchive} canManage={canManage} filterRoles={filterRoles} /><InlineNotification kind="info" lowContrast hideCloseButton title="Edit one role at a time" subtitle="Use Edit for custom roles or Duplicate for system roles. The focused role editor keeps permissions scoped, avoids horizontal comparison tables, and requires acknowledgement for sensitive permissions." /></div>;
+  return <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}><RolesTable roles={roles} loading={loading} onCreate={onCreate} onEdit={onEdit} onDuplicate={onDuplicate} onArchive={onArchive} canManage={canManage} filterRoles={filterRoles} /><InlineNotification kind="info" lowContrast hideCloseButton title="System roles cannot be edited" subtitle="Duplicate a system role to create a custom role. Custom roles can be edited directly." /></div>;
 }
 
 export function PermissionCatalogPanel({ permissions, loading, failed, onCreate, canManage, filterPermissions, getPermissionImplications, getPermissionRisk }: {

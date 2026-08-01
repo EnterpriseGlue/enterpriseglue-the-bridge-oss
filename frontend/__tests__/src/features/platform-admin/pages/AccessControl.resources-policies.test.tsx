@@ -63,6 +63,11 @@ import {
   reconcileExternalEngine,
 } from './AccessControlTestUtils';
 
+function menuItem(label: string): HTMLElement | null {
+  const node = screen.queryAllByText(label).find((candidate) => candidate.closest('.cds--overflow-menu-options__option'));
+  return node?.closest('button') || node?.closest('[role="menuitem"]') || node || null;
+}
+
 describe('AccessControl resources and policies', () => {
   beforeEach(resetAccessControlMocks);
 
@@ -101,7 +106,7 @@ describe('AccessControl resources and policies', () => {
     fireEvent.click(screen.getByRole('button', { name: /View resource External Engine/i }));
 
     expect(screen.getByRole('heading', { name: /Engine: External Engine/i })).toBeInTheDocument();
-    expect(screen.getByText('User: 00000000-0000-4000-8000-000000000001')).toBeInTheDocument();
+    expect(screen.getAllByText('User: 00000000-0000-4000-8000-000000000001').length).toBeGreaterThan(0);
     expect(screen.getByText('Group: Operations')).toBeInTheDocument();
     expect(screen.getAllByText('Custom Operator').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Managed by SSO').length).toBeGreaterThan(0);
@@ -142,12 +147,14 @@ describe('AccessControl resources and policies', () => {
   it('renders Engine Sets with materialization lineage and management actions', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Engine Sets$/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Engine sets$/i }));
 
     expect(screen.getAllByText('Production Engines').length).toBeGreaterThan(0);
     expect(screen.getByText('Labels (all): environment=prod')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Details/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Production Engines' }));
+    await waitFor(() => expect(menuItem('View details')).toBeTruthy());
+    fireEvent.click(menuItem('View details')!);
     expect(screen.getAllByText('External Engine').length).toBeGreaterThan(0);
     expect(screen.getByText('label: environment=prod')).toBeInTheDocument();
     expect(screen.getByText('Production Engines assignment usage')).toBeInTheDocument();
@@ -157,28 +164,29 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getAllByText('engine.deploy.create').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Allowed by Engine Set assignment').length).toBeGreaterThan(0);
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Materialize/i }));
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Production Engines' }));
+    await waitFor(() => expect(menuItem('Refresh matching engines')).toBeTruthy());
+    await act(async () => fireEvent.click(menuItem('Refresh matching engines')!));
 
     expect(materializeEngineSet).toHaveBeenCalledWith('engine-set-1');
-    expect(screen.getByText('Engine Set materialized')).toBeInTheDocument();
+    expect(screen.getByText(/engines matched/)).toBeInTheDocument();
   });
 
   it('requires acknowledgement before creating broad Engine Sets', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Engine Sets$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Create Engine Set/i }));
-    fireEvent.change(screen.getByLabelText('Engine Set name'), { target: { value: 'All Engines' } });
+    fireEvent.click(screen.getByRole('tab', { name: /^Engine sets$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create engine set/i }));
+    expect(screen.getByText('Enter one or more engine IDs, separated by commas.')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Engine set name'), { target: { value: 'All Engines' } });
 
-    const engineSetModal = screen.getByRole('heading', { name: /^Create Engine Set$/i }).closest('.cds--modal-container') as HTMLElement;
+    const engineSetModal = screen.getByRole('heading', { name: /^Create engine set$/i }).closest('.cds--modal-container') as HTMLElement;
     fireEvent.click(within(engineSetModal).getByRole('combobox', { name: /Selector/i }));
     const allEnginesOption = screen.getAllByText('All engines')
       .find((element) => element.classList.contains('cds--list-box__menu-item__option')) as HTMLElement;
     fireEvent.click(allEnginesOption);
 
-    expect(screen.getByText('Broad Engine Set selector')).toBeInTheDocument();
+    expect(screen.getByText('Broad engine set selector')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Create$/i }).find((button) => button.hasAttribute('disabled'))).toBeDefined();
 
     fireEvent.click(screen.getByLabelText('I understand this selector can grant access across a broad set of engines.'));
@@ -200,44 +208,42 @@ describe('AccessControl resources and policies', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /^Project Targets$/i }));
 
-    const projectTargetsPanel = screen.getByLabelText('Project target API diagnostics').parentElement as HTMLElement;
-    const projectTargets = within(projectTargetsPanel);
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced integration status' }));
+    const projectTargets = screen;
 
-    expect(projectTargets.getByText('Project target API diagnostics')).toBeInTheDocument();
-    expect(projectTargets.getByText('External API target registration blocked')).toBeInTheDocument();
-    expect(projectTargets.getByText('External API target decommission blocked')).toBeInTheDocument();
+    expect(projectTargets.getByLabelText('Project target API diagnostics')).toBeInTheDocument();
+    expect(projectTargets.getByText('Register targets: unavailable')).toBeInTheDocument();
+    expect(projectTargets.getByText('Decommission targets: unavailable')).toBeInTheDocument();
     expect(projectTargets.getAllByText('Payments').length).toBeGreaterThan(0);
     expect(projectTargets.getByText('Manual, CI')).toBeInTheDocument();
     expect(projectTargets.getByText(/Policies: prod/)).toBeInTheDocument();
-    const hasArchiveAction = (row: HTMLTableRowElement | null): row is HTMLTableRowElement =>
-      row !== null && within(row).queryByRole('button', { name: /Archive/i }) !== null;
-
-    const manualRow = projectTargets
-      .getAllByText('Payments')
-      .map((element) => element.closest('tr'))
-      .find(hasArchiveAction)!;
-    fireEvent.click(within(manualRow).getByRole('button', { name: /Archive/i }));
+    fireEvent.click(projectTargets.getByRole('button', { name: 'Actions for Payments' }));
+    await waitFor(() => expect(menuItem('Archive')).toBeTruthy());
+    fireEvent.click(menuItem('Archive')!);
+    fireEvent.click(screen.getByRole('dialog', { name: 'Archive project target' }).querySelector('.cds--btn--danger')!);
     await waitFor(() => expect(archiveProjectEngineTarget).toHaveBeenCalledWith('target-1'));
 
-    const sourceOwnedRow = projectTargets
-      .getAllByText('Inventory')
-      .map((element) => element.closest('tr'))
-      .find(hasArchiveAction)!;
-    expect(within(sourceOwnedRow).getByRole('button', { name: /Edit/i })).toBeDisabled();
-    expect(within(sourceOwnedRow).getByRole('button', { name: /Archive/i })).toBeDisabled();
+    fireEvent.click(projectTargets.getByRole('button', { name: 'Actions for Inventory' }));
+    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    expect(menuItem('Edit')).toBeDisabled();
+    expect(menuItem('Archive')).toBeDisabled();
 
-    fireEvent.change(projectTargets.getByLabelText('Project ID to sync'), { target: { value: 'project-1' } });
-    fireEvent.click(projectTargets.getByRole('button', { name: /Sync Legacy Targets/i }));
+    fireEvent.click(document.getElementById('target-sync-project')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Payments' }));
+    fireEvent.click(projectTargets.getByRole('button', { name: /Import targets/i }));
     await waitFor(() => expect(syncLegacyProjectEngineTargets).toHaveBeenCalledWith({ projectId: 'project-1' }));
-    await waitFor(() => expect(projectTargets.getByText('Legacy project targets synced')).toBeInTheDocument());
+    await waitFor(() => expect(projectTargets.getByText('Existing project targets imported')).toBeInTheDocument());
 
-    fireEvent.change(document.getElementById('target-evaluate-user-id')!, { target: { value: 'user-1' } });
-    fireEvent.change(document.getElementById('target-evaluate-project-id')!, { target: { value: 'project-1' } });
-    fireEvent.change(document.getElementById('target-evaluate-engine-id')!, { target: { value: 'engine-1' } });
-    fireEvent.click(projectTargets.getByRole('button', { name: /Evaluate Eligibility/i }));
+    fireEvent.change(document.getElementById('target-evaluate-user')!, { target: { value: 'second' } });
+    fireEvent.click(screen.getByRole('button', { name: /Second User/ }));
+    fireEvent.click(document.getElementById('target-evaluate-project')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Payments' }));
+    fireEvent.click(document.getElementById('target-evaluate-engine')!);
+    fireEvent.click(screen.getByRole('option', { name: 'External Engine' }));
+    fireEvent.click(projectTargets.getByRole('button', { name: /Check deployment access/i }));
 
     await waitFor(() => expect(evaluateDeploymentEligibility).toHaveBeenCalledWith({
-      userId: 'user-1',
+      userId: '00000000-0000-4000-8000-000000000020',
       projectId: 'project-1',
       engineId: 'engine-1',
       mode: 'manual',
@@ -252,9 +258,12 @@ describe('AccessControl resources and policies', () => {
     fireEvent.click(screen.getByRole('tab', { name: /^Project Targets$/i }));
     fireEvent.click(screen.getByRole('button', { name: /Create Target/i }));
 
-    fireEvent.change(document.getElementById('project-target-project-id')!, { target: { value: 'project-new' } });
-    fireEvent.change(document.getElementById('project-target-engine-id')!, { target: { value: 'engine-new' } });
+    fireEvent.click(document.getElementById('project-target-project')!);
+    fireEvent.click(screen.getByRole('option', { name: 'New project' }));
+    fireEvent.click(document.getElementById('project-target-engine')!);
+    fireEvent.click(screen.getByRole('option', { name: 'External Engine' }));
     fireEvent.click(screen.getByLabelText('API deploy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced integration metadata' }));
     fireEvent.change(document.getElementById('project-target-external-project-id')!, { target: { value: 'cmdb-project-new' } });
     fireEvent.change(document.getElementById('project-target-policy-tags')!, { target: { value: 'prod, sox' } });
 
@@ -265,7 +274,7 @@ describe('AccessControl resources and policies', () => {
 
     await waitFor(() => expect(createProjectEngineTarget).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-new',
-      engineId: 'engine-new',
+      engineId: 'engine-1',
       source: 'manual',
       allowManualDeploy: true,
       allowApiDeploy: true,
@@ -283,11 +292,15 @@ describe('AccessControl resources and policies', () => {
     expect(screen.getAllByText('engine:deploy').length).toBeGreaterThan(0);
     expect(screen.getByText('timeWindow')).toBeInTheDocument();
 
-    const policyRow = screen.getByText('Block production deploys outside hours').closest('tr')!;
-    fireEvent.click(within(policyRow).getByRole('button', { name: /Disable/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Block production deploys outside hours' }));
+    await waitFor(() => expect(menuItem('Disable')).toBeTruthy());
+    fireEvent.click(menuItem('Disable')!);
     await waitFor(() => expect(updatePolicy).toHaveBeenCalledWith({ id: 'policy-1', isActive: false }));
 
-    fireEvent.click(within(policyRow).getByRole('button', { name: /Delete/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Block production deploys outside hours' }));
+    await waitFor(() => expect(menuItem('Delete')).toBeTruthy());
+    fireEvent.click(menuItem('Delete')!);
+    fireEvent.click(screen.getByRole('dialog', { name: 'Delete authorization policy' }).querySelector('.cds--btn--danger')!);
     await waitFor(() => expect(deletePolicy).toHaveBeenCalledWith('policy-1'));
   });
 
@@ -295,11 +308,18 @@ describe('AccessControl resources and policies', () => {
     render(<AccessControl />);
 
     fireEvent.click(screen.getByRole('tab', { name: /^Policies$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Add Policy/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add policy/i }));
+    expect(screen.getByRole('combobox', { name: 'Effect' })).toHaveTextContent('Select an effect');
 
     fireEvent.change(screen.getByLabelText('Policy name'), { target: { value: 'Require production approvals' } });
     fireEvent.change(document.getElementById('policy-description')!, { target: { value: 'Blocks production without an approval tag.' } });
-    fireEvent.change(document.getElementById('policy-action')!, { target: { value: 'engine:deploy' } });
+    fireEvent.click(document.querySelector('#policy-effect button')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Deny' }));
+    fireEvent.click(document.querySelector('#policy-resource-type button')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Engine' }));
+    fireEvent.click(document.getElementById('policy-action')!);
+    fireEvent.click(screen.getByText('Deploy (engine:deploy)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced conditions (JSON)' }));
     fireEvent.change(document.getElementById('policy-conditions')!, {
       target: {
         value: JSON.stringify({
@@ -321,7 +341,7 @@ describe('AccessControl resources and policies', () => {
       description: 'Blocks production without an approval tag.',
       effect: 'deny',
       priority: 100,
-      resourceType: undefined,
+      resourceType: 'engine',
       action: 'engine:deploy',
       conditions: {
         resourceAttribute: {
@@ -338,9 +358,27 @@ describe('AccessControl resources and policies', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
 
-    expect(document.querySelector('#effective-user-id')).toBeInTheDocument();
+    expect(document.querySelector('#effective-user')).toBeInTheDocument();
     expect(document.querySelector('#effective-permission')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Evaluate/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Check access/i })).toBeDisabled();
+  });
+
+  it('only offers permissions compatible with the selected Effective Access resource', () => {
+    render(<AccessControl />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
+    fireEvent.click(document.querySelector('#effective-permission button')!);
+
+    expect(screen.getByText('Check Access (platform:authz:check)')).toBeInTheDocument();
+    expect(screen.queryByText('View Instances (engine:instance:view)')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Check Access (platform:authz:check)'));
+    fireEvent.click(document.querySelector('#effective-resource-type button')!);
+    fireEvent.click(screen.getByRole('option', { name: 'Engine' }));
+    fireEvent.click(document.querySelector('#effective-permission button')!);
+
+    expect(screen.getByText('View Instances (engine:instance:view)')).toBeInTheDocument();
+    expect(screen.queryByText('Check Access (platform:authz:check)')).not.toBeInTheDocument();
   });
 
   it('shows runtime resource selector fields for effective access', () => {
@@ -352,10 +390,10 @@ describe('AccessControl resources and policies', () => {
     fireEvent.click(resourceTypeDropdown as HTMLButtonElement);
     fireEvent.click(screen.getByText('Runtime resource'));
 
-    expect(document.querySelector('#effective-runtime-engine-id')).toBeInTheDocument();
+    expect(document.querySelector('#effective-runtime-engine')).toBeInTheDocument();
     expect(document.querySelector('#effective-runtime-resource-kind')).toBeInTheDocument();
-    expect(document.querySelector('#effective-runtime-resource-key')).toBeInTheDocument();
-    expect(document.querySelector('#effective-runtime-tenant-id')).toBeInTheDocument();
+    expect(document.querySelector('#effective-runtime-resource')).toBeInTheDocument();
+    expect(document.querySelector('#effective-runtime-tenant-id')).not.toBeInTheDocument();
   });
 
   it('renders effective access SSO Engine Set lineage', () => {
@@ -412,8 +450,8 @@ describe('AccessControl resources and policies', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Effective Access/i }));
 
-    expect(screen.getByText('Authorization sources')).toBeInTheDocument();
-    expect(screen.getByText('system.engine.operator')).toBeInTheDocument();
+    expect(screen.getByText('Why this access decision was made')).toBeInTheDocument();
+    expect(screen.getAllByText('system.engine.operator').length).toBeGreaterThan(0);
     expect(screen.getByText('user:user-1')).toBeInTheDocument();
     expect(screen.getByText('Engine Set: SSO Prod Operators')).toBeInTheDocument();
     expect(screen.getByText(/Identity mapping: group exact Prod Operators/)).toBeInTheDocument();

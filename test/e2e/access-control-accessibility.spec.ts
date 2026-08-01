@@ -31,6 +31,10 @@ async function openPermissions(page: Page, failPermissions = false): Promise<voi
   await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
 }
 
+function permissionLabelCell(page: Page): Locator {
+  return page.getByRole('cell', { name: permission.label, exact: true });
+}
+
 async function contrastRatio(locator: Locator): Promise<number> {
   return locator.evaluate((element) => {
     const parseRgb = (value: string): [number, number, number] => {
@@ -78,8 +82,8 @@ test.describe('Access Control accessibility release checks', () => {
     const samples = [
       page.getByRole('heading', { name: 'Access Control' }),
       page.getByRole('tab', { name: 'Permissions', exact: true }),
-      page.getByText(permission.label, { exact: true }),
-      page.getByRole('button', { name: 'Add Permission' }),
+      permissionLabelCell(page),
+      page.getByRole('button', { name: 'Add permission' }),
     ];
     for (const sample of samples) {
       await expect(sample).toBeVisible();
@@ -97,30 +101,30 @@ test.describe('Access Control accessibility release checks', () => {
     await expect.poll(() => page.evaluate(() =>
       document.documentElement.scrollWidth <= document.documentElement.clientWidth
     )).toBe(true);
-    await expect(page.getByText(permission.label, { exact: true })).toBeVisible();
+    await expect(permissionLabelCell(page)).toBeVisible();
   });
 
   test('keeps the permission workflow usable when reduced motion is requested @accessibility', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await openPermissions(page);
 
-    await expect(page.getByText(permission.label, { exact: true })).toBeVisible();
+    await expect(permissionLabelCell(page)).toBeVisible();
     await expect(page.evaluate(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)).resolves.toBe(true);
-    await page.getByRole('combobox', { name: 'Quick filter' }).click();
+    await page.getByRole('combobox', { name: 'Permission capability' }).click();
     await expect(page.getByRole('option', { name: 'All permissions', exact: true })).toBeVisible();
   });
 
   test('aligns the permission filter with the primary toolbar action @accessibility', async ({ page }) => {
     await openPermissions(page);
 
-    const quickFilter = page.getByRole('combobox', { name: 'Quick filter' });
-    const addPermission = page.getByRole('button', { name: 'Add Permission' });
+    const quickFilter = page.getByRole('combobox', { name: 'Permission capability' });
+    const addPermission = page.getByRole('button', { name: 'Add permission' });
     await expect(quickFilter).toBeVisible();
     await expect(addPermission).toBeVisible();
 
     await expect.poll(() => quickFilter.evaluate((element) => {
       const button = Array.from(document.querySelectorAll('button'))
-        .find((candidate) => candidate.textContent?.includes('Add Permission'));
+        .find((candidate) => candidate.textContent?.includes('Add permission'));
       if (!button) return null;
       const filter = element.getBoundingClientRect();
       const action = button.getBoundingClientRect();
@@ -141,7 +145,7 @@ test.describe('Access Control accessibility release checks', () => {
 
     const geometry = await quickFilter.evaluate((element) => {
       const button = Array.from(document.querySelectorAll('button'))
-        .find((candidate) => candidate.textContent?.includes('Add Permission'))!;
+        .find((candidate) => candidate.textContent?.includes('Add permission'))!;
       const filter = element.getBoundingClientRect();
       const action = button.getBoundingClientRect();
       return { topDifference: Math.abs(filter.top - action.top), bottomDifference: Math.abs(filter.bottom - action.bottom) };

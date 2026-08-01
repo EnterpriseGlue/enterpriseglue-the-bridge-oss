@@ -1,7 +1,13 @@
 import { IsNull, LessThanOrEqual } from 'typeorm';
 import { getDataSource } from '../../db/data-source.js';
 import { EngineBackstopSyncTask } from '../../infrastructure/persistence/entities/EngineBackstopSyncTask.js';
+import {
+  EngineBackstopSyncTaskResultSchema,
+  type EngineBackstopSyncTaskResult,
+} from '../../schemas/platform-admin/engine-backstop.js';
 import { generateId } from '../../utils/id.js';
+
+export type { EngineBackstopSyncTaskResult } from '../../schemas/platform-admin/engine-backstop.js';
 
 const DEFAULT_LEASE_MS = 60_000;
 const MAX_RETRY_DELAY_MS = 15 * 60_000;
@@ -14,22 +20,12 @@ export interface EnqueueEngineBackstopSyncTaskInput {
   operation: EngineBackstopSyncTask['operation'];
 }
 
-export interface EngineBackstopSyncTaskResult {
-  taskId: string;
-  runId: string;
-  operation: EngineBackstopSyncTask['operation'];
-  status: EngineBackstopSyncTask['status'];
-  attempts: number;
-  nextAttemptAt: number | null;
-  lastError: string | null;
-}
-
 function retryDelay(attempts: number): number {
   return Math.min(60_000 * (2 ** Math.min(Math.max(attempts - 1, 0), 4)), MAX_RETRY_DELAY_MS);
 }
 
 function resultFor(task: EngineBackstopSyncTask): EngineBackstopSyncTaskResult {
-  return {
+  return EngineBackstopSyncTaskResultSchema.parse({
     taskId: task.id,
     runId: task.runId,
     operation: task.operation,
@@ -37,7 +33,7 @@ function resultFor(task: EngineBackstopSyncTask): EngineBackstopSyncTaskResult {
     attempts: Number(task.attempts || 0),
     nextAttemptAt: task.nextAttemptAt == null ? null : Number(task.nextAttemptAt),
     lastError: task.lastError || null,
-  };
+  });
 }
 
 /** Durable lease/retry envelope. The executor owns all native side effects. */

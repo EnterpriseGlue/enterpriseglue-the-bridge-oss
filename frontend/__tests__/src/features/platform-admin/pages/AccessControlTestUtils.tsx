@@ -18,13 +18,54 @@ import type {
 import type { CurrentUserPermissions } from '@src/shared/types/auth';
 
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  useQuery: (options: { queryKey?: unknown[] }) => ({
+    data: options.queryKey?.[0] === 'authz-runtime-resource-engines'
+      ? [{
+          id: 'engine-1',
+          name: 'External Engine',
+          baseUrl: 'https://engine.example.com',
+          type: 'operaton',
+        }]
+      : options.queryKey?.[0] === 'authz-runtime-resources'
+        ? [{
+            id: 'runtime-resource-1',
+            engineId: 'engine-1',
+            resourceKind: 'process_definition',
+            resourceKey: 'payments',
+            runtimeTenantId: 'default',
+          }]
+        : [],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
   useMutation: () => ({ isPending: false, mutate: vi.fn(), mutateAsync: vi.fn(), reset: vi.fn() }),
 }));
 
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...await importOriginal<typeof import('react-router-dom')>(),
   useSearchParams: () => [new URLSearchParams(), vi.fn()] as const,
+}));
+
+vi.mock('@src/features/platform-admin/hooks/useAdminApi', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@src/features/platform-admin/hooks/useAdminApi')>(),
+  useUserSearch: (query: string) => ({
+    data: query.length >= 2 ? [{
+      id: '00000000-0000-4000-8000-000000000020',
+      email: 'second.user@example.com',
+      firstName: 'Second',
+      lastName: 'User',
+    }] : [],
+    isFetching: false,
+  }),
+  useProjectsGovernance: () => ({
+    data: [
+      { id: 'project-1', name: 'Payments' },
+      { id: 'project-new', name: 'New project' },
+    ],
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 const evaluateAccessState = vi.hoisted(() => ({

@@ -152,7 +152,7 @@ describe('engine registration OpenAPI contracts', () => {
     const metrics = generateOpenApi().paths?.['/metrics']?.get;
 
     expect(metrics?.responses?.['200']).toMatchObject({
-      description: 'Sanitized Prometheus configuration-bootstrap and aggregate engine-tenancy metrics',
+      description: 'Sanitized Prometheus configuration-bootstrap, aggregate engine-tenancy, and bounded login-experience metrics',
       content: {
         'text/plain': {
           schema: { type: 'string' },
@@ -189,5 +189,53 @@ describe('engine registration OpenAPI contracts', () => {
         reason: { nullable: true, maxLength: 2000 },
       },
     });
+  });
+
+  it('publishes the complete external project-engine target in create and update responses', () => {
+    const operation = generateOpenApi()
+      .paths?.['/engines-api/external/project-engine-targets']
+      ?.post;
+
+    for (const [status, created] of [['201', true], ['200', false]] as const) {
+      const responseSchema = operation?.responses?.[status]?.content?.['application/json']?.schema;
+      expect(responseSchema).toMatchObject({
+        type: 'object',
+        required: ['created', 'target'],
+        additionalProperties: false,
+        properties: {
+          created: { type: 'boolean', enum: [created] },
+          target: {
+            type: 'object',
+            required: expect.arrayContaining([
+              'id',
+              'projectId',
+              'engineId',
+              'status',
+              'source',
+              'ownershipMode',
+              'allowManualDeploy',
+              'allowCiDeploy',
+              'allowApiDeploy',
+              'allowImport',
+              'approvalStatus',
+              'policyTags',
+              'createdAt',
+              'updatedAt',
+            ]),
+            properties: expect.objectContaining({
+              id: { type: 'string' },
+              projectId: { type: 'string' },
+              engineId: { type: 'string' },
+              status: { type: 'string', enum: ['active', 'disabled', 'archived'] },
+              source: {
+                type: 'string',
+                enum: ['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation', 'config'],
+              },
+              ownershipMode: { type: 'string', enum: ['manual', 'config_locked', 'config_warn'] },
+            }),
+          },
+        },
+      });
+    }
   });
 });

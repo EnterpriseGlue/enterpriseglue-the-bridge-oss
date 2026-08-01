@@ -34,7 +34,8 @@ The UI, JSON bundles, CI/CD API, and identity synchronization must all write the
 
 | Concern | Options | Recommended default |
 | --- | --- | --- |
-| User authentication | `standalone`, `transition_to_sso`, `sso_enforced` | Start with `standalone`; retain a break-glass local admin during transition |
+| Ordinary local login | `auto`, `enabled`, `disabled` | Start with `auto`; use `enabled` only for a deliberate transition and test the separate administrator-recovery route before `disabled` |
+| SSO provider selection | `auto_redirect_single`, `chooser`, `progressive` | `auto_redirect_single` for one redirect provider; `chooser` or `progressive` for multiple providers |
 | Identity protocol | Local, OIDC, SAML, LDAP direct, LDAP claims-only | OIDC when available; map all protocols through provider-neutral entitlements |
 | Engine access authority | `manual`, `transition_to_sso`, `sso_managed` | `manual` for standalone, then explicit transition |
 | Project access authority | `manual`, `transition_to_sso`, `sso_managed` | `manual` unless projects are centrally governed |
@@ -276,8 +277,8 @@ Required sequence:
 2. Test discovery, signature/certificate, bind/search, TLS, timeout, and claim normalization.
 3. Create entitlement-to-group mappings.
 4. Preview mappings with representative test identities.
-5. Enable the provider while retaining a break-glass local administrator.
-6. Reconcile existing external identities before enforcing SSO.
+5. Set friendly provider presentation metadata and enable the provider while retaining a canonical local recovery administrator.
+6. Test `/admin-recovery`, then reconcile existing external identities before disabling ordinary local login.
 
 Every direct provider session executes step 6 again with fresh upstream
 evidence before the session is issued. `sync.triggers` must include `login`
@@ -286,7 +287,8 @@ bundle schema, and portal do not permit turning this off. Authoritative
 mappings replace stale provider-managed memberships after an upstream group or
 role change, while additive mappings, manual memberships, and memberships from
 other providers remain intact. Scheduled LDAP directory reconciliation and
-manual replay are additional refresh paths for users who have not signed in.
+applying saved membership data are additional refresh paths for users who have
+not signed in.
 
 An `exists` mapping to a normal internal group represents default access for every authenticated user. Do not configure a provider-level default role.
 
@@ -313,6 +315,25 @@ For OIDC providers such as Entra ID, the fresh verified token claims are the
 equivalent evidence; SAML uses the verified assertion attributes.
 
 ## Configure Engines
+
+### Runtime authorization and sidecar wording
+
+Platform Settings presents runtime enforcement in plain language while JSON and
+REST retain stable enum values:
+
+| Portal wording | JSON/API value | What it means |
+| --- | --- | --- |
+| **EnterpriseGlue only** | `enterpriseglue_authoritative` | EnterpriseGlue makes every authorization decision. Engine-native grants do not create EnterpriseGlue access. |
+| **EnterpriseGlue with engine read-access backup** | `mirrored_engine_backstop` | EnterpriseGlue remains authoritative and copies only reviewed group read access to compatible Operaton or Camunda engines after a successful, retained synchronization record. |
+
+A customer-sidecar connection is a separate transport choice, not another
+authorization mode. Use `connectionMode: "customer_sidecar"` with
+`auth.type: "none"` only for the peer-authenticated sidecar contract: the
+customer sidecar authenticates EnterpriseGlue peer-to-peer and owns its
+sidecar-to-engine credentials. `none` means EnterpriseGlue stores no downstream
+engine credential; it does not mean the sidecar endpoint is public or
+unauthenticated. EnterpriseGlue still evaluates access before every sidecar
+call.
 
 ### Engine tenancy rollout status
 
@@ -449,7 +470,11 @@ For a customer-owned sidecar or gateway:
 }
 ```
 
-`auth.type = none` is allowed only when platform policy permits a private credentialless customer-sidecar endpoint. Prefer mTLS, API-key references, or OAuth credentials for the EnterpriseGlue-to-sidecar hop when supported.
+`auth.type = none` is allowed only when platform policy permits the
+peer-authenticated customer-sidecar contract. It means EnterpriseGlue stores no
+sidecar-to-engine credential. It does not make the EnterpriseGlue-to-sidecar
+endpoint anonymous: peer-to-peer service-token validation or an equivalent
+customer-controlled authenticated channel must protect that hop.
 
 The sidecar-to-engine peer token remains customer-owned. It must never appear in EnterpriseGlue configuration, persistence, OpenAPI, logs, audits, UI, exports, or diagnostics. EnterpriseGlue still performs all authorization before calling the sidecar.
 
@@ -529,7 +554,10 @@ After apply, verify:
 
 Rollback applies the previous known-good bundle through the same preview/apply path. It does not restore a database dump and does not delete manual, API, identity-provider, or system-owned records merely because they are absent from the bundle.
 
-Provider lockout rollback must also preserve a tested local break-glass administrator and allow the problematic provider or mapping to be disabled without deleting unrelated access.
+Provider lockout rollback must also preserve a tested canonical local
+administrator on `/admin-recovery` and allow the problematic provider or
+mapping to be disabled without deleting unrelated access. The ordinary login
+endpoint never bypasses login policy for administrators.
 
 ## Implementation Checklist
 

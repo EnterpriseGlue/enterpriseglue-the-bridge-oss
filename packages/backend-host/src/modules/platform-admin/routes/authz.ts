@@ -17,6 +17,7 @@ import {
   normalizeTenantIdForPersistence,
   tenantIdsForAuthz,
 } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import { isPermissionCompatibleWithResourceType } from '@enterpriseglue/shared/authz/permission-actions.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { requireApiClientAction } from '@enterpriseglue/shared/middleware/apiClientAuth.js';
@@ -27,7 +28,6 @@ import {
   permissionService,
   API_CLIENT_TOKEN_PREFIX,
   ApiClientScopes,
-  AllPermissions,
   Permission,
   EvaluationContext,
 } from '@enterpriseglue/shared/services/platform-admin/index.js';
@@ -254,8 +254,13 @@ router.post('/api/authz/evaluate', apiLimiter, requireAuth, requirePlatformActio
   try {
     const { userId, permission, resourceType, resourceId, runtimeResource } = req.body;
     const tenantId = effectiveTenantId(req);
-    if (!new Set<string>(Object.values(AllPermissions)).has(permission)) {
+    const permissionDefinition = (await permissionService.getPermissionCatalog())
+      .find((candidate) => candidate.key === permission);
+    if (!permissionDefinition) {
       throw Errors.validation('Unknown permission');
+    }
+    if (!isPermissionCompatibleWithResourceType(permissionDefinition, resourceType)) {
+      throw Errors.validation(`Permission ${permission} is not compatible with resource type ${resourceType}`);
     }
 
     let resolvedResourceId = resourceId;

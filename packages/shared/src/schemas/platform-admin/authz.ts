@@ -14,6 +14,8 @@ import { EngineConnectionModeSchema } from '../mission-control/engine.js';
 import { RuntimeResourceKindSchema } from './config-bundle.js';
 import {
   IdentityProviderAuthenticationModeSchema,
+  IdentityProviderDisplayNameSchema,
+  IdentityProviderLoginDomainSchema,
   IdentityProviderProtocolSchema as SharedIdentityProviderProtocolSchema,
   IdentityProviderSyncConfigurationSchema,
   IdentitySyncEventSchema,
@@ -22,6 +24,7 @@ import {
   OidcIdentityProviderConfigurationSchema,
   SamlIdentityProviderConfigurationSchema,
 } from './identity.js';
+import { SsoProviderSelectionModeSchema } from './platform-settings.js';
 
 export { IdentityProviderProtocolSchema } from './identity.js';
 
@@ -401,12 +404,16 @@ export const RoleAssignmentSchema = z.object({
   userId: z.string(),
   principalType: AuthzPrincipalTypeSchema,
   principalId: z.string(),
+  principalDisplayName: z.string().nullable().optional(),
+  principalSecondary: z.string().nullable().optional(),
   roleId: z.string(),
   roleKey: z.string().nullable(),
   roleName: z.string().nullable(),
   roleScope: AuthzResourceTypeSchema.nullable(),
   resourceType: AuthzResourceTypeSchema.nullable(),
   resourceId: z.string().nullable(),
+  resourceDisplayName: z.string().nullable().optional(),
+  resourceSecondary: z.string().nullable().optional(),
   scopeType: AuthzResourceTypeSchema.nullable(),
   scopeId: z.string().nullable(),
   source: RoleAssignmentSourceSchema,
@@ -482,6 +489,8 @@ export const AuthzGroupMembershipSchema = z.object({
   groupKey: z.string().nullable(),
   groupName: z.string().nullable(),
   userId: z.string(),
+  userDisplayName: z.string().nullable().optional(),
+  userEmail: z.string().nullable().optional(),
   source: AuthzGroupSourceSchema,
   sourceRef: z.string().nullable(),
   expiresAt: z.number().nullable(),
@@ -1328,6 +1337,11 @@ export const IdentityProviderExternalIdentityUnlinkResponseSchema = z.object({
 
 const IdentityProviderRequestFields = {
   key: z.string().min(1).max(128),
+  displayName: IdentityProviderDisplayNameSchema.optional(),
+  organization: z.string().trim().min(1).max(255).nullable().optional(),
+  displayOrder: z.number().int().min(0).max(10000).optional(),
+  isPreferred: z.boolean().optional(),
+  loginDomains: z.array(IdentityProviderLoginDomainSchema).max(20).optional(),
   isEnabled: z.boolean().optional(),
   authenticationMode: IdentityProviderAuthenticationModeSchema.optional(),
   directoryTenantId: z.string().nullable().optional(),
@@ -1353,6 +1367,11 @@ export const IdentityProviderRequestSchema = z.discriminatedUnion('protocol', [
  * creation schema above.
  */
 export const IdentityProviderUpdateSchema = z.object({
+  displayName: IdentityProviderDisplayNameSchema.optional(),
+  organization: z.string().trim().min(1).max(255).nullable().optional(),
+  displayOrder: z.number().int().min(0).max(10000).optional(),
+  isPreferred: z.boolean().optional(),
+  loginDomains: z.array(IdentityProviderLoginDomainSchema).max(20).optional(),
   isEnabled: z.boolean().optional(),
   authenticationMode: IdentityProviderAuthenticationModeSchema.optional(),
   directoryTenantId: z.string().nullable().optional(),
@@ -1370,6 +1389,11 @@ export const IdentityProviderResponseSchema = z.object({
   id: z.string(),
   tenantId: z.string().nullable(),
   key: z.string().min(1).max(128),
+  displayName: IdentityProviderDisplayNameSchema,
+  organization: z.string().nullable(),
+  displayOrder: z.number().int().min(0).max(10000),
+  isPreferred: z.boolean(),
+  loginDomainsJson: z.string(),
   protocol: SharedIdentityProviderProtocolSchema,
   isEnabled: z.boolean(),
   authenticationMode: IdentityProviderAuthenticationModeSchema,
@@ -1380,6 +1404,25 @@ export const IdentityProviderResponseSchema = z.object({
   syncJson: z.string(),
   createdAt: z.number(),
   updatedAt: z.number(),
+});
+
+export const PublicLoginProviderSchema = z.object({
+  id: z.string(),
+  key: z.string().min(1).max(128),
+  displayName: IdentityProviderDisplayNameSchema,
+  organization: z.string().nullable(),
+  protocol: SharedIdentityProviderProtocolSchema,
+  loginMethod: z.enum(['redirect', 'password']),
+  preferred: z.boolean(),
+  loginDomains: z.array(IdentityProviderLoginDomainSchema),
+});
+
+export const PublicLoginMethodsResponseSchema = z.object({
+  localPassword: z.object({ enabled: z.boolean() }),
+  providerSelection: SsoProviderSelectionModeSchema,
+  autoRedirectProviderId: z.string().nullable(),
+  providers: z.array(PublicLoginProviderSchema),
+  configurationStatus: z.enum(['ready', 'no_login_method']),
 });
 
 export const IdentityProviderConnectionTestResponseSchema = z.discriminatedUnion('protocol', [
@@ -1513,6 +1556,8 @@ export type IdentityMappingProvisionAccessResponse = z.infer<typeof IdentityMapp
 export type IdentityMappingAccessGrantRequest = z.infer<typeof IdentityMappingAccessGrantRequestSchema>;
 export type IdentityMappingAccessGrantResponse = z.infer<typeof IdentityMappingAccessGrantResponseSchema>;
 export type IdentityProviderResponse = z.infer<typeof IdentityProviderResponseSchema>;
+export type PublicLoginProvider = z.infer<typeof PublicLoginProviderSchema>;
+export type PublicLoginMethodsResponse = z.infer<typeof PublicLoginMethodsResponseSchema>;
 export type IdentityProviderMembershipReplayResponse = z.infer<typeof IdentityProviderMembershipReplayResponseSchema>;
 export type IdentityProviderExternalIdentityUnlinkResponse = z.infer<typeof IdentityProviderExternalIdentityUnlinkResponseSchema>;
 export type IdentityProviderReconciliationPreview = z.infer<typeof IdentityProviderReconciliationPreviewSchema>;

@@ -1,5 +1,13 @@
 import { TableColumn } from 'typeorm';
 import type { MigrationInterface, QueryRunner } from 'typeorm';
+import {
+  addRequiredColumnWithBackfill,
+  portableStringDefault,
+  portableText,
+  sqlIdentifier,
+  sqlStringLiteral,
+  sqlTablePath,
+} from './support/portable-columns.js';
 
 function tablePath(queryRunner: QueryRunner): string {
   try { return queryRunner.connection.getMetadata('IdentityEntitlementMapping').tablePath; } catch { return 'identity_entitlement_mappings'; }
@@ -12,10 +20,24 @@ export class AddIdentityMappingOwnershipMode1700000000104 implements MigrationIn
   async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = tablePath(queryRunner);
     if (!await queryRunner.hasTable(tableName)) return;
-    if (!await queryRunner.hasColumn(tableName, 'ownership_mode')) {
-      await queryRunner.addColumn(tableName, new TableColumn({ name: 'ownership_mode', type: 'text', default: "'manual'" }));
-    }
-    await queryRunner.query(`UPDATE ${tableName} SET ownership_mode = 'config_locked' WHERE source_ref IS NOT NULL AND (ownership_mode IS NULL OR ownership_mode = 'manual')`);
+    await addRequiredColumnWithBackfill(
+      queryRunner,
+      tableName,
+      new TableColumn({
+        name: 'ownership_mode',
+        ...portableText(queryRunner, 'key'),
+        default: portableStringDefault(queryRunner, 'manual'),
+      }),
+      sqlStringLiteral('manual'),
+    );
+
+    const escapedTable = sqlTablePath(queryRunner, tableName);
+    const ownershipMode = sqlIdentifier(queryRunner, 'ownership_mode');
+    const sourceRef = sqlIdentifier(queryRunner, 'source_ref');
+    await queryRunner.query(
+      `UPDATE ${escapedTable} SET ${ownershipMode} = ${sqlStringLiteral('config_locked')} `
+      + `WHERE ${sourceRef} IS NOT NULL AND (${ownershipMode} IS NULL OR ${ownershipMode} = ${sqlStringLiteral('manual')})`,
+    );
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {

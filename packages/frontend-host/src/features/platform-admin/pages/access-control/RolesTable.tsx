@@ -4,6 +4,7 @@ import {
   DataTable,
   DataTableSkeleton,
   Dropdown,
+  Modal,
   Table,
   TableBody,
   TableCell,
@@ -17,13 +18,14 @@ import {
 } from '@carbon/react';
 import { Add } from '@carbon/icons-react';
 import type { RoleSummary } from '../../hooks/useAuthzApi';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
 import { ROLE_SCOPE_FILTERS, type RoleScopeFilter } from './roleScopePresentation';
 
 const rolesHeaders = [
   { key: 'name', header: 'Role' },
-  { key: 'scope', header: 'Scope' },
-  { key: 'kind', header: 'Kind' },
+  { key: 'scope', header: 'Role scope' },
+  { key: 'kind', header: 'Role type' },
   { key: 'permissions', header: 'Permissions' },
   { key: 'assignable', header: 'Assignable' },
   { key: 'status', header: 'Status' },
@@ -58,6 +60,7 @@ export function RolesTable({
 }) {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [scopeFilter, setScopeFilter] = React.useState<RoleScopeFilter>('all');
+  const [archiveTarget, setArchiveTarget] = React.useState<RoleSummary | null>(null);
   const filteredRoles = React.useMemo(
     () => filterRoles(roles, searchQuery, scopeFilter),
     [filterRoles, roles, searchQuery, scopeFilter],
@@ -98,8 +101,8 @@ export function RolesTable({
                   itemToString={(item) => item?.label || ''}
                   onChange={({ selectedItem }) => setScopeFilter(selectedItem?.id || 'all')}
                 />
-                <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'}>
-                  Create Role
+                <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'You can view roles, but you do not have permission to create or change them.'}>
+                  Create role
                 </Button>
               </TableToolbarContent>
             </TableToolbar>
@@ -123,11 +126,11 @@ export function RolesTable({
                         if (cell.info.header === 'status') return <TableCell key={cell.id}><Tag type={cell.value ? 'gray' : 'green'}>{cell.value ? 'Archived' : 'Active'}</Tag></TableCell>;
                         if (cell.info.header === 'actions') {
                           return <TableCell key={cell.id}>
-                            {role?.kind === 'system' && <Button kind="ghost" size="sm" disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onDuplicate(role)}>Duplicate</Button>}
-                            {role?.kind === 'custom' && <>
-                              <Button kind="ghost" size="sm" disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onEdit(role)}>Edit</Button>
-                              <Button kind="ghost" size="sm" disabled={role.isArchived || !canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onArchive(role)}>Archive</Button>
-                            </>}
+                            {role && <GuardedOverflowMenu size="sm" flipped iconDescription={`Actions for ${role.name}`}>
+                              {role.kind === 'system' && <GuardedOverflowMenuItem itemText="Duplicate" disabled={!canManage} unavailableReason={canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onDuplicate(role)} />}
+                              {role.kind === 'custom' && <GuardedOverflowMenuItem itemText="Edit" disabled={!canManage} unavailableReason={canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => onEdit(role)} />}
+                              {role.kind === 'custom' && <GuardedOverflowMenuItem itemText="Archive" isDelete disabled={role.isArchived || !canManage} unavailableReason={role.isArchived ? 'Role is already archived' : canManage ? undefined : 'Missing permission platform:authz:roles:manage'} onClick={() => setArchiveTarget(role)} />}
+                            </GuardedOverflowMenu>}
                           </TableCell>;
                         }
                         return <TableCell key={cell.id}>{cell.value}</TableCell>;
@@ -140,6 +143,21 @@ export function RolesTable({
           </>
         )}
       </DataTable>
+      <Modal
+        open={Boolean(archiveTarget)}
+        danger
+        modalHeading="Archive custom role"
+        primaryButtonText="Archive"
+        secondaryButtonText="Cancel"
+        onRequestClose={() => setArchiveTarget(null)}
+        onRequestSubmit={() => {
+          if (!archiveTarget) return;
+          onArchive(archiveTarget);
+          setArchiveTarget(null);
+        }}
+      >
+        Archive <strong>{archiveTarget?.name}</strong>? Existing assignments remain visible for audit, but this role cannot be assigned again.
+      </Modal>
     </TableContainer>
   );
 }

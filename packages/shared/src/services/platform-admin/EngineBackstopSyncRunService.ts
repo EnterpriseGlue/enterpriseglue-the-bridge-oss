@@ -6,9 +6,11 @@ import { generateId } from '../../utils/id.js';
 import {
   EngineBackstopProjectionSchema,
   EngineBackstopSanitizedClassificationSchema,
+  EngineBackstopSyncDetailSchema,
   EngineBackstopSyncRunSummarySchema,
   type EngineBackstopProjection,
   type EngineBackstopSanitizedClassification,
+  type EngineBackstopSyncDetail,
   type EngineBackstopSyncRunSummary,
 } from '../../schemas/platform-admin/engine-backstop.js';
 
@@ -61,8 +63,8 @@ function withinLimit(value: string, label: string): string {
   return value;
 }
 
-function encryptedDetail(value: unknown): string {
-  return withinLimit(encrypt(JSON.stringify(value)), 'Encrypted backstop evidence');
+function encryptedDetail(value: EngineBackstopSyncDetail): string {
+  return withinLimit(encrypt(JSON.stringify(EngineBackstopSyncDetailSchema.parse(value))), 'Encrypted backstop evidence');
 }
 
 function epoch(value: unknown, field: string): number | null {
@@ -192,13 +194,13 @@ export class EngineBackstopSyncRunService {
   }
 
   /** Caller must enforce the dedicated native-detail permission before use. */
-  async getDetailedSnapshot(id: string, now = Date.now()): Promise<unknown | null> {
+  async getDetailedSnapshot(id: string, now = Date.now()): Promise<EngineBackstopSyncDetail | null> {
     const run = await (await getDataSource()).getRepository(EngineBackstopSyncRun).findOne({ where: { id: id.trim() } });
     if (!run?.encryptedDetailedSnapshot || !snapshotAvailable(run, now)) return null;
-    return JSON.parse(decrypt(run.encryptedDetailedSnapshot));
+    return EngineBackstopSyncDetailSchema.parse(JSON.parse(decrypt(run.encryptedDetailedSnapshot)));
   }
 
-  async updateRun(input: { id: string; status: EngineBackstopSyncRun['status']; resultHash?: string | null; detailedSnapshot?: unknown; rollbackOfRunId?: string | null; observedOfRunId?: string | null; completed?: boolean; now?: number }): Promise<EngineBackstopSyncRunSummary | null> {
+  async updateRun(input: { id: string; status: EngineBackstopSyncRun['status']; resultHash?: string | null; detailedSnapshot?: EngineBackstopSyncDetail; rollbackOfRunId?: string | null; observedOfRunId?: string | null; completed?: boolean; now?: number }): Promise<EngineBackstopSyncRunSummary | null> {
     const id = input.id.trim();
     const repository = (await getDataSource()).getRepository(EngineBackstopSyncRun);
     const current = await repository.findOne({ where: { id } });

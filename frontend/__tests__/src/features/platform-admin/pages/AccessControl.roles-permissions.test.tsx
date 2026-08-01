@@ -79,6 +79,11 @@ function expectButtonAbsentOrDisabled(container: typeof screen | ReturnType<type
   }
 }
 
+function menuItem(label: string): HTMLElement | null {
+  const node = screen.queryAllByText(label).find((candidate) => candidate.closest('.cds--overflow-menu-options__option'));
+  return node?.closest('button') || node?.closest('[role="menuitem"]') || node || null;
+}
+
 describe('AccessControl roles and permissions', () => {
   beforeEach(resetAccessControlMocks);
 
@@ -134,10 +139,12 @@ describe('AccessControl roles and permissions', () => {
   it('duplicates a system role into a custom role draft', async () => {
     render(<AccessControl />);
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Duplicate/i })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Platform Admin' }));
+    await waitFor(() => expect(menuItem('Duplicate')).toBeTruthy());
+    fireEvent.click(menuItem('Duplicate')!);
 
     await waitFor(() => expect(screen.getByDisplayValue('Copy of Platform Admin')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByLabelText('Check Access (platform:authz:check)')).toBeChecked());
+    await waitFor(() => expect(screen.getByLabelText('Check Access')).toBeChecked());
     expect(screen.getByText('Sensitive permissions selected')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Create$/i }).find((button) => button.hasAttribute('disabled'))).toBeDefined();
     fireEvent.click(screen.getByLabelText('I understand this role includes sensitive permissions.'));
@@ -159,9 +166,10 @@ describe('AccessControl roles and permissions', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Create Role/i }));
 
-    expect(screen.getByText('Create Custom Role')).toBeInTheDocument();
+    expect(screen.getByText('Create custom role')).toBeInTheDocument();
     expect(screen.getByLabelText('Role name')).toBeInTheDocument();
-    expect(screen.getByText('Deploy (engine:deploy)')).toBeInTheDocument();
+    expect(screen.getAllByText('Deploy').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('engine:deploy').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /^Create$/i }).some((button) => button.hasAttribute('disabled'))).toBe(true);
   }, 60000);
 
@@ -184,7 +192,7 @@ describe('AccessControl roles and permissions', () => {
     expect(screen.getByRole('tab', { name: /^Groups$/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /Effective Access/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /SSO Engine Assignments/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: /^Engine Sets$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /^Engine sets$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^Project Targets$/i })).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /^Policies$/i })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: /^Audit$/i })).not.toBeInTheDocument();
@@ -192,11 +200,11 @@ describe('AccessControl roles and permissions', () => {
     expect(screen.getByRole('button', { name: /Create Role/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
-    expect(screen.getByRole('button', { name: /Assign Role/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Assign role/i })).toBeDisabled();
     expect(screen.getAllByLabelText('Remove assignment').every((button) => button.hasAttribute('disabled'))).toBe(true);
   });
 
-  it('allows read-only Engine Set inspection while disabling management actions', () => {
+  it('allows read-only Engine Set inspection while disabling management actions', async () => {
     authState.permissions = {
       userId: 'viewer-1',
       tenantId: null,
@@ -209,13 +217,15 @@ describe('AccessControl roles and permissions', () => {
 
     render(<AccessControl />);
 
-    fireEvent.click(screen.getByRole('tab', { name: /^Engine Sets$/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /^Engine sets$/i }));
 
     expect(screen.getAllByText('Production Engines').length).toBeGreaterThan(0);
-    expectButtonAbsentOrDisabled(screen, /Create Engine Set/i);
-    expectButtonAbsentOrDisabled(screen, /Edit/i);
-    expectButtonAbsentOrDisabled(screen, /Materialize/i);
-    expectButtonAbsentOrDisabled(screen, /Archive/i);
+    expectButtonAbsentOrDisabled(screen, /Create engine set/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Production Engines' }));
+    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    expect(menuItem('Edit')).toBeDisabled();
+    expect(menuItem('Refresh matching engines')).toBeDisabled();
+    expect(menuItem('Archive')).toBeDisabled();
   });
 
   it('allows read-only project target inspection while disabling management actions', () => {
@@ -235,8 +245,8 @@ describe('AccessControl roles and permissions', () => {
 
     expect(screen.getByText('Payments')).toBeInTheDocument();
     expectButtonAbsentOrDisabled(screen, /Create Target/i);
-    expectButtonAbsentOrDisabled(screen, /Sync Legacy Targets/i);
-    expectButtonAbsentOrDisabled(screen, /Evaluate Eligibility/i);
+    expectButtonAbsentOrDisabled(screen, /Import targets/i);
+    expectButtonAbsentOrDisabled(screen, /Check deployment access/i);
     const manualRow = screen.getByText('Payments').closest('tr')!;
     expectButtonAbsentOrDisabled(within(manualRow), /Edit/i);
     expectButtonAbsentOrDisabled(within(manualRow), /Archive/i);
@@ -258,7 +268,7 @@ describe('AccessControl roles and permissions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /^Policies$/i }));
 
     expect(screen.getByText('Block production deploys outside hours')).toBeInTheDocument();
-    expectButtonAbsentOrDisabled(screen, /Add Policy/i);
+    expectButtonAbsentOrDisabled(screen, /Add policy/i);
     const policyRow = screen.getByText('Block production deploys outside hours').closest('tr')!;
     expectButtonAbsentOrDisabled(within(policyRow), /Edit/i);
     expectButtonAbsentOrDisabled(within(policyRow), /Disable/i);
@@ -269,14 +279,14 @@ describe('AccessControl roles and permissions', () => {
     render(<AccessControl />);
 
     fireEvent.click(screen.getByRole('tab', { name: /^Permissions$/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Add Permission/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add permission/i }));
 
     fireEvent.change(document.getElementById('custom-permission-key')!, { target: { value: 'project:custom:approve-release' } });
     fireEvent.change(document.getElementById('custom-permission-category')!, { target: { value: 'Release' } });
     fireEvent.change(document.getElementById('custom-permission-label')!, { target: { value: 'Approve release' } });
     fireEvent.change(document.getElementById('custom-permission-description')!, { target: { value: 'Allows release approval.' } });
 
-    const permissionModal = screen.getByText('Create Custom Permission').closest('.cds--modal-container')!;
+    const permissionModal = screen.getByText('Create custom permission').closest('.cds--modal-container')!;
     const createButton = Array.from(permissionModal.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Create') as HTMLButtonElement | undefined;
     expect(createButton).toBeDefined();
     expect(createButton).not.toBeDisabled();
@@ -298,10 +308,11 @@ describe('AccessControl roles and permissions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
 
-    const principalCells = screen.getAllByText('00000000-0000-4000-8000-000000000001');
-    expect(principalCells.length).toBeGreaterThan(0);
     expect(screen.getAllByText('Custom Operator').length).toBeGreaterThan(0);
-    const assignmentRow = principalCells[0].closest('tr');
+    const assignmentRow = screen
+      .getAllByText('User: 00000000-0000-4000-8000-000000000001')
+      .map((principal) => principal.closest('tr'))
+      .find((row) => row && within(row).queryByLabelText('Remove assignment'));
     expect(assignmentRow).toBeTruthy();
     expect(within(assignmentRow!).getByLabelText('Remove assignment')).toBeInTheDocument();
   });
@@ -311,9 +322,7 @@ describe('AccessControl roles and permissions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
 
-    const assignmentRow = screen.getAllByText('00000000-0000-4000-8000-000000000012')
-      .map((principal) => principal.closest('tr'))
-      .find((row) => row && within(row).queryByText('Managed by SSO'));
+    const assignmentRow = screen.getByText('User: 00000000-0000-4000-8000-000000000012').closest('tr');
     expect(assignmentRow).toBeTruthy();
     expect(within(assignmentRow!).getByText('Managed by SSO')).toBeInTheDocument();
     expect(within(assignmentRow!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
@@ -329,7 +338,7 @@ describe('AccessControl roles and permissions', () => {
     };
     render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} />);
 
-    const row = screen.getByText('provider-user').closest('tr');
+    const row = screen.getByText('User: provider-user').closest('tr');
     expect(row).toBeTruthy();
     expect(within(row!).getByTitle(/SSO assignment mapping/)).toBeInTheDocument();
     expect(within(row!).queryByLabelText('Remove assignment')).not.toBeInTheDocument();
@@ -359,7 +368,7 @@ describe('AccessControl roles and permissions', () => {
     };
     render(<RoleAssignmentsTable assignments={[assignment]} apiClients={[]} groups={[]} serviceAccounts={[]} externalSystems={[]} loading={false} canDelete onRemove={() => undefined} />);
 
-    expect(screen.getByText('manual-user')).toBeInTheDocument();
+    expect(screen.getByText('User: manual-user')).toBeInTheDocument();
     expect(screen.getByLabelText('Remove assignment')).toBeDisabled();
     expect(screen.getByTitle(/SSO-managed/)).toBeInTheDocument();
   });
@@ -369,11 +378,9 @@ describe('AccessControl roles and permissions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /^Assignments$/i }));
 
-    const assignmentRow = screen.getAllByText('00000000-0000-4000-8000-000000000099')
-      .map((principal) => principal.closest('tr'))
-      .find((row) => row && within(row).queryByText('Config warning'));
+    const assignmentRow = screen.getByText('User: 00000000-0000-4000-8000-000000000099').closest('tr');
     expect(assignmentRow).toBeTruthy();
-    expect(within(assignmentRow!).getByText('Config warning')).toBeInTheDocument();
+    expect(within(assignmentRow!).getByText('Configuration-linked')).toBeInTheDocument();
     expect(within(assignmentRow!).getByLabelText('Remove assignment')).toBeInTheDocument();
   });
 

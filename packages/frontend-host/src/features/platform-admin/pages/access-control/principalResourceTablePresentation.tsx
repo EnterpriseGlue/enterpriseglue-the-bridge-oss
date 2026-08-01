@@ -7,8 +7,8 @@ export const principalOverviewHeaders = [
   { key: 'inheritedAssignments', header: 'Inherited' }, { key: 'relationships', header: 'Relationships' }, { key: 'status', header: 'Status' }, { key: 'actions', header: '' },
 ];
 export const principalAssignmentHeaders = [
-  { key: 'grantType', header: 'Grant' }, { key: 'role', header: 'Role' }, { key: 'scope', header: 'Scope' }, { key: 'source', header: 'Source' },
-  { key: 'lineage', header: 'Lineage' }, { key: 'audit', header: 'Audit' }, { key: 'expires', header: 'Expires' },
+  { key: 'grantType', header: 'Grant' }, { key: 'role', header: 'Role' }, { key: 'scope', header: 'Access target' }, { key: 'source', header: 'Source' },
+  { key: 'lineage', header: 'Technical details' }, { key: 'audit', header: 'Audit' }, { key: 'expires', header: 'Expires' },
 ];
 export const principalRelationshipHeaders = [
   { key: 'name', header: 'Name' }, { key: 'type', header: 'Type' }, { key: 'source', header: 'Source' },

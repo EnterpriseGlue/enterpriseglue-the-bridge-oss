@@ -345,7 +345,7 @@ export function getEngineRowDiagnosticTags(engine: EngineInventoryPresentation |
   if (!engine) return []
   const tags: EngineRowDiagnosticTag[] = []
   if (engine.registrationSource === 'config' || engine.ownershipMode === 'config_locked' || engine.ownershipMode === 'config_warn') {
-    tags.push({ label: 'Managed by config', type: 'purple', title: 'Managed by an EnterpriseGlue configuration bundle' })
+    tags.push({ label: 'Managed by configuration', type: 'purple', title: 'Managed by an EnterpriseGlue configuration bundle' })
   } else if (isExternallyManagedEngine(engine)) {
     tags.push({ label: 'External API', type: getRegistrationTagType('external_api'), title: 'Registered by external API' })
   } else if (isExternallyRegisteredEngine(engine)) {
@@ -1672,6 +1672,9 @@ export default function Engines() {
       return (!q || hay.includes(q)) && matchesEngineMetadataFilter(e, metadataFilterId)
     })
   }, [rows, searchQuery, metadataFilterId, envTags])
+  const hasPlatformEngineCreatePermission = Boolean(
+    permissions?.platform?.includes('platform:engine:create'),
+  )
 
   return (
     <PageLayout style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)', background: 'var(--color-bg-primary)', minHeight: '100vh' }}>
@@ -1697,6 +1700,16 @@ export default function Engines() {
           />
         )
       })()}
+
+      {!listQ.isLoading && rows.length > 0 && !hasPlatformEngineCreatePermission && (
+        <InlineNotification
+          lowContrast
+          kind="info"
+          title="Showing your assigned engines"
+          subtitle="Only engines granted to your account are listed. Engines outside your access scope are hidden."
+          hideCloseButton
+        />
+      )}
 
       {/* Loading State */}
       {listQ.isLoading && (
@@ -1851,7 +1864,7 @@ export default function Engines() {
                       const membersUnavailableReason = getEngineMembersUnavailableReason(actions)
                       const deleteUnavailableReason = getEngineDeleteUnavailableReason(actions, manualEngineOnboardingAllowed, engine)
                       const inventoryReadDecision = getEngineInventoryReadDecision(engine, permissions)
-                      const hasActions = Boolean(engine?.id) || actions.canEdit || actions.canTest || actions.canOpenMembers || actions.canDelete
+                      const hasActions = actions.canEdit || actions.canTest || actions.canOpenMembers || actions.canDelete
 
                       return (
                         <TableRow key={rowKey || row.id} {...rowProps}>
@@ -1863,7 +1876,20 @@ export default function Engines() {
                               return (
                                 <TableCell key={cell.id}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
-                                    <span>{cell.value}</span>
+                                    {!hasActions && inventoryReadDecision.allowed ? (
+                                      <Button
+                                        kind="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (engine) openEngineDetails(engine)
+                                        }}
+                                        style={{ minBlockSize: 0, paddingInline: 0 }}
+                                      >
+                                        {cell.value}
+                                      </Button>
+                                    ) : (
+                                      <span>{cell.value}</span>
+                                    )}
                                     {diagnosticTags.map((tag) => (
                                       <Tag key={tag.label} type={tag.type} size="sm" title={tag.title}>
                                         {tag.label}
@@ -1957,41 +1983,48 @@ export default function Engines() {
                                 <TableCell key={cell.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
                                   {hasActions && (
                                     <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                      <GuardedOverflowMenuItem
-                                        itemText={actions.canEdit ? 'Edit' : 'View details'}
-                                        decision={actions.canEdit ? null : inventoryReadDecision}
-                                        onClick={() => {
-                                          if (!engine) return
-                                          actions.canEdit ? openEdit(engine) : openEngineDetails(engine)
-                                        }}
-                                      />
-                                      <GuardedOverflowMenuItem
-                                        itemText="Test connection"
-                                        unavailableReason={testUnavailableReason}
-                                        onClick={() => {
-                                          testEngine(engine)
-                                        }}
-                                      />
-                                      <GuardedOverflowMenuItem
-                                        itemText={engineAccessAuthority === 'sso_managed'
-                                          ? 'View access'
-                                          : actions.canManageMembers || actions.canAddMembers || actions.canInviteMembers || actions.canUpdateMemberRoles || actions.canRemoveMembers || actions.canManageDelegate
-                                            ? 'Manage access'
-                                            : 'View access'}
-                                        unavailableReason={membersUnavailableReason}
-                                        onClick={() => {
-                                          if (engine) openMembersPanel(engine)
-                                        }}
-                                      />
-                                      <GuardedOverflowMenuItem
-                                        itemText="Delete"
-                                        isDelete
-                                        hasDivider
-                                        unavailableReason={deleteUnavailableReason}
-                                        onClick={() => {
-                                          deleteEngine(engine)
-                                        }}
-                                      />
+                                      {(actions.canEdit || inventoryReadDecision.allowed) && (
+                                        <GuardedOverflowMenuItem
+                                          itemText={actions.canEdit ? 'Edit' : 'View details'}
+                                          onClick={() => {
+                                            if (!engine) return
+                                            actions.canEdit ? openEdit(engine) : openEngineDetails(engine)
+                                          }}
+                                        />
+                                      )}
+                                      {actions.canTest && (
+                                        <GuardedOverflowMenuItem
+                                          itemText="Test connection"
+                                          unavailableReason={testUnavailableReason}
+                                          onClick={() => {
+                                            testEngine(engine)
+                                          }}
+                                        />
+                                      )}
+                                      {actions.canOpenMembers && (
+                                        <GuardedOverflowMenuItem
+                                          itemText={engineAccessAuthority === 'sso_managed'
+                                            ? 'View access'
+                                            : actions.canManageMembers || actions.canAddMembers || actions.canInviteMembers || actions.canUpdateMemberRoles || actions.canRemoveMembers || actions.canManageDelegate
+                                              ? 'Manage access'
+                                              : 'View access'}
+                                          unavailableReason={membersUnavailableReason}
+                                          onClick={() => {
+                                            if (engine) openMembersPanel(engine)
+                                          }}
+                                        />
+                                      )}
+                                      {actions.canDelete && (
+                                        <GuardedOverflowMenuItem
+                                          itemText="Delete"
+                                          isDelete
+                                          hasDivider
+                                          unavailableReason={deleteUnavailableReason}
+                                          onClick={() => {
+                                            deleteEngine(engine)
+                                          }}
+                                        />
+                                      )}
                                     </GuardedOverflowMenu>
                                   )}
                                 </TableCell>
@@ -2351,12 +2384,12 @@ export default function Engines() {
           <InlineNotification
             lowContrast
             kind={isCredentiallessEndpointInvalid ? 'warning' : 'info'}
-            title={isCredentiallessEndpointInvalid ? 'Credentialless endpoint not permitted' : 'Credentialless customer sidecar'}
+            title={isCredentiallessEndpointInvalid ? 'Peer-authenticated sidecar is not permitted' : 'Peer-authenticated customer sidecar'}
             subtitle={form.connectionMode !== 'customer_sidecar'
-              ? 'No EnterpriseGlue-managed endpoint credentials is valid only for a customer-managed sidecar or gateway.'
+              ? 'An endpoint without engine credentials is valid only for a customer-managed sidecar or gateway authenticated with peer-to-peer service tokens.'
               : platformSettingsQ.data?.credentiallessCustomerSidecarsEnabled !== true
-                ? 'A platform administrator must enable credentialless customer-sidecar endpoints before this engine can be saved.'
-                : 'EnterpriseGlue will not attach engine credentials to downstream requests; runtime authorization remains authoritative.'}
+                ? 'A platform administrator must allow peer-authenticated customer sidecars before this engine can be saved.'
+                : 'The sidecar uses peer-to-peer service tokens and stores no engine credentials. EnterpriseGlue still makes every authorization decision.'}
             hideCloseButton
           />
         )}

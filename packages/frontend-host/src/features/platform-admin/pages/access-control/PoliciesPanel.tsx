@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   Button,
   DataTable,
@@ -11,16 +12,18 @@ import {
   TableToolbar,
   TableToolbarContent,
   Tag,
+  Modal,
 } from '@carbon/react';
-import { Add, TrashCan } from '@carbon/icons-react';
+import { Add } from '@carbon/icons-react';
 import type { AuthzPolicy, PolicyCondition } from '../../hooks/useAuthzApi';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards';
 
 const authzPolicyHeaders = [
   { key: 'name', header: 'Policy' },
   { key: 'effect', header: 'Effect' },
-  { key: 'resourceType', header: 'Resource' },
-  { key: 'action', header: 'Action' },
+  { key: 'resourceType', header: 'Resource type' },
+  { key: 'action', header: 'Permission' },
   { key: 'priority', header: 'Priority' },
   { key: 'conditions', header: 'Conditions' },
   { key: 'status', header: 'Status' },
@@ -50,9 +53,11 @@ export function PoliciesPanel({
   onDelete: (id: string) => void;
   formatConditions: (conditions: PolicyCondition) => string;
 }) {
+  const [deleteTarget, setDeleteTarget] = React.useState<AuthzPolicy | null>(null);
   if (loading) return <DataTableSkeleton headers={authzPolicyHeaders} rowCount={5} />;
 
   return (
+    <>
     <TableContainer>
       <DataTable rows={policies.map((policy) => ({
         id: policy.id,
@@ -68,7 +73,7 @@ export function PoliciesPanel({
         {({ rows, headers, getHeaderProps, getRowProps, getTableProps }) => (
           <>
             <TableToolbar><TableToolbarContent>
-              <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={manageUnavailableReason}>Add Policy</Button>
+              <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={manageUnavailableReason}>Add policy</Button>
             </TableToolbarContent></TableToolbar>
             <Table {...getTableProps()} size="md">
               <TableHead><TableRow>{headers.map((header) => <DataTableHeaderCell key={dataTableHeaderKey(header)} header={header} getHeaderProps={getHeaderProps} />)}</TableRow></TableHead>
@@ -80,11 +85,13 @@ export function PoliciesPanel({
                       if (cell.info.header === 'effect') return <TableCell key={cell.id}><Tag type={cell.value === 'deny' ? 'red' : 'green'}>{cell.value === 'deny' ? 'Deny' : 'Allow'}</Tag></TableCell>;
                       if (cell.info.header === 'status') return <TableCell key={cell.id}><Tag type={cell.value ? 'green' : 'gray'}>{cell.value ? 'Active' : 'Inactive'}</Tag></TableCell>;
                       if (cell.info.header === 'action') return <TableCell key={cell.id}><code>{cell.value}</code></TableCell>;
-                      if (cell.info.header === 'actions') return <TableCell key={cell.id}>{policy && <>
-                        <Button kind="ghost" size="sm" disabled={pending || !canManage} title={manageUnavailableReason} onClick={() => onEdit(policy)}>Edit</Button>
-                        <Button kind="ghost" size="sm" disabled={pending || !canManage} title={manageUnavailableReason} onClick={() => onToggle(policy)}>{policy.isActive ? 'Disable' : 'Enable'}</Button>
-                        <Button kind="ghost" size="sm" disabled={pending || !canManage} title={manageUnavailableReason} renderIcon={TrashCan} onClick={() => onDelete(policy.id)}>Delete</Button>
-                      </>}</TableCell>;
+                      if (cell.info.header === 'actions') return <TableCell key={cell.id}>{policy && (
+                        <GuardedOverflowMenu size="sm" flipped iconDescription={`Actions for ${policy.name}`}>
+                          <GuardedOverflowMenuItem itemText="Edit" disabled={pending || !canManage} unavailableReason={manageUnavailableReason} onClick={() => onEdit(policy)} />
+                          <GuardedOverflowMenuItem itemText={policy.isActive ? 'Disable' : 'Enable'} disabled={pending || !canManage} unavailableReason={manageUnavailableReason} onClick={() => onToggle(policy)} />
+                          <GuardedOverflowMenuItem itemText="Delete" isDelete hasDivider disabled={pending || !canManage} unavailableReason={manageUnavailableReason} onClick={() => setDeleteTarget(policy)} />
+                        </GuardedOverflowMenu>
+                      )}</TableCell>;
                       return <TableCell key={cell.id}>{cell.value}</TableCell>;
                     })}
                   </DataTableDataRow>;
@@ -95,5 +102,22 @@ export function PoliciesPanel({
         )}
       </DataTable>
     </TableContainer>
+    <Modal
+      open={Boolean(deleteTarget)}
+      danger
+      modalHeading="Delete authorization policy"
+      primaryButtonText="Delete"
+      secondaryButtonText="Cancel"
+      primaryButtonDisabled={pending || !canManage}
+      onRequestClose={() => setDeleteTarget(null)}
+      onRequestSubmit={() => {
+        if (!deleteTarget) return;
+        onDelete(deleteTarget.id);
+        setDeleteTarget(null);
+      }}
+    >
+      <p>Delete <strong>{deleteTarget?.name}</strong>? Existing role assignments remain, but this policy will no longer affect authorization decisions.</p>
+    </Modal>
+    </>
   );
 }

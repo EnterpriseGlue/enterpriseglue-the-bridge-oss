@@ -173,6 +173,65 @@ export const EngineBackstopSyncRunHistorySchema = z.object({
   runs: z.array(EngineBackstopSyncRunSummarySchema).max(100),
 }).strict();
 
+/** Sensitive native grant evidence returned only by the detail endpoint. */
+export const EngineBackstopOwnedGrantSchema = z.object({
+  id: z.string().min(1).max(255),
+  nativeGroupId: z.string().min(1).max(255),
+  camundaResourceType: z.union([z.literal(6), z.literal(10)]),
+  resourceKey: z.string().min(1).max(255),
+}).strict();
+
+const EngineBackstopProjectionDetailSchema = z.object({
+  version: z.literal(1),
+  projection: EngineBackstopProjectionSchema,
+  ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000).optional(),
+}).strict();
+
+const EngineBackstopRollbackDetailSchema = z.object({
+  version: z.literal(1),
+  rollbackOfRunId: z.string().min(1).max(255),
+  ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000),
+}).strict();
+
+const EngineBackstopDriftDetailSchema = z.object({
+  version: z.literal(1),
+  observedOfRunId: z.string().min(1).max(255),
+  projection: EngineBackstopProjectionSchema,
+  ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000),
+}).strict();
+
+/**
+ * Protected detailed evidence. The public run summary intentionally exposes
+ * only opaque references; this union is reserved for callers with the
+ * dedicated sensitive-read permission.
+ */
+export const EngineBackstopSyncDetailSchema = z.union([
+  EngineBackstopProjectionDetailSchema,
+  EngineBackstopRollbackDetailSchema,
+  EngineBackstopDriftDetailSchema,
+]);
+
+/** Durable task receipt returned by apply, rollback, and drift-check calls. */
+export const EngineBackstopSyncTaskResultSchema = z.object({
+  taskId: z.string().min(1).max(255),
+  runId: z.string().min(1).max(255),
+  operation: z.enum(['apply', 'rollback', 'drift_check']),
+  status: z.enum(['queued', 'running', 'completed']),
+  attempts: z.number().int().nonnegative(),
+  nextAttemptAt: z.number().int().nonnegative().nullable(),
+  lastError: z.string().max(2_000).nullable(),
+}).strict();
+
+export const EngineBackstopSyncDetailResponseSchema = z.object({
+  run: EngineBackstopSyncRunSummarySchema,
+  detail: EngineBackstopSyncDetailSchema,
+}).strict();
+
+export const EngineBackstopSyncOperationResponseSchema = z.object({
+  run: EngineBackstopSyncRunSummarySchema,
+  task: EngineBackstopSyncTaskResultSchema.nullable(),
+}).strict();
+
 export const EngineBackstopSyncApplyRequestSchema = z.object({
   desiredHash: z.string().regex(/^[a-f0-9]{64}$/),
   acknowledgeDirectIdentityBoundary: z.literal(true),
@@ -197,5 +256,10 @@ export type EngineBackstopSanitizedClassification = z.infer<typeof EngineBacksto
 export type EngineBackstopSyncRunStatus = z.infer<typeof EngineBackstopSyncRunStatusSchema>;
 export type EngineBackstopSyncRunSummary = z.infer<typeof EngineBackstopSyncRunSummarySchema>;
 export type EngineBackstopSyncRunHistory = z.infer<typeof EngineBackstopSyncRunHistorySchema>;
+export type EngineBackstopOwnedGrant = z.infer<typeof EngineBackstopOwnedGrantSchema>;
+export type EngineBackstopSyncDetail = z.infer<typeof EngineBackstopSyncDetailSchema>;
+export type EngineBackstopSyncTaskResult = z.infer<typeof EngineBackstopSyncTaskResultSchema>;
+export type EngineBackstopSyncDetailResponse = z.infer<typeof EngineBackstopSyncDetailResponseSchema>;
+export type EngineBackstopSyncOperationResponse = z.infer<typeof EngineBackstopSyncOperationResponseSchema>;
 export type EngineBackstopSyncApplyRequest = z.infer<typeof EngineBackstopSyncApplyRequestSchema>;
 export type EngineBackstopSyncRollbackRequest = z.infer<typeof EngineBackstopSyncRollbackRequestSchema>;

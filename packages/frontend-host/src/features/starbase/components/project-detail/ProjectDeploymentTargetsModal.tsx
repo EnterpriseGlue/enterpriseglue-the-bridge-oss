@@ -137,9 +137,12 @@ export function ProjectDeploymentTargetsModal({
   const readReason = canReadTargets
     ? null
     : readTargetsUnavailableReason || `Missing permission ${PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW}`
-  const manageReason = canManageTargets
-    ? null
-    : manageTargetsUnavailableReason || `Missing permission ${PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE}`
+  const policyManageReason = projectEngineTargetMode === 'external_only'
+    ? 'Project deployment targets are externally managed by platform policy'
+    : null
+  const manageReason = !canManageTargets
+    ? manageTargetsUnavailableReason || `Missing permission ${PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE}`
+    : policyManageReason
   const createOrSyncReason = manageReason
   const firstAuthzDiagnosticDecision =
     buildDeploymentTargetDiagnosticDecision(projectId, apiScope, 'read', readReason) ||
@@ -252,7 +255,13 @@ export function ProjectDeploymentTargetsModal({
             <InlineNotification lowContrast kind="warning" title="Deployment targets unavailable" subtitle={readReason} hideCloseButton />
           )}
           {!readReason && manageReason && (
-            <InlineNotification lowContrast kind="info" title="Deployment target changes unavailable" subtitle={manageReason} hideCloseButton />
+            <InlineNotification
+              lowContrast
+              kind="info"
+              title={policyManageReason ? 'Manual deployment target changes unavailable' : 'Deployment target changes unavailable'}
+              subtitle={manageReason}
+              hideCloseButton
+            />
           )}
           {firstAuthzDiagnosticDecision ? (
             <div style={{ fontSize: 12 }}>

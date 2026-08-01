@@ -12,6 +12,7 @@ import {
   TableRow,
   TableToolbar,
   TableToolbarContent,
+  TableToolbarSearch,
   Tag,
 } from '@carbon/react';
 import { Add } from '@carbon/icons-react';
@@ -20,11 +21,10 @@ import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dat
 
 const permissionsHeaders = [
   { key: 'label', header: 'Permission' },
-  { key: 'key', header: 'Key' },
-  { key: 'scope', header: 'Scope' },
+  { key: 'scope', header: 'Permission scope' },
   { key: 'kind', header: 'Type' },
   { key: 'category', header: 'Category' },
-  { key: 'implications', header: 'Dependencies' },
+  { key: 'implications', header: 'Also includes' },
   { key: 'risk', header: 'Warning' },
 ];
 
@@ -32,13 +32,35 @@ type PermissionQuickFilter = 'all' | 'view' | 'editor' | 'operator' | 'deploymen
 
 const PERMISSION_QUICK_FILTERS: Array<{ id: PermissionQuickFilter; label: string }> = [
   { id: 'all', label: 'All permissions' },
-  { id: 'view', label: 'View only' },
-  { id: 'editor', label: 'Editor' },
-  { id: 'operator', label: 'Operator' },
-  { id: 'deployment', label: 'Deployment' },
+  { id: 'view', label: 'Read and inspect' },
+  { id: 'editor', label: 'Create and edit' },
+  { id: 'operator', label: 'Operate runtime' },
+  { id: 'deployment', label: 'Deploy and import' },
 ];
 
-const permissionTextCellStyle = { overflowWrap: 'anywhere' as const };
+const permissionTextCellStyle = { overflowWrap: 'break-word' as const };
+
+const implicationLabels: Record<string, string> = {
+  'project:files:view': 'View project files',
+  'project:members:view': 'View project members',
+  'engine:members:view': 'View engine members',
+  'engine:instance:view': 'View process instances',
+  'engine:variables:metadata:view': 'View variable names and metadata',
+  'engine:variables:value:view': 'View process variable values',
+  'engine:deploy:view': 'View deployments',
+};
+
+function impliedPermissionLabel(key: string, permissions: PermissionCatalogEntry[]): string {
+  const catalogLabel = permissions.find((permission) => permission.key === key)?.label;
+  if (catalogLabel) return catalogLabel;
+  if (implicationLabels[key]) return implicationLabels[key];
+  return key
+    .split(':')
+    .slice(1)
+    .join(' ')
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
 
 function scopeTag(scope: string) {
   if (scope === 'platform') return <Tag type="purple">Platform</Tag>;
@@ -65,17 +87,24 @@ export function PermissionsTable({
   getPermissionRisk: (permission: PermissionCatalogEntry) => { label: string; description: string } | null | undefined;
 }) {
   const [quickFilter, setQuickFilter] = React.useState<PermissionQuickFilter>('all');
-  const filteredPermissions = React.useMemo(() => filterPermissions(permissions, quickFilter), [filterPermissions, permissions, quickFilter]);
+  const [search, setSearch] = React.useState('');
+  const filteredPermissions = React.useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return filterPermissions(permissions, quickFilter).filter((permission) => (
+      !query ||
+      [permission.label, permission.key, permission.scope, permission.category, permission.description]
+        .some((value) => String(value || '').toLowerCase().includes(query))
+    ));
+  }, [filterPermissions, permissions, quickFilter, search]);
   const selectedQuickFilter = PERMISSION_QUICK_FILTERS.find((item) => item.id === quickFilter) || PERMISSION_QUICK_FILTERS[0];
 
   if (loading) return <DataTableSkeleton headers={permissionsHeaders} rowCount={8} />;
 
   return (
-    <TableContainer>
+    <TableContainer className="eg-permissions-table">
       <DataTable rows={filteredPermissions.map((permission) => ({
         id: permission.key,
         label: permission.label,
-        key: permission.key,
         scope: permission.scope,
         category: permission.category,
         kind: permission.kind || 'system',
@@ -86,11 +115,17 @@ export function PermissionsTable({
           <>
             <TableToolbar>
               <TableToolbarContent>
+                <TableToolbarSearch
+                  persistent
+                  placeholder="Search permissions"
+                  value={search}
+                  onChange={(event: any) => setSearch(String(event.target.value || ''))}
+                />
                 <Dropdown
                   id="permissions-quick-filter"
                   titleText=""
-                  aria-label="Quick filter"
-                  label="Quick filter"
+                  aria-label="Permission capability"
+                  label="Permission capability"
                   className="eg-table-toolbar-filter"
                   size="lg"
                   items={PERMISSION_QUICK_FILTERS}
@@ -98,7 +133,7 @@ export function PermissionsTable({
                   itemToString={(item) => item?.label || ''}
                   onChange={({ selectedItem }) => setQuickFilter(selectedItem?.id || 'all')}
                 />
-                <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'}>Add Permission</Button>
+                <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'You can view permissions, but you do not have permission to create them.'}>Add permission</Button>
               </TableToolbarContent>
             </TableToolbar>
             <Table {...getTableProps()} size="md">
@@ -113,7 +148,28 @@ export function PermissionsTable({
                       if (cell.info.header === 'scope') return <TableCell key={cell.id}>{scopeTag(String(cell.value))}</TableCell>;
                       if (cell.info.header === 'kind') return <TableCell key={cell.id}><Tag type={cell.value === 'custom' ? 'green' : 'gray'}>{String(cell.value)}</Tag></TableCell>;
                       if (cell.info.header === 'risk') return <TableCell key={cell.id}>{risk ? <Tag type="red" title={risk.description}>{risk.label}</Tag> : '-'}</TableCell>;
-                      if (cell.info.header === 'implications') return <TableCell key={cell.id} style={permissionTextCellStyle}>{implications.length ? implications.map((item) => <Tag key={item} type="cool-gray">{item}</Tag>) : '-'}</TableCell>;
+                      if (cell.info.header === 'label' && permission) return (
+                        <TableCell key={cell.id}>
+                          <div style={{ display: 'grid', gap: 'var(--spacing-1)', minWidth: 0 }}>
+                            <span>{permission.label}</span>
+                            <span title={permission.key} style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {permission.key}
+                            </span>
+                          </div>
+                        </TableCell>
+                      );
+                      if (cell.info.header === 'implications') return (
+                        <TableCell key={cell.id} style={permissionTextCellStyle}>
+                          {implications.length ? (
+                            <div className="eg-permission-implications">
+                              {implications.map((item) => {
+                                const label = impliedPermissionLabel(item, permissions);
+                                return <Tag key={item} type="cool-gray" title={`${label} (${item})`}>{label}</Tag>;
+                              })}
+                            </div>
+                          ) : '-'}
+                        </TableCell>
+                      );
                       return <TableCell key={cell.id} style={permissionTextCellStyle}>{cell.value}</TableCell>;
                     })}
                   </DataTableDataRow>;

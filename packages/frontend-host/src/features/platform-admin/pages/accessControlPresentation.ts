@@ -43,13 +43,14 @@ export function formatCapabilityDiagnostics(diagnostics?: ExternalEngineCapabili
 
 export function formatReconcileSummary(result: ExternalEngineReconcileResponse) {
   const capability = formatCapabilityDiagnostics(result.capabilityDiagnostics);
-  const materialization = result.materializationDiagnostics?.summary || 'Engine Sets checked';
-  return `${capability}. ${materialization}.`;
+  const matchingEngines = result.materializationDiagnostics?.summary || 'Engine sets checked';
+  return `${capability}. ${matchingEngines}.`;
 }
 
-export function formatEngineSetSelector(selector: EngineSetSelector) {
+export function formatEngineSetSelector(selector?: EngineSetSelector | null) {
+  if (!selector || !selector.mode) return 'Selector details unavailable';
   if (selector.mode === 'all') return 'All active engines';
-  if (selector.mode === 'engine_ids') return `Engine IDs: ${selector.engineIds.join(', ') || '-'}`;
+  if (selector.mode === 'engine_ids') return `Engine IDs: ${(selector.engineIds || []).join(', ') || '-'}`;
   const labels = Object.entries(selector.labels || {})
     .map(([key, value]) => `${key}=${value}`)
     .join(', ');

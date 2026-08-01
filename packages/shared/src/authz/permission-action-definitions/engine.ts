@@ -170,8 +170,8 @@ export const ENGINE_AUTHZ_ACTIONS = [
           route: '/engines-api/engines',
           resourceResolver: 'platform.self',
           additionalChecks: [
-            'current handler accepts authenticated users and assigns the caller as owner',
-            'future strict enforcement should use platform:engine:create; default user/developer roles include it for compatibility',
+            'platform:engine:create is required and the permitted caller becomes the engine owner',
+            'default platform users do not receive engine-registration permission; an administrator can grant it explicitly',
             'externalId and label changes refresh Engine Set materializations',
           ],
         },

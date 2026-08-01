@@ -465,12 +465,16 @@ export interface RoleAssignmentView {
   userId: string | null;
   principalType: PrincipalType;
   principalId: string;
+  principalDisplayName: string | null;
+  principalSecondary: string | null;
   roleId: string;
   roleKey: string | null;
   roleName: string | null;
   roleScope: RoleScope | null;
   resourceType: ResourceType | null;
   resourceId: string | null;
+  resourceDisplayName: string | null;
+  resourceSecondary: string | null;
   scopeType: ResourceType | null;
   scopeId: string | null;
   source: RoleAssignmentSource;
@@ -858,7 +862,6 @@ export const PlatformRolePermissions: Record<string, Permission[]> = {
   user: [
     PlatformPermissions.DASHBOARD_VIEW,
     PlatformPermissions.PROJECT_CREATE,
-    PlatformPermissions.ENGINE_CREATE,
   ],
 };
 
@@ -1246,7 +1249,7 @@ export const SystemRoleDefinitions: SystemRoleDefinition[] = [
     id: SYSTEM_ROLE_IDS.PLATFORM_USER,
     key: SYSTEM_ROLE_IDS.PLATFORM_USER,
     name: 'Platform User',
-    description: 'Preserves current default platform user behavior.',
+    description: 'View the dashboard and create projects. Engine access is granted separately for each engine.',
     scope: 'platform',
     kind: 'system',
     isEditable: false,
@@ -2406,20 +2409,145 @@ class PermissionServiceClass {
       : [];
     const rolesById = new Map(roles.map((role) => [role.id, role]));
 
+    const principalIdsByType = <T extends PrincipalType>(principalType: T) =>
+      Array.from(new Set(assignments
+        .filter((assignment) => assignment.principalType === principalType)
+        .map((assignment) => assignment.principalId)));
+    const scopeIdsByType = (scopeType: ResourceType) =>
+      Array.from(new Set(assignments
+        .filter((assignment) => assignment.scopeType === scopeType && assignment.scopeId)
+        .map((assignment) => assignment.scopeId as string)));
+
+    const userIds = principalIdsByType('user');
+    const groupIds = principalIdsByType('group');
+    const apiClientIds = principalIdsByType('api_client');
+    const serviceAccountIds = principalIdsByType('service_account');
+    const engineIds = scopeIdsByType('engine');
+    const projectIds = scopeIdsByType('project');
+    const engineSetIds = scopeIdsByType('engine_set');
+    const runtimeResourceIds = scopeIdsByType('engine_runtime_resource');
+    const runtimeResourceSetIds = scopeIdsByType('engine_runtime_resource_set');
+    const externalSystemIds = scopeIdsByType('external_engine_system');
+
+    const [
+      users,
+      groups,
+      apiClients,
+      serviceAccounts,
+      engines,
+      projects,
+      engineSets,
+      runtimeResources,
+      runtimeResourceSets,
+      externalSystems,
+    ] = await Promise.all([
+      userIds.length ? dataSource.getRepository(User).find({ where: { id: In(userIds) } }) : [],
+      groupIds.length ? dataSource.getRepository(AuthzGroup).find({ where: { id: In(groupIds) } }) : [],
+      apiClientIds.length ? dataSource.getRepository(ApiClient).find({ where: { id: In(apiClientIds) } }) : [],
+      serviceAccountIds.length ? dataSource.getRepository(ServiceAccount).find({ where: { id: In(serviceAccountIds) } }) : [],
+      engineIds.length ? dataSource.getRepository(Engine).find({ where: { id: In(engineIds) } }) : [],
+      projectIds.length ? dataSource.getRepository(Project).find({ where: { id: In(projectIds) } }) : [],
+      engineSetIds.length ? dataSource.getRepository(EngineSet).find({ where: { id: In(engineSetIds) } }) : [],
+      runtimeResourceIds.length ? dataSource.getRepository(RuntimeResource).find({ where: { id: In(runtimeResourceIds) } }) : [],
+      runtimeResourceSetIds.length ? dataSource.getRepository(RuntimeResourceSet).find({ where: { id: In(runtimeResourceSetIds) } }) : [],
+      externalSystemIds.length ? dataSource.getRepository(ExternalEngineSystem).find({ where: { id: In(externalSystemIds) } }) : [],
+    ]);
+
+    const runtimeEngineIds = Array.from(new Set([
+      ...runtimeResources.map((resource) => resource.engineId),
+      ...runtimeResourceSets.map((resourceSet) => resourceSet.engineId),
+    ]));
+    const missingRuntimeEngineIds = runtimeEngineIds.filter((id) => !engines.some((engine) => engine.id === id));
+    const runtimeEngines = missingRuntimeEngineIds.length
+      ? await dataSource.getRepository(Engine).find({ where: { id: In(missingRuntimeEngineIds) } })
+      : [];
+
+    const usersById = new Map(users.map((user) => [user.id, user]));
+    const groupsById = new Map(groups.map((group) => [group.id, group]));
+    const apiClientsById = new Map(apiClients.map((client) => [client.id, client]));
+    const serviceAccountsById = new Map(serviceAccounts.map((account) => [account.id, account]));
+    const enginesById = new Map([...engines, ...runtimeEngines].map((engine) => [engine.id, engine]));
+    const projectsById = new Map(projects.map((project) => [project.id, project]));
+    const engineSetsById = new Map(engineSets.map((engineSet) => [engineSet.id, engineSet]));
+    const runtimeResourcesById = new Map(runtimeResources.map((resource) => [resource.id, resource]));
+    const runtimeResourceSetsById = new Map(runtimeResourceSets.map((resourceSet) => [resourceSet.id, resourceSet]));
+    const externalSystemsById = new Map(externalSystems.map((system) => [system.id, system]));
+
+    const principalPresentation = (assignment: RbacRoleAssignment): { displayName: string; secondary: string } => {
+      const principalId = assignment.principalId;
+      if (assignment.principalType === 'user') {
+        const user = usersById.get(principalId);
+        const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+        return {
+          displayName: user?.email || fullName || principalId,
+          secondary: fullName ? `${fullName} · ${principalId}` : principalId,
+        };
+      }
+      if (assignment.principalType === 'group') {
+        const group = groupsById.get(principalId);
+        return { displayName: group?.name || principalId, secondary: group?.key ? `${group.key} · ${principalId}` : principalId };
+      }
+      if (assignment.principalType === 'api_client') {
+        return { displayName: apiClientsById.get(principalId)?.name || principalId, secondary: principalId };
+      }
+      return { displayName: serviceAccountsById.get(principalId)?.name || principalId, secondary: principalId };
+    };
+
+    const resourcePresentation = (assignment: RbacRoleAssignment): { displayName: string; secondary: string | null } => {
+      const scopeType = assignment.scopeType as ResourceType | null;
+      const scopeId = assignment.scopeId;
+      if (scopeType === 'platform') return { displayName: 'Platform', secondary: null };
+      if (!scopeId) return { displayName: scopeType === 'tenant' ? 'Current tenant' : 'Unscoped', secondary: null };
+      if (scopeType === 'tenant') return { displayName: 'Tenant', secondary: scopeId };
+      if (scopeType === 'engine') return { displayName: enginesById.get(scopeId)?.name || scopeId, secondary: `engine:${scopeId}` };
+      if (scopeType === 'project') return { displayName: projectsById.get(scopeId)?.name || scopeId, secondary: `project:${scopeId}` };
+      if (scopeType === 'engine_set') {
+        const set = engineSetsById.get(scopeId);
+        return { displayName: set?.name || scopeId, secondary: set?.key ? `${set.key} · ${scopeId}` : scopeId };
+      }
+      if (scopeType === 'engine_runtime_resource') {
+        const resource = runtimeResourcesById.get(scopeId);
+        const engineName = resource ? enginesById.get(resource.engineId)?.name : null;
+        return {
+          displayName: resource ? `${resource.resourceKey}${engineName ? ` · ${engineName}` : ''}` : scopeId,
+          secondary: resource ? `${resource.resourceKind} · ${scopeId}` : scopeId,
+        };
+      }
+      if (scopeType === 'engine_runtime_resource_set') {
+        const set = runtimeResourceSetsById.get(scopeId);
+        const engineName = set ? enginesById.get(set.engineId)?.name : null;
+        return {
+          displayName: set ? `${set.name}${engineName ? ` · ${engineName}` : ''}` : scopeId,
+          secondary: set?.key ? `${set.key} · ${scopeId}` : scopeId,
+        };
+      }
+      if (scopeType === 'external_engine_system') {
+        const system = externalSystemsById.get(scopeId);
+        return { displayName: system?.name || scopeId, secondary: system?.key ? `${system.key} · ${scopeId}` : scopeId };
+      }
+      return { displayName: scopeId, secondary: `${scopeType}:${scopeId}` };
+    };
+
     return assignments.map((assignment) => {
       const role = rolesById.get(assignment.roleId);
+      const principal = principalPresentation(assignment);
+      const resource = resourcePresentation(assignment);
       return {
         id: assignment.id,
         tenantId: assignment.tenantId,
         userId: assignment.principalType === 'user' ? assignment.principalId : null,
         principalType: assignment.principalType as PrincipalType,
         principalId: assignment.principalId!,
+        principalDisplayName: principal.displayName,
+        principalSecondary: principal.secondary,
         roleId: assignment.roleId,
         roleKey: role?.key || null,
         roleName: role?.name || null,
         roleScope: role ? role.scope as RoleScope : null,
         resourceType: assignment.scopeType as ResourceType | null,
         resourceId: assignment.scopeId,
+        resourceDisplayName: resource.displayName,
+        resourceSecondary: resource.secondary,
         scopeType: assignment.scopeType as ResourceType | null,
         scopeId: assignment.scopeId,
         source: assignment.source as RoleAssignmentSource,

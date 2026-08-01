@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, ComboBox, Checkbox, Dropdown, InlineNotification, SkeletonText, Tile, Tag } from '@carbon/react'
+import { Button, ComboBox, Checkbox, InlineNotification, RadioButton, RadioButtonGroup, SkeletonText, Tile, Tag } from '@carbon/react'
 import { Chip, UserAvatar, Add, Edit, TrashCan, Draggable } from '@carbon/icons-react'
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid'
 import type {
@@ -49,6 +49,7 @@ interface EnginesSettingsSectionProps {
   canManageGovernance?: boolean
   governanceReadUnavailableReason?: string | null
   governanceManageUnavailableReason?: string | null
+  settingsSaveState?: 'idle' | 'saving' | 'saved' | 'error'
 }
 
 const ALL_ROLES = ['owner', 'delegate', 'operator', 'deployer']
@@ -67,7 +68,7 @@ const ENGINE_ONBOARDING_MODE_ITEMS: Array<{ id: EngineOnboardingMode; label: str
   {
     id: 'hybrid',
     label: 'Hybrid ownership',
-    description: 'Manual engines and externally registered engines can coexist with source-owned fields enforced per engine.',
+    description: 'Manual and externally registered engines can coexist. Fields managed by an external system cannot be changed here.',
   },
 ]
 
@@ -75,7 +76,7 @@ const PROJECT_ENGINE_TARGET_MODE_ITEMS: Array<{ id: ProjectEngineTargetPolicyMod
   {
     id: 'manual_allowed',
     label: 'Manual target management',
-    description: 'Project owners and platform admins can manage local deployment targets; source-owned targets stay protected.',
+    description: 'Project owners and platform admins can manage local deployment targets. Targets managed by an external system cannot be changed here.',
   },
   {
     id: 'external_only',
@@ -85,7 +86,7 @@ const PROJECT_ENGINE_TARGET_MODE_ITEMS: Array<{ id: ProjectEngineTargetPolicyMod
   {
     id: 'hybrid',
     label: 'Hybrid target ownership',
-    description: 'Manual and externally managed targets can coexist with source ownership enforced per target.',
+    description: 'Manual and externally managed targets can coexist. Each target shows where its settings must be changed.',
   },
 ]
 
@@ -93,7 +94,7 @@ const ACCESS_AUTHORITY_MODE_ITEMS: Array<{ id: AccessAuthorityMode; label: strin
   {
     id: 'manual',
     label: 'Manual access',
-    description: 'Manual platform assignments are the primary source of access; SSO grants can still be diagnosed separately.',
+    description: 'Manual platform assignments provide access. Admins can review SSO grants separately when troubleshooting.',
   },
   {
     id: 'transition_to_sso',
@@ -110,15 +111,24 @@ const ACCESS_AUTHORITY_MODE_ITEMS: Array<{ id: AccessAuthorityMode; label: strin
 const ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS: Array<{ id: EngineRuntimeAuthorizationMode; label: string; description: string }> = [
   {
     id: 'enterpriseglue_authoritative',
-    label: 'EnterpriseGlue authoritative',
-    description: 'EnterpriseGlue is the authorization source for runtime resources. This is the default mode.',
+    label: 'EnterpriseGlue only',
+    description: 'EnterpriseGlue makes every runtime authorization decision. Access granted directly in the engine does not grant access in EnterpriseGlue.',
   },
   {
     id: 'mirrored_engine_backstop',
-    label: 'Mirrored engine backstop',
-    description: 'Mirrors a narrow, reviewed group READ subset to compatible Camunda 7 or Operaton engines while EnterpriseGlue remains authoritative.',
+    label: 'EnterpriseGlue with engine read-access backup',
+    description: 'EnterpriseGlue remains the source of truth and copies only reviewed group read access to compatible engines.',
   },
 ]
+
+function ModeOptionLabel({ label, description }: { label: string; description: string }) {
+  return (
+    <span style={{ display: 'grid', gap: 'var(--spacing-1)', paddingBlock: 'var(--spacing-1)' }}>
+      <span>{label}</span>
+      <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', lineHeight: 1.35 }}>{description}</span>
+    </span>
+  )
+}
 
 export function EnginesSettingsSection({
   settings,
@@ -157,6 +167,7 @@ export function EnginesSettingsSection({
   canManageGovernance = true,
   governanceReadUnavailableReason,
   governanceManageUnavailableReason,
+  settingsSaveState = 'idle',
 }: EnginesSettingsSectionProps) {
   const deployRoles = Array.isArray(settings?.defaultDeployRoles) ? settings.defaultDeployRoles : []
   const selectedOnboardingMode = settings?.engineOnboardingMode || 'manual_allowed'
@@ -173,124 +184,150 @@ export function EnginesSettingsSection({
     <PlatformGrid style={{ paddingInline: 0, alignItems: 'stretch' }}>
       <PlatformRow>
         <PlatformCol sm={4} md={8} lg={16} style={{ marginInlineStart: 0, marginInlineEnd: 0 }}>
-          <Tile style={{ marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-4)' }}>
-              <Chip size={20} style={{ color: 'var(--color-text-secondary)' }} />
-              <div>
-                <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>Engine Onboarding</h3>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
-                  Choose whether engines are created in the platform, registered externally, or both.
+          {canManageGovernanceSettings && (
+            <div
+              aria-live="polite"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-4)' }}
+            >
+              <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Changes save automatically.</span>
+              <Tag type={settingsSaveState === 'error' ? 'red' : settingsSaveState === 'saving' ? 'blue' : settingsSaveState === 'saved' ? 'green' : 'gray'}>
+                {settingsSaveState === 'error' ? 'Not saved' : settingsSaveState === 'saving' ? 'Saving' : settingsSaveState === 'saved' ? 'Saved' : 'No pending changes'}
+              </Tag>
+            </div>
+          )}
+          {!canManageGovernanceSettings && (
+            <InlineNotification
+              kind="warning"
+              title="Engine governance modes are read-only"
+              subtitle={governanceSettingsDisabledReason}
+              hideCloseButton
+              lowContrast
+              style={{ marginBottom: 'var(--spacing-4)' }}
+            />
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(19rem, 1fr))', gap: 'var(--spacing-5)', marginBottom: '1rem', alignItems: 'start' }}>
+            <Tile>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-5)' }}>
+                <Chip size={20} style={{ color: 'var(--color-text-secondary)', marginTop: 2 }} />
+                <div>
+                  <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>Registration ownership</h3>
+                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                    Who may register engines and connect projects to them.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-6)' }}>
+                <RadioButtonGroup
+                  name="engine-onboarding-mode"
+                  legendText="Engine registration"
+                  valueSelected={selectedOnboardingMode}
+                  onChange={(value) => onEngineOnboardingModeChange(value as EngineOnboardingMode)}
+                  orientation="vertical"
+                  disabled={!canManageGovernanceSettings}
+                >
+                  {ENGINE_ONBOARDING_MODE_ITEMS.map((item) => <RadioButton key={item.id} id={`engine-onboarding-mode-${item.id}`} value={item.id} disabled={!canManageGovernanceSettings} labelText={<ModeOptionLabel label={item.label} description={item.description} />} />)}
+                </RadioButtonGroup>
+                <RadioButtonGroup
+                  name="project-engine-target-mode"
+                  legendText="Project deployment targets"
+                  valueSelected={selectedProjectEngineTargetMode}
+                  onChange={(value) => onProjectEngineTargetModeChange(value as ProjectEngineTargetPolicyMode)}
+                  orientation="vertical"
+                  disabled={!canManageGovernanceSettings}
+                >
+                  {PROJECT_ENGINE_TARGET_MODE_ITEMS.map((item) => <RadioButton key={item.id} id={`project-engine-target-mode-${item.id}`} value={item.id} disabled={!canManageGovernanceSettings} labelText={<ModeOptionLabel label={item.label} description={item.description} />} />)}
+                </RadioButtonGroup>
+              </div>
+            </Tile>
+
+            <Tile>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-5)' }}>
+                <Chip size={20} style={{ color: 'var(--color-text-secondary)', marginTop: 2 }} />
+                <div>
+                  <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>Access ownership</h3>
+                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                    Where user and group access changes must originate.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gap: 'var(--spacing-6)' }}>
+                <RadioButtonGroup
+                  name="engine-access-authority"
+                  legendText="Engine access"
+                  valueSelected={selectedEngineAccessAuthority}
+                  onChange={(value) => onEngineAccessAuthorityChange(value as AccessAuthorityMode)}
+                  orientation="vertical"
+                  disabled={!canManageGovernanceSettings}
+                >
+                  {ACCESS_AUTHORITY_MODE_ITEMS.map((item) => <RadioButton key={item.id} id={`engine-access-authority-${item.id}`} value={item.id} disabled={!canManageGovernanceSettings} labelText={<ModeOptionLabel label={item.label} description={item.description} />} />)}
+                </RadioButtonGroup>
+                <RadioButtonGroup
+                  name="project-access-authority"
+                  legendText="Project access"
+                  valueSelected={selectedProjectAccessAuthority}
+                  onChange={(value) => onProjectAccessAuthorityChange(value as AccessAuthorityMode)}
+                  orientation="vertical"
+                  disabled={!canManageGovernanceSettings}
+                >
+                  {ACCESS_AUTHORITY_MODE_ITEMS.map((item) => <RadioButton key={item.id} id={`project-access-authority-${item.id}`} value={item.id} disabled={!canManageGovernanceSettings} labelText={<ModeOptionLabel label={item.label} description={item.description} />} />)}
+                </RadioButtonGroup>
+              </div>
+            </Tile>
+
+            <Tile>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-5)' }}>
+                <Chip size={20} style={{ color: 'var(--color-text-secondary)', marginTop: 2 }} />
+                <div>
+                  <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>Runtime enforcement</h3>
+                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                    How approved runtime-resource grants are enforced at an engine boundary.
+                  </p>
+                </div>
+              </div>
+              <RadioButtonGroup
+                name="engine-runtime-authorization-mode"
+                legendText="Authorization mode"
+                valueSelected={engineRuntimeAuthorizationMode}
+                onChange={(value) => onEngineRuntimeAuthorizationModeChange(value as EngineRuntimeAuthorizationMode)}
+                orientation="vertical"
+                disabled={!canManageGovernanceSettings}
+              >
+                {ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS.map((item) => <RadioButton key={item.id} id={`engine-runtime-authorization-mode-${item.id}`} value={item.id} disabled={!canManageGovernanceSettings} labelText={<ModeOptionLabel label={item.label} description={item.description} />} />)}
+              </RadioButtonGroup>
+              <div style={{ marginTop: 'var(--spacing-5)' }}>
+                {engineRuntimeAuthorizationMode === 'mirrored_engine_backstop' ? (
+                  <InlineNotification
+                    lowContrast
+                    kind="info"
+                    title="Engine read-access backup is on"
+                    subtitle="EnterpriseGlue still makes every authorization decision. It copies only reviewed group read access to compatible engines. Open the engine’s authorization backup panel to review the latest synchronization."
+                    hideCloseButton
+                  />
+                ) : (
+                  <InlineNotification
+                    lowContrast
+                    kind="info"
+                    title="EnterpriseGlue checks every request"
+                    subtitle="Access configured directly in an engine does not grant EnterpriseGlue access. Before you turn on engine read-access backup, complete one successful synchronization."
+                    hideCloseButton
+                  />
+                )}
+              </div>
+              <div style={{ marginTop: 'var(--spacing-6)' }}>
+                <Checkbox
+                  id="credentialless-customer-sidecars-enabled"
+                  labelText="Allow peer-authenticated customer sidecars without engine credentials"
+                  checked={settings?.credentiallessCustomerSidecarsEnabled === true}
+                  onChange={(_event, { checked }) => onCredentiallessCustomerSidecarsEnabledChange(Boolean(checked))}
+                  disabled={!canManageSettings}
+                  title={!canManageSettings ? settingsDisabledReason : undefined}
+                />
+                <p style={{ margin: 'var(--spacing-2) 0 0 1.75rem', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
+                  For customer-managed sidecars authenticated with peer-to-peer service tokens. The sidecar does not store engine credentials; EnterpriseGlue still makes every authorization decision.
                 </p>
               </div>
-            </div>
-            {!canManageGovernanceSettings && (
-              <InlineNotification
-                kind="warning"
-                title="Engine onboarding settings are read-only"
-                subtitle={governanceSettingsDisabledReason}
-                hideCloseButton
-                lowContrast
-                style={{ marginBottom: 'var(--spacing-4)' }}
-              />
-            )}
-            <div style={{ display: 'grid', gap: 'var(--spacing-4)', maxWidth: 560 }}>
-              <Dropdown
-                id="engine-onboarding-mode"
-                titleText="Onboarding mode"
-                label="Select onboarding mode"
-                items={ENGINE_ONBOARDING_MODE_ITEMS}
-                itemToString={(item) => item?.label || ''}
-                selectedItem={ENGINE_ONBOARDING_MODE_ITEMS.find((item) => item.id === selectedOnboardingMode)}
-                onChange={({ selectedItem }) => {
-                  if (selectedItem) onEngineOnboardingModeChange(selectedItem.id)
-                }}
-                helperText={ENGINE_ONBOARDING_MODE_ITEMS.find((item) => item.id === selectedOnboardingMode)?.description}
-                size="md"
-                disabled={!canManageGovernanceSettings}
-              />
-              <Dropdown
-                id="project-engine-target-mode"
-                titleText="Project deployment target mode"
-                label="Select target mode"
-                items={PROJECT_ENGINE_TARGET_MODE_ITEMS}
-                itemToString={(item) => item?.label || ''}
-                selectedItem={PROJECT_ENGINE_TARGET_MODE_ITEMS.find((item) => item.id === selectedProjectEngineTargetMode)}
-                onChange={({ selectedItem }) => {
-                  if (selectedItem) onProjectEngineTargetModeChange(selectedItem.id)
-                }}
-                helperText={PROJECT_ENGINE_TARGET_MODE_ITEMS.find((item) => item.id === selectedProjectEngineTargetMode)?.description}
-                size="md"
-                disabled={!canManageGovernanceSettings}
-              />
-              <Dropdown
-                id="engine-access-authority"
-                titleText="Engine access authority"
-                label="Select access authority"
-                items={ACCESS_AUTHORITY_MODE_ITEMS}
-                itemToString={(item) => item?.label || ''}
-                selectedItem={ACCESS_AUTHORITY_MODE_ITEMS.find((item) => item.id === selectedEngineAccessAuthority)}
-                onChange={({ selectedItem }) => {
-                  if (selectedItem) onEngineAccessAuthorityChange(selectedItem.id)
-                }}
-                helperText={ACCESS_AUTHORITY_MODE_ITEMS.find((item) => item.id === selectedEngineAccessAuthority)?.description}
-                size="md"
-                disabled={!canManageGovernanceSettings}
-              />
-              <Dropdown
-                id="project-access-authority"
-                titleText="Project access authority"
-                label="Select access authority"
-                items={ACCESS_AUTHORITY_MODE_ITEMS}
-                itemToString={(item) => item?.label || ''}
-                selectedItem={ACCESS_AUTHORITY_MODE_ITEMS.find((item) => item.id === selectedProjectAccessAuthority)}
-                onChange={({ selectedItem }) => {
-                  if (selectedItem) onProjectAccessAuthorityChange(selectedItem.id)
-                }}
-                helperText={ACCESS_AUTHORITY_MODE_ITEMS.find((item) => item.id === selectedProjectAccessAuthority)?.description}
-                size="md"
-                disabled={!canManageGovernanceSettings}
-              />
-              <Dropdown
-                id="engine-runtime-authorization-mode"
-                titleText="Runtime authorization mode"
-                label="Select runtime authorization mode"
-                items={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS}
-                itemToString={(item) => item?.label || ''}
-                selectedItem={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS.find((item) => item.id === engineRuntimeAuthorizationMode)}
-                onChange={({ selectedItem }) => {
-                  if (selectedItem) onEngineRuntimeAuthorizationModeChange(selectedItem.id)
-                }}
-                helperText={ENGINE_RUNTIME_AUTHORIZATION_MODE_ITEMS.find((item) => item.id === engineRuntimeAuthorizationMode)?.description}
-                size="md"
-                disabled={!canManageGovernanceSettings}
-              />
-              {engineRuntimeAuthorizationMode === 'mirrored_engine_backstop' && (
-                <InlineNotification
-                  lowContrast
-                  kind="info"
-                  title="Mirrored backstop enabled"
-                  subtitle="EnterpriseGlue remains authoritative. Only exact, reviewed group READ grants for compatible Camunda 7 or Operaton engines are mirrored; use each engine’s Native authorization backstop panel to manage the receipt-bound lifecycle."
-                  hideCloseButton
-                />
-              )}
-              {engineRuntimeAuthorizationMode === 'enterpriseglue_authoritative' && (
-                <p style={{ margin: '-0.5rem 0 0', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
-                  Enabling a mirrored backstop requires at least one successful, retained backstop synchronization receipt. The API enforces this prerequisite.
-                </p>
-              )}
-              <Checkbox
-                id="credentialless-customer-sidecars-enabled"
-                labelText="Allow credentialless customer-sidecar endpoints"
-                checked={settings?.credentiallessCustomerSidecarsEnabled === true}
-                onChange={(_event, { checked }) => onCredentiallessCustomerSidecarsEnabledChange(Boolean(checked))}
-                disabled={!canManageSettings}
-                title={!canManageSettings ? settingsDisabledReason : undefined}
-              />
-              <p style={{ margin: '-0.5rem 0 0 1.75rem', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
-                Applies only to customer-managed sidecars or gateways. EnterpriseGlue remains authoritative for runtime authorization.
-              </p>
-            </div>
-          </Tile>
+            </Tile>
+          </div>
         </PlatformCol>
       </PlatformRow>
       <PlatformRow>
@@ -299,7 +336,7 @@ export function EnginesSettingsSection({
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-4)' }}>
               <Chip size={20} style={{ color: 'var(--color-text-secondary)' }} />
               <div>
-                <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>Engine Governance</h3>
+                <h3 style={{ margin: '0 0 var(--spacing-1) 0', fontSize: '16px', fontWeight: 600 }}>Engine governance</h3>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-secondary)' }}>
                   Assign owners or delegates to workflow engines
                 </p>

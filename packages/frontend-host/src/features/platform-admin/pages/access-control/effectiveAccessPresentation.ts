@@ -14,9 +14,9 @@ export const effectiveAccessSourceHeaders = [
   { key: 'type', header: 'Source' },
   { key: 'grant', header: 'Grant' },
   { key: 'principal', header: 'Principal' },
-  { key: 'scope', header: 'Scope' },
+  { key: 'scope', header: 'Access target' },
   { key: 'tenantExpiry', header: 'Tenant / expiry' },
-  { key: 'lineage', header: 'Lineage' },
+  { key: 'lineage', header: 'Technical details' },
   { key: 'audit', header: 'Audit' },
 ];
 

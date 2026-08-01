@@ -4,6 +4,7 @@ import {
   DataTable,
   DataTableSkeleton,
   InlineNotification,
+  Modal,
   Table,
   TableBody,
   TableCell,
@@ -13,12 +14,13 @@ import {
   TableToolbar,
   TableToolbarContent,
   Tag,
-  TextInput,
 } from '@carbon/react';
 import { Add, TrashCan } from '@carbon/icons-react';
 import type { AuthzGroup, AuthzGroupMembership } from '../../hooks/useAuthzApi';
 import { AssignmentSourceTag } from './AssignmentSourceTag';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards';
+import { UserPrincipalPicker } from '../../components/UserPrincipalPicker';
 
 const authzGroupHeaders = [
   { key: 'name', header: 'Group' },
@@ -30,8 +32,8 @@ const authzGroupHeaders = [
 ];
 
 const authzGroupMembershipHeaders = [
-  { key: 'userId', header: 'User ID' },
-  { key: 'source', header: 'Source' },
+  { key: 'userId', header: 'User' },
+  { key: 'source', header: 'Membership sources' },
   { key: 'expires', header: 'Expires' },
   { key: 'created', header: 'Created' },
   { key: 'actions', header: '' },
@@ -48,7 +50,36 @@ function authzSourceTagType(source: unknown): 'blue' | 'purple' | 'gray' {
 }
 
 function formatAuthzSource(source: unknown): string {
-  return source === 'config' ? 'Managed by config' : String(source || '-');
+  return source === 'config' ? 'Managed by configuration' : String(source || '-');
+}
+
+function membershipSourcePresentation(membership: AuthzGroupMembership): {
+  label: string;
+  technicalReference: string | null;
+} {
+  const source = String(membership.source);
+  if (source === 'system' && membership.sourceRef === 'bootstrap:initial-admin') {
+    return {
+      label: 'Initial platform administrator',
+      technicalReference: membership.sourceRef,
+    };
+  }
+  if (source === 'manual' && membership.sourceRef === 'admin:break-glass-review') {
+    return {
+      label: 'Administrator recovery review',
+      technicalReference: membership.sourceRef,
+    };
+  }
+  if (source === 'manual' && !membership.sourceRef) {
+    return {
+      label: 'Manual administrator change',
+      technicalReference: null,
+    };
+  }
+  return {
+    label: membership.sourceRef || 'No source reference',
+    technicalReference: null,
+  };
 }
 
 export function GroupsPanel({
@@ -81,18 +112,32 @@ export function GroupsPanel({
   onRemoveMembership: (id: string) => void;
 }) {
   const [memberUserId, setMemberUserId] = React.useState('');
+  const [archiveTarget, setArchiveTarget] = React.useState<AuthzGroup | null>(null);
+  const [removeMembershipTarget, setRemoveMembershipTarget] = React.useState<AuthzGroupMembership | null>(null);
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) || groups.find((group) => !group.isArchived) || groups[0] || null;
   const selectedMemberships = selectedGroup ? memberships.filter((membership) => membership.groupId === selectedGroup.id) : [];
+  const selectedMembershipGroups = Array.from(
+    selectedMemberships.reduce<Map<string, AuthzGroupMembership[]>>((byUser, membership) => {
+      const entries = byUser.get(membership.userId) || [];
+      entries.push(membership);
+      byUser.set(membership.userId, entries);
+      return byUser;
+    }, new Map()),
+  ).map(([userId, entries]) => ({ userId, entries }));
   const canManageSelectedGroup = Boolean(selectedGroup && isEditableGroup(selectedGroup) && !selectedGroup.isArchived && canManage);
   const selectedGroupUnavailableReason = !canManage
-    ? 'Missing permission platform:authz:roles:manage'
+    ? 'You can view this group, but you do not have permission to change its membership.'
     : selectedGroup && !isEditableGroup(selectedGroup)
       ? selectedGroup?.source === 'config' && selectedGroup.ownershipMode === 'config_locked'
-        ? 'This group is locked by its configuration bundle'
-        : 'Source-owned groups are managed by their source'
+        ? 'This group is locked by its configuration bundle.'
+        : 'Source-owned groups are managed by their source.'
       : selectedGroup?.isArchived
-        ? 'Archived groups cannot be changed'
+        ? 'Archived groups cannot be changed.'
         : undefined;
+
+  React.useEffect(() => {
+    setMemberUserId('');
+  }, [selectedGroup?.id]);
 
   if (loading) return <DataTableSkeleton headers={authzGroupHeaders} rowCount={4} />;
 
@@ -105,7 +150,11 @@ export function GroupsPanel({
             name: group.name,
             key: group.key,
             source: group.isSystem ? 'system' : group.source,
-            members: memberships.filter((membership) => membership.groupId === group.id).length,
+            members: new Set(
+              memberships
+                .filter((membership) => membership.groupId === group.id)
+                .map((membership) => membership.userId),
+            ).size,
             status: group.isArchived ? 'Archived' : 'Active',
             actions: '',
           }))}
@@ -115,8 +164,8 @@ export function GroupsPanel({
             <>
               <TableToolbar>
                 <TableToolbarContent>
-                  <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'Missing permission platform:authz:roles:manage'}>
-                    Create Group
+                  <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={canManage ? undefined : 'You can view groups, but you do not have permission to create or change them.'}>
+                    Create group
                   </Button>
                 </TableToolbarContent>
               </TableToolbar>
@@ -137,19 +186,25 @@ export function GroupsPanel({
                     const group = groups.find((item) => item.id === row.id);
                     const editable = group ? isEditableGroup(group) : false;
                     const rowUnavailableReason = !canManage
-                      ? 'Missing permission platform:authz:roles:manage'
+                      ? 'You can view this group, but you do not have permission to change it.'
                       : !editable
                         ? group?.source === 'config' && group.ownershipMode === 'config_locked'
-                          ? 'This group is locked by its configuration bundle'
-                          : 'Source-owned groups are managed by their source'
+                          ? 'This group is locked by its configuration bundle.'
+                          : 'Source-owned groups are managed by their source.'
                         : group?.isArchived
-                          ? 'Archived groups cannot be changed'
+                          ? 'Archived groups cannot be changed.'
                           : undefined;
                     return (
-                      <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
+                      <DataTableDataRow
+                        key={row.id}
+                        row={row}
+                        getRowProps={getRowProps}
+                        aria-selected={group?.id === selectedGroup?.id}
+                        style={group?.id === selectedGroup?.id ? { boxShadow: 'inset 3px 0 0 var(--cds-link-primary)', background: 'var(--cds-layer-selected-01)' } : undefined}
+                      >
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={group?.source === 'config' && group.ownershipMode === 'config_warn' ? 'warm-gray' : authzSourceTagType(cell.value)}>{group?.source === 'config' && group.ownershipMode === 'config_warn' ? 'Config warning' : formatAuthzSource(cell.value)}</Tag>{group?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
+                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={group?.source === 'config' && group.ownershipMode === 'config_warn' ? 'warm-gray' : authzSourceTagType(cell.value)}>{group?.source === 'config' && group.ownershipMode === 'config_warn' ? 'Configuration-linked' : formatAuthzSource(cell.value)}</Tag>{group?.driftStatus === 'drifted' && <Tag type="red">Different from configuration</Tag>}</div></TableCell>;
                           }
                           if (cell.info.header === 'status') {
                             return <TableCell key={cell.id}><Tag type={cell.value === 'Active' ? 'green' : 'gray'}>{cell.value}</Tag></TableCell>;
@@ -158,14 +213,16 @@ export function GroupsPanel({
                             return (
                               <TableCell key={cell.id}>
                                 {group && (
-                                  <>
-                                    <Button kind="ghost" size="sm" onClick={() => onSelectGroup(group.id)}>Members</Button>
-                                    <Button kind="ghost" size="sm" disabled={pending || Boolean(rowUnavailableReason)} title={rowUnavailableReason} onClick={() => onEdit(group)}>Edit</Button>
-                                    {!group.isArchived && (
-                                      <Button kind="ghost" size="sm" disabled={pending || Boolean(rowUnavailableReason)} title={rowUnavailableReason} renderIcon={TrashCan} onClick={() => onArchive(group.id)}>Archive</Button>
-                                    )}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 'var(--spacing-2)' }}>
                                     {rowUnavailableReason && <Tag type="gray" title={rowUnavailableReason}>Read-only</Tag>}
-                                  </>
+                                    <GuardedOverflowMenu size="sm" flipped iconDescription={`Actions for ${group.name}`}>
+                                      <GuardedOverflowMenuItem itemText="View members" onClick={() => onSelectGroup(group.id)} />
+                                      <GuardedOverflowMenuItem itemText="Edit" disabled={pending || Boolean(rowUnavailableReason)} unavailableReason={rowUnavailableReason} onClick={() => onEdit(group)} />
+                                      {!group.isArchived && (
+                                        <GuardedOverflowMenuItem itemText="Archive" isDelete disabled={pending || Boolean(rowUnavailableReason)} unavailableReason={rowUnavailableReason} onClick={() => setArchiveTarget(group)} />
+                                      )}
+                                    </GuardedOverflowMenu>
+                                  </div>
                                 )}
                               </TableCell>
                             );
@@ -185,13 +242,22 @@ export function GroupsPanel({
       {selectedGroup ? (
         <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
           <h3 style={{ margin: 0 }}>{selectedGroup.name} members</h3>
+          <InlineNotification
+            kind={canManageSelectedGroup ? 'info' : 'warning'}
+            lowContrast
+            hideCloseButton
+            title={canManageSelectedGroup ? 'You can add manual members' : 'Membership is managed elsewhere'}
+            subtitle={canManageSelectedGroup
+              ? 'Manual members can be added or removed here. SSO and configuration-managed memberships remain owned by their source.'
+              : 'Membership in this system group is updated automatically. You can review each membership source here, but you cannot add or remove members.'}
+          />
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) auto', gap: 'var(--spacing-4)', alignItems: 'end' }}>
-            <TextInput
-              id="group-member-user-id"
-              labelText="User ID"
+            <UserPrincipalPicker
+              id="group-member-user"
+              labelText="User"
               value={memberUserId}
               disabled={!canManageSelectedGroup || pending}
-              onChange={(event) => setMemberUserId(event.target.value)}
+              onChange={setMemberUserId}
             />
             <Button
               disabled={!memberUserId.trim() || !canManageSelectedGroup || pending}
@@ -201,7 +267,7 @@ export function GroupsPanel({
                 setMemberUserId('');
               }}
             >
-              Add Member
+              Add member
             </Button>
           </div>
           {membershipsLoading ? (
@@ -209,12 +275,14 @@ export function GroupsPanel({
           ) : (
             <TableContainer>
               <DataTable
-                rows={selectedMemberships.map((membership) => ({
-                  id: membership.id,
-                  userId: membership.userId,
-                  source: membership.source,
-                  expires: membership.expiresAt ? new Date(membership.expiresAt).toLocaleString() : 'Never',
-                  created: new Date(membership.createdAt).toLocaleString(),
+                rows={selectedMembershipGroups.map(({ userId, entries }) => ({
+                  id: userId,
+                  userId,
+                  source: entries.map((membership) => membership.source).join(', '),
+                  expires: entries.some((membership) => membership.expiresAt == null)
+                    ? 'Never'
+                    : new Date(Math.max(...entries.map((membership) => membership.expiresAt || 0))).toLocaleString(),
+                  created: new Date(Math.min(...entries.map((membership) => membership.createdAt))).toLocaleString(),
                   actions: '',
                 }))}
                 headers={authzGroupMembershipHeaders}
@@ -234,18 +302,57 @@ export function GroupsPanel({
                           <TableCell colSpan={headers.length}>No users are assigned to this group.</TableCell>
                         </TableRow>
                       ) : rows.map((row) => {
-                        const membership = selectedMemberships.find((item) => item.id === row.id);
-                        const canRemove = canManageSelectedGroup && membership?.source === 'manual';
+                        const membershipGroup = selectedMembershipGroups.find((item) => item.userId === row.id);
+                        const manualMembership = membershipGroup?.entries.find((membership) => membership.source === 'manual') || null;
+                        const canRemove = canManageSelectedGroup && Boolean(manualMembership);
                         return (
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                             {row.cells.map((cell) => {
                               if (cell.info.header === 'source') {
-                                return <TableCell key={cell.id}><AssignmentSourceTag source={cell.value} /></TableCell>;
+                                return (
+                                  <TableCell key={cell.id}>
+                                    <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
+                                      {membershipGroup?.entries.map((membership) => {
+                                        const sourcePresentation = membershipSourcePresentation(membership);
+                                        return (
+                                          <div key={membership.id} style={{ display: 'grid', gap: 'var(--spacing-1)' }}>
+                                            <AssignmentSourceTag source={membership.source} />
+                                            <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', overflowWrap: 'anywhere' }}>
+                                              {sourcePresentation.label}
+                                            </span>
+                                            {sourcePresentation.technicalReference && (
+                                              <span style={{ color: 'var(--cds-text-helper)', fontSize: '0.75rem', overflowWrap: 'anywhere' }}>
+                                                {sourcePresentation.technicalReference}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </TableCell>
+                                );
+                              }
+                              if (cell.info.header === 'userId') {
+                                const membership = membershipGroup?.entries[0];
+                                const primary = membership?.userDisplayName || membership?.userEmail || membership?.userId || String(cell.value);
+                                return (
+                                  <TableCell key={cell.id}>
+                                    <div style={{ display: 'grid', gap: 'var(--spacing-1)' }}>
+                                      <span>{primary}</span>
+                                      {membership?.userEmail && membership.userEmail !== primary && (
+                                        <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem' }}>{membership.userEmail}</span>
+                                      )}
+                                      <span style={{ color: 'var(--cds-text-helper)', fontSize: '0.75rem', overflowWrap: 'anywhere' }}>
+                                        {membership?.userId || cell.value}
+                                      </span>
+                                    </div>
+                                  </TableCell>
+                                );
                               }
                               if (cell.info.header === 'actions') {
                                 return (
                                   <TableCell key={cell.id}>
-                                    {membership && (
+                                    {membershipGroup && (
                                       <Button
                                         kind="ghost"
                                         size="sm"
@@ -253,8 +360,14 @@ export function GroupsPanel({
                                         hasIconOnly
                                         iconDescription="Remove group member"
                                         disabled={pending || !canRemove}
-                                        title={canRemove ? undefined : membership.source === 'manual' ? selectedGroupUnavailableReason : 'Source-managed memberships are updated by their source'}
-                                        onClick={() => onRemoveMembership(membership.id)}
+                                        title={canRemove
+                                          ? undefined
+                                          : manualMembership
+                                            ? selectedGroupUnavailableReason
+                                            : 'Source-managed memberships are updated by their source'}
+                                        onClick={() => {
+                                          if (manualMembership) setRemoveMembershipTarget(manualMembership);
+                                        }}
                                       />
                                     )}
                                   </TableCell>
@@ -275,6 +388,48 @@ export function GroupsPanel({
       ) : (
         <InlineNotification kind="info" title="Create a group before adding members" lowContrast />
       )}
+      <Modal
+        open={Boolean(archiveTarget)}
+        danger
+        modalHeading="Archive authorization group"
+        primaryButtonText="Archive"
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={pending}
+        onRequestClose={() => setArchiveTarget(null)}
+        onRequestSubmit={() => {
+          if (!archiveTarget) return;
+          onArchive(archiveTarget.id);
+          setArchiveTarget(null);
+        }}
+      >
+        Archive <strong>{archiveTarget?.name}</strong>? Existing source lineage remains available for audit, but the group cannot receive new manual memberships or assignments.
+      </Modal>
+      <Modal
+        open={Boolean(removeMembershipTarget)}
+        danger
+        modalHeading="Remove manual group member"
+        primaryButtonText="Remove member"
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={pending}
+        onRequestClose={() => setRemoveMembershipTarget(null)}
+        onRequestSubmit={() => {
+          if (!removeMembershipTarget) return;
+          onRemoveMembership(removeMembershipTarget.id);
+          setRemoveMembershipTarget(null);
+        }}
+      >
+        Remove <strong>{removeMembershipTarget?.userDisplayName || removeMembershipTarget?.userEmail || removeMembershipTarget?.userId}</strong> from <strong>{selectedGroup?.name}</strong>? Their access from this manual membership will end immediately. Memberships managed by sign-in providers or configuration will not change.
+        {removeMembershipTarget?.userEmail && removeMembershipTarget.userEmail !== removeMembershipTarget.userDisplayName ? (
+          <span style={{ display: 'block', marginTop: 'var(--spacing-3)', color: 'var(--cds-text-secondary)', overflowWrap: 'anywhere' }}>
+            Email: {removeMembershipTarget.userEmail}
+          </span>
+        ) : null}
+        {removeMembershipTarget?.userId && (removeMembershipTarget.userDisplayName || removeMembershipTarget.userEmail) ? (
+          <span style={{ display: 'block', marginTop: 'var(--spacing-2)', color: 'var(--cds-text-secondary)', overflowWrap: 'anywhere' }}>
+            User ID: {removeMembershipTarget.userId}
+          </span>
+        ) : null}
+      </Modal>
     </div>
   );
 }

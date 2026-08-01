@@ -394,6 +394,8 @@ describe('EnginesPage', () => {
     renderPage();
 
     expect(await screen.findByText('External Engine')).toBeInTheDocument();
+    expect(screen.getByText('Showing your assigned engines')).toBeInTheDocument();
+    expect(screen.getByText('Only engines granted to your account are listed. Engines outside your access scope are hidden.')).toBeInTheDocument();
     expect(screen.getByText('Drift: Manual Override')).toBeInTheDocument();
     expect(screen.getByText('Capability: Mismatch')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /options/i }));
@@ -456,11 +458,11 @@ describe('EnginesPage', () => {
     renderPage();
 
     expect(await screen.findByText('Config engine')).toBeInTheDocument();
-    expect(screen.getByText('Managed by config')).toBeInTheDocument();
+    expect(screen.getByText('Managed by configuration')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /options/i }));
     fireEvent.click((await screen.findByText('Edit')).closest('button')!);
 
-    expect(await screen.findByText('Managed by configuration')).toBeInTheDocument();
+    expect((await screen.findAllByText('Managed by configuration')).length).toBeGreaterThan(0);
     expect(screen.getByText('Native authorization backstop')).toBeInTheDocument();
     expect(screen.getByText(/This engine is config-locked/)).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toBeDisabled();
@@ -505,8 +507,7 @@ describe('EnginesPage', () => {
     renderPage();
 
     expect(await screen.findByText('Visible Engine')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /options/i }));
-    fireEvent.click((await screen.findByText('View details')).closest('button')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Visible Engine' }));
 
     expect(await screen.findByText('Engine details')).toBeInTheDocument();
     expect(screen.getByText('Registration')).toBeInTheDocument();
@@ -515,7 +516,7 @@ describe('EnginesPage', () => {
     expect(screen.getByLabelText('Name')).toBeDisabled();
   });
 
-  it('disables row detail viewing when engine inventory read is denied', async () => {
+  it('hides row actions when engine inventory and scoped actions are denied', async () => {
     authState.permissions = {
       userId: 'user-1',
       platform: [],
@@ -542,11 +543,7 @@ describe('EnginesPage', () => {
     renderPage();
 
     expect(await screen.findByText('Visible Engine')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /options/i }));
-
-    const viewDetails = await screen.findByText('View details');
-    expect(viewDetails.closest('button')).toBeDisabled();
-    fireEvent.click(viewDetails);
+    expect(screen.queryByRole('button', { name: /options/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Engine details')).not.toBeInTheDocument();
   });
 
@@ -823,7 +820,7 @@ describe('EnginesPage', () => {
     expect(getEngineRowDiagnosticTags({
       registrationSource: 'config',
       ownershipMode: 'config_locked',
-    }).map((tag) => tag.label)).toEqual(['Managed by config']);
+    }).map((tag) => tag.label)).toEqual(['Managed by configuration']);
     expect(getEngineRowDiagnosticTags({
       registrationSource: 'external_api',
       lifecycleStatus: 'decommissioned',

@@ -21,6 +21,9 @@ services:
     networks:
       enterpriseglue-network:
         aliases:
+          # The live Operaton acceptance journey uses a product-accurate
+          # hostname while reusing this deterministic REST-compatible runtime.
+          - operaton-mock
           # Public-shaped local DNS name exercises the external registration
           # URL contract without weakening its localhost/private-host denylist.
           - camunda-mock.example.test

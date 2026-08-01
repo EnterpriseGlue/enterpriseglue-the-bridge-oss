@@ -40,6 +40,107 @@
   padding: 1.5rem 0;
 }
 
+/* Keep long administration labels readable while retaining Carbon's native
+   overflow buttons and keyboard navigation. */
+.eg-scrollable-tab-list .cds--tabs__nav-link,
+.eg-scrollable-tab-list .cds--tabs__nav-item-label {
+  max-inline-size: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.eg-scrollable-tab-list .cds--tabs__nav-item {
+  flex: 0 0 auto;
+}
+
+.eg-scrollable-tab-list .cds--tab--list {
+  scroll-behavior: auto;
+}
+
+.eg-settings-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-5);
+  margin-block-end: var(--spacing-5);
+}
+
+.eg-settings-section-header > :first-child {
+  flex: 1 1 32rem;
+  min-inline-size: 0;
+}
+
+.eg-settings-section-header .cds--btn {
+  flex: 0 0 auto;
+}
+
+/* Keep the sign-in action and its optional organization as separate,
+   scannable content inside Carbon's interactive tile. */
+.eg-login-provider-tile.cds--tile--clickable {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  min-block-size: 4.75rem;
+  padding: var(--spacing-4) 3.5rem var(--spacing-4) var(--spacing-4);
+  border: 1px solid var(--cds-border-interactive);
+  background: var(--cds-layer);
+  text-align: start;
+}
+
+.eg-login-provider-tile__content {
+  display: block;
+  min-inline-size: 0;
+}
+
+.eg-login-provider-tile__action,
+.eg-login-provider-tile__supporting {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.eg-login-provider-tile__action {
+  color: inherit;
+  font-weight: var(--font-weight-semibold);
+}
+
+.eg-login-provider-tile__supporting {
+  margin-block-start: var(--spacing-2);
+  color: var(--cds-text-secondary);
+  font-size: var(--text-12);
+}
+
+.eg-login-provider-tile.cds--tile--clickable .cds--tile--icon {
+  inset-block-start: 50%;
+  inset-block-end: auto;
+  transform: translateY(-50%);
+}
+
+.eg-login-provider-tile--primary.cds--tile--clickable,
+.eg-login-provider-tile--primary.cds--tile--clickable:visited {
+  border-color: var(--cds-button-primary);
+  background: var(--cds-button-primary);
+  color: var(--cds-text-on-color);
+}
+
+.eg-login-provider-tile--primary.cds--tile--clickable:hover,
+.eg-login-provider-tile--primary.cds--tile--clickable:active {
+  background: var(--cds-button-primary-hover);
+  color: var(--cds-text-on-color);
+}
+
+.eg-login-provider-tile--primary .eg-login-provider-tile__supporting {
+  color: var(--cds-text-on-color);
+  opacity: 0.85;
+}
+
+.eg-login-provider-tile--primary.cds--tile--clickable .cds--tile--icon {
+  fill: var(--cds-icon-on-color);
+}
+
 /* Toolbar controls use the search field's outline for separation. Remove the
    standalone dropdown underline so the scope filter has a clean shared edge
    with the search field and primary action. */
@@ -62,13 +163,12 @@
   border-block-end: 0;
 }
 
-/* Provider forms contain protocol-specific configuration. A two-column grid
-   keeps the complete OIDC/SAML form visible in a standard laptop viewport
-   instead of hiding the configuration beneath the modal footer. */
+/* Protocol settings remain readable at laptop widths. Long forms scroll in the
+   modal body while the Carbon header and action footer stay fixed. */
 .eg-identity-provider-form {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--spacing-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-5);
   align-items: start;
 }
 
@@ -76,8 +176,119 @@
   margin: 0;
 }
 
+.eg-identity-provider-section {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  gap: var(--spacing-5);
+  min-inline-size: 0;
+  padding-block-start: var(--spacing-5);
+  border-block-start: 1px solid var(--cds-border-subtle);
+}
+
+.eg-identity-provider-section:first-child {
+  padding-block-start: 0;
+  border-block-start: 0;
+}
+
+.eg-identity-provider-section > h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.eg-identity-provider-section > .cds--inline-notification {
+  grid-column: 1 / -1;
+  max-inline-size: none;
+}
+
+.eg-identity-provider-section > .cds--callout {
+  grid-column: 1 / -1;
+  max-inline-size: none;
+}
+
+.eg-login-experience-preview {
+  margin-block-start: var(--spacing-6);
+  padding: var(--spacing-5);
+  border: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
+}
+
+.eg-login-experience-preview__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+}
+
+.eg-login-experience-preview__heading h4,
+.eg-identity-provider-empty-state h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.eg-login-experience-preview__heading p,
+.eg-login-experience-preview__summary,
+.eg-identity-provider-empty-state p {
+  margin: var(--spacing-2) 0 0;
+  color: var(--cds-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.eg-login-experience-preview__input,
+.eg-login-experience-preview__method {
+  margin-block-start: var(--spacing-4);
+  min-block-size: 3rem;
+  padding: var(--spacing-4);
+  border: 1px solid var(--cds-border-subtle);
+  background: var(--cds-field-01);
+  overflow-wrap: anywhere;
+}
+
+.eg-login-experience-preview__methods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-3);
+}
+
+.eg-login-experience-preview__method {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.eg-login-experience-preview__method small {
+  color: var(--cds-text-secondary);
+}
+
+.eg-identity-provider-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: var(--spacing-7);
+  background: var(--cds-layer-01);
+}
+
+.eg-identity-provider-empty-state .cds--btn {
+  margin-block-start: var(--spacing-5);
+}
+
+.eg-identity-provider-empty-state--compact {
+  padding: var(--spacing-5);
+}
+
+.eg-login-redirect-status {
+  min-inline-size: 0;
+}
+
+.eg-login-redirect-status .cds--inline-loading {
+  inline-size: 100%;
+}
+
 .cds--modal-container:has(.eg-identity-provider-form) {
-  height: min(92vh, 54rem);
+  block-size: min(92vh, 54rem) !important;
+  max-block-size: 92vh;
 }
 
 /* The provider form is intentionally dense. Without a zero minimum grid size,
@@ -86,18 +297,116 @@
    sit behind the fixed footer on laptop-height viewports. */
 .cds--modal-container:has(.eg-identity-provider-form) .cds--modal-content {
   min-block-size: 0;
+  overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-@media (max-width: 66rem) {
-  .eg-identity-provider-form {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  padding-block-end: var(--spacing-7);
 }
 
 @media (max-width: 42rem) {
+  .eg-settings-section-header {
+    align-items: flex-start;
+  }
+
+  .eg-settings-section-header > :first-child {
+    flex-basis: 100%;
+  }
+
   .eg-identity-provider-form {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .eg-identity-provider-section {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .eg-login-experience-preview__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .eg-login-experience-preview__methods {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.cds--modal-container:has(.eg-identity-mapping-flow) {
+  block-size: min(90vh, 52rem);
+}
+
+.cds--modal-container:has(.eg-identity-mapping-flow) .cds--modal-content {
+  min-block-size: 0;
+  overscroll-behavior: contain;
+}
+
+.eg-identity-mapping-flow {
+  display: grid;
+  gap: var(--spacing-6);
+}
+
+.eg-identity-mapping-flow > .cds--progress {
+  margin-block: 0 var(--spacing-2);
+}
+
+.eg-identity-mapping-choice {
+  display: grid;
+  gap: var(--spacing-4);
+  margin-block-end: var(--spacing-5);
+  padding: var(--spacing-5);
+  border: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
+}
+
+.eg-identity-mapping-choice .cds--radio-button-wrapper + .cds--radio-button-wrapper {
+  margin-block-start: var(--spacing-3);
+}
+
+.eg-identity-mapping-choice-fields {
+  display: grid;
+  gap: var(--spacing-5);
+  margin-block: var(--spacing-5) var(--spacing-2);
+}
+
+.eg-permission-implications {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
+.eg-permission-implications .cds--tag {
+  block-size: auto;
+  min-block-size: 1.5rem;
+  max-inline-size: 100%;
+  white-space: normal;
+}
+
+@media (max-width: 50rem) {
+  .eg-permissions-table .cds--data-table th:nth-child(3),
+  .eg-permissions-table .cds--data-table td:nth-child(3),
+  .eg-permissions-table .cds--data-table th:nth-child(4),
+  .eg-permissions-table .cds--data-table td:nth-child(4),
+  .eg-permissions-table .cds--data-table th:nth-child(6),
+  .eg-permissions-table .cds--data-table td:nth-child(6) {
+    display: none;
+  }
+
+  .eg-permissions-table .cds--data-table {
+    table-layout: fixed;
+    inline-size: 100%;
+  }
+
+  .eg-permissions-table .cds--data-table th:nth-child(1),
+  .eg-permissions-table .cds--data-table td:nth-child(1) {
+    inline-size: 42%;
+  }
+
+  .eg-permissions-table .cds--data-table th:nth-child(2),
+  .eg-permissions-table .cds--data-table td:nth-child(2) {
+    inline-size: 18%;
+  }
+
+  .eg-permissions-table .cds--data-table th:nth-child(5),
+  .eg-permissions-table .cds--data-table td:nth-child(5) {
+    inline-size: 40%;
   }
 }
 

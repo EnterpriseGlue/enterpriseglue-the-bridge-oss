@@ -18,9 +18,9 @@ export const ASSIGNMENT_PRINCIPAL_OPTIONS: Array<{ id: AssignmentPrincipalType; 
   { id: 'user', label: 'User' }, { id: 'group', label: 'Group' }, { id: 'api_client', label: 'API client' }, { id: 'service_account', label: 'Service account' },
 ];
 export function assignmentResourceTypeOptions(principalType: AssignmentPrincipalType) {
-  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine Set' }];
-  if (principalType === 'service_account') return [{ id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine Set' }];
-  return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine Set' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
+  if (principalType === 'api_client') return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'external_engine_system', label: 'External system' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine set' }];
+  if (principalType === 'service_account') return [{ id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine set' }];
+  return [{ id: 'platform', label: 'Platform' }, { id: 'tenant', label: 'Current tenant' }, { id: 'project', label: 'Project' }, { id: 'engine', label: 'Engine' }, { id: 'engine_set', label: 'Engine set' }, { id: 'engine_runtime_resource', label: 'Runtime resource' }, { id: 'engine_runtime_resource_set', label: 'Runtime resource set' }];
 }
 export function withAssignmentPrincipalType(state: AssignmentFormState, principalType: AssignmentPrincipalType): AssignmentFormState {
   return {

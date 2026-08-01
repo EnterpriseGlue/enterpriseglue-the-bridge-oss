@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Dropdown, TextInput } from '@carbon/react';
+import { Button, ComboBox, Dropdown, TextInput } from '@carbon/react';
 import type {
   ApiClient,
   AuthzGroup,
@@ -23,6 +23,8 @@ import {
 import type { CoreAssignmentResourceType } from './effectiveAccessPresentation';
 import type { RuntimeResourceEngineOption } from './runtimeResourceOptions';
 import { useActionDecision } from '../../../../shared/auth/guards';
+import { UserPrincipalPicker } from '../../components/UserPrincipalPicker';
+import { useProjectsGovernance } from '../../hooks/useAdminApi';
 
 export function RoleAssignmentForm({
   roles,
@@ -58,6 +60,10 @@ export function RoleAssignmentForm({
   const selectedExternalSystem = activeExternalSystems.find((system) => system.id === form.resourceId) || null;
   const selectedEngineSet = engineSets.find((set) => set.id === form.resourceId && !set.isArchived) || null;
   const selectedRuntimeEngine = runtimeEngines.find((engine) => engine.id === form.runtimeEngineId) || null;
+  const selectedEngine = runtimeEngines.find((engine) => engine.id === form.resourceId) || null;
+  const projectsQ = useProjectsGovernance(undefined, { enabled: form.resourceType === 'project' });
+  const projects = projectsQ.data || [];
+  const selectedProject = projects.find((project) => project.id === form.resourceId) || null;
   const { runtimeResourcesQ, runtimeSetsQ } = useAssignmentRuntimeOptions(form);
   const selectedRuntimeResource = (runtimeResourcesQ.data || []).find((resource) => resource.id === form.resourceId) || null;
   const selectedRuntimeSet = (runtimeSetsQ.data || []).find((set) => set.id === form.resourceId) || null;
@@ -133,17 +139,16 @@ export function RoleAssignmentForm({
             onChange={({ selectedItem }) => setForm((current) => ({ ...current, principalId: selectedItem?.id || '' }))}
           />
         ) : (
-          <TextInput
-            id="assignment-user-id"
-            labelText="User ID"
-            placeholder="Enter user ID"
+          <UserPrincipalPicker
+            id="assignment-user"
+            labelText="User"
             value={form.principalId}
-            onChange={(event) => setForm((current) => ({ ...current, principalId: event.target.value }))}
+            onChange={(principalId) => setForm((current) => ({ ...current, principalId }))}
           />
         )}
         <Dropdown
           id="assignment-resource-type"
-          titleText="Scope"
+          titleText="Access target"
           label="Select scope"
           items={resourceTypeItems}
           itemToString={(item) => item?.label || ''}
@@ -153,11 +158,32 @@ export function RoleAssignmentForm({
             setForm((current) => withAssignmentResourceType(current, resourceType));
           }}
         />
-        {form.resourceType === 'engine_set' ? (
+        {form.resourceType === 'engine' ? (
+          <ComboBox
+            id="assignment-engine"
+            titleText="Engine"
+            placeholder="Find an engine"
+            items={runtimeEngines}
+            itemToString={(item) => item?.name || ''}
+            selectedItem={selectedEngine}
+            onChange={({ selectedItem }) => setForm((current) => ({ ...current, resourceId: selectedItem?.id || '' }))}
+          />
+        ) : form.resourceType === 'project' ? (
+          <ComboBox
+            id="assignment-project"
+            titleText="Project"
+            placeholder={projectsQ.isLoading ? 'Loading projects' : 'Find a project'}
+            items={projects}
+            itemToString={(item) => item?.name || ''}
+            selectedItem={selectedProject}
+            disabled={projectsQ.isLoading}
+            onChange={({ selectedItem }) => setForm((current) => ({ ...current, resourceId: selectedItem?.id || '' }))}
+          />
+        ) : form.resourceType === 'engine_set' ? (
           <Dropdown
             id="assignment-engine-set"
-            titleText="Engine Set"
-            label="Select an Engine Set"
+            titleText="Engine set"
+            label="Select an engine set"
             items={engineSets.filter((set) => !set.isArchived)}
             itemToString={(item) => item ? `${item.name} (${item.key})` : ''}
             selectedItem={selectedEngineSet}
@@ -212,7 +238,7 @@ export function RoleAssignmentForm({
             labelText={form.resourceType === 'tenant' ? 'Tenant' : 'Resource ID'}
             helperText={form.resourceType === 'tenant' ? 'The authenticated tenant is used automatically.' : undefined}
             disabled={form.resourceType === 'platform' || form.resourceType === 'tenant'}
-            placeholder={form.resourceType === 'platform' || form.resourceType === 'tenant' ? 'Not required for this scope' : 'Enter resource ID'}
+            placeholder={form.resourceType === 'platform' || form.resourceType === 'tenant' ? 'Not required for this scope' : 'Enter an exact resource identifier'}
             value={form.resourceId}
             onChange={(event) => setForm((current) => ({ ...current, resourceId: event.target.value }))}
           />
@@ -233,10 +259,10 @@ export function RoleAssignmentForm({
           : !canAssign && <p style={{ margin: 0, color: 'var(--cds-text-secondary)', fontSize: '0.875rem' }}>Choose a principal, scope, resource, and role to enable assignment.</p>}
         <Button
           disabled={!canAssign || !canCreate || Boolean(authorityReason)}
-          title={authorityReason || (canCreate ? undefined : 'Missing permission platform:authz:roles:manage')}
+          title={authorityReason || (canCreate ? undefined : 'You can view assignments, but you do not have permission to create them.')}
           onClick={() => onAssign(form)}
         >
-          Assign Role
+          Assign role
         </Button>
       </div>
     </>

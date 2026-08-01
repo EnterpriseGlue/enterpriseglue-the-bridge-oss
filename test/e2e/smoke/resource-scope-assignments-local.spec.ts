@@ -52,15 +52,15 @@ async function selectOption(page: Page, name: string, option: string): Promise<v
 
 async function assignThroughUi(
   page: Page,
-  input: { userId: string; scope: 'Engine Set' | 'Runtime resource' | 'Runtime resource set'; role: string; target: string },
+  input: { userId: string; scope: 'Engine set' | 'Runtime resource' | 'Runtime resource set'; role: string; target: string },
 ): Promise<void> {
   await page.goto('/admin/access-control');
   await page.getByRole('tab', { name: 'Assignments', exact: true }).click();
   await page.getByRole('textbox', { name: 'User ID', exact: true }).fill(input.userId);
   await selectOption(page, 'Scope', input.scope);
 
-  if (input.scope === 'Engine Set') {
-    await selectOption(page, 'Engine Set', input.target);
+  if (input.scope === 'Engine set') {
+    await selectOption(page, 'Engine set', input.target);
   } else {
     const runtimeTargetLoaded = page.waitForResponse((response) =>
       response.request().method() === 'GET'
@@ -80,7 +80,7 @@ async function assignThroughUi(
     response.request().method() === 'POST'
     && /\/api\/authz\/role-assignments(?:\?|$)/.test(new URL(response.url()).pathname),
   );
-  await page.getByRole('button', { name: 'Assign Role', exact: true }).click();
+  await page.getByRole('button', { name: 'Assign role', exact: true }).click();
   expect((await submitted).status()).toBe(201);
 }
 
@@ -102,7 +102,7 @@ test.describe('Smoke: Access Control resource-scope assignments', () => {
 
       await assignThroughUi(administratorPage, {
         userId: fixture.scopeAssignmentEngineSetUserId!,
-        scope: 'Engine Set',
+        scope: 'Engine set',
         role: 'Engine Operator',
         target: `${fixture.scopeAssignmentEngineSetName} (${fixture.scopeAssignmentEngineSetKey})`,
       });

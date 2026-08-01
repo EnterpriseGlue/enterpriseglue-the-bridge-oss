@@ -1476,9 +1476,10 @@ describe('permissionService', () => {
       permissions: [
         PlatformPermissions.DASHBOARD_VIEW,
         PlatformPermissions.PROJECT_CREATE,
-        PlatformPermissions.ENGINE_CREATE,
       ],
     });
+    expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_USER)?.description)
+      .toBe('View the dashboard and create projects. Engine access is granted separately for each engine.');
     expect(roles.find((role) => role.id === SYSTEM_ROLE_IDS.PLATFORM_ACCESS_ADMIN)).toMatchObject({
       scope: 'platform',
       isAssignable: true,
@@ -2896,6 +2897,8 @@ describe('permissionService', () => {
       getRepository: (entity: unknown) => {
         if (entity === RbacRoleAssignment) return assignmentRepo;
         if (entity === RbacRole) return { find: vi.fn().mockResolvedValue([{ id: 'system.engine.operator', key: 'system.engine.operator', name: 'Operator', scope: 'engine' }]) };
+        if (entity === User) return { find: vi.fn().mockResolvedValue([{ id: 'user-1', email: 'operator@example.com', firstName: 'Opal', lastName: 'Operator' }]) };
+        if (entity === Engine) return { find: vi.fn().mockResolvedValue([{ id: 'engine-1', name: 'Production Operaton' }]) };
         throw new Error('Unexpected repository');
       },
     });
@@ -2908,6 +2911,10 @@ describe('permissionService', () => {
     );
     expect(assignments).toEqual([expect.objectContaining({
       userId: 'user-1',
+      principalDisplayName: 'operator@example.com',
+      principalSecondary: 'Opal Operator · user-1',
+      resourceDisplayName: 'Production Operaton',
+      resourceSecondary: 'engine:engine-1',
       sourceRef: 'legacy_sso:provider-1:mapping:mapping-1',
     })]);
   });

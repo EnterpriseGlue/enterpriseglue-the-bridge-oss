@@ -20,11 +20,12 @@ export function DataTableDataRow({
   row,
   getRowProps,
   children,
+  ...rest
 }: {
   row: any;
   getRowProps: (args: { row: any }) => Record<string, any>;
   children: React.ReactNode;
-}) {
+} & React.ComponentProps<typeof TableRow>) {
   const { key, ...rowProps } = getRowProps({ row });
-  return <TableRow key={key || row.id} {...rowProps}>{children}</TableRow>;
+  return <TableRow key={key || row.id} {...rowProps} {...rest}>{children}</TableRow>;
 }

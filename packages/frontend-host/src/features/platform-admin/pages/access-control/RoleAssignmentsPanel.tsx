@@ -63,6 +63,9 @@ export function RoleAssignmentsPanel({
         groups={groups}
         serviceAccounts={serviceAccounts}
         externalSystems={externalSystems}
+        roles={roles}
+        engineSets={engineSets}
+        runtimeEngines={runtimeEngines}
         loading={loading}
         canDelete={canDelete}
         onRemove={onRemove}

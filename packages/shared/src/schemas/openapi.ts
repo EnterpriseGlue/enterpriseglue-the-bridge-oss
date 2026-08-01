@@ -311,7 +311,7 @@ registry.registerPath({
   method: 'get',
   path: '/metrics',
   ...authzExemption('GET', '/metrics'),
-  responses: { 200: { description: 'Sanitized Prometheus configuration-bootstrap and aggregate engine-tenancy metrics', content: { 'text/plain': { schema: z.string() } } } },
+  responses: { 200: { description: 'Sanitized Prometheus configuration-bootstrap, aggregate engine-tenancy, and bounded login-experience metrics', content: { 'text/plain': { schema: z.string() } } } },
 });
 
 registry.register('Project', ProjectSchema);
@@ -998,6 +998,9 @@ const ExternalEngineRegistrationResponseSchema = z.object({
   health: ExternalRegistrationHealthSchema.nullable().optional(),
 })
 registry.register('ExternalEngineRegistrationResponse', ExternalEngineRegistrationResponseSchema)
+const {
+  ProjectEngineTargetSchema: ExternalProjectEngineTargetSchema,
+} = await import('./platform-admin/authz.js')
 const ExternalProjectEngineTargetModeFlagsSchema = z.object({
   allowManualDeploy: z.boolean().optional(),
   allowCiDeploy: z.boolean().optional(),
@@ -1164,8 +1167,8 @@ registry.registerPath({
   ...authzExtension('project-engine-target.external-registration.upsert', 'POST', '/engines-api/external/project-engine-targets'),
   request: { body: { content: { 'application/json': { schema: ExternalProjectEngineTargetUpsertRequestSchema } } } },
   responses: {
-    201: { description: 'External project-engine target registered', content: { 'application/json': { schema: z.object({ created: z.literal(true), target: z.unknown() }) } } },
-    200: { description: 'External project-engine target updated', content: { 'application/json': { schema: z.object({ created: z.literal(false), target: z.unknown() }) } } },
+    201: { description: 'External project-engine target registered', content: { 'application/json': { schema: z.object({ created: z.literal(true), target: ExternalProjectEngineTargetSchema }).strict() } } },
+    200: { description: 'External project-engine target updated', content: { 'application/json': { schema: z.object({ created: z.literal(false), target: ExternalProjectEngineTargetSchema }).strict() } } },
     400: { description: 'Invalid external project-engine target request' },
     403: { description: 'API client is not authorized to manage project-engine targets for this external system' },
     409: { description: 'Project-engine target is already managed by another source' },
@@ -2967,6 +2970,18 @@ registry.registerPath({
   responses: { 200: { description: 'Login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid credentials' } },
 });
 
+registry.registerPath({
+  method: 'post',
+  path: '/api/auth/recovery/login',
+  ...authzExemption('POST', '/api/auth/recovery/login'),
+  request: { body: { content: { 'application/json': { schema: z.object({ email: z.string().email(), password: z.string() }) } } } },
+  responses: {
+    200: { description: 'Canonical platform-administrator recovery login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
+    401: { description: 'Invalid credentials' },
+    403: { description: 'Administrator recovery is unavailable for this account' },
+  },
+});
+
 // POST /api/auth/complete-onboarding
 registry.registerPath({
   method: 'post',
@@ -3117,18 +3132,28 @@ registry.registerPath({
 registry.registerPath({ method: 'get', path: '/api/auth/identity/{key}/start', ...authzExemption('GET', '/api/auth/identity/{key}/start'), request: { params: z.object({ key: z.string() }) }, responses: { 302: { description: 'Redirect to the selected OIDC identity provider' } } });
 registry.registerPath({ method: 'get', path: '/api/auth/identity/callback', ...authzExemption('GET', '/api/auth/identity/callback'), responses: { 302: { description: 'Provider-neutral OIDC callback redirect' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/identity/{key}/ldap/login', ...authzExemption('POST', '/api/auth/identity/{key}/ldap/login'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/providers/enabled', ...authzExemption('GET', '/api/auth/providers/enabled'), responses: { 200: { description: 'Enabled provider-neutral direct-login options', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), key: z.string(), protocol: z.enum(['oidc', 'saml', 'ldap']), loginMethod: z.enum(['redirect', 'password']) })) } } } } });
+registry.registerPath({ method: 'get', path: '/api/auth/providers/enabled', ...authzExemption('GET', '/api/auth/providers/enabled'), responses: { 200: { description: 'Compatibility response for enabled provider-neutral direct-login options. New clients use /api/auth/login-methods.', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), key: z.string(), displayName: z.string(), organization: z.string().nullable(), protocol: z.enum(['oidc', 'saml', 'ldap']), loginMethod: z.enum(['redirect', 'password']) })) } } } } });
+registry.registerPath({ method: 'get', path: '/api/auth/login-methods', ...authzExemption('GET', '/api/auth/login-methods'), responses: { 200: { description: 'Policy-resolved login methods safe to show before authentication', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } } } });
 registry.registerPath({ method: 'get', path: '/api/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/providers/{providerId}/start'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to the selected provider-neutral OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/providers/{providerId}/login'), request: { params: z.object({ providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/providers/saml/callback', ...authzExemption('POST', '/api/auth/providers/saml/callback'), request: { body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } } } }, responses: { 302: { description: 'Provider-neutral SAML callback redirect' }, 401: { description: 'Invalid identity provider state' } } });
 
+const TenantProviderParamsSchema = z.object({ tenantSlug: z.string(), providerId: z.string() });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/login-methods', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/login-methods'), request: { params: z.object({ tenantSlug: z.string() }) }, responses: { 200: { description: 'Tenant-scoped policy-resolved login methods safe to show before authentication', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/providers/{providerId}/start'), request: { params: TenantProviderParamsSchema }, responses: { 302: { description: 'Redirect to the selected tenant-scoped OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found in the resolved tenant scope' } } });
+registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/t/{tenantSlug}/auth/providers/{providerId}/login'), request: { params: TenantProviderParamsSchema, body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Tenant-scoped provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
+
 // Tenant SSO config
+const TenantSsoConfigResponseSchema = z.object({
+  ssoRequired: z.boolean(),
+}).strict();
+
 registry.registerPath({
   method: 'get',
   path: '/api/t/{tenantSlug}/auth/sso-config',
   ...authzExemption('GET', '/api/t/{tenantSlug}/auth/sso-config'),
   request: { params: z.object({ tenantSlug: z.string() }) },
-  responses: { 200: { description: 'SSO config for tenant', content: { 'application/json': { schema: z.unknown() } } } },
+  responses: { 200: { description: 'Resolved SSO requirement for the tenant login experience', content: { 'application/json': { schema: TenantSsoConfigResponseSchema } } } },
 });
 
 // Invitations
@@ -3395,6 +3420,8 @@ const {
   EngineBackstopGroupMappingSummarySchema,
   EngineBackstopGroupMappingWriteRequestSchema,
   EngineBackstopGroupMappingWriteResponseSchema,
+  EngineBackstopSyncDetailResponseSchema,
+  EngineBackstopSyncOperationResponseSchema,
   EngineBackstopSyncApplyRequestSchema,
   EngineBackstopSyncRollbackRequestSchema,
   EngineBackstopSyncRunHistorySchema,
@@ -3598,7 +3625,7 @@ registry.registerPath({
 });
 registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync', summary: 'List mirrored-backstop synchronization receipts', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/sync'), request: { params: z.object({ id: z.string() }) }, responses: { 200: { description: 'Bounded sanitized mirrored-engine backstop history', content: { 'application/json': { schema: EngineBackstopSyncRunHistorySchema } } } } });
 registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}', summary: 'Read a mirrored-backstop receipt', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Sanitized mirrored-engine backstop receipt', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema }) } } } } });
-registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}/detail', summary: 'Read permission-gated mirrored-backstop detail', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.sensitive.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}/detail'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Permission-gated encrypted mirrored-engine backstop detail', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, detail: z.unknown() }) } } } } });
+registry.registerPath({ method: 'get', path: '/engines-api/engines/{id}/backstop/sync/{runId}/detail', summary: 'Read permission-gated mirrored-backstop detail', description: customerSidecarBackstopDescription, ...authzExtension('platform.engine-backstop.sensitive.read', 'GET', '/engines-api/engines/{id}/backstop/sync/{runId}/detail'), request: { params: z.object({ id: z.string(), runId: z.string() }) }, responses: { 200: { description: 'Permission-gated encrypted mirrored-engine backstop detail', content: { 'application/json': { schema: EngineBackstopSyncDetailResponseSchema } } } } });
 registry.registerPath({
   method: 'post',
   path: '/engines-api/engines/{id}/backstop/sync/{runId}/apply',
@@ -3606,7 +3633,7 @@ registry.registerPath({
   description: customerSidecarBackstopDescription,
   ...authzExtension('platform.engine-backstop.apply', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/apply'),
   request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopSyncApplyRequestSchema } } } },
-  responses: { 200: { description: 'Applies an acknowledged mirrored-engine backstop preview', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } },
+  responses: { 200: { description: 'Applies an acknowledged mirrored-engine backstop preview', content: { 'application/json': { schema: EngineBackstopSyncOperationResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
@@ -3615,7 +3642,7 @@ registry.registerPath({
   description: customerSidecarBackstopDescription,
   ...authzExtension('platform.engine-backstop.apply', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/rollback'),
   request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: EngineBackstopSyncRollbackRequestSchema } } } },
-  responses: { 200: { description: 'Deletes only native authorization IDs owned by a successful mirrored-engine backstop run', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } },
+  responses: { 200: { description: 'Deletes only native authorization IDs owned by a successful mirrored-engine backstop run', content: { 'application/json': { schema: EngineBackstopSyncOperationResponseSchema } } } },
 });
 registry.registerPath({
   method: 'post',
@@ -3624,7 +3651,7 @@ registry.registerPath({
   description: customerSidecarBackstopDescription,
   ...authzExtension('platform.engine-backstop.drift-check', 'POST', '/engines-api/engines/{id}/backstop/sync/{runId}/drift-check'),
   request: { params: z.object({ id: z.string(), runId: z.string() }), body: { content: { 'application/json': { schema: z.object({}) } } } },
-  responses: { 200: { description: 'Reads only tracked native authorization IDs and records a sanitized drift receipt', content: { 'application/json': { schema: z.object({ run: EngineBackstopSyncRunSummarySchema, task: z.unknown().nullable() }) } } } },
+  responses: { 200: { description: 'Reads only tracked native authorization IDs and records a sanitized drift receipt', content: { 'application/json': { schema: EngineBackstopSyncOperationResponseSchema } } } },
 });
 registry.registerPath({ method: 'get', path: '/api/authz/project-engine-targets', ...authzExtension('platform.project-engine-targets.read', 'GET', '/api/authz/project-engine-targets'), request: { query: z.object({ projectId: z.string().optional(), engineId: z.string().optional(), status: z.enum(['active', 'disabled', 'archived', 'all']).optional(), source: z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation', 'config']).optional() }) }, responses: { 200: { description: 'List project-engine targets', content: { 'application/json': { schema: z.array(ProjectEngineTargetSchema) } } } } });
 registry.registerPath({ method: 'post', path: '/api/authz/project-engine-targets/evaluate', ...authzExtension('project.deployment-eligibility.evaluate', 'POST', '/api/authz/project-engine-targets/evaluate'), request: { body: { content: { 'application/json': { schema: DeploymentEligibilityEvaluateRequestSchema } } } }, responses: { 200: { description: 'Deployment eligibility evaluation', content: { 'application/json': { schema: DeploymentEligibilityEvaluateResponseSchema } } } } });

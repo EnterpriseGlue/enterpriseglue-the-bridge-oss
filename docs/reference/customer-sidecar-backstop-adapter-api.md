@@ -39,9 +39,11 @@ identity, and token-rotation material belong exclusively to the customer.
 They must never be supplied to EnterpriseGlue through an engine API request,
 configuration bundle, user interface, diagnostic, audit event, or export.
 
-Credentialless upstream registration (`authType: "none"`) is permitted only
+Registration without an EnterpriseGlue-stored downstream credential
+(`authType: "none"`) is permitted only
 when the platform setting `credentiallessCustomerSidecarsEnabled` is enabled
-and the endpoint is private and allowlisted. Prefer mTLS, bearer, basic, or
+for a peer-authenticated customer sidecar and the endpoint is private and
+allowlisted. Prefer mTLS, bearer, basic, or
 OAuth client credentials for the EnterpriseGlue → sidecar hop. See the
 [Customer Sidecar Readiness Runbook](../how-to/customer-sidecar-readiness-runbook.md)
 for the deployment controls.

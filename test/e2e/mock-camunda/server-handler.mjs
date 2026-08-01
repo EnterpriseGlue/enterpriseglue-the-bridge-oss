@@ -162,6 +162,14 @@ export function createMockCamundaHandler() {
 
       recordRequest(req.method || 'GET', pathname)
 
+      // Operaton exposes the Camunda 7-compatible `/version` endpoint. The
+      // local acceptance stack uses this response for connection health and
+      // adapter-version evidence.
+      if (req.method === 'GET' && pathname === '/engine-rest/version') {
+        sendJson(res, 200, { version: '2.1.0', productName: 'Operaton' })
+        return
+      }
+
       if (req.method === 'GET' && pathname === '/engine-rest/process-definition') {
         const definitions = filterProcessDefinitions(searchParams)
         sendJson(

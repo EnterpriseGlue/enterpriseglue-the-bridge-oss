@@ -4,23 +4,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CamundaNativeGrantMigrationPanel from '@src/features/mission-control/engines/components/CamundaNativeGrantMigrationPanel'
 import { apiClient } from '@src/shared/api/client'
 
-vi.mock('@src/shared/api/client', () => ({
-  apiClient: { get: vi.fn(), post: vi.fn() },
-}))
+vi.mock('@src/shared/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@src/shared/api/client')>()
+  return {
+    ...actual,
+    apiClient: { get: vi.fn(), post: vi.fn() },
+  }
+})
 
-const allowedDecision = {
-  allowed: true,
-  state: 'allowed' as const,
-  reason: 'Allowed by test permission snapshot',
-}
-
-const useActionDecision = vi.fn<
-  (_actionId?: unknown, _resource?: unknown) => {
+const { allowedDecision, useActionDecision } = vi.hoisted(() => {
+  const decision: {
     allowed: boolean
     state: 'allowed' | 'hidden' | 'disabled'
     reason: string
+  } = {
+    allowed: true,
+    state: 'allowed',
+    reason: 'Allowed by test permission snapshot',
   }
->(() => allowedDecision)
+  return {
+    allowedDecision: decision,
+    useActionDecision: vi.fn<(_actionId?: unknown) => typeof decision>(() => decision),
+  }
+})
 
 vi.mock('@src/shared/auth/guards', () => ({
   useActionDecision,
@@ -44,7 +50,7 @@ describe('CamundaNativeGrantMigrationPanel', () => {
   })
 
   it('does not call protected APIs and renders unavailable controls from the permission snapshot', async () => {
-    useActionDecision.mockImplementation((actionId: unknown) => actionId === 'platform.camunda-native-grants.history.read'
+    useActionDecision.mockImplementation((actionId?: unknown) => actionId === 'platform.camunda-native-grants.history.read'
       ? { allowed: false, state: 'hidden' as const, reason: 'Missing history permission' }
       : { allowed: false, state: 'disabled' as const, reason: `Missing ${String(actionId)}` })
 
@@ -76,7 +82,7 @@ describe('CamundaNativeGrantMigrationPanel', () => {
       if (url.endsWith('/draft')) {
         expect(body.base.bundle).toMatchObject({
           metadata: { key: 'migration.camunda-native-run-1' }, tenantKey: 'default', mode: 'additive',
-          settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' },
+          governance: { runtimeAuthorizationAuthority: 'enterpriseglue_authoritative' },
         })
         expect(body.groupMappings).toEqual([{
           nativeGroupId: 'camunda-sensitive-operators',

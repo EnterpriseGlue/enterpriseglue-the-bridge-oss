@@ -53,6 +53,7 @@ describe('RoleLibrarySettingsTab interactions', () => {
   it('searches roles, groups permissions by category, and enables save only for unsaved custom-role changes', async () => {
     renderTab();
     await screen.findByText('System Operator');
+    expect(screen.getByText('Create custom roles that grant permissions. Configure denials under Policies.')).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search roles' }), { target: { value: 'Custom' } });
     expect(screen.getByText('Custom Operator')).toBeInTheDocument();
@@ -109,10 +110,10 @@ describe('RoleLibrarySettingsTab interactions', () => {
   it('marks config-owned roles and disables their local permission controls', async () => {
     renderTab();
     await screen.findByText('Config Locked Operator');
-    fireEvent.click(screen.getByRole('button', { name: /Config Locked Operator custom engine Managed by config/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Config Locked Operator custom engine Managed by configuration/ }));
 
     expect(await screen.findByText('Managed by configuration')).toBeInTheDocument();
-    expect(screen.getByText('Managed by config')).toBeInTheDocument();
+    expect(screen.getAllByText('Managed by configuration').length).toBeGreaterThan(0);
     fireEvent.click(category('Runtime (1)'));
     await waitFor(() => expect(document.getElementById('role-library-engine:instance:view')).toBeDisabled());
 

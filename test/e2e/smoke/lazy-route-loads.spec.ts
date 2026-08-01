@@ -65,7 +65,7 @@ async function expectMissionControlProcessesState(page: Page) {
   await expect
     .poll(async () => {
       const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-      return /Processes|To view a Diagram|Process Instances|Access Denied|No Active Engine|Failed to load/i.test(bodyText);
+      return /Processes|To view a diagram|Process Instances|Access Denied|No Active Engine|Failed to load/i.test(bodyText);
     })
     .toBe(true);
 }

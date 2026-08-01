@@ -463,7 +463,8 @@ safe to use as a GitOps template after replacing identifiers and endpoints.
 For a customer-sidecar, EnterpriseGlue authenticates only to the sidecar. The
 customer owns the downstream engine credential, so `auth.type: "none"` is
 valid only with `connectionMode: "customer_sidecar"` and only when the platform
-policy enables credentialless sidecars:
+policy enables peer-authenticated sidecars that keep downstream engine
+credentials outside EnterpriseGlue:
 
 <!-- enterpriseglue-config-schema: ConfigEnginesFileSchema -->
 ```json

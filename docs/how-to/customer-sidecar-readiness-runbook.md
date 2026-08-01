@@ -41,15 +41,16 @@ EnterpriseGlue-to-sidecar authentication method:
 - `basic`, `bearer`, or `oauth2-client-credentials` with an external secret
   reference when the sidecar supports application-level authentication;
 - `none` only for a network-private sidecar after a platform administrator has
-  explicitly enabled `credentiallessCustomerSidecarsEnabled` in Platform
+  explicitly enabled the `credentiallessCustomerSidecarsEnabled` interface
+  flag for peer-authenticated customer sidecars in Platform
   Settings.
 
 `none` is rejected for a direct engine and is fail-closed while the platform
 setting remains false. Do not enter a customer downstream peer token in any
 engine form, config bundle, API request, shell command, diagnostic, or ticket.
 
-Example configuration-bundle entry for the exceptional private credentialless
-case:
+Example configuration-bundle entry for the exceptional private,
+peer-authenticated case:
 
 <!-- enterpriseglue-config-schema: ConfigEngineSchema -->
 ```json

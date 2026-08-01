@@ -50,6 +50,14 @@ test('synthetic Camunda deployment fixture derives stable deployment metadata fr
   });
 });
 
+test('synthetic runtime fixture exposes Operaton-compatible connection metadata', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/engine-rest/version`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { version: '2.1.0', productName: 'Operaton' });
+  });
+});
+
 test('synthetic Camunda process variables support an isolated modification round trip', async () => {
   await withServer(async (baseUrl) => {
     const instanceId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';

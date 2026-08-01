@@ -524,6 +524,9 @@ Return `authorized: false` for a known tenant the principal cannot use, and
 claims, or tenant inventory. The host installs this resolver before base routes
 are registered.
 
+Database work inside this plugin must use the portable TypeORM boundary on
+`ctx.database`. See [Enterprise Backend Plugin Database API](./enterprise-backend-plugin-database-api.md).
+
 ## Operational Metrics API
 
 `GET /metrics` includes the existing configuration-bootstrap metrics and these

@@ -73,6 +73,11 @@ function membershipRowFor(userId: string) {
     });
 }
 
+function menuItem(label: string): HTMLElement | null {
+  const node = screen.queryAllByText(label).find((candidate) => candidate.closest('.cds--overflow-menu-options__option'));
+  return node?.closest('button') || node?.closest('[role="menuitem"]') || node || null;
+}
+
 describe('AccessControl groups', () => {
   beforeEach(resetAccessControlMocks);
 
@@ -87,14 +92,14 @@ describe('AccessControl groups', () => {
     expect(container).toHaveTextContent('00000000-0000-4000-8000-000000000010');
 
     const createGroupButton = Array.from(container.querySelectorAll('button'))
-      .find((button) => button.textContent?.trim() === 'Create Group') as HTMLButtonElement;
+      .find((button) => button.textContent?.trim() === 'Create group') as HTMLButtonElement;
     fireEvent.click(createGroupButton);
     fireEvent.change(document.getElementById('authz-group-key')!, { target: { value: 'release-ops' } });
     fireEvent.change(document.getElementById('authz-group-name')!, { target: { value: 'Release Ops' } });
     fireEvent.change(document.getElementById('authz-group-description')!, { target: { value: 'Release operators' } });
 
     const groupModal = Array.from(document.querySelectorAll('.cds--modal-container'))
-      .find((modal) => modal.textContent?.includes('Create Group')) as HTMLElement;
+      .find((modal) => modal.textContent?.includes('Create group')) as HTMLElement;
     const createButton = Array.from(groupModal.querySelectorAll('button'))
       .find((button) => button.textContent?.trim() === 'Create') as HTMLButtonElement;
     await waitFor(() => expect(createButton).not.toBeDisabled());
@@ -115,9 +120,13 @@ describe('AccessControl groups', () => {
     fireEvent.click(screen.getByRole('tab', { name: /^Groups$/i }));
 
     const operationsRow = screen.getByText('operations').closest('tr')!;
-    fireEvent.click(within(operationsRow).getByRole('button', { name: /Edit/i }));
+    fireEvent.click(within(operationsRow).getByRole('button', { name: 'Actions for Operations' }));
+    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    fireEvent.click(menuItem('Edit')!);
     fireEvent.change(screen.getByLabelText('Group name'), { target: { value: 'Operations EU' } });
-    screen.getByRole('button', { name: /^Save$/i }).click();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Save$/i }));
+    });
 
     expect(updateGroup).toHaveBeenCalledWith({
       id: 'group-1',
@@ -125,7 +134,12 @@ describe('AccessControl groups', () => {
       description: null,
     });
 
-    within(operationsRow).getByRole('button', { name: /Archive/i }).click();
+    fireEvent.click(within(operationsRow).getByRole('button', { name: 'Actions for Operations' }));
+    await waitFor(() => expect(menuItem('Archive')).toBeTruthy());
+    fireEvent.click(menuItem('Archive')!);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('dialog', { name: 'Archive authorization group' }).querySelector('.cds--btn--danger')!);
+    });
 
     expect(archiveGroup).toHaveBeenCalledWith('group-1');
   }, 60000);
@@ -137,7 +151,8 @@ describe('AccessControl groups', () => {
 
     expect(screen.getAllByText('00000000-0000-4000-8000-000000000010').length).toBeGreaterThan(0);
 
-    fireEvent.change(document.getElementById('group-member-user-id')!, { target: { value: '00000000-0000-4000-8000-000000000020' } });
+    fireEvent.change(document.getElementById('group-member-user')!, { target: { value: 'second' } });
+    fireEvent.click(screen.getByRole('button', { name: /Second User/ }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Add Member/i }));
     });
@@ -151,27 +166,31 @@ describe('AccessControl groups', () => {
     await act(async () => {
       fireEvent.click(within(membershipRow).getByLabelText('Remove group member'));
     });
+    fireEvent.click(screen.getByRole('dialog', { name: 'Remove manual group member' }).querySelector('.cds--btn--danger')!);
 
     expect(removeGroupMembership).toHaveBeenCalledWith('membership-1');
   });
 
-  it('keeps source-owned groups and memberships read-only', () => {
+  it('keeps source-owned groups and memberships read-only', async () => {
     render(<AccessControl />);
 
     fireEvent.click(screen.getByRole('tab', { name: /^Groups$/i }));
 
     const ssoGroupRow = screen.getByText('sso-ops').closest('tr')!;
-    expect(within(ssoGroupRow).getByRole('button', { name: /Edit/i })).toBeDisabled();
-    expect(within(ssoGroupRow).getByRole('button', { name: /Archive/i })).toBeDisabled();
+    fireEvent.click(within(ssoGroupRow).getByRole('button', { name: /Actions for SSO Operators/i }));
+    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    expect(menuItem('Edit')).toBeDisabled();
+    expect(menuItem('Archive')).toBeDisabled();
 
-    fireEvent.click(within(ssoGroupRow).getByRole('button', { name: /Members/i }));
+    fireEvent.click(menuItem('View members')!);
     expect(screen.getAllByText('00000000-0000-4000-8000-000000000011').length).toBeGreaterThan(0);
     const ssoMembershipRow = membershipRowFor('00000000-0000-4000-8000-000000000011')!;
     expect(within(ssoMembershipRow).getByLabelText('Remove group member')).toBeDisabled();
+    expect(within(ssoMembershipRow).getByText('identity_mapping:mapping-1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add Member/i })).toBeDisabled();
   });
 
-  it('allows read-only group inspection while disabling group management actions', () => {
+  it('allows read-only group inspection while disabling group management actions', async () => {
     authState.permissions = {
       userId: 'viewer-1',
       tenantId: null,
@@ -189,8 +208,10 @@ describe('AccessControl groups', () => {
     expect(screen.getAllByText('Operations').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Create Group/i })).toBeDisabled();
     const operationsRow = screen.getByText('operations').closest('tr')!;
-    expect(within(operationsRow).getByRole('button', { name: /Edit/i })).toBeDisabled();
-    expect(within(operationsRow).getByRole('button', { name: /Archive/i })).toBeDisabled();
+    fireEvent.click(within(operationsRow).getByRole('button', { name: 'Actions for Operations' }));
+    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    expect(menuItem('Edit')).toBeDisabled();
+    expect(menuItem('Archive')).toBeDisabled();
     expect(screen.getByRole('button', { name: /Add Member/i })).toBeDisabled();
     const membershipRow = membershipRowFor('00000000-0000-4000-8000-000000000010')!;
     expect(within(membershipRow).getByLabelText('Remove group member')).toBeDisabled();

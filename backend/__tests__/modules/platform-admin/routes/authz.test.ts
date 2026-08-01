@@ -185,7 +185,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
     getAuditLog: vi.fn().mockResolvedValue([]),
   },
   permissionService: {
-    getPermissionCatalog: vi.fn().mockReturnValue([{ key: 'platform:authz:check', scope: 'platform', category: 'Access Control', label: 'Check', description: 'Check access' }]),
+    getPermissionCatalog: vi.fn().mockReturnValue([
+      { key: 'platform:authz:check', scope: 'platform', category: 'Access Control', label: 'Check', description: 'Check access' },
+      { key: 'engine:instance:view', scope: 'engine', category: 'Engine', label: 'View engine', description: 'View engine instances' },
+    ]),
     getRoles: vi.fn().mockResolvedValue([
       { id: 'system.platform.admin', key: 'system.platform.admin', name: 'Platform Admin', scope: 'platform', kind: 'system', isAssignable: true, isArchived: false, permissionCount: 1 },
       { id: 'system.engine.operator', key: 'system.engine.operator', name: 'Engine Operator', scope: 'engine', kind: 'system', isAssignable: true, isArchived: false, permissionCount: 1 },
@@ -1622,6 +1625,19 @@ describe('platform-admin authz routes', () => {
     expect(response.body.baseReason).toBe('role:platform:admin');
   });
 
+  it('rejects a permission paired with an incompatible resource type', async () => {
+    const response = await request(app)
+      .post('/api/authz/evaluate')
+      .send({
+        userId: '00000000-0000-4000-8000-000000000001',
+        permission: 'engine:instance:view',
+        resourceType: 'platform',
+    });
+
+    expect(response.status).toBe(400);
+    expect(permissionService.evaluatePermission).not.toHaveBeenCalled();
+  });
+
   it('does not make engine Effective Access depend on direct versus sidecar transport metadata', async () => {
     const evaluate = (connectionMode: 'direct' | 'customer_sidecar') => request(app)
       .post('/api/authz/evaluate')
@@ -1670,7 +1686,7 @@ describe('platform-admin authz routes', () => {
       .post('/api/authz/evaluate')
       .send({
         userId: '00000000-0000-4000-8000-000000000001',
-        permission: 'platform:authz:check',
+        permission: 'engine:instance:view',
         resourceType: 'engine_runtime_resource',
         runtimeResource: {
           engineId: 'engine-1',
@@ -1695,7 +1711,7 @@ describe('platform-admin authz routes', () => {
       ]),
     });
     expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
-      'platform:authz:check',
+      'engine:instance:view',
       expect.objectContaining({
         tenantId: 'tenant-default',
         resourceType: 'engine_runtime_resource',
@@ -1734,7 +1750,7 @@ describe('platform-admin authz routes', () => {
       .set('x-test-omit-tenant-context', 'true')
       .send({
         userId: '00000000-0000-4000-8000-000000000001',
-        permission: 'platform:authz:check',
+        permission: 'engine:instance:view',
         resourceType: 'engine_runtime_resource',
         runtimeResource: {
           engineId: 'engine-1',
@@ -1750,7 +1766,7 @@ describe('platform-admin authz routes', () => {
       ]),
     });
     expect(permissionService.evaluatePermission).toHaveBeenCalledWith(
-      'platform:authz:check',
+      'engine:instance:view',
       expect.objectContaining({
         tenantId: 'tenant-default',
         resourceType: 'engine_runtime_resource',

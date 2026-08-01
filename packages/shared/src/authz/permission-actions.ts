@@ -328,6 +328,37 @@ export function listAuthzActions(): AuthzActionDefinition[] {
   return [...AUTHZ_ACTIONS];
 }
 
+export interface PermissionResourceCompatibilityDescriptor {
+  key: string;
+  scope: AuthzResourceType;
+  tenantSafe?: boolean;
+}
+
+const ENGINE_PERMISSION_RESOURCE_TYPES = new Set<AuthzResourceType>([
+  'engine',
+  'engine_set',
+  'engine_runtime_resource',
+  'engine_runtime_resource_set',
+]);
+
+/**
+ * Defines which effective-access and policy resource selectors may be paired
+ * with a permission. Engine Sets and runtime-resource scopes deliberately use
+ * engine permissions because they narrow where an engine role applies; they
+ * do not introduce a second permission namespace.
+ */
+export function isPermissionCompatibleWithResourceType(
+  permission: PermissionResourceCompatibilityDescriptor,
+  resourceType: AuthzResourceType,
+): boolean {
+  if (permission.scope === resourceType) return true;
+  if (resourceType === 'tenant') return permission.tenantSafe === true;
+  if (ENGINE_PERMISSION_RESOURCE_TYPES.has(resourceType) && permission.scope === 'engine') return true;
+  return AUTHZ_ACTIONS.some((action) =>
+    action.permissionId === permission.key && action.resourceType === resourceType,
+  );
+}
+
 export function getAuthzActionDefinition(actionId: string): AuthzActionDefinition | undefined {
   return authzActionsById.get(actionId);
 }

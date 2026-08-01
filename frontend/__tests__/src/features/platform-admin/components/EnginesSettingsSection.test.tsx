@@ -30,7 +30,8 @@ const baseSettings: PlatformSettings = {
   },
   inviteAllowAllDomains: true,
   inviteAllowedDomains: [],
-  ssoAutoRedirectSingleProvider: false,
+  localPasswordLoginMode: 'auto',
+  ssoProviderSelectionMode: 'auto_redirect_single',
   ssoBroadEntitlementMappingsEnabled: false,
   ssoAllEnginesAssignmentMappingsEnabled: true,
   ssoEngineOwnerAssignmentMappingsEnabled: false,
@@ -93,9 +94,21 @@ describe('EnginesSettingsSection', () => {
   it('renders engine onboarding mode from platform settings', () => {
     renderSection();
 
-    expect(screen.getByText('Engine Onboarding')).toBeInTheDocument();
+    expect(screen.getByText('Changes save automatically.')).toBeInTheDocument();
+    expect(screen.getByText('No pending changes')).toBeInTheDocument();
+    expect(screen.getByText('Registration ownership')).toBeInTheDocument();
+    expect(screen.getByText('Access ownership')).toBeInTheDocument();
+    expect(screen.getByText('Runtime enforcement')).toBeInTheDocument();
     expect(screen.getByText('External registration only')).toBeInTheDocument();
     expect(screen.getByText('Hybrid target ownership')).toBeInTheDocument();
+    expect(screen.getByText('Manual and externally registered engines can coexist. Fields managed by an external system cannot be changed here.')).toBeInTheDocument();
+    expect(screen.getAllByText('Admins can review SSO grants separately when troubleshooting.', { exact: false })).toHaveLength(2);
+    expect(screen.getByText('Access granted directly in the engine does not grant access in EnterpriseGlue.', { exact: false })).toBeInTheDocument();
+  });
+
+  it('announces engine governance save progress and completion', () => {
+    renderSection({ settingsSaveState: 'saving' });
+    expect(screen.getByText('Saving')).toBeInTheDocument();
   });
 
   it('offers mirrored backstop mode and sends the selected setting to the platform page', async () => {
@@ -103,17 +116,16 @@ describe('EnginesSettingsSection', () => {
     const onEngineRuntimeAuthorizationModeChange = vi.fn();
     renderSection({ onEngineRuntimeAuthorizationModeChange });
 
-    await user.click(screen.getByRole('combobox', { name: 'Runtime authorization mode' }));
-    await user.click(screen.getByRole('option', { name: 'Mirrored engine backstop' }));
+    await user.click(screen.getByRole('radio', { name: /EnterpriseGlue with engine read-access backup/ }));
 
     expect(onEngineRuntimeAuthorizationModeChange).toHaveBeenCalledWith('mirrored_engine_backstop');
   });
 
-  it('explains receipt-bound backstop behavior when the mode is enabled', () => {
+  it('explains synchronization-record behavior when engine read-access backup is enabled', () => {
     renderSection({ settings: { ...baseSettings, engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' } });
 
-    expect(screen.getByText('Mirrored backstop enabled')).toBeInTheDocument();
-    expect(screen.getByText(/receipt-bound lifecycle/)).toBeInTheDocument();
+    expect(screen.getByText('Engine read-access backup is on')).toBeInTheDocument();
+    expect(screen.getByText(/It copies only reviewed group read access to compatible engines/)).toBeInTheDocument();
   });
 
   it('renders governance controls read-only when configuration owns the settings', () => {
@@ -123,13 +135,12 @@ describe('EnginesSettingsSection', () => {
       governanceSettingsUnavailableReason: 'Managed by config_bundle:acme.authz',
     });
 
-    expect(screen.getByText('Engine onboarding settings are read-only')).toBeInTheDocument();
+    expect(screen.getByText('Engine governance modes are read-only')).toBeInTheDocument();
     expect(screen.getByText('Managed by config_bundle:acme.authz')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Onboarding mode' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Project deployment target mode' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Engine access authority' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Project access authority' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Runtime authorization mode' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /External registration only/ })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /Hybrid target ownership/ })).toBeDisabled();
+    expect(screen.getAllByRole('radio', { name: /Manual access/ }).every((control) => control.hasAttribute('disabled'))).toBe(true);
+    expect(screen.getByRole('radio', { name: /EnterpriseGlue only/ })).toBeDisabled();
   });
 
   it('keeps engine governance visible but honors the server-calculated read-only decision', () => {

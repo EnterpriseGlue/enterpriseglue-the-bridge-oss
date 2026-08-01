@@ -64,6 +64,6 @@ test.describe('Smoke: Mission Control processes', () => {
     }
     await expectMissionControlState(page, requireMock && fixture?.listProcessDefinitionName
       ? new RegExp(`Processes|${fixture.listProcessDefinitionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
-      : /To view a Diagram|Process Instances|Processes/i);
+      : /To view a diagram|Process Instances|Processes/i);
   });
 });

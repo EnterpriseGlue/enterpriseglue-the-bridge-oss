@@ -28,7 +28,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     await expect(page.getByRole('tab', { name: 'Roles', exact: true })).toHaveAttribute('aria-selected', 'true');
 
     await page.getByRole('tab', { name: 'Runtime Resources', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Runtime Resources' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Runtime resources' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Engine' })).toBeVisible();
 
     await page.getByRole('tab', { name: 'Effective Access', exact: true }).click();
@@ -56,9 +56,9 @@ test.describe('Smoke: local Access Control authorization', () => {
     await panel.getByRole('textbox', { name: 'User ID' }).fill(userId);
     await panel.getByRole('combobox', { name: 'Permission' }).click();
     await page.getByRole('option', { name: `${permission.label} (${permission.key})` }).click();
-    await expect(panel.getByRole('button', { name: 'Evaluate' })).toBeEnabled();
-    await panel.getByRole('button', { name: 'Evaluate' }).click();
-    await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Check access' })).toBeEnabled();
+    await panel.getByRole('button', { name: 'Check access' }).click();
+    await expect(panel.getByText('Access is allowed')).toBeVisible();
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toBeVisible();
   });
 
@@ -88,7 +88,7 @@ test.describe('Smoke: local Access Control authorization', () => {
       await panel.getByRole('combobox', { name: 'Permission' }).click();
       await page.getByRole('option', { name: `${permission.label} (${permission.key})` }).click();
       const response = page.waitForResponse((candidate) => candidate.url().includes('/api/authz/evaluate') && candidate.request().method() === 'POST');
-      await panel.getByRole('button', { name: 'Evaluate' }).click();
+      await panel.getByRole('button', { name: 'Check access' }).click();
       return (await response).json();
     };
     const evaluateRuntimeResource = async () => {
@@ -100,7 +100,7 @@ test.describe('Smoke: local Access Control authorization', () => {
       await panel.getByRole('combobox', { name: 'Permission' }).click();
       await page.getByRole('option', { name: `${permission.label} (${permission.key})` }).click();
       const response = page.waitForResponse((candidate) => candidate.url().includes('/api/authz/evaluate') && candidate.request().method() === 'POST');
-      await panel.getByRole('button', { name: 'Evaluate' }).click();
+      await panel.getByRole('button', { name: 'Check access' }).click();
       return (await response).json();
     };
 
@@ -112,7 +112,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     expect(allowed.sources).toEqual(expect.arrayContaining([
       expect.objectContaining({ tenantId: 'tenant-default', expiresAt: fineGrained.scopedEngineAssignmentExpiresAt }),
     ]));
-    await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByText('Access is allowed')).toBeVisible();
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText('engine');
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText('tenant-default');
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText(new Date(fineGrained.scopedEngineAssignmentExpiresAt!).toISOString());
@@ -122,7 +122,7 @@ test.describe('Smoke: local Access Control authorization', () => {
     expect(group.sources).toEqual(expect.arrayContaining([
       expect.objectContaining({ principalType: 'group', scopeType: 'engine', scopeId: fineGrained.groupScopedEngineId }),
     ]));
-    await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByText('Access is allowed')).toBeVisible();
     await expect(panel.getByRole('table', { name: /authorization sources/i })).toContainText('group:');
 
     const runtime = await evaluateRuntimeResource();
@@ -134,14 +134,14 @@ test.describe('Smoke: local Access Control authorization', () => {
     expect(runtime.sources).toEqual(expect.arrayContaining([
       expect.objectContaining({ scopeType: 'engine_runtime_resource', scopeId: fineGrained.runtimeAllowedResourceId }),
     ]));
-    await expect(panel.getByText('Access allowed')).toBeVisible();
+    await expect(panel.getByText('Access is allowed')).toBeVisible();
     await expect(panel.getByText(/resolved runtime resource/i)).toBeVisible();
 
     const expired = await evaluate(fineGrained.expiredUserId!, fineGrained.expiredEngineId!);
     expect(expired.allowed).toBe(false);
     expect(expired.reason).toBe('no-permission');
     expect(expired.sources).toEqual([]);
-    await expect(panel.getByText('Access denied')).toBeVisible();
+    await expect(panel.getByText('Access is denied')).toBeVisible();
     await expect(panel.getByText(/no-permission \(0 sources\)/)).toBeVisible();
   });
 });

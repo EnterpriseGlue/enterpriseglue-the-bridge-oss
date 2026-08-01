@@ -9,7 +9,7 @@ function typeFor(source: unknown): 'blue' | 'purple' | 'gray' {
 
 function labelFor(source: unknown) {
   if (source === 'manual') return 'Manual';
-  if (source === 'config') return 'Managed by config';
+  if (source === 'config') return 'Managed by configuration';
   if (source === 'sso') return 'Managed by SSO';
   if (source === 'identity_provider') return 'Managed by identity provider';
   if (source === 'api') return 'API managed';
@@ -27,6 +27,6 @@ function descriptionFor(source: unknown) {
 }
 
 export function AssignmentSourceTag({ source, configWarning = false }: { source: unknown; configWarning?: boolean }) {
-  const description = configWarning ? 'A local configuration override permits removal until the next authoritative apply.' : descriptionFor(source);
-  return <span title={description}><Tag type={configWarning ? 'warm-gray' : typeFor(source)}>{configWarning ? 'Config warning' : labelFor(source)}</Tag></span>;
+  const description = configWarning ? 'Local changes are allowed, but the next configuration apply may overwrite them.' : descriptionFor(source);
+  return <span title={description}><Tag type={configWarning ? 'warm-gray' : typeFor(source)}>{configWarning ? 'Configuration-linked' : labelFor(source)}</Tag></span>;
 }

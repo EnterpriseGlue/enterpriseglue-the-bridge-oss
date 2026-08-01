@@ -236,6 +236,41 @@ describe('authzGroupService', () => {
     expect(authzGroupKeyIdentity('tenant-a', 'operators')).toBe('tenant-a:operators');
   });
 
+  it('lists memberships with human-readable group and user identity metadata', async () => {
+    const membershipQb = {
+      orderBy: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{
+        id: 'membership-1',
+        tenantId: 'tenant-a',
+        groupId: 'group-1',
+        userId: 'user-1',
+        source: 'manual',
+        sourceRef: null,
+        expiresAt: null,
+        createdById: 'admin-1',
+        createdAt: 10,
+        updatedAt: 11,
+      }]),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === AuthzGroupMembership) return { createQueryBuilder: vi.fn().mockReturnValue(membershipQb) };
+        if (entity === AuthzGroup) return { find: vi.fn().mockResolvedValue([{ id: 'group-1', key: 'operators', name: 'Operators' }]) };
+        if (entity === User) return { find: vi.fn().mockResolvedValue([{ id: 'user-1', email: 'opal@example.com', firstName: 'Opal', lastName: 'Operator' }]) };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const memberships = await authzGroupService.listMemberships({ tenantId: 'tenant-a', groupId: 'group-1' });
+
+    expect(memberships).toEqual([expect.objectContaining({
+      groupName: 'Operators',
+      userDisplayName: 'Opal Operator',
+      userEmail: 'opal@example.com',
+    })]);
+  });
+
   it('creates the authenticated-user baseline once through the provisioning transaction manager', async () => {
     const groupRepo = {
       findOneBy: vi.fn().mockResolvedValue({

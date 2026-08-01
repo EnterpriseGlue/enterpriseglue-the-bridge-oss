@@ -186,7 +186,9 @@ describe('Camunda native-grant migration (database integration)', () => {
       actorId: adminUserId,
     }, policy);
     forwardApplyRunId = forward.applyRunId || '';
-    expect(forward).toMatchObject({ created: 7, updated: 0, archived: 0 });
+    // Two groups, two runtime-resource sets, one role, two assignments, and
+    // the tenant-scoped governance-settings record are owned by the import.
+    expect(forward).toMatchObject({ created: 8, updated: 0, archived: 0 });
     expect(forward.applyRunId).toBeTruthy();
     expect(await configBundleRuntimeReconciliationTaskService.drainApplyRun({ applyRunId: forwardApplyRunId })).toMatchObject({ status: 'completed', failedTaskCount: 0 });
 

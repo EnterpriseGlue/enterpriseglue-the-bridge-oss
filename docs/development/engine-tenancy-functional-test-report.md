@@ -19,8 +19,8 @@ stale/multi-tab state, refresh, and browser-history restoration.
 
 The engine-tenancy database matrix passes PostgreSQL 18.4, MySQL 8.4.10, SQL
 Server 16.0.4265.3, Oracle 21.0.0.0.0, and Spanner emulator 1.5.30. All 35
-adapter/stage cells and all ten adapter/upgrade-baseline observations pass.
-Clean install and both upgrade paths converge on one logical-schema
+adapter/stage cells and all twenty adapter/upgrade-baseline observations pass.
+Clean install and all four upgrade paths converge on one logical-schema
 fingerprint:
 `95a8dc5b0d4d97026587e2e41b63ef3536cc5abe681a3d944c5111de69ae753e`.
 
@@ -129,7 +129,7 @@ meaning of 100% functional coverage are documented in
 | Fine-grained access browser matrix | **27** |
 | Real-service provisioning channel executions | **30** |
 | Database lifecycle stage cells | **35** |
-| Database upgrade-baseline observations | **10** |
+| Database upgrade-baseline observations | **20** |
 | Equivalent logical-schema fingerprints | **1** |
 
 The shared package build and backend/frontend type checks also passed. The
@@ -383,7 +383,7 @@ pnpm run test:engine-tenancy:database-matrix
 ```
 
 It writes `database-matrix.json` only as release-qualified when all five
-targets, all 35 stage cells, all ten baseline observations, and one equivalent
+targets, all 35 stage cells, all twenty baseline observations, and one equivalent
 logical schema pass. See
 [Qualify Engine Tenancy on Every Supported Database](./engine-tenancy-database-qualification.md)
 for prerequisites, focused diagnosis, cleanup, and rollback conditions.

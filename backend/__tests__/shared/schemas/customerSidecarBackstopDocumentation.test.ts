@@ -71,4 +71,64 @@ describe('customer-sidecar backstop API documentation contracts', () => {
       expect(operation?.description).toContain('never falls back to a direct-engine endpoint');
     }
   });
+
+  it('publishes explicit protected-detail and durable-task response contracts', () => {
+    const paths = generateOpenApi().paths;
+    const detailSchema = paths?.['/engines-api/engines/{id}/backstop/sync/{runId}/detail']
+      ?.get?.responses?.['200']?.content?.['application/json']?.schema;
+
+    expect(detailSchema).toMatchObject({
+      type: 'object',
+      required: ['run', 'detail'],
+      additionalProperties: false,
+      properties: {
+        run: {
+          type: 'object',
+          properties: expect.objectContaining({
+            id: expect.any(Object),
+            status: expect.any(Object),
+          }),
+        },
+        detail: {
+          anyOf: expect.arrayContaining([
+            expect.objectContaining({
+              required: ['version', 'projection'],
+              additionalProperties: false,
+            }),
+            expect.objectContaining({
+              required: ['version', 'rollbackOfRunId', 'ownedGrants'],
+              additionalProperties: false,
+            }),
+            expect.objectContaining({
+              required: ['version', 'observedOfRunId', 'projection', 'ownedGrants'],
+              additionalProperties: false,
+            }),
+          ]),
+        },
+      },
+    });
+
+    for (const suffix of ['apply', 'rollback', 'drift-check']) {
+      const operationSchema = paths?.[`/engines-api/engines/{id}/backstop/sync/{runId}/${suffix}`]
+        ?.post?.responses?.['200']?.content?.['application/json']?.schema;
+      expect(operationSchema).toMatchObject({
+        type: 'object',
+        required: ['run', 'task'],
+        additionalProperties: false,
+        properties: {
+          task: {
+            type: 'object',
+            nullable: true,
+            required: ['taskId', 'runId', 'operation', 'status', 'attempts', 'nextAttemptAt', 'lastError'],
+            additionalProperties: false,
+            properties: expect.objectContaining({
+              operation: { type: 'string', enum: ['apply', 'rollback', 'drift_check'] },
+              status: { type: 'string', enum: ['queued', 'running', 'completed'] },
+              attempts: { type: 'integer', minimum: 0 },
+            }),
+          },
+        },
+      });
+    }
+  });
 });

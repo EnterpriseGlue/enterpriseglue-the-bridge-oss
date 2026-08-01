@@ -418,10 +418,17 @@ export class AuthzGroupService {
     const groups = groupIds.length
       ? await dataSource.getRepository(AuthzGroup).find({ where: { id: In(groupIds) } })
       : [];
+    const userIds = Array.from(new Set(memberships.map((membership) => membership.userId)));
+    const users = userIds.length
+      ? await dataSource.getRepository(User).find({ where: { id: In(userIds) } })
+      : [];
     const groupsById = new Map(groups.map((group) => [group.id, group]));
+    const usersById = new Map(users.map((user) => [user.id, user]));
 
     return memberships.map((membership) => {
       const group = groupsById.get(membership.groupId);
+      const user = usersById.get(membership.userId);
+      const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
       return {
         id: membership.id,
         tenantId: membership.tenantId,
@@ -429,6 +436,8 @@ export class AuthzGroupService {
         groupKey: group?.key || null,
         groupName: group?.name || null,
         userId: membership.userId,
+        userDisplayName: fullName || user?.email || null,
+        userEmail: user?.email || null,
         source: membership.source as AuthzGroupSource,
         sourceRef: membership.sourceRef,
         expiresAt: membership.expiresAt,

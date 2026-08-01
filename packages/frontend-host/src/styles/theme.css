@@ -378,3 +378,12 @@ body::-webkit-scrollbar,
   background-color: #da1e28 !important;
   color: #ffffff !important;
 }
+
+.eg-identity-provider-menu {
+  inline-size: min(18rem, calc(100vw - 2rem)) !important;
+  max-inline-size: calc(100vw - 2rem) !important;
+}
+
+.eg-identity-provider-menu .cds--overflow-menu-options__btn {
+  max-inline-size: none;
+}

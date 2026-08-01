@@ -2,8 +2,11 @@ import React from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
+  Accordion,
+  AccordionItem,
   Button,
   Checkbox,
+  ComboBox,
   DataTable,
   DataTableSkeleton,
   Dropdown,
@@ -35,7 +38,11 @@ import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/componen
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { apiClient } from '../../../shared/api/client';
 import { UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
-import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
+import {
+  isPermissionCompatibleWithResourceType,
+  type AuthzResourceType,
+  type UiAuthzDecision,
+} from '@enterpriseglue/shared/authz/permission-actions.js';
 import {
   formatCapabilityDiagnostics,
   formatEngineSetMatchedBy,
@@ -75,7 +82,7 @@ import { ProjectEngineTargetsTab } from './access-control/ProjectEngineTargetsTa
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { ByPrincipalPanel, ByResourcePanel } from './access-control/PrincipalResourcePanels';
 import { ExternalRegistrationTab } from './access-control/ExternalRegistrationTab';
-import { usePlatformSettings } from '../hooks/useAdminApi';
+import { usePlatformSettings, useProjectsGovernance } from '../hooks/useAdminApi';
 import type { ResourceSummary } from './access-control/principalResourcePresentation';
 import {
   filterPermissions,
@@ -168,7 +175,6 @@ import {
   type RoleSummary,
   type RuntimeResource,
   type ServiceAccount,
-  type AuthzResourceType,
 } from '../hooks/useAuthzApi';
 
 function unavailableReason(decision: UiAuthzDecision, fallback: string): string | undefined {
@@ -204,7 +210,7 @@ const ACCESS_CONTROL_TAB_LABELS: Record<AccessControlTabId, string> = {
   by_resource: 'By Resource',
   groups: 'Groups',
   effective_access: 'Effective Access',
-  engine_sets: 'Engine Sets',
+  engine_sets: 'Engine sets',
   runtime_resources: 'Runtime Resources',
   project_targets: 'Project Targets',
   policies: 'Policies',
@@ -282,13 +288,15 @@ const POLICY_EFFECTS: Array<{ id: AuthzPolicy['effect']; label: string }> = [
   { id: 'deny', label: 'Deny' },
 ];
 
+const POLICY_ALL_RESOURCES = '__all__';
+
 const POLICY_RESOURCE_TYPES: Array<{ id: string; label: string }> = [
-  { id: '', label: 'All resources' },
+  { id: POLICY_ALL_RESOURCES, label: 'All resources (advanced)' },
   { id: 'platform', label: 'Platform' },
   { id: 'tenant', label: 'Current tenant' },
   { id: 'project', label: 'Project' },
   { id: 'engine', label: 'Engine' },
-  { id: 'engine_set', label: 'Engine Set' },
+  { id: 'engine_set', label: 'Engine set' },
   { id: 'engine_runtime_resource', label: 'Runtime resource' },
   { id: 'engine_runtime_resource_set', label: 'Runtime resource set' },
   { id: 'project_engine_target', label: 'Project-engine target' },
@@ -300,7 +308,7 @@ const POLICY_RESOURCE_TYPES: Array<{ id: string; label: string }> = [
 interface AuthzPolicyFormState {
   name: string;
   description: string;
-  effect: AuthzPolicy['effect'];
+  effect: AuthzPolicy['effect'] | '';
   priority: number;
   resourceType: string;
   action: string;
@@ -309,7 +317,7 @@ interface AuthzPolicyFormState {
 const DEFAULT_AUTHZ_POLICY_FORM: AuthzPolicyFormState = {
   name: '',
   description: '',
-  effect: 'deny',
+  effect: '',
   priority: 100,
   resourceType: '',
   action: '',
@@ -410,9 +418,9 @@ function getEngineSetSelectorRiskReasons(selector: EngineSetSelector) {
 
 function engineSetSelectorRiskDescription(reason: 'all_engines_selector' | 'any_label_match') {
   if (reason === 'all_engines_selector') {
-    return 'This Engine Set can include every active engine visible to this tenant.';
+    return 'This engine set can include every active engine visible to this tenant.';
   }
-  return 'This Engine Set can include engines that match only one configured label.';
+  return 'This engine set can include engines that match only one configured label.';
 }
 
 function formatPolicyConditions(conditions: PolicyCondition) {
@@ -575,7 +583,7 @@ function getAssignmentResourceId(assignment: RoleAssignment) {
 }
 
 function authzResourceTypeLabel(type: AuthzResourceType) {
-  if (type === 'engine_set') return 'Engine Set';
+  if (type === 'engine_set') return 'Engine set';
   if (type === 'project_engine_target') return 'Project target';
   if (type === 'external_engine_system') return 'External system';
   if (type === 'api_client') return 'API client';
@@ -711,6 +719,7 @@ export default function AccessControl() {
   const [duplicatingRole, setDuplicatingRole] = React.useState<RoleSummary | null>(null);
   const [matrixSavingRoleId, setMatrixSavingRoleId] = React.useState<string | null>(null);
   const [roleRiskAcknowledged, setRoleRiskAcknowledged] = React.useState(false);
+  const [rolePermissionSearch, setRolePermissionSearch] = React.useState('');
   const [groupModalOpen, setGroupModalOpen] = React.useState(false);
   const [editingGroup, setEditingGroup] = React.useState<AuthzGroup | null>(null);
   const [groupForm, setGroupForm] = React.useState<AuthzGroupFormState>(DEFAULT_AUTHZ_GROUP_FORM);
@@ -730,6 +739,8 @@ export default function AccessControl() {
   const [editingPolicy, setEditingPolicy] = React.useState<AuthzPolicy | null>(null);
   const [policyForm, setPolicyForm] = React.useState<AuthzPolicyFormState>(DEFAULT_AUTHZ_POLICY_FORM);
   const [policyConditionsJson, setPolicyConditionsJson] = React.useState('{}');
+  const [policyMatchAllActions, setPolicyMatchAllActions] = React.useState(false);
+  const [policyRiskAcknowledged, setPolicyRiskAcknowledged] = React.useState(false);
   const [apiClientToken, setApiClientToken] = React.useState<string | null>(null);
   const [serviceAccountToken, setServiceAccountToken] = React.useState<string | null>(null);
   const [selectedExternalEngineId, setSelectedExternalEngineId] = React.useState('');
@@ -774,9 +785,10 @@ export default function AccessControl() {
   const externalProjectTargetApiDecommissionDecision = useActionDecision('project-engine-target.external-registration.decommission', platformAuthzResource);
   const runtimeResourceEnginesQ = useQuery({
     queryKey: ['authz-runtime-resource-engines'],
-    enabled: engineSetsReadDecision.allowed,
+    enabled: engineSetsReadDecision.allowed || projectTargetsReadDecision.allowed || effectiveAccessDecision.allowed || assignmentsReadDecision.allowed,
     queryFn: getAccessibleEngines,
   });
+  const projectCatalogQ = useProjectsGovernance(undefined, { enabled: projectTargetsReadDecision.allowed });
   const runtimeResourcesQ = useQuery({
     queryKey: ['authz-runtime-resources', selectedRuntimeEngineId],
     enabled: engineSetsReadDecision.allowed && Boolean(selectedRuntimeEngineId),
@@ -947,6 +959,7 @@ export default function AccessControl() {
     setEditingRole(null);
     setDuplicatingRole(null);
     setRoleRiskAcknowledged(false);
+    setRolePermissionSearch('');
     setRoleForm({
       name: '',
       description: '',
@@ -960,6 +973,7 @@ export default function AccessControl() {
     setEditingRole(null);
     setDuplicatingRole(role);
     setRoleRiskAcknowledged(false);
+    setRolePermissionSearch('');
     setRoleForm({
       name: `Copy of ${role.name}`,
       description: role.description || '',
@@ -973,6 +987,7 @@ export default function AccessControl() {
     setEditingRole(role);
     setDuplicatingRole(null);
     setRoleRiskAcknowledged(false);
+    setRolePermissionSearch('');
     setRoleForm({
       name: role.name,
       description: role.description || '',
@@ -1124,6 +1139,8 @@ export default function AccessControl() {
     setEditingPolicy(null);
     setPolicyForm(DEFAULT_AUTHZ_POLICY_FORM);
     setPolicyConditionsJson('{}');
+    setPolicyMatchAllActions(false);
+    setPolicyRiskAcknowledged(false);
     setPolicyModalOpen(true);
   };
 
@@ -1134,10 +1151,12 @@ export default function AccessControl() {
       description: policy.description || '',
       effect: policy.effect,
       priority: policy.priority,
-      resourceType: policy.resourceType || '',
+      resourceType: policy.resourceType || POLICY_ALL_RESOURCES,
       action: policy.action || '',
     });
     setPolicyConditionsJson(getPolicyConditionsJson(policy));
+    setPolicyMatchAllActions(!policy.action);
+    setPolicyRiskAcknowledged(false);
     setPolicyModalOpen(true);
   };
 
@@ -1153,10 +1172,10 @@ export default function AccessControl() {
     const payload = {
       name: policyForm.name.trim(),
       description: policyForm.description.trim() || undefined,
-      effect: policyForm.effect,
+      effect: policyForm.effect as AuthzPolicy['effect'],
       priority: policyForm.priority,
-      resourceType: policyForm.resourceType || undefined,
-      action: policyForm.action.trim() || undefined,
+      resourceType: policyForm.resourceType === POLICY_ALL_RESOURCES ? undefined : policyForm.resourceType,
+      action: policyMatchAllActions ? undefined : policyForm.action.trim(),
       conditions,
     };
 
@@ -1258,11 +1277,11 @@ export default function AccessControl() {
   const materializeEngineSet = async (id: string) => {
     try {
       const result = await materializeEngineSetM.mutateAsync(id);
-      setEngineSetMaterializeSummary(`${result.matched} matched; ${result.created} created, ${result.updated} updated, ${result.removed} removed`);
+      setEngineSetMaterializeSummary(`${result.matched} engines matched; ${result.created} added, ${result.updated} refreshed, ${result.removed} removed`);
       setSelectedEngineSetId(id);
       setError(null);
     } catch (e) {
-      setError(parseApiError(e, 'Unable to materialize Engine Set').message);
+      setError(parseApiError(e, 'Unable to refresh matching engines').message);
     }
   };
 
@@ -1490,6 +1509,18 @@ export default function AccessControl() {
 
   const roleScopePermissions = permissions.filter((permission) =>
     permission.scope === roleForm.scope || (roleForm.scope === 'tenant' && permission.tenantSafe));
+  const filteredRoleScopePermissions = roleScopePermissions.filter((permission) => {
+    const query = rolePermissionSearch.trim().toLowerCase();
+    return !query || [permission.label, permission.key, permission.category, permission.description]
+      .some((value) => String(value || '').toLowerCase().includes(query));
+  });
+  const rolePermissionsByCategory = Object.entries(
+    filteredRoleScopePermissions.reduce<Record<string, PermissionCatalogEntry[]>>((groups, permission) => {
+      const category = permission.category || 'Other';
+      (groups[category] ||= []).push(permission);
+      return groups;
+    }, {}),
+  ).sort(([left], [right]) => left.localeCompare(right));
   const selectedRiskyRolePermissions = roleScopePermissions.filter(
     (permission) => roleForm.permissionIds.includes(permission.key) && getPermissionRisk(permission)
   );
@@ -1522,8 +1553,33 @@ export default function AccessControl() {
     )
   );
   const selectedProjectTargetStatus = PROJECT_ENGINE_TARGET_STATUSES.find((item) => item.id === projectTargetForm.status) || PROJECT_ENGINE_TARGET_STATUSES[0];
-  const selectedPolicyEffect = POLICY_EFFECTS.find((item) => item.id === policyForm.effect) || POLICY_EFFECTS[1];
-  const selectedPolicyResourceType = POLICY_RESOURCE_TYPES.find((item) => item.id === policyForm.resourceType) || POLICY_RESOURCE_TYPES[0];
+  const selectedProjectTargetProject = (projectCatalogQ.data || []).find((project) => project.id === projectTargetForm.projectId) || null;
+  const selectedProjectTargetEngine = (runtimeResourceEnginesQ.data || []).find((engine) => engine.id === projectTargetForm.engineId) || null;
+  const selectedPolicyEffect = POLICY_EFFECTS.find((item) => item.id === policyForm.effect) || null;
+  const selectedPolicyResourceType = POLICY_RESOURCE_TYPES.find((item) => item.id === policyForm.resourceType) || null;
+  const policyCompatiblePermissions = React.useMemo(() => {
+    if (!policyForm.resourceType || policyForm.resourceType === POLICY_ALL_RESOURCES) return permissions;
+    return permissions.filter((permission) =>
+      isPermissionCompatibleWithResourceType(permission, policyForm.resourceType as AuthzResourceType),
+    );
+  }, [permissions, policyForm.resourceType]);
+  const policyPermissionOptions = React.useMemo(() => {
+    if (!policyForm.action || policyCompatiblePermissions.some((permission) => permission.key === policyForm.action)) {
+      return policyCompatiblePermissions;
+    }
+    return [...policyCompatiblePermissions, {
+      key: policyForm.action,
+      scope: (policyForm.resourceType && policyForm.resourceType !== POLICY_ALL_RESOURCES
+        ? policyForm.resourceType
+        : 'platform') as AuthzResourceType,
+      category: 'Existing policy',
+      label: policyForm.action,
+      description: 'Existing permission value retained for compatibility.',
+    }];
+  }, [policyCompatiblePermissions, policyForm.action, policyForm.resourceType]);
+  const selectedPolicyPermission = policyPermissionOptions.find((item) => item.key === policyForm.action) || null;
+  const policyHasExplicitScope = Boolean(selectedPolicyResourceType);
+  const policyHighImpact = policyForm.resourceType === POLICY_ALL_RESOURCES || policyMatchAllActions;
   const policyConditionsJsonValid = React.useMemo(() => {
     try {
       JSON.parse(policyConditionsJson || '{}');
@@ -1559,7 +1615,7 @@ export default function AccessControl() {
         <PageHeader
           icon={Security}
           title="Access Control"
-          subtitle="Review system roles, permissions, effective access, and SSO engine assignments"
+          subtitle="Manage roles, permissions, group membership, and access to projects, engines, and runtime resources."
           gradient={PAGE_GRADIENTS.red}
         />
         <UnauthorizedEmptyState
@@ -1575,7 +1631,7 @@ export default function AccessControl() {
       <PageHeader
         icon={Security}
         title="Access Control"
-        subtitle="Review system roles, permissions, effective access, and SSO engine assignments"
+        subtitle="Manage roles, permissions, group membership, and access to projects, engines, and runtime resources."
         gradient={PAGE_GRADIENTS.red}
       />
 
@@ -1594,7 +1650,7 @@ export default function AccessControl() {
           setSearchParams(nextSearchParams, { replace: true });
         }}
       >
-        <TabList aria-label="Access control tabs">
+        <TabList aria-label="Access control tabs" className="eg-scrollable-tab-list" scrollIntoView>
           {visibleTabIds.map((tabId) => <Tab key={tabId}>{ACCESS_CONTROL_TAB_LABELS[tabId]}</Tab>)}
         </TabList>
         <VisibleTabPanels>
@@ -1735,6 +1791,9 @@ export default function AccessControl() {
             <EffectiveAccessPanel
               permissions={permissions}
               auditEntries={auditReadDecision.allowed ? inspectionAuditEntries : []}
+              engineSets={engineSetsReadDecision.allowed ? engineSets : []}
+              externalSystems={externalSystemsReadDecision.allowed ? externalSystems : []}
+              runtimeEngines={runtimeResourceEnginesQ.data || []}
               onOpenAuditReference={auditReadDecision.allowed ? openAuthzAuditReference : undefined}
             />
           </TabPanel>
@@ -1913,7 +1972,7 @@ export default function AccessControl() {
         open={permissionModalOpen}
         onRequestClose={() => setPermissionModalOpen(false)}
         onRequestSubmit={submitPermission}
-        modalHeading="Create Custom Permission"
+        modalHeading="Create custom permission"
         primaryButtonText="Create"
         secondaryButtonText="Cancel"
         primaryButtonDisabled={
@@ -1928,8 +1987,8 @@ export default function AccessControl() {
         <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
           <Dropdown
             id="custom-permission-scope"
-            titleText="Scope"
-            label="Select scope"
+            titleText="Permission scope"
+            label="Select permission scope"
             items={[
               { id: 'platform', label: 'Platform' },
               { id: 'tenant', label: 'Tenant' },
@@ -1979,7 +2038,7 @@ export default function AccessControl() {
           setEditingGroup(null);
         }}
         onRequestSubmit={submitGroup}
-        modalHeading={editingGroup ? 'Edit Group' : 'Create Group'}
+        modalHeading={editingGroup ? 'Edit group' : 'Create group'}
         primaryButtonText={editingGroup ? 'Save' : 'Create'}
         secondaryButtonText="Cancel"
         primaryButtonDisabled={
@@ -2021,9 +2080,10 @@ export default function AccessControl() {
           setEditingRole(null);
           setDuplicatingRole(null);
           setRoleRiskAcknowledged(false);
+          setRolePermissionSearch('');
         }}
         onRequestSubmit={submitRole}
-        modalHeading={editingRole ? 'Edit Custom Role' : duplicatingRole ? 'Duplicate System Role' : 'Create Custom Role'}
+        modalHeading={editingRole ? 'Edit custom role' : duplicatingRole ? 'Duplicate system role' : 'Create custom role'}
         primaryButtonText={editingRole ? 'Save' : 'Create'}
         secondaryButtonText="Cancel"
         primaryButtonDisabled={
@@ -2051,8 +2111,8 @@ export default function AccessControl() {
           />
           <Dropdown
             id="custom-role-scope"
-            titleText="Scope"
-            label="Select scope"
+            titleText="Role scope"
+            label="Select role scope"
             disabled={Boolean(editingRole || duplicatingRole)}
             items={[
               { id: 'platform', label: 'Platform' },
@@ -2067,16 +2127,37 @@ export default function AccessControl() {
             }}
           />
           <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
-            <div style={{ fontSize: '0.875rem', fontWeight: 600 }}>Permissions</div>
-            <div style={{ display: 'grid', gap: 'var(--spacing-3)', maxHeight: 280, overflow: 'auto', padding: 'var(--spacing-3)', border: '1px solid var(--cds-border-subtle)' }}>
-              {roleScopePermissions.map((permission) => (
-                <Checkbox
-                  key={permission.key}
-                  id={`role-permission-${permission.key}`}
-                  labelText={`${permission.label} (${permission.key})`}
-                  checked={roleForm.permissionIds.includes(permission.key)}
-                  onChange={(_event, { checked }) => toggleRolePermission(permission.key, Boolean(checked))}
-                />
+            <TextInput
+              id="custom-role-permission-search"
+              labelText={`Permissions (${roleForm.permissionIds.length} selected)`}
+              placeholder="Search permissions by name, category, or key"
+              value={rolePermissionSearch}
+              onChange={(event) => setRolePermissionSearch(event.target.value)}
+            />
+            <div style={{ display: 'grid', gap: 'var(--spacing-5)', maxHeight: 360, overflow: 'auto', padding: 'var(--spacing-4)', border: '1px solid var(--cds-border-subtle)' }}>
+              {rolePermissionsByCategory.length === 0 ? (
+                <span style={{ color: 'var(--cds-text-secondary)' }}>No permissions match this search.</span>
+              ) : rolePermissionsByCategory.map(([category, categoryPermissions]) => (
+                <section key={category} aria-labelledby={`role-permission-category-${category.replace(/\W+/g, '-').toLowerCase()}`}>
+                  <h4 id={`role-permission-category-${category.replace(/\W+/g, '-').toLowerCase()}`} style={{ margin: '0 0 var(--spacing-3)', fontSize: '0.875rem' }}>
+                    {category}
+                  </h4>
+                  <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+                    {categoryPermissions.map((permission) => (
+                      <div key={permission.key} style={{ display: 'grid', gap: 'var(--spacing-1)' }}>
+                        <Checkbox
+                          id={`role-permission-${permission.key}`}
+                          labelText={permission.label}
+                          checked={roleForm.permissionIds.includes(permission.key)}
+                          onChange={(_event, { checked }) => toggleRolePermission(permission.key, Boolean(checked))}
+                        />
+                        <div style={{ marginInlineStart: '1.75rem', color: 'var(--cds-text-secondary)', fontSize: '0.75rem' }}>
+                          {permission.description || 'No description available.'} <code>{permission.key}</code>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           </div>
@@ -2108,7 +2189,7 @@ export default function AccessControl() {
           previewEngineSetM.reset();
         }}
         onRequestSubmit={submitEngineSet}
-        modalHeading={editingEngineSet ? 'Edit Engine Set' : 'Create Engine Set'}
+        modalHeading={editingEngineSet ? 'Edit engine set' : 'Create engine set'}
         primaryButtonText={editingEngineSet ? 'Save' : 'Create'}
         secondaryButtonText="Cancel"
         primaryButtonDisabled={
@@ -2123,7 +2204,7 @@ export default function AccessControl() {
         <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
           <TextInput
             id="engine-set-key"
-            labelText="Engine Set key"
+            labelText="Engine set key"
             helperText="Leave empty to generate a key from the name."
             value={engineSetForm.key}
             disabled={Boolean(editingEngineSet)}
@@ -2131,7 +2212,7 @@ export default function AccessControl() {
           />
           <TextInput
             id="engine-set-name"
-            labelText="Engine Set name"
+            labelText="Engine set name"
             value={engineSetForm.name}
             onChange={(event) => setEngineSetForm((current) => ({ ...current, name: event.target.value }))}
           />
@@ -2166,7 +2247,7 @@ export default function AccessControl() {
           <TextInput
             id="engine-set-engine-ids"
             labelText="Engine IDs"
-            helperText="Comma-separated engine ids."
+            helperText="Enter one or more engine IDs, separated by commas."
             disabled={engineSetForm.selectorMode !== 'engine_ids'}
             value={engineSetForm.engineIds}
             onChange={(event) => {
@@ -2223,7 +2304,7 @@ export default function AccessControl() {
             <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
               <InlineNotification
                 kind="warning"
-                title="Broad Engine Set selector"
+                title="Broad engine set selector"
                 subtitle={engineSetSelectorRiskReasons.map(engineSetSelectorRiskDescription).join(' ')}
                 lowContrast
               />
@@ -2278,19 +2359,25 @@ export default function AccessControl() {
       >
         <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-4)' }}>
-            <TextInput
-              id="project-target-project-id"
-              labelText="Project ID"
+            <ComboBox
+              id="project-target-project"
+              titleText="Project"
+              placeholder={projectCatalogQ.isLoading ? 'Loading projects' : 'Find a project'}
+              items={projectCatalogQ.data || []}
+              itemToString={(item) => item?.name || ''}
+              selectedItem={selectedProjectTargetProject}
               disabled={Boolean(editingProjectTarget)}
-              value={projectTargetForm.projectId}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, projectId: event.target.value }))}
+              onChange={({ selectedItem }) => setProjectTargetForm((current) => ({ ...current, projectId: selectedItem?.id || '' }))}
             />
-            <TextInput
-              id="project-target-engine-id"
-              labelText="Engine ID"
+            <ComboBox
+              id="project-target-engine"
+              titleText="Engine"
+              placeholder={runtimeResourceEnginesQ.isLoading ? 'Loading engines' : 'Find an engine'}
+              items={runtimeResourceEnginesQ.data || []}
+              itemToString={(item) => item?.name || ''}
+              selectedItem={selectedProjectTargetEngine}
               disabled={Boolean(editingProjectTarget)}
-              value={projectTargetForm.engineId}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, engineId: event.target.value }))}
+              onChange={({ selectedItem }) => setProjectTargetForm((current) => ({ ...current, engineId: selectedItem?.id || '' }))}
             />
             <Dropdown
               id="project-target-status"
@@ -2310,45 +2397,18 @@ export default function AccessControl() {
             <Checkbox id="project-target-allow-import" labelText="Import" checked={projectTargetForm.allowImport} onChange={(_event, { checked }) => setProjectTargetForm((current) => ({ ...current, allowImport: Boolean(checked) }))} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-4)' }}>
-            <TextInput
-              id="project-target-source-ref"
-              labelText="Source reference"
-              value={projectTargetForm.sourceRef}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, sourceRef: event.target.value }))}
-            />
-            <TextInput
-              id="project-target-external-system-id"
-              labelText="External system ID"
-              value={projectTargetForm.externalSystemId}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalSystemId: event.target.value }))}
-            />
-            <TextInput
-              id="project-target-external-project-id"
-              labelText="External project ID"
-              value={projectTargetForm.externalProjectId}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalProjectId: event.target.value }))}
-            />
-            <TextInput
-              id="project-target-external-engine-id"
-              labelText="External engine ID"
-              value={projectTargetForm.externalEngineId}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalEngineId: event.target.value }))}
-            />
-            <TextInput
-              id="project-target-external-target-id"
-              labelText="External target ID"
-              value={projectTargetForm.externalTargetId}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalTargetId: event.target.value }))}
-            />
-            <TextInput
-              id="project-target-policy-tags"
-              labelText="Policy tags"
-              helperText="Comma-separated tags."
-              value={projectTargetForm.policyTags}
-              onChange={(event) => setProjectTargetForm((current) => ({ ...current, policyTags: event.target.value }))}
-            />
-          </div>
+          <Accordion>
+            <AccordionItem title="Advanced integration metadata">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-4)' }}>
+                <TextInput id="project-target-source-ref" labelText="Source reference" value={projectTargetForm.sourceRef} onChange={(event) => setProjectTargetForm((current) => ({ ...current, sourceRef: event.target.value }))} />
+                <TextInput id="project-target-external-system-id" labelText="External system ID" value={projectTargetForm.externalSystemId} onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalSystemId: event.target.value }))} />
+                <TextInput id="project-target-external-project-id" labelText="External project ID" value={projectTargetForm.externalProjectId} onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalProjectId: event.target.value }))} />
+                <TextInput id="project-target-external-engine-id" labelText="External engine ID" value={projectTargetForm.externalEngineId} onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalEngineId: event.target.value }))} />
+                <TextInput id="project-target-external-target-id" labelText="External target ID" value={projectTargetForm.externalTargetId} onChange={(event) => setProjectTargetForm((current) => ({ ...current, externalTargetId: event.target.value }))} />
+                <TextInput id="project-target-policy-tags" labelText="Policy tags" helperText="Comma-separated tags." value={projectTargetForm.policyTags} onChange={(event) => setProjectTargetForm((current) => ({ ...current, policyTags: event.target.value }))} />
+              </div>
+            </AccordionItem>
+          </Accordion>
         </div>
       </Modal>
 
@@ -2357,21 +2417,30 @@ export default function AccessControl() {
         onRequestClose={() => {
           setPolicyModalOpen(false);
           setEditingPolicy(null);
+          setPolicyMatchAllActions(false);
+          setPolicyRiskAcknowledged(false);
         }}
         onRequestSubmit={submitPolicy}
-        modalHeading={editingPolicy ? 'Edit Policy' : 'Add Policy'}
+        modalHeading={editingPolicy ? 'Edit policy' : 'Add policy'}
         primaryButtonText={editingPolicy ? 'Save' : 'Create'}
         secondaryButtonText="Cancel"
         primaryButtonDisabled={
           !policiesManageDecision.allowed ||
           !policyForm.name.trim() ||
+          !policyForm.effect ||
+          !policyHasExplicitScope ||
+          (!policyMatchAllActions && !policyForm.action.trim()) ||
+          (policyHighImpact && !policyRiskAcknowledged) ||
           !policyConditionsJsonValid ||
           createPolicyM.isPending ||
           updatePolicyM.isPending
         }
         size="lg"
       >
-        <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
+        <div
+          key={`${policyModalOpen ? 'open' : 'closed'}:${editingPolicy?.id || 'new'}`}
+          style={{ display: 'grid', gap: 'var(--spacing-5)' }}
+        >
           <TextInput
             id="policy-name"
             labelText="Policy name"
@@ -2389,11 +2458,14 @@ export default function AccessControl() {
             <Dropdown
               id="policy-effect"
               titleText="Effect"
-              label="Effect"
+              label="Select an effect"
               items={POLICY_EFFECTS}
               itemToString={(item) => item?.label || ''}
               selectedItem={selectedPolicyEffect}
-              onChange={({ selectedItem }) => setPolicyForm((current) => ({ ...current, effect: selectedItem?.id || 'deny' }))}
+              onChange={({ selectedItem }) => {
+                setPolicyRiskAcknowledged(false);
+                setPolicyForm((current) => ({ ...current, effect: selectedItem?.id || '' }));
+              }}
             />
             <NumberInput
               id="policy-priority"
@@ -2407,30 +2479,72 @@ export default function AccessControl() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'var(--spacing-4)' }}>
             <Dropdown
               id="policy-resource-type"
-              titleText="Resource"
-              label="Resource"
+              titleText="Resource type"
+              label="Select resource type"
               items={POLICY_RESOURCE_TYPES}
               itemToString={(item) => item?.label || ''}
               selectedItem={selectedPolicyResourceType}
-              onChange={({ selectedItem }) => setPolicyForm((current) => ({ ...current, resourceType: selectedItem?.id || '' }))}
+              onChange={({ selectedItem }) => {
+                setPolicyRiskAcknowledged(false);
+                setPolicyForm((current) => ({ ...current, resourceType: selectedItem?.id || '', action: '' }));
+              }}
             />
-            <TextInput
+            <ComboBox
+              key={`${policyModalOpen ? 'open' : 'closed'}:${editingPolicy?.id || 'new'}:${policyForm.resourceType || 'unselected'}`}
               id="policy-action"
-              labelText="Action or permission"
-              helperText="Leave empty to match all actions on the selected resource type."
-              value={policyForm.action}
-              onChange={(event) => setPolicyForm((current) => ({ ...current, action: event.target.value }))}
+              titleText="Permission"
+              placeholder={policyMatchAllActions
+                ? 'All actions selected'
+                : policyPermissionOptions.length > 0
+                  ? 'Search permissions'
+                  : 'No compatible permissions'}
+              items={policyPermissionOptions}
+              itemToString={(item) => item ? `${item.label} (${item.key})` : ''}
+              selectedItem={selectedPolicyPermission}
+              disabled={policyMatchAllActions}
+              onChange={({ selectedItem }) => setPolicyForm((current) => ({ ...current, action: selectedItem?.key || '' }))}
             />
           </div>
-          <TextArea
-            id="policy-conditions"
-            labelText="Conditions JSON"
-            value={policyConditionsJson}
-            rows={8}
-            invalid={!policyConditionsJsonValid}
-            invalidText="Conditions must be valid JSON."
-            onChange={(event) => setPolicyConditionsJson(event.target.value)}
+          <Checkbox
+            id="policy-all-actions"
+            labelText="Apply to every permission for this resource type"
+            checked={policyMatchAllActions}
+            onChange={(_event, { checked }) => {
+              setPolicyMatchAllActions(Boolean(checked));
+              setPolicyRiskAcknowledged(false);
+            }}
           />
+          {policyHighImpact && (
+            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+              <InlineNotification
+                kind="warning"
+                lowContrast
+                hideCloseButton
+                title="Broad policy impact"
+                subtitle={`${policyForm.effect === 'deny' ? 'This policy can deny' : 'This policy can allow'} ${policyMatchAllActions ? 'all actions' : policyForm.action || 'the selected action'} on ${policyForm.resourceType === POLICY_ALL_RESOURCES ? 'all resource types' : selectedPolicyResourceType?.label || 'the selected resource type'}.`}
+              />
+              <Checkbox
+                id="policy-risk-acknowledged"
+                labelText="I understand the scope of this broad policy."
+                checked={policyRiskAcknowledged}
+                onChange={(_event, { checked }) => setPolicyRiskAcknowledged(Boolean(checked))}
+              />
+            </div>
+          )}
+          <Accordion>
+            <AccordionItem title="Advanced conditions (JSON)">
+              <TextArea
+                id="policy-conditions"
+                labelText="Conditions"
+                helperText="Optional. Add valid JSON only when this policy must apply under specific conditions."
+                value={policyConditionsJson}
+                rows={8}
+                invalid={!policyConditionsJsonValid}
+                invalidText="Conditions must be valid JSON."
+                onChange={(event) => setPolicyConditionsJson(event.target.value)}
+              />
+            </AccordionItem>
+          </Accordion>
         </div>
       </Modal>
     </PageLayout>

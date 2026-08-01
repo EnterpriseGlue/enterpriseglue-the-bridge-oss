@@ -38,7 +38,12 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
   // Build items list (no "All Engines" option)
   const items = React.useMemo(() => {
     if (engines.length === 0) return []
-    return engines.map(e => ({ id: e.id, label: e.name || e.baseUrl }))
+    return engines.map(e => ({
+      id: e.id,
+      label: e.name || e.baseUrl,
+      technicalId: e.id,
+      baseUrl: e.baseUrl,
+    }))
   }, [engines])
 
   // Find current selection
@@ -55,11 +60,20 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
   return (
     <Dropdown
       id="engine-selector"
+      aria-label={label || 'Engine'}
       titleText=""
       label={label}
       size={size}
       items={items}
       itemToString={(item: any) => item?.label || ''}
+      itemToElement={(item: any) => (
+        <div style={{ display: 'grid', gap: '0.125rem', minWidth: 0 }}>
+          <span>{item?.label || ''}</span>
+          <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', overflowWrap: 'anywhere' }}>
+            {item?.technicalId}
+          </span>
+        </div>
+      )}
       selectedItem={currentItem}
       onChange={({ selectedItem }: any) => {
         if (selectedItem?.id) {

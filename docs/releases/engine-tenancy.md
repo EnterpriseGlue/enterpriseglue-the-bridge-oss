@@ -25,7 +25,7 @@ EnterpriseGlue now models engine topology explicitly:
 - bounded operational metrics report resolution health and provisioning
   fallback adoption without exposing identifiers; and
 - the same engine-tenancy migration and mapping contract passes all 35
-  lifecycle stage cells and all ten upgrade-baseline observations across
+  lifecycle stage cells and all twenty upgrade-baseline observations across
   PostgreSQL, MySQL, SQL Server, Oracle, and Spanner with one equivalent
   logical-schema fingerprint.
 

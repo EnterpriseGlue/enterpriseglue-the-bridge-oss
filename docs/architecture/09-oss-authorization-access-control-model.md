@@ -121,7 +121,11 @@ Customer-managed sidecars do not change the EnterpriseGlue authorization model. 
 
 For v1, model the sidecar as the registered engine endpoint with `connectionMode = customer_sidecar`. The customer-owned sidecar injects its peer-to-peer token or local service identity on the downstream engine hop. That downstream credential is outside EnterpriseGlue configuration, persistence, OpenAPI, UI, logs, audit payloads, and support diagnostics.
 
-The EnterpriseGlue-to-sidecar hop may use a private credentialless endpoint only when platform policy explicitly permits it. Prefer mTLS, API-key references, or OAuth client credentials where supported. A credentialless direct-engine endpoint must be rejected.
+The EnterpriseGlue-to-sidecar hop may omit an EnterpriseGlue-stored downstream
+engine credential only when platform policy explicitly permits the
+peer-authenticated customer-sidecar contract. Prefer mTLS, API-key references,
+OAuth client credentials, or peer-to-peer service-token validation where
+supported. An unauthenticated direct-engine endpoint must be rejected.
 
 Do not require a sidecar principal, heartbeat, inventory, JWKS, nonce store, or EnterpriseGlue-issued action token for this v1 transport. Those belong to a separate optional cooperating-sidecar protocol and remain deferred.
 
@@ -499,6 +503,16 @@ Platform developer is a compatibility role for older installs or integrations th
 
 ### Platform User
 Default least-privileged platform role.
+
+**Default permissions**
+- view the dashboard
+- create projects, becoming the owner of each new project
+
+Platform User does not include `platform:engine:create`. Registering an engine
+is a separate registry-administration capability, while using an engine
+requires an explicit engine, Engine Set, runtime-resource, or
+runtime-resource-set grant. This keeps normal organization membership separate
+from SSO-provisioned engine access.
 
 ## Project Authorization Model
 

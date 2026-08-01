@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import {
   Button,
   DataTable,
   DataTableSkeleton,
   InlineNotification,
+  Modal,
   Table,
   TableBody,
   TableCell,
@@ -13,7 +15,7 @@ import {
   TableToolbarContent,
   Tag,
 } from '@carbon/react';
-import { Add, TrashCan } from '@carbon/icons-react';
+import { Add } from '@carbon/icons-react';
 import { formatEngineSetMatchedBy, formatEngineSetSelector } from '../accessControlPresentation';
 import type {
   ApiClient,
@@ -27,15 +29,16 @@ import type {
 } from '../../hooks/useAuthzApi';
 import { AssignmentSourceTag } from './AssignmentSourceTag';
 import { DataTableDataRow, DataTableHeaderCell, dataTableHeaderKey } from './dataTablePrimitives';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards';
 
 const engineSetHeaders = [
-  { key: 'name', header: 'Engine Set' },
+  { key: 'name', header: 'Engine set' },
   { key: 'key', header: 'Key' },
   { key: 'selector', header: 'Selector' },
   { key: 'engines', header: 'Engines' },
   { key: 'source', header: 'Source' },
   { key: 'status', header: 'Status' },
-  { key: 'materialized', header: 'Materialized' },
+  { key: 'materialized', header: 'Matching engines refreshed' },
   { key: 'actions', header: '' },
 ];
 
@@ -61,12 +64,20 @@ const engineSetAuditPreviewHeaders = [
   { key: 'reason', header: 'Reason' },
 ];
 
+function effectiveEngineSetSource(engineSet: EngineSetSummary) {
+  // Engine Sets created before source ownership was introduced are manual.
+  // Keeping this fallback in the presentation layer lets administrators open
+  // and update those rows before a later persistence migration backfills them.
+  return engineSet.source || 'manual';
+}
+
 function isSourceOwnedEngineSet(engineSet: EngineSetSummary) {
-  return engineSet.source !== 'manual' && !(engineSet.source === 'config' && engineSet.ownershipMode === 'config_warn');
+  const source = effectiveEngineSetSource(engineSet);
+  return source !== 'manual' && !(source === 'config' && engineSet.ownershipMode === 'config_warn');
 }
 
 function engineSetSourceOwnershipReason(engineSet: EngineSetSummary) {
-  const owner = engineSet.source.replace(/_/g, ' ');
+  const owner = effectiveEngineSetSource(engineSet).replace(/_/g, ' ');
   return `Managed by ${owner}${engineSet.sourceRef ? ` (${engineSet.sourceRef})` : ''}`;
 }
 
@@ -144,17 +155,36 @@ export function EngineSetsPanel({
   assignmentsReadUnavailableReason?: string;
   auditReadUnavailableReason?: string;
 }) {
+  const [archiveTarget, setArchiveTarget] = useState<EngineSetSummary | null>(null);
   if (loading) return <DataTableSkeleton headers={engineSetHeaders} rowCount={4} />;
   const selectedEngineSetMaterializations = selectedEngineSet?.materializations || [];
-  const selectedEngineSetLabel = selectedEngineSet?.name || selectedEngineSet?.key || 'Selected Engine Set';
+  const selectedEngineSetLabel = selectedEngineSet?.name || selectedEngineSet?.key || 'Selected engine set';
   const selectedAssignments = selectedEngineSet
     ? assignments.filter((assignment) => assignmentScopeMatches(assignment, 'engine_set', selectedEngineSet.id))
     : [];
 
+  if (engineSets.length === 0) {
+    return (
+      <div style={{ display: 'grid', gap: 'var(--spacing-4)', padding: 'var(--spacing-6)', border: '1px solid var(--cds-border-subtle)', background: 'var(--cds-layer-01)' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Group engines for reusable access</h3>
+          <p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>
+            Engine sets let one scoped role assignment follow a reviewed group of engines selected by labels or explicit membership.
+          </p>
+        </div>
+        <div>
+          <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={manageUnavailableReason}>
+            Create engine set
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
       {materializeSummary && (
-        <InlineNotification kind="info" title="Engine Set materialized" subtitle={materializeSummary} lowContrast />
+        <InlineNotification kind="info" title="Matching engines refreshed" subtitle={materializeSummary} lowContrast />
       )}
       <TableContainer>
         <DataTable
@@ -164,7 +194,7 @@ export function EngineSetsPanel({
             key: engineSet.key,
             selector: formatEngineSetSelector(engineSet.selector),
             engines: engineSet.materializedEngineCount,
-            source: engineSet.source,
+            source: effectiveEngineSetSource(engineSet),
             status: engineSet.isArchived ? 'Archived' : engineSet.materializationStatus || 'Active',
             materialized: engineSet.lastMaterializedAt ? new Date(engineSet.lastMaterializedAt).toLocaleString() : 'Never',
             actions: '',
@@ -176,7 +206,7 @@ export function EngineSetsPanel({
               <TableToolbar>
                 <TableToolbarContent>
                   <Button kind="primary" renderIcon={Add} onClick={onCreate} disabled={!canManage} title={manageUnavailableReason}>
-                    Create Engine Set
+                    Create engine set
                   </Button>
                 </TableToolbarContent>
               </TableToolbar>
@@ -191,7 +221,7 @@ export function EngineSetsPanel({
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={headers.length}>No Engine Sets are defined yet.</TableCell>
+                      <TableCell colSpan={headers.length}>No engine sets are defined yet.</TableCell>
                     </TableRow>
                   ) : rows.map((row) => {
                     const engineSet = engineSets.find((item) => item.id === row.id);
@@ -205,7 +235,8 @@ export function EngineSetsPanel({
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
                         {row.cells.map((cell) => {
                           if (cell.info.header === 'source') {
-                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={engineSet?.source === 'config' && engineSet.ownershipMode === 'config_warn' ? 'warm-gray' : engineSet?.source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{engineSet?.source === 'config' && engineSet.ownershipMode === 'config_warn' ? 'Config warning' : engineSet?.source === 'config' ? 'Managed by config' : cell.value}</Tag>{engineSet?.driftStatus === 'drifted' && <Tag type="red">Drifted</Tag>}</div></TableCell>;
+                            const source = engineSet ? effectiveEngineSetSource(engineSet) : 'manual';
+                            return <TableCell key={cell.id}><div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}><Tag type={source === 'config' && engineSet?.ownershipMode === 'config_warn' ? 'warm-gray' : source === 'config' ? 'purple' : sourceOwned ? 'cyan' : 'gray'}>{source === 'config' && engineSet?.ownershipMode === 'config_warn' ? 'Configuration-linked' : source === 'config' ? 'Managed by configuration' : cell.value}</Tag>{engineSet?.driftStatus === 'drifted' && <Tag type="red">Different from configuration</Tag>}</div></TableCell>;
                           }
                           if (cell.info.header === 'status') {
                             const status = String(cell.value);
@@ -216,14 +247,14 @@ export function EngineSetsPanel({
                             return (
                               <TableCell key={cell.id}>
                                 {engineSet && (
-                                  <>
-                                    <Button kind="ghost" size="sm" onClick={() => onSelect(engineSet.id)}>Details</Button>
-                                    <Button kind="ghost" size="sm" disabled={pending || Boolean(rowManageUnavailableReason)} title={rowManageUnavailableReason} onClick={() => onEdit(engineSet)}>Edit</Button>
-                                    <Button kind="ghost" size="sm" disabled={pending || !canManage || engineSet.isArchived} title={!canManage ? manageUnavailableReason : engineSet.isArchived ? 'Archived Engine Sets cannot be materialized' : undefined} onClick={() => onMaterialize(engineSet.id)}>Materialize</Button>
+                                  <GuardedOverflowMenu size="sm" flipped iconDescription={`Actions for ${engineSet.name}`}>
+                                    <GuardedOverflowMenuItem itemText="View details" onClick={() => onSelect(engineSet.id)} />
+                                    <GuardedOverflowMenuItem itemText="Edit" disabled={pending || Boolean(rowManageUnavailableReason)} unavailableReason={rowManageUnavailableReason} onClick={() => onEdit(engineSet)} />
+                                    <GuardedOverflowMenuItem itemText="Refresh matching engines" disabled={pending || !canManage || engineSet.isArchived} unavailableReason={!canManage ? manageUnavailableReason : engineSet.isArchived ? 'Archived engine sets cannot be refreshed' : undefined} onClick={() => onMaterialize(engineSet.id)} />
                                     {!engineSet.isArchived && (
-                                      <Button kind="ghost" size="sm" disabled={pending || Boolean(rowManageUnavailableReason)} title={rowManageUnavailableReason} renderIcon={TrashCan} onClick={() => onArchive(engineSet.id)}>Archive</Button>
+                                      <GuardedOverflowMenuItem itemText="Archive" isDelete disabled={pending || Boolean(rowManageUnavailableReason)} unavailableReason={rowManageUnavailableReason} onClick={() => setArchiveTarget(engineSet)} />
                                     )}
-                                  </>
+                                  </GuardedOverflowMenu>
                                 )}
                               </TableCell>
                             );
@@ -244,7 +275,7 @@ export function EngineSetsPanel({
         <DataTableSkeleton headers={engineSetMaterializationHeaders} rowCount={3} />
       ) : selectedEngineSet ? (
         <>
-          <TableContainer title={`${selectedEngineSetLabel} materializations`}>
+          <TableContainer title={`${selectedEngineSetLabel} matching engines`}>
             <DataTable
               rows={selectedEngineSetMaterializations.map((materialization) => ({
                 id: materialization.id,
@@ -267,7 +298,7 @@ export function EngineSetsPanel({
                   <TableBody>
                     {rows.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={headers.length}>No engines are currently materialized for this Engine Set.</TableCell>
+                        <TableCell colSpan={headers.length}>No engines currently match this engine set.</TableCell>
                       </TableRow>
                     ) : rows.map((row) => (
                       <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
@@ -309,7 +340,7 @@ export function EngineSetsPanel({
                       <TableBody>
                         {rows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={headers.length}>No role assignments target this Engine Set.</TableCell>
+                            <TableCell colSpan={headers.length}>No role assignments target this engine set.</TableCell>
                           </TableRow>
                         ) : rows.map((row) => (
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
@@ -359,7 +390,7 @@ export function EngineSetsPanel({
                       <TableBody>
                         {rows.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={headers.length}>No authorization audit events reference this Engine Set.</TableCell>
+                            <TableCell colSpan={headers.length}>No authorization audit events reference this engine set.</TableCell>
                           </TableRow>
                         ) : rows.map((row) => (
                           <DataTableDataRow key={row.id} row={row} getRowProps={getRowProps}>
@@ -385,8 +416,24 @@ export function EngineSetsPanel({
           )}
         </>
       ) : (
-        <InlineNotification kind="info" title="Select an Engine Set to inspect materialized engines and selector lineage" lowContrast />
+        <InlineNotification kind="info" title="Select an engine set to inspect matching engines and technical matching details" lowContrast />
       )}
+      <Modal
+        open={Boolean(archiveTarget)}
+        danger
+        modalHeading="Archive engine set"
+        primaryButtonText="Archive"
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={pending}
+        onRequestClose={() => setArchiveTarget(null)}
+        onRequestSubmit={() => {
+          if (!archiveTarget) return;
+          onArchive(archiveTarget.id);
+          setArchiveTarget(null);
+        }}
+      >
+        Archive <strong>{archiveTarget?.name}</strong>? Existing assignments and matching history remain visible, but the set cannot be selected for new access.
+      </Modal>
     </div>
   );
 }
