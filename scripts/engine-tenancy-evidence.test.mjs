@@ -341,7 +341,7 @@ test('requires real five-adapter database qualification evidence', () => {
     'rollback',
     'cleanup',
   ]);
-  assert.equal(databaseMatrixContract.upgradeBaselines.length, 2);
+  assert.equal(databaseMatrixContract.upgradeBaselines.length, 4);
   assert.match(databaseMatrixRunner, /schemaFingerprints\.size === 1/);
   assert.match(databaseMatrixRunner, /releaseCommitQualified: status === 'passed' && sourceState === 'clean'/);
   assert.match(databaseMatrixRunner, /Database-matrix evidence must be run from a clean worktree/);
