@@ -445,6 +445,7 @@ jobs:
             -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
             -e ADMIN_EMAIL \
             -e ADMIN_PASSWORD \
+            -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
@@ -464,6 +465,7 @@ jobs:
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_SEED_USER=false \
             -e IDENTITY_TEST_EVIDENCE_PATH=test/results/identity-lifecycle-evidence.json \
+            -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
@@ -491,6 +493,7 @@ jobs:
             -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_SEED_USER=false \
+            -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \

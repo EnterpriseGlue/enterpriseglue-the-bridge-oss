@@ -130,6 +130,11 @@ test('the pull-request workflow retains browser and database evidence when autho
     assert.match(workflow, /node test\/e2e\/mock-camunda\/server\.mjs/);
     assert.match(workflow, /curl -sf http:\/\/localhost:9080\/health/);
     assert.doesNotMatch(workflow, /local-docs\/ING\/api-specs\/Mission-Control-Camunda-API\.postman_collection\.json/);
+    assert.equal(
+      (workflow.match(/-e ENCRYPTION_KEY/g) || []).length,
+      3,
+      'every Playwright container must receive the validated encryption key',
+    );
   }
   assert.match(authzPrWorkflow, /cron: "15 3 \* \* \*"/);
   assert.match(authzPrWorkflow, /\["chromium"\]/);
