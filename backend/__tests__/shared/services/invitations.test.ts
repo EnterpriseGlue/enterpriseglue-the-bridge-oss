@@ -227,7 +227,9 @@ describe('InvitationService', () => {
       resourceRole: 'viewer',
       resourceRolesJson: JSON.stringify(['viewer']),
       deliveryMethod: 'email',
-      expiresAt: now - 1,
+      // PostgreSQL exposes bigint columns as strings even though the entity
+      // property is typed as a number.
+      expiresAt: String(now - 1),
       status: 'pending',
       revokedAt: null,
       completedAt: null,
@@ -237,6 +239,7 @@ describe('InvitationService', () => {
     await expect(service.getInvitationInfo('invite-token')).resolves.toEqual(expect.objectContaining({
       email: 'invitee@example.com',
       deliveryMethod: 'email',
+      expiresAt: now - 1,
       status: 'expired',
     }));
   });

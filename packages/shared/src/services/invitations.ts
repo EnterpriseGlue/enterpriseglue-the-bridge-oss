@@ -152,7 +152,9 @@ function toInvitationInfo(invitation: Invitation, now: number): InvitationInfo {
     resourceRole: invitation.resourceRole,
     resourceRoles: parseRoles(invitation.resourceRolesJson),
     deliveryMethod: invitation.deliveryMethod,
-    expiresAt: invitation.expiresAt,
+    // PostgreSQL returns bigint columns as strings. Normalize at the service
+    // boundary so every adapter exposes the numeric public API contract.
+    expiresAt: Number(invitation.expiresAt),
     status: toInvitationDisplayStatus(invitation, now),
   };
 }
