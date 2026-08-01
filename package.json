@@ -29,7 +29,7 @@
     "lint": "eslint backend frontend packages scripts test --max-warnings=0",
     "typecheck": "pnpm --filter webmodeler-backend run typecheck && pnpm --filter webmodeler-frontend run typecheck && pnpm --filter frontend-host run typecheck",
     "guard:published-package-runtime": "pnpm --filter shared run build && pnpm --filter backend-host run build && node scripts/check-published-host-package.mjs",
-    "test:ci-change-detection": "node --test scripts/ci-change-detection.test.mjs",
+    "test:ci-change-detection": "node --test scripts/ci-change-detection.test.mjs scripts/pr-release-label-workflows.test.mjs",
     "test:workspace-runtime-contract": "node --test scripts/workspace-runtime-contract.test.mjs",
     "test:unit": "pnpm --filter webmodeler-backend run test:unit && pnpm --filter webmodeler-frontend run test:unit",
     "test:integration": "pnpm --filter webmodeler-backend run test:integration",

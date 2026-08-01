@@ -583,12 +583,17 @@ jobs:
             await ensureLabelExists(targetReleaseLabel);
             for (const label of existingReleaseLabels) {
               if (label === targetReleaseLabel) continue;
-              await github.rest.issues.removeLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                name: label,
-              });
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  name: label,
+                });
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                core.notice(`Release label already removed by another workflow: ${label}`);
+              }
             }
 
             if (!existingReleaseLabels.includes(targetReleaseLabel)) {
