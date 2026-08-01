@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { getE2ECredentials, hasE2ECredentials } from '../utils/credentials';
+import { listAuthzActions } from '../../../packages/shared/src/authz/permission-actions.ts';
 
 const shouldSkip = !hasE2ECredentials();
 const projectId = '11111111-1111-1111-8111-111111111111';
@@ -42,6 +43,29 @@ const BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
 const SECONDARY_BPMN_XML = BPMN_XML.split('approval-process').join('quote-process').split('Approve Invoice').join('Review Quote');
 const VERSION_ONE_BPMN_XML = BPMN_XML.replace('Approve Invoice', 'Approve Invoice v1');
 const VERSION_TWO_BPMN_XML = BPMN_XML.replace('Approve Invoice', 'Approve Invoice v2');
+const projectPermissions = [...new Set(
+  listAuthzActions()
+    .filter((action) => action.resourceType === 'project')
+    .map((action) => action.permissionId),
+)];
+
+async function stubProjectPermissionSnapshot(page: Page) {
+  await page.route('**/api/authz/me/permissions', async (route) => {
+    const response = await route.fetch();
+    const snapshot = await response.json() as Record<string, unknown>;
+    const projects = Array.isArray(snapshot.projects)
+      ? snapshot.projects.filter((entry) => (entry as { resourceId?: string }).resourceId !== projectId)
+      : [];
+
+    await route.fulfill({
+      response,
+      json: {
+        ...snapshot,
+        projects: [...projects, { resourceId: projectId, permissions: projectPermissions }],
+      },
+    });
+  });
+}
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
   await route.fulfill({
@@ -781,6 +805,13 @@ async function stubEditorCollaboration(page: Page, sessionStatus: CollaborationL
 test.describe('Smoke: Starbase versioning split', () => {
   test.skip(shouldSkip, 'E2E_USER/E2E_PASSWORD not set');
 
+  test.beforeEach(async ({ page }) => {
+    // These tests intentionally stub a fixed project instead of persisting it.
+    // Keep the server-calculated browser snapshot consistent with that fake
+    // resource so permission UX remains part of the scenario.
+    await stubProjectPermissionSnapshot(page);
+  });
+
   test('offline projects save versions via local file versions API @smoke', async ({ page }) => {
     await login(page);
     const state = await stubEditorVersioning(page, 'offline');
@@ -978,7 +1009,11 @@ test.describe('Smoke: Starbase versioning split', () => {
     await page.goto(`/starbase/editor/${primaryFileId}`);
     await expect(page.getByRole('status').getByText(/Alex Editor appears idle/i)).toBeVisible();
     await expect(page.getByRole('heading', { name: /take over editing\?/i })).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'Versions' })).toBeDisabled();
+    // Read-only collaborators may inspect history, but cannot create a
+    // version until they explicitly take over the editing lock.
+    await page.getByRole('button', { name: 'Versions' }).click();
+    await expect(page.getByRole('button', { name: /new version|save version/i })).toBeDisabled();
+    await page.getByRole('button', { name: 'Close' }).click();
 
     await page.getByRole('button', { name: /^Take over$/i }).click();
     await expect(page.getByRole('heading', { name: /take over editing\?/i })).toBeVisible();
@@ -987,5 +1022,7 @@ test.describe('Smoke: Starbase versioning split', () => {
     await expect.poll(() => collaboration.acquireBodies.filter((body) => body.force === true).length).toBe(1);
     expect(collaboration.acquireBodies[collaboration.acquireBodies.length - 1]).toMatchObject({ fileId: primaryFileId, force: true });
     await expect(page.getByRole('button', { name: 'Versions' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Versions' }).click();
+    await expect(page.getByRole('button', { name: /new version|save version/i })).toBeEnabled();
   });
 });

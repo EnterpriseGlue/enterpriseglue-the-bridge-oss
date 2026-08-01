@@ -55,7 +55,7 @@ export function useOnlineProjectWizard({
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const queryClient = useQueryClient()
-  const { hasEnginePermission, permissions } = useAuth()
+  const { hasEnginePermission, permissions, refreshPermissions } = useAuth()
   const isExistingProject = !!existingProjectId
   const gitCreateDecision = evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform', id: null })
   const gitInspectDecision = evaluateActionSnapshot(permissions, 'project.create.git.inspect', { type: 'platform', id: null })
@@ -495,9 +495,12 @@ export function useOnlineProjectWizard({
         throw new Error(parsed.message || 'Failed to create project')
       }
     },
-    onSuccess: (data: CreateOnlineProjectResponse) => {
-      queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
-      queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
+    onSuccess: async (data: CreateOnlineProjectResponse) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
+        queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] }),
+        refreshPermissions(),
+      ])
       resetForm()
       onClose()
       safeNavigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.project.id))}`), { state: { name: data.project.name } })
@@ -520,7 +523,10 @@ export function useOnlineProjectWizard({
       }
     },
     onSuccess: async (data: CreateProjectResponse) => {
-      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
+        refreshPermissions(),
+      ])
       resetForm()
       onClose()
       safeNavigate(toTenantPath(`/starbase/project/${encodeURIComponent(sanitizePathParam(data.id))}`), { state: { name: data.name } })
@@ -585,9 +591,12 @@ export function useOnlineProjectWizard({
         conflictStrategy,
       })
     },
-    onSuccess: (data: { projectId: string; projectName: string }) => {
-      queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
-      queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] })
+    onSuccess: async (data: { projectId: string; projectName: string }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] }),
+        queryClient.invalidateQueries({ queryKey: ['git', 'repositories'] }),
+        refreshPermissions(),
+      ])
       resetForm()
       onClose()
       if (data?.projectId) {
