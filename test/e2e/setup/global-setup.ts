@@ -832,6 +832,7 @@ export default async function globalSetup() {
   const expiredEmail = `e2e-expired-scope-${Date.now()}-${suffix}@example.com`;
   const expiredPassword = `E2eExpiredScope-${suffix}-Pass1!`;
   const expiredEngineId = randomUUID();
+  const expiredEngineName = `${prefix}-expired-engine`;
   const expiredPasswordHash = await hashPassword(expiredPassword);
   await pool.query(
     `INSERT INTO ${schema}.users
@@ -856,7 +857,7 @@ export default async function globalSetup() {
        tenancy_mode, tenant_resolution_status, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
     [
-      expiredEngineId, `${prefix}-expired-engine`, engineBaseUrl, 'camunda7', null,
+      expiredEngineId, expiredEngineName, engineBaseUrl, 'camunda7', null,
       null, null, null, userId, null, null, false, 'tenant-default', 'dedicated',
       'ready', now, now,
     ]
@@ -958,6 +959,7 @@ export default async function globalSetup() {
       expiredPassword,
       expiredUserId,
       expiredEngineId,
+      expiredEngineName,
       disabledDirectProviderIds,
       cleanupAdmin: Boolean(adminUserId),
       membershipSourceRef,

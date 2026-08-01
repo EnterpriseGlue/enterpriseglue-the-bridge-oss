@@ -54,7 +54,7 @@ async function responseJson<T>(response: APIResponse, operation: string): Promis
 async function loginAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }

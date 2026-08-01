@@ -29,7 +29,7 @@ async function login(page: Page, email: string, password: string): Promise<void>
   // context under the macOS headless keyboard layout. Filling exercises the
   // same browser validation and submits the exact fixture credentials.
   await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   // The personas deliberately receive only engine-scoped access, so their
   // default landing page is not an authorization prerequisite. Prove the

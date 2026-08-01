@@ -92,6 +92,7 @@ export function getE2EFineGrainedFixture() {
     expiredPassword: data.expiredPassword,
     expiredUserId: data.expiredUserId,
     expiredEngineId: data.expiredEngineId,
+    expiredEngineName: data.expiredEngineName,
   };
 }
 

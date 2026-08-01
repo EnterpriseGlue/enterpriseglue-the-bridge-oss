@@ -45,7 +45,7 @@ async function login(page: Page): Promise<void> {
   if (!email || !password) throw new Error('Disposable local browser credentials are unavailable');
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(/\/t\/default(?:\/|$)/);
 }

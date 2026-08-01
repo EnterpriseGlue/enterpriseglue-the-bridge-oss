@@ -54,7 +54,7 @@ async function login(page: Page) {
 async function loginAs(page: Page, email: string, password: string) {
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).pressSequentially(email);
-  await page.getByLabel(/password/i).pressSequentially(password);
+  await page.getByLabel('Password', { exact: true }).pressSequentially(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -64,6 +64,10 @@ async function request(page: Page, path: string, init?: RequestInit) {
     const response = await fetch(path, init);
     return { status: response.status, body: await response.json().catch(() => null) };
   }, { path, init });
+}
+
+function authorizationGraphVersion(version: string): string {
+  return version.replace(/:actions:[a-f0-9]+$/, '');
 }
 
 test.describe('Smoke: fine-grained local engine access', () => {
@@ -128,7 +132,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
 
     await page.goto('/login?local=1');
     await page.getByLabel(/email/i).pressSequentially(groupFixture.email!);
-    await page.getByLabel(/password/i).pressSequentially(groupFixture.password!);
+    await page.getByLabel('Password', { exact: true }).pressSequentially(groupFixture.password!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
@@ -204,7 +208,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
 
     await page.goto('/login?local=1');
     await page.getByLabel(/email/i).pressSequentially(fixture.expiredEmail!);
-    await page.getByLabel(/password/i).pressSequentially(fixture.expiredPassword!);
+    await page.getByLabel('Password', { exact: true }).pressSequentially(fixture.expiredPassword!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
@@ -223,7 +227,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
 
     await page.goto('/login?local=1');
     await page.getByLabel(/email/i).pressSequentially(fixture.groupEmail!);
-    await page.getByLabel(/password/i).pressSequentially(fixture.groupPassword!);
+    await page.getByLabel('Password', { exact: true }).pressSequentially(fixture.groupPassword!);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 
@@ -292,10 +296,11 @@ test.describe('Smoke: fine-grained local engine access', () => {
     for (const snapshot of await Promise.all(activeSnapshots)) {
       expect(snapshot.status, JSON.stringify(snapshot.body)).toBe(200);
       const engineIds = snapshot.body.engines.map((engine: { resourceId: string }) => engine.resourceId);
-      if (snapshot.body.authorizationVersion === after.body.authorizationVersion) {
+      const snapshotGraphVersion = authorizationGraphVersion(snapshot.body.authorizationVersion);
+      if (snapshotGraphVersion === authorizationGraphVersion(after.body.authorizationVersion)) {
         expect(engineIds).not.toContain(fixture.scopedEngineId);
       } else {
-        expect(snapshot.body.authorizationVersion).toBe(before.body.authorizationVersion);
+        expect(snapshotGraphVersion).toBe(authorizationGraphVersion(before.body.authorizationVersion));
         expect(engineIds).toContain(fixture.scopedEngineId);
       }
     }
@@ -319,10 +324,10 @@ test.describe('Smoke: fine-grained local engine access', () => {
     // revalidate against the current snapshot instead of showing the old row.
     await staleTab.goto('/t/default/');
     await staleTab.goBack();
-    await expect(staleTab.getByRole('heading', { name: /^engines$/i })).toBeVisible();
+    await expect(staleTab.getByRole('heading', { name: 'Access Denied', exact: true })).toBeVisible();
     await expect(staleTab.getByText(fixture.scopedEngineName!, { exact: true })).not.toBeVisible();
     await staleTab.goto('/t/default/engines');
-    await expect(staleTab.getByRole('heading', { name: /^engines$/i })).toBeVisible();
+    await expect(staleTab.getByRole('heading', { name: 'Access Denied', exact: true })).toBeVisible();
     await expect(staleTab.getByText(fixture.scopedEngineName!, { exact: true })).not.toBeVisible();
     await staleTab.close();
   });

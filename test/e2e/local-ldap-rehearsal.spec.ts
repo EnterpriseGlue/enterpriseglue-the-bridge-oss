@@ -62,7 +62,7 @@ test.describe('Local LDAP rehearsal', () => {
     await page.goto('/login');
     await page.getByRole('button', { name: `Continue with ${providerKey}` }).click();
     await page.getByLabel('Username').fill(username);
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     const loginResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return response.request().method() === 'POST' && /^\/api\/auth\/providers\/[^/]+\/login$/.test(url.pathname);

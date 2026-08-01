@@ -65,7 +65,7 @@ async function login(page: Page): Promise<void> {
   if (!email || !password) throw new Error('Disposable local test credentials are unavailable');
   await page.goto('/login?local=1');
   await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   const loginResponse = page.waitForResponse((response) =>
     response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/auth/login',
   );
