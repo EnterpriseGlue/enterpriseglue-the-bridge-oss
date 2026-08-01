@@ -24,8 +24,10 @@ import logoPng from '../assets/logo.png';
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
-function normalizeBranding(raw: any): PublicPlatformBranding {
-  const r = raw && typeof raw === 'object' ? raw : {};
+function normalizeBranding(raw: unknown): PublicPlatformBranding {
+  const r: Record<string, unknown> = raw && typeof raw === 'object'
+    ? raw as Record<string, unknown>
+    : {};
   return {
     logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
     loginLogoUrl: typeof r.loginLogoUrl === 'string' ? r.loginLogoUrl : null,
@@ -39,7 +41,6 @@ function normalizeBranding(raw: any): PublicPlatformBranding {
     titleVerticalOffset: typeof r.titleVerticalOffset === 'number' ? r.titleVerticalOffset : 0,
     menuAccentColor: typeof r.menuAccentColor === 'string' ? r.menuAccentColor : null,
     faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
-    ssoAutoRedirectSingleProvider: Boolean(r.ssoAutoRedirectSingleProvider),
   };
 }
 
@@ -168,7 +169,7 @@ export default function AcceptInvite() {
     apiClient.get<unknown>('/api/auth/branding', undefined, { credentials: 'include' })
       .then((data) => {
         if (cancelled || !data || typeof data !== 'object') return;
-        const normalized = normalizeBranding(data as any);
+        const normalized = normalizeBranding(data);
         try {
           window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(normalized));
         } catch {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
@@ -50,6 +50,9 @@ describe('IdentityMappingsSettingsTab', () => {
   it('renders manual mappings from the provider-neutral API', async () => {
     renderTab();
     await waitFor(() => expect(screen.getByText('group.engine-operators')).toBeInTheDocument());
+    expect(screen.getByText('Engine operators')).toBeInTheDocument();
+    expect(screen.getByText('Keep in sync')).toBeInTheDocument();
+    expect(screen.getByText('Add and remove members')).toBeInTheDocument();
     expect(screen.getByText('Manual')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Add mapping/i })).toBeEnabled();
   });
@@ -79,19 +82,19 @@ describe('IdentityMappingsSettingsTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
 
-    expect(await screen.findByText('Step 1 of 3')).toBeInTheDocument();
-    expect(screen.getByText('Choose the provider entitlement that identifies members.')).toBeInTheDocument();
+    expect((await screen.findAllByText('External identity data')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Provider and match rule')).toBeInTheDocument();
     expect(document.getElementById('identity-mapping-group')).not.toBeVisible();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
     expect(screen.getAllByRole('button', { name: 'Cancel' }).length).toBeGreaterThan(0);
   });
 
   it.each([
-    ['engine', 'One engine', 'Main engine', 'engine-1'],
-    ['engine_set', 'Engine Set', 'Production engines (engines.production)', 'engine-set-1'],
-    ['engine_runtime_resource', 'One runtime resource', 'invoice-process (process)', 'runtime-resource-1'],
-    ['engine_runtime_resource_set', 'Runtime Resource Set', 'Payments resources (runtime.payments)', 'runtime-resource-set-1'],
-  ] as const)('completes all mapping-wizard steps and atomically provisions %s access', async (resourceType, _scopeLabel, targetLabel, resourceId) => {
+    ['engine', 'One engine', 'Main engine', 'Main engine', 'engine-1'],
+    ['engine_set', 'Engine set', 'Production engines (engines.production)', 'Production engines', 'engine-set-1'],
+    ['engine_runtime_resource', 'One runtime resource', 'invoice-process (process)', 'invoice-process', 'runtime-resource-1'],
+    ['engine_runtime_resource_set', 'Runtime resource set', 'Payments resources (runtime.payments)', 'Payments resources', 'runtime-resource-set-1'],
+  ] as const)('completes all mapping-wizard steps and atomically provisions %s access', async (resourceType, _scopeLabel, targetLabel, targetName, resourceId) => {
     const provisionRequests: unknown[] = [];
     const user = userEvent.setup();
     authState.permissions = {
@@ -115,15 +118,15 @@ describe('IdentityMappingsSettingsTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
     fireEvent.click(screen.getByRole('combobox', { name: 'Identity provider' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'demo-oidc' }));
-    fireEvent.change(screen.getByLabelText('External ID'), { target: { value: 'operations' } });
+    fireEvent.click(await screen.findByRole('option', { name: 'Demo OIDC (demo-oidc)' }));
+    fireEvent.change(screen.getByLabelText('External group, role, or attribute value'), { target: { value: 'operations' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByText('Step 2 of 3')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Create a new group' }));
+    expect(await screen.findByText('Group and access')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('radio', { name: 'Create a new group' }));
     fireEvent.change(await screen.findByLabelText('New EnterpriseGlue group name'), { target: { value: `Operators ${resourceType}` } });
     fireEvent.change(screen.getByLabelText('New group key'), { target: { value: `group.operators.${resourceType}` } });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Grant scoped engine access now' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Also grant engine access' }));
     fireEvent.click(document.getElementById('identity-mapping-provision-role')!);
     fireEvent.click(await screen.findByRole('option', { name: 'Engine operator' }));
     await user.selectOptions(document.getElementById('identity-mapping-provision-scope') as HTMLSelectElement, resourceType);
@@ -134,7 +137,7 @@ describe('IdentityMappingsSettingsTab', () => {
       fireEvent.click(document.getElementById('identity-mapping-provision-engine')!);
       fireEvent.click(await screen.findByRole('option', { name: targetLabel }));
     } else if (resourceType === 'engine_set') {
-      const engineSetSelectors = await screen.findAllByRole('combobox', { name: 'Engine Set' });
+      const engineSetSelectors = await screen.findAllByRole('combobox', { name: 'Engine set' });
       fireEvent.click(engineSetSelectors[0]);
       fireEvent.click(await screen.findByRole('option', { name: targetLabel }));
     } else {
@@ -153,11 +156,16 @@ describe('IdentityMappingsSettingsTab', () => {
     }
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByText('Step 3 of 3')).toBeInTheDocument();
-    expect(screen.getByText('Ready to create atomically')).toBeInTheDocument();
+    expect(await screen.findByText('Review')).toBeInTheDocument();
+    expect(screen.getByText('Ready to create')).toBeInTheDocument();
+    expect(screen.getByText('EnterpriseGlue will create the new group, identity mapping, and engine role assignment together. If any step fails, nothing will be saved.')).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Identity mapping review')).getByText(targetName, { exact: false })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Create mapping' }));
 
     await waitFor(() => expect(provisionRequests).toHaveLength(1));
+    expect(await screen.findByText('Identity mapping created')).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Demo OIDC now maps matching identities to Operators ${resourceType}`))).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Members also receive Engine operator access to ${targetName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))).toBeInTheDocument();
     expect(provisionRequests[0]).toEqual(expect.objectContaining({
       providerKey: 'demo-oidc',
       newGroup: { name: `Operators ${resourceType}`, key: `group.operators.${resourceType}` },
@@ -172,41 +180,49 @@ describe('IdentityMappingsSettingsTab', () => {
     await screen.findByText('group.engine-operators');
     fireEvent.click(screen.getByRole('button', { name: /Add mapping/i }));
 
-    fireEvent.change(screen.getByLabelText('Match'), { target: { value: 'contains' } });
+    fireEvent.change(screen.getByLabelText('Match rule'), { target: { value: 'contains' } });
 
     expect(await screen.findByText('Broad entitlement match')).toBeInTheDocument();
     expect(screen.getByText(/partial display value/)).toBeInTheDocument();
   });
 
-  it('shows config-managed mappings but disables UI mutation actions', async () => {
+  it('shows config-managed mappings in a read-only diagnostic view', async () => {
     server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations', ownershipMode: 'config_locked' }])));
     renderTab();
-    await waitFor(() => expect(screen.getByText('Managed by config')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Managed by configuration')).toBeInTheDocument());
 
     const overflow = screen.getAllByRole('button').find((button) => button.className.includes('cds--overflow-menu'));
     if (!overflow) throw new Error('Mapping actions menu not found');
     fireEvent.click(overflow);
 
-    await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
-    expect(menuItem('Edit')).toBeDisabled();
-    expect(menuItem('Edit')).toHaveAttribute('title', 'Managed by configuration');
-    expect(menuItem('Delete')).toBeDisabled();
-    expect(menuItem('Delete')).toHaveAttribute('title', 'Managed by configuration');
+    await waitFor(() => expect(menuItem('View configuration')).toBeTruthy());
+    expect(menuItem('View configuration')).toBeEnabled();
+    expect(menuItem('Grant engine access')).toBeNull();
+    expect(menuItem('Delete')).toBeNull();
+    fireEvent.click(menuItem('View configuration')!);
+    expect(await screen.findByText('View identity mapping configuration')).toBeInTheDocument();
+    expect(screen.getByText(/cannot be changed here/)).toBeInTheDocument();
+    expect(screen.getByText(/Update configuration source identity-mappings\/operations and apply it again/)).toBeInTheDocument();
+    expect(screen.getByLabelText('External identity data type')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Preview with sample claims' })).toBeEnabled();
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'View identity mapping configuration' })).getByRole('button', { name: 'Close' }));
   });
 
   it('shows config warnings and permits local mapping edits without allowing deletion', async () => {
     server.use(http.get('/api/identity/mappings', () => HttpResponse.json([{ ...identityMappingFixture, sourceRef: 'config:identity-mappings/operations', ownershipMode: 'config_warn' }])));
     renderTab();
-    await waitFor(() => expect(screen.getByText('Config warning')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Configuration-linked')).toBeInTheDocument());
 
     const overflow = screen.getAllByRole('button').find((button) => button.className.includes('cds--overflow-menu'));
     if (!overflow) throw new Error('Mapping actions menu not found');
     fireEvent.click(overflow);
 
     await waitFor(() => expect(menuItem('Edit')).toBeTruthy());
+    expect(menuItem('Grant engine access')).toBeTruthy();
     expect(menuItem('Edit')).toBeEnabled();
     expect(menuItem('Delete')).toBeDisabled();
-    expect(menuItem('Delete')).toHaveAttribute('title', 'Managed by configuration; edit or disable a config-warning mapping instead');
+    expect(menuItem('Delete')).toHaveAttribute('title', 'This mapping is configuration-linked. Disable it here or remove it from configuration.');
+    expect(screen.getByText('Local changes are allowed, but the next configuration apply may overwrite them.')).toBeInTheDocument();
   });
 
   it('does not load mapping data without the read action', () => {
@@ -220,13 +236,13 @@ describe('IdentityMappingsSettingsTab', () => {
     await screen.findByText('group.engine-operators');
     await editManualMapping();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Test mapping' }));
-    expect(await screen.findByText('Mapping preview')).toBeInTheDocument();
-    expect(screen.getByText('Matched: group:operations')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview with sample claims' }));
+    expect(await screen.findByText('Sample sign-in claim preview')).toBeInTheDocument();
+    expect(screen.getByText('The sample matches this mapping through the “operations” external group. One matching external value was found. No identity or access was changed.')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preview stored identities' }));
-    expect(await screen.findByText('Stored identity coverage')).toBeInTheDocument();
-    expect(screen.getByText('1 of 1 stored identities match; 0 do not.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Check saved identities' }));
+    expect(await screen.findByText('Saved identity preview')).toBeInTheDocument();
+    expect(screen.getByText('1 saved identity would match and 0 saved identities would not. No identity or access was changed.')).toBeInTheDocument();
   });
 
   it('shows only sanitized mapping-preview failures', async () => {
@@ -238,7 +254,7 @@ describe('IdentityMappingsSettingsTab', () => {
     await screen.findByText('group.engine-operators');
     await editManualMapping();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Test mapping' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview with sample claims' }));
     expect(await screen.findByText('Mapping preview is temporarily unavailable')).toBeInTheDocument();
     expect(screen.queryByText(/never-render-this/)).not.toBeInTheDocument();
   });

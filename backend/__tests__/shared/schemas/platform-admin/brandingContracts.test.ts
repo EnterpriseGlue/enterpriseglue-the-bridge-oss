@@ -22,12 +22,9 @@ const platformBranding = {
 };
 
 describe('platform branding contracts', () => {
-  it('separates administrator branding from the safe public login extension', () => {
+  it('keeps the public login contract limited to non-secret branding', () => {
     expect(PlatformBrandingSchema.parse(platformBranding)).toEqual(platformBranding);
-    expect(PublicPlatformBrandingSchema.parse({
-      ...platformBranding,
-      ssoAutoRedirectSingleProvider: true,
-    })).toMatchObject({ ssoAutoRedirectSingleProvider: true });
+    expect(PublicPlatformBrandingSchema.parse(platformBranding)).toEqual(platformBranding);
   });
 
   it('keeps administrator update bounds in the shared route contract', () => {
@@ -51,9 +48,9 @@ describe('platform branding contracts', () => {
 
     expect(admin).toMatchObject({ type: 'object', properties: { logoScale: { type: 'number' } } });
     expect(update).toMatchObject({ type: 'object', properties: { logoScale: { maximum: 200 } } });
-    expect(publicBranding).toMatchObject({
-      type: 'object',
-      properties: { ssoAutoRedirectSingleProvider: { type: 'boolean' } },
+    expect(publicBranding).toMatchObject({ type: 'object', properties: { logoScale: { type: 'number' } } });
+    expect(publicBranding).not.toMatchObject({
+      properties: { ssoAutoRedirectSingleProvider: expect.anything() },
     });
   });
 });

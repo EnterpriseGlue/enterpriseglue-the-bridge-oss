@@ -3,6 +3,12 @@ import { z } from 'zod';
 /** Provider-neutral contracts shared by adapters, mapping services, and API schemas. */
 export const IdentityProviderProtocolSchema = z.enum(['oidc', 'saml', 'ldap']);
 export const IdentityProviderAuthenticationModeSchema = z.enum(['direct', 'claims_only']);
+export const IdentityProviderDisplayNameSchema = z.string().trim().min(1).max(255);
+export const IdentityProviderLoginDomainSchema = z.string()
+  .trim()
+  .toLowerCase()
+  .max(253)
+  .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/, 'Use a DNS email domain such as example.com');
 
 /**
  * Provider credentials and trust material are always resolved by the shared
@@ -136,6 +142,11 @@ export const IdentityProviderRecordSchema = z.object({
   id: z.string().min(1),
   tenantId: z.string().nullable(),
   key: z.string().min(1).max(128),
+  displayName: IdentityProviderDisplayNameSchema,
+  organization: z.string().trim().min(1).max(255).nullable(),
+  displayOrder: z.number().int().min(0).max(10000),
+  isPreferred: z.boolean(),
+  loginDomainsJson: z.string(),
   providerKeyIdentity: z.string().min(1),
   protocol: IdentityProviderProtocolSchema,
   isEnabled: z.boolean(),

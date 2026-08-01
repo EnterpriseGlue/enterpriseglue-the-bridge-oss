@@ -124,6 +124,30 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
     }).success).toBe(false);
   });
 
+  it('normalizes the v1beta1 headless login policy without adding it to v1alpha1', () => {
+    const parsed = EnterpriseGlueConfigBundleSchema.parse({
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      kind: 'EnterpriseGlueConfigBundle',
+      metadata: { key: 'acme-login', owner: 'iam-platform-team' },
+      tenantKey: 'default',
+      mode: 'additive',
+      login: {
+        localPassword: 'disabled',
+        providerSelection: 'progressive',
+      },
+      imports: ['./identity-providers.json'],
+    });
+
+    expect(normalizeEnterpriseGlueConfigBundle(parsed).bundle.login).toEqual({
+      localPassword: 'disabled',
+      providerSelection: 'progressive',
+    });
+    expect(EnterpriseGlueConfigBundleSchema.safeParse({
+      ...parsed,
+      login: { localPassword: 'sometimes', providerSelection: 'progressive' },
+    }).success).toBe(false);
+  });
+
   it('allows an engine-only bundle to omit governance settings without losing parsed defaults', () => {
     const result = EnterpriseGlueConfigBundleSchema.parse({
       apiVersion: 'enterpriseglue.ai/v1alpha1',
@@ -453,6 +477,34 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
           clientSecret: 'plaintext',
         },
       }],
+    }).success).toBe(false);
+  });
+
+  it('supports friendly provider discovery metadata and only one preferred provider', () => {
+    const provider = {
+      key: 'identity.entra',
+      displayName: 'Microsoft Entra ID',
+      organization: 'Example Corporation',
+      displayOrder: 10,
+      preferred: true,
+      loginDomains: ['example.com'],
+      type: 'oidc',
+      authenticationMode: 'direct',
+      sync: { triggers: ['login'] },
+      oidc: {
+        issuerUrl: 'https://login.microsoftonline.com/example/v2.0',
+        clientId: 'enterpriseglue',
+        callbackUrl: 'https://app.example.test/api/auth/identity/callback',
+        scopes: ['openid', 'profile', 'email'],
+      },
+    } as const;
+    expect(ConfigIdentityProvidersFileSchema.parse({ identityProviders: [provider] }).identityProviders[0]).toMatchObject({
+      displayName: 'Microsoft Entra ID',
+      preferred: true,
+      loginDomains: ['example.com'],
+    });
+    expect(ConfigIdentityProvidersFileSchema.safeParse({
+      identityProviders: [provider, { ...provider, key: 'identity.entra-secondary' }],
     }).success).toBe(false);
   });
 

@@ -531,10 +531,19 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       canManageGovernance={canManageEngineGovernance}
       governanceReadUnavailableReason={governanceReadUnavailableReason}
       governanceManageUnavailableReason={engineGovernanceUnavailableReason}
+      settingsSaveState={updateSettings.isPending ? 'saving' : updateSettings.isError ? 'error' : updateSettings.isSuccess ? 'saved' : 'idle'}
     />
   );
 
-  const renderIdentityProviders = () => <IdentityProvidersSettingsTab />;
+  const renderIdentityProviders = () => <IdentityProvidersSettingsTab
+    loginPolicy={settings ? {
+      localPasswordLoginMode: settings.localPasswordLoginMode,
+      ssoProviderSelectionMode: settings.ssoProviderSelectionMode,
+    } : null}
+    canManageLoginPolicy={canManageSettings}
+    loginPolicyUnavailableReason={settingsManageUnavailableReason}
+    onLoginPolicyChange={(change) => updateSettings.mutate(change)}
+  />;
   const renderIdentityMappings = () => <IdentityMappingsSettingsTab />;
   const renderConfiguration = () => <ConfigurationBundleSettingsTab />;
   const renderRoleLibrary = () => <RoleLibrarySettingsTab />;
@@ -598,6 +607,24 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const platformSettingsTabs = PLATFORM_SETTINGS_SECTION_REGISTRY
     .filter((tab) => sectionVisibility[tab.visibility])
     .map((tab) => ({ ...tab, render: sectionRenderers[tab.id] }));
+
+  const scrollPlatformSettingsTabIntoView = (selectedTab: HTMLElement) => {
+    if (typeof window === 'undefined') return;
+    const centerSelectedTab = () => {
+      const tabList = selectedTab.closest<HTMLElement>(
+        '[role="tablist"][aria-label="Platform settings tabs"]',
+      );
+      if (!tabList || !selectedTab) return;
+      const centeredScrollLeft = selectedTab.offsetLeft
+        - ((tabList.clientWidth - selectedTab.offsetWidth) / 2);
+      tabList.scrollTo({
+        left: Math.max(0, centeredScrollLeft),
+        behavior: 'auto',
+      });
+    };
+    window.requestAnimationFrame(centerSelectedTab);
+    window.setTimeout(centerSelectedTab, 250);
+  };
 
   const selectedSectionTab = section
     ? platformSettingsTabs.find((tab) => tab.id === section)
@@ -774,9 +801,15 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         </div>
       ) : (
         <Tabs>
-          <TabList aria-label="Platform settings tabs">
+          <TabList aria-label="Platform settings tabs" className="eg-scrollable-tab-list" scrollIntoView>
             {platformSettingsTabs.map((tab) => (
-              <Tab key={tab.id}>{tab.label}</Tab>
+              <Tab
+                key={tab.id}
+                onClick={(event) => scrollPlatformSettingsTabIntoView(event.currentTarget as HTMLElement)}
+                onFocus={(event) => scrollPlatformSettingsTabIntoView(event.currentTarget as HTMLElement)}
+              >
+                {tab.label}
+              </Tab>
             ))}
           </TabList>
           <TabPanels>

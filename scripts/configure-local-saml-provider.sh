@@ -87,7 +87,10 @@ fi
 
 curl_args=(--fail --silent --show-error --max-time 15 --cacert "$ca_file")
 login_payload="$(jq -nc --arg email "$admin_email" --arg password "$admin_password" '{email:$email,password:$password}')"
-login_headers="$(curl "${curl_args[@]}" --dump-header - --output /dev/null --header 'Content-Type: application/json' --data "$login_payload" "$base_url/api/auth/login")"
+# Provider setup is an administrator-recovery operation. Use the dedicated
+# route so the rehearsal remains runnable after ordinary local login is
+# correctly disabled by an SSO-only policy.
+login_headers="$(curl "${curl_args[@]}" --dump-header - --output /dev/null --header 'Content-Type: application/json' --data "$login_payload" "$base_url/api/auth/recovery/login")"
 session_cookies="$(printf '%s\n' "$login_headers" | cookie_values | paste -sd ';' -)"
 
 if [[ -z "$session_cookies" || "$session_cookies" != *'accessToken='* ]]; then

@@ -301,6 +301,10 @@ class ConfigBundleApplyService {
       apiVersion: string;
       metadata: { key: string };
       mode: string;
+      login?: {
+        localPassword: 'auto' | 'enabled' | 'disabled';
+        providerSelection: 'auto_redirect_single' | 'chooser' | 'progressive';
+      };
       settings: {
         engineAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
         projectAccessAuthority: 'manual' | 'transition_to_sso' | 'sso_managed';
@@ -424,6 +428,25 @@ class ConfigBundleApplyService {
       for (const change of diff.changes) {
         if (change.operation === 'noop' || change.operation === 'conflict') continue;
         if (change.objectType === 'platform_settings') {
+          if (change.key === 'login-policy' && manifest.login) {
+            await platformSettingsService.update({
+              localPasswordLoginMode: manifest.login.localPassword,
+              ssoProviderSelectionMode: manifest.login.providerSelection,
+            }, input.actorId, { store: manager });
+            await writeAudit(manager, {
+              tenantId,
+              actorId: input.actorId,
+              action: change.operation === 'create'
+                ? 'authz.config_bundle.login_policy.create'
+                : 'authz.config_bundle.login_policy.update',
+              resourceType: 'platform_settings',
+              resourceId: 'default',
+              details: { bundleKey: manifest.metadata.key, canonicalHash: diff.canonicalHash },
+            });
+            if (change.operation === 'create') created += 1;
+            else updated += 1;
+            continue;
+          }
           const sourceRef = `config_bundle:${manifest.metadata.key}`;
           await platformSettingsService.update({
             engineAccessAuthority: manifest.settings.engineAccessAuthority,
@@ -630,6 +653,11 @@ class ConfigBundleApplyService {
             const provider = await identityProviderService.upsert({
               tenantId,
               key: desired.key,
+              displayName: desired.displayName,
+              organization: desired.organization || null,
+              displayOrder: desired.displayOrder,
+              isPreferred: desired.preferred,
+              loginDomains: desired.loginDomains,
               protocol: desired.type,
               isEnabled: desired.enabled,
               authenticationMode: desired.authenticationMode,
@@ -648,6 +676,11 @@ class ConfigBundleApplyService {
             await identityProviderService.upsert({
               tenantId,
               key: desired.key,
+              displayName: desired.displayName,
+              organization: desired.organization || null,
+              displayOrder: desired.displayOrder,
+              isPreferred: desired.preferred,
+              loginDomains: desired.loginDomains,
               protocol: desired.type,
               isEnabled: desired.enabled,
               authenticationMode: desired.authenticationMode,

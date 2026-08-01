@@ -262,7 +262,7 @@ describe('configBundleExportService', () => {
     const engineTenantMapping = { id: 'engine-mapping-1', engineId: engine.id, externalTenantId: 'default', enterpriseTenantId: 'tenant-default', tenantReferenceJson: '{"type":"request_context"}', strategy: 'engine_tenant_id', source: 'config', sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-default', ownershipMode: 'config_locked', sourceHash: 'hash', lastAppliedAt: 1, isActive: true, createdAt: 1, updatedAt: 1 };
     const engineSet = { id: 'engine-set-1', tenantId: null, key: 'engines.central', name: 'Central engines', description: null, selectorJson: '{"mode":"engine_ids","engineKeys":["engine.central"]}', source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false };
     const runtimeResourceSet = { id: 'runtime-set-1', tenantId: null, key: 'runtime.payments', name: 'Payments', description: null, engineId: 'engine-1', resourceKind: 'process_definition', selectorJson: '{"mode":"prefix","prefix":"payments-"}', runtimeTenantId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false };
-    const configProvider = { id: 'provider-config', tenantId: null, key: 'identity.oidc.config', protocol: 'oidc', isEnabled: true, authenticationMode: 'claims_only', directoryTenantId: null, configurationJson: '{"issuerUrl":"https://issuer.example.test","clientId":"enterpriseglue","callbackUrl":"https://app.example.test/callback","scopes":["openid"],"allowVerifiedEmailLinking":true}', syncJson: '{"triggers":["login"],"requiredForLogin":true,"incompleteEntitlements":"fail_closed","connectorCapability":"claim_only","scheduled":false}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz' };
+    const configProvider = { id: 'provider-config', tenantId: null, key: 'identity.oidc.config', displayName: 'Corporate identity', organization: 'Example Corporation', displayOrder: 10, isPreferred: true, loginDomainsJson: '["example.com"]', protocol: 'oidc', isEnabled: true, authenticationMode: 'claims_only', directoryTenantId: null, configurationJson: '{"issuerUrl":"https://issuer.example.test","clientId":"enterpriseglue","callbackUrl":"https://app.example.test/callback","scopes":["openid"],"allowVerifiedEmailLinking":true}', syncJson: '{"triggers":["login"],"requiredForLogin":true,"incompleteEntitlements":"fail_closed","connectorCapability":"claim_only","scheduled":false}', ownershipMode: 'config_locked', sourceRef: 'config_bundle:acme.authz' };
     const externalProvider = { id: 'provider-external', tenantId: null, key: 'identity.ldap.external', protocol: 'ldap', isEnabled: true, authenticationMode: 'direct', directoryTenantId: null, configurationJson: '{}', syncJson: '{}', ownershipMode: 'manual', sourceRef: null };
     const identityMapping = { id: 'mapping-1', tenantId: null, configKey: 'mapping.operators', providerId: 'provider-external', targetGroupId: 'group-1', entitlementType: 'group', externalId: 'operations', matchOperator: 'exact', syncMode: 'authoritative', isActive: true, sourceRef: 'config_bundle:acme.authz' };
     const assignment = { id: 'assignment-1', tenantId: null, assignmentKey: canonicalRoleAssignmentKey({ tenantId: null, principalType: 'group', principalId: 'group-1', roleId: 'role-system', scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz' }), principalType: 'group', principalId: 'group-1', roleId: 'role-system', scopeType: 'platform', scopeId: null, source: 'config', sourceRef: 'config_bundle:acme.authz', expiresAt: null };
@@ -291,6 +291,8 @@ describe('configBundleExportService', () => {
           engineOnboardingMode: 'manual_allowed',
           projectEngineTargetMode: 'manual_allowed',
           engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+          localPasswordLoginMode: 'disabled',
+          ssoProviderSelectionMode: 'progressive',
           accessGovernanceSourceRef: 'config_bundle:acme.authz',
           accessGovernanceOwnershipMode: 'config_locked',
           accessGovernanceDriftStatus: 'in_sync',
@@ -310,6 +312,10 @@ describe('configBundleExportService', () => {
       runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
       governanceSettingsOwnership: 'config_locked',
     });
+    expect(result.bundle.login).toEqual({
+      localPassword: 'disabled',
+      providerSelection: 'progressive',
+    });
     expect(result.contract).toEqual({
       inputApiVersion: 'enterpriseglue.ai/v1beta1',
       normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
@@ -319,7 +325,15 @@ describe('configBundleExportService', () => {
       './engine-sets.json': { engineSets: [expect.objectContaining({ key: 'engines.central', selector: { mode: 'engine_ids', engineKeys: ['engine.central'] } })] },
       './engine-tenant-mappings.json': { engineTenantMappings: [expect.objectContaining({ key: 'engine-tenant-mapping.central-default', engineRef: { engineKey: 'engine.central' }, tenantRef: { type: 'request_context' } })] },
       './runtime-resource-sets.json': { runtimeResourceSets: [expect.objectContaining({ key: 'runtime.payments', engineRef: { engineKey: 'engine.central' }, ownershipMode: 'config_warn' })] },
-      './identity-providers.json': { identityProviders: [expect.objectContaining({ key: 'identity.oidc.config', type: 'oidc' })] },
+      './identity-providers.json': { identityProviders: [expect.objectContaining({
+        key: 'identity.oidc.config',
+        displayName: 'Corporate identity',
+        organization: 'Example Corporation',
+        displayOrder: 10,
+        preferred: true,
+        loginDomains: ['example.com'],
+        type: 'oidc',
+      })] },
       './identity-mappings.json': { identityMappings: [expect.objectContaining({ key: 'mapping.operators', providerKey: 'identity.ldap.external', targetGroupKey: 'group.operators' })] },
       './assignments.json': { assignments: [expect.objectContaining({ roleKey: 'system.platform.user', principal: { type: 'group', key: 'group.operators' }, scope: { type: 'platform' } })] },
       './project-engine-targets.json': { projectEngineTargets: [expect.objectContaining({ projectRef: { id: target.projectId }, engineRef: { engineKey: 'engine.central' }, allowCiDeploy: true })] },
@@ -340,6 +354,7 @@ describe('configBundleExportService', () => {
       expect.objectContaining({ objectType: 'identity_mapping', key: 'mapping.operators', operation: 'noop' }),
       expect.objectContaining({ objectType: 'assignment', operation: 'noop' }),
       expect.objectContaining({ objectType: 'project_engine_target', key: '00000000-0000-4000-8000-000000000001:engine.central', operation: 'noop' }),
+      expect.objectContaining({ objectType: 'platform_settings', key: 'login-policy', operation: 'noop' }),
     ]));
     expect(diff.changes.every((change) => change.operation === 'noop')).toBe(true);
     const exportedProvider = (result.files['./identity-providers.json'] as any).identityProviders[0];

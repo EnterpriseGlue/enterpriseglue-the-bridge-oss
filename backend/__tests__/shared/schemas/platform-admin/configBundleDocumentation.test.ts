@@ -11,6 +11,7 @@ import {
   ConfigEnginesFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
+  ConfigBundleLoginPolicySchema,
   ConfigIdentityProviderSchema,
   ConfigIdentityProvidersFileSchema,
   ConfigRolesFileSchema,
@@ -19,6 +20,9 @@ import {
   GovernanceOwnershipApplyRequestSchema,
   GovernanceOwnershipRequestSchema,
 } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
+import {
+  PublicLoginMethodsResponseSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import {
   UpdatePlatformSettingsRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
@@ -44,6 +48,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   ConfigEnginesFileSchema,
   ConfigGroupsFileSchema,
   ConfigIdentityMappingsFileSchema,
+  ConfigBundleLoginPolicySchema,
   ConfigIdentityProviderSchema,
   ConfigIdentityProvidersFileSchema,
   ConfigRolesFileSchema,
@@ -60,6 +65,7 @@ const SCHEMAS: Record<string, z.ZodType> = {
   ExternalEngineTenantMappingsUpsertRequestSchema,
   GovernanceOwnershipApplyRequestSchema,
   GovernanceOwnershipRequestSchema,
+  PublicLoginMethodsResponseSchema,
   UpdatePlatformSettingsRequest,
   UpdateEngineRequestSchema,
 };

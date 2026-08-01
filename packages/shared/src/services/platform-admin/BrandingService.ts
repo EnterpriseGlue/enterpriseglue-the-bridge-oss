@@ -20,7 +20,6 @@ const BRANDING_DEFAULTS: PlatformBranding = {
   titleVerticalOffset: 0,
   menuAccentColor: null,
   faviconUrl: null,
-  ssoAutoRedirectSingleProvider: false,
 };
 
 class BrandingService {
@@ -46,7 +45,6 @@ class BrandingService {
       titleVerticalOffset: row.titleVerticalOffset ?? 0,
       menuAccentColor: row.menuAccentColor || null,
       faviconUrl: row.faviconUrl || null,
-      ssoAutoRedirectSingleProvider: (row as any).ssoAutoRedirectSingleProvider ?? false,
     };
   }
 

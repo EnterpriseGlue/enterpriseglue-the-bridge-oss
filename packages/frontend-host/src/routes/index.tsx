@@ -646,6 +646,8 @@ export function getPublicRoutes(): RouteObject[] {
   return [
     { path: '/login', element: <Login /> },
     { path: '/t/:tenantSlug/login', element: <Login /> },
+    { path: '/admin-recovery', element: <Login /> },
+    { path: '/t/:tenantSlug/admin-recovery', element: <Login /> },
     { path: '/t/:tenantSlug/invite/:token', element: <AcceptInvite /> },
     { path: '/forgot-password', element: <ForgotPassword /> },
     { path: '/t/:tenantSlug/forgot-password', element: <ForgotPassword /> },

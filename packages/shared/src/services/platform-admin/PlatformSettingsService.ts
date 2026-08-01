@@ -12,13 +12,17 @@ import {
   derivePlatformGovernanceBehavior,
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
+  LocalPasswordLoginModeSchema,
   ProjectEngineTargetPolicyModeSchema,
+  SsoProviderSelectionModeSchema,
   type AccessAuthorityMode,
   type AccessGovernanceDriftStatus,
   type EngineOnboardingMode,
   type EngineRuntimeAuthorizationMode,
+  type LocalPasswordLoginMode,
   type PlatformGovernanceBehavior,
   type ProjectEngineTargetPolicyMode,
+  type SsoProviderSelectionMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
 import type { DataSource, EntityManager } from 'typeorm';
@@ -29,6 +33,8 @@ export const DEFAULT_ENGINE_ONBOARDING_MODE: EngineOnboardingMode = 'manual_allo
 export const DEFAULT_PROJECT_ENGINE_TARGET_MODE: ProjectEngineTargetPolicyMode = 'manual_allowed';
 export const DEFAULT_ACCESS_AUTHORITY_MODE: AccessAuthorityMode = 'manual';
 export const DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE: EngineRuntimeAuthorizationMode = 'enterpriseglue_authoritative';
+export const DEFAULT_LOCAL_PASSWORD_LOGIN_MODE: LocalPasswordLoginMode = 'auto';
+export const DEFAULT_SSO_PROVIDER_SELECTION_MODE: SsoProviderSelectionMode = 'auto_redirect_single';
 
 export function normalizeEngineOnboardingMode(value: unknown): EngineOnboardingMode {
   const parsed = EngineOnboardingModeSchema.safeParse(value);
@@ -48,6 +54,16 @@ export function normalizeAccessAuthorityMode(value: unknown): AccessAuthorityMod
 export function normalizeEngineRuntimeAuthorizationMode(value: unknown): EngineRuntimeAuthorizationMode {
   const parsed = EngineRuntimeAuthorizationModeSchema.safeParse(value);
   return parsed.success ? parsed.data : DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE;
+}
+
+export function normalizeLocalPasswordLoginMode(value: unknown): LocalPasswordLoginMode {
+  const parsed = LocalPasswordLoginModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_LOCAL_PASSWORD_LOGIN_MODE;
+}
+
+export function normalizeSsoProviderSelectionMode(value: unknown): SsoProviderSelectionMode {
+  const parsed = SsoProviderSelectionModeSchema.safeParse(value);
+  return parsed.success ? parsed.data : DEFAULT_SSO_PROVIDER_SELECTION_MODE;
 }
 
 export function normalizeAccessGovernanceDriftStatus(value: unknown): AccessGovernanceDriftStatus | null {
@@ -75,7 +91,8 @@ export interface PlatformSettingsData {
   credentiallessCustomerSidecarsEnabled: boolean;
   inviteAllowAllDomains: boolean;
   inviteAllowedDomains: string[];
-  ssoAutoRedirectSingleProvider: boolean;
+  localPasswordLoginMode: LocalPasswordLoginMode;
+  ssoProviderSelectionMode: SsoProviderSelectionMode;
   ssoAllEnginesAssignmentMappingsEnabled: boolean;
   ssoEngineOwnerAssignmentMappingsEnabled: boolean;
   ssoEngineDelegateAssignmentMappingsEnabled: boolean;
@@ -136,7 +153,8 @@ export class PlatformSettingsService {
         credentiallessCustomerSidecarsEnabled: false,
         inviteAllowAllDomains: true,
         inviteAllowedDomains: [],
-        ssoAutoRedirectSingleProvider: false,
+        localPasswordLoginMode: DEFAULT_LOCAL_PASSWORD_LOGIN_MODE,
+        ssoProviderSelectionMode: DEFAULT_SSO_PROVIDER_SELECTION_MODE,
         ssoAllEnginesAssignmentMappingsEnabled: true,
         ssoEngineOwnerAssignmentMappingsEnabled: false,
         ssoEngineDelegateAssignmentMappingsEnabled: false,
@@ -159,33 +177,33 @@ export class PlatformSettingsService {
       };
     }
 
-    const engineOnboardingMode = normalizeEngineOnboardingMode((settings as any).engineOnboardingMode);
-    const projectEngineTargetMode = normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode);
-    const engineAccessAuthority = normalizeAccessAuthorityMode((settings as any).engineAccessAuthority);
-    const projectAccessAuthority = normalizeAccessAuthorityMode((settings as any).projectAccessAuthority);
-    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String((settings as any).accessGovernanceOwnershipMode))
-      ? (settings as any).accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
+    const engineOnboardingMode = normalizeEngineOnboardingMode(settings.engineOnboardingMode);
+    const projectEngineTargetMode = normalizeProjectEngineTargetMode(settings.projectEngineTargetMode);
+    const engineAccessAuthority = normalizeAccessAuthorityMode(settings.engineAccessAuthority);
+    const projectAccessAuthority = normalizeAccessAuthorityMode(settings.projectAccessAuthority);
+    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String(settings.accessGovernanceOwnershipMode))
+      ? settings.accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
       : 'manual';
 
     return {
       defaultEnvironmentTagId: settings.defaultEnvironmentTagId,
       syncPushEnabled: settings.syncPushEnabled,
       syncPullEnabled: settings.syncPullEnabled,
-      gitProjectTokenSharingEnabled: (settings as any).gitProjectTokenSharingEnabled ?? false,
+      gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles: JSON.parse(settings.defaultDeployRoles),
       engineOnboardingMode,
       projectEngineTargetMode,
       engineAccessAuthority,
       projectAccessAuthority,
-      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
-      accessGovernanceSourceRef: (settings as any).accessGovernanceSourceRef ?? null,
+      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode(settings.engineRuntimeAuthorizationMode),
+      accessGovernanceSourceRef: settings.accessGovernanceSourceRef ?? null,
       accessGovernanceOwnershipMode,
-      accessGovernanceSourceHash: (settings as any).accessGovernanceSourceHash ?? null,
-      accessGovernanceLastAppliedAt: (settings as any).accessGovernanceLastAppliedAt === null || (settings as any).accessGovernanceLastAppliedAt === undefined
+      accessGovernanceSourceHash: settings.accessGovernanceSourceHash ?? null,
+      accessGovernanceLastAppliedAt: settings.accessGovernanceLastAppliedAt === null || settings.accessGovernanceLastAppliedAt === undefined
         ? null
-        : Number((settings as any).accessGovernanceLastAppliedAt),
+        : Number(settings.accessGovernanceLastAppliedAt),
       accessGovernanceDriftStatus: normalizeAccessGovernanceDriftStatus(
-        (settings as any).accessGovernanceDriftStatus,
+        settings.accessGovernanceDriftStatus,
       ),
       governanceBehavior: derivePlatformGovernanceBehavior({
         engineOnboardingMode,
@@ -194,41 +212,42 @@ export class PlatformSettingsService {
         projectAccessAuthority,
         accessGovernanceOwnershipMode,
       }),
-      credentiallessCustomerSidecarsEnabled: (settings as any).credentiallessCustomerSidecarsEnabled ?? false,
-      inviteAllowAllDomains: (settings as any).inviteAllowAllDomains ?? true,
+      credentiallessCustomerSidecarsEnabled: settings.credentiallessCustomerSidecarsEnabled ?? false,
+      inviteAllowAllDomains: settings.inviteAllowAllDomains ?? true,
       inviteAllowedDomains: (() => {
         try {
-          return JSON.parse(String((settings as any).inviteAllowedDomains || '[]'));
+          return JSON.parse(String(settings.inviteAllowedDomains || '[]'));
         } catch {
           return [];
         }
       })(),
-      ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
-      ssoAllEnginesAssignmentMappingsEnabled: (settings as any).ssoAllEnginesAssignmentMappingsEnabled ?? true,
-      ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,
-      ssoEngineDelegateAssignmentMappingsEnabled: (settings as any).ssoEngineDelegateAssignmentMappingsEnabled ?? false,
-      ssoRegexClaimMappingsEnabled: (settings as any).ssoRegexClaimMappingsEnabled ?? false,
-      ssoBroadEntitlementMappingsEnabled: (settings as any).ssoBroadEntitlementMappingsEnabled ?? false,
-      ssoSecretViewMappingsEnabled: (settings as any).ssoSecretViewMappingsEnabled ?? false,
-      ssoUnredactedAuditMappingsEnabled: (settings as any).ssoUnredactedAuditMappingsEnabled ?? false,
-      ssoPermanentDeleteMappingsEnabled: (settings as any).ssoPermanentDeleteMappingsEnabled ?? false,
-      piiRegexEnabled: (settings as any).piiRegexEnabled ?? false,
-      piiExternalProviderEnabled: (settings as any).piiExternalProviderEnabled ?? false,
-      piiExternalProviderType: (settings as any).piiExternalProviderType ?? null,
-      piiExternalProviderEndpoint: (settings as any).piiExternalProviderEndpoint ?? null,
-      piiExternalProviderAuthHeader: (settings as any).piiExternalProviderAuthHeader ?? null,
+      localPasswordLoginMode: normalizeLocalPasswordLoginMode(settings.localPasswordLoginMode),
+      ssoProviderSelectionMode: normalizeSsoProviderSelectionMode(settings.ssoProviderSelectionMode),
+      ssoAllEnginesAssignmentMappingsEnabled: settings.ssoAllEnginesAssignmentMappingsEnabled ?? true,
+      ssoEngineOwnerAssignmentMappingsEnabled: settings.ssoEngineOwnerAssignmentMappingsEnabled ?? false,
+      ssoEngineDelegateAssignmentMappingsEnabled: settings.ssoEngineDelegateAssignmentMappingsEnabled ?? false,
+      ssoRegexClaimMappingsEnabled: settings.ssoRegexClaimMappingsEnabled ?? false,
+      ssoBroadEntitlementMappingsEnabled: settings.ssoBroadEntitlementMappingsEnabled ?? false,
+      ssoSecretViewMappingsEnabled: settings.ssoSecretViewMappingsEnabled ?? false,
+      ssoUnredactedAuditMappingsEnabled: settings.ssoUnredactedAuditMappingsEnabled ?? false,
+      ssoPermanentDeleteMappingsEnabled: settings.ssoPermanentDeleteMappingsEnabled ?? false,
+      piiRegexEnabled: settings.piiRegexEnabled ?? false,
+      piiExternalProviderEnabled: settings.piiExternalProviderEnabled ?? false,
+      piiExternalProviderType: settings.piiExternalProviderType ?? null,
+      piiExternalProviderEndpoint: settings.piiExternalProviderEndpoint ?? null,
+      piiExternalProviderAuthHeader: settings.piiExternalProviderAuthHeader ?? null,
       piiExternalProviderAuthToken: null,
-      piiExternalProviderProjectId: (settings as any).piiExternalProviderProjectId ?? null,
-      piiExternalProviderRegion: (settings as any).piiExternalProviderRegion ?? null,
-      piiRedactionStyle: (settings as any).piiRedactionStyle ?? '<TYPE>',
+      piiExternalProviderProjectId: settings.piiExternalProviderProjectId ?? null,
+      piiExternalProviderRegion: settings.piiExternalProviderRegion ?? null,
+      piiRedactionStyle: settings.piiRedactionStyle ?? '<TYPE>',
       piiScopes: (() => {
         try {
-          return JSON.parse(String((settings as any).piiScopes || '[]'));
+          return JSON.parse(String(settings.piiScopes || '[]'));
         } catch {
           return [...DEFAULT_PII_SCOPES];
         }
       })(),
-      piiMaxPayloadSizeBytes: Number((settings as any).piiMaxPayloadSizeBytes ?? 262144),
+      piiMaxPayloadSizeBytes: Number(settings.piiMaxPayloadSizeBytes ?? 262144),
     };
   }
 
@@ -242,7 +261,7 @@ export class PlatformSettingsService {
     if (!settings) return this.get();
 
     const base = await this.get();
-    const token = (settings as any).piiExternalProviderAuthToken ?? null;
+    const token = settings.piiExternalProviderAuthToken ?? null;
     return {
       ...base,
       piiExternalProviderAuthToken: token ? safeDecrypt(String(token)) : null,
@@ -267,7 +286,8 @@ export class PlatformSettingsService {
       credentiallessCustomerSidecarsEnabled: boolean;
       inviteAllowAllDomains: boolean;
       inviteAllowedDomains: string[];
-      ssoAutoRedirectSingleProvider: boolean;
+      localPasswordLoginMode: LocalPasswordLoginMode;
+      ssoProviderSelectionMode: SsoProviderSelectionMode;
       ssoAllEnginesAssignmentMappingsEnabled: boolean;
       ssoEngineOwnerAssignmentMappingsEnabled: boolean;
       ssoEngineDelegateAssignmentMappingsEnabled: boolean;
@@ -379,8 +399,11 @@ export class PlatformSettingsService {
     if (data.inviteAllowedDomains !== undefined) {
       updateData.inviteAllowedDomains = JSON.stringify(data.inviteAllowedDomains);
     }
-    if (data.ssoAutoRedirectSingleProvider !== undefined) {
-      updateData.ssoAutoRedirectSingleProvider = data.ssoAutoRedirectSingleProvider;
+    if (data.localPasswordLoginMode !== undefined) {
+      updateData.localPasswordLoginMode = normalizeLocalPasswordLoginMode(data.localPasswordLoginMode);
+    }
+    if (data.ssoProviderSelectionMode !== undefined) {
+      updateData.ssoProviderSelectionMode = normalizeSsoProviderSelectionMode(data.ssoProviderSelectionMode);
     }
     if (data.ssoAllEnginesAssignmentMappingsEnabled !== undefined) {
       updateData.ssoAllEnginesAssignmentMappingsEnabled = data.ssoAllEnginesAssignmentMappingsEnabled;
@@ -470,7 +493,8 @@ export class PlatformSettingsService {
         credentiallessCustomerSidecarsEnabled: data.credentiallessCustomerSidecarsEnabled ?? false,
         inviteAllowAllDomains: data.inviteAllowAllDomains ?? true,
         inviteAllowedDomains: JSON.stringify(data.inviteAllowedDomains ?? []),
-        ssoAutoRedirectSingleProvider: data.ssoAutoRedirectSingleProvider ?? false,
+        localPasswordLoginMode: data.localPasswordLoginMode ?? DEFAULT_LOCAL_PASSWORD_LOGIN_MODE,
+        ssoProviderSelectionMode: data.ssoProviderSelectionMode ?? DEFAULT_SSO_PROVIDER_SELECTION_MODE,
         ssoAllEnginesAssignmentMappingsEnabled: data.ssoAllEnginesAssignmentMappingsEnabled ?? true,
         ssoEngineOwnerAssignmentMappingsEnabled: data.ssoEngineOwnerAssignmentMappingsEnabled ?? false,
         ssoEngineDelegateAssignmentMappingsEnabled: data.ssoEngineDelegateAssignmentMappingsEnabled ?? false,

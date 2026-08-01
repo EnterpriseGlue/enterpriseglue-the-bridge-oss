@@ -48,7 +48,7 @@ function sanitizeReturnTo(value: unknown, tenantSlug?: string): string | undefin
 }
 
 export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }): string {
-  const tenantSlug = sanitizeTenantSlug(req.query.tenantSlug);
+  const tenantSlug = sanitizeTenantSlug(req.params?.tenantSlug) || sanitizeTenantSlug(req.query.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
   const payload: SsoState = {
     timestamp: Date.now(),

@@ -53,10 +53,48 @@ function RuntimeResourceChangeDetails({ changes }: { changes: NonNullable<Config
 
 function identitySnapshotMessage(snapshot: ConfigBundleIdentitySnapshot): string {
   if (snapshot.status === 'not_needed') return '';
-  if (snapshot.status === 'skipped') return ` Stored identity reconciliation was skipped for ${snapshot.providerCount} provider${snapshot.providerCount === 1 ? '' : 's'}.`;
+  if (snapshot.status === 'skipped') return ` Saved identity membership updates were skipped for ${snapshot.providerCount} provider${snapshot.providerCount === 1 ? '' : 's'}.`;
   const verb = snapshot.mode === 'preview' ? 'would add' : 'added';
   const removalVerb = snapshot.mode === 'preview' ? 'would remove' : 'removed';
-  return ` Identity reconciliation ${snapshot.status}: ${snapshot.scanned} snapshots, ${snapshot.created} ${verb}, ${snapshot.removed} ${removalVerb}.`;
+  const statusMessage = snapshot.status === 'failed'
+    ? ' Some saved identity records could not be applied.'
+    : snapshot.status === 'truncated'
+      ? ' More saved identity records remain.'
+      : '';
+  return ` Checked ${snapshot.scanned} saved identity snapshot${snapshot.scanned === 1 ? '' : 's'}; ${verb} ${snapshot.created} membership${snapshot.created === 1 ? '' : 's'} and ${removalVerb} ${snapshot.removed}.${statusMessage}`;
+}
+
+function configurationApplyMessage(reconciliation: ConfigBundleApplyResult['reconciliation']): string {
+  const runtimeStatus = reconciliation.runtimeReconciliation?.status || 'not_needed';
+  const identity = reconciliation.identitySnapshot;
+  const noIdentityChanges = (
+    identity.status === 'not_needed'
+    || (
+      identity.status === 'completed'
+      && identity.scanned === 0
+      && identity.created === 0
+      && identity.removed === 0
+      && identity.failed === 0
+    )
+  );
+  const checkedTargets = `Checked ${reconciliation.engineSetCount} engine set${reconciliation.engineSetCount === 1 ? '' : 's'}, ${reconciliation.runtimeResourceSetCount} runtime resource set${reconciliation.runtimeResourceSetCount === 1 ? '' : 's'}, and ${reconciliation.engineCount} engine${reconciliation.engineCount === 1 ? '' : 's'}.`;
+  if (
+    reconciliation.engineSetCount === 0
+    && reconciliation.runtimeResourceSetCount === 0
+    && reconciliation.engineCount === 0
+    && runtimeStatus === 'not_needed'
+    && noIdentityChanges
+  ) {
+    return `No engine or identity changes were needed. ${checkedTargets}`;
+  }
+  const runtimeMessage = runtimeStatus === 'queued'
+    ? ' Runtime access reconciliation was queued.'
+    : runtimeStatus === 'completed'
+      ? ' Runtime access reconciliation completed.'
+      : runtimeStatus === 'failed'
+        ? ' Runtime access reconciliation failed. Review the apply history before continuing.'
+        : '';
+  return `${checkedTargets}${runtimeMessage}${identitySnapshotMessage(identity)}`;
 }
 
 export default function ConfigurationBundleSettingsTab() {
@@ -214,6 +252,7 @@ export default function ConfigurationBundleSettingsTab() {
   return <Tile>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--spacing-5)', marginBottom: 'var(--spacing-5)' }}><div><h3 style={{ margin: 0, fontSize: '1rem' }}>Configuration Bundles</h3><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Validate, review, and apply JSON-managed authorization, identity, engine, and deployment-target configuration.</p></div><div style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center' }}>{preview?.contract && <Tag type={preview.contract.inputApiVersion.endsWith('/v1beta1') ? 'blue' : 'purple'}>{preview.contract.inputApiVersion.split('/').slice(-1)[0]} → v1beta1</Tag>}{preview?.valid && <Tag type="green">Preview valid</Tag>}</div></div>
     {(error || queryError) && <InlineNotification kind="error" title="Configuration bundle" subtitle={error || parseApiError(queryError, 'Configuration history could not be loaded').message} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
+    {applyResult && <InlineNotification kind={applyResult.reconciliation.identitySnapshot.status === 'failed' || applyResult.reconciliation.runtimeReconciliation?.status === 'failed' ? 'error' : applyResult.reconciliation.identitySnapshot.status === 'truncated' || applyResult.reconciliation.runtimeReconciliation?.status === 'queued' ? 'warning' : 'success'} title="Configuration applied" subtitle={configurationApplyMessage(applyResult.reconciliation)} hideCloseButton style={{ marginBottom: 'var(--spacing-5)' }} />}
     {preview?.contract?.warnings.map((warning) => <InlineNotification key={warning.code} kind="warning" title={warning.code === 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' ? 'Deprecated configuration version' : 'Configuration normalized'} subtitle={warning.message} hideCloseButton lowContrast style={{ marginBottom: 'var(--spacing-3)' }} />)}
     <TextArea id="configuration-bundle-json" labelText="Configuration bundle JSON" value={source} onChange={(event) => setSource(event.target.value)} rows={22} helperText="Use the same bundle and files shape as CI/CD. Folder-style ZIP archives must contain bundle.json. Secret references only; plaintext secrets are rejected." />
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', alignItems: 'end', marginTop: 'var(--spacing-4)' }}><TextInput id="configuration-bundle-git-url" labelText="Git raw file URL" value={remoteUrl} onChange={(event) => setRemoteUrl(event.target.value)} disabled={busy !== null} helperText="HTTPS raw JSON or ZIP URL from GitHub or GitLab only; redirects, credentials, queries, and arbitrary hosts are rejected." style={{ flex: '1 1 28rem' }} /><GuardedAction actionId="platform.config-bundles.preview" resource={resource}><Button kind="tertiary" disabled={!remoteUrl.trim() || busy !== null} onClick={importRemote}>Import Git URL</Button></GuardedAction></div>
@@ -224,7 +263,6 @@ export default function ConfigurationBundleSettingsTab() {
     </Select>
     <input ref={uploadRef} type="file" accept="application/json,.json,application/zip,.zip" onChange={importJson} style={{ display: 'none' }} />
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', marginTop: 'var(--spacing-5)' }}><GuardedAction actionId="platform.config-bundles.preview" resource={resource}><Button kind="tertiary" renderIcon={Upload} disabled={busy !== null} onClick={() => uploadRef.current?.click()}>Import JSON or ZIP</Button></GuardedAction><GuardedAction actionId="platform.config-bundles.export" resource={resource}><Button kind="tertiary" renderIcon={Download} disabled={busy !== null} onClick={exportJson}>Export JSON</Button></GuardedAction><GuardedAction actionId="platform.config-bundles.preview" resource={resource}><Button kind="secondary" renderIcon={View} disabled={busy !== null} onClick={previewBundle}>Preview changes</Button></GuardedAction><GuardedAction actionId="platform.config-bundles.preview" resource={resource}><Button kind="secondary" renderIcon={Checkmark} disabled={busy !== null} onClick={preflightSecrets}>Check secret references</Button></GuardedAction><GuardedAction actionId="platform.config-bundles.apply" resource={resource}><Button kind="primary" renderIcon={Play} disabled={!preview?.valid || !preview.canonicalHash || busy !== null || missingAcknowledgements.length > 0 || checkedSecretsAreUnavailable} onClick={applyBundle}>Apply exact preview</Button></GuardedAction><GuardedAction actionId="platform.config-bundles.view" resource={resource}><Button kind="ghost" renderIcon={Time} disabled={busy !== null} onClick={loadRuns}>Refresh history</Button></GuardedAction></div>
-    {applyResult && <InlineNotification kind={applyResult.reconciliation.identitySnapshot.status === 'failed' || applyResult.reconciliation.runtimeReconciliation?.status === 'failed' ? 'error' : applyResult.reconciliation.identitySnapshot.status === 'truncated' || applyResult.reconciliation.runtimeReconciliation?.status === 'queued' ? 'warning' : 'success'} title="Configuration applied" subtitle={`Queued reconciliation for ${applyResult.reconciliation.engineSetCount} Engine Sets, ${applyResult.reconciliation.runtimeResourceSetCount} runtime resource sets, and ${applyResult.reconciliation.engineCount} engines. Runtime reconciliation: ${applyResult.reconciliation.runtimeReconciliation?.status || 'not_needed'}.${identitySnapshotMessage(applyResult.reconciliation.identitySnapshot)}`} hideCloseButton style={{ marginTop: 'var(--spacing-5)' }} />}
     {preview && <div style={{ marginTop: 'var(--spacing-6)' }}><h4 style={{ margin: 0 }}>Preview</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{preview.valid ? `Hash ${preview.canonicalHash}` : 'Validation failed'}</p>{preview.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.objectKey ? `${issue.path} (${issue.objectKey})` : issue.path} subtitle={`${issue.message} ${issue.remediation}`} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{Object.entries(preview.counts).map(([path, count]) => <Tag key={path} type="cool-gray" style={{ marginRight: 'var(--spacing-2)' }}>{path}: {count}</Tag>)}{preview.roleTemplateBaselines && Object.entries(preview.roleTemplateBaselines).map(([roleKey, baseline]) => <div key={roleKey} style={{ marginTop: 'var(--spacing-3)', color: 'var(--cds-text-secondary)' }}><strong>{roleKey}</strong> copies {baseline.copyFromRoleKey} ({baseline.permissions.length} baseline permissions, fingerprint {baseline.fingerprint.slice(0, 12)}).</div>)}{preview.valid && <section aria-label="CI command example" style={{ marginTop: 'var(--spacing-5)' }}><div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', flexWrap: 'wrap' }}><div><h5 style={{ margin: 0 }}>CI command example</h5><p style={{ margin: 'var(--spacing-2) 0 0', color: 'var(--cds-text-secondary)' }}>Set the tenant scope and CI secret before applying this reviewed bundle.</p></div><Button kind="tertiary" size="sm" renderIcon={Copy} onClick={copyCiCommand}>{ciCommandCopied ? 'Copied' : 'Copy command'}</Button></div><pre style={{ margin: 'var(--spacing-3) 0 0', padding: 'var(--spacing-3)', overflowX: 'auto', background: 'var(--cds-layer-accent-01)', fontSize: '0.75rem' }}>{ciCommand}</pre></section>}</div>}
     {secretPreflight && <div style={{ marginTop: 'var(--spacing-5)' }}><h4 style={{ margin: 0 }}>Secret reference availability</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{secretPreflight.valid ? secretPreflight.available ? 'All configured secret references are available. Values are not returned.' : 'One or more configured secret references are unavailable. Values are not returned.' : 'The bundle must be valid before secret references can be checked.'}</p>{secretPreflight.errors.map((issue) => <InlineNotification key={`${issue.path}:${issue.message}`} kind="error" title={issue.objectKey ? `${issue.path} (${issue.objectKey})` : issue.path} subtitle={`${issue.message} ${issue.remediation}`} hideCloseButton style={{ marginBottom: 'var(--spacing-3)' }} />)}{secretPreflight.references.map((reference) => <div key={reference.reference} style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-3)', paddingBlock: 'var(--spacing-2)', borderBottom: '1px solid var(--cds-border-subtle)' }}><Tag type={reference.available ? 'green' : 'red'}>{reference.available ? 'available' : 'unavailable'}</Tag><strong>{reference.reference}</strong><span style={{ color: 'var(--cds-text-secondary)', flex: '1 1 16rem' }}>{reference.locations.join(', ')}</span>{reference.reason && <span style={{ color: 'var(--cds-text-secondary)' }}>{reference.reason.replace(/_/g, ' ')}</span>}</div>)}</div>}
     {diff?.affectedPrincipals && (diff.affectedPrincipals.affectedGroupCount > 0 || diff.affectedPrincipals.externalIdentityMappingChangeCount > 0) ? <div style={{ marginTop: 'var(--spacing-5)' }}><h4 style={{ margin: 0 }}>Known access impact</h4><p style={{ color: 'var(--cds-text-secondary)' }}>{diff.affectedPrincipals.affectedUserCount} current group members across {diff.affectedPrincipals.affectedGroupCount} groups may be affected.{diff.affectedPrincipals.externalIdentityMappingChangeCount > 0 ? ` ${diff.affectedPrincipals.externalIdentityMappingChangeCount} identity mapping change${diff.affectedPrincipals.externalIdentityMappingChangeCount === 1 ? '' : 's'} may also affect externally managed identities.` : ''}</p></div> : null}

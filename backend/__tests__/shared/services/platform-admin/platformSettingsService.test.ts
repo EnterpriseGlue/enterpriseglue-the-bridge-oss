@@ -52,6 +52,8 @@ describe('PlatformSettingsService', () => {
       governanceSettingsMutations: 'allowed',
     });
     expect(settings.credentiallessCustomerSidecarsEnabled).toBe(false);
+    expect(settings.localPasswordLoginMode).toBe('auto');
+    expect(settings.ssoProviderSelectionMode).toBe('auto_redirect_single');
     expect(settings.ssoAllEnginesAssignmentMappingsEnabled).toBe(true);
     expect(settings.ssoEngineOwnerAssignmentMappingsEnabled).toBe(false);
     expect(settings.ssoEngineDelegateAssignmentMappingsEnabled).toBe(false);
@@ -120,6 +122,8 @@ describe('PlatformSettingsService', () => {
       projectEngineTargetMode: 'manual_allowed',
       engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
       credentiallessCustomerSidecarsEnabled: false,
+      localPasswordLoginMode: 'auto',
+      ssoProviderSelectionMode: 'auto_redirect_single',
       ssoAllEnginesAssignmentMappingsEnabled: true,
       ssoEngineOwnerAssignmentMappingsEnabled: false,
       ssoEngineDelegateAssignmentMappingsEnabled: false,
@@ -194,6 +198,36 @@ describe('PlatformSettingsService', () => {
 
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
       projectEngineTargetMode: 'external_only',
+      updatedById: 'admin-1',
+    }));
+  });
+
+  it('persists ordinary-login and provider-selection policy independently from governance ownership', async () => {
+    const repo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'default',
+        accessGovernanceSourceRef: 'config_bundle:acme.authz',
+        accessGovernanceOwnershipMode: 'config_locked',
+      }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return repo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await service.update({
+      localPasswordLoginMode: 'disabled',
+      ssoProviderSelectionMode: 'progressive',
+    }, 'admin-1');
+
+    expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
+      localPasswordLoginMode: 'disabled',
+      ssoProviderSelectionMode: 'progressive',
       updatedById: 'admin-1',
     }));
   });

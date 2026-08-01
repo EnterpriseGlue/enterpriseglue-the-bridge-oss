@@ -21,11 +21,57 @@ EnterpriseGlue intentionally keeps these concerns separate:
 | Settings ownership | `settings.ownershipMode` in a bundle | Whether the five fields above are portal-owned, configuration-locked, or editable with drift | Ownership of engines, groups, mappings, assignments, or members |
 | Runtime granularity | `runtimeAccessScope` on each engine | Engine-wide versus resource-aware process/decision filtering | The platform-wide authorization authority |
 | Engine topology | `tenancy` on each engine | Dedicated versus shared tenant resolution | SSO or member-screen editability |
+| Ordinary local login | `localPasswordLoginMode` / `login.localPassword` | Whether the normal login page accepts local passwords | Administrator recovery or SSO-derived access |
+| Provider presentation | `ssoProviderSelectionMode` / `login.providerSelection` | Single-provider redirect, chooser, or email-domain discovery | Which engines or projects the signed-in identity may access |
 
 Enabling an SSO provider does not automatically make access SSO-managed.
 Adding an engine through JSON or the external API does not automatically grant
 anyone access. Creating a project is controlled by `project:create`, regardless
-of `projectAccessAuthority`.
+of `projectAccessAuthority`. Login presentation is likewise independent:
+`sso_managed` governs how access is assigned, while the two login-policy fields
+govern how a logged-out person selects an authentication method.
+
+### Tenant-scoped pre-authentication API
+
+Headless login clients should use the tenant-scoped public contract:
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/t/{tenantSlug}/auth/login-methods` | Read only the sanitized login methods resolved for that tenant. |
+| `GET /api/t/{tenantSlug}/auth/providers/{providerId}/start` | Start the exact OIDC or SAML provider in that tenant and bind it into signed state. |
+| `POST /api/t/{tenantSlug}/auth/providers/{providerId}/login` | Submit direct LDAP credentials to the exact provider in that tenant. |
+| `GET /api/auth/identity/callback` | Complete OIDC using the tenant and provider already bound into state. |
+| `POST /api/auth/providers/saml/callback` | Complete SAML using signed RelayState. |
+
+The OpenAPI document includes all of these routes and their public-route risk
+classification. The corresponding global discovery/start/login routes are
+compatibility aliases for the OSS/default scope, not multi-tenant interfaces.
+OSS resolves every tenant URL to its canonical default tenant and retains legacy
+platform-scoped provider rows as a read/start fallback. Enterprise deployments
+must resolve the slug before these route handlers execute.
+
+### Portal labels and stable interface values
+
+Portal copy is intentionally human-readable. Automations must continue to send
+the enum values:
+
+| Portal label | Interface value |
+| --- | --- |
+| EnterpriseGlue only | `engineRuntimeAuthorizationMode: "enterpriseglue_authoritative"` / `governance.runtimeAuthorizationAuthority: "enterpriseglue_authoritative"` |
+| EnterpriseGlue with engine read-access backup | `engineRuntimeAuthorizationMode: "mirrored_engine_backstop"` / `governance.runtimeAuthorizationAuthority: "mirrored_engine_backstop"` |
+| Users sign in through this provider | `authenticationMode: "direct"` |
+| Accept trusted claims from a gateway | `authenticationMode: "claims_only"` |
+| Add and remove members to match the provider | `syncMode: "authoritative"` |
+| Add matching members only | `syncMode: "additive"` |
+| Managed by configuration | `ownershipMode: "config_locked"` |
+| Configuration-linked | `ownershipMode: "config_warn"` |
+
+Provider and mapping previews are read-only. Applying saved membership data is
+the audited `POST /api/identity/providers/{key}/replay-memberships` operation:
+it does not contact the provider and its membership changes take effect
+immediately. `DELETE /api/identity/providers/{key}` disables the provider by
+setting `isEnabled: false`; the current contract does not expose a separate
+provider archive state.
 
 ## Effective UI and API Behavior
 
@@ -87,7 +133,9 @@ Use `PUT /api/admin/settings` only while governance settings are editable
   "projectAccessAuthority": "manual",
   "engineOnboardingMode": "external_only",
   "projectEngineTargetMode": "hybrid",
-  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative"
+  "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+  "localPasswordLoginMode": "disabled",
+  "ssoProviderSelectionMode": "progressive"
 }
 ```
 
@@ -101,7 +149,9 @@ curl --fail-with-body \
     "projectAccessAuthority": "manual",
     "engineOnboardingMode": "external_only",
     "projectEngineTargetMode": "hybrid",
-    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative"
+    "engineRuntimeAuthorizationMode": "enterpriseglue_authoritative",
+    "localPasswordLoginMode": "disabled",
+    "ssoProviderSelectionMode": "progressive"
   }'
 ```
 
@@ -136,9 +186,23 @@ governance declares all five fields and an ownership mode:
     "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
     "governanceSettingsOwnership": "config_locked"
   },
+  "login": {
+    "localPassword": "disabled",
+    "providerSelection": "progressive"
+  },
   "imports": ["./engines.json"]
 }
 ```
+
+The `login` block does not claim governance ownership and is not inferred from
+the five access-governance fields. It is optional so engine-only bundles do not
+silently change authentication. When present, preview/diff/apply reports a
+separate `platform_settings` change with key `login-policy`.
+
+`localPassword` accepts `auto`, `enabled`, or `disabled`.
+`providerSelection` accepts `auto_redirect_single`, `chooser`, or
+`progressive`. Progressive discovery uses each provider's public
+`loginDomains`; it performs no account lookup.
 
 The engine file controls connection, topology, and runtime granularity:
 
@@ -332,6 +396,27 @@ existing receipt. Reusing that key with another preview fails closed.
 
 See [Migrate Governance Settings Ownership](../how-to/migrate-governance-settings-ownership.md)
 for operator success criteria, rollback, and failure recovery.
+
+## Human-Readable Authorization Responses
+
+Authorization identifiers remain the immutable API keys. Collection responses
+also include optional presentation metadata so portals and API clients do not
+need one lookup per row:
+
+- role assignments may include `principalDisplayName`,
+  `principalSecondary`, `resourceDisplayName`, and `resourceSecondary`;
+- group memberships may include `userDisplayName` and `userEmail`.
+
+Clients should render the display name first and retain the immutable ID as
+secondary diagnostic text. They must continue to send the immutable
+`principalId`, `resourceId`, and `userId` in mutation requests. Presentation
+fields are derived response data and are not accepted as authorization
+identifiers.
+
+For configuration-owned identity records, `ownershipMode: "config_locked"`
+means the portal exposes **View configuration** and safe diagnostics only.
+`config_warn` remains editable but records drift. These interface rules do not
+replace route enforcement: mutation endpoints evaluate ownership again.
 
 ## External Registry API
 

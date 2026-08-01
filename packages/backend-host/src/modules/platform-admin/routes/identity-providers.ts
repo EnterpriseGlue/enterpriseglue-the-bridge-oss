@@ -110,6 +110,11 @@ router.put('/api/identity/providers/:key', requireAuth, identityAdminLimiter, re
   if (!existing) throw Errors.notFound('Identity provider not found');
   const providerInput = IdentityProviderRequestSchema.parse({
     key: existing.key,
+    displayName: existing.displayName || existing.key,
+    organization: existing.organization,
+    displayOrder: existing.displayOrder,
+    isPreferred: existing.isPreferred,
+    loginDomains: JSON.parse(existing.loginDomainsJson || '[]'),
     protocol: existing.protocol,
     isEnabled: existing.isEnabled,
     authenticationMode: existing.authenticationMode,

@@ -5,13 +5,13 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
-import { IdentityProvider } from '@enterpriseglue/shared/db/entities/IdentityProvider.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
 import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index.js';
 
 const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const ordinaryLocalPasswordEnabled = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -41,6 +41,10 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () =>
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.js', () => ({
   getAccessAuthorityDecision: accessAuthorityDecisionMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({
+  loginMethodService: { ordinaryLocalPasswordEnabled },
 }));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
@@ -73,9 +77,6 @@ describe('InvitationService', () => {
     findOneByOrFail: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
-  let identityProviderRepo: {
-    count: ReturnType<typeof vi.fn>;
-  };
   let managerUserRepo: {
     update: ReturnType<typeof vi.fn>;
   };
@@ -87,6 +88,7 @@ describe('InvitationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     accessAuthorityDecisionMock.mockResolvedValue(null);
+    ordinaryLocalPasswordEnabled.mockResolvedValue(true);
     vi.spyOn(Date, 'now').mockReturnValue(now);
 
     const defaultExecute = vi.fn().mockResolvedValue({ affected: 1 });
@@ -112,10 +114,6 @@ describe('InvitationService', () => {
       update: vi.fn().mockResolvedValue(undefined),
     };
 
-    identityProviderRepo = {
-      count: vi.fn().mockResolvedValue(0),
-    };
-
     managerUserRepo = {
       update: vi.fn().mockResolvedValue(undefined),
     };
@@ -136,7 +134,6 @@ describe('InvitationService', () => {
       getRepository: (entity: unknown) => {
         if (entity === Invitation) return invitationRepo;
         if (entity === User) return userRepo;
-        if (entity === IdentityProvider) return identityProviderRepo;
         if (entity === AuthzGroupMembership) return membershipRepo;
         throw new Error('Unexpected repository');
       },

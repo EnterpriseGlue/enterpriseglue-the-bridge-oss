@@ -15,9 +15,11 @@ const getConfigBootstrapStatus = vi.hoisted(() => vi.fn<() => {
 })));
 const getConfigBootstrapMetrics = vi.hoisted(() => vi.fn(() => 'enterpriseglue_config_bootstrap_ready 1\n'));
 const getEngineTenancyMetrics = vi.hoisted(() => vi.fn(async () => 'enterpriseglue_engine_tenancy_metrics_collection_success 1\n'));
+const getLoginExperienceMetrics = vi.hoisted(() => vi.fn(() => 'enterpriseglue_login_experience_total{method="oidc",event="selected"} 1\n'));
 
 vi.mock('../../packages/backend-host/src/services/configBundleBootstrap.js', () => ({ getConfigBootstrapStatus, getConfigBootstrapMetrics }));
 vi.mock('../../packages/backend-host/src/services/engineTenancyMetrics.js', () => ({ getEngineTenancyMetrics }));
+vi.mock('../../packages/backend-host/src/services/loginExperienceMetrics.js', () => ({ getLoginExperienceMetrics }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
@@ -91,6 +93,7 @@ describe('app', () => {
     expect(response.text).toBe([
       'enterpriseglue_config_bootstrap_ready 1',
       'enterpriseglue_engine_tenancy_metrics_collection_success 1',
+      'enterpriseglue_login_experience_total{method="oidc",event="selected"} 1',
       '',
     ].join('\n'));
   });

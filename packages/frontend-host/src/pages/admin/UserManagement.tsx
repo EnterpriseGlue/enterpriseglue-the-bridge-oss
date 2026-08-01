@@ -504,7 +504,9 @@ export default function UserManagement() {
   const headers = [
     { key: 'email', header: 'Email' },
     { key: 'name', header: 'Name' },
-    { key: 'bootstrapAccess', header: 'Platform Role' },
+    { key: 'bootstrapAccess', header: 'Platform access' },
+    { key: 'scopedAccess', header: 'Scoped access' },
+    { key: 'accessSource', header: 'Scoped access source' },
     { key: 'status', header: 'Status' },
     { key: 'created', header: 'Created' },
     { key: 'actions', header: '' },
@@ -538,6 +540,8 @@ export default function UserManagement() {
     email: user.email,
     name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || '-',
     bootstrapAccess: getUserBootstrapAccess(user),
+    scopedAccess: '',
+    accessSource: '',
     status: getUserDisplayStatus(user).label,
     created: user.createdAt ? new Date(Number(user.createdAt)).toLocaleDateString() : '-',
     user, // Store full user object for actions
@@ -571,7 +575,7 @@ export default function UserManagement() {
               />
               {canCreateUsers && (
                 <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
-                  Invite User
+                  Invite user
                 </Button>
               )}
             </TableToolbarContent>
@@ -598,7 +602,7 @@ export default function UserManagement() {
                   />
                   {canCreateUsers && (
                     <Button kind="primary" renderIcon={Add} onClick={() => createModal.openModal()}>
-                      Invite User
+                      Invite user
                     </Button>
                   )}
                 </TableToolbarContent>
@@ -651,27 +655,52 @@ export default function UserManagement() {
                             const bootstrapAccess = getUserBootstrapAccess(user);
                             const tagType = getBootstrapAccessTagType(bootstrapAccess);
                             const label = getBootstrapAccessLabel(bootstrapAccess);
+                            return (
+                              <TableCell key={cell.id}>
+                                <Tag type={tagType}>{label}</Tag>
+                              </TableCell>
+                            );
+                          }
+
+                          if (cell.info.header === 'scopedAccess') {
                             const directAssignments = directRoleAssignmentsByUser.get(user.id) || [];
                             return (
                               <TableCell key={cell.id}>
-                                <Tag type={tagType}>
-                                  {label}
-                                </Tag>
-                                {canReadRoleAssignments ? (
-                                  <div style={{ marginTop: 'var(--spacing-2)', display: 'grid', gap: 'var(--spacing-1)', fontSize: '0.75rem', color: 'var(--cds-text-secondary, #525252)' }}>
-                                    {roleAssignmentsQ.isLoading ? (
-                                      <span>Scoped RBAC: loading assignments</span>
-                                    ) : roleAssignmentsQ.isError ? (
-                                      <span>Scoped RBAC: assignments unavailable</span>
-                                    ) : directAssignments.length > 0 ? (
-                                      <span title={directAssignments.map((assignment) => `${formatUserRoleAssignmentSummary(assignment)}; ${formatUserRoleAssignmentSourceLineage(assignment)}`).join('\n')}>
-                                        Scoped RBAC: {directAssignments.length} direct assignment{directAssignments.length === 1 ? '' : 's'}
-                                      </span>
-                                    ) : (
-                                      <span>Scoped RBAC: no direct assignments</span>
-                                    )}
-                                  </div>
-                                ) : null}
+                                {!canReadRoleAssignments ? (
+                                  <span style={{ color: 'var(--cds-text-secondary)' }}>Not available</span>
+                                ) : roleAssignmentsQ.isLoading ? (
+                                  <span>Loading assignments</span>
+                                ) : roleAssignmentsQ.isError ? (
+                                  <span>Assignments unavailable</span>
+                                ) : directAssignments.length > 0 ? (
+                                  <span title={directAssignments.map((assignment) => formatUserRoleAssignmentSummary(assignment)).join('\n')}>
+                                    {directAssignments.length} direct assignment{directAssignments.length === 1 ? '' : 's'}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: 'var(--cds-text-secondary)' }}>No direct assignments</span>
+                                )}
+                              </TableCell>
+                            );
+                          }
+
+                          if (cell.info.header === 'accessSource') {
+                            const directAssignments = directRoleAssignmentsByUser.get(user.id) || [];
+                            const sources = Array.from(new Set(directAssignments.map((assignment) => assignment.source)));
+                            return (
+                              <TableCell key={cell.id}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-2)' }}>
+                                  {sources.length === 0 ? (
+                                    <span style={{ color: 'var(--cds-text-secondary)' }}>—</span>
+                                  ) : sources.map((source) => (
+                                    <Tag
+                                      key={source}
+                                      type={source === 'sso' ? 'purple' : source === 'manual' ? 'blue' : source === 'bootstrap' ? 'teal' : 'gray'}
+                                      title={directAssignments.filter((assignment) => assignment.source === source).map(formatUserRoleAssignmentSourceLineage).join('\n')}
+                                    >
+                                      {source === 'sso' ? 'SSO-managed' : source === 'manual' ? 'Manual' : source === 'bootstrap' ? 'Bootstrap' : source}
+                                    </Tag>
+                                  ))}
+                                </div>
                               </TableCell>
                             );
                           }

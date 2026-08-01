@@ -121,6 +121,8 @@ describe('platform settings runtime authorization contracts', () => {
     expect(schemas?.AccessGovernanceOwnershipMode?.enum).toEqual(['manual', 'config_locked', 'config_warn']);
     expect(schemas?.EngineOnboardingMode?.enum).toEqual(['manual_allowed', 'external_only', 'hybrid']);
     expect(schemas?.ProjectEngineTargetPolicyMode?.enum).toEqual(['manual_allowed', 'external_only', 'hybrid']);
+    expect(schemas?.PlatformSettings?.properties?.localPasswordLoginMode?.enum).toEqual(['auto', 'enabled', 'disabled']);
+    expect(schemas?.PlatformSettings?.properties?.ssoProviderSelectionMode?.enum).toEqual(['auto_redirect_single', 'chooser', 'progressive']);
     expect(schemas?.PlatformGovernanceBehavior?.required).toEqual(expect.arrayContaining([
       'manualEngineAccessMutationsAllowed',
       'manualProjectAccessMutationsAllowed',
@@ -135,20 +137,29 @@ describe('platform settings runtime authorization contracts', () => {
       'accessGovernanceLastAppliedAt',
       'accessGovernanceDriftStatus',
       'governanceBehavior',
+      'localPasswordLoginMode',
+      'ssoProviderSelectionMode',
     ]));
 
     expect(getSettings?.summary).toContain('effective governance behavior');
     expect(putSettings?.description).toContain('does not register engines');
-    expect(preview?.description).toContain('Omit bundle.settings');
+    expect(preview?.description).toContain('Omit bundle.governance');
     expect(diff?.description).toContain('raw manifest explicitly declares');
-    expect(apply?.description).toContain('omitted settings never claim');
-    expect(exportBundle?.description).toContain('settings block is included only');
+    expect(apply?.description).toContain('omitted v1beta1 governance');
+    expect(exportBundle?.description).toContain('governance block is included only');
     expect(publicSettings?.description).toContain('principal permission snapshot');
 
     const example = putSettings?.requestBody?.content?.['application/json']?.example;
     expect(UpdatePlatformSettingsRequest.parse(example)).toMatchObject({
       engineAccessAuthority: 'sso_managed',
       engineOnboardingMode: 'external_only',
+    });
+    expect(UpdatePlatformSettingsRequest.parse({
+      localPasswordLoginMode: 'disabled',
+      ssoProviderSelectionMode: 'progressive',
+    })).toEqual({
+      localPasswordLoginMode: 'disabled',
+      ssoProviderSelectionMode: 'progressive',
     });
   });
 

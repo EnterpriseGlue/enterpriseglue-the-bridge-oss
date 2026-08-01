@@ -32,8 +32,9 @@ function tokenAuthenticatedRoute(method: string, route: string, risk: AuthzActio
 export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only sanitized configuration bootstrap state.'),
   publicRoute('GET', '/ready', 'low', 'platform-runtime', 'Unauthenticated readiness probes expose only sanitized configuration bootstrap state.'),
-  publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap and aggregate engine-tenancy gauges/counters without tenant or engine identifiers.'),
+  publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap, aggregate engine-tenancy, and login-experience gauges/counters without tenant, engine, provider, or principal identifiers.'),
   publicRoute('POST', '/api/auth/login', 'high', 'platform-auth', 'Credential login must be reachable before a session exists and is protected by authentication rate limits.'),
+  publicRoute('POST', '/api/auth/recovery/login', 'high', 'platform-auth', 'Dedicated administrator recovery verifies local credentials and current canonical platform-administrator membership under authentication rate limits.'),
   tokenAuthenticatedRoute('POST', '/api/auth/complete-onboarding', 'high', 'A one-time onboarding token authorizes completion before the normal user session is issued.'),
   tokenAuthenticatedRoute('POST', '/api/auth/refresh', 'medium', 'The refresh cookie authenticates session renewal when the access token is unavailable or expired.'),
   publicRoute('POST', '/api/auth/forgot-password', 'medium', 'platform-auth', 'Password recovery initiation must be reachable before authentication and returns a non-enumerating response.'),
@@ -46,8 +47,12 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('GET', '/api/auth/identity/callback', 'high', 'platform-auth', 'Completes a state-bound provider-neutral OIDC callback before issuing a local session.'),
   publicRoute('POST', '/api/auth/identity/:key/ldap/login', 'high', 'platform-auth', 'Direct directory login validates credentials before issuing a local session and is rate limited.'),
   publicRoute('GET', '/api/auth/providers/enabled', 'low', 'platform-auth', 'The login page needs sanitized provider-neutral login options before authentication.'),
+  publicRoute('GET', '/api/auth/login-methods', 'low', 'platform-auth', 'The login page needs a sanitized policy-resolved list of available login methods before authentication.'),
   publicRoute('GET', '/api/auth/providers/:providerId/start', 'medium', 'platform-auth', 'Starts a state-bound provider-neutral redirect login before a local session exists.'),
   publicRoute('POST', '/api/auth/providers/:providerId/login', 'high', 'platform-auth', 'Provider-neutral directory login validates credentials before issuing a local session and is rate limited.'),
+  publicRoute('GET', '/api/t/:tenantSlug/auth/login-methods', 'low', 'platform-auth', 'The tenant login page needs its sanitized, policy-resolved login methods before authentication.'),
+  publicRoute('GET', '/api/t/:tenantSlug/auth/providers/:providerId/start', 'medium', 'platform-auth', 'Starts a state-bound provider-neutral redirect login in the resolved tenant scope.'),
+  publicRoute('POST', '/api/t/:tenantSlug/auth/providers/:providerId/login', 'high', 'platform-auth', 'Tenant-scoped directory login validates credentials before issuing a session and is rate limited.'),
   publicRoute('POST', '/api/auth/providers/saml/callback', 'high', 'platform-auth', 'Consumes a signed provider-neutral SAML assertion and state before issuing a local session.'),
   publicRoute('GET', '/api/t/:tenantSlug/auth/sso-config', 'low', 'platform-auth', 'Tenant login discovery exposes only sanitized SSO configuration before authentication.'),
   {

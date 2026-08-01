@@ -2,6 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { expect, test, type Route } from '@playwright/test';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
+import { captureManualScreenshot } from './utils/manualScreenshots';
 
 const canonicalHash = 'a'.repeat(64);
 
@@ -74,13 +75,19 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect(page.getByText('Preview valid')).toBeVisible();
     await page.getByRole('button', { name: 'Apply exact preview' }).click();
     await expect(page.getByText('Configuration applied')).toBeVisible();
+    await expect(page.getByText(/No engine or identity changes were needed|Checked \d+ engine sets?/)).toBeVisible();
+    const platformSettingsHeading = page.getByRole('heading', { name: 'Platform Settings' });
+    await platformSettingsHeading.scrollIntoViewIfNeeded();
+    await expect(platformSettingsHeading).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Configuration' })).toHaveAttribute('aria-selected', 'true');
+    await captureManualScreenshot(page, '48-identity-configuration-applied.jpg');
     expect(appliedBodies).toHaveLength(1);
     expect(appliedBodies[0]).toMatchObject({ expectedPreviewHash: canonicalHash, identityReconciliationMode: 'apply' });
 
     identityStack.beginExternalLogin();
     await page.evaluate(() => localStorage.clear());
     await page.goto('/login');
-    await page.getByRole('button', { name: 'Sign in with identity.oidc.browser-mock' }).click();
+    await page.getByRole('button', { name: /^Continue with Browser identity provider/ }).click();
     await expect(page).toHaveURL(new RegExp(`${appOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`));
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
     expect(identityStack.events).toEqual(expect.arrayContaining(['provider_listed', 'authorization_started', 'token_issued', 'session_created']));
@@ -91,22 +98,41 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect(providersPanel.getByText('identity.oidc.browser-mock', { exact: true })).toBeVisible();
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Test connection' }).click();
-    await expect(providersPanel.getByText('Connection test: identity.oidc.browser-mock')).toBeVisible();
+    await expect(providersPanel.getByText('Connection verified: Browser identity provider')).toBeVisible();
+    await captureManualScreenshot(page, '49-provider-connection-success.jpg');
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
-    await page.getByRole('menuitem', { name: 'Preview membership changes' }).click();
-    await expect(providersPanel.getByText('3 snapshots checked: 1 additions and 1 removals would result.', { exact: false })).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Preview memberships' }).click();
+    await expect(providersPanel.getByText(/Checked 3 saved identity records. 1 membership would be added and 1 membership removed. No access was changed, and the provider was not contacted./)).toBeVisible();
+    await expect(providersPanel.getByText('Connection verified: Browser identity provider')).toHaveCount(0);
+    await captureManualScreenshot(page, '50-provider-membership-preview.jpg');
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
-    await page.getByRole('menuitem', { name: 'View sync history' }).click();
-    await expect(providersPanel.getByText('Synchronization history: identity.oidc.browser-mock')).toBeVisible();
-    await expect(providersPanel.getByText('1 added, 1 removed')).toBeVisible();
+    await page.getByRole('menuitem', { name: 'View refresh history' }).click();
+    const synchronizationHistoryHeading = providersPanel.getByText(
+      'Refresh history: Browser identity provider',
+    );
+    await expect(synchronizationHistoryHeading).toBeVisible();
+    await expect(providersPanel.getByText('1 membership added, 1 membership removed')).toBeVisible();
+    await synchronizationHistoryHeading.evaluate((element) => {
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    });
+    await captureManualScreenshot(page, '51-provider-sync-history.jpg', { stabilize: false });
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
-    await page.getByRole('menuitem', { name: 'Replay stored memberships' }).click();
-    await expect(providersPanel.getByText('Stored membership replay: identity.oidc.browser-mock')).toBeVisible();
+    await page.getByRole('menuitem', { name: 'Apply saved membership data' }).click();
+    const applySavedDataDialog = page.getByRole('dialog', { name: 'Apply saved membership data?' });
+    await expect(applySavedDataDialog).toContainText('It will not contact the provider');
+    await expect(applySavedDataDialog).toContainText('access changes take effect immediately');
+    await captureManualScreenshot(page, '77-apply-saved-membership-data-confirmation.jpg');
+    await applySavedDataDialog.getByRole('button', { name: /Apply changes/ }).click();
+    await expect(providersPanel.getByText('Saved membership data applied: Browser identity provider')).toBeVisible();
+    await expect(providersPanel.getByText(/Browser identity provider: Checked 1 saved identity record. Added 1 membership and removed 0 memberships. Access changes took effect immediately./)).toBeVisible();
+    await expect(providersPanel.getByText(/Checked 3 saved identity records/)).toHaveCount(0);
+    await captureManualScreenshot(page, '52-provider-membership-replay.jpg');
 
     identityStack.failNextConnectionTest();
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Test connection' }).click();
     await expect(providersPanel.getByText('Provider connection could not be verified')).toBeVisible();
+    await expect(providersPanel.getByText('Saved membership data applied: Browser identity provider')).toHaveCount(0);
     await expect(providersPanel.getByText(/browser-stack-secret/)).toHaveCount(0);
 
     await page.getByRole('tab', { name: 'Identity Mappings' }).click();
@@ -114,10 +140,61 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect(mappingsPanel.getByText('group.browser-operators', { exact: true })).toBeVisible();
     await mappingsPanel.getByRole('button', { name: 'Mapping actions' }).click();
     await page.getByRole('menuitem', { name: 'Edit' }).click();
-    await page.getByRole('button', { name: 'Test mapping' }).click();
-    await expect(page.getByText('Matched: group:operators')).toBeVisible();
-    await page.getByRole('button', { name: 'Preview stored identities' }).click();
-    await expect(page.getByText('2 of 3 stored identities match; 1 do not.')).toBeVisible();
+    await page.getByRole('button', { name: 'Preview with sample claims' }).click();
+    const mappingPreview = page.getByText('The sample matches this mapping through the “operators” external group. One matching external value was found. No identity or access was changed.');
+    await expect(mappingPreview).toBeVisible();
+    const mappingPreviewNotification = mappingPreview.locator(
+      'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " cds--inline-notification ")][1]',
+    );
+    await expect(mappingPreviewNotification).toBeVisible();
+    await expect.poll(async () => (await mappingPreviewNotification.boundingBox())?.height || 0)
+      .toBeGreaterThan(40);
+    await expect.poll(() => mappingPreviewNotification.evaluate((element) => {
+      const modalContent = element.closest('.cds--modal-content');
+      if (!modalContent) return false;
+      return element.getBoundingClientRect().bottom
+        <= modalContent.getBoundingClientRect().bottom - 64;
+    }))
+      .toBe(true);
+    await expect(page.getByRole('heading', { name: 'Edit identity mapping' })).toBeVisible();
+    await captureManualScreenshot(page, '25-identity-mapping-preview.jpg');
+    await page.getByRole('button', { name: 'Check saved identities' }).click();
+    const storedIdentityPreview = page.getByText('2 saved identities would match and 1 saved identity would not. No identity or access was changed.');
+    await expect(storedIdentityPreview).toBeVisible();
+    await storedIdentityPreview.scrollIntoViewIfNeeded();
+    await captureManualScreenshot(page, '54-mapping-test-and-stored-preview.jpg');
+
+    const enabledMapping = page.getByRole('checkbox', { name: 'Enable mapping' });
+    await enabledMapping.uncheck({ force: true });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(mappingsPanel.getByText('Identity mapping disabled', { exact: true })).toBeVisible();
+    await expect(mappingsPanel.getByText('Access from this mapping has been revoked. Memberships from manual changes and other providers are unchanged.', { exact: true })).toBeVisible();
+    await captureManualScreenshot(page, '56-mapping-disabled-recovery.jpg');
+
+    await mappingsPanel.getByRole('button', { name: 'Mapping actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    const deleteMappingDialog = page.getByRole('dialog', { name: 'Delete this identity mapping?' });
+    await expect(deleteMappingDialog).toContainText('Memberships created only by this mapping will be removed immediately');
+    await expect(deleteMappingDialog).toContainText('Manual memberships and memberships from other providers will remain');
+    await captureManualScreenshot(page, '78-mapping-delete-access-impact.jpg');
+    await deleteMappingDialog.getByRole('button', { name: 'Cancel' }).click();
+
+    identityStack.makeProviderManual();
+    await page.getByRole('tab', { name: 'Identity Providers' }).click();
+    await page.reload();
+    await page.getByRole('tab', { name: 'Identity Providers' }).click();
+    const manualProvidersPanel = page.getByLabel('Identity Providers', { exact: true });
+    await manualProvidersPanel.getByRole('button', { name: 'Provider actions' }).click();
+    await page.getByRole('menuitem', { name: 'Disable provider' }).click();
+    const disableProviderDialog = page.getByRole('dialog', { name: 'Disable Browser identity provider?' });
+    await expect(disableProviderDialog).toContainText('Provider-managed group memberships will be removed immediately');
+    await expect(disableProviderDialog).toContainText('Manual and API-managed access will not change');
+    await captureManualScreenshot(page, '57-provider-disable-confirmation.jpg');
+    await disableProviderDialog.getByRole('button', { name: /Disable provider/ }).click();
+    const manualProviderRow = manualProvidersPanel.getByRole('row').filter({ hasText: identityStack.provider.key });
+    await expect(manualProviderRow.getByTitle('Disabled')).toBeVisible();
+    await expect(manualProviderRow.getByText('Preferred', { exact: true })).toHaveCount(0);
+    await captureManualScreenshot(page, '79-provider-disabled.jpg');
 
     expect(identityStack.events).toEqual(expect.arrayContaining(['connection_tested', 'membership_previewed', 'membership_replayed', 'mapping_tested', 'mapping_previewed']));
   });

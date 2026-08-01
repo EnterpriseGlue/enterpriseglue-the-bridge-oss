@@ -6,6 +6,11 @@ Audience: Developers and architects.
 
 Configuration-bundle bootstrap is optional and disabled by default. Its operational contract is documented in [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md).
 
+Source development and CI use Node.js 24 (`>=24 <25`) and pnpm 11.0.8.
+Every workspace manifest declares the same Node runtime range; the root
+`packageManager` field pins pnpm. Use Corepack so package scripts do not fall
+back to an incompatible globally installed pnpm.
+
 ## Backend Configuration
 Primary sources:
 - `.local/docker/env/docker.env` (Docker Compose, Postgres default)
@@ -109,9 +114,10 @@ Production outbound engine traffic fails closed unless `EG_ENGINE_ALLOWED_HOSTS`
 `/health` exposes sanitized bootstrap state for diagnostics. `/ready` returns
 `503` after a non-fail-closed bootstrap error. Successful apply receipts report
 Engine Set and runtime-resource materialization counts; identity-provider
-mapping changes must also finish their bounded stored-snapshot replay before
-readiness opens. Live identity-provider directory synchronization remains a
-separate scheduled operation.
+mapping changes must also finish applying their bounded saved membership data
+(the `replay-memberships` API operation) before readiness opens. Live
+identity-provider directory synchronization remains a separate scheduled
+operation.
 
 `/metrics` publishes `enterpriseglue_config_bootstrap_ready`,
 `enterpriseglue_config_bootstrap_applied`, and
@@ -123,6 +129,11 @@ a collection-success gauge, and process-local default-fallback counters. These
 series contain no engine, tenant, mapping, resource, URL, or principal
 identifiers; see
 [Configure Dedicated and Shared Engine Tenancy](../how-to/configure-engine-tenancy.md#monitor-resolution-and-default-fallback).
+It also publishes bounded `enterpriseglue_login_experience_*` counters and
+duration aggregates. Login labels are restricted to authentication-method and
+outcome enums and never include provider, tenant, user, email, domain, IP,
+request, or session identifiers; see
+[Authentication and SSO](../how-to/auth-sso.md#privacy-safe-login-experience-metrics).
 
 ### Database Compatibility (TypeORM Adapters)
 Database support is provided via TypeORM adapters and driver packages:

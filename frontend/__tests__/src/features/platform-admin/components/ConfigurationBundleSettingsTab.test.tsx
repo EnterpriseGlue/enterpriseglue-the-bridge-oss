@@ -67,6 +67,8 @@ describe('ConfigurationBundleSettingsTab', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Apply exact preview' }));
     expect(await screen.findByText('Configuration applied')).toBeInTheDocument();
+    expect(screen.getByText('Checked 1 engine set, 2 runtime resource sets, and 3 engines. Checked 0 saved identity snapshots; added 0 memberships and removed 0.')).toBeInTheDocument();
+    expect(screen.queryByText(/not_needed/)).not.toBeInTheDocument();
     await waitFor(() => expect(applyBody).not.toBeNull());
     await waitFor(() => expect(authState.refreshPermissions).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(queryClient.getQueryState(authzQueryKeys.roles)?.isInvalidated).toBe(true));

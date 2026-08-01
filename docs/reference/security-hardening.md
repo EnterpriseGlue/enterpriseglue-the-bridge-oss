@@ -50,6 +50,10 @@ Implemented config-bundle controls and remaining customer-sidecar controls are d
   unresolved/conflicting/stale resource gauges, and default-fallback rates.
   Investigate with authenticated diagnostics; never weaken fail-closed runtime
   enforcement to clear an alert.
+- Monitor `enterpriseglue_login_experience_total` and the corresponding
+  duration aggregates by their bounded `method` and `event` labels. Do not add
+  provider, tenant, user, email, domain, IP, request, or session labels; those
+  would turn an operational aggregate into identity-tracking data.
 - Treat the hash in health/readiness, logs, and receipts as configuration
   metadata. Those surfaces use stable generic issue codes and must never be
   changed to expose raw parser, provider, or secret-resolution exceptions.

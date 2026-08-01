@@ -17,6 +17,11 @@ export class MockBrowserIdentityStack {
   readonly provider = {
     id: 'browser-oidc-provider',
     key: 'identity.oidc.browser-mock',
+    displayName: 'Browser identity provider',
+    organization: 'EnterpriseGlue test',
+    displayOrder: 0,
+    isPreferred: true,
+    loginDomainsJson: JSON.stringify(['example.test']),
     protocol: 'oidc' as const,
     isEnabled: true,
     authenticationMode: 'direct' as const,
@@ -57,11 +62,29 @@ export class MockBrowserIdentityStack {
     await page.route('**/*', async (route) => {
       const request = route.request();
       const url = new URL(request.url());
-      const path = url.pathname.replace(/^\/t\/[^/]+(?=\/(?:api|engines-api|mission-control-api))/, '');
+      const path = url.pathname
+        .replace(/^\/api\/t\/[^/]+\/auth/, '/api/auth')
+        .replace(/^\/t\/[^/]+(?=\/(?:api|engines-api|mission-control-api))/, '');
 
-      if (path === '/api/auth/providers/enabled') {
+      if (path === '/api/auth/login-methods') {
         this.events.push('provider_listed');
-        return json(route, this.provider.isEnabled ? [{ id: this.provider.id, key: this.provider.key, protocol: this.provider.protocol, loginMethod: 'redirect' }] : []);
+        const providers = this.provider.isEnabled ? [{
+          id: this.provider.id,
+          key: this.provider.key,
+          displayName: this.provider.displayName,
+          organization: this.provider.organization,
+          protocol: this.provider.protocol,
+          loginMethod: 'redirect',
+          preferred: true,
+          loginDomains: ['example.test'],
+        }] : [];
+        return json(route, {
+          localPassword: { enabled: providers.length === 0 },
+          providerSelection: 'chooser',
+          autoRedirectProviderId: null,
+          providers,
+          configurationStatus: 'ready',
+        });
       }
       if (path === `/api/auth/providers/${this.provider.id}/start`) {
         this.events.push('authorization_started', 'token_issued', 'session_created');
@@ -111,7 +134,12 @@ export class MockBrowserIdentityStack {
       if (path === '/api/dashboard/context') return json(route, { isPlatformAdmin: true, canViewActiveUsers: false, canViewEngines: false, canViewProcessData: false, canViewDeployments: false, canViewMetrics: false });
       if (path === '/api/dashboard/stats') return json(route, { totalProjects: 0, totalFiles: 0, fileTypes: { bpmn: 0, dmn: 0, form: 0 } });
       if (path === '/engines-api/engines' || path === '/api/users') return json(route, []);
-      if (path === '/api/admin/settings') return json(route, { inviteAllowAllDomains: true, inviteAllowedDomains: [] });
+      if (path === '/api/admin/settings') return json(route, {
+        inviteAllowAllDomains: true,
+        inviteAllowedDomains: [],
+        localPasswordLoginMode: 'auto',
+        ssoProviderSelectionMode: 'auto_redirect_single',
+      });
       if (path === '/api/admin/environments' || path === '/api/admin/projects' || path === '/api/admin/engines') return json(route, []);
       if (path === '/api/sso/providers' || path === '/api/identity/providers/environment-migration-drafts') return json(route, []);
       if (path === '/api/identity/providers') return json(route, [this.provider]);

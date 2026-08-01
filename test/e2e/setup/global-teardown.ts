@@ -41,6 +41,14 @@ async function tenantMembershipsSupported(pool: import('pg').Pool, schema: strin
   return (result.rowCount || 0) > 0;
 }
 
+async function tableExists(pool: import('pg').Pool, schema: string, tableName: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+    [schema, tableName],
+  );
+  return (result.rowCount || 0) > 0;
+}
+
 async function loadBackendEnv() {
   try {
     const envPath = path.resolve(process.cwd(), 'backend/.env');
@@ -151,6 +159,63 @@ async function cleanupNativeGrantIdentitySourceArtifacts(pool: import('pg').Pool
   await pool.query(`DELETE FROM ${schema}.identity_providers WHERE id = ANY($1::text[])`, [providerIds]);
 }
 
+/**
+ * Browser rehearsals deliberately create uniquely named providers so parallel
+ * runs cannot share authentication state. Archiving through the product API is
+ * the behavior under test, but archived rows must not accumulate in the local
+ * acceptance database or leak into later screenshots and chooser assertions.
+ *
+ * This hard-delete is restricted to the E2E-only key namespaces below and is
+ * guarded by assertLocalDatabaseTarget() before teardown reaches this helper.
+ */
+async function cleanupDisposableIdentityProviderArtifacts(pool: import('pg').Pool, schema: string) {
+  const providerRows = await pool.query(
+    `SELECT id FROM ${schema}.identity_providers
+     WHERE key LIKE 'local-oidc-authz-%'
+        OR key LIKE 'identity.oidc.config.%'`,
+  );
+  const providerIds = providerRows.rows.map((row: { id: string }) => row.id);
+  if (providerIds.length === 0) return;
+
+  const mappingRows = await pool.query(
+    `SELECT id FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`,
+    [providerIds],
+  );
+  const mappingIds = mappingRows.rows.map((row: { id: string }) => row.id);
+  const mappingMembershipRefs = mappingIds.flatMap((mappingId) => [
+    `identity_mapping:${mappingId}`,
+    ...providerIds.map((providerId) => `identity_provider:${providerId}:mapping:${mappingId}`),
+  ]);
+
+  if (mappingMembershipRefs.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.authz_group_memberships
+       WHERE source = 'identity_provider' AND source_ref = ANY($1::text[])`,
+      [mappingMembershipRefs],
+    );
+  }
+
+  await pool.query(`DELETE FROM ${schema}.sso_sync_events WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.sso_sync_runs WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  if (await tableExists(pool, schema, 'sso_group_mappings')) {
+    await pool.query(`DELETE FROM ${schema}.sso_group_mappings WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  }
+  await pool.query(`DELETE FROM ${schema}.sso_engine_access_snapshots WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.saml_assertion_replays WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_reconciliation_checkpoints WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.config_bundle_identity_replay_tasks WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE identity_provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.external_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.sso_normalized_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(
+    `DELETE FROM ${schema}.audit_logs
+     WHERE resource_type = 'identity_provider' AND resource_id = ANY($1::text[])`,
+    [providerIds],
+  );
+  await pool.query(`DELETE FROM ${schema}.identity_providers WHERE id = ANY($1::text[])`, [providerIds]);
+}
+
 async function cleanupNativeGrantMigrationArtifacts(pool: import('pg').Pool, schema: string, engineId: string) {
   await cleanupNativeGrantIdentitySourceArtifacts(pool, schema);
   const runRows = await pool.query(
@@ -221,6 +286,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     options: `-c search_path=${schema}`,
   });
   const hasTenantMemberships = await tenantMembershipsSupported(pool, schema);
+  await cleanupDisposableIdentityProviderArtifacts(pool, schema);
 
   if (membershipSourceRef) {
     const [engineSetRows, runtimeResourceSetRows] = await Promise.all([

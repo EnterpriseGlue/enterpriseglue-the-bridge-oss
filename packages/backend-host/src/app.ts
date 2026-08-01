@@ -14,6 +14,7 @@ import { registerRoutes } from './routes/index.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
 import { getConfigBootstrapMetrics, getConfigBootstrapStatus } from './services/configBundleBootstrap.js';
 import { getEngineTenancyMetrics } from './services/engineTenancyMetrics.js';
+import { getLoginExperienceMetrics } from './services/loginExperienceMetrics.js';
 
 interface CreateAppOptions {
   registerBaseRoutes?: boolean;
@@ -212,6 +213,7 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     const metrics = [
       getConfigBootstrapMetrics().trimEnd(),
       (await getEngineTenancyMetrics()).trimEnd(),
+      getLoginExperienceMetrics().trimEnd(),
       '',
     ].join('\n');
     res.type('text/plain; version=0.0.4').send(metrics);

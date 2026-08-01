@@ -14,18 +14,50 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.f
 
 describe('identityProviderService', () => {
   const find = vi.fn(); const findOne = vi.fn(); const insert = vi.fn(); const update = vi.fn();
+  const transaction = vi.fn();
   beforeEach(() => {
     vi.clearAllMocks(); findOne.mockResolvedValue(null); find.mockResolvedValue([]); insert.mockResolvedValue(undefined);
-    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => {
+    const manager = { getRepository: (entity: unknown) => {
       if (entity === IdentityProvider) return { find, findOne, insert, update };
       throw new Error('Unexpected repository');
-    }});
+    }};
+    transaction.mockImplementation(async (work: (store: typeof manager) => Promise<unknown>) => work(manager));
+    (getDataSource as any).mockResolvedValue({ ...manager, transaction });
   });
   it('creates OIDC providers with secret references only', async () => {
     const provider = await identityProviderService.upsert({ key: 'entra', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client', clientSecretRef: 'EG_ENTRA_SECRET' } });
     expect(provider.key).toBe('entra');
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc', providerKeyIdentity: 'platform:entra', configurationJson: expect.stringContaining('clientSecretRef') }));
     expect(JSON.parse(insert.mock.calls[0][0].syncJson)).toEqual({ triggers: ['login'], requiredForLogin: true });
+  });
+
+  it('normalizes login presentation metadata and keeps one preferred provider per scope', async () => {
+    find.mockResolvedValue([{ id: 'old-preferred' }]);
+    await identityProviderService.upsert({
+      tenantId: 'tenant-a',
+      key: 'entra',
+      displayName: 'Microsoft Entra ID',
+      organization: 'Example Corporation',
+      displayOrder: 10,
+      isPreferred: true,
+      loginDomains: ['EXAMPLE.COM', 'example.com', ' subsidiary.example.com '],
+      protocol: 'oidc',
+      configuration: { issuerUrl: 'https://login.example.test', clientId: 'client' },
+    });
+
+    expect(update).toHaveBeenCalledWith({ id: 'old-preferred' }, {
+      isPreferred: false,
+      preferredScopeIdentity: 'provider:old-preferred',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      displayName: 'Microsoft Entra ID',
+      organization: 'Example Corporation',
+      displayOrder: 10,
+      isPreferred: true,
+      preferredScopeIdentity: 'preferred:tenant-a',
+      loginDomainsJson: JSON.stringify(['example.com', 'subsidiary.example.com']),
+    }));
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 
   it('requires reconciliation before sign-in even when a service caller bypasses the API schema', async () => {
@@ -67,6 +99,18 @@ describe('identityProviderService', () => {
     await expect(identityProviderService.getDirectLoginProviderByKey('entra')).resolves.toBe(defaultProvider);
     await expect(identityProviderService.getDirectLoginProviderById('default-provider')).resolves.toBe(defaultProvider);
     expect(findOne).not.toHaveBeenCalledWith({ where: { providerKeyIdentity: 'platform:entra' } });
+  });
+  it('uses the same legacy fallback when the OSS default tenant was resolved from the URL', async () => {
+    const platformProvider = { id: 'platform-provider', key: 'legacy-saml', protocol: 'saml' } as IdentityProvider;
+    findOne.mockImplementation(({ where }: { where: { providerKeyIdentity?: string; id?: string; tenantId?: unknown } }) => (
+      where.providerKeyIdentity === 'platform:legacy-saml' || (where.id === 'platform-provider' && where.tenantId !== OSS_DEFAULT_TENANT_ID)
+        ? Promise.resolve(platformProvider)
+        : Promise.resolve(null)
+    ));
+
+    await expect(identityProviderService.getDirectLoginProviderByKey('legacy-saml', OSS_DEFAULT_TENANT_ID)).resolves.toBe(platformProvider);
+    await expect(identityProviderService.getDirectLoginProviderById('platform-provider', OSS_DEFAULT_TENANT_ID)).resolves.toBe(platformProvider);
+    expect(findOne).toHaveBeenCalledWith({ where: { providerKeyIdentity: 'platform:legacy-saml' } });
   });
   it('persists config provenance through a supplied transaction manager', async () => {
     const transactionInsert = vi.fn().mockResolvedValue(undefined);

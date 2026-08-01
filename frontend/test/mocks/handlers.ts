@@ -3,6 +3,11 @@ import { http, HttpResponse } from 'msw';
 export const identityProviderFixture = {
   id: 'identity-provider-1',
   key: 'demo-oidc',
+  displayName: 'Demo OIDC',
+  organization: 'EnterpriseGlue',
+  displayOrder: 0,
+  isPreferred: true,
+  loginDomainsJson: JSON.stringify(['example.test']),
   protocol: 'oidc',
   isEnabled: true,
   authenticationMode: 'claims_only',
@@ -38,7 +43,13 @@ export function identityApiFailureHandlers(message = 'Identity provider unavaila
 }
 
 export const handlers = [
-  http.get('/api/auth/providers/enabled', () => HttpResponse.json([])),
+  http.get('/api/auth/login-methods', () => HttpResponse.json({
+    localPassword: { enabled: true },
+    providerSelection: 'chooser',
+    autoRedirectProviderId: null,
+    providers: [],
+    configurationStatus: 'ready',
+  })),
   http.get('/api/auth/branding', () => {
     return HttpResponse.json({});
   }),

@@ -23,12 +23,14 @@ const externalEntitlementId = process.env.LOCAL_OIDC_ENTITLEMENT_ID || 'operator
 
 type Engine = { id: string; name: string };
 type ConfigPreview = { valid: boolean; canonicalHash: string; requiredAcknowledgements?: string[] };
+type ConfigBundleRunSummary = { bundleKey: string; status: string };
 
 async function requestJson<T>(page: Page, path: string, options: { method?: 'GET' | 'POST'; csrf?: string; data?: unknown } = {}) {
   const response = await page.request.fetch(path, {
     method: options.method || 'GET',
     headers: options.csrf ? { 'x-csrf-token': options.csrf } : undefined,
     data: options.data,
+    timeout: 30_000,
   });
   let body: T | null = null;
   try { body = await response.json() as T; } catch { /* status-only assertion */ }
@@ -44,10 +46,10 @@ async function csrfToken(page: Page): Promise<string> {
 }
 
 async function loginAdministrator(page: Page): Promise<void> {
-  await page.goto('/login?local=1');
+  await page.goto('/admin-recovery');
   await page.getByLabel(/email/i).fill(process.env.LOCAL_OIDC_ADMIN_EMAIL!);
-  await page.getByLabel(/password/i).fill(process.env.LOCAL_OIDC_ADMIN_PASSWORD!);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByLabel('Password', { exact: true }).fill(process.env.LOCAL_OIDC_ADMIN_PASSWORD!);
+  await page.getByRole('button', { name: 'Sign in for recovery', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
 
@@ -77,11 +79,12 @@ async function applyBundle(page: Page, csrf: string, envelope: Record<string, un
   expect([200, 202], JSON.stringify(applied.body)).toContain(applied.status);
 }
 
-async function signInWithKeycloak(context: BrowserContext, providerKey: string, throughChooser = false): Promise<Page> {
+async function signInWithKeycloak(context: BrowserContext, providerKey: string, throughChooser = false, displayName = providerKey): Promise<Page> {
   const page = await context.newPage();
   if (throughChooser) {
     await page.goto('/login');
-    await page.getByRole('button', { name: `Sign in with ${providerKey}`, exact: true }).click();
+    const escapedDisplayName = displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await page.getByRole('button', { name: new RegExp(`^Continue with ${escapedDisplayName}(?:$|\\s)`) }).click();
   } else {
     await page.goto(`/api/auth/identity/${encodeURIComponent(providerKey)}/start`);
   }
@@ -119,7 +122,7 @@ function bundleFor(input: { bundleKey: string; providerKey: string; groupKey: st
       './engines.json': { engines: [{
         key: input.engineKey,
         name: `Configured OIDC engine ${input.bundleKey}`,
-        type: 'camunda7',
+        type: 'operaton',
         baseUrl: 'http://camunda-mock:9080/engine-rest',
         auth: { type: 'basic', username: 'e2e', passwordRef: 'env://E2E_ENGINE_PASSWORD' },
         connectionMode: 'direct',
@@ -139,6 +142,11 @@ function bundleFor(input: { bundleKey: string; providerKey: string; groupKey: st
       }] },
       './identity-providers.json': { identityProviders: [{
         key: input.providerKey,
+        displayName: 'Configured OIDC identity',
+        organization: 'Local acceptance environment',
+        displayOrder: 20,
+        preferred: false,
+        loginDomains: ['identity-mock.test'],
         type: 'oidc',
         enabled: true,
         authenticationMode: 'direct',
@@ -172,8 +180,27 @@ function bundleFor(input: { bundleKey: string; providerKey: string; groupKey: st
   };
 }
 
+async function cleanInterruptedConfigFixtures(page: Page, csrf: string): Promise<void> {
+  const runs = await requestJson<ConfigBundleRunSummary[]>(page, '/api/authz/config-bundles/runs?limit=100');
+  expect(runs.status, JSON.stringify(runs.body)).toBe(200);
+  const staleBundleKeys = [...new Set((runs.body || [])
+    .map((run) => run.bundleKey)
+    .filter((key) => key.startsWith('e2e.oidc-config.')))];
+  for (const bundleKey of staleBundleKeys) {
+    const staleSuffix = bundleKey.slice('e2e.oidc-config.'.length);
+    const staleBundle = bundleFor({
+      bundleKey,
+      providerKey: `identity.oidc.config.${staleSuffix}`,
+      groupKey: `group.oidc-config.${staleSuffix}`,
+      engineKey: `engine.oidc-config.${staleSuffix}`,
+      includeMapping: false,
+    });
+    await applyBundle(page, csrf, emptyBundle(staleBundle), `oidc-config-recovered-cleanup-${staleSuffix}`);
+  }
+}
+
 test.describe('Local OIDC configuration-to-login authorization rehearsal', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   test.skip(!enabled, 'Set LOCAL_OIDC_CONFIG_AUTHORIZATION_REHEARSAL=true with local administrator credentials.');
 
   test('applies an authoritative bundle, signs in through its OIDC provider, and revokes access after mapping removal @local-oidc-live @identity-configuration-live', async ({ browser }) => {
@@ -191,17 +218,18 @@ test.describe('Local OIDC configuration-to-login authorization rehearsal', () =>
     try {
       await loginAdministrator(admin);
       csrf = await csrfToken(admin);
+      await cleanInterruptedConfigFixtures(admin, csrf);
       granted = bundleFor({ bundleKey, providerKey, groupKey, engineKey, includeMapping: true });
       await applyBundle(admin, csrf, granted, `oidc-config-create-${suffix}`);
 
       const chooser = await browser.newContext({ ignoreHTTPSErrors: true, baseURL: baseUrl });
       const chooserPage = await chooser.newPage();
       await chooserPage.goto('/login');
-      await expect(chooserPage.getByRole('button', { name: 'Sign in with local-keycloak-oidc', exact: true })).toBeVisible();
-      await expect(chooserPage.getByRole('button', { name: `Sign in with ${providerKey}`, exact: true })).toBeVisible();
+      await expect(chooserPage.getByRole('button', { name: 'Continue with local-keycloak-oidc', exact: true })).toBeVisible();
+      await expect(chooserPage.getByRole('button', { name: 'Continue with Configured OIDC identity Local acceptance environment', exact: true })).toHaveCount(1);
       await chooser.close();
 
-      const operator = await signInWithKeycloak(operatorContext, providerKey, true);
+      const operator = await signInWithKeycloak(operatorContext, providerKey, true, 'Configured OIDC identity');
       const visible = await requestJson<Engine[]>(operator, '/engines-api/engines');
       expect(visible.status, JSON.stringify(visible.body)).toBe(200);
       expect(visible.body).toHaveLength(1);

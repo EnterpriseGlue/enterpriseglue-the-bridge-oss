@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
+import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 
 const router = Router();
 
@@ -13,16 +14,13 @@ const router = Router();
  * provider-neutral identity providers. Full tenant-based SSO enforcement is
  * an EE-only feature.
  */
-router.get('/api/t/:tenantSlug/auth/sso-config', asyncHandler(async (req, res) => {
+router.get('/api/t/:tenantSlug/auth/sso-config', apiLimiter, resolveTenantContext({ required: true }), asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim();
   if (!tenantSlug) {
     return res.status(400).json({ error: 'Tenant slug is required' });
   }
 
-  const dataSource = await getDataSource();
-  const identityProviderRepo = dataSource.getRepository(IdentityProvider);
-  const directIdentityProviderCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
-  const ssoRequired = directIdentityProviderCount > 0;
+  const ssoRequired = !await loginMethodService.ordinaryLocalPasswordEnabled(req.tenant?.tenantId || null);
 
   return res.json({ ssoRequired });
 }));

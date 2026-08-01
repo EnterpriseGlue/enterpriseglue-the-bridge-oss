@@ -12,6 +12,10 @@ export const AccessAuthorityModeSchema = z.enum(['manual', 'transition_to_sso', 
 export const AccessGovernanceOwnershipModeSchema = z.enum(['manual', 'config_locked', 'config_warn'])
   .describe('Declares whether the five governance settings are portal-owned, configuration-locked, or editable with drift tracking.');
 export const AccessGovernanceDriftStatusSchema = z.enum(['in_sync', 'drifted']);
+export const LocalPasswordLoginModeSchema = z.enum(['auto', 'enabled', 'disabled'])
+  .describe('Controls ordinary local password login. auto preserves safe SSO enforcement by disabling ordinary local login whenever a direct identity provider is enabled.');
+export const SsoProviderSelectionModeSchema = z.enum(['auto_redirect_single', 'chooser', 'progressive'])
+  .describe('Controls how the public login page selects among enabled direct identity providers.');
 export const UnsupportedEngineRuntimeAuthorizationModeMessage = 'Unsupported runtime authorization mode';
 export const EngineRuntimeAuthorizationModeSchema = z.enum(['enterpriseglue_authoritative', 'mirrored_engine_backstop'], {
   error: UnsupportedEngineRuntimeAuthorizationModeMessage,
@@ -42,9 +46,7 @@ export const PlatformBrandingSchema = z.object({
 });
 
 /** Non-secret branding available before a normal user session exists. */
-export const PublicPlatformBrandingSchema = PlatformBrandingSchema.extend({
-  ssoAutoRedirectSingleProvider: z.boolean(),
-});
+export const PublicPlatformBrandingSchema = PlatformBrandingSchema;
 
 export const UpdatePlatformBrandingRequestSchema = z.object({
   logoUrl: z.string().nullable().optional(),
@@ -118,7 +120,8 @@ export const PlatformSettingsSchema = z.object({
   credentiallessCustomerSidecarsEnabled: z.boolean(),
   inviteAllowAllDomains: z.boolean(),
   inviteAllowedDomains: z.array(z.string()),
-  ssoAutoRedirectSingleProvider: z.boolean(),
+  localPasswordLoginMode: LocalPasswordLoginModeSchema,
+  ssoProviderSelectionMode: SsoProviderSelectionModeSchema,
   ssoAllEnginesAssignmentMappingsEnabled: z.boolean(),
   ssoEngineOwnerAssignmentMappingsEnabled: z.boolean(),
   ssoEngineDelegateAssignmentMappingsEnabled: z.boolean(),
@@ -178,7 +181,8 @@ export const UpdatePlatformSettingsRequest = z.object({
   credentiallessCustomerSidecarsEnabled: z.boolean().optional(),
   inviteAllowAllDomains: z.boolean().optional(),
   inviteAllowedDomains: z.array(z.string()).optional(),
-  ssoAutoRedirectSingleProvider: z.boolean().optional(),
+  localPasswordLoginMode: LocalPasswordLoginModeSchema.optional(),
+  ssoProviderSelectionMode: SsoProviderSelectionModeSchema.optional(),
   ssoAllEnginesAssignmentMappingsEnabled: z.boolean().optional(),
   ssoEngineOwnerAssignmentMappingsEnabled: z.boolean().optional(),
   ssoEngineDelegateAssignmentMappingsEnabled: z.boolean().optional(),
@@ -208,6 +212,8 @@ export type PlatformBranding = z.infer<typeof PlatformBrandingSchema>;
 export type PublicPlatformBranding = z.infer<typeof PublicPlatformBrandingSchema>;
 export type UpdatePlatformBrandingRequest = z.infer<typeof UpdatePlatformBrandingRequestSchema>;
 export type EngineOnboardingMode = z.infer<typeof EngineOnboardingModeSchema>;
+export type LocalPasswordLoginMode = z.infer<typeof LocalPasswordLoginModeSchema>;
+export type SsoProviderSelectionMode = z.infer<typeof SsoProviderSelectionModeSchema>;
 export type ProjectEngineTargetPolicyMode = z.infer<typeof ProjectEngineTargetPolicyModeSchema>;
 export type AccessAuthorityMode = z.infer<typeof AccessAuthorityModeSchema>;
 export type AccessGovernanceOwnershipMode = z.infer<typeof AccessGovernanceOwnershipModeSchema>;

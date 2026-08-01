@@ -24,7 +24,21 @@ openssl rand -base64 32
 
 ## Configure a direct identity provider
 
-Create an enabled direct OIDC, SAML, or LDAP provider with secret references only. The login page reads `/api/auth/providers/enabled` and starts the selected provider at `/api/auth/providers/{providerId}/start`; SAML assertions post to `/api/auth/providers/saml/callback`.
+Create an enabled direct OIDC, SAML, or LDAP provider with secret references
+only. Give every provider a user-facing sign-in name and, when useful, its
+organization and accepted email domains. Provider keys remain stable machine
+identifiers and are not shown as login-button labels.
+
+The tenant login page reads the sanitized, policy-resolved
+`GET /api/t/{tenantSlug}/auth/login-methods` contract. Redirect providers start
+at `/api/t/{tenantSlug}/auth/providers/{providerId}/start`; LDAP submits to
+`/api/t/{tenantSlug}/auth/providers/{providerId}/login`; OIDC and SAML callbacks
+remain platform callback URLs because their signed state carries the resolved
+tenant, provider record, and safe return path. The global
+`/api/auth/login-methods` and provider start/login routes remain default-tenant
+compatibility aliases for older clients. The older
+`GET /api/auth/providers/enabled` response remains a compatibility contract
+for older clients, but new clients must use `login-methods`.
 
 Create **Identity Mappings** from stable upstream entitlements to internal groups, then grant platform, project, engine, or runtime-resource roles to those groups. Test the connection and perform a controlled sign-in before enabling SSO enforcement.
 
@@ -43,25 +57,150 @@ next successful sign-in. An `additive` mapping only adds memberships. Manual
 memberships and memberships sourced from another provider are unaffected. If
 reconciliation fails, EnterpriseGlue fails closed and issues no session.
 
-Scheduled LDAP directory reconciliation and manual replay are supplementary
+Scheduled LDAP directory reconciliation and applying saved membership data are supplementary
 ways to refresh identities that have not signed in; they do not replace the
 mandatory fresh reconciliation at sign-in. OIDC/Entra obtains fresh verified
 claims through the sign-in flow. A future Graph or SCIM poller would be a
 separate background capability, not an opt-out from this requirement.
 
+### Portal language and API values
+
+The portal uses outcome-based language. JSON and REST interfaces retain stable
+machine values:
+
+| Portal wording | JSON/API value | Exact behavior |
+| --- | --- | --- |
+| **Users sign in through this provider** | `authenticationMode: "direct"` | The provider appears as a sign-in method. |
+| **Accept trusted claims from a gateway** | `authenticationMode: "claims_only"` | EnterpriseGlue accepts verified upstream identity facts; the provider is not shown on the login page. |
+| **Add and remove members to match the provider** | `syncMode: "authoritative"` | Provider-managed membership is added and removed to match fresh provider evidence. Other providers and manual membership are not changed. |
+| **Add matching members only** | `syncMode: "additive"` | Matching membership is added; an upstream removal does not remove the existing membership. |
+| **Block sign-in until the refresh succeeds** | `sync.incompleteEntitlements: "fail_closed"` | No session is issued when membership evidence is incomplete. |
+| **Keep previous memberships until a refresh succeeds** | `sync.incompleteEntitlements: "preserve_previous"` | Earlier provider-managed access remains temporarily; the portal shows a warning. |
+| **Managed by configuration** | `ownershipMode: "config_locked"` | Fields and destructive actions are read-only in the portal and rejected again by mutation APIs. |
+| **Configuration-linked** | `ownershipMode: "config_warn"` | A portal/API edit is allowed, records drift, and may be overwritten by the next bundle apply. |
+
+**Preview membership changes** and **Check saved identities** never change
+identity or access and never contact the provider. **Apply saved membership
+data** calls `POST /api/identity/providers/{key}/replay-memberships`; it uses
+the most recently stored provider data, does not contact the provider, and
+applies membership changes immediately. The portal requires a confirmation and
+reports checked, added, removed, failed, and remaining-record counts.
+
+**Disable provider** calls `DELETE /api/identity/providers/{key}`. In the
+current data model this sets `isEnabled` to `false`; there is no separate
+archived state. Sign-in through that provider stops and provider-managed
+memberships are removed, while mappings, refresh history, manual access, and
+API-managed access remain available for diagnosis or recovery.
+
 In local OSS, the logged-out provider chooser reads the canonical
 `tenant-default` providers first and then legacy platform-scoped provider rows
-as a compatibility fallback. In a tenant-aware deployment, discovery and the
-selected provider start are scoped to the resolved tenant; EnterpriseGlue never
-enumerates providers from other tenants. The signed OIDC/SAML state records the
-selected provider and tenant, so the callback cannot switch scope.
+as a compatibility fallback, even when the browser uses `/t/default/login`.
+In a tenant-aware deployment, the `/api/t/{tenantSlug}/auth/*` routes run the
+pre-authentication tenant resolver before discovery or credential handling;
+EnterpriseGlue never enumerates providers from other tenants. The signed
+OIDC/SAML state records the selected provider and tenant, so the callback cannot
+switch scope. Do not implement multi-tenant login by sending `x-tenant-slug` to
+the global compatibility aliases.
 
-When any direct SSO provider is enabled, password login remains disabled for
-ordinary local accounts. The break-glass exception is limited to an active local
-account that still has a password and an active canonical Platform Administrator
-membership. Verified-email linking does not replace that account's local
-authentication method or password. Removing its administrator membership closes
-the exception immediately.
+At most one provider can be preferred in each tenant scope. The service changes
+the previous preferred row and the new preferred row in one TypeORM transaction,
+while a database unique identity prevents concurrent writes from creating two
+preferred providers. Existing duplicate rows are migrated deterministically;
+all providers remain enabled and only the duplicate preferred flags are cleared.
+
+### Login experience policy
+
+Configure login behavior in **Platform Settings → Identity Providers** or in
+the top-level `login` block of a `v1beta1` configuration bundle. Login policy
+is independent from engine/project access authority and from whether the
+provider row is portal- or configuration-managed.
+
+| Setting | Value | Logged-out behavior |
+| --- | --- | --- |
+| Local password | `auto` | Show ordinary local credentials only when no direct provider is enabled. This preserves standalone installs and hides them after SSO is introduced. |
+| Local password | `enabled` | Show local credentials alongside organization methods. Use only for a deliberate transition period. |
+| Local password | `disabled` | Never accept ordinary local password login. Administrator recovery remains separate. |
+| Provider selection | `auto_redirect_single` | Redirect only when local password is unavailable and exactly one redirect-capable provider is enabled. LDAP never auto-redirects. |
+| Provider selection | `chooser` | Show all enabled methods in preferred/display order. |
+| Provider selection | `progressive` | Ask for a work email, match only its domain to provider metadata, then redirect or narrow the chooser. The response never reveals whether an account exists. |
+
+With zero providers, `localPassword: auto` keeps the standalone form
+available. With one provider, EnterpriseGlue can use a single primary action
+or a policy-controlled redirect. With multiple providers it presents their
+friendly names; raw provider keys and generated fixture identifiers are not
+login labels. A failed login-method lookup fails closed with an actionable
+error instead of guessing a local or SSO route.
+
+The portal's **What users will see** panel resolves the saved provider rows
+against the current policy and previews automatic redirect, work-email
+discovery, provider chooser, local-password, and no-method states. It is a
+presentation preview, not a connection test. Provider forms start without
+premature error states, validate fields after interaction, and focus the first
+invalid field after submission. Always run **Test connection** before enabling
+a provider.
+
+The login page exposes password fields to browsers and password managers with
+the standard `username` and `current-password` autocomplete purposes, permits
+paste, and provides a password-reveal control. Redirect flows announce the
+selected provider before navigation and provide a short opportunity to choose
+another method. A returned or failed redirect suppresses immediate
+auto-redirect so the user can select a recovery path instead of entering a
+loop.
+
+The public response contains only:
+
+<!-- enterpriseglue-config-schema: PublicLoginMethodsResponseSchema -->
+```json
+{
+  "localPassword": { "enabled": false },
+  "providerSelection": "progressive",
+  "autoRedirectProviderId": null,
+  "providers": [
+    {
+      "id": "provider-record-id",
+      "key": "identity.corporate-entra",
+      "displayName": "Microsoft Entra ID",
+      "organization": "Example Corporation",
+      "protocol": "oidc",
+      "loginMethod": "redirect",
+      "preferred": true,
+      "loginDomains": ["example.com"]
+    }
+  ],
+  "configurationStatus": "ready"
+}
+```
+
+It does not expose client secrets, issuer internals, directory credentials,
+mapping rules, or account existence.
+
+### Privacy-safe login experience metrics
+
+`GET /metrics` exports process-local counters and elapsed-time aggregates:
+
+- `enterpriseglue_login_experience_total{method,event}`
+- `enterpriseglue_login_experience_duration_ms_sum{method,event}`
+- `enterpriseglue_login_experience_duration_ms_count{method,event}`
+
+Methods are the bounded values `local`, `recovery`, `oidc`, `saml`, and
+`ldap`. Events are `selected`, `succeeded`, `failed`, and `redirect_failed`.
+The metrics deliberately contain no user, email, domain, provider, tenant, IP,
+request, or session label. Durations are capped at ten minutes. Use these
+aggregates to detect redirect failures and unusually slow authentication
+without turning the login page into an identity-tracking surface.
+
+### Administrator recovery
+
+When ordinary local login is disabled, the main login endpoint has no hidden
+administrator exception. Recovery uses the separate, deliberately
+non-advertised `/admin-recovery` page and
+`POST /api/auth/recovery/login`. It accepts only an active local account with
+a password and an active canonical Platform Administrator membership.
+Verified-email linking does not replace that account's local authentication
+method or password. Removing its administrator membership closes recovery
+immediately. Monitor and audit use of this route, test it before SSO
+enforcement, and keep its URL in the operator runbook rather than on the
+ordinary login page.
 
 Unlinking a provider identity marks that provider/subject link and normalized
 snapshot as unlinked, removes only memberships sourced from that provider,
@@ -76,7 +215,10 @@ verified email equal to the recorded provider email, and the provider's
 email, unverified claim, disabled policy, or missing active local account stays
 blocked.
 
-Rollback is intentionally simple: disable the affected provider and restore local break-glass access while correcting its mapping or secret reference.
+Rollback is intentionally simple: use the recovery route, set ordinary local
+login to `enabled` only when a reviewed rollback requires it, then disable or
+correct the affected provider or mapping. Do not expose recovery by adding it
+back to the normal login form.
 
 For the broader provider-neutral identity and group-mapping model, see
 [Configure Authorization, Identity, And Engines](./configure-authorization-and-engines.md).
@@ -122,6 +264,10 @@ mapping itself stays platform-wide.
     "projectEngineTargetPolicy": "manual_allowed",
     "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
     "governanceSettingsOwnership": "config_locked"
+  },
+  "login": {
+    "localPassword": "disabled",
+    "providerSelection": "progressive"
   },
   "imports": [
     "./roles.json",
@@ -185,6 +331,11 @@ mapping itself stays platform-wide.
   "identityProviders": [
     {
       "key": "identity.corporate-oidc",
+      "displayName": "Microsoft Entra ID",
+      "organization": "Example Corporation",
+      "displayOrder": 10,
+      "preferred": true,
+      "loginDomains": ["example.com"],
       "type": "oidc",
       "enabled": true,
       "authenticationMode": "direct",
@@ -271,7 +422,12 @@ as `drifted`; the next reviewed bundle apply restores the mapping declared in
 the bundle. Local deletion remains unavailable for both modes: disable or edit
 a `config_warn` mapping for a temporary change, or remove it from the bundle
 for an authoritative removal. The Identity Mappings page shows **Managed by
-config** or **Config warning** accordingly.
+configuration** or **Configuration-linked** accordingly. For `config_locked` providers and
+mappings, the row action is **View configuration**, not **Edit**. The modal
+keeps bundle-owned fields read-only, explains the owning source, and leaves
+non-mutating diagnostics such as connection tests, sample-claims previews, and
+saved identity previews available. Grant, delete, and disable actions remain
+visibly unavailable and are still rejected by the backend if called directly.
 
 When startup apply changes identity mappings, EnterpriseGlue drains the stored
 identity snapshots affected by that apply before `/ready` opens. The drain is

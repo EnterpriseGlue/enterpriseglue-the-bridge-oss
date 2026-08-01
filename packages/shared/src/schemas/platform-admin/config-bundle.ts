@@ -5,6 +5,8 @@ import {
   IdentityEntitlementMatchOperatorSchema,
   IdentityEntitlementSyncModeSchema,
   IdentityProviderSyncConfigurationSchema,
+  IdentityProviderDisplayNameSchema,
+  IdentityProviderLoginDomainSchema,
   LdapIdentityProviderConfigurationSchema,
   OidcIdentityProviderConfigurationSchema,
   SamlIdentityProviderConfigurationSchema,
@@ -13,7 +15,9 @@ import {
   AccessAuthorityModeSchema,
   EngineOnboardingModeSchema,
   EngineRuntimeAuthorizationModeSchema,
+  LocalPasswordLoginModeSchema,
   ProjectEngineTargetPolicyModeSchema,
+  SsoProviderSelectionModeSchema,
 } from './platform-settings.js';
 import {
   EngineConnectionModeSchema,
@@ -512,6 +516,13 @@ export const ConfigBundleGovernanceV1Beta1Schema = z.object({
     .describe('Ownership of this governance block only, never ownership of managed object rows.'),
 }).strict();
 
+export const ConfigBundleLoginPolicySchema = z.object({
+  localPassword: LocalPasswordLoginModeSchema
+    .describe('Whether ordinary local password sign-in is automatic, always enabled, or disabled.'),
+  providerSelection: SsoProviderSelectionModeSchema
+    .describe('Whether to redirect a single provider, always show a chooser, or use email-domain discovery.'),
+}).strict();
+
 const configBundleSettingsDefaults = {
   engineAccessAuthority: 'manual',
   projectAccessAuthority: 'manual',
@@ -577,6 +588,8 @@ export const EnterpriseGlueConfigBundleV1Beta1Schema = z.object({
   ...EnterpriseGlueConfigBundleCommonShape,
   governance: ConfigBundleGovernanceV1Beta1Schema.default(configBundleGovernanceDefaults)
     .describe('Optional platform governance policy. Omit it when this bundle must not claim or reset governance settings.'),
+  login: ConfigBundleLoginPolicySchema.optional()
+    .describe('Optional ordinary-user login policy. Administrator recovery is intentionally configured separately and cannot be disabled by this block.'),
 }).strict().superRefine(validateConfigBundleImports);
 
 /** Public version-discriminated input contract. */
@@ -593,6 +606,7 @@ export const NormalizedEnterpriseGlueConfigBundleSchema = z.object({
   apiVersion: z.literal(ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1),
   ...EnterpriseGlueConfigBundleCommonShape,
   settings: ConfigBundleSettingsSchema.default(configBundleSettingsDefaults),
+  login: ConfigBundleLoginPolicySchema.optional(),
 }).strict().superRefine(validateConfigBundleImports);
 
 export function normalizeEnterpriseGlueConfigBundle(
@@ -868,6 +882,11 @@ export const ConfigAssignmentsFileSchema = z.object({
 
 const CommonIdentityProviderSchema = z.object({
   key: ConfigKeySchema,
+  displayName: IdentityProviderDisplayNameSchema.optional(),
+  organization: z.string().trim().min(1).max(255).optional(),
+  displayOrder: z.number().int().min(0).max(10000).default(0),
+  preferred: z.boolean().default(false),
+  loginDomains: z.array(IdentityProviderLoginDomainSchema).max(20).default([]),
   enabled: z.boolean().default(true),
   authenticationMode: z.enum(['direct', 'claims_only']).default('claims_only'),
   allowVerifiedEmailLinking: z.boolean().default(false),
@@ -894,7 +913,17 @@ export const ConfigIdentityProviderSchema = z.discriminatedUnion('type', [
 ]);
 export const ConfigIdentityProvidersFileSchema = z.object({
   identityProviders: z.array(ConfigIdentityProviderSchema),
-}).strict().superRefine((file, ctx) => uniqueKeys(file.identityProviders, ctx, 'identityProviders'));
+}).strict().superRefine((file, ctx) => {
+  uniqueKeys(file.identityProviders, ctx, 'identityProviders');
+  const preferred = file.identityProviders.filter((provider) => provider.preferred);
+  if (preferred.length > 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['identityProviders'],
+      message: 'Only one identity provider may be preferred in a tenant-scoped provider file',
+    });
+  }
+});
 
 export const ConfigIdentityMappingSchema = z.object({
   key: ConfigKeySchema,
@@ -998,6 +1027,7 @@ export type ConfigBundleDiffChange = z.infer<typeof ConfigBundleDiffChangeSchema
 export type ConfigBundleDiffWarning = z.infer<typeof ConfigBundleDiffWarningSchema>;
 export type ConfigBundleDiffResponse = z.infer<typeof ConfigBundleDiffResponseSchema>;
 export type ConfigBundleSettings = z.infer<typeof ConfigBundleSettingsSchema>;
+export type ConfigBundleLoginPolicy = z.infer<typeof ConfigBundleLoginPolicySchema>;
 export type ConfigBundleBootstrapStatus = z.infer<typeof ConfigBundleBootstrapStatusSchema>;
 export type ConfigBundleIdentityReconciliationMode = z.infer<typeof ConfigBundleIdentityReconciliationModeSchema>;
 export type ConfigBundleIdentitySnapshot = z.infer<typeof ConfigBundleIdentitySnapshotSchema>;

@@ -12,9 +12,9 @@ import {
   type IdentityProviderAuthenticationMode as SchemaIdentityProviderAuthenticationMode,
   type IdentityProviderType as SchemaIdentityProviderProtocol,
 } from '@enterpriseglue/shared/schemas/platform-admin/identity.js';
-import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import { isOssDefaultTenantId, OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
+import { In, IsNull, type DataSource, type EntityManager, type FindOptionsWhere } from 'typeorm';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 
 /** Compatibility exports; shared schemas remain the canonical vocabulary. */
@@ -24,6 +24,11 @@ export type IdentityProviderAuthenticationMode = SchemaIdentityProviderAuthentic
 export interface IdentityProviderInput {
   tenantId?: string | null;
   key: string;
+  displayName?: string;
+  organization?: string | null;
+  displayOrder?: number;
+  isPreferred?: boolean;
+  loginDomains?: string[];
   protocol: IdentityProviderProtocol;
   isEnabled?: boolean;
   authenticationMode?: IdentityProviderAuthenticationMode;
@@ -56,8 +61,19 @@ export interface IdentityProviderArchiveResult {
 
 function normalized(value?: string | null): string | null { return value?.trim() || null; }
 function json(value: Record<string, unknown> | undefined): string { return JSON.stringify(value || {}); }
+function normalizeLoginDomains(values: string[] | undefined): string[] | undefined {
+  if (values === undefined) return undefined;
+  return Array.from(new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))).sort();
+}
 export function identityProviderKeyIdentity(tenantId: string | null | undefined, key: string): string {
   return `${tenantId || 'platform'}:${key.trim()}`;
+}
+export function identityProviderPreferenceIdentity(
+  tenantId: string | null | undefined,
+  providerId: string,
+  preferred: boolean,
+): string {
+  return preferred ? `preferred:${tenantId || 'platform'}` : `provider:${providerId}`;
 }
 function ensureAuthorizationAttributeKeys(configuration: Record<string, unknown>): void {
   const keys = configuration.authorizationAttributeKeys;
@@ -141,7 +157,8 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
   const now = Date.now();
   const tenantScope = provider.tenantId ? { tenantId: provider.tenantId } : { tenantId: IsNull() };
   const mappingRepo = manager.getRepository(IdentityEntitlementMapping);
-  const mappings = await mappingRepo.find({ where: { ...tenantScope, providerId: provider.id } as any });
+  const mappingWhere: FindOptionsWhere<IdentityEntitlementMapping> = { ...tenantScope, providerId: provider.id };
+  const mappings = await mappingRepo.find({ where: mappingWhere });
   const mappingRefs = mappings.flatMap((mapping) => identityProviderMembershipSourceRefs(provider.id, mapping.id));
 
   const memberships = mappingRefs.length
@@ -149,16 +166,17 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
       ...tenantScope,
       source: 'identity_provider',
       sourceRef: In(mappingRefs),
-    } as any)
+    } as FindOptionsWhere<AuthzGroupMembership>)
     : { affected: 0 };
   const normalizedIdentities = await manager.getRepository(SsoNormalizedIdentity).update(
-    { ...tenantScope, providerId: provider.id } as any,
+    { ...tenantScope, providerId: provider.id } as FindOptionsWhere<SsoNormalizedIdentity>,
     { providerStatus: 'provider_disabled', lastProviderCheckAt: now, updatedAt: now },
   );
   const externalIdentityRepo = manager.getRepository(ExternalIdentity);
-  const linkedIdentities = await externalIdentityRepo.find({ where: { ...tenantScope, providerId: provider.id } as any, select: ['userId'] });
+  const externalIdentityWhere = { ...tenantScope, providerId: provider.id } as FindOptionsWhere<ExternalIdentity>;
+  const linkedIdentities = await externalIdentityRepo.find({ where: externalIdentityWhere, select: ['userId'] });
   const externalIdentities = await externalIdentityRepo.update(
-    { ...tenantScope, providerId: provider.id } as any,
+    externalIdentityWhere,
     { status: 'provider_disabled', updatedAt: now },
   );
   const refreshSessions = await manager.getRepository(RefreshToken).update(
@@ -169,7 +187,7 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
   let providerUserSessionsInvalidated = 0;
   if (linkedUserIds.length) {
     const userRepo = manager.getRepository(User);
-    const users = await userRepo.find({ where: { id: In(linkedUserIds) } as any, select: ['id', 'authSessionVersion'] });
+    const users = await userRepo.find({ where: { id: In(linkedUserIds) }, select: ['id', 'authSessionVersion'] });
     for (const user of users) {
       await userRepo.update({ id: user.id }, { authSessionVersion: (user.authSessionVersion || 0) + 1 });
       providerUserSessionsInvalidated += 1;
@@ -190,7 +208,10 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
 class IdentityProviderServiceClass {
   async list(tenantId?: string | null): Promise<IdentityProvider[]> {
     const repo = (await getDataSource()).getRepository(IdentityProvider);
-    return repo.find({ where: normalized(tenantId) ? { tenantId: normalized(tenantId)! } : { tenantId: IsNull() }, order: { key: 'ASC' } });
+    return repo.find({
+      where: normalized(tenantId) ? { tenantId: normalized(tenantId)! } : { tenantId: IsNull() },
+      order: { displayOrder: 'ASC', displayName: 'ASC', key: 'ASC' },
+    });
   }
   async getByKey(key: string, tenantId?: string | null): Promise<IdentityProvider | null> {
     return (await getDataSource()).getRepository(IdentityProvider).findOne({ where: { providerKeyIdentity: identityProviderKeyIdentity(normalized(tenantId), key) } });
@@ -216,11 +237,11 @@ class IdentityProviderServiceClass {
     return [...defaultTenantProviders, ...platformProviders.filter((provider) => !defaultKeys.has(provider.key))];
   }
   async getDirectLoginProviderByKey(key: string, tenantId?: string | null): Promise<IdentityProvider | null> {
-    if (normalized(tenantId)) return this.getByKey(key, tenantId);
+    if (normalized(tenantId) && !isOssDefaultTenantId(tenantId)) return this.getByKey(key, tenantId);
     return await this.getByKey(key, OSS_DEFAULT_TENANT_ID) || await this.getByKey(key, null);
   }
   async getDirectLoginProviderById(id: string, tenantId?: string | null): Promise<IdentityProvider | null> {
-    if (normalized(tenantId)) return this.getById(id, tenantId);
+    if (normalized(tenantId) && !isOssDefaultTenantId(tenantId)) return this.getById(id, tenantId);
     return await this.getById(id, OSS_DEFAULT_TENANT_ID) || await this.getById(id, null);
   }
   async upsert(input: IdentityProviderInput, store?: DataSource | EntityManager): Promise<IdentityProvider> {
@@ -229,12 +250,52 @@ class IdentityProviderServiceClass {
     ensureConfig(input.protocol, input.configuration);
     ensureSync(input.sync);
     const sync = normalizeIdentityProviderSyncForMandatoryLogin(input.sync);
-    const repo = (store || await getDataSource()).getRepository(IdentityProvider); const now = Date.now();
+    if (!store) {
+      const dataSource = await getDataSource();
+      return dataSource.transaction((manager) => this.upsert(input, manager));
+    }
+    const repo = store.getRepository(IdentityProvider); const now = Date.now();
     const providerKeyIdentity = identityProviderKeyIdentity(tenantId, key);
     const existing = await repo.findOne({ where: { providerKeyIdentity } });
-    const values = { protocol: input.protocol, isEnabled: input.isEnabled ?? false, authenticationMode: input.authenticationMode ?? 'claims_only', directoryTenantId: normalized(input.directoryTenantId), configurationJson: json(input.configuration), syncJson: json(sync), ownershipMode: input.ownershipMode || 'manual', sourceRef: normalized(input.sourceRef), sourceHash: input.sourceHash ?? null, lastAppliedAt: input.lastAppliedAt ?? null, driftStatus: input.driftStatus ?? null, updatedAt: now };
+    const providerId = existing?.id || generateId();
+    const displayName = normalized(input.displayName) || normalized(existing?.displayName) || key;
+    const loginDomains = normalizeLoginDomains(input.loginDomains);
+    const isPreferred = input.isPreferred ?? existing?.isPreferred ?? false;
+    if (isPreferred) {
+      const scopedProviders = await repo.find({
+        where: tenantId ? { tenantId } : { tenantId: IsNull() },
+        select: ['id'],
+      });
+      for (const scopedProvider of scopedProviders) {
+        if (scopedProvider.id === providerId) continue;
+        await repo.update({ id: scopedProvider.id }, {
+          isPreferred: false,
+          preferredScopeIdentity: identityProviderPreferenceIdentity(tenantId, scopedProvider.id, false),
+        });
+      }
+    }
+    const values = {
+      displayName,
+      organization: input.organization !== undefined ? normalized(input.organization) : existing?.organization ?? null,
+      displayOrder: input.displayOrder ?? existing?.displayOrder ?? 0,
+      isPreferred,
+      preferredScopeIdentity: identityProviderPreferenceIdentity(tenantId, providerId, isPreferred),
+      loginDomainsJson: loginDomains === undefined ? existing?.loginDomainsJson || '[]' : JSON.stringify(loginDomains),
+      protocol: input.protocol,
+      isEnabled: input.isEnabled ?? false,
+      authenticationMode: input.authenticationMode ?? 'claims_only',
+      directoryTenantId: normalized(input.directoryTenantId),
+      configurationJson: json(input.configuration),
+      syncJson: json(sync),
+      ownershipMode: input.ownershipMode || 'manual',
+      sourceRef: normalized(input.sourceRef),
+      sourceHash: input.sourceHash ?? null,
+      lastAppliedAt: input.lastAppliedAt ?? null,
+      driftStatus: input.driftStatus ?? null,
+      updatedAt: now,
+    };
     if (existing) { await repo.update({ id: existing.id }, values); return { ...existing, ...values } as IdentityProvider; }
-    const provider = { id: generateId(), tenantId, key, providerKeyIdentity, ...values, createdAt: now } as unknown as IdentityProvider;
+    const provider = { id: providerId, tenantId, key, providerKeyIdentity, ...values, createdAt: now } as unknown as IdentityProvider;
     await repo.insert(provider); return provider;
   }
   async archive(key: string, tenantId?: string | null): Promise<IdentityProviderArchiveResult> {

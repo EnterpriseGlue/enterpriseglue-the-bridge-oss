@@ -26,6 +26,15 @@ function json(value: string | null | undefined): Record<string, unknown> {
   try { const parsed = value ? JSON.parse(value) : {}; return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
 }
 
+function jsonArray(value: string | null | undefined): unknown[] {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 function externalReference(value: string | null | undefined): string | null {
   return value?.startsWith('ref:') ? value.slice(4) : null;
 }
@@ -225,6 +234,11 @@ class ConfigBundleExportService {
       assertProviderConfigurationContainsOnlyReferences(protocolConfiguration, `identity provider ${provider.key}`);
       return {
         key: provider.key,
+        displayName: provider.displayName || provider.key,
+        ...(provider.organization ? { organization: provider.organization } : {}),
+        displayOrder: provider.displayOrder || 0,
+        preferred: Boolean(provider.isPreferred),
+        loginDomains: jsonArray(provider.loginDomainsJson),
         type: provider.protocol,
         enabled: provider.isEnabled,
         authenticationMode: provider.authenticationMode,
@@ -292,6 +306,12 @@ class ConfigBundleExportService {
         tenantKey: input.tenantKey || 'default',
         mode: 'authoritative',
         ...(governance ? { governance } : {}),
+        ...(platformSettings ? {
+          login: {
+            localPassword: platformSettings.localPasswordLoginMode || 'auto',
+            providerSelection: platformSettings.ssoProviderSelectionMode || 'auto_redirect_single',
+          },
+        } : {}),
         imports,
       },
       files,

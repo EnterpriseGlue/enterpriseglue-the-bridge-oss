@@ -12,6 +12,8 @@ export function getE2ESeedData() {
     return JSON.parse(readFileSync(seedFile, 'utf8')) as {
       email?: string;
       password?: string;
+      adminEmail?: string;
+      adminPassword?: string;
       engineId?: string;
       migrationEngineId?: string;
     };

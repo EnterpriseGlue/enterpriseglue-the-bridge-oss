@@ -200,6 +200,7 @@ function isPublicRoute(): boolean {
   const pathname = window.location.pathname;
   const publicRoutes = [
     '/login',
+    '/admin-recovery',
     '/invite',
     '/verify-email',
     '/reset-password',
@@ -208,7 +209,7 @@ function isPublicRoute(): boolean {
     '/resend-verification',
   ];
   if (publicRoutes.some((route) => pathname.startsWith(route))) return true;
-  return /^\/t\/[^/]+\/(login|invite|verify-email|reset-password|forgot-password|password-reset|resend-verification)(?:\/|$)/.test(pathname);
+  return /^\/t\/[^/]+\/(login|admin-recovery|invite|verify-email|reset-password|forgot-password|password-reset|resend-verification)(?:\/|$)/.test(pathname);
 }
 
 /**

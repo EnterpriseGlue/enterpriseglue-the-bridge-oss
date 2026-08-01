@@ -2,7 +2,6 @@ import { createHash, randomBytes } from 'crypto';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation, type InvitationDeliveryMethod, type InvitationResourceType } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
@@ -14,6 +13,7 @@ import { getAccessAuthorityDecision } from './platform-admin/AccessAuthorityServ
 import type { User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
 import { getActivePlatformAdministratorUserIds } from './platform-admin/PlatformAdministratorMembershipService.js';
 import type { Repository } from 'typeorm';
+import { loginMethodService } from './platform-admin/LoginMethodService.js';
 
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const OTP_LOCK_WINDOW_MS = 15 * 60 * 1000;
@@ -164,9 +164,9 @@ async function getInvitationByTokenValue(token: string): Promise<Invitation | nu
   return invitationRepo.findOneBy({ inviteTokenHash });
 }
 
-function assertLocalLoginAllowed(enabledProviderCount: number): void {
-  if (enabledProviderCount > 0) {
-    throw Errors.forbidden('Local login is disabled while SSO is enabled. One-time password invites are unavailable.');
+function assertLocalLoginAllowed(localLoginDisabled: boolean): void {
+  if (localLoginDisabled) {
+    throw Errors.forbidden('Local login is disabled by platform sign-in policy. One-time password invites are unavailable.');
   }
 }
 
@@ -182,21 +182,17 @@ export class InvitationService {
   }
 
   async isLocalLoginDisabled(): Promise<boolean> {
-    const dataSource = await getDataSource();
-    const identityProviderRepo = dataSource.getRepository(IdentityProvider);
-    const enabledCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
-    return enabledCount > 0;
+    return !await loginMethodService.ordinaryLocalPasswordEnabled(null);
   }
 
   async createInvitation(input: CreateInvitationInput): Promise<CreateInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    const identityProviderRepo = dataSource.getRepository(IdentityProvider);
-    const enabledCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
+    const localLoginDisabled = !await loginMethodService.ordinaryLocalPasswordEnabled(input.tenantId || null);
     const deliveryMethod = input.deliveryMethod === 'email' ? 'email' : 'manual';
 
-    if (enabledCount > 0 && deliveryMethod !== 'email') {
-      assertLocalLoginAllowed(enabledCount);
+    if (localLoginDisabled && deliveryMethod !== 'email') {
+      assertLocalLoginAllowed(localLoginDisabled);
     }
 
     const tenantSlug = normalizeTenantSlug(input.tenantSlug);
@@ -284,9 +280,7 @@ export class InvitationService {
   async verifyOneTimePassword(token: string, oneTimePassword: string): Promise<VerifiedInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    const identityProviderRepo = dataSource.getRepository(IdentityProvider);
-    const enabledCount = await identityProviderRepo.count({ where: { isEnabled: true, authenticationMode: 'direct' } });
-    assertLocalLoginAllowed(enabledCount);
+    assertLocalLoginAllowed(!await loginMethodService.ordinaryLocalPasswordEnabled(null));
 
     const invitation = await getInvitationByTokenValue(token);
     const now = Date.now();

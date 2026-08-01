@@ -62,8 +62,11 @@ export class PlatformSettings {
   @Column({ name: 'invite_allowed_domains', type: 'text', default: '[]' })
   inviteAllowedDomains!: string;
 
-  @Column({ name: 'sso_auto_redirect_single_provider', type: 'boolean', default: false })
-  ssoAutoRedirectSingleProvider!: boolean;
+  @Column({ name: 'local_password_login_mode', type: 'text', default: 'auto' })
+  localPasswordLoginMode!: 'auto' | 'enabled' | 'disabled';
+
+  @Column({ name: 'sso_provider_selection_mode', type: 'text', default: 'auto_redirect_single' })
+  ssoProviderSelectionMode!: 'auto_redirect_single' | 'chooser' | 'progressive';
 
   @Column({ name: 'sso_all_engines_assignment_mappings_enabled', type: 'boolean', default: true })
   ssoAllEnginesAssignmentMappingsEnabled!: boolean;

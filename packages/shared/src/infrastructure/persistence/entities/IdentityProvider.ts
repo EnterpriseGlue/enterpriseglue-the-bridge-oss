@@ -9,11 +9,19 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Entity({ name: 'identity_providers', schema: 'main' })
 @Unique('uq_identity_providers_tenant_key', ['tenantId', 'key'])
 @Index('uq_identity_providers_key_identity', ['providerKeyIdentity'], { unique: true })
+@Index('uq_identity_providers_preferred_scope_identity', ['preferredScopeIdentity'], { unique: true })
 @Index('idx_identity_providers_tenant', ['tenantId'])
 @Index('idx_identity_providers_protocol_enabled', ['protocol', 'isEnabled'])
 export class IdentityProvider extends AppBaseEntity {
   @Column({ name: 'tenant_id', type: 'text', nullable: true }) tenantId!: string | null;
   @Column({ type: 'text' }) key!: string;
+  @Column({ name: 'display_name', type: 'text' }) displayName!: string;
+  @Column({ type: 'text', nullable: true }) organization!: string | null;
+  @Column({ name: 'display_order', type: 'integer', default: 0 }) displayOrder!: number;
+  @Column({ name: 'is_preferred', type: 'boolean', default: false }) isPreferred!: boolean;
+  /** One portable unique identity per provider, or per scope when preferred. */
+  @Column({ name: 'preferred_scope_identity', type: 'text' }) preferredScopeIdentity!: string;
+  @Column({ name: 'login_domains_json', type: 'text', default: '[]' }) loginDomainsJson!: string;
   /** Non-null canonical tenant-plus-key identity; portable across nullable tenant SQL semantics. */
   @Column({ name: 'provider_key_identity', type: 'text' }) providerKeyIdentity!: string;
   @Column({ type: 'text' }) protocol!: 'oidc' | 'saml' | 'ldap';

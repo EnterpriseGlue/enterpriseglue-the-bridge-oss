@@ -335,6 +335,39 @@ describe('configBundleApplyService', () => {
     }));
   });
 
+  it('applies login policy independently from governance ownership', async () => {
+    const { platformSettingsRepo, auditInsert } = setupDataSource();
+    const loginBundle = {
+      ...bundle,
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      login: {
+        localPassword: 'disabled',
+        providerSelection: 'progressive',
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: loginBundle, files });
+
+    const result = await configBundleApplyService.apply({
+      bundle: loginBundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.created).toBe(3);
+    expect(platformSettingsRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      localPasswordLoginMode: 'disabled',
+      ssoProviderSelectionMode: 'progressive',
+      accessGovernanceSourceRef: null,
+      accessGovernanceOwnershipMode: 'manual',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.login_policy.create',
+      resourceType: 'platform_settings',
+    }));
+  });
+
   it('persists every current headless engine and OIDC provider option through the same config apply', async () => {
     const { engineInsert, providerRepo } = setupDataSource();
     const advancedBundle = { ...bundle, imports: ['./engines.json', './identity-providers.json'] };
@@ -352,6 +385,7 @@ describe('configBundleApplyService', () => {
       './identity-providers.json': {
         identityProviders: [{
           key: 'identity.corporate-oidc', type: 'oidc', enabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory',
+          displayName: 'Microsoft Entra ID', organization: 'Example Corporation', displayOrder: 10, preferred: true, loginDomains: ['example.com'],
           allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'],
           sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
           oidc: { issuerUrl: 'https://login.example.test/tenant/v2.0', clientId: 'enterpriseglue-web', clientSecretRef: 'env://CORPORATE_OIDC_CLIENT_SECRET', callbackUrl: 'https://enterpriseglue.example.test/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue-web' },
@@ -376,6 +410,7 @@ describe('configBundleApplyService', () => {
     }));
     expect(providerRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'identity.corporate-oidc', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory', ownershipMode: 'config_warn',
+      displayName: 'Microsoft Entra ID', organization: 'Example Corporation', displayOrder: 10, isPreferred: true, loginDomainsJson: '["example.com"]',
       configurationJson: expect.stringContaining('"expectedAudience":"enterpriseglue-web"'),
       syncJson: expect.stringContaining('"connectorCapability":"graph"'),
     }));

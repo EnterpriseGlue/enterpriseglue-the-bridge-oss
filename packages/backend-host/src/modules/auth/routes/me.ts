@@ -87,7 +87,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
   const now = Date.now();
 
   // Build update object with only provided fields
-  const updates: any = { updatedAt: now };
+  const updates: Partial<Pick<User, 'updatedAt' | 'firstName' | 'lastName'>> = { updatedAt: now };
   if (firstName !== undefined) updates.firstName = firstName || null;
   if (lastName !== undefined) updates.lastName = lastName || null;
 
@@ -158,7 +158,6 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
         titleVerticalOffset: 0,
         menuAccentColor: null,
         faviconUrl: null,
-        ssoAutoRedirectSingleProvider: false,
       }));
     }
 
@@ -175,7 +174,6 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
       titleVerticalOffset: settings.titleVerticalOffset ?? 0,
       menuAccentColor: settings.menuAccentColor || null,
       faviconUrl: settings.faviconUrl || null,
-      ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
     }));
   } catch (error) {
     logger.error('Get branding error:', error);
@@ -233,12 +231,12 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       }
     })();
 
-    const engineOnboardingMode = normalizeEngineOnboardingMode((settings as any).engineOnboardingMode);
-    const projectEngineTargetMode = normalizeProjectEngineTargetMode((settings as any).projectEngineTargetMode);
-    const engineAccessAuthority = normalizeAccessAuthorityMode((settings as any).engineAccessAuthority);
-    const projectAccessAuthority = normalizeAccessAuthorityMode((settings as any).projectAccessAuthority);
-    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String((settings as any).accessGovernanceOwnershipMode))
-      ? (settings as any).accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
+    const engineOnboardingMode = normalizeEngineOnboardingMode(settings.engineOnboardingMode);
+    const projectEngineTargetMode = normalizeProjectEngineTargetMode(settings.projectEngineTargetMode);
+    const engineAccessAuthority = normalizeAccessAuthorityMode(settings.engineAccessAuthority);
+    const projectAccessAuthority = normalizeAccessAuthorityMode(settings.projectAccessAuthority);
+    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String(settings.accessGovernanceOwnershipMode))
+      ? settings.accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
       : 'manual';
 
     res.json(PublicPlatformSettingsSchema.parse({
@@ -250,7 +248,7 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       projectEngineTargetMode,
       engineAccessAuthority,
       projectAccessAuthority,
-      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode((settings as any).engineRuntimeAuthorizationMode),
+      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode(settings.engineRuntimeAuthorizationMode),
       governanceBehavior: derivePlatformGovernanceBehavior({
         engineOnboardingMode,
         projectEngineTargetMode,
@@ -258,15 +256,15 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
         projectAccessAuthority,
         accessGovernanceOwnershipMode,
       }),
-      credentiallessCustomerSidecarsEnabled: (settings as any).credentiallessCustomerSidecarsEnabled ?? false,
-      ssoAllEnginesAssignmentMappingsEnabled: (settings as any).ssoAllEnginesAssignmentMappingsEnabled ?? true,
-      ssoEngineOwnerAssignmentMappingsEnabled: (settings as any).ssoEngineOwnerAssignmentMappingsEnabled ?? false,
-      ssoEngineDelegateAssignmentMappingsEnabled: (settings as any).ssoEngineDelegateAssignmentMappingsEnabled ?? false,
-      ssoRegexClaimMappingsEnabled: (settings as any).ssoRegexClaimMappingsEnabled ?? false,
-      ssoBroadEntitlementMappingsEnabled: (settings as any).ssoBroadEntitlementMappingsEnabled ?? false,
-      ssoSecretViewMappingsEnabled: (settings as any).ssoSecretViewMappingsEnabled ?? false,
-      ssoUnredactedAuditMappingsEnabled: (settings as any).ssoUnredactedAuditMappingsEnabled ?? false,
-      ssoPermanentDeleteMappingsEnabled: (settings as any).ssoPermanentDeleteMappingsEnabled ?? false,
+      credentiallessCustomerSidecarsEnabled: settings.credentiallessCustomerSidecarsEnabled ?? false,
+      ssoAllEnginesAssignmentMappingsEnabled: settings.ssoAllEnginesAssignmentMappingsEnabled ?? true,
+      ssoEngineOwnerAssignmentMappingsEnabled: settings.ssoEngineOwnerAssignmentMappingsEnabled ?? false,
+      ssoEngineDelegateAssignmentMappingsEnabled: settings.ssoEngineDelegateAssignmentMappingsEnabled ?? false,
+      ssoRegexClaimMappingsEnabled: settings.ssoRegexClaimMappingsEnabled ?? false,
+      ssoBroadEntitlementMappingsEnabled: settings.ssoBroadEntitlementMappingsEnabled ?? false,
+      ssoSecretViewMappingsEnabled: settings.ssoSecretViewMappingsEnabled ?? false,
+      ssoUnredactedAuditMappingsEnabled: settings.ssoUnredactedAuditMappingsEnabled ?? false,
+      ssoPermanentDeleteMappingsEnabled: settings.ssoPermanentDeleteMappingsEnabled ?? false,
     }));
   } catch (error) {
     logger.error('Get platform settings error:', error);

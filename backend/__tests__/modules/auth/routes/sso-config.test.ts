@@ -1,28 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import ssoConfigRoute from '../../../../../packages/backend-host/src/modules/auth/routes/sso-config.js';
-import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 
-vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
+const ordinaryLocalPasswordEnabled = vi.hoisted(() => vi.fn());
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({
+  loginMethodService: { ordinaryLocalPasswordEnabled },
+}));
 
 describe('tenant SSO configuration', () => {
-  const identityCount = vi.fn();
-
   beforeEach(() => {
     vi.clearAllMocks();
-    identityCount.mockResolvedValue(0);
-    (getDataSource as any).mockResolvedValue({
-      getRepository: (entity: unknown) => {
-        if (entity === IdentityProvider) return { count: identityCount };
-        throw new Error('Unexpected repository');
-      },
-    });
+    ordinaryLocalPasswordEnabled.mockResolvedValue(true);
   });
 
-  it('requires SSO when an enabled direct provider-neutral identity provider exists', async () => {
-    identityCount.mockResolvedValue(1);
+  it('requires SSO when the resolved login policy disables ordinary local passwords', async () => {
+    ordinaryLocalPasswordEnabled.mockResolvedValue(false);
     const app = express();
     app.use(ssoConfigRoute);
 
@@ -30,13 +25,28 @@ describe('tenant SSO configuration', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ssoRequired: true });
-    expect(identityCount).toHaveBeenCalledWith({ where: { isEnabled: true, authenticationMode: 'direct' } });
+    expect(ordinaryLocalPasswordEnabled).toHaveBeenCalledWith('tenant-default');
   });
 
-  it('does not require SSO when the provider-neutral registry is empty', async () => {
+  it('does not require SSO when the resolved login policy enables ordinary local passwords', async () => {
     const app = express();
     app.use(ssoConfigRoute);
 
     await expect(request(app).get('/api/t/default/auth/sso-config')).resolves.toMatchObject({ body: { ssoRequired: false } });
+  });
+
+  it('publishes the strict runtime response in OpenAPI', () => {
+    const responseSchema = generateOpenApi()
+      .paths?.['/api/t/{tenantSlug}/auth/sso-config']
+      ?.get?.responses?.['200']?.content?.['application/json']?.schema;
+
+    expect(responseSchema).toEqual({
+      type: 'object',
+      properties: {
+        ssoRequired: { type: 'boolean' },
+      },
+      required: ['ssoRequired'],
+      additionalProperties: false,
+    });
   });
 });

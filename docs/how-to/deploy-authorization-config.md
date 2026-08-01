@@ -70,6 +70,25 @@ claim the current settings row and does not reset existing portal choices. An
 engine-only or identity-only `v1beta1` bundle may omit `governance` entirely
 with the same non-claiming behavior.
 
+The same manifest may independently declare ordinary-user login behavior by
+using this object as the top-level `login` value:
+
+<!-- enterpriseglue-config-schema: ConfigBundleLoginPolicySchema -->
+```json
+{
+  "localPassword": "disabled",
+  "providerSelection": "progressive"
+}
+```
+
+Omit `login` when this deployment must leave the current login experience
+unchanged. Login policy is diffed as the separate `platform_settings` key
+`login-policy`; it does not inherit governance ownership and it never disables
+the separate administrator recovery route. For SSO cutover, configure friendly
+provider metadata (`displayName`, optional `organization`, `displayOrder`,
+`preferred`, and `loginDomains`) and prove `/api/auth/login-methods` before
+changing `localPassword` from `auto` or `enabled` to `disabled`.
+
 Database migration `1700000000105` adds the governance-settings source,
 ownership, hash, apply-time, and drift columns non-destructively. Existing
 installations retain their current five mode values and begin with

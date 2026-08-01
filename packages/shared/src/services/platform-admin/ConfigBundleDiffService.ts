@@ -318,6 +318,10 @@ class ConfigBundleDiffService {
     const manifest = compilation.manifest as {
       metadata: { key: string };
       mode: string;
+      login?: {
+        localPassword: 'auto' | 'enabled' | 'disabled';
+        providerSelection: 'auto_redirect_single' | 'chooser' | 'progressive';
+      };
       settings: {
         engineAccessAuthority: string;
         projectAccessAuthority: string;
@@ -329,6 +333,7 @@ class ConfigBundleDiffService {
     };
     const sourceRef = configBundleSourceRef(manifest.metadata.key);
     const explicitGovernanceSettings = hasExplicitGovernanceSettings(input.bundle);
+    const explicitLoginPolicy = Boolean(input.bundle && typeof input.bundle === 'object' && Object.prototype.hasOwnProperty.call(input.bundle, 'login'));
     const normalizedTenantId = tenantId || null;
     const dataSource = await getDataSource();
     const [roles, groups, engines, engineBackstopMappings, engineTenantMappings, engineSets, runtimeResourceSets, runtimeResourceSetMaterializations, rolePermissions, identityProviders, identityMappings, projectEngineTargets, assignments, runtimeResources, projects, groupMemberships, platformSettings] = await Promise.all([
@@ -473,6 +478,22 @@ class ConfigBundleDiffService {
         operation: 'noop',
         currentId: platformSettings!.id,
         reason: 'Config-owned platform governance settings already match the desired state',
+      });
+    }
+    if (explicitLoginPolicy && manifest.login) {
+      const loginPolicyMatches = platformSettings
+        && platformSettings.localPasswordLoginMode === manifest.login.localPassword
+        && platformSettings.ssoProviderSelectionMode === manifest.login.providerSelection;
+      changes.push({
+        objectType: 'platform_settings',
+        key: 'login-policy',
+        operation: !platformSettings ? 'create' : loginPolicyMatches ? 'noop' : 'update',
+        ...(platformSettings ? { currentId: platformSettings.id } : {}),
+        reason: !platformSettings
+          ? 'Platform login policy has not been persisted yet'
+          : loginPolicyMatches
+            ? 'Platform login policy already matches the desired state'
+            : 'Platform login policy differs from the desired ordinary-user sign-in behavior',
       });
     }
     const desiredAssignmentGroupIds = new Map<string, string>();
@@ -860,18 +881,24 @@ class ConfigBundleDiffService {
       const existing = identityProvidersByKey.get(provider.key);
       const configurationJson = JSON.stringify(providerConfiguration(provider));
       const syncJson = JSON.stringify(provider.sync);
+      const loginDomainsJson = JSON.stringify(provider.loginDomains);
       if (!existing) {
         changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'create', reason: 'No persisted identity provider uses this tenant-scoped key' });
       } else if (existing.sourceRef !== sourceRef) {
         changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'conflict', currentId: existing.id, reason: 'Existing identity provider is not owned by this configuration bundle' });
       } else if (
         existing.protocol !== provider.type || existing.isEnabled !== provider.enabled ||
+        (existing.displayName || existing.key) !== (provider.displayName || provider.key) ||
+        existing.organization !== (provider.organization || null) ||
+        Number(existing.displayOrder || 0) !== provider.displayOrder ||
+        Boolean(existing.isPreferred) !== provider.preferred ||
+        existing.loginDomainsJson !== loginDomainsJson ||
         existing.authenticationMode !== provider.authenticationMode ||
         existing.directoryTenantId !== (provider.directoryTenantId || null) ||
         existing.configurationJson !== configurationJson || existing.syncJson !== syncJson ||
         existing.ownershipMode !== (provider.ownershipMode || 'config_locked')
       ) {
-        changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity provider differs from the desired protocol, configuration, sync, or ownership state' });
+        changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'update', currentId: existing.id, reason: 'Config-owned identity provider differs from the desired login presentation, protocol, configuration, sync, or ownership state' });
       } else {
         changes.push({ objectType: 'identity_provider', key: provider.key, operation: 'noop', currentId: existing.id, reason: 'Config-owned identity provider already matches the desired state' });
       }
