@@ -40,6 +40,7 @@ export const GovernanceProjectSummarySchema = z.object({
 
 export const GovernanceEngineSummarySchema = GovernanceProjectSummarySchema.extend({
   type: z.string(),
+  lifecycleStatus: z.string().nullable().optional(),
 });
 
 // Success response

@@ -2154,7 +2154,7 @@ registry.registerPath({
   path: '/api/admin/projects',
   ...authzExtension('platform.governance.read', 'GET', '/api/admin/projects'),
   request: { query: z.object({ search: z.string().optional() }) },
-  responses: { 200: { description: 'Governance project list', content: { 'application/json': { schema: z.array(GovernanceProjectSummarySchema) } } } },
+  responses: { 200: { description: 'Non-secret project candidates for governance and access-control administration', content: { 'application/json': { schema: z.array(GovernanceProjectSummarySchema) } } } },
 });
 
 registry.registerPath({
@@ -2162,7 +2162,7 @@ registry.registerPath({
   path: '/api/admin/engines',
   ...authzExtension('platform.governance.read', 'GET', '/api/admin/engines'),
   request: { query: z.object({ search: z.string().optional() }) },
-  responses: { 200: { description: 'Governance engine list', content: { 'application/json': { schema: z.array(GovernanceEngineSummarySchema) } } } },
+  responses: { 200: { description: 'Non-secret engine candidates for governance, SSO mapping, and access-control administration', content: { 'application/json': { schema: z.array(GovernanceEngineSummarySchema) } } } },
 });
 
 registry.registerPath({

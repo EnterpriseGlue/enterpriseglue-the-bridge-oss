@@ -26,6 +26,13 @@ vi.mock('@enterpriseglue/shared/middleware/requirePermission.js', () => ({
   },
 }));
 
+vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
+  requireAction: () => (req: any, _res: unknown, next: () => void) => {
+    req.user = { userId: 'access-admin-1' };
+    next();
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   getAccessAuthorityDecision: accessAuthorityDecisionMock,
   projectMemberService: {
@@ -114,6 +121,41 @@ describe('platform-admin governance routes', () => {
 
     expect(mutationResponse.status).toBe(403);
     expect(projectMemberService.addMember).not.toHaveBeenCalled();
+  });
+
+  it('returns non-secret engine candidates for access-control selectors', async () => {
+    const qb = {
+      orderBy: vi.fn().mockReturnThis(),
+      getMany: vi.fn().mockResolvedValue([{
+        id: 'engine-1',
+        name: 'Operations',
+        type: 'operaton',
+        lifecycleStatus: 'active',
+        username: 'must-not-leak',
+        passwordEnc: 'must-not-leak',
+        createdAt: 123,
+      }]),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({ createQueryBuilder: vi.fn().mockReturnValue(qb) }),
+    });
+
+    const response = await request(app).get('/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{
+      id: 'engine-1',
+      name: 'Operations',
+      type: 'operaton',
+      lifecycleStatus: 'active',
+      ownerEmail: null,
+      ownerName: null,
+      delegateEmail: null,
+      delegateName: null,
+      createdAt: 123,
+    }]);
+    expect(response.body[0]).not.toHaveProperty('username');
+    expect(response.body[0]).not.toHaveProperty('passwordEnc');
   });
 
   it('rejects engine governance assignment when engine access is SSO-managed', async () => {

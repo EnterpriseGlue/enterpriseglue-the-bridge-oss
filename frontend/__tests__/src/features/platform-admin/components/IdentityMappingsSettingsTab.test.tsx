@@ -103,8 +103,7 @@ describe('IdentityMappingsSettingsTab', () => {
     };
     server.use(
       http.get('/api/authz/roles', () => HttpResponse.json([{ id: 'role-operator', name: 'Engine operator', scope: 'engine', isAssignable: true, isArchived: false }])),
-      http.get('/engines-api/engines', () => HttpResponse.json([{ id: 'engine-1', name: 'Main engine', lifecycleStatus: 'active' }])),
-      http.get('/t/default/engines-api/engines', () => HttpResponse.json([{ id: 'engine-1', name: 'Main engine', lifecycleStatus: 'active' }])),
+      http.get('/api/admin/engines', () => HttpResponse.json([{ id: 'engine-1', name: 'Main engine', type: 'operaton', lifecycleStatus: 'active' }])),
       http.get('/api/authz/engine-sets', () => HttpResponse.json([{ id: 'engine-set-1', name: 'Production engines', key: 'engines.production', isArchived: false }])),
       http.get('/api/authz/runtime-resources', () => HttpResponse.json([{ id: 'runtime-resource-1', engineId: 'engine-1', resourceKey: 'invoice-process', resourceKind: 'process_definition', isActive: true }])),
       http.get('/api/authz/runtime-resource-sets', () => HttpResponse.json([{ id: 'runtime-resource-set-1', engineId: 'engine-1', name: 'Payments resources', key: 'runtime.payments', isArchived: false }])),

@@ -74,7 +74,6 @@ import {
 } from './access-control/auditReferences';
 import { PermissionCatalogPanel, RoleCatalogPanel } from './access-control/RoleCatalogPanels';
 import { RuntimeResourcesPanel } from './access-control/RuntimeResourcesPanel';
-import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
 import { PoliciesPanel } from './access-control/PoliciesPanel';
 import { GroupsPanel } from './access-control/GroupsPanel';
 import { EngineSetsPanel } from './access-control/EngineSetsPanel';
@@ -82,7 +81,7 @@ import { ProjectEngineTargetsTab } from './access-control/ProjectEngineTargetsTa
 import { RoleAssignmentsPanel } from './access-control/RoleAssignmentsPanel';
 import { ByPrincipalPanel, ByResourcePanel } from './access-control/PrincipalResourcePanels';
 import { ExternalRegistrationTab } from './access-control/ExternalRegistrationTab';
-import { usePlatformSettings, useProjectsGovernance } from '../hooks/useAdminApi';
+import { useEnginesGovernance, usePlatformSettings, useProjectsGovernance } from '../hooks/useAdminApi';
 import type { ResourceSummary } from './access-control/principalResourcePresentation';
 import {
   filterPermissions,
@@ -783,10 +782,8 @@ export default function AccessControl() {
   const externalEngineApiDecommissionDecision = useActionDecision('engine.external-registration.decommission', platformAuthzResource);
   const externalProjectTargetApiUpsertDecision = useActionDecision('project-engine-target.external-registration.upsert', platformAuthzResource);
   const externalProjectTargetApiDecommissionDecision = useActionDecision('project-engine-target.external-registration.decommission', platformAuthzResource);
-  const runtimeResourceEnginesQ = useQuery({
-    queryKey: ['authz-runtime-resource-engines'],
+  const runtimeResourceEnginesQ = useEnginesGovernance(undefined, {
     enabled: engineSetsReadDecision.allowed || projectTargetsReadDecision.allowed || effectiveAccessDecision.allowed || assignmentsReadDecision.allowed,
-    queryFn: getAccessibleEngines,
   });
   const projectCatalogQ = useProjectsGovernance(undefined, { enabled: projectTargetsReadDecision.allowed });
   const runtimeResourcesQ = useQuery({

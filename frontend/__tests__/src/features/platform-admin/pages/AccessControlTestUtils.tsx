@@ -66,6 +66,16 @@ vi.mock('@src/features/platform-admin/hooks/useAdminApi', async (importOriginal)
     isLoading: false,
     isError: false,
   }),
+  useEnginesGovernance: () => ({
+    data: [{
+      id: 'engine-1',
+      name: 'External Engine',
+      type: 'operaton',
+      lifecycleStatus: 'active',
+    }],
+    isLoading: false,
+    isError: false,
+  }),
 }));
 
 const evaluateAccessState = vi.hoisted(() => ({

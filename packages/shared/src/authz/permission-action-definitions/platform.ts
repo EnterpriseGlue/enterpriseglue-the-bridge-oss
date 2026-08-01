@@ -815,7 +815,7 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       risk: 'medium',
       audit: false,
       category: 'Governance',
-      description: 'Read platform governance user, project, and engine assignment candidates.',
+      description: 'Read non-secret project and engine candidates for platform governance and access-control administration.',
       ui: [{ surfaceId: 'admin.governance', behavior: 'hide' }],
       routes: [
         { method: 'GET', route: '/api/admin/users/search', resourceResolver: 'platform.self' },

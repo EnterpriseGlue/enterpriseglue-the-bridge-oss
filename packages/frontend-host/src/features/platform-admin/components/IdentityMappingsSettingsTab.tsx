@@ -26,9 +26,8 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
-import { getAccessibleEngines } from '../../mission-control/engines/api/engines';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { GuardedAction, GuardedOverflowMenu, GuardedOverflowMenuItem, UnauthorizedEmptyState, useActionDecision } from '../../../shared/auth/guards';
 import { authzQueryKeys, useAuthzGroups, useEngineSets, useIdentityEntitlementMappings, useIdentityProviders, useRbacRoles, useRuntimeResources, useRuntimeResourceSets } from '../hooks/useAuthzApi';
@@ -53,6 +52,7 @@ import {
   identityProviderName,
   membershipBehaviorCopy,
 } from '../identityAccessCopy';
+import { useEnginesGovernance } from '../hooks/useAdminApi';
 
 type EntitlementType = HumanIdentityEntitlementType;
 type MatchOperator = 'exact' | 'contains' | 'exists';
@@ -94,7 +94,7 @@ export default function IdentityMappingsSettingsTab() {
   const providersQuery = useIdentityProviders({ enabled: manage.allowed });
   const groupsQuery = useAuthzGroups(undefined, { enabled: manage.allowed });
   const rolesQuery = useRbacRoles({ enabled: rolesManage.allowed });
-  const enginesQuery = useQuery({ queryKey: ['identity-mapping-engines'], queryFn: getAccessibleEngines, enabled: rolesManage.allowed });
+  const enginesQuery = useEnginesGovernance(undefined, { enabled: rolesManage.allowed });
   const engineSetsQuery = useEngineSets(undefined, { enabled: rolesManage.allowed });
   const [editing, setEditing] = useState<Mapping | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);

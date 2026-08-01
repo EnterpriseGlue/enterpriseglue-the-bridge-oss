@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import {
   projectMemberService,
   engineService,
@@ -36,6 +37,17 @@ const governanceSearchQuerySchema = z.object({
 const assignOwnerSchema = z.object({
   userId: z.string().uuid(),
   reason: z.string().min(1),
+});
+
+const requireGovernanceCatalogRead = requireAction('platform.governance.read', {
+  resourceResolver: 'platform.self',
+  acceptedPermissions: [
+    PlatformPermissions.SETTINGS_MANAGE,
+    PlatformPermissions.AUTHZ_ROLES_VIEW,
+    PlatformPermissions.AUTHZ_CHECK,
+    PlatformPermissions.ENGINE_SETS_VIEW,
+    PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW,
+  ],
 });
 
 async function assertManualGovernanceAllowed(resourceType: 'project' | 'engine'): Promise<void> {
@@ -85,7 +97,7 @@ router.get('/users/search', apiLimiter, requirePermission({ permission: Platform
  * GET /api/platform-admin/admin/governance/projects
  * List projects with owner info for governance
  */
-router.get('/projects', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/projects', apiLimiter, requireGovernanceCatalogRead, validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const searchRaw = req.query['search'];
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
@@ -122,7 +134,7 @@ router.get('/projects', apiLimiter, requirePermission({ permission: PlatformPerm
  * GET /api/platform-admin/admin/governance/engines
  * List engines with owner info for governance
  */
-router.get('/engines', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/engines', apiLimiter, requireGovernanceCatalogRead, validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const searchRaw = req.query['search'];
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
@@ -142,6 +154,7 @@ router.get('/engines', apiLimiter, requirePermission({ permission: PlatformPermi
       id: e.id,
       name: e.name,
       type: e.type,
+      lifecycleStatus: e.lifecycleStatus || null,
       ownerEmail: null,
       ownerName: null,
       delegateEmail: null,
