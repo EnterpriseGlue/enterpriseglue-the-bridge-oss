@@ -72,7 +72,7 @@
     "react-dom": "^19.2.4",
     "react-loading-skeleton": "^3.5.0",
     "react-pro-sidebar": "^1.1.0",
-    "react-router-dom": "^7.15.1",
+    "react-router-dom": "^7.18.2",
     "react-split-pane": "^3.2.0",
     "svg2pdf.js": "^2.7.0",
     "tailwind-merge": "^3.4.0",
