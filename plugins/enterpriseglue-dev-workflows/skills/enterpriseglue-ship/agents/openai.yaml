@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Ship"
+  short_description: "Validate and ship an EnterpriseGlue change"
+  default_prompt: "Use $enterpriseglue-ship to help with this EnterpriseGlue task."

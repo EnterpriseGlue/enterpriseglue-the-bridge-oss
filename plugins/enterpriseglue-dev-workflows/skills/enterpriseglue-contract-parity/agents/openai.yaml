@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Contract Parity"
+  short_description: "Keep EnterpriseGlue UI, API, config, and docs aligned"
+  default_prompt: "Use $enterpriseglue-contract-parity to help with this EnterpriseGlue task."

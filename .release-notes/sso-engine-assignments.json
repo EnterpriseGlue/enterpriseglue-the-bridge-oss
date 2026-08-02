@@ -69,6 +69,7 @@
     "Engine tenancy upgrade: `docs/how-to/upgrade-engine-tenancy.md` and `docs/how-to/migrate-existing-engines-to-explicit-tenancy.md`",
     "Mirrored backstop and sidecar: `docs/developer/mirrored-engine-backstop.md` and `docs/how-to/customer-sidecar-readiness-runbook.md`",
     "Release contribution and fail-fast CI preflight: `docs/development/release-notes-process.md`",
+    "Versioned Codex development workflows: `docs/development/codex-workflow-plugin.md`",
     "Validation evidence: `docs/development/engine-tenancy-functional-test-report.md` and `docs/development/customer-sidecar-backstop-test-report.md`"
   ],
   "knownLimitations": [
@@ -87,6 +88,7 @@
     "Fine-grained authorization state-space, custom-role, resource-type, machine-principal, variable-control, and mutation coverage",
     "Operaton and Camunda mirrored-backstop matrix plus local real-Operaton and customer-sidecar container evidence",
     "Reusable release-note preflight contracts and dependency ordering across every expensive pull-request workflow",
+    "Versioned Codex plugin, skill metadata, portability, PR-readiness, UI-evidence, access-governance lane selection, and contract-parity helper contracts",
     "Built-image deployment smoke, CodeQL, third-party notices, package compatibility, and hardened image security scans"
   ],
   "packages": [

@@ -293,12 +293,16 @@ function listFragmentPaths(root) {
     .sort()
 }
 
-function changedPaths(root, baseRef) {
+export function changedPaths(root, baseRef) {
   if (!baseRef) return []
   const output = git(['diff', '--name-only', '--diff-filter=ACMR', `${baseRef}...HEAD`], root)
+  const working = git(['diff', '--name-only', '--diff-filter=ACMR'], root)
+  const staged = git(['diff', '--cached', '--name-only', '--diff-filter=ACMR'], root)
   const untracked = git(['ls-files', '--others', '--exclude-standard'], root)
   return unique([
     ...(output ? output.split('\n').filter(Boolean) : []),
+    ...(working ? working.split('\n').filter(Boolean) : []),
+    ...(staged ? staged.split('\n').filter(Boolean) : []),
     ...(untracked ? untracked.split('\n').filter(Boolean) : []),
   ])
 }

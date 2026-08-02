@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
+  changedPaths,
   renderReleaseNotes,
   recommendReleaseVersion,
   validateBaselineState,
@@ -96,6 +100,23 @@ test('low-risk internal changes can be exempted only with a reason', () => {
   assert.deepEqual(result.requirements, ['exempt'])
 })
 
+test('local release validation includes committed, staged, modified, and untracked paths', () => {
+  const root = mkdtempSync(join(tmpdir(), 'enterpriseglue-release-paths-'))
+  const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'ignore' })
+  git('init')
+  git('config', 'user.email', 'test@enterpriseglue.local')
+  git('config', 'user.name', 'EnterpriseGlue Test')
+  writeFileSync(join(root, 'tracked.txt'), 'initial\n')
+  writeFileSync(join(root, 'staged.txt'), 'initial\n')
+  git('add', '.')
+  git('commit', '-m', 'initial')
+  writeFileSync(join(root, 'tracked.txt'), 'modified\n')
+  writeFileSync(join(root, 'staged.txt'), 'staged\n')
+  git('add', 'staged.txt')
+  writeFileSync(join(root, 'untracked.txt'), 'untracked\n')
+  assert.deepEqual(changedPaths(root, 'HEAD').sort(), ['staged.txt', 'tracked.txt', 'untracked.txt'])
+})
+
 test('renderer produces audience, compatibility, package, rollback, and evidence sections', () => {
   const output = renderReleaseNotes([fragment], { version: '0.11.0', baseRef: 'v0.10.5' })
   assert.match(output, /# EnterpriseGlue v0\.11\.0 Release Notes/)
@@ -148,9 +169,10 @@ test('the reusable preflight fetches fresh PR metadata and validates release not
   assert.match(workflow, /RELEASE_NOTE_EXEMPT: \$\{\{ steps\.pull_request\.outputs\.exempt/)
   assert.match(workflow, /RELEASE_PR_LABELS: \$\{\{ steps\.pull_request\.outputs\.labels/)
   assert.match(workflow, /RELEASE_PR_TITLE: \$\{\{ steps\.pull_request\.outputs\.title/)
-  assert.match(workflow, /node scripts\/release-notes\.mjs baseline/)
-  assert.match(workflow, /node scripts\/release-notes\.mjs validate --base-ref/)
-  assert.match(workflow, /- name: Build release-note preview\n        if: always\(\)/)
+  assert.match(workflow, /- name: Run release-note preflight/)
+  assert.match(workflow, /node scripts\/run-release-notes-preflight\.mjs/)
+  assert.match(workflow, /--base-ref "\$\{\{ steps\.release_base\.outputs\.base_ref \}\}"/)
+  assert.match(workflow, /- name: Upload release-note preview\n        if: always\(\)/)
   assert.match(workflow, /release-notes-preview-\$\{\{ github\.run_id \}\}/)
 })
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Access Governance"
+  short_description: "Verify EnterpriseGlue SSO and authorization"
+  default_prompt: "Use $enterpriseglue-access-governance-verify to help with this EnterpriseGlue task."

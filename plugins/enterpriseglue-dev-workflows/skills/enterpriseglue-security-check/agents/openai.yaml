@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Security Check"
+  short_description: "Run EnterpriseGlue vulnerability checks"
+  default_prompt: "Use $enterpriseglue-security-check to help with this EnterpriseGlue task."

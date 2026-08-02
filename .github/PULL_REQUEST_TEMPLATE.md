@@ -22,6 +22,7 @@ Provide steps to validate the change.
 ## Release impact
 
 - Release-note fragment: `.release-notes/<change-id>.json`
+- Preflight: `pnpm run release-notes:preflight -- --base-ref origin/main`
 - Expected application bump: patch / minor / major / none
 - Compatibility: backward-compatible / deprecated / breaking
 - Required operator action: none, or summarize and link the fragment

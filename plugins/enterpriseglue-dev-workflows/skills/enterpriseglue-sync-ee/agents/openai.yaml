@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Sync EE"
+  short_description: "Synchronize EnterpriseGlue OSS packages into EE"
+  default_prompt: "Use $enterpriseglue-sync-ee to help with this EnterpriseGlue task."

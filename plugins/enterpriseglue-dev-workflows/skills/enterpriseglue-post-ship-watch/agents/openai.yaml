@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Post-Ship Watch"
+  short_description: "Monitor EnterpriseGlue after a PR merge"
+  default_prompt: "Use $enterpriseglue-post-ship-watch to help with this EnterpriseGlue task."

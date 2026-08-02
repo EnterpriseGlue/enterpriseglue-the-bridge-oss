@@ -150,6 +150,9 @@ See [Release-note and versioning process](docs/development/release-notes-process
 for the schema, path-aware requirements, Release Please integration, and
 post-release checks.
 
+Codex contributors can install and validate the version-controlled
+[EnterpriseGlue development workflow plugin](docs/development/codex-workflow-plugin.md).
+
 ## Security
 
 If you believe you have found a security vulnerability, do not open a public issue.

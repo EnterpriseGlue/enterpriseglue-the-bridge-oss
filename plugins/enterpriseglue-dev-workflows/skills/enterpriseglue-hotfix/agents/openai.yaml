@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Hotfix"
+  short_description: "Fast-track a safe EnterpriseGlue hotfix"
+  default_prompt: "Use $enterpriseglue-hotfix to help with this EnterpriseGlue task."

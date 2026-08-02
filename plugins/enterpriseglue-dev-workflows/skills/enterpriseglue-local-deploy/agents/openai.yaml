@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Local Deploy"
+  short_description: "Deploy an EnterpriseGlue worktree locally"
+  default_prompt: "Use $enterpriseglue-local-deploy to help with this EnterpriseGlue task."

@@ -91,30 +91,24 @@ jobs:
           git rev-parse --verify "$base_ref^{commit}" >/dev/null
           echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
 
-      - name: Test release-note tooling
-        run: node --test scripts/release-notes.test.mjs
-
-      - name: Validate release baseline
-        run: node scripts/release-notes.mjs baseline
-
-      - name: Validate release-note coverage
+      - name: Run release-note preflight
         env:
           RELEASE_NOTE_EXEMPT: ${{ steps.pull_request.outputs.exempt || 'false' }}
           RELEASE_NOTE_EXEMPT_REASON: ${{ steps.pull_request.outputs.body || '' }}
           RELEASE_PR_LABELS: ${{ steps.pull_request.outputs.labels || '' }}
           RELEASE_PR_TITLE: ${{ steps.pull_request.outputs.title || '' }}
-        run: node scripts/release-notes.mjs validate --base-ref "${{ steps.release_base.outputs.base_ref }}"
-
-      - name: Recommend semantic release version
-        if: inputs.pull_number > 0
         run: |
           set -euo pipefail
           base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
-          node scripts/release-notes.mjs recommend --base-ref "$base_tag"
-
-      - name: Build release-note preview
-        if: always()
-        run: node scripts/release-notes.mjs preview --base-ref "${{ steps.release_base.outputs.base_ref }}" --output .artifacts/release-notes-preview.md
+          preflight_args=(
+            --base-ref "${{ steps.release_base.outputs.base_ref }}"
+            --release-base "$base_tag"
+            --output .artifacts/release-notes-preview.md
+          )
+          if [[ "${{ inputs.pull_number }}" == "0" ]]; then
+            preflight_args+=(--skip-recommend)
+          fi
+          node scripts/run-release-notes-preflight.mjs "${preflight_args[@]}"
 
       - name: Upload release-note preview
         if: always() && inputs.publish_preview && hashFiles('.artifacts/release-notes-preview.md') != ''

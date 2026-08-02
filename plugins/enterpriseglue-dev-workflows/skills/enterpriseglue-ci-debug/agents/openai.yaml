@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue CI Debug"
+  short_description: "Diagnose EnterpriseGlue GitHub Actions failures"
+  default_prompt: "Use $enterpriseglue-ci-debug to help with this EnterpriseGlue task."

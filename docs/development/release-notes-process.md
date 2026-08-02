@@ -23,12 +23,12 @@ feature pull request.
 3. Run:
 
    ```bash
-   pnpm run test:release-notes
-   pnpm run guard:release-baseline
-   pnpm run release-notes:validate --base-ref origin/main
-   pnpm run release-notes:recommend --base-ref vX.Y.Z
-   pnpm run release-notes:preview --base-ref origin/main --output .artifacts/release-notes-preview.md
+   pnpm run release-notes:preflight -- --base-ref origin/main
    ```
+
+   This single command tests the tooling, validates the release baseline and
+   path coverage, recommends the next version, and always writes
+   `.artifacts/release-notes-preview.md`, including when validation fails.
 
 4. Review the generated preview as user, administrator, operator, developer,
    and security communication—not only as an implementation summary.
