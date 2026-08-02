@@ -9,6 +9,10 @@ on:
       frontend_image_ref:
         required: true
         type: string
+      image_platforms:
+        required: false
+        type: string
+        default: linux/amd64,linux/arm64
 
 permissions:
   contents: read
@@ -29,33 +33,40 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # -- Validate image freshness ---------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Validate scanned image versions
+      # -- Validate image provenance --------------------------------------------
+
+      - name: Validate scanned image provenance
         id: image-meta
         shell: bash
+        env:
+          EXPECTED_PLATFORMS: ${{ inputs.image_platforms }}
+          EXPECTED_SOURCE: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
           backend_ref="${{ inputs.backend_image_ref }}"
           frontend_ref="${{ inputs.frontend_image_ref }}"
 
-          backend_digest="$(docker manifest inspect "$backend_ref" -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .config.digest // "unknown"' 2>/dev/null || echo 'unavailable')"
-          frontend_digest="$(docker manifest inspect "$frontend_ref" -v 2>/dev/null | jq -r '.[0].Descriptor.digest // .config.digest // "unknown"' 2>/dev/null || echo 'unavailable')"
+          docker buildx imagetools inspect "$backend_ref" --format '{{json .}}' \
+            | node scripts/verify-oci-image-metadata.mjs backend \
+            >> "$GITHUB_OUTPUT"
+          docker buildx imagetools inspect "$frontend_ref" --format '{{json .}}' \
+            | node scripts/verify-oci-image-metadata.mjs frontend \
+            >> "$GITHUB_OUTPUT"
 
-          backend_version="$(docker manifest inspect "$backend_ref" -v 2>/dev/null | jq -r '.[0].OCIManifest.annotations["org.opencontainers.image.version"] // .[0].Descriptor.annotations["org.opencontainers.image.version"] // "unknown"' 2>/dev/null || echo 'unknown')"
-          frontend_version="$(docker manifest inspect "$frontend_ref" -v 2>/dev/null | jq -r '.[0].OCIManifest.annotations["org.opencontainers.image.version"] // .[0].Descriptor.annotations["org.opencontainers.image.version"] // "unknown"' 2>/dev/null || echo 'unknown')"
-
-          echo "backend_digest=${backend_digest}" >> "$GITHUB_OUTPUT"
-          echo "frontend_digest=${frontend_digest}" >> "$GITHUB_OUTPUT"
-          echo "backend_version=${backend_version}" >> "$GITHUB_OUTPUT"
-          echo "frontend_version=${frontend_version}" >> "$GITHUB_OUTPUT"
-
-          echo "### Scanned image metadata" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Image | Ref | Version | Digest |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| backend | \`${backend_ref}\` | ${backend_version} | \`${backend_digest:0:20}…\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| frontend | \`${frontend_ref}\` | ${frontend_version} | \`${frontend_digest:0:20}…\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+      - name: Summarize scanned image provenance
+        shell: bash
+        run: |
+          {
+            echo "### Scanned image metadata"
+            echo "| Image | Ref | Version | Revision | Digest |"
+            echo "|---|---|---|---|---|"
+            echo "| backend | \`${{ inputs.backend_image_ref }}\` | ${{ steps.image-meta.outputs.backend_version }} | \`${{ steps.image-meta.outputs.backend_revision }}\` | \`${{ steps.image-meta.outputs.backend_digest }}\` |"
+            echo "| frontend | \`${{ inputs.frontend_image_ref }}\` | ${{ steps.image-meta.outputs.frontend_version }} | \`${{ steps.image-meta.outputs.frontend_revision }}\` | \`${{ steps.image-meta.outputs.frontend_digest }}\` |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # -- Trivy scans --------------------------------------------------------
 
@@ -65,7 +76,8 @@ jobs:
           image-ref: ${{ inputs.backend_image_ref }}
           format: 'json'
           output: 'backend-trivy.json'
-          exit-code: '0'          # don't fail the workflow — report via issue
+          # Defer failure until reports are uploaded and the tracking issue is updated.
+          exit-code: '0'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN'
           scanners: 'vuln'
           trivyignores: '.trivyignore'
@@ -129,6 +141,8 @@ jobs:
         id: evaluate
         run: |
           total=0
+          critical_total=0
+          high_total=0
           body=""
 
           for img in backend frontend; do
@@ -140,6 +154,8 @@ jobs:
               medium=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "MEDIUM")] | length' "$file")
               low=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "LOW")] | length' "$file")
               total=$((total + count))
+              critical_total=$((critical_total + critical))
+              high_total=$((high_total + high))
 
               body="${body}### ${img}\n"
               body="${body}| Severity | Count |\n|---|---|\n"
@@ -158,9 +174,10 @@ jobs:
             fi
           done
 
-          echo "total=${total}" >> "$GITHUB_OUTPUT"
-
           {
+            echo "total=${total}"
+            echo "critical=${critical_total}"
+            echo "high=${high_total}"
             echo "body<<EOF"
             echo -e "$body"
             echo "EOF"
@@ -171,49 +188,52 @@ jobs:
       - name: Security scan summary
         if: always()
         run: |
-          echo "## Nightly Security Drift Scan" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Date:** $(date -u +%Y-%m-%d)" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Total findings:** ${{ steps.evaluate.outputs.total }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Nightly Security Drift Scan"
+            echo ""
+            echo "**Date:** $(date -u +%Y-%m-%d)"
+            echo "**Total findings:** ${{ steps.evaluate.outputs.total }}"
+            echo "**Release-blocking findings:** ${{ steps.evaluate.outputs.critical }} critical, ${{ steps.evaluate.outputs.high }} high"
+            echo ""
 
-          for img in backend frontend; do
-            file="${img}-trivy.json"
-            if [ -f "$file" ]; then
-              count=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
-              critical=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "CRITICAL")] | length' "$file")
-              high=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "HIGH")] | length' "$file")
-              medium=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "MEDIUM")] | length' "$file")
-              low=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "LOW")] | length' "$file")
-              echo "### ${img}" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
-              echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Critical | ${critical} |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| High | ${high} |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Medium | ${medium} |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Low | ${low} |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| **Total** | **${count}** |" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+            for img in backend frontend; do
+              file="${img}-trivy.json"
+              if [ -f "$file" ]; then
+                count=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' "$file")
+                critical=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "CRITICAL")] | length' "$file")
+                high=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "HIGH")] | length' "$file")
+                medium=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "MEDIUM")] | length' "$file")
+                low=$(jq '[.Results[]?.Vulnerabilities // [] | .[] | select(.Severity == "LOW")] | length' "$file")
+                echo "### ${img}"
+                echo "| Severity | Count |"
+                echo "|---|---|"
+                echo "| Critical | ${critical} |"
+                echo "| High | ${high} |"
+                echo "| Medium | ${medium} |"
+                echo "| Low | ${low} |"
+                echo "| **Total** | **${count}** |"
+                echo ""
 
-              if [ "$count" -gt 0 ]; then
-                echo "<details><summary>Vulnerability details</summary>" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
-                echo "| CVE | Package | Severity | Installed | Fixed |" >> "$GITHUB_STEP_SUMMARY"
-                echo "|---|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-                jq -r '[.Results[]?.Vulnerabilities // [] | .[] | "| \(.VulnerabilityID) | \(.PkgName) | \(.Severity) | \(.InstalledVersion) | \(.FixedVersion // "none") |"] | .[]' "$file" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
-                echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
+                if [ "$count" -gt 0 ]; then
+                  echo "<details><summary>Vulnerability details</summary>"
+                  echo ""
+                  echo "| CVE | Package | Severity | Installed | Fixed |"
+                  echo "|---|---|---|---|---|"
+                  jq -r '[.Results[]?.Vulnerabilities // [] | .[] | "| \(.VulnerabilityID) | \(.PkgName) | \(.Severity) | \(.InstalledVersion) | \(.FixedVersion // "none") |"] | .[]' "$file"
+                  echo ""
+                  echo "</details>"
+                  echo ""
+                fi
               fi
-            fi
-          done
+            done
 
-          if [ "${{ steps.expiry.outputs.has_expired }}" == "true" ]; then
-            echo "### ⚠️ Expired .trivyignore entries" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            echo "${{ steps.expiry.outputs.expired_entries }}" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-          fi
+            if [ "${{ steps.expiry.outputs.has_expired }}" == "true" ]; then
+              echo "### ⚠️ Expired .trivyignore entries"
+              echo '```'
+              echo "${{ steps.expiry.outputs.expired_entries }}"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # -- Create or update tracking issue -------------------------------------
 
@@ -233,9 +253,9 @@ jobs:
             body += `**Date:** ${new Date().toISOString().split('T')[0]}\n`;
             body += `**Total findings:** ${total}\n\n`;
             body += `### Scanned images\n\n`;
-            body += `| Image | Ref | Version | Digest |\n|---|---|---|---|\n`;
-            body += `| backend | \`${{ inputs.backend_image_ref }}\` | ${{ steps.image-meta.outputs.backend_version }} | \`${{ steps.image-meta.outputs.backend_digest }}\` |\n`;
-            body += `| frontend | \`${{ inputs.frontend_image_ref }}\` | ${{ steps.image-meta.outputs.frontend_version }} | \`${{ steps.image-meta.outputs.frontend_digest }}\` |\n\n`;
+            body += `| Image | Ref | Version | Revision | Digest |\n|---|---|---|---|---|\n`;
+            body += `| backend | \`${{ inputs.backend_image_ref }}\` | ${{ steps.image-meta.outputs.backend_version }} | \`${{ steps.image-meta.outputs.backend_revision }}\` | \`${{ steps.image-meta.outputs.backend_digest }}\` |\n`;
+            body += `| frontend | \`${{ inputs.frontend_image_ref }}\` | ${{ steps.image-meta.outputs.frontend_version }} | \`${{ steps.image-meta.outputs.frontend_revision }}\` | \`${{ steps.image-meta.outputs.frontend_digest }}\` |\n\n`;
             body += ${{ toJSON(steps.evaluate.outputs.body) }};
 
             if (hasExpired) {
@@ -327,3 +347,11 @@ jobs:
               });
               core.info(`Closed issue #${existing.number} — zero findings`);
             }
+
+      - name: Enforce high and critical vulnerability gate
+        if: always() && steps.evaluate.outcome == 'success'
+        shell: bash
+        env:
+          CRITICAL_FINDINGS: ${{ steps.evaluate.outputs.critical }}
+          HIGH_FINDINGS: ${{ steps.evaluate.outputs.high }}
+        run: node scripts/enforce-security-severity-gate.mjs

@@ -122,16 +122,18 @@ jobs:
             publish_dockerhub="true"
           fi
 
-          echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
-          echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
-          echo "publish_latest=${publish_latest}" >> "$GITHUB_OUTPUT"
-          echo "publish_dockerhub=${publish_dockerhub}" >> "$GITHUB_OUTPUT"
-          echo "image_platforms=${image_platforms}" >> "$GITHUB_OUTPUT"
-          echo "dockerhub_backend=${dockerhub_backend}" >> "$GITHUB_OUTPUT"
-          echo "dockerhub_frontend=${dockerhub_frontend}" >> "$GITHUB_OUTPUT"
-          echo "backend_temp_tag=tmp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-backend" >> "$GITHUB_OUTPUT"
-          echo "frontend_temp_tag=tmp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-frontend" >> "$GITHUB_OUTPUT"
+          {
+            echo "backend_image=${backend_image}"
+            echo "frontend_image=${frontend_image}"
+            echo "image_tag=${image_tag}"
+            echo "publish_latest=${publish_latest}"
+            echo "publish_dockerhub=${publish_dockerhub}"
+            echo "image_platforms=${image_platforms}"
+            echo "dockerhub_backend=${dockerhub_backend}"
+            echo "dockerhub_frontend=${dockerhub_frontend}"
+            echo "backend_temp_tag=tmp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-backend"
+            echo "frontend_temp_tag=tmp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-frontend"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Login to Docker Hub
         if: steps.meta.outputs.publish_dockerhub == 'true'
@@ -400,33 +402,52 @@ jobs:
             -t "${{ steps.meta.outputs.dockerhub_frontend }}:latest" \
             "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}"
 
-      - name: Verify published image refs
+      - name: Verify published image provenance
         shell: bash
+        env:
+          EXPECTED_PLATFORMS: ${{ steps.meta.outputs.image_platforms }}
+          EXPECTED_SOURCE: ${{ github.server_url }}/${{ github.repository }}
+          EXPECTED_REVISION: ${{ github.sha }}
+          EXPECTED_VERSION: ${{ steps.meta.outputs.image_tag }}
         run: |
           set -euo pipefail
-          docker buildx imagetools inspect "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" >/dev/null
-          docker buildx imagetools inspect "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}" >/dev/null
+
+          verify_image() {
+            local prefix="$1"
+            local ref="$2"
+            docker buildx imagetools inspect "$ref" --format '{{json .}}' \
+              | node scripts/verify-oci-image-metadata.mjs "$prefix" \
+              >/dev/null
+          }
+
+          verify_image backend "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}"
+          verify_image frontend "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}"
           if [[ "${{ steps.meta.outputs.publish_latest }}" == "true" ]]; then
-            docker buildx imagetools inspect "${{ steps.meta.outputs.backend_image }}:latest" >/dev/null
-            docker buildx imagetools inspect "${{ steps.meta.outputs.frontend_image }}:latest" >/dev/null
+            verify_image backend "${{ steps.meta.outputs.backend_image }}:latest"
+            verify_image frontend "${{ steps.meta.outputs.frontend_image }}:latest"
           fi
           if [[ "${{ steps.meta.outputs.publish_dockerhub }}" == "true" && -n "${{ steps.meta.outputs.dockerhub_frontend }}" ]]; then
-            docker buildx imagetools inspect "${{ steps.meta.outputs.dockerhub_backend }}:${{ steps.meta.outputs.image_tag }}" >/dev/null
-            docker buildx imagetools inspect "${{ steps.meta.outputs.dockerhub_frontend }}:${{ steps.meta.outputs.image_tag }}" >/dev/null
+            verify_image backend "${{ steps.meta.outputs.dockerhub_backend }}:${{ steps.meta.outputs.image_tag }}"
+            verify_image frontend "${{ steps.meta.outputs.dockerhub_frontend }}:${{ steps.meta.outputs.image_tag }}"
             if [[ "${{ steps.meta.outputs.publish_latest }}" == "true" ]]; then
-              docker buildx imagetools inspect "${{ steps.meta.outputs.dockerhub_backend }}:latest" >/dev/null
-              docker buildx imagetools inspect "${{ steps.meta.outputs.dockerhub_frontend }}:latest" >/dev/null
+              verify_image backend "${{ steps.meta.outputs.dockerhub_backend }}:latest"
+              verify_image frontend "${{ steps.meta.outputs.dockerhub_frontend }}:latest"
             fi
           fi
 
       - name: Publish summary
         run: |
-          echo "backend_image=${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "frontend_image=${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "platforms=${{ steps.meta.outputs.image_platforms }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "backend_digest=${{ steps.backend.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "frontend_digest=${{ steps.frontend.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "publish_latest=${{ steps.meta.outputs.publish_latest }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "backend_image=${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.image_tag }}"
+            echo "frontend_image=${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}"
+            echo "platforms=${{ steps.meta.outputs.image_platforms }}"
+            echo "backend_digest=${{ steps.backend.outputs.digest }}"
+            echo "frontend_digest=${{ steps.frontend.outputs.digest }}"
+            echo "source=${{ github.server_url }}/${{ github.repository }}"
+            echo "revision=${{ github.sha }}"
+            echo "version=${{ steps.meta.outputs.image_tag }}"
+            echo "publish_latest=${{ steps.meta.outputs.publish_latest }}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture image digest metadata
         run: |
@@ -437,6 +458,9 @@ jobs:
             "frontend_image": "${{ steps.meta.outputs.frontend_image }}:${{ steps.meta.outputs.image_tag }}",
             "backend_digest": "${{ steps.backend.outputs.digest }}",
             "frontend_digest": "${{ steps.frontend.outputs.digest }}",
+            "source": "${{ github.server_url }}/${{ github.repository }}",
+            "revision": "${{ github.sha }}",
+            "version": "${{ steps.meta.outputs.image_tag }}",
             "platforms": "${{ steps.meta.outputs.image_platforms }}",
             "publish_latest": "${{ steps.meta.outputs.publish_latest }}"
           }
