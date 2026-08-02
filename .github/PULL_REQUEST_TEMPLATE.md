@@ -19,6 +19,16 @@ Provide steps to validate the change.
 - [ ] Typecheck: `cd backend && npx tsc --noEmit`
 - [ ] Frontend build: `cd frontend && pnpm run build`
 
+## Release impact
+
+- Release-note fragment: `.release-notes/<change-id>.json`
+- Expected application bump: patch / minor / major / none
+- Compatibility: backward-compatible / deprecated / breaking
+- Required operator action: none, or summarize and link the fragment
+- Release-note exemption (internal-only changes):
+
+`Release-note exemption: <reason>`
+
 ## Checklist
 
 - [ ] I have kept the PR focused and scoped
@@ -26,6 +36,7 @@ Provide steps to validate the change.
 - [ ] I have added/updated tests where appropriate
 - [ ] I have updated documentation where appropriate
 - [ ] I have added a release label (`release:feature`, `release:fix`, `release:breaking`, etc.)
+- [ ] I added and previewed a structured release-note fragment, or documented an allowed `release-note:none` exemption
 - [ ] If this is breaking, I added compatibility + migration notes in this PR
 - [ ] I confirmed release impact (patch/minor/major) for this change
 - [ ] I have included screenshots for UI changes (if applicable)

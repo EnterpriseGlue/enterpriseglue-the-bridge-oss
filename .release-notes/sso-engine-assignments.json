@@ -1,0 +1,116 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "sso-engine-assignments",
+  "type": "feature",
+  "scope": "identity-and-access-governance",
+  "breaking": true,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "developers",
+    "security"
+  ],
+  "summary": "Adds tenant-aware SSO engine assignments, fine-grained authorization, governed engine modes, mandatory identity reconciliation, and portable headless provisioning.",
+  "userImpact": [
+    "Administrators can map identity-provider groups to engines, Engine Sets, runtime resources, and runtime-resource sets.",
+    "Mission Control enforces resource-type permissions and independently controls whether process variables are hidden, visible, or editable.",
+    "Managed memberships clearly indicate whether access is controlled manually, by SSO, or by configuration, and configuration-owned controls become view-only.",
+    "The login experience uses provider display names, supports safe single-provider redirection, hides disabled local login, and keeps administrator recovery separate."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Back up the application database and configuration before upgrading.",
+      "Allow the application to run the TypeORM authorization, identity, and engine-governance migrations; do not execute hand-written database-specific SQL.",
+      "Review existing engine registrations and assign explicit tenancy before using the external engine provisioning API.",
+      "Review SSO mappings, engine authority modes, configuration ownership, and break-glass administrator membership before enabling SSO enforcement.",
+      "Retain the generated migration, authorization, identity-reconciliation, and image-security evidence with the release record."
+    ]
+  },
+  "configuration": [
+    "Adds JSON configuration for identity providers, identity mappings, provider display and login labels, login behavior, engine registration, engine tenancy, governance ownership, and reconciliation.",
+    "Adds enterprise-authoritative, engine-native, mirrored-backstop, and credentialless customer-sidecar engine integration settings.",
+    "Configuration-managed providers, mappings, roles, grants, engines, and governance settings are presented as configuration-owned and cannot be mutated through the portal."
+  ],
+  "api": {
+    "compatibility": "breaking",
+    "changes": [
+      "Adds OpenAPI-described headless endpoints and schemas for SSO providers, mappings, engines, authority modes, tenancy, resource assignments, effective access, and reconciliation.",
+      "Tenant-scoped login discovery and provider-start routes are additive; the global default-tenant routes remain compatibility aliases.",
+      "External engine registration and idempotent upsert now require explicit tenancy instead of inferring the default tenant.",
+      "The enterprise plugin API adds a portable TypeORM database context while retaining the legacy connectionPool field as deprecated compatibility."
+    ]
+  },
+  "database": {
+    "migrations": [
+      "Authorization, identity, and engine-governance migration series through 1700000000107",
+      "1700000000104 add identity-mapping ownership mode",
+      "1700000000105 add platform-governance settings ownership",
+      "1700000000106 add login-experience metadata",
+      "1700000000107 consolidate login-provider preference"
+    ],
+    "rollbackSupported": true,
+    "notes": [
+      "Clean install, upgrade, interrupted retry, schema equivalence, service behavior, rollback, and cleanup are qualified across PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.",
+      "Existing SSO rows and the OSS default-tenant fallback are preserved; compatibility aliases remain where documented."
+    ]
+  },
+  "security": [
+    "Identity-provider entitlements are reconciled after every successful OIDC, Entra-compatible OIDC, SAML, and LDAP login so removed grants are revoked promptly.",
+    "Tenant and resource boundaries are enforced in the backend, including sibling and cross-tenant denials.",
+    "Process-variable redaction is performed by the backend before values reach EnterpriseGlue clients.",
+    "Engine endpoints, sidecar trust boundaries, configuration secrets, callback state, sessions, and break-glass access have fail-closed validation and dedicated regression coverage."
+  ],
+  "documentation": [
+    "Administrator configuration: `docs/how-to/configure-authorization-and-engines.md` and `docs/how-to/auth-sso.md`",
+    "Headless API and JSON configuration: `docs/reference/access-governance-and-headless-api.md` and `docs/architecture/11-json-driven-authz-and-engine-registration.md`",
+    "Engine tenancy upgrade: `docs/how-to/upgrade-engine-tenancy.md` and `docs/how-to/migrate-existing-engines-to-explicit-tenancy.md`",
+    "Mirrored backstop and sidecar: `docs/developer/mirrored-engine-backstop.md` and `docs/how-to/customer-sidecar-readiness-runbook.md`",
+    "Validation evidence: `docs/development/engine-tenancy-functional-test-report.md` and `docs/development/customer-sidecar-backstop-test-report.md`"
+  ],
+  "knownLimitations": [
+    "Protected real-OpenShift evidence remains deferred by release decision.",
+    "Real customer identity-provider credentials are not stored in CI; provider-specific behavior is covered with disposable local protocol services and Entra-compatible emulation."
+  ],
+  "rollback": [
+    "Roll back backend and frontend images together and run the documented TypeORM migration rollback for the matching application version.",
+    "Preserve classification reports, transition previews, mapping versions, reconciliation summaries, and release evidence before rollback.",
+    "Do not repair engine topology, ownership, or SSO state with direct database edits."
+  ],
+  "validation": [
+    "Backend and frontend unit, integration, typecheck, lint, and browser suites",
+    "PostgreSQL and Oracle CI plus five-adapter migration and runtime portability qualification",
+    "OIDC, Entra-compatible OIDC, SAML, and LDAP login, mapping, reconciliation, grant, revocation, and denial scenarios",
+    "Fine-grained authorization state-space, custom-role, resource-type, machine-principal, variable-control, and mutation coverage",
+    "Operaton and Camunda mirrored-backstop matrix plus local real-Operaton and customer-sidecar container evidence",
+    "Built-image deployment smoke, CodeQL, third-party notices, package compatibility, and hardened image security scans"
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.3.5",
+      "newVersion": "0.3.6",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.2.10",
+      "newVersion": "0.2.11",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.4.7",
+      "newVersion": "0.4.8",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.2.1",
+      "newVersion": "0.3.0",
+      "impact": "minor"
+    }
+  ]
+}

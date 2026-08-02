@@ -21,6 +21,25 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout full release history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Validate release baseline
+        run: |
+          set -euo pipefail
+          if git log -1 --format=%s | grep -Eq '^chore\(main\): release [0-9]+\.[0-9]+\.[0-9]+'; then
+            node scripts/release-notes.mjs baseline --allow-pending
+          else
+            node scripts/release-notes.mjs baseline
+          fi
+
       - name: Run Release Please
         id: release
         uses: googleapis/release-please-action@c3fc4de07084f75a2b61a5b933069bda6edf3d5c # v4
@@ -28,6 +47,71 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: .github/release-please-config.json
           manifest-file: .github/.release-please-manifest.json
+
+      - name: Resolve detailed release-note context
+        id: notes
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          PRS_JSON: ${{ steps.release.outputs.prs || '[]' }}
+          PR_JSON: ${{ steps.release.outputs.pr || '{}' }}
+          RELEASES_CREATED: ${{ steps.release.outputs.releases_created || 'false' }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
+        with:
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          script: |
+            const parseJson = (value, fallback) => {
+              try { return JSON.parse(value); } catch { return fallback; }
+            };
+            const prs = parseJson(process.env.PRS_JSON || '[]', []);
+            const pr = parseJson(process.env.PR_JSON || '{}', {});
+            const releasesCreated = String(process.env.RELEASES_CREATED) === 'true';
+            let pullNumber = releasesCreated
+              ? ''
+              : String(pr.number || pr.pullRequestNumber || prs[0]?.number || prs[0]?.pullRequestNumber || '');
+
+            if (!pullNumber && !releasesCreated) {
+              const candidates = await github.paginate(github.rest.pulls.list, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+              });
+              const releasePull = candidates.find((candidate) =>
+                String(candidate.head?.ref || '').startsWith('release-please--branches--')
+              );
+              pullNumber = releasePull ? String(releasePull.number) : '';
+            }
+
+            if (pullNumber) {
+              const { data: pull } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(pullNumber),
+              });
+              const version = String(pull.title || '').match(/release (\d+\.\d+\.\d+)\b/i)?.[1] || '';
+              const headRef = String(pull.head?.ref || '');
+              if (!version || !headRef.startsWith('release-please--branches--')) {
+                core.setFailed(`Could not resolve a safe version/ref for release PR #${pullNumber}.`);
+                return;
+              }
+              core.setOutput('pull_number', pullNumber);
+              core.setOutput('head_ref', headRef);
+              core.setOutput('pr_version', version);
+            }
+
+            const releasedVersion = String(process.env.HEAD_COMMIT_MESSAGE || '')
+              .match(/^chore\(main\): release (\d+\.\d+\.\d+)\b/)?.[1] || '';
+            core.setOutput('released_version', releasedVersion);
+
+      - name: Prepare detailed release PR notes
+        if: steps.notes.outputs.pull_number != ''
+        env:
+          CI: "true"
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          RELEASE_PR_NUMBER: ${{ steps.notes.outputs.pull_number }}
+          RELEASE_PR_HEAD_REF: ${{ steps.notes.outputs.head_ref }}
+          RELEASE_VERSION: ${{ steps.notes.outputs.pr_version }}
+        run: bash scripts/prepare-release-notes-pr.sh
 
       - name: Release Please result
         if: ${{ always() }}
@@ -98,3 +182,14 @@ jobs:
               `Expected merged release commit "${headCommitMessage}" to publish ${tagName}, but verification failed. ` +
               `tagExists=${tagExists} releaseExists=${releaseExists}.`
             );
+
+      - name: Publish detailed GitHub release notes
+        if: steps.notes.outputs.released_version != ''
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          RELEASE_VERSION: ${{ steps.notes.outputs.released_version }}
+        run: |
+          set -euo pipefail
+          release_file="docs/releases/v${RELEASE_VERSION}.md"
+          test -f "$release_file"
+          gh release edit "v${RELEASE_VERSION}" --notes-file "$release_file"

@@ -1,6 +1,12 @@
 # Engine Tenancy Release Note
 
-Status: Pending release
+Status: Feature-specific companion to the pending release
+
+The canonical release summary is generated from
+`.release-notes/sso-engine-assignments.json` through the
+[release-note and versioning process](../development/release-notes-process.md).
+This document retains the deeper engine-tenancy operator context; it does not
+replace the generated `docs/releases/vX.Y.Z.md` release record.
 
 ## Highlights
 

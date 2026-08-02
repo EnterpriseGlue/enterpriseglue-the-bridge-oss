@@ -30,6 +30,28 @@ jobs:
   trigger-hotfix-release:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout full release history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Validate release baseline
+        run: node scripts/release-notes.mjs baseline
+
+      - name: Validate forced hotfix version
+        if: ${{ inputs.release_as != '' }}
+        env:
+          RELEASE_VERSION: ${{ inputs.release_as }}
+        run: |
+          set -euo pipefail
+          base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          node scripts/release-notes.mjs assert-version --base-ref "$base_tag" --version "$RELEASE_VERSION"
+
       - name: Run Release Please (automatic bump)
         id: release_auto
         if: ${{ inputs.release_as == '' }}
@@ -58,6 +80,7 @@ jobs:
           PRS_CREATED: ${{ steps.release_auto.outputs.prs_created || steps.release_forced.outputs.prs_created || 'false' }}
           RELEASES_CREATED: ${{ steps.release_auto.outputs.releases_created || steps.release_forced.outputs.releases_created || 'false' }}
         with:
+          github-token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           script: |
             const parseJson = (value, fallback) => {
               try {
@@ -70,18 +93,45 @@ jobs:
             const prs = parseJson(process.env.PRS_JSON || '[]', []);
             const pr = parseJson(process.env.PR_JSON || '{}', {});
 
+            const releasesCreated = String(process.env.RELEASES_CREATED) === 'true';
             let pullNumber = '';
-            if (Array.isArray(prs) && prs.length > 0) {
+            if (!releasesCreated && Array.isArray(prs) && prs.length > 0) {
               const first = prs[0] || {};
               pullNumber = String(first.number || first.pullRequestNumber || '');
             }
-            if (!pullNumber) {
+            if (!releasesCreated && !pullNumber) {
               pullNumber = String(pr.number || pr.pullRequestNumber || '');
+            }
+
+            if (pullNumber) {
+              const { data: pull } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(pullNumber),
+              });
+              const version = String(pull.title || '').match(/release (\d+\.\d+\.\d+)\b/i)?.[1] || '';
+              const headRef = String(pull.head?.ref || '');
+              if (!version || !headRef.startsWith('release-please--branches--')) {
+                core.setFailed(`Could not resolve a safe version/ref for release PR #${pullNumber}.`);
+                return;
+              }
+              core.setOutput('head_ref', headRef);
+              core.setOutput('pr_version', version);
             }
 
             core.setOutput('pull_number', pullNumber);
             core.setOutput('prs_created', String(process.env.PRS_CREATED || 'false'));
             core.setOutput('releases_created', String(process.env.RELEASES_CREATED || 'false'));
+
+      - name: Prepare detailed hotfix release notes
+        if: steps.resolve.outputs.pull_number != ''
+        env:
+          CI: "true"
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          RELEASE_PR_NUMBER: ${{ steps.resolve.outputs.pull_number }}
+          RELEASE_PR_HEAD_REF: ${{ steps.resolve.outputs.head_ref }}
+          RELEASE_VERSION: ${{ steps.resolve.outputs.pr_version }}
+        run: bash scripts/prepare-release-notes-pr.sh
 
       - name: Enable auto-merge on generated release PR
         if: ${{ inputs.enable_release_pr_automerge && steps.resolve.outputs.pull_number != '' }}
@@ -89,7 +139,7 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           pull-request-number: ${{ steps.resolve.outputs.pull_number }}
-          merge-method: squash
+          merge-method: merge
 
       - name: Publish hotfix summary
         run: |

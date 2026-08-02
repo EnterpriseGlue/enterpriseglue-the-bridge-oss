@@ -74,6 +74,7 @@ Audience: Developers and architects.
 
 ## Release Notes
 - [Engine Tenancy](releases/engine-tenancy.md)
+- [Release-note and versioning process](development/release-notes-process.md)
 
 ## Security
 - [Security Hardening Checklist](reference/security-hardening.md)

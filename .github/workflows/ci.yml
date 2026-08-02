@@ -28,6 +28,67 @@ jobs:
       security_scan_on_smoke_only: true
     secrets: inherit
 
+  release-notes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_NOTE_EXEMPT: ${{ contains(github.event.pull_request.labels.*.name, 'release-note:none') }}
+      RELEASE_NOTE_EXEMPT_REASON: ${{ github.event.pull_request.body || '' }}
+      RELEASE_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+      RELEASE_PR_TITLE: ${{ github.event.pull_request.title || '' }}
+    steps:
+      - name: Checkout full release history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Resolve release-note comparison base
+        id: release_base
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_HEAD_REF:-}" == release-please--branches--* ]]; then
+            base_ref="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          else
+            base_ref="origin/${GITHUB_BASE_REF:-main}"
+          fi
+          test -n "$base_ref"
+          echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Test release-note tooling
+        run: node --test scripts/release-notes.test.mjs
+
+      - name: Validate release baseline
+        run: node scripts/release-notes.mjs baseline
+
+      - name: Validate release-note coverage
+        run: node scripts/release-notes.mjs validate --base-ref "${{ steps.release_base.outputs.base_ref }}"
+
+      - name: Recommend semantic release version
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          node scripts/release-notes.mjs recommend --base-ref "$base_tag"
+
+      - name: Build release-note preview
+        run: node scripts/release-notes.mjs preview --base-ref "${{ steps.release_base.outputs.base_ref }}" --output .artifacts/release-notes-preview.md
+
+      - name: Upload release-note preview
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-notes-preview-${{ github.run_id }}
+          path: .artifacts/release-notes-preview.md
+          if-no-files-found: error
+          retention-days: 30
+
   boundary-guards:
     runs-on: ubuntu-latest
     needs: detect
@@ -860,7 +921,7 @@ jobs:
 
           is_target_job() {
             case "$1" in
-              "detect / detect"|boundary-guards|published-package-version-discipline|plugin-api-compat-current|plugin-api-compat-next|plugin-api-package|compose-render|build-ci-images|smoke-postgres-image-deploy|smoke-postgres-image-deploy-exposed|security-pr-scan)
+              "detect / detect"|release-notes|boundary-guards|published-package-version-discipline|plugin-api-compat-current|plugin-api-compat-next|plugin-api-package|compose-render|build-ci-images|smoke-postgres-image-deploy|smoke-postgres-image-deploy-exposed|security-pr-scan)
                 return 0
                 ;;
               test\ \(*)
