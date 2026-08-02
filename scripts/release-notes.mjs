@@ -43,6 +43,10 @@ function fail(message) {
   throw new Error(message)
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function git(args, root = process.cwd()) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 }
@@ -452,13 +456,13 @@ export function renderReleaseNotes(fragments, { version = 'next', baseRef = '' }
 
 export function validateBaselineState({ manifestVersion, latestTag, changelog, allowPending = false }) {
   const latestVersion = latestTag.replace(/^v/, '')
-  const latestHeading = new RegExp(`^## \\[${latestVersion.replace(/\./g, '\\.') }\\]`, 'm')
+  const latestHeading = new RegExp(`^## \\[${escapeRegExp(latestVersion)}\\]`, 'm')
   if (!latestHeading.test(changelog)) fail(`CHANGELOG.md does not contain the latest tag ${latestTag}.`)
   const comparison = compareVersions(manifestVersion, latestVersion)
   if (comparison < 0) fail(`Release Please manifest ${manifestVersion} is behind latest tag ${latestTag}.`)
   if (comparison > 0) {
     if (!allowPending) fail(`Release Please manifest ${manifestVersion} is ahead of latest tag ${latestTag} outside a release PR.`)
-    const pendingHeading = new RegExp(`^## \\[${manifestVersion.replace(/\./g, '\\.') }\\]`, 'm')
+    const pendingHeading = new RegExp(`^## \\[${escapeRegExp(manifestVersion)}\\]`, 'm')
     if (!pendingHeading.test(changelog)) fail(`Pending release ${manifestVersion} is missing from CHANGELOG.md.`)
   }
   return { manifestVersion, latestTag, pending: comparison > 0 }

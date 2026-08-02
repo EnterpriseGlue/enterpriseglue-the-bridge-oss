@@ -8,7 +8,7 @@ export function analyzeParity(files) {
   const any = (pattern) => files.some((file) => pattern.test(file))
   const surfaces = {
     api: any(/openapi|enterprise-plugin-api|packages\/shared\/src\/schemas/i),
-    config: any(/config[-_.]?bundle|configuration|\.env\.example$/i),
+    config: any(/config[-_.]?bundle|configuration/i) || any(/(?:^|\/)\.env\.example$/i),
     docs: any(/^(?:docs\/|README\.md|CONTRIBUTING\.md)/),
     persistence: any(/(?:migrations?|entities|persistence|repositories?)\//i),
     tests: any(/(?:^test\/|\/__tests__\/|\.test\.[cm]?[jt]sx?$)/),
