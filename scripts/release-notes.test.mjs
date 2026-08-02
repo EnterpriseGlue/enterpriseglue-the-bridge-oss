@@ -138,14 +138,56 @@ test('version recommendation follows pre-1.0 Release Please semantics', () => {
   assert.equal(recommendReleaseVersion([fragment], '1.4.2'), '2.0.0')
 })
 
-test('CI makes release-note validation and preview part of the aggregate gate', () => {
-  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
-  assert.match(workflow, /^  release-notes:$/m)
+test('the reusable preflight fetches fresh PR metadata and validates release notes', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/release-notes-preflight-reusable.yml', import.meta.url),
+    'utf8',
+  )
+  assert.match(workflow, /^  workflow_call:$/m)
+  assert.match(workflow, /github\.rest\.pulls\.get/)
+  assert.match(workflow, /RELEASE_NOTE_EXEMPT: \$\{\{ steps\.pull_request\.outputs\.exempt/)
+  assert.match(workflow, /RELEASE_PR_LABELS: \$\{\{ steps\.pull_request\.outputs\.labels/)
+  assert.match(workflow, /RELEASE_PR_TITLE: \$\{\{ steps\.pull_request\.outputs\.title/)
   assert.match(workflow, /node scripts\/release-notes\.mjs baseline/)
   assert.match(workflow, /node scripts\/release-notes\.mjs validate --base-ref/)
   assert.match(workflow, /- name: Build release-note preview\n        if: always\(\)/)
   assert.match(workflow, /release-notes-preview-\$\{\{ github\.run_id \}\}/)
-  assert.match(workflow, /"detect \/ detect"\|release-notes\|boundary-guards/)
+})
+
+test('CI blocks change detection and its aggregate gate on release-note preflight', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  assert.match(workflow, /^  release-notes-preflight:$/m)
+  assert.match(workflow, /uses: \.\/\.github\/workflows\/release-notes-preflight-reusable\.yml/)
+  assert.match(workflow, /^  detect:\n    needs: release-notes-preflight$/m)
+  assert.match(workflow, /release-notes-preflight\*\|"detect \/ detect"\|boundary-guards/)
+})
+
+test('expensive pull-request workflows cannot start before release-note preflight', () => {
+  const dependencyRoots = new Map([
+    ['authz-pr.yml', ['adapter-backstop-changes', 'authorization']],
+    ['identity-protocol-rehearsal.yml', ['protocol-rehearsal']],
+    ['engine-tenancy-database.yml', ['database-matrix']],
+    ['access-governance-deployment-evidence.yml', ['contract']],
+    ['codeql.yml', ['analyze']],
+    ['third-party-notices.yml', ['verify-third-party-notices']],
+  ])
+
+  for (const [filename, roots] of dependencyRoots) {
+    const workflow = readFileSync(new URL(`../.github/workflows/${filename}`, import.meta.url), 'utf8')
+    assert.match(workflow, /^  release-notes-preflight:$/m, `${filename} must call the preflight`)
+    assert.match(
+      workflow,
+      /uses: \.\/\.github\/workflows\/release-notes-preflight-reusable\.yml/,
+      `${filename} must use the shared implementation`,
+    )
+    for (const root of roots) {
+      const start = workflow.indexOf(`  ${root}:\n`)
+      assert.notEqual(start, -1, `${filename} is missing ${root}`)
+      const next = workflow.slice(start + root.length + 3).search(/^  [a-z0-9-]+:\n/m)
+      const block = next === -1 ? workflow.slice(start) : workflow.slice(start, start + root.length + 3 + next)
+      assert.match(block, /^    needs: release-notes-preflight$/m, `${filename}:${root} must wait for preflight`)
+    }
+  }
 })
 
 test('normal and hotfix release workflows generate detailed notes through the same script', () => {

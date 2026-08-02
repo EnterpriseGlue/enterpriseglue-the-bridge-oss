@@ -5,6 +5,15 @@ Please remains the authority for application versions, release pull requests,
 tags, and GitHub releases; structured release-note fragments provide the
 detail that cannot be reconstructed reliably from commit titles.
 
+There are two different manifests with different owners:
+
+- change authors create `.release-notes/<change-id>.json` fragments;
+- Release Please owns `.github/.release-please-manifest.json`, which records
+  the current released application version.
+
+Do not create or manually advance the Release Please version manifest in a
+feature pull request.
+
 ## Change author workflow
 
 1. Add one JSON file under `.release-notes/` for every release-impacting pull
@@ -50,8 +59,32 @@ CI derives mandatory fragment sections from the changed files:
 | Frontend behavior | User impact |
 | Published OSS packages | Previous version, new version, and semantic impact |
 
-The PR CI uploads `.artifacts/release-notes-preview.md` as a thirty-day
-artifact and includes the release-note job in the aggregate required check.
+## Pull-request preflight
+
+Release-note validation is a fail-fast prerequisite, not a test that runs in
+parallel with the product suites. Every expensive pull-request workflow calls
+`.github/workflows/release-notes-preflight-reusable.yml`; its first test or
+change-detection job declares `needs: release-notes-preflight`.
+
+The preflight:
+
+1. checks out the complete tag and branch history;
+2. fetches the current PR title, body, and labels through the GitHub API rather
+   than trusting a possibly stale webhook payload;
+3. waits briefly for automatic release classification on a newly opened PR;
+4. tests the release-note tooling and validates the release baseline;
+5. enforces path coverage, exemption policy, breaking-title/label agreement,
+   and package/version details; and
+6. recommends the semantic version and builds the release-note preview.
+
+If any step fails, CI change detection, build matrices, browsers, containers,
+database adapters, CodeQL, and dependency-notice verification do not start.
+Separate GitHub Actions workflows cannot depend on a job in another workflow,
+so each expensive workflow invokes the same reusable implementation. Contract
+tests in `scripts/release-notes.test.mjs` protect those dependency edges.
+
+The main PR CI uploads `.artifacts/release-notes-preview.md` as a thirty-day
+artifact and includes the reusable preflight in the aggregate required check.
 
 ## Release Please workflow
 

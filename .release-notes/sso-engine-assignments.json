@@ -68,6 +68,7 @@
     "Headless API and JSON configuration: `docs/reference/access-governance-and-headless-api.md` and `docs/architecture/11-json-driven-authz-and-engine-registration.md`",
     "Engine tenancy upgrade: `docs/how-to/upgrade-engine-tenancy.md` and `docs/how-to/migrate-existing-engines-to-explicit-tenancy.md`",
     "Mirrored backstop and sidecar: `docs/developer/mirrored-engine-backstop.md` and `docs/how-to/customer-sidecar-readiness-runbook.md`",
+    "Release contribution and fail-fast CI preflight: `docs/development/release-notes-process.md`",
     "Validation evidence: `docs/development/engine-tenancy-functional-test-report.md` and `docs/development/customer-sidecar-backstop-test-report.md`"
   ],
   "knownLimitations": [
@@ -85,6 +86,7 @@
     "OIDC, Entra-compatible OIDC, SAML, and LDAP login, mapping, reconciliation, grant, revocation, and denial scenarios",
     "Fine-grained authorization state-space, custom-role, resource-type, machine-principal, variable-control, and mutation coverage",
     "Operaton and Camunda mirrored-backstop matrix plus local real-Operaton and customer-sidecar container evidence",
+    "Reusable release-note preflight contracts and dependency ordering across every expensive pull-request workflow",
     "Built-image deployment smoke, CodeQL, third-party notices, package compatibility, and hardened image security scans"
   ],
   "packages": [
