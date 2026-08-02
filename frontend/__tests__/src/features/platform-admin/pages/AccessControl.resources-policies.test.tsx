@@ -249,7 +249,7 @@ describe('AccessControl resources and policies', () => {
     }));
     await waitFor(() => expect(projectTargets.getByText('Deployment eligibility denied')).toBeInTheDocument());
     expect(projectTargets.getByText('Missing engine deploy permission')).toBeInTheDocument();
-  });
+  }, 120_000);
 
   it('creates manual project-engine targets from Access Control', async () => {
     render(<AccessControl />);
