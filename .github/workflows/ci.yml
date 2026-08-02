@@ -78,10 +78,11 @@ jobs:
           node scripts/release-notes.mjs recommend --base-ref "$base_tag"
 
       - name: Build release-note preview
+        if: always()
         run: node scripts/release-notes.mjs preview --base-ref "${{ steps.release_base.outputs.base_ref }}" --output .artifacts/release-notes-preview.md
 
       - name: Upload release-note preview
-        if: always()
+        if: always() && hashFiles('.artifacts/release-notes-preview.md') != ''
         uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: release-notes-preview-${{ github.run_id }}

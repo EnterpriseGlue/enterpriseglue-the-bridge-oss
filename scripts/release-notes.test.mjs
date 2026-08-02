@@ -143,6 +143,7 @@ test('CI makes release-note validation and preview part of the aggregate gate', 
   assert.match(workflow, /^  release-notes:$/m)
   assert.match(workflow, /node scripts\/release-notes\.mjs baseline/)
   assert.match(workflow, /node scripts\/release-notes\.mjs validate --base-ref/)
+  assert.match(workflow, /- name: Build release-note preview\n        if: always\(\)/)
   assert.match(workflow, /release-notes-preview-\$\{\{ github\.run_id \}\}/)
   assert.match(workflow, /"detect \/ detect"\|release-notes\|boundary-guards/)
 })
