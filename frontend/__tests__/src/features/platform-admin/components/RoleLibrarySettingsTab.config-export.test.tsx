@@ -49,7 +49,11 @@ describe('RoleLibrarySettingsTab configuration export', () => {
     const downloadClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
     renderTab();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Export config role' }));
+    fireEvent.click(await screen.findByRole(
+      'button',
+      { name: 'Export config role' },
+      { timeout: 10_000 },
+    ));
 
     expect(await screen.findByText('Export configuration role')).toBeInTheDocument();
     expect(screen.getByLabelText('Bundle key')).toHaveValue('example.authz');

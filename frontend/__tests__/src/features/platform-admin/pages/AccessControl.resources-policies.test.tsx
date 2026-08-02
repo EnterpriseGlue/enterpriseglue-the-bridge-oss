@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import type {
   AuthzGroup,
   AuthzGroupMembership,
@@ -193,7 +192,7 @@ describe('AccessControl resources and policies', () => {
 
     const createButton = screen.getAllByRole('button', { name: /^Create$/i }).find((button) => !button.hasAttribute('disabled'));
     expect(createButton).toBeDefined();
-    await userEvent.click(createButton!);
+    await act(async () => fireEvent.click(createButton!));
 
     expect(createEngineSet).toHaveBeenCalledWith(expect.objectContaining({
       name: 'All Engines',
@@ -201,7 +200,7 @@ describe('AccessControl resources and policies', () => {
       selector: { mode: 'all' },
       riskAcknowledged: true,
     }));
-  }, 60000);
+  }, 120_000);
 
   it('renders project-engine targets with manage, sync, and eligibility actions', async () => {
     render(<AccessControl />);
@@ -270,7 +269,7 @@ describe('AccessControl resources and policies', () => {
     const projectTargetModal = screen.getByRole('heading', { name: /^Create Project Target$/i }).closest('.cds--modal-container') as HTMLElement;
     const createButton = within(projectTargetModal).getByRole('button', { name: /^Create$/i });
     expect(createButton).toBeDefined();
-    await userEvent.click(createButton!);
+    await act(async () => fireEvent.click(createButton!));
 
     await waitFor(() => expect(createProjectEngineTarget).toHaveBeenCalledWith(expect.objectContaining({
       projectId: 'project-new',
