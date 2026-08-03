@@ -6,6 +6,7 @@
   ],
   "scripts": {
     "dev": "bash ./dev.sh",
+    "dev:backend": "bash ./dev.sh -d backend",
     "down": "bash ./down.sh",
     "prod": "ENV_FILE=.local/docker/env/production.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.production; EG_BACKEND_ENV_FILE=\"$ENV_FILE\" docker compose --project-directory . --env-file \"$ENV_FILE\" -f infra/docker/compose/docker-compose.prod.yml up --build",
     "prod:down": "ENV_FILE=.local/docker/env/production.env; [ -f \"$ENV_FILE\" ] || ENV_FILE=.env.production; EG_BACKEND_ENV_FILE=\"$ENV_FILE\" docker compose --project-directory . --env-file \"$ENV_FILE\" -f infra/docker/compose/docker-compose.prod.yml down",

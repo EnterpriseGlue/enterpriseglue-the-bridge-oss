@@ -47,6 +47,15 @@ This starts:
 - Backend: http://localhost:8787
 - Frontend: http://localhost:5173
 
+To run PostgreSQL and the backend without the bundled frontend:
+
+- `pnpm run dev:backend`
+
+The backend remains available at http://localhost:8787. When connecting a
+separately running frontend, set `FRONTEND_URL` in
+`.local/docker/env/docker.env` to that frontend's exact origin so credentialed
+CORS and authentication redirects stay aligned.
+
 To stop:
 
 - `pnpm run down`
