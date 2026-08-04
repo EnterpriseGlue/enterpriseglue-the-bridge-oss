@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -29,7 +29,7 @@
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
     "@node-saml/node-saml": "^5.1.0",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "azure-devops-node-api": "^15.1.1",
     "bcryptjs": "^3.0.3",
     "bitbucket": "^2.12.0",

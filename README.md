@@ -45,6 +45,19 @@ To upgrade: change `IMAGE_TAG=latest` (or pin to e.g. `v1.2.3`) and re-run `up -
    - Ports are configurable in the active env file (`.local/docker/env/docker.env` by default).
    - Docker dev serves frontend via Nginx for production-parity routing.
 
+### Backend-only development
+
+Run PostgreSQL and the backend without starting the bundled frontend:
+
+```bash
+pnpm run dev:backend
+```
+
+The API remains exposed at http://localhost:8787. For a separately running
+frontend, set `FRONTEND_URL` in `.local/docker/env/docker.env` to the
+frontend's exact origin. This value controls credentialed CORS and
+authentication redirects, including SSO callbacks.
+
 ### One-click alternative databases
 Use a database selector for Docker dev:
 
@@ -57,7 +70,7 @@ pnpm run dev -- --db spanner
 
 Behavior:
 - On first run for a DB, `.local/docker/env/docker.<db>.env` is auto-created from `infra/docker/env/examples/docker.<db>.env.example`.
-- `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements and install a missing DB driver into local `node_modules` when needed.
+- `dev.sh` runs `scripts/db-preflight.sh` to validate env requirements. Docker mode manages database drivers inside the backend container; localhost mode installs a missing driver into local `node_modules` when requested.
 - Docker compose automatically includes the matching DB overlay from `infra/docker/compose/` (`docker-compose.<db>.yml`).
 
 ## Production (Docker Compose)

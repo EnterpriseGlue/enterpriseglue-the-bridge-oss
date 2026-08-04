@@ -181,7 +181,11 @@ case "$MODE" in
 esac
 
 check_env_requirements
-install_driver_if_missing
-oracle_native_check
+if [[ "$MODE" == "docker" ]]; then
+  log "Database drivers are managed inside the Docker backend container"
+else
+  install_driver_if_missing
+  oracle_native_check
+fi
 
 log "Preflight checks passed for DATABASE_TYPE=$DB_TYPE"
