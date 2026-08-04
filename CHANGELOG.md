@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.10.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.4...v0.10.5) (2026-08-04)
+
+
+### Bug Fixes
+
+* **docker:** make dev.sh backend stack work from a clean checkout ([#344](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/344)) ([727bfc1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/727bfc193dac3b7d65499885e653a32a2a427b55))
+
 ## [0.10.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.3...v0.10.4) (2026-06-29)
 
 
