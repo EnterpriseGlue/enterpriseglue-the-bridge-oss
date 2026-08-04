@@ -12,13 +12,14 @@ overrides:
   esbuild: ^0.28.1
   form-data: ^4.0.6
   immutable: ^5.1.9
+  ip-address: ^10.4.0
   morgan: ^1.11.0
   nodemailer: ^9.0.1
   postcss: ^8.5.25
   qs: ^6.15.2
   tar: ^7.5.19
   typeorm: ^0.3.31
-  undici: ^7.28.0
+  undici: ^7.29.0
 
 importers:
 
@@ -146,8 +147,8 @@ importers:
         specifier: ^0.3.31
         version: 0.3.31(babel-plugin-macros@3.1.0)(mssql@12.7.0(supports-color@7.2.0))(mysql2@3.23.2(@types/node@25.6.1))(oracledb@6.10.0)(pg@8.20.0)(sql.js@1.14.1)(supports-color@7.2.0)
       undici:
-        specifier: ^7.28.0
-        version: 7.28.0
+        specifier: ^7.29.0
+        version: 7.29.0
       zod:
         specifier: ^4.3.6
         version: 4.4.3
@@ -394,8 +395,8 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
       undici:
-        specifier: ^7.28.0
-        version: 7.28.0
+        specifier: ^7.29.0
+        version: 7.29.0
       zod:
         specifier: ^4.3.6
         version: 4.4.3
@@ -584,8 +585,8 @@ importers:
         specifier: ^8.1.0
         version: 8.1.0
       ip-address:
-        specifier: '>=10.1.1'
-        version: 10.2.0
+        specifier: ^10.4.0
+        version: 10.4.0
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.3
@@ -611,8 +612,8 @@ importers:
         specifier: ^0.3.31
         version: 0.3.31(babel-plugin-macros@3.1.0)(mssql@12.7.0(supports-color@7.2.0))(mysql2@3.23.2(@types/node@25.6.1))(oracledb@6.10.0)(pg@8.20.0)(sql.js@1.14.1)(supports-color@7.2.0)
       undici:
-        specifier: ^7.28.0
-        version: 7.28.0
+        specifier: ^7.29.0
+        version: 7.29.0
       uuid:
         specifier: ^14.0.0
         version: 14.0.0
@@ -3531,8 +3532,8 @@ packages:
   iobuffer@5.4.0:
     resolution: {integrity: sha512-DRebOWuqDvxunfkNJAlc3IzWIPD5xVxwUNbHr7xKB8E6aLJxIPfNX3CoMJghcFjpv6RWQsrcJbghtEwSPoJqMA==}
 
-  ip-address@10.2.0:
-    resolution: {integrity: sha512-/+S6j4E9AHvW9SWMSEY9Xfy66O5PWvVEJ08O0y5JGyEKQpojb0K0GKpz/v5HJ/G0vi3D2sjGK78119oXZeE0qA==}
+  ip-address@10.4.0:
+    resolution: {integrity: sha512-oSK96Grm3aP6OrS263xVxbNDGVL7rzBtYdpGqlDG8iQdoenDoTs/nkki+DflYbAEE8Xl6o5YxhxlrKvI3nqKXQ==}
     engines: {node: '>= 12'}
 
   ipaddr.js@1.9.1:
@@ -4811,8 +4812,8 @@ packages:
   undici-types@7.19.2:
     resolution: {integrity: sha512-qYVnV5OEm2AW8cJMCpdV20CDyaN3g0AjDlOGf1OW4iaDEx8MwdtChUp4zu4H0VP3nDRF/8RKWH+IPp9uW0YGZg==}
 
-  undici@7.28.0:
-    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
+  undici@7.29.0:
+    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
     engines: {node: '>=20.18.1'}
 
   universal-github-app-jwt@2.2.2:
@@ -8157,7 +8158,7 @@ snapshots:
   express-rate-limit@8.5.1(express@5.2.1(supports-color@7.2.0)):
     dependencies:
       express: 5.2.1(supports-color@7.2.0)
-      ip-address: 10.2.0
+      ip-address: 10.4.0
 
   express@5.2.1(supports-color@7.2.0):
     dependencies:
@@ -8534,7 +8535,7 @@ snapshots:
 
   iobuffer@5.4.0: {}
 
-  ip-address@10.2.0: {}
+  ip-address@10.4.0: {}
 
   ipaddr.js@1.9.1: {}
 
@@ -8636,7 +8637,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 7.28.0
+      undici: 7.29.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -9800,7 +9801,7 @@ snapshots:
 
   undici-types@7.19.2: {}
 
-  undici@7.28.0: {}
+  undici@7.29.0: {}
 
   universal-github-app-jwt@2.2.2: {}
 
