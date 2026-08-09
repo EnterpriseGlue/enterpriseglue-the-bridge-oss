@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import request from 'supertest';
+import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
+import { buildSignedOidcState, parseSignedOidcState } from '../../../../../packages/backend-host/src/modules/auth/routes/sso-state.js';
 
 const identityProviderService = vi.hoisted(() => ({ getByKey: vi.fn(), getById: vi.fn(), getDirectLoginProviderByKey: vi.fn(), getDirectLoginProviderById: vi.fn(), listEnabledDirectLoginProviders: vi.fn(), listEnabledDirectLoginProvidersForUnauthenticatedLogin: vi.fn() }));
 const genericOidcService = vi.hoisted(() => ({ createAuthorizationRequest: vi.fn(), exchangeCode: vi.fn() }));
@@ -11,7 +13,7 @@ const samlAssertionReplayService = vi.hoisted(() => ({ consume: vi.fn() }));
 const identityProviderProvisioningService = vi.hoisted(() => ({ reconcileOidcLogin: vi.fn(), reconcileLdapLogin: vi.fn(), reconcileSamlLogin: vi.fn() }));
 const directLdapIdentityService = vi.hoisted(() => ({ authenticate: vi.fn() }));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
-const auditService = vi.hoisted(() => ({ auditFromRequest: vi.fn(() => ({})), logAudit: vi.fn() }));
+const auditService = vi.hoisted(() => ({ auditFromRequest: vi.fn((_req: unknown, input: unknown) => input), logAudit: vi.fn() }));
 const loginMethodService = vi.hoisted(() => ({ get: vi.fn() }));
 const recordLoginExperienceMetric = vi.hoisted(() => vi.fn());
 
@@ -26,11 +28,12 @@ vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSe
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
   getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
 }));
-vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success' }, ...auditService }));
+vi.mock('@enterpriseglue/shared/services/audit.js', () => ({ AuditActions: { LOGIN_SUCCESS: 'auth.login.success', LOGIN_FAILED: 'auth.login.failed' }, ...auditService }));
 vi.mock('@enterpriseglue/shared/auth/login-experience-metrics.js', () => ({ recordLoginExperienceMetric }));
 
 const provider = {
   id: 'provider-1', tenantId: null, key: 'identity.oidc.main', protocol: 'oidc', isEnabled: true,
+  updatedAt: 1234,
   authenticationMode: 'direct', configurationJson: JSON.stringify({ issuerUrl: 'https://issuer.example.test', clientId: 'client', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'] }),
 };
 
@@ -95,6 +98,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual([{ id: 'provider-1', key: 'identity.oidc.main', displayName: 'identity.oidc.main', organization: null, protocol: 'oidc', loginMethod: 'redirect' }]);
     expect(identityProviderService.listEnabledDirectLoginProvidersForUnauthenticatedLogin).toHaveBeenCalledWith();
+    expect(identityFlowLimiter).toHaveBeenCalledOnce();
   });
 
   it('returns the sanitized, policy-resolved login-method contract', async () => {
@@ -120,7 +124,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(identityProviderService.getDirectLoginProviderById).toHaveBeenCalledWith('provider-1', 'tenant-default');
     const authorizationCalls = genericOidcService.createAuthorizationRequest.mock.calls;
     const encodedState = authorizationCalls[authorizationCalls.length - 1]?.[1];
-    const state = JSON.parse(Buffer.from(encodedState, 'base64').toString('utf8'));
+    const state = parseSignedOidcState(encodedState);
     expect(state).toMatchObject({ tenantSlug: 'acme', providerId: 'provider-1' });
   });
 
@@ -133,22 +137,22 @@ describe('provider-neutral OIDC routes', () => {
   });
 
   it('completes only when callback state is bound to the exact provider', async () => {
-    const state = Buffer.from(JSON.stringify({ timestamp: Date.now(), nonce: 'nonce', providerId: 'provider-1', identityProviderKey: 'identity.oidc.main' })).toString('base64');
+    const state = buildSignedOidcState({ params: {}, query: {} } as any, 'provider-1', { key: 'identity.oidc.main', tenantId: null });
     const response = await request(app)
       .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
       .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
       .redirects(0);
     expect(response.status).toBe(302);
     expect(identityProviderService.getByKey).toHaveBeenLastCalledWith('identity.oidc.main', null);
-    expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: 'nonce' });
+    expect(genericOidcService.exchangeCode).toHaveBeenCalledWith(expect.any(Object), { code: 'code-1', codeVerifier: 'verifier', nonce: expect.any(String) });
     expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc' }), expect.objectContaining({ sub: 'subject-1', email: 'person@example.test' }));
     expect(identityProviderProvisioningService.reconcileOidcLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
-    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1' }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1', authSessionVersion: 7 }), expect.objectContaining({ identityProviderId: 'provider-1', identityProviderUpdatedAt: 1234 }));
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'oidc', event: 'succeeded' }));
   });
 
   it('rejects callback state when its provider id resolves to a different same-protocol provider', async () => {
-    const state = Buffer.from(JSON.stringify({ timestamp: Date.now(), nonce: 'nonce', providerId: 'provider-1', identityProviderKey: 'identity.oidc.main' })).toString('base64');
+    const state = buildSignedOidcState({ params: {}, query: {} } as any, 'provider-1', { key: 'identity.oidc.main', tenantId: null });
     identityProviderService.getByKey.mockResolvedValue({
       ...provider,
       id: 'provider-2',
@@ -168,6 +172,26 @@ describe('provider-neutral OIDC routes', () => {
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'oidc', event: 'failed' }));
   });
 
+  it('rejects a tenant/provider-tampered OIDC state even when the attacker matches the cookie', async () => {
+    const valid = buildSignedOidcState({ params: {}, query: {} } as any, 'provider-1', { key: 'identity.oidc.main', tenantId: null });
+    const parts = valid.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    const inner = JSON.parse(Buffer.from(payload.state, 'base64url').toString('utf8'));
+    inner.identityProviderTenantId = 'tenant-b';
+    inner.identityProviderKey = 'identity.oidc.other';
+    payload.state = Buffer.from(JSON.stringify(inner)).toString('base64url');
+    const tampered = `${parts[0]}.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.${parts[2]}`;
+
+    const response = await request(app)
+      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(tampered)}`)
+      .set('Cookie', [`identity_oidc_state=${tampered}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+
+    expect(response.status).toBe(401);
+    expect(identityProviderService.getByKey).not.toHaveBeenCalled();
+    expect(genericOidcService.exchangeCode).not.toHaveBeenCalled();
+  });
+
   it('authenticates a direct LDAP provider without returning directory credentials', async () => {
     identityProviderService.getDirectLoginProviderByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
     const response = await request(app).post('/api/auth/identity/identity.oidc.main/ldap/login').send({ username: 'person@example.test', password: 'directory-password' });
@@ -185,7 +209,7 @@ describe('provider-neutral OIDC routes', () => {
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith({ method: 'ldap', event: 'selected' });
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'ldap', event: 'succeeded' }));
     expect(identityProviderProvisioningService.reconcileLdapLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
-    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1', identityProviderUpdatedAt: 1234 }));
   });
 
   it('authenticates direct LDAP through the exact provider id', async () => {
@@ -219,33 +243,69 @@ describe('provider-neutral OIDC routes', () => {
     expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 
+  it('does not reconcile memberships or issue a session when LDAP safety budgets stop authentication', async () => {
+    identityProviderService.getDirectLoginProviderByKey.mockResolvedValue({ ...provider, protocol: 'ldap', authenticationMode: 'direct' });
+    directLdapIdentityService.authenticate.mockRejectedValue(new Error('LDAP group search exceeded its safety limit'));
+
+    const response = await request(app)
+      .post('/api/auth/identity/identity.oidc.main/ldap/login')
+      .send({ username: 'person@example.test', password: 'directory-password' });
+
+    expect(response.status).toBe(401);
+    expect(identityProviderProvisioningService.reconcileLdapLogin).not.toHaveBeenCalled();
+    expect(authSessionService.issue).not.toHaveBeenCalled();
+  });
+
   it('starts and completes direct SAML login through the exact provider id', async () => {
     const samlProvider = {
       ...provider,
       protocol: 'saml',
-      configurationJson: JSON.stringify({ entityId: 'enterpriseglue', callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'EG_SAML_CERT' }),
+      configurationJson: JSON.stringify({ entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test', callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'EG_SAML_CERT' }),
     };
     identityProviderService.getDirectLoginProviderById.mockResolvedValue(samlProvider);
     identityProviderService.getByKey.mockResolvedValue(samlProvider);
     identityProviderService.listEnabledDirectLoginProviders.mockResolvedValue([samlProvider]);
 
-    const start = await request(app).get('/api/auth/providers/provider-1/start').redirects(0);
+    const browser = request.agent(app);
+    const start = await browser.get('/api/auth/providers/provider-1/start').redirects(0);
     expect(start.status).toBe(302);
     expect(start.headers.location).toContain('https://idp.example.test/sso');
     const relayState = genericSamlService.createAuthorizationRequest.mock.calls[0][1];
+    const requestId = genericSamlService.createAuthorizationRequest.mock.calls[0][2];
     expect(relayState).toEqual(expect.any(String));
+    expect(requestId).toMatch(/^_[A-Za-z0-9_-]{32,160}$/);
 
-    const callback = await request(app)
+    const callback = await browser
       .post('/api/auth/providers/saml/callback')
       .type('form')
       .send({ SAMLResponse: 'signed-response', RelayState: relayState })
       .redirects(0);
     expect(callback.status).toBe(302);
-    expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response');
-    expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-1', tenantId: null, samlResponse: 'signed-response' });
+    expect(genericSamlService.validatePostResponse).toHaveBeenCalledWith(expect.any(Object), 'signed-response', requestId);
+    expect(samlAssertionReplayService.consume).toHaveBeenCalledWith({ providerId: 'provider-1', tenantId: null, requestId });
     expect(identityProviderProvisioningService.reconcileSamlLogin).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'saml' }), expect.objectContaining({ subjectId: 'subject-1', claims: expect.objectContaining({ groups: ['ops'] }) }));
     expect(identityProviderProvisioningService.reconcileSamlLogin.mock.invocationCallOrder[0]).toBeLessThan(authSessionService.issue.mock.invocationCallOrder[0]);
-    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1' }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-1' }), expect.objectContaining({ identityProviderId: 'provider-1', identityProviderUpdatedAt: 1234 }));
+    expect(callback.headers['set-cookie']).toEqual(expect.arrayContaining([expect.stringContaining('identity_saml_request=;')]));
+  });
+
+  it('rejects a valid signed SAML response when the initiating browser cookie is missing or wrong', async () => {
+    const samlProvider = { ...provider, protocol: 'saml' };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(samlProvider);
+    identityProviderService.getByKey.mockResolvedValue(samlProvider);
+    const initiatingBrowser = request.agent(app);
+    await initiatingBrowser.get('/api/auth/providers/provider-1/start').redirects(0);
+    const relayState = genericSamlService.createAuthorizationRequest.mock.calls[0][1];
+
+    const missing = await request(app).post('/api/auth/providers/saml/callback').type('form').send({ SAMLResponse: 'signed-response', RelayState: relayState });
+    expect(missing.status).toBe(401);
+    const wrong = await request(app).post('/api/auth/providers/saml/callback')
+      .set('Cookie', 'identity_saml_request=_wrong_browser_request_00000000000000000000000000000000')
+      .type('form').send({ SAMLResponse: 'signed-response', RelayState: relayState });
+    expect(wrong.status).toBe(401);
+    expect(genericSamlService.validatePostResponse).not.toHaveBeenCalled();
+    expect(identityProviderProvisioningService.reconcileSamlLogin).not.toHaveBeenCalled();
+    expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 
   it('fails closed when a provider-neutral SAML RelayState is unsigned or expired', async () => {
@@ -261,10 +321,14 @@ describe('provider-neutral OIDC routes', () => {
   });
 
   it('rejects a replayed SAML assertion before provisioning a user session', async () => {
-    identityProviderService.getByKey.mockResolvedValue({ ...provider, protocol: 'saml' });
+    const samlProvider = { ...provider, protocol: 'saml' };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(samlProvider);
+    identityProviderService.getByKey.mockResolvedValue(samlProvider);
     samlAssertionReplayService.consume.mockRejectedValue({ statusCode: 401, message: 'SAML assertion has already been used' });
-    const relayState = Buffer.from(JSON.stringify({ timestamp: Date.now(), providerId: 'provider-1', identityProviderKey: 'identity.oidc.main' })).toString('base64');
-    const response = await request(app)
+    const browser = request.agent(app);
+    await browser.get('/api/auth/providers/provider-1/start').redirects(0);
+    const relayState = genericSamlService.createAuthorizationRequest.mock.calls[0][1];
+    const response = await browser
       .post('/api/auth/providers/saml/callback')
       .type('form')
       .send({ SAMLResponse: 'replayed-response', RelayState: relayState });
@@ -272,5 +336,41 @@ describe('provider-neutral OIDC routes', () => {
     expect(response.status).toBe(401);
     expect(identityProviderProvisioningService.reconcileSamlLogin).not.toHaveBeenCalled();
     expect(authSessionService.issue).not.toHaveBeenCalled();
+  });
+
+  it('rejects OIDC session issuance after a provider trust edit and never audits login success', async () => {
+    authSessionService.issue.mockRejectedValue({ statusCode: 401, message: 'Identity provider changed while sign-in was in progress' });
+    const state = buildSignedOidcState({ params: {}, query: {} } as any, 'provider-1', { key: provider.key, tenantId: null });
+    const response = await request(app)
+      .get(`/api/auth/identity/callback?code=code-1&state=${encodeURIComponent(state)}`)
+      .set('Cookie', [`identity_oidc_state=${state}`, 'identity_oidc_verifier=verifier'])
+      .redirects(0);
+
+    expect(response.status).toBe(401);
+    expect(auditService.logAudit).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'auth.login.success' }));
+    expect(auditService.logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'auth.login.failed', details: expect.objectContaining({ reason: 'session_not_issued' }) }));
+    const oidcCookies = response.headers['set-cookie'];
+    const oidcCookieHeader = Array.isArray(oidcCookies) ? oidcCookies.join(';') : oidcCookies || '';
+    expect(oidcCookieHeader).not.toContain('accessToken=');
+    expect(oidcCookieHeader).not.toContain('refreshToken=');
+  });
+
+  it('rejects SAML session issuance after a provider trust edit and never audits login success', async () => {
+    const samlProvider = { ...provider, protocol: 'saml' };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(samlProvider);
+    identityProviderService.getByKey.mockResolvedValue(samlProvider);
+    authSessionService.issue.mockRejectedValue({ statusCode: 401, message: 'Identity provider changed while sign-in was in progress' });
+    const browser = request.agent(app);
+    await browser.get('/api/auth/providers/provider-1/start').redirects(0);
+    const relayState = genericSamlService.createAuthorizationRequest.mock.calls[0][1];
+    const response = await browser.post('/api/auth/providers/saml/callback').type('form').send({ SAMLResponse: 'signed-response', RelayState: relayState });
+
+    expect(response.status).toBe(401);
+    expect(auditService.logAudit).not.toHaveBeenCalledWith(expect.objectContaining({ action: 'auth.login.success' }));
+    expect(auditService.logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'auth.login.failed', details: expect.objectContaining({ reason: 'session_not_issued' }) }));
+    const samlCookies = response.headers['set-cookie'];
+    const samlCookieHeader = Array.isArray(samlCookies) ? samlCookies.join(';') : samlCookies || '';
+    expect(samlCookieHeader).not.toContain('accessToken=');
+    expect(samlCookieHeader).not.toContain('refreshToken=');
   });
 });

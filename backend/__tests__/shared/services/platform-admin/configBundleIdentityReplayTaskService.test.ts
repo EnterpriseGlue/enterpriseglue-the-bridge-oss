@@ -71,13 +71,19 @@ describe('configBundleIdentityReplayTaskService', () => {
       id: 'task-2', tenantId: null, applyRunId: 'run-2', providerId: 'provider-2', syncRunId: 'sync-run-2', status: 'queued', cursor: 'page-3',
       attempts: 1, scanned: 0, created: 0, removed: 0, failed: 0,
     }]);
-    replayMemberships.mockRejectedValueOnce(new Error('identity store unavailable'));
+    replayMemberships.mockRejectedValueOnce(new Error('file:///run/secrets/idp Bearer secret-value https://directory.internal'));
 
     await expect(configBundleIdentityReplayTaskService.runNextPage()).resolves.toMatchObject({ taskId: 'task-2', status: 'queued', failed: 1, truncated: true, nextCursor: 'page-3' });
-    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'task-2' }), expect.objectContaining({ status: 'queued', attempts: 2, lastError: 'identity store unavailable' }));
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'task-2' }), expect.objectContaining({
+      status: 'queued', attempts: 2,
+      lastError: 'Configuration identity replay failed; inspect protected server logs',
+    }));
+    expect(JSON.stringify(update.mock.calls)).not.toContain('/run/secrets/idp');
+    expect(JSON.stringify(update.mock.calls)).not.toContain('secret-value');
+    expect(JSON.stringify(update.mock.calls)).not.toContain('directory.internal');
     const [runId, error, diagnosticInput] = syncDiagnostics.failRun.mock.calls[0];
     expect(runId).toBe('sync-run-2');
-    expect((error as Error).message).toBe('identity store unavailable');
+    expect((error as Error).message).toContain('/run/secrets/idp');
     expect(diagnosticInput).toMatchObject({ details: { applyRunId: 'run-2' } });
   });
 

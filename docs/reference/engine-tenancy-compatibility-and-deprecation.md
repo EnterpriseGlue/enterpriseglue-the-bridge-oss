@@ -62,8 +62,10 @@ non-null topology, shared fail-closed behavior, runtime reconciliation,
 aggregate metrics, and cleanup pass through the real browser and HTTP stack.
 See the
 [Engine Tenancy Functional Test Report](../development/engine-tenancy-functional-test-report.md).
-This closes the technical local-adoption and null-owner compatibility gates; it
-does not shorten the external API deprecation window.
+This closes the technical local-adoption, null-owner, and external request
+compatibility gates for the documented 0.11.0 breaking release. The negative
+contract test remains permanent: omission must continue to fail before any
+engine read or write.
 
 ## External Integrator Migration
 
@@ -78,8 +80,8 @@ does not shorten the external API deprecation window.
    and recreate an engine to change topology.
 6. Update retry logic so omitted tenancy is treated as a non-retryable HTTP 400.
 7. Verify decommission, credential rotation, reconciliation, and audit evidence.
-8. Remove reliance on the omission warning and confirm the fallback metric
-   remains flat through the observation window.
+8. Confirm omission receives a non-retryable HTTP 400 before persistence and
+   that no warning, default, or fallback metric is emitted.
 
 ## Removal Pull Request Requirements
 
@@ -89,7 +91,8 @@ The completed removal change includes:
 - SDK, API, OpenAPI, configuration, CLI help, and Markdown updates;
 - clean-install and supported-upgrade results;
 - explicit omission rejection tests for user and API-client paths;
-- removal of the temporary warning only after callers no longer rely on it;
+- removal of the temporary warning/default branch, with a retained HTTP 400
+  regression test;
 - rollback conditions and operator communication; and
 - no change to explicit local `default` tenant references.
 

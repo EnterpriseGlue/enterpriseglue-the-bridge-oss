@@ -26,9 +26,9 @@ const documents = documentationFiles.map((file) => ({
 
 test('database qualification denominator is derived from the matrix contract', () => {
   assert.equal(databaseCount, 5);
-  assert.equal(baselineCount, 4);
+  assert.equal(baselineCount, 5);
   assert.equal(stageCells, 35);
-  assert.equal(baselineObservations, 20);
+  assert.equal(baselineObservations, 25);
 });
 
 test('database qualification documentation contains no stale two-baseline denominator', () => {
@@ -52,5 +52,5 @@ test('canonical qualification documents publish the current derived counts', () 
   const report = documents.find(({ file }) => file.endsWith('engine-tenancy-functional-test-report.md'))?.text || '';
   assert.match(runbook, new RegExp(`${stageCells}/${stageCells} stage cells`));
   assert.match(runbook, new RegExp(`${baselineObservations}/${baselineObservations} baseline`));
-  assert.match(report, new RegExp(`all twenty adapter/upgrade-baseline observations`));
+  assert.match(report, new RegExp(`${baselineObservations}/${baselineObservations} adapter/upgrade-baseline observations`));
 });

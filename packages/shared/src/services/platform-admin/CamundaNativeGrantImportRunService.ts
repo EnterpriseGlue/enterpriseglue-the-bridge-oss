@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto';
 import { IsNull, LessThanOrEqual, Not } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { CamundaNativeGrantImportRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/CamundaNativeGrantImportRun.js';
-import { decrypt, encrypt } from '@enterpriseglue/shared/services/encryption.js';
+import { blindIndex, decrypt, encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import {
   CamundaNativeGrantClassificationSchema,
@@ -49,6 +48,39 @@ export interface CreateCamundaNativeGrantImportRunInput {
   snapshotRetentionMs?: number;
 }
 
+export interface CamundaNativeGrantMigrationEngineContext {
+  id: string;
+  type?: string | null;
+  baseUrl?: string | null;
+  connectionMode?: string | null;
+  authType?: string | null;
+  username?: string | null;
+  passwordEnc?: string | null;
+  oauthTokenUrl?: string | null;
+  oauthScopes?: string | null;
+  oauthAudience?: string | null;
+  tenancyMode?: string | null;
+  tenantId?: string | null;
+  runtimeAccessScope?: string | null;
+}
+
+export interface CamundaNativeGrantMigrationRuntimeResourceContext {
+  id?: string | null;
+  engineId?: string | null;
+  resourceKind?: string | null;
+  resourceKey?: string | null;
+  runtimeTenantId?: string | null;
+  tenantId?: string | null;
+  isActive?: boolean | null;
+  tenantResolutionStatus?: string | null;
+  updatedAt?: number | null;
+}
+
+export interface CamundaNativeGrantMigrationCommitments {
+  engineConnectionCommitment: string;
+  runtimeInventoryCommitment: string;
+}
+
 /** Encrypted alongside the source snapshot; never included in run summaries. */
 export interface CamundaNativeGrantStoredDraft {
   bundle: unknown;
@@ -60,7 +92,79 @@ export interface CamundaNativeGrantStoredDraft {
 }
 
 function opaqueReference(prefix: string, value: string): string {
-  return `${prefix}-${createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 24)}`;
+  return `${prefix}-${blindIndex(`camunda-native-import:${prefix}`, value).slice(0, 24)}`;
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+    .join(',')}}`;
+}
+
+function protectedCommitment(domain: string, value: unknown): string {
+  return blindIndex(`camunda-native-import:${domain}:v1`, stableJson(value));
+}
+
+export function camundaNativeGrantMigrationCommitments(
+  engine: CamundaNativeGrantMigrationEngineContext,
+  runtimeResources: CamundaNativeGrantMigrationRuntimeResourceContext[],
+): CamundaNativeGrantMigrationCommitments {
+  return {
+    engineConnectionCommitment: protectedCommitment('engine-connection', {
+      id: engine.id,
+      type: engine.type,
+      baseUrl: engine.baseUrl,
+      connectionMode: engine.connectionMode,
+      authType: engine.authType,
+      username: engine.username,
+      passwordEnc: engine.passwordEnc,
+      oauthTokenUrl: engine.oauthTokenUrl,
+      oauthScopes: engine.oauthScopes,
+      oauthAudience: engine.oauthAudience,
+      tenancyMode: engine.tenancyMode,
+      tenantId: engine.tenantId,
+      runtimeAccessScope: engine.runtimeAccessScope,
+    }),
+    runtimeInventoryCommitment: protectedCommitment('runtime-inventory', runtimeResources
+      .map((resource) => ({
+        id: resource.id,
+        engineId: resource.engineId,
+        resourceKind: resource.resourceKind,
+        resourceKey: resource.resourceKey,
+        runtimeTenantId: resource.runtimeTenantId,
+        tenantId: resource.tenantId,
+        isActive: resource.isActive,
+        tenantResolutionStatus: resource.tenantResolutionStatus,
+        updatedAt: resource.updatedAt,
+      }))
+      .sort((left, right) => stableJson(left).localeCompare(stableJson(right)))),
+  };
+}
+
+export function assertCamundaNativeGrantMigrationContext(
+  detail: unknown,
+  engine: CamundaNativeGrantMigrationEngineContext,
+  runtimeResources: CamundaNativeGrantMigrationRuntimeResourceContext[],
+): void {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) {
+    throw new Error('Native-grant migration detail is unavailable');
+  }
+  const stored = (detail as Record<string, unknown>).contextCommitments;
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
+    throw new Error('Native-grant migration preview is not bound to an engine and runtime inventory; create a new preview');
+  }
+  const expected = camundaNativeGrantMigrationCommitments(engine, runtimeResources);
+  const value = stored as Record<string, unknown>;
+  if (value.engineConnectionCommitment !== expected.engineConnectionCommitment) {
+    throw new Error('The engine connection or topology changed since the native-grant preview; create and review a new preview');
+  }
+  if (value.runtimeInventoryCommitment !== expected.runtimeInventoryCommitment) {
+    throw new Error('The runtime-resource inventory changed since the native-grant preview; reconcile resources and create a new preview');
+  }
 }
 
 function parseObject(value: string | null): Record<string, unknown> {

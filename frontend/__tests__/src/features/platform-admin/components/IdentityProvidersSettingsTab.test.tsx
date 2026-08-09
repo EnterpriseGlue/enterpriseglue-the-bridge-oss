@@ -135,8 +135,9 @@ describe('IdentityProvidersSettingsTab', () => {
 
     await openProviderActions();
     fireEvent.click(providerMenuItem('Test connection'));
-    expect(await screen.findByText('Connection verified: Demo OIDC')).toBeInTheDocument();
-    expect(screen.getByText(/OIDC connection verified for https:\/\/identity\.example\.test/)).toBeInTheDocument();
+    expect(await screen.findByText('Provider metadata reachable: Demo OIDC')).toBeInTheDocument();
+    expect(screen.getByText(/read valid OIDC discovery metadata for https:\/\/identity\.example\.test/)).toBeInTheDocument();
+    expect(screen.getByText(/does not verify the client secret, callback registration, or token exchange/)).toBeInTheDocument();
 
     await openProviderActions();
     fireEvent.click(providerMenuItem('Preview memberships'));
@@ -267,7 +268,8 @@ describe('IdentityProvidersSettingsTab', () => {
     fireEvent.change(within(modal).getByLabelText('Callback URL'), { target: { value: 'https://app.example.test/api/auth/identity/callback' } });
     fireEvent.change(within(modal).getByLabelText('Group claim (optional)'), { target: { value: 'groups' } });
     fireEvent.change(within(modal).getByLabelText('Expected audience (optional)'), { target: { value: 'enterpriseglue-web' } });
-    fireEvent.change(within(modal).getByLabelText('How memberships are refreshed'), { target: { value: 'graph' } });
+    expect(within(modal).queryByRole('option', { name: 'SCIM directory API' })).not.toBeInTheDocument();
+    expect(within(modal).queryByRole('option', { name: 'Directory graph API' })).not.toBeInTheDocument();
     expect(within(modal).getByText('Memberships are refreshed at every sign-in')).toBeInTheDocument();
     expect(within(modal).queryByLabelText('Synchronize on sign-in')).not.toBeInTheDocument();
     expect(within(modal).queryByLabelText('Synchronization required for sign-in')).not.toBeInTheDocument();
@@ -276,7 +278,7 @@ describe('IdentityProvidersSettingsTab', () => {
     await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({
       key: 'advanced-oidc', displayName: 'Advanced OIDC', protocol: 'oidc',
       configuration: expect.objectContaining({ groupClaim: 'groups', expectedAudience: 'enterpriseglue-web', scopes: ['openid', 'profile', 'email'] }),
-      sync: expect.objectContaining({ triggers: ['login'], connectorCapability: 'graph', requiredForLogin: true, incompleteEntitlements: 'fail_closed' }),
+      sync: expect.objectContaining({ triggers: ['login'], connectorCapability: 'claim_only', requiredForLogin: true, incompleteEntitlements: 'fail_closed' }),
     })));
   });
 

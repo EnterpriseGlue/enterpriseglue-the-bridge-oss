@@ -40,8 +40,12 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
   it('requires every provider protocol to reconcile before sign-in', () => {
     expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['manual'], requiredForLogin: true }).success).toBe(false);
     expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login'], requiredForLogin: false }).success).toBe(false);
-    expect(IdentityProviderSyncConfigurationSchema.parse({ triggers: ['login', 'scheduled'] })).toMatchObject({
-      triggers: ['login', 'scheduled'], requiredForLogin: true,
+    expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous' }).success).toBe(false);
+    expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login'], connectorCapability: 'graph' }).success).toBe(false);
+    expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login'], connectorCapability: 'scim' }).success).toBe(false);
+    expect(IdentityProviderSyncConfigurationSchema.safeParse({ triggers: ['login', 'scheduled'], scheduled: false, connectorCapability: 'ldap_directory' }).success).toBe(false);
+    expect(IdentityProviderSyncConfigurationSchema.parse({ triggers: ['login', 'scheduled'], scheduled: true, connectorCapability: 'ldap_directory' })).toMatchObject({
+      triggers: ['login', 'scheduled'], requiredForLogin: true, incompleteEntitlements: 'fail_closed',
     });
   });
 
@@ -429,7 +433,7 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
       identityProviders: [{
         key: 'customer-saml', type: 'saml', sync: { triggers: ['login'] },
         saml: {
-          entityId: 'enterpriseglue-ai', callbackUrl: 'https://app.example.test/callback', ssoUrl: 'https://idp.example.test/sso',
+          entityId: 'enterpriseglue-ai', idpEntityId: 'https://idp.example.test', callbackUrl: 'https://app.example.test/callback', ssoUrl: 'https://idp.example.test/sso',
           signingCertificate: 'saml-certificate-sentinel', nameIdAttribute: 'nameID',
         },
       }],
@@ -513,6 +517,7 @@ describe('EnterpriseGlue configuration bundle contracts', () => {
       key: 'customer-saml', type: 'saml', authenticationMode: 'direct', sync: { triggers: ['login'] },
       saml: {
         entityId: 'enterpriseglue-ai',
+        idpEntityId: 'https://idp.example.test',
         callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback',
         ssoUrl: 'https://idp.example.test/sso',
         signingCertificateRef: 'EG_SAML_SIGNING_CERT',

@@ -204,6 +204,8 @@ describe('identity mock provider contracts', () => {
 
   it.each([
     ['wrong_audience', 'jwt audience invalid. expected: enterpriseglue-test-client'],
+    ['multi_audience_missing_azp', 'OIDC ID token with multiple audiences must include an authorized party'],
+    ['wrong_azp', 'OIDC ID token authorized party does not match the configured client'],
     ['expired_token', 'jwt expired'],
     ['not_yet_valid_token', 'jwt not active'],
     ['missing_subject', 'OIDC ID token subject is invalid'],
@@ -215,6 +217,16 @@ describe('identity mock provider contracts', () => {
     await expect(genericOidcService.exchangeCode(provider.configuration(), {
       code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
     })).rejects.toThrow(message);
+  });
+
+  it('accepts a multi-audience ID token only when azp matches the configured client', async () => {
+    const provider = new MockOidcProvider();
+    provider.setFailureMode('matching_azp');
+    vi.stubGlobal('fetch', provider.fetch.bind(provider));
+
+    await expect(genericOidcService.exchangeCode(provider.configuration(), {
+      code: 'code-1', codeVerifier: 'verifier-1', nonce: 'nonce-1',
+    })).resolves.toMatchObject({ sub: 'user-1', azp: provider.clientId });
   });
 
   it('surfaces an OIDC provider timeout without continuing authorization', async () => {

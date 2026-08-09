@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
-import { MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
+import { MOCK_SAML_REQUEST_ID, MockSamlIdentityProvider } from '../../../../test/identity-mocks/index.js';
 
 const configuration = {
   entityId: 'enterpriseglue-ai',
-  callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback',
+  idpEntityId: 'https://saml-mock.example.test',
+  callbackUrl: 'http://localhost:5173/api/auth/providers/saml/callback',
   ssoUrl: 'https://idp.example.test/sso',
   signingCertificateRef: 'EG_SAML_CERT',
   nameIdAttribute: 'urn:example:subject',
@@ -56,7 +57,7 @@ describe('GenericSamlService', () => {
     const profile = await genericSamlService.validatePostResponse({
       ...configuration,
       signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
-    }, provider.signedResponse());
+    }, provider.signedResponse(), MOCK_SAML_REQUEST_ID);
 
     expect(profile).toMatchObject({
       nameID: 'person@example.test',
@@ -75,7 +76,7 @@ describe('GenericSamlService', () => {
     await expect(genericSamlService.validatePostResponse({
       ...configuration,
       signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
-    }, tampered)).rejects.toMatchObject({ code: 'invalid_signature' });
+    }, tampered, MOCK_SAML_REQUEST_ID)).rejects.toMatchObject({ code: 'invalid_signature' });
   });
 
   it('requires the configured certificate to rotate with SAML signing material', async () => {
@@ -87,13 +88,27 @@ describe('GenericSamlService', () => {
     await expect(genericSamlService.validatePostResponse({
       ...configuration,
       signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
-    }, response)).rejects.toThrow(/signature/i);
+    }, response, MOCK_SAML_REQUEST_ID)).rejects.toThrow(/signature/i);
 
     process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
     await expect(genericSamlService.validatePostResponse({
       ...configuration,
       signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
-    }, response)).resolves.toMatchObject({ nameID: 'person@example.test' });
+    }, response, MOCK_SAML_REQUEST_ID)).resolves.toMatchObject({ nameID: 'person@example.test' });
+
+  });
+
+  it.each([
+    ['missing request correlation', { inResponseTo: null }],
+    ['wrong request correlation', { inResponseTo: '_wrong_authentication_request_000000000000000000000000000001' }],
+    ['wrong identity provider issuer', { issuer: 'https://another-idp.example.test' }],
+  ])('rejects a signed response with %s', async (_label, options) => {
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    await expect(genericSamlService.validatePostResponse({
+      ...configuration,
+      signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
+    }, provider.signedResponse(options), MOCK_SAML_REQUEST_ID)).rejects.toMatchObject({ code: 'invalid_signature' });
   });
 
   it('uses fresh signing material for each test provider instance', () => {

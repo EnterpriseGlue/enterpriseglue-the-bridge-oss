@@ -88,10 +88,10 @@ router.post('/api/identity/providers/:key/test-connection', requireAuth, identit
     result = { status: 'connected', protocol: 'ldap', sampledIdentities: page.identities.length };
   } else if (provider.protocol === 'oidc') {
     const metadata = await genericOidcService.testConnection(JSON.parse(provider.configurationJson));
-    result = { status: 'connected', protocol: 'oidc', issuer: metadata.issuer };
+    result = { status: 'metadata_reachable', protocol: 'oidc', issuer: metadata.issuer };
   } else {
     const metadata = await samlMetadataService.testConnection(provider.configurationJson);
-    result = { status: 'connected', protocol: 'saml', entityDescriptorCount: metadata.entityDescriptorCount };
+    result = { status: 'metadata_reachable', protocol: 'saml', entityDescriptorCount: metadata.entityDescriptorCount };
   }
   await logAudit({ action: 'identity.provider.connection_test', userId: req.user!.userId, resourceType: 'identity_provider', resourceId: provider.id, details: { key: provider.key, ...result } });
   res.json(result);

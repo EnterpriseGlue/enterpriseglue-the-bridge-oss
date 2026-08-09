@@ -49,6 +49,10 @@
     {
       "id": "pre_login_experience",
       "description": "Populated identity providers and platform settings immediately before login-experience migrations 0106 and 0107."
+    },
+    {
+      "id": "pre_external_identity_and_project_tenancy",
+      "description": "Populated external registration and tenantless project authorization rows immediately before ownership migrations 0108 and 0109."
     }
   ],
   "requiredStages": [
@@ -127,6 +131,29 @@
       "access_governance_drift_status",
       "local_password_login_mode",
       "sso_provider_selection_mode"
+    ],
+    "external_engine_registrations": [
+      "engine_id",
+      "external_id",
+      "source_identity",
+      "active_external_id_identity"
+    ],
+    "projects": [
+      "tenant_id"
+    ],
+    "project_engine_targets": [
+      "tenant_id",
+      "project_id",
+      "engine_id"
+    ],
+    "role_assignments": [
+      "tenant_id",
+      "assignment_key"
+    ],
+    "permission_grants": [
+      "tenant_id",
+      "resource_type",
+      "resource_id"
     ]
   },
   "requiredIndexes": {
@@ -148,6 +175,10 @@
     ],
     "identity_providers": [
       "uq_identity_providers_preferred_scope_identity"
+    ],
+    "external_engine_registrations": [
+      "uq_external_engine_registrations_source_identity",
+      "uq_external_engine_registrations_active_external_identity"
     ]
   }
 }

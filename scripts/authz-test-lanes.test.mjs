@@ -46,6 +46,7 @@ const openApiSource = readFileSync(new URL('../packages/shared/src/schemas/opena
 const sharedAuthContractSource = readFileSync(new URL('../packages/shared/src/contracts/auth.ts', import.meta.url), 'utf8');
 const localLanes = ['test:authz:identity', 'test:authz:config', 'test:authz:runtime'];
 const expectedLeafChecks = [
+  'test:identity-security',
   'test:identity-contract',
   'test:identity-integration',
   'test:identity-persistence',

@@ -85,7 +85,8 @@
               "enum": [
                 "pull_request",
                 "local_release",
-                "release"
+                "release",
+                "external_acceptance"
               ]
             }
           },

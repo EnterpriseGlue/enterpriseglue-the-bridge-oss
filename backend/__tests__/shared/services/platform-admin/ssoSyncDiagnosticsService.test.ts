@@ -39,4 +39,28 @@ describe('ssoSyncDiagnosticsService', () => {
     expect(updateIdentity).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({ providerStatus: 'active', email: 'new@example.test' }));
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'identity_provider_health_check.identity_active' }));
   });
+
+  it('stores only stable public diagnostics for unexpected identity failures', async () => {
+    const updateRun = vi.fn();
+    const insertEvent = vi.fn();
+    vi.mocked(getDataSource).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === SsoSyncRun ? { update: updateRun } : { insert: insertEvent },
+    } as never);
+    const canary = 'file:///run/secrets/idp Bearer secret-value https://directory.internal';
+
+    await ssoSyncDiagnosticsService.failRun('run-1', new Error(canary), {
+      providerId: 'oidc-main',
+      details: { kind: 'config_bundle_identity_replay' },
+    });
+
+    expect(updateRun).toHaveBeenCalledWith({ id: 'run-1' }, expect.objectContaining({
+      errorCode: 'IdentityProviderSyncError',
+      errorMessage: 'Identity provider synchronization failed; inspect protected server logs',
+    }));
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Identity provider synchronization failed; inspect protected server logs',
+    }));
+    expect(JSON.stringify([updateRun.mock.calls, insertEvent.mock.calls])).not.toContain(canary);
+    expect(JSON.stringify([updateRun.mock.calls, insertEvent.mock.calls])).not.toContain('secret-value');
+  });
 });

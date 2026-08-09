@@ -40,6 +40,7 @@ describe('UserService authorization baseline', () => {
       firstName: null,
       lastName: null,
       platformRole,
+      authSessionVersion: 4,
       authProvider: 'local',
       isActive: true,
       isEmailVerified: false,
@@ -100,7 +101,7 @@ describe('UserService authorization baseline', () => {
   });
 
   it('removes only the manual administrator membership when a user is demoted', async () => {
-    const { manager, userRepo } = mockCreateTransaction('admin');
+    const { manager, userRepo, refreshTokenRepo } = mockCreateTransaction('admin');
     userRepo.findOneBy
       .mockResolvedValueOnce({
         id: 'user-1', email: 'admin@example.test', firstName: null, lastName: null,
@@ -118,6 +119,11 @@ describe('UserService authorization baseline', () => {
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     expect(authzGroupService.removeManualPlatformAdministratorMembershipWithManager).toHaveBeenCalledWith(manager, 'user-1');
     expect(authzGroupService.ensureManualPlatformAdministratorMembershipWithManager).not.toHaveBeenCalled();
+    expect(userRepo.update).toHaveBeenCalledWith({ id: 'user-1' }, { authSessionVersion: 1 });
+    expect(refreshTokenRepo.update).toHaveBeenCalledWith(
+      { userId: 'user-1' },
+      { revokedAt: expect.any(Number) },
+    );
   });
 
   it('removes baseline access and revokes refresh tokens when update deactivates a user', async () => {

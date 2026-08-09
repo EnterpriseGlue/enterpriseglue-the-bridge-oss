@@ -12,6 +12,7 @@ import { engineTenancyVisibilityWhere } from '@enterpriseglue/shared/engine-tena
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { applyPreparedEngineImportToProject, type PreparedEngineImport } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { OSS_DEFAULT_TENANT_ID, normalizeTenantIdForPersistence } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 export interface AccessedEngineResponse {
   engineId: string;
@@ -37,16 +38,18 @@ export interface RenamedProjectResponse {
 }
 
 class ProjectQueryServiceImpl {
-  async createProject(input: { name: string; ownerId: string; preparedImport?: PreparedEngineImport | null }): Promise<{ id: string; name: string; ownerId: string; createdAt: number; updatedAt: number }> {
+  async createProject(input: { name: string; ownerId: string; tenantId: string; preparedImport?: PreparedEngineImport | null }): Promise<{ id: string; name: string; ownerId: string; createdAt: number; updatedAt: number }> {
     const id = generateId();
     const now = unixTimestamp();
     const dataSource = await getDataSource();
+    const tenantId = normalizeTenantIdForPersistence(input.tenantId) || OSS_DEFAULT_TENANT_ID;
 
     await dataSource.transaction(async (manager) => {
       await manager.getRepository(Project).insert({
         id,
         name: input.name,
         ownerId: input.ownerId,
+        tenantId,
         createdAt: now,
         updatedAt: now,
       });
@@ -79,7 +82,7 @@ class ProjectQueryServiceImpl {
 
       await writeProjectMemberRoleAssignments(manager, {
         projectId: id,
-        tenantId: null,
+        tenantId,
         userId: input.ownerId,
         roles: ['owner'],
         createdById: null,
@@ -91,6 +94,7 @@ class ProjectQueryServiceImpl {
           manager,
           projectId: id,
           userId: input.ownerId,
+          tenantId,
           importData: input.preparedImport,
         });
       }

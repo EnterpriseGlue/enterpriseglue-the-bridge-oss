@@ -15,12 +15,15 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/LdapReconciliationServic
 }));
 
 describe('ssoDiagnosticsPoller LDAP scheduler', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     delete process.env.SSO_DIAGNOSTICS_INTERVAL_MS;
     delete process.env.SSO_DIAGNOSTICS_TENANT_IDS;
     delete process.env.SSO_DIAGNOSTICS_RUN_ON_START;
+    process.env.NODE_ENV = 'test';
     stopSsoDiagnosticsPoller();
     vi.mocked(identityProviderService.list).mockResolvedValue([] as never);
     vi.mocked(ldapReconciliationService.reconcileProvider).mockResolvedValue({ processed: 0, runId: null });
@@ -28,6 +31,7 @@ describe('ssoDiagnosticsPoller LDAP scheduler', () => {
 
   afterEach(() => {
     stopSsoDiagnosticsPoller();
+    process.env.NODE_ENV = originalNodeEnv;
     vi.useRealTimers();
   });
 
@@ -70,5 +74,15 @@ describe('ssoDiagnosticsPoller LDAP scheduler', () => {
     release();
     await vi.advanceTimersByTimeAsync(1_000);
     expect(ldapReconciliationService.reconcileProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the fail-safe production cadence when the interval is omitted or disabled', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.SSO_DIAGNOSTICS_INTERVAL_MS = '0';
+
+    await expect(startSsoDiagnosticsPollerIfEnabled()).resolves.not.toBeNull();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(identityProviderService.list).toHaveBeenCalledWith(null);
   });
 });

@@ -83,6 +83,34 @@ function parseRemotePayload(buffer: Buffer, url: URL): ConfigBundleRemoteImportR
   return envelope.data;
 }
 
+async function readBoundedRemoteBundle(response: Response): Promise<Buffer> {
+  const contentLength = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_REMOTE_BUNDLE_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    throw Errors.validation('Remote configuration file exceeds the 1 MB limit');
+  }
+  if (!response.body) return Buffer.alloc(0);
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      receivedBytes += value.byteLength;
+      if (receivedBytes > MAX_REMOTE_BUNDLE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw Errors.validation('Remote configuration file exceeds the 1 MB limit');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks);
+}
+
 class ConfigBundleRemoteSourceService {
   async import(urlValue: string): Promise<ConfigBundleRemoteImportResult> {
     const url = normalizeGitRawUrl(urlValue);
@@ -96,12 +124,11 @@ class ConfigBundleRemoteSourceService {
     } catch {
       throw Errors.validation('Remote configuration file could not be fetched');
     }
-    if (!response.ok) throw Errors.validation(`Remote configuration request failed (${response.status})`);
-    const contentLength = Number(response.headers.get('content-length') || 0);
-    if (contentLength > MAX_REMOTE_BUNDLE_BYTES) throw Errors.validation('Remote configuration file exceeds the 1 MB limit');
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length > MAX_REMOTE_BUNDLE_BYTES) throw Errors.validation('Remote configuration file exceeds the 1 MB limit');
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw Errors.validation(`Remote configuration request failed (${response.status})`);
+    }
+    const buffer = await readBoundedRemoteBundle(response);
     const sourceKind: ConfigBundleRemoteSourceKind = url.pathname.toLowerCase().endsWith('.zip') || buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])) ? 'zip' : 'json';
     return { payload: parseRemotePayload(buffer, url), sourceHost: url.hostname, sourceKind };
   }

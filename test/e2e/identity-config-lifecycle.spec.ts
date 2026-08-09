@@ -98,12 +98,12 @@ test.describe('Identity configuration browser lifecycle', () => {
     await expect(providersPanel.getByText('identity.oidc.browser-mock', { exact: true })).toBeVisible();
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Test connection' }).click();
-    await expect(providersPanel.getByText('Connection verified: Browser identity provider')).toBeVisible();
+    await expect(providersPanel.getByText('Provider metadata reachable: Browser identity provider')).toBeVisible();
     await captureManualScreenshot(page, '49-provider-connection-success.jpg');
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'Preview memberships' }).click();
     await expect(providersPanel.getByText(/Checked 3 saved identity records. 1 membership would be added and 1 membership removed. No access was changed, and the provider was not contacted./)).toBeVisible();
-    await expect(providersPanel.getByText('Connection verified: Browser identity provider')).toHaveCount(0);
+    await expect(providersPanel.getByText('Provider metadata reachable: Browser identity provider')).toHaveCount(0);
     await captureManualScreenshot(page, '50-provider-membership-preview.jpg');
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();
     await page.getByRole('menuitem', { name: 'View refresh history' }).click();

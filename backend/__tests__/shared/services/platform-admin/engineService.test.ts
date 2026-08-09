@@ -13,6 +13,9 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/db/entities/ProjectE
 import { RuntimeResource } from '@enterpriseglue/shared/db/entities/RuntimeResource.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/db/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/db/entities/RuntimeResourceSetMaterialization.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/db/entities/EngineBackstopGroupMapping.js';
+import { EngineBackstopSyncRun } from '@enterpriseglue/shared/db/entities/EngineBackstopSyncRun.js';
+import { EngineBackstopSyncTask } from '@enterpriseglue/shared/db/entities/EngineBackstopSyncTask.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -494,7 +497,7 @@ describe('EngineService', () => {
   });
 
   it('writes configuration engine updates and decommissions through a supplied transaction store', async () => {
-    const update = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn().mockResolvedValue({ affected: 1 });
     const assignmentDelete = vi.fn().mockResolvedValue(undefined);
     const engineSetMaterializationDelete = vi.fn().mockResolvedValue(undefined);
     const runtimeSetMaterializationDelete = vi.fn().mockResolvedValue(undefined);
@@ -503,6 +506,7 @@ describe('EngineService', () => {
     const runtimeResourceSetUpdate = vi.fn().mockResolvedValue(undefined);
     const projectTargetUpdate = vi.fn().mockResolvedValue(undefined);
     const engineMemberDelete = vi.fn().mockResolvedValue(undefined);
+    const backstopMappingUpdate = vi.fn().mockResolvedValue(undefined);
     const store = { getRepository: (entity: unknown) => {
       if (entity === Engine) return {
         update,
@@ -527,6 +531,13 @@ describe('EngineService', () => {
         return { delete: runtimeSetMaterializationDelete };
       }
       if (entity === ProjectEngineTarget) return { update: projectTargetUpdate };
+      if (entity === EngineBackstopSyncTask || entity === EngineBackstopSyncRun) {
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      }
+      if (entity === EngineBackstopGroupMapping) return {
+        findOne: vi.fn().mockResolvedValue(null),
+        update: backstopMappingUpdate,
+      };
       if (entity === EngineSetMaterialization) {
         return { delete: engineSetMaterializationDelete };
       }
@@ -545,7 +556,8 @@ describe('EngineService', () => {
     expect(update).toHaveBeenNthCalledWith(1, { id: 'engine-1' }, expect.objectContaining({
       name: 'Payments', sourceHash: 'hash-1', lifecycleStatus: 'active', updatedAt: expect.any(Number),
     }));
-    expect(update).toHaveBeenNthCalledWith(2, { id: 'engine-1' }, expect.objectContaining({
+    expect(update).toHaveBeenNthCalledWith(2, { id: 'engine-1' }, { id: 'engine-1' });
+    expect(update).toHaveBeenNthCalledWith(3, { id: 'engine-1' }, expect.objectContaining({
       lifecycleStatus: 'decommissioned', driftStatus: 'decommissioned',
       configKeyIdentity: null, lastAppliedAt: 200,
     }));
@@ -569,6 +581,38 @@ describe('EngineService', () => {
     );
     expect(engineSetMaterializationDelete).toHaveBeenCalledWith({ engineId: 'engine-1' });
     expect(runtimeSetMaterializationDelete).toHaveBeenCalledTimes(2);
+    expect(backstopMappingUpdate).toHaveBeenCalledWith(
+      { engineId: 'engine-1' },
+      expect.objectContaining({ isActive: false }),
+    );
+  });
+
+  it.each([
+    ['direct', 'active task', true, false],
+    ['customer_sidecar', 'retained native journal', false, true],
+  ] as const)('blocks %s decommission before mutation when the backstop has an %s', async (connectionMode, _kind, activeTask, retainedJournal) => {
+    const engineUpdate = vi.fn();
+    const assignmentDelete = vi.fn();
+    const store = { getRepository: (entity: unknown) => {
+      if (entity === Engine) return {
+        findOne: vi.fn().mockResolvedValue({ id: 'engine-1', connectionMode, registrationSource: 'user' }),
+        update: engineUpdate.mockResolvedValue({ affected: 1 }),
+      };
+      if (entity === EngineBackstopSyncTask) return {
+        findOne: vi.fn().mockResolvedValue(activeTask ? { id: 'task-1' } : null),
+      };
+      if (entity === EngineBackstopSyncRun) return {
+        findOne: vi.fn().mockResolvedValue(retainedJournal ? { id: 'run-1' } : null),
+      };
+      if (entity === RbacRoleAssignment) return { delete: assignmentDelete };
+      throw new Error('Unexpected repository');
+    } };
+
+    await expect(service.decommissionEngine('engine-1', {}, store as any))
+      .rejects.toMatchObject({ statusCode: 409 });
+    expect(engineUpdate).toHaveBeenCalledOnce();
+    expect(engineUpdate).toHaveBeenCalledWith({ id: 'engine-1' }, { id: 'engine-1' });
+    expect(assignmentDelete).not.toHaveBeenCalled();
   });
 
   it('removes canonical legacy assignments when a legacy engine member is removed', async () => {

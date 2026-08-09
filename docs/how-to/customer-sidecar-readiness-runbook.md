@@ -23,12 +23,17 @@ exact host or a narrowly scoped wildcard before registering the engine:
 ```bash
 export EG_ENGINE_ALLOWED_HOSTS='payments-sidecar.internal'
 export EG_ENFORCE_ENGINE_ENDPOINT_POLICY='true'
+export EG_ENGINE_ALLOW_PRIVATE_HOSTS='true'
 ```
 
-Use HTTPS. `EG_ALLOW_INSECURE_ENGINE_HTTP=true` is only a reviewed, temporary
+The private-host opt-in is required for a single-label, `.local`, loopback,
+address-literal, Docker-local, or otherwise private sidecar and works only with
+an exact host entry. Omit it for a reviewed public endpoint. Use HTTPS.
+`EG_ALLOW_INSECURE_ENGINE_HTTP=true` is only a separate, reviewed, temporary
 migration exception for a private endpoint; remove it after migration. Do not
 allowlist the underlying engine host when EnterpriseGlue should reach only the
-sidecar.
+sidecar. The host allowlist is not DNS pinning: retain trusted DNS ownership and
+network egress controls for private and cloud-metadata destinations.
 
 ## Configure the upstream hop
 
@@ -95,8 +100,10 @@ never substitute a literal value for a reference.
    metadata, not an authorization bypass.
 7. If `mirrored_engine_backstop` is enabled, allow only the bounded
    `engine.native_authorization.backstop` operation class for
-   `/authorization/create` and ID-addressed `/authorization/{id}` reads and
-   deletes. Create a reviewed backstop preview, apply it, run tracked-ID drift,
+   `/authorization/create`, the exact four-parameter `/authorization` recovery
+   query, and ID-addressed `/authorization/{id}` reads and deletes. Reject
+   every unfiltered, partially filtered, wildcard, duplicated, or extended
+   query. Create a reviewed backstop preview, apply it, run tracked-ID drift,
    and roll it back in a non-production engine. Confirm the sidecar receives no
    `Authorization` header containing a downstream engine credential; the
    customer-owned hop authenticates separately.
@@ -112,7 +119,7 @@ Attach sanitized artifacts to the change record:
 - relevant audit-event identifiers and a statement that no secrets or
   downstream credentials were captured.
 - when the backstop is enabled, the reviewed preview/apply/drift/rollback
-  receipt identifiers and sidecar allow-list evidence for the three bounded
+  receipt identifiers and sidecar allow-list evidence for the four bounded
   authorization endpoint shapes.
 
 Success requires an HTTPS allowlisted sidecar endpoint, restricted network

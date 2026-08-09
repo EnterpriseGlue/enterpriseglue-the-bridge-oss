@@ -3,6 +3,7 @@ import { createServer as createHttpsServer, request as httpsRequest, type Server
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
+import { inflateRawSync } from 'node:zlib';
 import jwt from 'jsonwebtoken';
 import type { IdentityProviderAdapter, NormalizedExternalIdentity, ProviderIdentityInput } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderAdapter.js';
 import { IdentityProviderFailure } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderFailure.js';
@@ -13,7 +14,7 @@ const { signXml } = require('@node-saml/node-saml/lib/xml.js') as {
   signXml: (xml: string, xpath: string, location: { reference: string; action: 'after' }, options: { privateKey: string; publicCert: string; signatureAlgorithm: 'sha256' }) => string;
 };
 
-export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'unknown_signing_key' | 'timeout';
+export type OidcMockFailureMode = 'none' | 'unavailable' | 'malformed' | 'wrong_issuer' | 'invalid_token' | 'wrong_audience' | 'multi_audience_missing_azp' | 'wrong_azp' | 'matching_azp' | 'group_overage' | 'expired_token' | 'not_yet_valid_token' | 'missing_subject' | 'unknown_signing_key' | 'timeout';
 export type MockEntraOidcScenario = 'standard' | 'guest_user' | 'group_overage' | 'tenant_mismatch' | 'consent_denied';
 
 export interface MockOidcProviderOptions {
@@ -35,10 +36,14 @@ export interface MockSamlIdentityProviderOptions {
 export interface MockSamlResponseOptions {
   audience?: string;
   callbackUrl?: string;
+  issuer?: string;
+  inResponseTo?: string | null;
   issueInstant?: Date;
   notBefore?: Date;
   notOnOrAfter?: Date;
 }
+
+export const MOCK_SAML_REQUEST_ID = '_mock_authentication_request_00000000000000000000000000000001';
 
 interface SigningMaterial {
   privateKey: string;
@@ -71,7 +76,7 @@ export class MockOidcProvider {
   constructor(options: MockOidcProviderOptions = {}) {
     this.issuer = options.issuer || 'https://identity-mock.example.test';
     this.clientId = options.clientId || 'enterpriseglue-test-client';
-    this.callbackUrl = options.callbackUrl || 'https://app.example.test/api/auth/identity/callback';
+    this.callbackUrl = options.callbackUrl || 'http://localhost:5173/api/auth/identity/callback';
   }
 
   configuration() {
@@ -133,6 +138,16 @@ export class MockOidcProvider {
       if (this.failureMode === 'invalid_token') return Response.json({ id_token: 'invalid.token.value' });
       if (this.failureMode === 'wrong_audience') {
         return Response.json({ id_token: jwt.sign({ ...this.tokenClaims, iss: this.issuer, aud: 'wrong-audience' }, this.signingMaterial.privateKey, {
+          algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m',
+        }) });
+      }
+      if (this.failureMode === 'multi_audience_missing_azp' || this.failureMode === 'wrong_azp' || this.failureMode === 'matching_azp') {
+        return Response.json({ id_token: jwt.sign({
+          ...this.tokenClaims,
+          iss: this.issuer,
+          aud: [this.clientId, 'enterpriseglue-secondary-audience'],
+          ...(this.failureMode === 'multi_audience_missing_azp' ? {} : { azp: this.failureMode === 'matching_azp' ? this.clientId : 'another-client' }),
+        }, this.signingMaterial.privateKey, {
           algorithm: 'RS256', keyid: String(this.signingMaterial.publicJwk.kid), expiresIn: '5m',
         }) });
       }
@@ -421,7 +436,7 @@ export class MockSamlIdentityProvider {
   constructor(options: MockSamlIdentityProviderOptions = {}) {
     this.issuer = options.issuer || 'https://saml-mock.example.test';
     this.audience = options.audience || 'enterpriseglue-ai';
-    this.callbackUrl = options.callbackUrl || 'https://app.example.test/api/auth/providers/saml/callback';
+    this.callbackUrl = options.callbackUrl || 'http://localhost:5173/api/auth/providers/saml/callback';
   }
 
   setAttributes(attributes: Record<string, unknown>): void {
@@ -465,13 +480,16 @@ export class MockSamlIdentityProvider {
     const nameId = xmlEscape(String(this.attributes.nameID ?? 'person@example.test'));
     const callbackUrl = options.callbackUrl || this.callbackUrl;
     const audience = options.audience || this.audience;
+    const issuer = options.issuer || this.issuer;
+    const requestId = options.inResponseTo === undefined ? MOCK_SAML_REQUEST_ID : options.inResponseTo;
+    const inResponseTo = requestId ? ` InResponseTo="${xmlEscape(requestId)}"` : '';
     const attributeXml = Object.entries(this.attributes)
       .filter(([name]) => name !== 'nameID')
       .map(([name, value]) => `<saml:Attribute Name="${xmlEscape(name)}">${(Array.isArray(value) ? value : [value]).map((entry) => `<saml:AttributeValue>${xmlEscape(String(entry))}</saml:AttributeValue>`).join('')}</saml:Attribute>`)
       .join('');
-    const assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_assertion-${sequence}" Version="2.0" IssueInstant="${issueInstant}"><saml:Issuer>${this.issuer}</saml:Issuer><saml:Subject><saml:NameID>${nameId}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${callbackUrl}" NotOnOrAfter="${notOnOrAfter}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}"><saml:AudienceRestriction><saml:Audience>${audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${issueInstant}" SessionIndex="session-${sequence}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attributeXml}</saml:AttributeStatement></saml:Assertion>`;
+    const assertion = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_assertion-${sequence}" Version="2.0" IssueInstant="${issueInstant}"><saml:Issuer>${issuer}</saml:Issuer><saml:Subject><saml:NameID>${nameId}</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData Recipient="${callbackUrl}"${inResponseTo} NotOnOrAfter="${notOnOrAfter}"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="${notBefore}" NotOnOrAfter="${notOnOrAfter}"><saml:AudienceRestriction><saml:Audience>${audience}</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="${issueInstant}" SessionIndex="session-${sequence}"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement>${attributeXml}</saml:AttributeStatement></saml:Assertion>`;
     const signedAssertion = signXml(assertion, "/*[local-name(.)='Assertion']", { reference: "/*[local-name(.)='Assertion']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
-    const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response-${sequence}" Version="2.0" IssueInstant="${issueInstant}" Destination="${callbackUrl}"><saml:Issuer>${this.issuer}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signedAssertion}</samlp:Response>`;
+    const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_response-${sequence}" Version="2.0" IssueInstant="${issueInstant}" Destination="${callbackUrl}"${inResponseTo}><saml:Issuer>${issuer}</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status>${signedAssertion}</samlp:Response>`;
     const signedResponse = signXml(response, "/*[local-name(.)='Response']", { reference: "/*[local-name(.)='Response']/*[local-name(.)='Issuer']", action: 'after' }, { ...material, publicCert: material.certificate, signatureAlgorithm: 'sha256' });
     return Buffer.from(signedResponse).toString('base64');
   }
@@ -567,8 +585,18 @@ export class MockSamlHttpsServer {
     }
     if (url.pathname === '/sso') {
       const relayState = url.searchParams.get('RelayState') || '';
+      const request = url.searchParams.get('SAMLRequest');
+      let inResponseTo: string | undefined;
+      if (request) {
+        try {
+          const xml = inflateRawSync(Buffer.from(request, 'base64')).toString('utf8');
+          inResponseTo = xml.match(/\bID="([^"]+)"/)?.[1];
+        } catch {
+          inResponseTo = undefined;
+        }
+      }
       response.setHeader('content-type', 'text/html; charset=utf-8');
-      response.end(`<!doctype html><form method="post" action="${xmlEscape(provider.callbackUrl)}"><input type="hidden" name="SAMLResponse" value="${provider.signedResponse()}"/><input type="hidden" name="RelayState" value="${xmlEscape(relayState)}"/></form>`);
+      response.end(`<!doctype html><form method="post" action="${xmlEscape(provider.callbackUrl)}"><input type="hidden" name="SAMLResponse" value="${provider.signedResponse({ inResponseTo })}"/><input type="hidden" name="RelayState" value="${xmlEscape(relayState)}"/></form>`);
       return;
     }
     response.statusCode = 404;

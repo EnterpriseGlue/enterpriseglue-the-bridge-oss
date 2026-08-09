@@ -230,10 +230,6 @@ class IdentityEntitlementMappingService {
   /** Applies an already-validated configuration mapping and clears only its prior derived memberships. */
   async reconcileConfiguredMapping(id: string, input: ConfiguredIdentityEntitlementMappingUpdate, tenantId?: string | null, store?: MappingStore): Promise<void> {
     const dataSource = store || await getDataSource();
-    await dataSource.getRepository(AuthzGroupMembership).delete({
-      ...tenantWhere(tenantId), source: 'identity_provider',
-      sourceRef: In(identityProviderMembershipSourceRefs(input.previousProviderId || input.providerId, id)),
-    } as any);
     await dataSource.getRepository(IdentityEntitlementMapping).update({ id }, {
       providerId: input.providerId,
       configKey: input.configKey,
@@ -251,14 +247,18 @@ class IdentityEntitlementMappingService {
       isActive: input.isActive,
       updatedAt: Date.now(),
     });
+    await dataSource.getRepository(AuthzGroupMembership).delete({
+      ...tenantWhere(tenantId), source: 'identity_provider',
+      sourceRef: In(identityProviderMembershipSourceRefs(input.previousProviderId || input.providerId, id)),
+    } as any);
   }
 
   async disableConfiguredMapping(id: string, providerId: string, tenantId?: string | null, store?: MappingStore): Promise<void> {
     const dataSource = store || await getDataSource();
+    await dataSource.getRepository(IdentityEntitlementMapping).update({ id }, { isActive: false, updatedAt: Date.now() });
     await dataSource.getRepository(AuthzGroupMembership).delete({
       ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(providerId, id)),
     } as any);
-    await dataSource.getRepository(IdentityEntitlementMapping).update({ id }, { isActive: false, updatedAt: Date.now() });
   }
 
   async update(id: string, input: Partial<IdentityEntitlementMappingInput> & { isActive?: boolean }, tenantId?: string | null): Promise<ManagedIdentityEntitlementMapping> {
@@ -275,10 +275,10 @@ class IdentityEntitlementMappingService {
         || input.matchOperator !== undefined || input.syncMode !== undefined;
       if (attemptedChange || input.isActive !== false) throw Errors.validation('Legacy OAuth scope mappings cannot grant human access; replace or deactivate the mapping');
       await dataSource.transaction(async (manager) => {
+        await manager.getRepository(IdentityEntitlementMapping).update({ id }, { isActive: false, updatedAt: Date.now() });
         await manager.getRepository(AuthzGroupMembership).delete({
           ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(existing.providerId, existing.id)),
         } as any);
-        await manager.getRepository(IdentityEntitlementMapping).update({ id }, { isActive: false, updatedAt: Date.now() });
       });
       return { ...current, isActive: false };
     }
@@ -307,6 +307,7 @@ class IdentityEntitlementMappingService {
       || existing.syncMode !== values.syncMode
       || existing.isActive !== values.isActive;
     await dataSource.transaction(async (manager) => {
+      await manager.getRepository(IdentityEntitlementMapping).update({ id }, values);
       if (membershipDefinitionChanged) {
         await manager.getRepository(AuthzGroupMembership).delete({
           ...tenantWhere(tenantId),
@@ -314,7 +315,6 @@ class IdentityEntitlementMappingService {
           sourceRef: In(identityProviderMembershipSourceRefs(existing.providerId, existing.id)),
         } as any);
       }
-      await manager.getRepository(IdentityEntitlementMapping).update({ id }, values);
     });
     return { id, providerId: provider.id, providerKey: provider.key, targetGroupId: group.id, targetGroupKey: group.key, entitlementType: merged.entitlementType, externalId: merged.externalId?.trim() || null, matchOperator: merged.matchOperator, syncMode: merged.syncMode || 'authoritative', isActive, configKey: existing.configKey, sourceRef: existing.sourceRef, ownershipMode: ownershipMode(existing) };
   }
@@ -326,6 +326,7 @@ class IdentityEntitlementMappingService {
       const mapping = await repo.findOne({ where: { ...tenantWhere(tenantId), id } as any });
       if (!mapping) throw Errors.notFound('Identity mapping not found');
       if (mapping.sourceRef) throw Errors.forbidden('This identity mapping is managed by configuration; edit or disable a config-warning mapping instead');
+      await repo.delete({ id: mapping.id });
       await manager.getRepository(AuthzGroupMembership).delete({
         ...tenantWhere(tenantId), source: 'identity_provider', sourceRef: In(identityProviderMembershipSourceRefs(mapping.providerId, mapping.id)),
       } as any);
@@ -337,7 +338,6 @@ class IdentityEntitlementMappingService {
           `identity_entitlement_mapping:${mapping.id}`,
         ]),
       } as any);
-      await repo.delete({ id: mapping.id });
     });
   }
 
@@ -351,10 +351,11 @@ class IdentityEntitlementMappingService {
   }
 
   async syncMemberships(userId: string, tenantId: string | null | undefined, identity: NormalizedExternalIdentity): Promise<{ created: number; removed: number }> {
-    return this.syncMembershipsInStore(await getDataSource(), userId, tenantId, identity);
+    const dataSource = await getDataSource();
+    return dataSource.transaction((manager) => this.syncMembershipsInStore(manager, userId, tenantId, identity));
   }
 
-  async syncMembershipsInStore(store: MappingStore, userId: string, tenantId: string | null | undefined, identity: NormalizedExternalIdentity): Promise<{ created: number; removed: number }> {
+  async syncMembershipsInStore(store: EntityManager, userId: string, tenantId: string | null | undefined, identity: NormalizedExternalIdentity): Promise<{ created: number; removed: number }> {
     const mappingRepo = store.getRepository(IdentityEntitlementMapping);
     const membershipRepo = store.getRepository(AuthzGroupMembership);
     const mappings = (await mappingRepo.find({ where: tenantWhere(tenantId) as any }))
@@ -364,6 +365,24 @@ class IdentityEntitlementMappingService {
     const now = Date.now();
 
     for (const mapping of mappings) {
+      // Claim the exact active mapping generation before applying it. A
+      // concurrent disable/edit either happens first (so this row is skipped)
+      // or waits and then removes memberships created by this transaction.
+      const mappingClaim = await mappingRepo.update(
+        {
+          id: mapping.id,
+          isActive: true,
+          updatedAt: mapping.updatedAt,
+          providerId: mapping.providerId,
+          targetGroupId: mapping.targetGroupId,
+          entitlementType: mapping.entitlementType,
+          externalId: mapping.externalId ?? IsNull(),
+          matchOperator: mapping.matchOperator,
+          syncMode: mapping.syncMode,
+        },
+        { updatedAt: mapping.updatedAt },
+      );
+      if (mappingClaim.affected !== 1) continue;
       const sourceRef = identityProviderMembershipSourceRef(mapping.providerId, mapping.id);
       const existing = await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef } })
         || await membershipRepo.findOne({ where: { userId, groupId: mapping.targetGroupId, source: 'identity_provider', sourceRef: `identity_mapping:${mapping.id}` } });

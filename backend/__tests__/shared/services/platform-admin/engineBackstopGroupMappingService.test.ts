@@ -10,6 +10,7 @@ vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   encrypt: vi.fn((value: string) => `encrypted:${value}`),
   decrypt: vi.fn((value: string) => value.replace('encrypted:', '')),
   hash: vi.fn((value: string) => value.includes('native-ops') ? 'a'.repeat(64) : 'b'.repeat(64)),
+  blindIndex: vi.fn((_domain: string, value: string) => value.includes('native-ops') ? 'a'.repeat(64) : 'b'.repeat(64)),
 }));
 
 const service = new EngineBackstopGroupMappingService();
@@ -35,12 +36,18 @@ function mapping(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function setup(input: { currentEngine?: Record<string, unknown> | null; groups?: Record<string, Record<string, unknown>>; mappings?: Array<Record<string, unknown>> } = {}) {
+function setup(input: { currentEngine?: Record<string, unknown> | null; engineClaimSucceeds?: boolean; groups?: Record<string, Record<string, unknown>>; mappings?: Array<Record<string, unknown>> } = {}) {
   const currentEngine = input.currentEngine === undefined ? engine() : input.currentEngine;
   const groups: Record<string, Record<string, unknown>> = input.groups || { 'group-a': group('group-a') };
   const mappings = [...(input.mappings || [])];
-  const engineRepo = { findOne: vi.fn().mockResolvedValue(currentEngine) };
-  const groupRepo = { findOne: vi.fn().mockImplementation(({ where }) => groups[where.id] || null) };
+  const engineRepo = {
+    findOne: vi.fn().mockResolvedValue(currentEngine),
+    update: vi.fn().mockResolvedValue({ affected: input.engineClaimSucceeds ?? (currentEngine?.lifecycleStatus === 'active' ? 1 : 0) }),
+  };
+  const groupRepo = {
+    findOne: vi.fn().mockImplementation(({ where }) => groups[where.id] || null),
+    find: vi.fn().mockImplementation(async () => Object.values(groups)),
+  };
   const mappingRepo = {
     find: vi.fn().mockImplementation(async ({ where }: any = {}) => mappings.filter((row) =>
       !where || Object.entries(where).every(([key, value]) => row[key] === value)
@@ -70,7 +77,7 @@ describe('EngineBackstopGroupMappingService', () => {
   it('encrypts native IDs, returns only opaque mapping summaries, and preserves a stable source identity', async () => {
     const state = setup();
     const result = await service.write({
-      engineId: ' engine-1 ', actorId: 'user-1',
+      engineId: ' engine-1 ', tenantId: 'tenant-a', actorId: 'user-1',
       request: { mappings: [{ authzGroupId: ' group-a ', nativeGroupId: ' native-ops ', isActive: true }] },
     });
 
@@ -81,13 +88,13 @@ describe('EngineBackstopGroupMappingService', () => {
     expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
       encryptedNativeGroupId: 'encrypted:native-ops', source: 'manual', sourceRef: 'authz-group:group-a', ownershipMode: 'manual',
     }));
-    await expect(service.list('engine-1')).resolves.toEqual(result.mappings);
+    await expect(service.list('engine-1', 'tenant-a')).resolves.toEqual(result.mappings);
   });
 
   it('prevents a native group from representing more than one EnterpriseGlue group for an engine', async () => {
     setup({ groups: { 'group-a': group('group-a'), 'group-b': group('group-b') } });
     await expect(service.write({
-      engineId: 'engine-1',
+      engineId: 'engine-1', tenantId: 'tenant-a',
       request: { mappings: [
         { authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true },
         { authzGroupId: 'group-b', nativeGroupId: 'native-ops', isActive: true },
@@ -96,14 +103,14 @@ describe('EngineBackstopGroupMappingService', () => {
 
     setup({ groups: { 'group-b': group('group-b') }, mappings: [mapping()] });
     await expect(service.write({
-      engineId: 'engine-1', request: { mappings: [{ authzGroupId: 'group-b', nativeGroupId: 'native-ops', isActive: true }] },
+      engineId: 'engine-1', tenantId: 'tenant-a', request: { mappings: [{ authzGroupId: 'group-b', nativeGroupId: 'native-ops', isActive: true }] },
     })).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_MAPPING_CONFLICT', statusCode: 409 });
   });
 
   it('accepts direct Operaton engines using the same encrypted mapping boundary', async () => {
     const state = setup({ currentEngine: engine({ type: 'operaton' }) });
     await expect(service.write({
-      engineId: 'engine-1',
+      engineId: 'engine-1', tenantId: 'tenant-a',
       request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'operaton-operators', isActive: true }] },
     })).resolves.toMatchObject({ mappings: [expect.objectContaining({ engineId: 'engine-1', authzGroupId: 'group-a' })] });
     expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ encryptedNativeGroupId: 'encrypted:operaton-operators' }));
@@ -112,25 +119,34 @@ describe('EngineBackstopGroupMappingService', () => {
   it('accepts customer-sidecar Operaton engines using the same encrypted mapping boundary', async () => {
     const state = setup({ currentEngine: engine({ type: 'operaton', connectionMode: 'customer_sidecar' }) });
     await expect(service.write({
-      engineId: 'engine-1',
+      engineId: 'engine-1', tenantId: 'tenant-a',
       request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'operaton-sidecar-operators', isActive: true }] },
     })).resolves.toMatchObject({ mappings: [expect.objectContaining({ engineId: 'engine-1', authzGroupId: 'group-a' })] });
     expect(state.mappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ encryptedNativeGroupId: 'encrypted:operaton-sidecar-operators' }));
   });
 
+  it('does not persist a mapping after engine decommission wins the lifecycle claim', async () => {
+    const state = setup({ currentEngine: engine(), engineClaimSucceeds: false });
+    await expect(service.write({
+      engineId: 'engine-1', tenantId: 'tenant-a',
+      request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] },
+    })).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_INACTIVE', statusCode: 409 });
+    expect(state.mappingRepo.insert).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported or inactive engines and cross-tenant or archived groups', async () => {
     setup({ currentEngine: engine({ type: 'zeebe' }) });
-    await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED' });
+    await expect(service.list('engine-1', 'tenant-a')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_NOT_SUPPORTED' });
 
     setup({ currentEngine: engine({ lifecycleStatus: 'stale' }) });
-    await expect(service.list('engine-1')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_INACTIVE' });
+    await expect(service.list('engine-1', 'tenant-a')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_ENGINE_INACTIVE' });
 
     setup({ groups: { 'group-a': group('group-a', { tenantId: 'tenant-b' }) } });
-    await expect(service.write({ engineId: 'engine-1', request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] } }))
+    await expect(service.write({ engineId: 'engine-1', tenantId: 'tenant-a', request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] } }))
       .rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_GROUP_NOT_USABLE', statusCode: 409 });
 
     setup({ groups: { 'group-a': group('group-a', { isArchived: true }) } });
-    await expect(service.write({ engineId: 'engine-1', request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] } }))
+    await expect(service.write({ engineId: 'engine-1', tenantId: 'tenant-a', request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] } }))
       .rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_GROUP_NOT_USABLE', statusCode: 404 });
   });
 
@@ -145,10 +161,44 @@ describe('EngineBackstopGroupMappingService', () => {
     await expect(service.activeProjectionMappings('engine-1', 'tenant-a')).resolves.toEqual([
       { authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true },
     ]);
-    await expect(service.list('engine-1')).resolves.toEqual(expect.arrayContaining([
-      expect.not.objectContaining({ nativeGroupId: expect.anything() }),
-      expect.not.objectContaining({ encryptedNativeGroupId: expect.anything() }),
-    ]));
+    await expect(service.list('engine-1', 'tenant-a')).resolves.toEqual([
+      expect.not.objectContaining({ nativeGroupId: expect.anything(), encryptedNativeGroupId: expect.anything() }),
+    ]);
+  });
+
+  it('removes archived and cross-tenant groups from the active projection even when a mapping row remains active', async () => {
+    setup({ groups: { 'group-a': group('group-a', { isArchived: true }) }, mappings: [mapping()] });
+    await expect(service.activeProjectionMappings('engine-1', 'tenant-a')).resolves.toEqual([]);
+
+    setup({ groups: { 'group-a': group('group-a', { tenantId: 'tenant-b' }) }, mappings: [mapping()] });
+    await expect(service.activeProjectionMappings('engine-1', 'tenant-a')).resolves.toEqual([]);
+  });
+
+  it('isolates shared-engine mapping reads and writes by the explicit request tenant', async () => {
+    setup({
+      currentEngine: engine({ tenancyMode: 'shared', tenantId: null }),
+      groups: {
+        'group-a': group('group-a', { tenantId: 'tenant-a' }),
+        'group-b': group('group-b', { tenantId: 'tenant-b' }),
+      },
+      mappings: [
+        mapping({ tenantId: 'tenant-a' }),
+        mapping({ id: 'mapping-b', tenantId: 'tenant-b', authzGroupId: 'group-b', encryptedNativeGroupId: 'encrypted:native-b', nativeGroupReference: `native-engine-group-${'b'.repeat(24)}` }),
+      ],
+    });
+
+    await expect(service.list('engine-1', 'tenant-a')).resolves.toEqual([
+      expect.objectContaining({ id: 'mapping-1', tenantId: 'tenant-a' }),
+    ]);
+    await expect(service.write({
+      engineId: 'engine-1', tenantId: 'tenant-a',
+      request: { mappings: [{ authzGroupId: 'group-b', nativeGroupId: 'native-b', isActive: true }] },
+    })).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_GROUP_NOT_USABLE', statusCode: 409 });
+  });
+
+  it('rejects a dedicated engine request from another tenant', async () => {
+    setup();
+    await expect(service.list('engine-1', 'tenant-b')).rejects.toMatchObject({ code: 'ENGINE_BACKSTOP_GROUP_NOT_USABLE', statusCode: 404 });
   });
 
   it('moves a stable config mapping between configured engines without taking over a manual mapping', async () => {
@@ -165,6 +215,7 @@ describe('EngineBackstopGroupMappingService', () => {
 
     await service.write({
       engineId: 'engine-2',
+      tenantId: 'tenant-a',
       source: 'config',
       sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.ops',
       nativeGroupSecretRef: 'CAMUNDA_OPS_GROUP',
@@ -180,6 +231,7 @@ describe('EngineBackstopGroupMappingService', () => {
     setup({ mappings: [mapping({ source: 'manual', ownershipMode: 'manual' })] });
     await expect(service.write({
       engineId: 'engine-1',
+      tenantId: 'tenant-a',
       source: 'config',
       sourceRef: 'config_bundle:acme.authz:engine_backstop_mapping:engine-backstop-mapping.ops',
       request: { mappings: [{ authzGroupId: 'group-a', nativeGroupId: 'native-ops', isActive: true }] },

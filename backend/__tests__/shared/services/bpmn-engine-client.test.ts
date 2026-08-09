@@ -23,6 +23,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   safeDecrypt: vi.fn((val) => val),
+  blindIndex: vi.fn((domain: string, value: string) => `${domain}:${Buffer.from(value).toString('base64url')}`),
 }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
@@ -201,6 +202,23 @@ describe('bpmn-engine-client', () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(result.response.status).toBe(200);
     expect(result.diagnostics).toMatchObject({ attempts: 2, timeoutMs: 500, connectionMode: 'customer_sidecar' });
+  });
+
+  it('cannot be configured by a caller to follow engine redirects', async () => {
+    (fetch as unknown as Mock).mockResolvedValueOnce({ ok: true, status: 200, statusText: 'OK', body: null });
+
+    await fetchBpmnEngineEndpoint({
+      id: 'engine-sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }, { engineId: 'engine-sidecar', method: 'GET', path: '/version', retry: 'never' }, {
+      redirect: 'follow',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('https://sidecar.example.com/engine-rest/version', expect.objectContaining({
+      redirect: 'error',
+    }));
   });
 
   it('never retries mutations and sanitizes exhausted transport errors', async () => {
@@ -463,13 +481,13 @@ describe('bpmn-engine-client', () => {
     const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
     const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
     process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
-    process.env.EG_ENGINE_ALLOWED_HOSTS = 'sidecar.example.test,*.trusted.internal';
+    process.env.EG_ENGINE_ALLOWED_HOSTS = 'sidecar.example.test,*.engines.trusted.internal';
 
     try {
       expect(resolveBpmnEngineRequestUrl('https://sidecar.example.test/engine-rest', '/version'))
         .toBe('https://sidecar.example.test/engine-rest/version');
-      expect(resolveBpmnEngineRequestUrl('https://worker.trusted.internal/engine-rest', '/version'))
-        .toBe('https://worker.trusted.internal/engine-rest/version');
+      expect(resolveBpmnEngineRequestUrl('https://worker.engines.trusted.internal/engine-rest', '/version'))
+        .toBe('https://worker.engines.trusted.internal/engine-rest/version');
       expect(() => resolveBpmnEngineRequestUrl('https://metadata.example.test/latest', '/version'))
         .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
     } finally {
@@ -501,6 +519,92 @@ describe('bpmn-engine-client', () => {
       else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
       if (previousInsecureHttp === undefined) delete process.env.EG_ALLOW_INSECURE_ENGINE_HTTP;
       else process.env.EG_ALLOW_INSECURE_ENGINE_HTTP = previousInsecureHttp;
+    }
+  });
+
+  it('keeps engine endpoint policy fail-closed in production and rejects broad wildcard trust', () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    process.env.NODE_ENV = 'production';
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'false';
+
+    try {
+      process.env.EG_ENGINE_ALLOWED_HOSTS = '*.com';
+      expect(() => validateBpmnEngineEndpointUrl('https://engine.example.com/engine-rest'))
+        .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
+      process.env.EG_ENGINE_ALLOWED_HOSTS = '*.co.uk';
+      expect(() => validateBpmnEngineEndpointUrl('https://engine.example.co.uk/engine-rest'))
+        .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
+      for (const broadSuffix of ['*.github.io', '*.appspot.com', '*.cloudfront.net', '*.example.com']) {
+        process.env.EG_ENGINE_ALLOWED_HOSTS = broadSuffix;
+        expect(() => validateBpmnEngineEndpointUrl(`https://engine.${broadSuffix.slice(2)}/engine-rest`))
+          .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
+      }
+      process.env.EG_ENGINE_ALLOWED_HOSTS = '*.engines.example.com';
+      expect(validateBpmnEngineEndpointUrl('https://prod.engines.example.com/engine-rest').hostname)
+        .toBe('prod.engines.example.com');
+    } finally {
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+      if (previousEnforcement === undefined) delete process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+      else process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = previousEnforcement;
+      if (previousAllowedHosts === undefined) delete process.env.EG_ENGINE_ALLOWED_HOSTS;
+      else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
+    }
+  });
+
+  it('requires exact reviewed allowlisting for private hosts and always blocks metadata endpoints', () => {
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    const previousAllowPrivate = process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS;
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
+    process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS = 'true';
+
+    try {
+      process.env.EG_ENGINE_ALLOWED_HOSTS = '*.docker.internal';
+      expect(() => validateBpmnEngineEndpointUrl('https://host.docker.internal/engine-rest'))
+        .toThrow('Engine endpoint URL private host must have an exact endpoint-policy allowlist entry');
+      process.env.EG_ENGINE_ALLOWED_HOSTS = 'host.docker.internal';
+      expect(validateBpmnEngineEndpointUrl('https://host.docker.internal/engine-rest').hostname).toBe('host.docker.internal');
+      process.env.EG_ENGINE_ALLOWED_HOSTS = '169.254.169.254';
+      expect(() => validateBpmnEngineEndpointUrl('https://169.254.169.254/latest/meta-data'))
+        .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
+      process.env.EG_ENGINE_ALLOWED_HOSTS = '[::ffff:a9fe:a9fe]';
+      expect(() => validateBpmnEngineEndpointUrl('https://[::ffff:169.254.169.254]/latest/meta-data'))
+        .toThrow('Engine endpoint URL host is not permitted by endpoint policy');
+    } finally {
+      if (previousEnforcement === undefined) delete process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+      else process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = previousEnforcement;
+      if (previousAllowedHosts === undefined) delete process.env.EG_ENGINE_ALLOWED_HOSTS;
+      else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
+      if (previousAllowPrivate === undefined) delete process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS;
+      else process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS = previousAllowPrivate;
+    }
+  });
+
+  it('revalidates Docker loopback rewrites against the final endpoint host', () => {
+    const previousEnforcement = process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+    const previousAllowedHosts = process.env.EG_ENGINE_ALLOWED_HOSTS;
+    const previousAllowPrivate = process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS;
+    const previousRewrite = process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS;
+    process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = 'true';
+    process.env.EG_ENGINE_ALLOWED_HOSTS = 'localhost';
+    process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS = 'true';
+    process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS = 'true';
+
+    try {
+      expect(() => resolveBpmnEngineRequestUrl('https://localhost:8443/engine-rest', '/version'))
+        .toThrow('Engine endpoint URL private host must have an exact endpoint-policy allowlist entry');
+    } finally {
+      if (previousEnforcement === undefined) delete process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY;
+      else process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY = previousEnforcement;
+      if (previousAllowedHosts === undefined) delete process.env.EG_ENGINE_ALLOWED_HOSTS;
+      else process.env.EG_ENGINE_ALLOWED_HOSTS = previousAllowedHosts;
+      if (previousAllowPrivate === undefined) delete process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS;
+      else process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS = previousAllowPrivate;
+      if (previousRewrite === undefined) delete process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS;
+      else process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS = previousRewrite;
     }
   });
 
@@ -573,6 +677,43 @@ describe('bpmn-engine-client', () => {
     });
   });
 
+  it('does not reuse OAuth tokens after secret rotation or destination replacement', async () => {
+    const base = {
+      id: 'engine-oauth-generation-test',
+      connectionMode: 'customer_sidecar' as const,
+      authType: 'oauth2-client-credentials' as const,
+      username: 'client-id',
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    };
+    const tokenResponse = (token: string) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: vi.fn().mockReturnValue('application/json') },
+      body: null,
+      json: vi.fn().mockResolvedValue({ access_token: token, expires_in: 300 }),
+      text: vi.fn().mockResolvedValue(''),
+    });
+    (fetch as unknown as Mock)
+      .mockResolvedValueOnce(tokenResponse('token-one'))
+      .mockResolvedValueOnce(tokenResponse('token-two'))
+      .mockResolvedValueOnce(tokenResponse('token-three'));
+
+    await expect(resolveBpmnEngineConnection({
+      ...base, baseUrl: 'https://engine-one.example.com/engine-rest', passwordEnc: 'secret-one',
+    }, { method: 'GET', path: '/version' })).resolves.toMatchObject({ headers: { Authorization: 'Bearer token-one' } });
+    await expect(resolveBpmnEngineConnection({
+      ...base, baseUrl: 'https://engine-one.example.com/engine-rest', passwordEnc: 'secret-two',
+    }, { method: 'GET', path: '/version' })).resolves.toMatchObject({ headers: { Authorization: 'Bearer token-two' } });
+    await expect(resolveBpmnEngineConnection({
+      ...base, baseUrl: 'https://engine-two.example.com/engine-rest', passwordEnc: 'secret-two',
+    }, { method: 'GET', path: '/version' })).resolves.toMatchObject({ headers: { Authorization: 'Bearer token-three' } });
+
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const submittedSecrets = (fetch as unknown as Mock).mock.calls.map((call) => (call[1].body as URLSearchParams).get('client_secret'));
+    expect(submittedSecrets).toEqual(['secret-one', 'secret-two', 'secret-two']);
+  });
+
   it('bounds OAuth2 client-credentials token responses before decoding JSON', async () => {
     const cancel = vi.fn().mockResolvedValue(undefined);
     (fetch as unknown as Mock).mockResolvedValueOnce({
@@ -597,6 +738,124 @@ describe('bpmn-engine-client', () => {
       details: { maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES, connectionMode: 'customer_sidecar' },
     });
     expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds a declared oversized OAuth2 error response before reporting its status', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: vi.fn((name: string) => name === 'content-length' ? String(MAX_ENGINE_RESPONSE_BYTES + 1) : 'text/plain') },
+      body: { cancel },
+    });
+
+    await expect(resolveBpmnEngineConnection({
+      id: 'engine-oauth-error-too-large',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'oauth2-client-credentials',
+      username: 'client-id',
+      passwordEnc: 'client-secret',
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    }, { engineId: 'engine-oauth-error-too-large', method: 'GET', path: '/version' })).rejects.toMatchObject({
+      code: 'ENGINE_RESPONSE_TOO_LARGE',
+      statusCode: 502,
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds a chunked OAuth2 error response while streaming it', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseLock = vi.fn();
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: new Uint8Array(MAX_ENGINE_RESPONSE_BYTES) })
+      .mockResolvedValueOnce({ done: false, value: new Uint8Array(1) });
+    (fetch as unknown as Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      headers: { get: vi.fn().mockReturnValue(null) },
+      body: { getReader: () => ({ read, cancel, releaseLock }) },
+    });
+
+    await expect(resolveBpmnEngineConnection({
+      id: 'engine-oauth-error-chunked',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'oauth2-client-credentials',
+      username: 'client-id',
+      passwordEnc: 'client-secret',
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    }, { engineId: 'engine-oauth-error-chunked', method: 'GET', path: '/version' })).rejects.toMatchObject({
+      code: 'ENGINE_RESPONSE_TOO_LARGE',
+      statusCode: 502,
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['infinite number', Number.POSITIVE_INFINITY],
+    ['infinite string', 'Infinity'],
+    ['negative', -1],
+    ['excessive', 10 ** 12],
+  ])('never caches OAuth tokens indefinitely for a %s expires_in value', async (caseName, expiresIn) => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const tokenResponse = (token: string) => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: { get: vi.fn().mockReturnValue('application/json') },
+      body: null,
+      json: vi.fn().mockResolvedValue({ access_token: token, expires_in: expiresIn }),
+      text: vi.fn().mockResolvedValue(''),
+    });
+    (fetch as unknown as Mock)
+      .mockResolvedValueOnce(tokenResponse(`token-one-${caseName}`))
+      .mockResolvedValueOnce(tokenResponse(`token-two-${caseName}`));
+    const connection = {
+      id: `ttl-${caseName}`,
+      baseUrl: 'https://engine.example.com/engine-rest',
+      connectionMode: 'customer_sidecar' as const,
+      authType: 'oauth2-client-credentials' as const,
+      username: 'client-id',
+      passwordEnc: `secret-${caseName}`,
+      oauthTokenUrl: 'https://identity.example.com/oauth/token',
+    };
+
+    await expect(resolveBpmnEngineConnection(connection, { method: 'GET', path: '/version' }))
+      .resolves.toMatchObject({ headers: { Authorization: `Bearer token-one-${caseName}` } });
+    now.mockReturnValue(1_000_000 + (3601 * 1000));
+    await expect(resolveBpmnEngineConnection(connection, { method: 'GET', path: '/version' }))
+      .resolves.toMatchObject({ headers: { Authorization: `Bearer token-two-${caseName}` } });
+    now.mockRestore();
+  });
+
+  it('rejects empty, header-breaking, and oversized OAuth access tokens', async () => {
+    for (const [index, accessToken] of ['', 'token\nInjected: value', 'x'.repeat((16 * 1024) + 1)].entries()) {
+      (fetch as unknown as Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: vi.fn().mockReturnValue('application/json') },
+        body: null,
+        json: vi.fn().mockResolvedValue({ access_token: accessToken, expires_in: 300 }),
+        text: vi.fn().mockResolvedValue(''),
+      });
+
+      await expect(resolveBpmnEngineConnection({
+        id: `invalid-oauth-token-${index}`,
+        baseUrl: 'https://engine.example.com/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'oauth2-client-credentials',
+        username: 'client-id',
+        passwordEnc: `client-secret-${index}`,
+        oauthTokenUrl: 'https://identity.example.com/oauth/token',
+      }, { method: 'GET', path: '/version' })).rejects.toMatchObject({
+        message: 'Engine OAuth2 token response did not include a valid access token',
+      });
+    }
   });
 
   it('rejects OAuth2 token endpoint URLs with embedded credentials before an outbound request', async () => {

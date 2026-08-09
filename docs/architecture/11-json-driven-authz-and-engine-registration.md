@@ -153,7 +153,7 @@ The 2026-07-12 codebase review found that the implemented RBAC foundation is a u
 - [x] ✅ Keep navigation permission snapshots coarse; runtime-resource visibility is server-filtered.
 - [x] ✅ Complete group-first default access: provider-neutral mappings can use `exists` to target an internal group. There are no deployed legacy provider rows to preserve, so legacy `defaultRole` configuration is retired rather than retained for cutover compatibility.
 - [x] ✅ Treat the current SSO platform-role and direct-engine mapping models as migration inputs, not parallel target models. Product wizards may create a managed internal group plus scoped assignment, but runtime lineage stays entitlement -> group -> assignment.
-- [x] ✅ Require exact provider-id-bound login and reconciliation for every protocol. Microsoft/Google compatibility routes now bind selected provider configuration, callback state, account-link promotion, normalized identity, mapping, diagnostics, hook context, and audit to the same record; provider-API reconciliation remains a separate pending capability.
+- [x] ✅ Require exact provider-id-bound login and reconciliation for every protocol. Provider-neutral OIDC/SAML/LDAP routes bind selected provider configuration, callback state, account linking, normalized identity, mapping, diagnostics, hook context, and audit to the same persisted record. The earlier Microsoft/Google compatibility routes and environment fallbacks are retired; provider-API reconciliation remains a separate pending capability.
 - [x] ✅ Require a real secret resolver/encryption service before config bundle apply can handle provider or engine credentials.
 - [x] ✅ Make the Phase 0 alignment gate a prerequisite for Phase 1 config schemas and runtime-resource persistence.
 
@@ -326,7 +326,7 @@ Controls how EnterpriseGlue and engine-native authorization interact for runtime
 | Value | Meaning | Product behavior | Roadmap |
 | --- | --- | --- | --- |
 | `enterpriseglue_authoritative` | EnterpriseGlue is the source of truth for product authorization. Engine-native permissions are not edited as a separate product model. | EnterpriseGlue evaluates scoped roles, runtime resource sets, policies, project-engine targets, and route context. The backend may call the engine with a configured service identity, customer sidecar, or gateway identity. | Implement in v1. This is the default and recommended mode. |
-| `mirrored_engine_backstop` | EnterpriseGlue remains the source of truth, but an exact, representable subset of group runtime `READ` access is mirrored to a Camunda 7 or Operaton endpoint, either directly or through a customer sidecar. | Admins still edit EnterpriseGlue roles/groups/resource sets. Native authorization is shown only as sanitized mapping/sync/drift status, never as a second editor. | Implemented for active direct and customer-sidecar Camunda 7/Operaton engines, including secret-reference configuration-bundle mappings and the guarded Mission Control workflow. The sidecar adapter has only create, tracked-ID read, and tracked-ID delete access and never receives a downstream credential. Direct-identity-provider certification remains a release-evidence gate. |
+| `mirrored_engine_backstop` | EnterpriseGlue remains the source of truth, but an exact, representable subset of group runtime `READ` access is mirrored to a Camunda 7 or Operaton endpoint, either directly or through a customer sidecar. | Admins still edit EnterpriseGlue roles/groups/resource sets. Native authorization is shown only as sanitized mapping/sync/drift status, never as a second editor. | Implemented for active direct and customer-sidecar Camunda 7/Operaton engines, including secret-reference configuration-bundle mappings and the guarded Mission Control workflow. The sidecar adapter has only exact create, bounded exact-match interrupted-create recovery, tracked-ID read, and tracked-ID delete access and never receives a downstream credential. Local direct-provider emulator/protocol certification is the 0.11 release-evidence gate; representative customer-provider sign-in remains deployment acceptance evidence. |
 | `engine_native_authority` | The engine's native authorization model is treated as the runtime source of truth and EnterpriseGlue reflects or imports it. | EnterpriseGlue would need to read/sync engine-native users, groups, permissions, tenants, and resource ids, then map them back to UI decisions and diagnostics. | Defer. This is complex and should not block v1 because it conflicts with EnterpriseGlue project, Starbase, SSO, config, and policy concepts. |
 
 Conflict rule:
@@ -670,7 +670,7 @@ Security requirements:
 - [x] ✅ Health checks and version reads work through the same shared connection resolver for sidecar endpoints.
 - [x] ✅ UI labels customer-sidecar endpoint authentication as `Customer-managed engine authentication` and makes clear that EnterpriseGlue authorization remains active.
 - [x] ✅ Config preview rejects `auth.type = "none"` unless the first-class `connectionMode` is `customer_sidecar` and the relevant platform policy allows it; secret preflight, diff, apply, and bootstrap use the same policy context.
-- [x] ✅ SSRF controls, allowed protocols/hosts, TLS verification, redirect handling, timeouts, and response-size limits apply equally to direct engine and sidecar endpoints. Production outbound engine and OAuth token traffic requires HTTPS and a configured exact/wildcard host allowlist; redirects are rejected, certificates use normal runtime verification, requests are bounded by timeout, and response bodies are capped before decoding.
+- [x] ✅ SSRF controls, allowed protocols/hosts, TLS verification, redirect handling, timeouts, and response-size limits apply equally to direct engine and sidecar endpoints. Production always enforces HTTPS and a configured exact/narrow-organizational host allowlist for engine and OAuth token traffic; the policy cannot be disabled. Private/address-literal/Docker-local hosts require a separate opt-in and exact entry. Redirects are rejected, certificates use normal runtime verification, requests are bounded by timeout, and response bodies are capped before decoding. Host validation is not DNS pinning, so deployed network egress policy remains required.
 - [x] ✅ A transport failure or sidecar denial fails closed and is distinguishable from an EnterpriseGlue authorization denial: transport failures return sanitized `ENGINE_TRANSPORT_UNAVAILABLE` diagnostics, while an upstream rejection returns sanitized `ENGINE_OPERATION_REJECTED` diagnostics.
 
 Future optional expanded connection schema, if the flattened v1 fields become insufficient:
@@ -816,9 +816,8 @@ The preferred form is explicit and deterministic:
       "scope": "engine",
       "description": "Can inspect runtime state but cannot mutate engine state.",
       "permissions": [
-        "engine:view",
-        "engine:runtime:process-definitions:view",
-        "engine:runtime:process-instances:view"
+        "engine:instance:view",
+        "engine:variables:metadata:view"
       ]
     },
     {
@@ -827,14 +826,19 @@ The preferred form is explicit and deterministic:
       "scope": "engine",
       "description": "Can administer engine runtime operations and deployments.",
       "permissions": [
-        "engine:view",
         "engine:edit",
         "engine:deploy",
+        "engine:deploy:view",
         "engine:members:view",
-        "engine:runtime:process-definitions:view",
-        "engine:runtime:process-instances:view",
-        "engine:runtime:process-instances:modify",
-        "engine:runtime:batches:manage"
+        "engine:process:start",
+        "engine:process:cancel",
+        "engine:process:modify",
+        "engine:instance:view",
+        "engine:instance:delete",
+        "engine:instance:retry",
+        "engine:variables:metadata:view",
+        "engine:variables:value:view",
+        "engine:variables:edit"
       ]
     }
   ]
@@ -852,13 +856,13 @@ Customers may also define a custom role by duplicating a seeded system role as a
       "key": "custom.engine.prod-operator",
       "name": "Production Engine Operator",
       "scope": "engine",
-      "description": "Starts from the default engine operator and adds deployment visibility.",
+      "description": "Starts from the default engine operator, adds engine settings access, and removes process-instance deletion.",
       "copyFromRoleKey": "system.engine.operator",
       "addPermissions": [
-        "engine:deploy:view"
+        "engine:edit"
       ],
       "removePermissions": [
-        "engine:runtime:batches:manage"
+        "engine:instance:delete"
       ]
     }
   ]
@@ -872,13 +876,20 @@ Preview must show the expanded permission list:
   "roleKey": "custom.engine.prod-operator",
   "copyFromRoleKey": "system.engine.operator",
   "expandedPermissions": [
-    "engine:view",
+    "engine:edit",
+    "engine:members:view",
+    "engine:deploy",
     "engine:deploy:view",
-    "engine:runtime:process-definitions:view",
-    "engine:runtime:process-instances:view"
+    "engine:process:start",
+    "engine:process:cancel",
+    "engine:process:modify",
+    "engine:instance:view",
+    "engine:instance:retry",
+    "engine:variables:metadata:view",
+    "engine:variables:value:view"
   ],
   "removedPermissions": [
-    "engine:runtime:batches:manage"
+    "engine:instance:delete"
   ],
   "warnings": []
 }
@@ -886,7 +897,10 @@ Preview must show the expanded permission list:
 
 For regulated customers, explicit `permissions` is the safest style because it is fully reproducible across EnterpriseGlue upgrades. `copyFromRoleKey` is useful for maintainability, but an upgrade that changes the referenced system role can change the next preview. The preview diff must make that visible before apply.
 
-Runtime resource-scoped roles are separate from broad engine roles. Use them when a central engine hosts artifacts for multiple projects or business domains.
+Runtime-resource assignments reuse engine-scoped roles. Assign such a role to an
+exact runtime resource or runtime-resource set when a central engine hosts
+artifacts for multiple projects or business domains; assign the same role to
+the engine only when broad access is intended.
 
 ```json
 {
@@ -894,35 +908,33 @@ Runtime resource-scoped roles are separate from broad engine roles. Use them whe
     {
       "key": "custom.runtime.process.viewer",
       "name": "Runtime Process Viewer",
-      "scope": "engine_runtime_resource",
+      "scope": "engine",
       "description": "Can inspect selected process definitions and their instances on a shared engine.",
       "permissions": [
-        "engine:runtime:process-definitions:view",
-        "engine:runtime:process-instances:view",
-        "engine:runtime:variables:view"
+        "engine:instance:view",
+        "engine:variables:metadata:view"
       ]
     },
     {
       "key": "custom.runtime.process.operator",
       "name": "Runtime Process Operator",
-      "scope": "engine_runtime_resource",
+      "scope": "engine",
       "description": "Can operate selected process definitions and instances on a shared engine.",
       "permissions": [
-        "engine:runtime:process-definitions:view",
-        "engine:runtime:process-definitions:start",
-        "engine:runtime:process-instances:view",
-        "engine:runtime:process-instances:modify",
-        "engine:runtime:jobs:retry",
-        "engine:runtime:incidents:view"
+        "engine:instance:view",
+        "engine:process:start",
+        "engine:process:modify",
+        "engine:instance:retry",
+        "engine:variables:metadata:view"
       ]
     },
     {
       "key": "custom.runtime.decision.viewer",
       "name": "Runtime Decision Viewer",
-      "scope": "engine_runtime_resource",
+      "scope": "engine",
       "description": "Can inspect selected decision definitions on a shared engine.",
       "permissions": [
-        "engine:runtime:decisions:view"
+        "engine:instance:view"
       ]
     }
   ]
@@ -1157,12 +1169,12 @@ Common provider fields:
 | Field | Purpose |
 | --- | --- |
 | `key`, `type`, `enabled` | Stable reference, adapter selection, and lifecycle. |
-| `authenticationMode` | `direct` when EnterpriseGlue authenticates against the provider, or `claims_only` when another login layer supplies verified identity facts. |
+| `authenticationMode` | `direct` when EnterpriseGlue authenticates against the provider. `claims_only` is a non-login namespace for a separately verified host/plugin integration; the 0.11 base application ships no gateway-claims ingress. |
 | `allowVerifiedEmailLinking` | Defaults to `false`. When enabled for one provider, a newly observed, verified external subject may link to one existing local account with the same email. Disable it after a standalone-to-SSO transition or when account links are pre-provisioned. |
 | `sync.triggers` | Any supported combination of `login`, `scheduled`, and `manual`. |
 | `sync.intervalSeconds` | Scheduled reconciliation interval with platform minimum/maximum validation. |
 | `sync.requiredForLogin` | When true, login fails closed if authoritative normalization/reconciliation cannot complete. |
-| `sync.incompleteEntitlements` | `fail_closed` or `preserve_previous`; `fail_closed` is required for authoritative high-risk mappings. |
+| `sync.incompleteEntitlements` | `fail_closed`; every direct provider login blocks session issuance when fresh entitlement reconciliation fails. |
 
 Protocol-specific fields remain inside their adapter block:
 
@@ -1171,7 +1183,7 @@ Protocol-specific fields remain inside their adapter block:
 | OIDC | `issuerUrl`, `clientId`, `clientSecretRef`, callback, scopes, claim/userinfo/group-fetch settings, expected issuer/audience. |
 | SAML | Entity ID, callback/ACS, IdP SSO URL, signing-certificate reference, optional metadata URL/XML reference, signature algorithm, and NameID/email/group attribute names. |
 
-SAML signatures are restricted to SHA-256 or SHA-512. SHA-1 is rejected by the JSON schema, provider-neutral and legacy provider APIs, both runtime clients, and the administration forms. A migration upgrades legacy persisted SAML provider request-signing configuration to SHA-256 rather than preserving a weak algorithm.
+SAML signatures are restricted to SHA-256 or SHA-512. SHA-1 is rejected by the JSON schema, provider-neutral API/runtime, and administration form. Before the later greenfield removal migration drops any obsolete legacy provider table, the schema sequence upgrades a pre-existing legacy SAML request-signing value to SHA-256 so no intermediate upgraded runtime preserves SHA-1.
 | LDAP | LDAPS URL, bind DN/password ref, user/group bases and filters, immutable id attributes, membership mode, paging, nested-group policy, TLS trust ref. |
 
 The bundle schema must reject protocol fields outside the selected adapter block and must never return resolved secret values during preview, export, diagnostics, or test-connection responses.
@@ -1258,7 +1270,7 @@ Implement the remaining work in this order:
 - [x] ✅ Allowlist persisted identity attributes and emit deterministic `attribute:<key>:<value>` entitlements for direct mappings; raw email addresses, tokens, assertions, and unrestricted claims are not authorization inputs.
 - [x] ✅ No customer has a deployed legacy SSO mapping as of 2026-07-20, so representative migration/cutover evidence is not a release gate for this clean-slate rollout. Legacy mapping evaluators, configuration, migration/cutover controls, API routes, UI, and OpenAPI contracts are removed.
 - [x] ✅ Change session and middleware contracts to use authenticated principal and tenant identity with evaluator decisions. New access, refresh, and onboarding JWTs emit the canonical `principalType = user` and `principalId` plus only token lifecycle claims; they omit duplicated `userId`, email, and `platformRole`. Access and refresh validation, plus versioned onboarding-token validation, normalize pre-existing tokens and reject mismatched user principals before any authorization work. Versioned onboarding tokens additionally require an active user and matching persisted session version, while pre-refactor onboarding tokens without that field remain compatible. The authenticated BPMN request context is now populated only after those active-user and session-version checks, so rejected tokens cannot establish downstream identity state. Optional authentication runs the same enterprise post-auth tenant resolver before attaching a user; if resolution fails it continues anonymously rather than exposing a partially resolved principal. The legacy interfaces middleware export reuses that canonical implementation. Older tokens remain parseable and their legacy claim has no authorization effect. Authenticated profile, local-login, onboarding, and direct-LDAP login payloads expose a consistent response-only `session` context (`principal.type`, `principal.id`, and request-derived `tenant.id`), documented in OpenAPI; the tenant scope is deliberately not embedded in reusable JWTs. Their compatible `platformRole` display value is projected from active canonical Platform Administrators membership through one narrow read helper, not the persisted user column.
-- [x] ✅ Stop elevated platform-role mutations in SSO and invitation flows. Microsoft, Google, and legacy SAML provisioning keep `User.platformRole` unchanged for existing users and create new users with only the schema's `user` compatibility default; their resolved legacy claim role is synchronized through a provider-scoped SSO administrator-group membership. Invitation-created accounts likewise use only the non-privileged `user` compatibility default and receive resource access through the canonical baseline and requested scoped membership flows. Source-scoped compatibility memberships remain until explicit retirement.
+- [x] ✅ Stop elevated platform-role mutations in provider-neutral SSO and invitation flows. OIDC, SAML, and LDAP provisioning keep `User.platformRole` unchanged for existing users and create new users with only the schema's non-privileged `user` compatibility default. Elevated access comes only from canonical group assignments. Invitation-created accounts likewise receive resource access through the canonical baseline and requested scoped membership flows.
 - [x] ✅ Remove legacy evaluator grants and direct legacy membership/owner/delegate fallbacks. Authorization evaluation, visibility, snapshots, and action checks read canonical assignments, group memberships, and policies; retained owner/member values are governance or display data only, and the legacy local-row projection is migration-only.
 
 ### External Identity Linking
@@ -1278,10 +1290,10 @@ ExternalIdentity
 
 - [x] ✅ Enforce unique `(tenantId, providerId, subjectId)` through the collision-safe canonical external-identity key and allow one user to link multiple providers. The persistence constraint prevents duplicate links across database engines, and the upsert service re-reads after a competing first-login insert so it either updates the same user's link or fails closed when the subject belongs to another user.
 - [x] ✅ Link by verified email only when the provider and platform policy permit it; ambiguous or conflicting email matches fail closed and require admin resolution. The provider-management UI exposes an audited, explicit unlink action that cannot transfer a subject to another account. Recovery then requires a fresh verified sign-in for the exact recorded provider email and the provider's opt-in verified-email-linking policy; all other recovery attempts stay fail closed.
-- [x] ✅ Keep local credentials independent so an approved recovery account remains usable when external providers fail. Verified-email linking preserves an existing local account's authentication provider and password. The ordinary login route follows explicit login policy with no administrator exception; the separate `/admin-recovery` route requires an active canonical Platform Administrator membership.
+- [x] ✅ Keep local credentials independent so an approved recovery account remains usable when external providers fail. Verified-email linking preserves an existing local account's authentication provider and password. The ordinary login route follows explicit login policy with no administrator exception; the separate `/admin-recovery` route requires an active canonical Platform Administrator membership. Session issue is serialized with membership removal; recovery-token access and refresh validation recheck that live membership, so an already-open recovery session is rejected on its next request or refresh. Manual administrator removal additionally advances the persisted session version and revokes stored refresh rows.
 - [x] ✅ Unlink one provider identity without damaging unrelated access. The provider/subject link and normalized snapshot become fail-closed tombstones, only memberships sourced from that provider's mappings are removed, and only that user's refresh sessions from that provider are revoked. Other provider links, local credentials, and manual access remain intact.
 - [x] ✅ Provider deactivation removes provider-managed memberships and marks provider identity records as disabled without deleting manual, API, automation, or other-provider access.
-- [x] ✅ Add provider-scoped refresh-session lineage and revocation for provider-neutral OIDC, SAML, and LDAP sessions. Provider archival revokes only refresh sessions issued by that provider; existing access JWTs remain valid only until their short normal expiry.
+- [x] ✅ Add provider-scoped refresh-session lineage and revocation for provider-neutral OIDC, SAML, and LDAP sessions. Provider archival revokes refresh sessions issued by that provider and advances the affected users' persisted session versions, so their existing access JWTs fail immediately rather than waiting for normal expiry.
 - [x] ✅ Add immediate access-JWT revocation for a deactivated or unlinked provider: persisted session versions are embedded in access/refresh JWTs, checked by runtime middleware, and advanced transactionally by unlink and provider archive paths. Middleware and lifecycle contracts verify stale access JWT rejection.
 - [x] ✅ Provider archive/deactivation also advances the linked users’ session versions after marking links disabled and revoking provider refresh tokens, immediately invalidating their access JWTs.
 - [x] ✅ Add immediate unlink-driven session invalidation: JWT access and refresh tokens carry a persisted user session version, authentication requires an exact match, and `ExternalIdentity.unlink` increments the version in the same transaction as provider refresh-token revocation.
@@ -1335,7 +1347,7 @@ For a pipeline-only central engine such as the Türkiye reference case, keep the
 }
 ```
 
-No human directory group should receive `project:deployment:create` or `engine:deployment:create` for this target. The pipeline API client/service account receives those permissions at the exact project and engine scopes.
+No human directory group should receive `project:deploy` or `engine:deploy` for this target. The pipeline API client/service account receives those implemented permissions at the exact project and engine scopes.
 
 ### Project-Engine Target Ownership Rule
 
@@ -1482,7 +1494,7 @@ Mission Control and dashboard surfaces should show engines based on engine-scope
 | Check | Required condition |
 | --- | --- |
 | Engine registry | Engine exists, belongs to tenant, and lifecycle is active. |
-| Engine permission | User has `engine:view`, runtime read, operate, deploy-view, or another surface-specific engine permission on the engine or a materialized Engine Set. |
+| Engine permission | User has a surface-specific permission such as `engine:instance:view`, `engine:deploy:view`, `engine:edit`, or `engine:members:view` on the engine or a materialized Engine Set. There is no generic `engine:view` permission in the 0.11 catalog. |
 | Policy/context | ABAC policies and contextual checks do not deny the read. |
 | Surface action | The UI shows only actions allowed by the user's engine permissions. |
 
@@ -1553,7 +1565,15 @@ engine
 
 Runtime resources are discovered from deployment lineage and runtime engine queries, then materialized into EnterpriseGlue records for efficient filtering and explainability.
 
-Runtime permissions remain **engine-scoped permissions**. A role containing `engine:runtime:*` permissions has `role.scope = engine`, but its assignment may target `engine`, `engine_set`, `engine_runtime_resource`, or `engine_runtime_resource_set`. This extends the existing Engine Set assignment exception and avoids cloning the same role for every runtime resource kind.
+Runtime permissions remain **engine-scoped permissions**. A role containing the
+implemented engine runtime capabilities (`engine:instance:*`,
+`engine:process:*`, and `engine:variables:*`) has `role.scope = engine`, but its
+assignment may target `engine`, `engine_set`, `engine_runtime_resource`, or
+`engine_runtime_resource_set`. This extends the existing Engine Set assignment
+exception and avoids cloning the same role for every runtime resource kind.
+Endpoint-shaped `engine:runtime:*` permission ids are not part of the 0.11
+catalog; introducing a more granular catalog is deferred and would require a
+versioned permission/action migration.
 
 | Scope | Stable identity | Typical resource kinds | Assignment use |
 | --- | --- | --- | --- |
@@ -1685,28 +1705,28 @@ Assignments can then target a runtime resource set instead of the whole engine:
 
 Keep broad engine-scoped permissions for customers who want simple engine-level administration. Add the ability to evaluate the same runtime action family at runtime-resource scope.
 
-Recommended fine-grained runtime actions:
+The implemented action-to-permission mapping is:
 
 | Action family | Example permission ids | Resource resolver |
 | --- | --- | --- |
-| Process definition read | `engine:runtime:process-definitions:view` | `engineRuntimeResource.byProcessDefinitionKey` |
-| Process start | `engine:runtime:process-definitions:start` | `engineRuntimeResource.byProcessDefinitionKey` |
-| Process instance read | `engine:runtime:process-instances:view` | Resolve instance to process definition key and optional runtime tenant id. |
-| Process instance mutate | `engine:runtime:process-instances:modify`, `engine:runtime:process-instances:suspend`, `engine:runtime:process-instances:delete` | Resolve instance to inherited definition/deployment scope plus contextual checks. |
-| Variables | `engine:runtime:variables:view`, `engine:runtime:variables:update` | Resolve process/task instance to inherited resource scope; field-level redaction still applies. |
-| Jobs/incidents | `engine:runtime:jobs:retry`, `engine:runtime:incidents:view` | Resolve job/incident to process definition key where available. |
-| Decisions | `engine:runtime:decisions:view`, `engine:runtime:decisions:evaluate` | `engineRuntimeResource.byDecisionDefinitionKey`. |
-| Batches/migrations | `engine:runtime:batches:manage`, `engine:runtime:migrations:execute` | Require all affected runtime resources to pass, or return partial denial. |
+| Process definition read | `engine:instance:view` | `engineRuntimeResource.byProcessDefinitionKey` |
+| Process start | `engine:process:start` | `engineRuntimeResource.byProcessDefinitionKey` |
+| Process instance read | `engine:instance:view` | Resolve instance to process definition key and optional runtime tenant id. |
+| Process instance mutate | `engine:process:modify`; destructive deletion uses `engine:instance:delete` | Resolve instance to inherited definition/deployment scope plus contextual checks. |
+| Variables | `engine:variables:metadata:view`, `engine:variables:value:view`, `engine:variables:edit` | Resolve process/task instance to inherited resource scope. Value view requires metadata view; edit requires both. Backend redaction remains authoritative. |
+| Jobs/incidents | `engine:instance:view` for reads and `engine:instance:retry` for retry execution | Resolve job/incident to process definition key where available. |
+| Decisions | `engine:instance:view` | `engineRuntimeResource.byDecisionDefinitionKey`; read and evaluation currently share this catalog permission. |
+| Batches/migrations | `engine:instance:view` for previews/reads; `engine:process:modify`, `engine:instance:delete`, `engine:instance:retry`, or `engine:process:cancel` for the corresponding mutation | Require every affected runtime resource to pass, or return partial denial. There is no aggregate `batches:manage` or `migrations:execute` permission. |
 
 The initial catalog should make the common central-engine capabilities explicit without creating one permission per engine endpoint:
 
 | Customer capability | Initial permission family | Notes |
 | --- | --- | --- |
-| Read process runtime | `engine:runtime:process-definitions:view`, `engine:runtime:process-instances:view`, `engine:runtime:history:view`, `engine:runtime:variables:view` | Roles may bundle these as a process reader while the evaluator still redacts fields independently. |
-| Migrate process instances | `engine:runtime:migrations:execute` | Migration preview and validation actions may map to this permission initially; split planning from execution only when a concrete workflow needs it. |
-| Delete process instances | `engine:runtime:process-instances:delete` | History deletion stays separate and is not implied. |
-| Read decisions | `engine:runtime:decisions:view` | Evaluation remains a separate permission if exposed. |
-| Deploy | `engine:deployment:create` | For the Türkiye pattern, assign only to API clients/service accounts and never to human directory groups. |
+| Read process runtime | `engine:instance:view`, optionally `engine:variables:metadata:view` and `engine:variables:value:view` | Variable values remain independently gated and redacted. |
+| Migrate process instances | `engine:process:modify` | Preview/validation stays read-only under `engine:instance:view`; execution uses the mutation permission. |
+| Delete process instances | `engine:instance:delete` | History deletion stays separate and is not implied. |
+| Read decisions | `engine:instance:view` | Decision evaluation currently uses the same permission; a distinct permission is deferred. |
+| Deploy | `engine:deploy` | For the Türkiye pattern, assign only to API clients/service accounts and never to human directory groups. |
 
 Evaluator lookup order for runtime actions:
 
@@ -1864,20 +1884,16 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Evolve the identity surface to provider-neutral OIDC, SAML, and LDAP entities and orchestration. Historical class names retained for normalized snapshot/diagnostic services do not reintroduce a legacy-provider persistence or authorization path.
 - [x] ✅ Add `ExternalIdentity` as the account-link table with a collision-safe canonical `(tenantId, providerId, subjectId)` key, indexed `userId`, migration coverage, and fail-closed concurrent-link handling. Generic OIDC/SAML/LDAP provisioning creates or refreshes the link transactionally before normalized-identity reconciliation; keep normalized entitlement snapshots diagnostic/reconciliation data only.
 - [x] ✅ Replace provider-specific `User.entraId` / `User.googleId` authorization-link use with `ExternalIdentity`. No customer SSO accounts exist to preserve, so migration `0092` irreversibly drops `entra_id`, `entra_email`, and `google_id`; provider-neutral account linking is exclusively `ExternalIdentity`.
-- [x] ✅ Stage the legacy account-link cutover safely: mirror existing Microsoft, Google, and SAML user subjects into collision-checked `ExternalIdentity` rows under distinct legacy provider namespaces. The legacy readers remain in place until their verified-email linking policy and provider-specific runtime cutover are complete. Successful legacy-provider login audits retain provider lineage but never record raw external subject identifiers.
-- [x] ✅ Move legacy Microsoft sign-in to prefer and refresh `ExternalIdentity` links. The old Entra user column is read only as a one-release fallback after the link lookup, and new Microsoft accounts leave it null.
-- [x] ✅ Apply the same provider-neutral link preference to legacy Google sign-in; new Google accounts leave `User.googleId` null while old rows remain a controlled fallback.
-- [x] ✅ Move legacy SAML sign-in to exact provider-and-tenant `ExternalIdentity` links, promote the staged legacy SAML namespace on successful login, and retain the old Entra column only as the final rollout fallback.
-- [x] ✅ Define the legacy standalone-to-SSO policy: an existing local account may be linked only when its stored email is verified; Google also requires the upstream verified-email claim. Existing provider-owned accounts and already-linked legacy subjects remain continuity paths, not email-based relinks.
+- [x] ✅ Supersede the earlier staged legacy-account cutover proposal with the approved greenfield 0.11.0 boundary. Provider-neutral `ExternalIdentity` is the sole account-link model; migrations remove legacy provider-specific tables/columns without conversion, and no legacy reader or writer remains.
+- [x] ✅ Define the current standalone-to-SSO policy: an existing local account may be linked only when the provider opts in, the upstream assertion marks the email verified, and the address matches exactly. This provider-neutral rule is the only local-account continuity path; removed Microsoft/Google/SAML subject columns are not fallback readers.
 - [x] ✅ Split EnterpriseGlue `tenantId` from external `directoryTenantId`/issuer tenant fields in provider and external-identity schemas, migrations, and normalized-identity linking. Contracts assert that the two values persist independently.
 - [x] ✅ Make global and tenant-scoped `IdentityProvider` keys portable across SQL null-uniqueness semantics with a non-null canonical `providerKeyIdentity`. The migration backfills existing records and the service/config paths use the canonical lookup and write identity.
 - [x] ✅ Make global and tenant-scoped authorization-group keys portable across SQL null-uniqueness semantics with a non-null canonical `groupKeyIdentity`. The migration backfills existing records and bootstrap, service, and configuration-bundle paths write the canonical identity.
 - [x] ✅ Make global and tenant-scoped Engine Set and runtime-resource-set keys portable across SQL null-uniqueness semantics. Their canonical non-null identities are backfilled and written by manual, SSO-managed, and configuration-bundle resource paths.
 - [x] ✅ Make config-managed identity-mapping keys portable across global and tenant scopes with a nullable-but-unique canonical `configKeyIdentity`; manual mappings remain unkeyed.
-- [x] ✅ Complete the identity-provider membership/assignment source migration. Provider-neutral memberships plus legacy SSO group mappings, direct assignments, dynamic Engine Sets, and materializations now use provider-and-mapping lineage, while reconciliation/archival accepts mapping-only rows from older releases. Global legacy mappings remain intentionally mapping-scoped because no provider owns them.
-- [x] ✅ Provider-bound legacy SSO group mappings now persist `legacy_sso:<provider>:mapping:<mapping>` membership lineage, adopt mapping-only rows during reconciliation, and delete both lineage forms on mapping change or removal; global legacy mappings remain mapping-scoped.
-- [x] ✅ Provider-bound legacy direct SSO assignments, dynamic Engine Sets, and materializations now use the same `legacy_sso:<provider>:mapping:<mapping>` lineage and canonical assignment key, promote mapping-only rows in place during reconciliation, archive duplicate source-owned Engine Sets during retries, and retain `sourceMappingId` as mapping ownership for deletion.
-- [x] ✅ Backfill the legacy SSO assignment `sourceMappingId` from its existing `sourceRef`, and make the legacy writer persist both fields. Mapping update/delete cleanup retains a null-`sourceMappingId` fallback during rollout so pre-migration grants cannot be orphaned.
+- [x] ✅ Complete provider-neutral membership/assignment lineage. Current memberships, assignments, dynamic Engine Sets, and materializations use provider-and-mapping ownership. The earlier proposal to adopt mapping-only legacy rows was retired at the greenfield 0.11.0 boundary; reconciliation and archival no longer accept removed legacy mapping persistence.
+- [x] ✅ Supersede the earlier `legacy_sso:*` lineage rollout proposal. Current provider/mapping lineage is provider-neutral and canonical; removed legacy mapping/assignment persistence is neither imported nor authorized.
+- [x] ✅ Retire the proposed `sourceMappingId` compatibility backfill and legacy dual-write. Migration `0093` removes that obsolete alias; canonical `sourceRef` is the only assignment lineage field and no null-alias cleanup fallback remains.
 - [x] ✅ Add `RuntimeResource` and `RuntimeResourceSet` entities with set-materialization lineage. Portable canonical uniqueness covers engine, kind, key, and normalized runtime tenant; set membership is uniquely materialized per resource. Entity and migration contracts verify the complete persistence shape.
 - [x] ✅ Add `runtimeAccessScope`, deployment integration configuration, and first-class `connectionMode` to `Engine`; add platform policy persistence for credentialless private-sidecar endpoints.
 - [x] ✅ Extend `EngineDeployment` and `EngineDeploymentArtifact` for direct discovery, nullable project lineage, pipeline receipt provenance, and explicit lineage quality. Entity/migration contracts and discovery/receipt service tests cover the portable history model.
@@ -1921,7 +1937,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ Extract SSO group mapping CRUD, test, and provider-neutral migration into `routes/authz/sso-group-mappings.ts`; all SSO mapping and diagnostic route families are now isolated.
 - [x] ✅ Add the external machine-authenticated deployment receipt route with API deployment eligibility, action/OpenAPI metadata, audit logging, and inventory materialization. Runtime scope settings, inventory reads, and reconciliation routes remain pending.
 - [x] ✅ Update `packages/backend-host/src/modules/mission-control/engines/routes.ts` manual engine create/update/list/detail schemas and serializers, including runtime scope, deployment integration, metadata discovery, pipeline receipt ingestion, managed-field protection, and canonical deployment-history reads.
-- [x] ✅ Update auth start/callback routes and provider services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit. The Microsoft/Google compatibility routes retain their environment fallback only when no provider is selected; an explicit selected record must be enabled, protocol-matched, and credential-complete.
+- [x] ✅ Update provider-neutral auth start/callback routes and services so exact provider ids flow through state, account linking, normalization, mapping, sync diagnostics, and audit. The earlier Microsoft/Google environment-fallback proposal is retired; 0.11 accepts only an enabled, protocol-matched, credential-complete persisted provider selected by exact id.
 - [x] ✅ Complete authorized-subset filtering and inherited runtime-resource resolvers across every Mission Control route family. Process, process-instance, decision, batch, migration, job, incident, history, variable, and the legacy compatibility process-instance router use runtime-aware guards; bounded collection failures preserve their explicit `runtime_filter_not_supported` denial rather than being converted to 500 errors. Modification and restart mutations explicitly resolve their `engineId` from the request body before runtime definition authorization. Metrics remain intentionally engine-wide-only and fail closed for resource-only grants. The serial Mission Control suite and route-inventory audit pass 39 files / 258 tests.
 - [x] ✅ Update deployment query services and `edit-target-resolution.ts` for nullable project lineage and remove authorization through file-key fallback. Project deployment queries remain explicitly project-scoped, so unattributed discovery rows are excluded; process and decision edit-target routes share the deployment-artifact resolver, require complete or reported deployment lineage plus a project/file pair, and evaluate project file permissions only after that authoritative lineage lookup.
 - [x] ✅ Register every Mission Control route in OpenAPI with action-derived `x-enterpriseglue-authz` metadata or an explicit exemption. The metadata carries the permission, resource resolver (including collection and live runtime-resource resolvers), additional checks, risk, audit behavior, and UI behavior; strict generated-document coverage prevents unclassified operations.
@@ -1967,7 +1983,7 @@ The implementation should extend existing packages rather than introduce an auth
 - [x] ✅ `GET /api/auth/login-methods`
   - Returns the policy-resolved local-password state, sanitized friendly provider presentation, chooser mode, and optional single-provider redirect id without secrets, mapping details, or account enumeration. The UI supports zero, one, multiple, direct-LDAP, and progressive-domain flows. `GET /api/auth/providers/enabled` remains a temporary older-client compatibility response.
 - [x] ✅ `POST /api/auth/recovery/login`
-  - Keeps canonical administrator recovery separate from ordinary local sign-in. It accepts only an active local-password account with an active canonical Platform Administrator membership and fails closed immediately when that membership is removed.
+  - Keeps canonical administrator recovery separate from ordinary local sign-in. It accepts only an active local-password account with an active canonical Platform Administrator membership. Membership removal races safely with session issue; recovery-marked access and refresh tokens recheck live membership and therefore fail immediately after removal.
 - [x] ✅ `GET /api/auth/providers/:providerId/start` for direct OIDC and SAML providers
   - Starts OIDC login for the exact provider id with PKCE and nonce. Starts SAML login with signed, expiring RelayState because cross-site SAML POST callbacks cannot safely depend on a Lax cookie. Both bind provider, tenant, and return path.
 - [x] ✅ `POST /api/auth/providers/saml/callback`
@@ -2212,7 +2228,7 @@ This phase is required because the current implementation still carries compatib
 
 - [x] ✅ Require canonical assignment principals and scope type. Migration `0084` backfills derivable `principalType`/`principalId`/scope fields, fails closed for ambiguous historical rows, and only then makes the canonical columns non-null; the collision-safe canonical assignment key remains the portable uniqueness contract.
 - [x] ✅ Add a collision-safe, non-null canonical assignment identity key and unique database constraint; active assignment writers now populate it. Required principal fields and removal of compatibility aliases remain in progress.
-- [x] ✅ Make assignment listing read canonical user principals first and use the legacy `userId` only as a compatibility fallback. Public assignment views preserve `sourceMappingId` separately from provider-qualified `sourceRef`, so SSO mapping diagnostics and transition controls retain their actual mapping id.
+- [x] ✅ Complete the assignment-list cutover to canonical `principalType`/`principalId`, `scopeType`/`scopeId`, and `sourceRef`. The earlier `userId`/`sourceMappingId` read fallback existed only during development migration and is retired; public assignment views and provider-neutral diagnostics do not expose those removed aliases.
 - [x] ✅ Move role-assignment evaluation, effective-access lineage, and evaluator-backed visible project/engine discovery to canonical principal and scope fields.
 - [x] ✅ Change active manual, SSO, bootstrap, and engine-governance assignment writes to canonical fields; legacy aliases are now nullable and retained only for migration/diagnostic reads.
 - [x] ✅ Keep permission scope (`engine`) separate from assignment target type (`engine`, `engine_set`, `engine_runtime_resource`, `engine_runtime_resource_set`).
@@ -2236,7 +2252,7 @@ This phase is required because the current implementation still carries compatib
   The Engine Members delegate-removal affordance now identifies the current delegate from that governance object (with the top-level metadata only as compatibility fallback), never from a member-row role label. Its action permission remains the server-enforced delegate-management decision.
 - [x] ✅ Replace engine/project collection builders and frontend role helpers with evaluator-backed visible collections and action decisions. The authenticated capability snapshot derives Mission Control visibility from `EngineService.getUserEngines`, which discovers engines through canonical assignments only, carries tenant scope through evaluation, and never uses `platformRole`. Starbase/project collections and deployment visibility use canonical evaluator-backed services; retained member values cannot independently grant access. Engine actions are constrained to engine ids, focused coverage proves display roles cannot enable an action, and `guard:frontend-authz` reports zero hard-coded legacy role/capability checks.
 
-  Current partial migration: Project Members deploy-grant eligibility is now reported by the same canonical `project:files:edit` decision enforced by the mutation, and the modal uses that response rather than `ProjectMember.role`. Project and Engine Members now protect directly assigned canonical owner/delegate principals from member-row mutation even when a retained display row has an ordinary role; historical owner/delegate labels remain restrictive fallbacks until representative deployed-provider cutover evidence proves every governance row has its canonical grant. Other frontend role helpers remain in scope for this unchecked item.
+  Current partial migration: Project Members deploy-grant eligibility is now reported by the same canonical `project:files:edit` decision enforced by the mutation, and the modal uses that response rather than `ProjectMember.role`. Project and Engine Members protect directly assigned canonical owner/delegate principals from member-row mutation even when a retained display row has an ordinary role. Historical owner/delegate labels are display/governance compatibility metadata only and never authorize; there is no deployed-provider cutover evidence gate. Other frontend role helpers remain in scope for this unchecked item.
 
 #### Provider-Neutral Identity Foundation
 
@@ -2245,7 +2261,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Complete provider-id-bound OIDC/SAML start/callback flows and direct LDAP mode. Provider selection is bound into callback state and sessions, with same-protocol mismatch, forged/expired state, and SAML replay failures closed; provider-API reconciliation remains pending.
 - [x] ✅ Bind SAML start/callback state and metadata generation to the exact selected provider id. The selected configured SAML provider is used for authorization redirect, assertion validation, and metadata.
 - [x] ✅ Configure external default access with explicit provider-neutral internal-group mappings and scoped role assignments. The global `authenticated-users` group is provisioned transactionally and backfilled for active accounts; no legacy SSO provider defaults or customer mapping rows require conversion.
-- [x] ✅ Define verified-email account-linking policy, collision handling, unlink/deactivate behavior, and administrator-recovery behavior. Linking is provider-opt-in and verified-email-only; canonical subject conflicts fail closed. The audited provider-management conflict workflow can only unlink a confirmed provider subject; it cannot reassign it, and recovery requires a fresh verified sign-in for its recorded email. Unlink and provider deactivation are source-scoped and revoke their refresh-session lineage. Local credentials survive linking; ordinary local login follows explicit policy, while the separate recovery route is restricted to canonical local platform administrators.
+- [x] ✅ Define verified-email account-linking policy, collision handling, unlink/deactivate behavior, and administrator-recovery behavior. Linking is provider-opt-in and verified-email-only; canonical subject conflicts fail closed. The audited provider-management conflict workflow can only unlink a confirmed provider subject; it cannot reassign it, and recovery requires a fresh verified sign-in for its recorded email. Unlink and provider deactivation are source-scoped and revoke their refresh-session lineage. Local credentials survive linking; ordinary local login follows explicit policy, while the separate recovery route is restricted to canonical local platform administrators and its recovery-marked access/refresh tokens recheck that membership on every use.
 - [x] ✅ Allowlist persisted identity attributes and entitlements; do not persist raw tokens, full assertions, bind responses, or unrestricted claims JSON. Normalized snapshots persist only deterministic groups, roles, scopes, and explicitly configured authorization attribute keys in a dedicated sanitized block. Snapshot refresh preserves only that pre-existing validated attribute block when an upstream refresh returns groups/roles alone; focused contracts reject raw token, assertion, bind-password, certificate, and private-key sentinels from persistence.
 
 #### Secret And Config Ownership Foundation
@@ -2274,7 +2290,7 @@ This phase is required because the current implementation still carries compatib
 - [x] ✅ Retire legacy SSO mapping presentation components; the provider-neutral Identity Mappings form owns supported mapping preview and provisioning controls.
 - [x] ✅ Split external registration and all SSO mapping/diagnostic families into focused routers. Roles/permissions, assignments/groups, project-engine targets/bridges, engine sets/runtime resources, policies, machines, configuration bundles, audit, external registration, and SSO mappings are now isolated; the parent router retains only shared evaluation and module mounting.
 - [x] ✅ Split action and OpenAPI registrations into domain modules with aggregate validation exports so strict inventory guards remain authoritative. Platform, engine/runtime, and project catalogs now compose through the existing compatibility export; duplicate action/resolver ids, missing UI surfaces, and unknown route resolvers fail aggregate validation.
-- [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces. The Platform Admin hook now imports canonical identity-provider lifecycle, migration-draft and legacy-provider summary, mapping, synchronization queries/reconciliation requests/results, snapshots, Effective Access, permission snapshots, deployment eligibility, runtime-resource, configuration preview/diff/secret-preflight/apply/run/reconciliation-task, policy conditions, role and permission mutation payloads, permission-catalog, audit log, machine-principal, group, assignment, Engine Set, project-target, external-engine-system create/update and registration/lifecycle/reconciliation, legacy SSO mapping/operator, resource, principal, and Mission Control-Starbase bridge request/response types from shared schemas. The browser's coarse effective-permissions snapshot now likewise imports the shared authorization schema, and its backend route serializes through that same schema before returning it; the local aggregate guards this boundary against reverting to the legacy auth-contract barrel. Configuration preview/diff/secret-preflight envelopes now use those schemas for backend route validation, OpenAPI metadata, and Configuration Bundles UI, preventing a second hand-maintained response model. Engine Detail now also reads canonical role assignments and SSO access snapshots directly from the shared authorization schemas; display helpers derive only the fields they render. Git deployment and lock mutations/responses used by DeployDialog and the project Git client now import the shared transport contracts, with defaulted deployment fields correctly optional for request callers. The Starbase project-members collection, including unresolved invitations and display-only deploy-grant state, now has one shared schema used by the route's OpenAPI response and frontend panel; Project Detail and Project Overview now obtain membership lists, the current membership, invitation capabilities, and candidate lookup through the typed Starbase client, with the profile-name-only project-list model kept distinct from the canonical membership response. Project Overview's visible-project list, counts, Git display metadata, and retained collaborator display rows now likewise share its backend serializer, OpenAPI response, and frontend table contract. The deployed process and decision edit-target responses now likewise share their runtime serializers, OpenAPI contracts, and every Mission Control consumer, including canonical lineage quality. Project Detail also uses that client for candidate search, typed add/edit-role payloads (including the email/manual invitation delivery mode), deploy-grant updates, manual-invite reissue, member removal, ownership transfer, and the project-contents read; that contents schema now captures the route's safe folder/file provenance and timestamps rather than relying on a local interface. File metadata mutations now use one schema for rename and folder moves across backend validation and OpenAPI rather than documenting only the rename half of that route. Starbase file/folder creation and metadata responses now also use explicit shared contracts in their routes, OpenAPI declarations, and typed file client, retaining UUID validation and the backend's actual response shapes. The latest-project and per-file deployment-history payloads now likewise share strict schemas across the query service's routes, OpenAPI, Editor, and Git Versions UI. Legacy mapping coverage/readiness, verification, and retirement contracts now likewise flow through the shared schema, route validation, OpenAPI, service aliases, hook queries, and UI. Legacy provider migration drafts share one strict secret-reference-only schema across the service, API contract, OpenAPI, and UI, while the retained legacy SSO provider response shares one redacted schema (including configured-value indicators) across the compatibility service, OpenAPI, and both settings surfaces. The shared bridge API client uses the same contracts. The shared policy response now parses persisted JSON conditions into that same API object and fails closed to an empty condition set for malformed legacy values; the audit response preserves nullable references but normalizes nullable display reason/context strings. The legacy all-provider SSO row retains only its historical `null` provider id at the UI boundary. Reachable legacy Platform Settings claims-mapping UI now reuses that mapping contract too. Its explicit `scope` entitlement union remains only to render pre-migration rows, and risk acknowledgement remains a UI-only compatibility marker. Engine Members and Project Detail now also construct scoped role-assignment requests and parse assignment-create responses through the shared schemas; the local structure guard prevents their old inline identifier-only response models from returning. Project deployment-target controls now likewise build canonical create/update payloads and consume shared identifier, mutation, and legacy-sync responses; the project-scoped OpenAPI routes reuse those same result schemas instead of local lookalikes. Configuration Bundle remote import now reads the same canonical bundle envelope as preview, diff, apply, export, and OpenAPI. Retained legacy provider creation now advertises the shared redacted provider response, and toggle uses a strict shared `{ enabled }` response rather than the UI's former incompatible success-only shape. Other legacy frontend interfaces still require consolidation.
+- [ ] ⬜ Keep shared types generated/imported from shared schemas instead of duplicating hand-maintained frontend interfaces. Current provider-neutral identity lifecycle, mappings, synchronization, Effective Access, authorization, configuration-bundle, runtime-resource, engine-registration, project-target, Mission Control, and Starbase flows use shared transport schemas across route validation, OpenAPI, and browser consumers. The former legacy SSO mapping/provider contracts were consolidated only as an intermediate removal aid and are now retired history: 0.11 exposes no legacy provider creation, provider summary, mapping/operator, migration-draft, all-provider row, or compatibility claims-mapping UI contract. Remaining type-consolidation work applies only to still-reachable non-SSO frontend interfaces.
 
 Dashboard context and statistics are also shared by their evaluator-backed routes, OpenAPI, and dashboard consumer rather than locally duplicated or documented as unknown.
 
@@ -2730,7 +2746,7 @@ Phase 0 exit criteria:
 - [x] ✅ Legacy-removal tests prove platform admin, project/engine member rows, owner/delegate metadata, and old role fields grant nothing without canonical assignments. Negative evaluator coverage supplies populated legacy fixtures while canonical assignments and explicit grants remain empty, then proves both permission checks and known-resource discovery deny access without querying the legacy repositories.
 - [x] ✅ Bootstrap, invitation, project creation, engine creation, ownership/delegate governance, local login, and SSO login tests prove canonical assignments are created at the originating command boundary. Bootstrap and local-login tests require the authenticated-user (and, when enabled, bootstrap-administrator) memberships in the same transaction as the account state change. Invitation tests require project/engine grant commands before completion. Project creation persists the owner assignment in its creation transaction. Manual and external engine creation persist the engine and managed owner/delegate assignment atomically, while ownership/delegate commands use the same writer without legacy reconciliation. Provider-neutral and Microsoft/Google/SAML provisioning tests require baseline membership through their provisioning transaction managers.
 - [x] ✅ Provider routing tests prove two providers of the same protocol remain isolated by provider id and state; generic OIDC is exercised end to end. Two direct OIDC provider records run through independent browser agents, provider-id lookup, state and PKCE cookies, real discovery/authorization/token/JWKS handling against the in-process protocol provider, provider-specific provisioning, and provider-bound session issuance. Crossed browser state and a state whose provider id resolves to another OIDC provider both fail before token exchange or provisioning.
-- [x] ✅ External identity tests cover multi-provider links, verified-email linking, collision, audited conflict unlink, verified-sign-in recovery, deactivation, session revocation, ordinary-login policy, and separate administrator recovery. Canonical keys allow one user to retain distinct links from multiple providers while rejecting subject reassignment and concurrent-link collisions. Verified-email linking remains provider-opt-in and preserves an existing local password identity. Unlink marks only the selected provider/subject link and snapshot, removes only its provider-managed memberships, revokes only its refresh sessions, and cannot move the subject to another account. Recovery requires fresh verified provider evidence for the recorded email while provider policy permits verified-email linking; all other attempts remain blocked. Provider deactivation remains provider-scoped. With ordinary local login disabled, `/api/auth/login` rejects administrators too; only `/api/auth/recovery/login` accepts an active local password account with canonical Platform Administrator membership.
+- [x] ✅ External identity tests cover multi-provider links, verified-email linking, collision, audited conflict unlink, verified-sign-in recovery, deactivation, session revocation, ordinary-login policy, and separate administrator recovery. Canonical keys allow one user to retain distinct links from multiple providers while rejecting subject reassignment and concurrent-link collisions. Verified-email linking remains provider-opt-in and preserves an existing local password identity. Unlink marks only the selected provider/subject link and snapshot, removes only its provider-managed memberships, marks its provider refresh sessions revoked, and cannot move the subject to another account. Immediate revocation also advances the user's global session version, so every already-issued access/refresh token is invalid and the user must sign in again through a still-valid provider or local method to exercise preserved manual/other-provider access. Recovery requires fresh verified provider evidence for the recorded email while provider policy permits verified-email linking; all other attempts remain blocked. Provider deactivation remains provider-scoped. With ordinary local login disabled, `/api/auth/login` rejects administrators too; only `/api/auth/recovery/login` accepts an active local password account with canonical Platform Administrator membership. Removing that membership invalidates a concurrent issue attempt, and live-membership validation rejects every already-issued recovery access/refresh token immediately.
 - [x] ✅ Secret tests prove provider and engine credentials are encrypted or externally referenced and never exposed through API, logs, audit, config, errors, or test artifacts. Sentinel-based coverage verifies authenticated provider encryption, opaque engine normalization, reference-only configuration export/preflight, sanitized provider and engine APIs, audit metadata, connection-test failures, and public provider reads. The maintained `test:secret-boundaries` lane is part of the authorization-refactor aggregate.
 - [x] ✅ Target ownership tests cover conflict, skip, explicit transfer, authoritative archive, atomic mode updates, and manual-row preservation. The apply suite proves a default ownership conflict never opens the write transaction, explicit transfer records prior ownership and replaces all deployment modes in one update, ordinary config updates atomically replace status/ownership/eligibility, and authoritative cleanup archives only source-owned rows. Route coverage requires the additional target-management action for transfer, and the maintained `test:target-ownership` lane is part of the authorization-refactor aggregate.
 - [x] ✅ Service tests cover bundle validation, deterministic preview, hash-bound apply, authoritative cleanup, and drift handling. The maintained `test:config-bundles` lane now includes strict schemas and documentation examples, ZIP archive ingestion, bootstrap, preview/diff/apply, export, secret preflight, and CLI sanitization/exit contracts. Cross-stage apply coverage proves invalid and preview-only bundles fail before a transaction, drifted `config_warn` roles/groups return to their declared state with fresh source hashes, and authoritative cleanup archives only bundle-owned rows while preserving manual rows.

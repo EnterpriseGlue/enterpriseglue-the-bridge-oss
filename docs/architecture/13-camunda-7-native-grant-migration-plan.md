@@ -92,9 +92,9 @@ IdP.
 
 ### Engine registration and tenancy
 
-- New engines must eventually declare tenancy explicitly on every registration
-  surface. The compatibility fallback is a provisioning-only behavior and must
-  be removed before broad external adoption.
+- New engines declare tenancy explicitly on every external registration
+  request. Omission is rejected with HTTP 400 before persistence; the former
+  compatibility warning/default branch has been removed.
 - An engine created through the current EnterpriseGlue UI already submits
   explicit `dedicated` tenancy with the current tenant. Removing the omitted
   tenancy fallback does not require that engine to be deleted or re-added.
@@ -256,9 +256,11 @@ catalogue must name any intentional loss of capability and require approval for
 action expansion. Default role templates remain least-privileged; an operator
 may select a broader role only with an explicit acknowledgement.
 
-For a shared engine, a candidate requires a current runtime resource with
-exactly one resolved EnterpriseGlue tenant. The default tenant is never
-inferred. For a dedicated engine, the importer can propose `resource_aware`
+The 0.11 importer is fail-closed for shared engines because a whole-engine
+Camunda authorization inventory cannot be attributed safely to one requesting
+tenant. Shared-engine inventory/import is deferred until the adapter can prove
+tenant-filtered evidence without retaining global or another tenant's native
+identities. For a dedicated engine, the importer can propose `resource_aware`
 when the customer has per-process/per-decision grants; the operator must use
 the existing topology/scope preview before applying it.
 
@@ -368,7 +370,7 @@ adapter/API limitation has a visible, stable diagnostic.
 - Implement live/export ingestion, normalization, duplicate handling, stable
   hashing, and capability checks.
 - Join exact process/decision identifiers to active EnterpriseGlue runtime
-  inventory. Require one resolved tenant on shared engines.
+  inventory. Reject shared-engine imports before any native inventory read.
 - Classify every input record as `proposed`, `approval_required`,
   `manual_required`, or `blocked`; never silently discard an input item.
 - Provide a read-only UI/report with counts, mappings, and manual work.
@@ -451,7 +453,7 @@ API and customer-export import paths use the same semantic test matrix.
 | Fixture family | Required synthetic cases |
 | --- | --- |
 | Supported group grants | Exact process-definition and decision-definition grants; read/start/operate/history-style permission candidates; multiple compatible grants for one group/key; separate groups with disjoint resources |
-| Runtime tenancy | One resolved tenant per resource; no-tenant resource; two tenant partitions; unmapped tenant; conflicting tenant; dedicated engine with resource-aware access |
+| Runtime tenancy | Dedicated owning-tenant engine with resource-aware access; shared-engine request rejected before inventory read or evidence retention |
 | Broad grants | `*`/all-resource group grant that stays blocked until an explicit broad-access acknowledgement is supplied |
 | Non-convertible grants | Global grant, revoke, precedence-dependent combination, direct user grant, task/process-instance/deployment/batch/filter/application/administration resource, native tenant-administration grant, and unknown resource/permission |
 | Identity mapping | Exact group map; missing group; ambiguous group; explicit user identity link; OIDC/SAML/LDAP-normalized memberships that land in the imported EnterpriseGlue group |
@@ -473,10 +475,10 @@ specification.
 | Area | Required coverage |
 | --- | --- |
 | Native input | Synthetic Camunda 7 pagination, duplicate rows, malformed records, unsupported engine/version, customer export validation, input hashing, and no-write guarantee |
-| Translation | Every supported resource/permission mapping, exact key match, missing/inactive inventory, dedicated/resource-aware/shared topology, resolved/unmapped/conflicting tenant, broad `*`, global/revoke/user/manual cases |
+| Translation | Every supported resource/permission mapping, exact key match, missing/inactive inventory, dedicated/resource-aware topology, explicit shared-engine rejection before inventory, broad `*`, global/revoke/user/manual cases |
 | Identity | Group map, explicit user identity-link map, ambiguous/missing identity, and OIDC/SAML/LDAP-derived EnterpriseGlue group memberships |
 | Authorization | Imported allowed and denied cases on definitions, decisions, instances, tasks, jobs, external tasks, history, mutations, batches, and migrations; native denial must not broaden EnterpriseGlue access |
-| Safety | No default-tenant inference for shared engines, no secrets/PII in logs or ordinary responses, source ownership conflict, stale/altered preview, expiry, retry, rollback, and no native Camunda write |
+| Safety | Shared-engine migration rejection before inventory, no secrets/PII in logs or ordinary responses, keyed opaque commitments, source ownership conflict, stale/altered preview, expiry, retry, rollback, and no native Camunda write |
 | Interfaces | Schema/OpenAPI/API contract tests, config draft/preview/apply, Effective Access explanation, permission gates, and browser accessibility/UI tests |
 | Integration | Disposable local Camunda 7 seeded from the synthetic native-grant fixture catalogue, plus an authenticated EnterpriseGlue scenario; selected customer test-environment evidence before production use |
 
@@ -501,37 +503,34 @@ engine, drains Runtime Resource Set materialization, verifies a
 provider-synchronized member allow plus sibling/non-member denies through
 Effective Access, and performs an authoritative import-owned rollback.
 Shared-engine unresolved and ambiguous tenant cases remain covered by the
-classifier/tenancy contract suite. The authenticated-browser and real Camunda
-container scenarios above remain release qualification work; they must not be
-represented as already executed by this synthetic baseline. The disposable
+classifier/tenancy contract suite. The maintained authenticated-browser and
+disposable real-Camunda container lanes provide local synthetic qualification;
+customer-environment certification remains external. The disposable
 `test:camunda7-native-grant-container` contract now separately exercises the
 real Camunda 7 REST service with synthetic API-seeded process-definition (`6`)
 and decision-definition (`10`) `READ` grants. It proves the production
 read-only inventory accepts Camunda's operational response fields only by
 projecting them out before canonical hashing/classification, and never writes
-while reading. It does not replace an authenticated EnterpriseGlue browser
-acceptance journey or customer cutover evidence.
+while reading. It complements the authenticated EnterpriseGlue browser
+acceptance journey; neither local lane is represented as customer-environment
+cutover evidence.
 
 ### Release-gate status and executable external handoff
 
 The synthetic fixture, local PostgreSQL migration/rollback integration,
-digest-pinned real-Camunda REST contract, focused backend/frontend tests, and
-five-adapter physical schema matrix are local release evidence. The remaining
-external gate is intentionally explicit rather than assumed: a browser-capable
-local Docker environment must execute the authenticated preview/draft/apply,
-Effective Access allow-and-deny, protected-route, accessibility, and
-hash-bound rollback journey using only synthetic identities and grants. The
-exact prerequisites, commands, retained artifacts, success criteria, and stop
-conditions are maintained in the [developer handoff](../development/camunda7-native-grant-migration.md#authenticated-local-browser-evidence).
-No runtime authority-mode change or compatibility removal is permitted before
-that evidence exists.
+digest-pinned real-Camunda REST contract, authenticated browser journey,
+focused backend/frontend tests, and five-adapter physical schema matrix are
+local release evidence. The developer handoff retains the commands, artifacts,
+success criteria, and stop conditions. Only representative customer-side
+direct-user/cutover certification remains environment-dependent; it does not
+block the greenfield provider-neutral 0.11.0 implementation.
 
 ## Rollback and Stop Conditions
 
 Stop and do not apply when any of the following is true:
 
 - the engine cannot be read through the approved secure connection;
-- a shared resource lacks exactly one resolved tenant;
+- the selected engine is shared or is not owned by the active tenant;
 - a group/user cannot be matched safely;
 - a permission/resource/revoke/global rule lacks an approved mapping;
 - the generated draft has source-ownership conflicts or an altered/stale hash;

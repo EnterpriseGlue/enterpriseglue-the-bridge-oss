@@ -206,6 +206,7 @@ describe('engine import service', () => {
       manager,
       projectId: 'project-1',
       userId: 'user-1',
+      tenantId: 'tenant-a',
       importData: {
         engineId: 'engine-1',
         counts: { bpmn: 1, dmn: 1 },

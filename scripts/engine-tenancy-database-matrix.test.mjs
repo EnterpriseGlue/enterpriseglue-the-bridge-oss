@@ -31,7 +31,7 @@ const stages = [
   'cleanup',
 ];
 
-test('declares the exact five-adapter, four-baseline, seven-stage denominator', () => {
+test('declares the exact five-adapter, five-baseline, seven-stage denominator', () => {
   assert.equal(contract.schemaVersion, 1);
   assert.deepEqual(Object.keys(contract.databases), databases);
   assert.deepEqual(contract.requiredStages, stages);
@@ -42,6 +42,7 @@ test('declares the exact five-adapter, four-baseline, seven-stage denominator', 
       'engine_tenancy_foundation_v1',
       'pre_access_governance_ownership',
       'pre_login_experience',
+      'pre_external_identity_and_project_tenancy',
     ],
   );
   assert.ok(contract.requiredTables.engines.includes('tenancy_mode'));
@@ -63,6 +64,15 @@ test('declares the exact five-adapter, four-baseline, seven-stage denominator', 
   ));
   assert.ok(contract.requiredIndexes.identity_providers.includes(
     'uq_identity_providers_preferred_scope_identity',
+  ));
+  assert.ok(contract.requiredTables.external_engine_registrations.includes('source_identity'));
+  assert.ok(contract.requiredTables.external_engine_registrations.includes('active_external_id_identity'));
+  assert.ok(contract.requiredTables.projects.includes('tenant_id'));
+  assert.ok(contract.requiredTables.project_engine_targets.includes('tenant_id'));
+  assert.ok(contract.requiredTables.role_assignments.includes('assignment_key'));
+  assert.ok(contract.requiredTables.permission_grants.includes('tenant_id'));
+  assert.ok(contract.requiredIndexes.external_engine_registrations.includes(
+    'uq_external_engine_registrations_active_external_identity',
   ));
 });
 
@@ -131,10 +141,14 @@ test('executes every stage against the real adapter and service transaction', ()
   assert.match(worker, /AddPlatformGovernanceSettingsOwnership1700000000105/);
   assert.match(worker, /AddLoginExperienceMetadata1700000000106/);
   assert.match(worker, /ConsolidateLoginProviderPreference1700000000107/);
+  assert.match(worker, /AddExternalEngineRegistrationIdentities1700000000108/);
+  assert.match(worker, /RequireProjectTenantOwnership1700000000109/);
   assert.match(worker, /mapping\.ownershipMode, 'config_locked'/);
   assert.match(worker, /provider\.displayName, ids\.migrationProvider/);
   assert.match(worker, /settings\.ssoProviderSelectionMode, 'auto_redirect_single'/);
   assert.match(worker, /provider\.preferredScopeIdentity/);
+  assert.match(worker, /assignment\.tenantId, 'tenant-default'/);
+  assert.match(worker, /grant\.tenantId, 'tenant-default'/);
   assert.match(worker, /rollbackConfigBundleRunId/);
   assert.match(worker, /ownedRowsRemaining: 0/);
   assert.match(worker, /cleanInstallEqualsAllUpgradePaths: true/);

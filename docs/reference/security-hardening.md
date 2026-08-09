@@ -38,6 +38,31 @@ Implemented config-bundle controls and remaining customer-sidecar controls are d
   broad engine, or Engine Set access to bypass quarantine.
 - Keep topology/mapping diagnostics authenticated. The public `/metrics`
   endpoint must remain aggregate and identifier-free.
+- Populate `EG_ENGINE_ALLOWED_HOSTS` before enabling engine, sidecar, or OAuth
+  token traffic in production. Production cannot disable the endpoint policy.
+  Use exact hosts or narrow organizational suffixes, and enable
+  `EG_ENGINE_ALLOW_PRIVATE_HOSTS` only with an exact entry for a reviewed
+  private endpoint. The separate insecure-HTTP switch is a temporary migration
+  exception, not an allowlist bypass.
+- Treat the engine allowlist as hostname validation, not DNS pinning. Keep its
+  DNS zones under trusted control and enforce network-level egress denial for
+  loopback, private, and cloud-metadata destinations reached through unexpected
+  DNS answers.
+- Populate `EG_IDENTITY_PROVIDER_ALLOWED_HOSTS` before enabling direct SSO in
+  production. Keep the production endpoint policy enabled, use exact entries
+  for private-host/address-literal providers, reject redirects, and enable
+  `EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS` only for a reviewed internal
+  IdP/directory. Callback URLs must match `FRONTEND_URL` and the canonical
+  provider-neutral callback path exactly.
+- Treat the IdP allowlist as a reviewed hostname policy, not DNS pinning. Keep
+  allowlisted DNS zones under trusted control and enforce network-level egress
+  denial for private and cloud-metadata destinations.
+- Keep `EG_IDENTITY_FLOW_RATE_LIMIT_MAX` bounded and monitor pre-authentication
+  429 responses. Set an LDAP reconciliation identity budget appropriate for
+  the directory; a budget failure must stop without authoritative removals.
+- Keep `SSO_DIAGNOSTICS_INTERVAL_MS=60000` (or another reviewed positive
+  cadence) in deployed configuration. Production falls back to 60 seconds
+  rather than silently disabling authoritative LDAP revocation.
 
 ## Operational Hygiene
 - Keep dependencies updated.

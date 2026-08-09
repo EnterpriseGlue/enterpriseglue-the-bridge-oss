@@ -559,8 +559,8 @@ describe('requireAction project resource resolvers', () => {
       .mockReset()
       .mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
 
-    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
-    projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: null }]);
+    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' });
+    projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
     engineFind = vi.fn().mockResolvedValue([{
       id: engineId,
       tenantId: 'tenant-default',
@@ -2515,7 +2515,7 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('omits missing projects from explicit project collections before checking permission', async () => {
-    projectFind.mockResolvedValue([{ id: projectId, tenantId: null }]);
+    projectFind.mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
 
     const response = await request(app).get(`/projects?projectIds=${projectId},missing-project`);
 
@@ -2530,8 +2530,8 @@ describe('requireAction project resource resolvers', () => {
 
   it('filters a project collection through the same per-resource policy boundary as project detail routes', async () => {
     projectFind.mockResolvedValue([
-      { id: projectId, tenantId: null },
-      { id: secondProjectId, tenantId: null },
+      { id: projectId, tenantId: 'tenant-default' },
+      { id: secondProjectId, tenantId: 'tenant-default' },
     ]);
     (permissionService.getKnownProjectIdsForUser as unknown as Mock).mockResolvedValue([projectId, secondProjectId]);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
@@ -2588,15 +2588,15 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(200);
     expect(response.body.collection).toEqual({
       type: 'project',
-      ids: [projectId, secondProjectId].sort(),
-      requestedIds: [projectId, secondProjectId].sort(),
+      ids: [projectId],
+      requestedIds: [projectId],
       deniedIds: [],
     });
-    expect(projectFind).toHaveBeenNthCalledWith(1, expect.objectContaining({ select: ['id'] }));
+    expect(projectFind).toHaveBeenNthCalledWith(1, expect.objectContaining({ select: ['id', 'tenantId'] }));
   });
 
-  it('supports platform-scoped project discovery without an active tenant', async () => {
-    projectFind.mockResolvedValue([{ id: projectId, tenantId: null }]);
+  it('resolves missing project tenant context to the canonical OSS tenant', async () => {
+    projectFind.mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) => permission === 'project:files:view'
     );
@@ -2608,11 +2608,11 @@ describe('requireAction project resource resolvers', () => {
     expect(response.status).toBe(200);
     expect(response.body.collection.ids).toEqual([projectId]);
     expect(projectFind).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: undefined,
+      where: expect.anything(),
     }));
     expect(policyService.evaluateGate).toHaveBeenCalledWith(
       'project:files:view',
-      expect.objectContaining({ tenantId: null }),
+      expect.objectContaining({ tenantId: 'tenant-default' }),
     );
   });
 
@@ -2846,8 +2846,8 @@ describe('requireAction project resource resolvers', () => {
     };
     const unexpectedParamNext = vi.fn();
     await middleware(unexpectedParamReq, {} as any, unexpectedParamNext);
-    expect(unexpectedParamNext).toHaveBeenCalledWith();
-    expect(unexpectedParamReq.authzResource).toEqual({ type: 'project', id: projectId });
+    expect(unexpectedParamNext).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 403 }));
+    expect(unexpectedParamReq.authzResource).toBeUndefined();
   });
 
   it('fails closed for route-less actions and registered resolvers without middleware support', async () => {
@@ -3059,7 +3059,7 @@ describe('requireAction project resource resolvers', () => {
   });
 
   it('resolves platform-scoped project and shared-engine invitations without an active tenant', async () => {
-    projectFindOne.mockResolvedValue({ id: projectId, tenantId: null });
+    projectFindOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-default' });
     engineFindOne.mockResolvedValue({ id: engineId, tenantId: null, tenancyMode: 'shared' });
     (permissionService.hasPermission as unknown as Mock).mockImplementation(
       async (permission: string) =>
@@ -3079,7 +3079,7 @@ describe('requireAction project resource resolvers', () => {
     expect(engineResponse.status).toBe(200);
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       'project:members:manage',
-      expect.objectContaining({ tenantId: null, resourceType: 'project' }),
+      expect.objectContaining({ tenantId: 'tenant-default', resourceType: 'project' }),
     );
     expect(permissionService.hasPermission).toHaveBeenCalledWith(
       'engine:members:manage',

@@ -39,6 +39,7 @@ import { vi } from 'vitest';
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   authLimiter: (_req: any, _res: any, next: any) => next(),
+  identityFlowLimiter: vi.fn((_req: any, _res: any, next: any) => next()),
   passwordResetLimiter: (_req: any, _res: any, next: any) => next(),
   passwordResetVerifyLimiter: (_req: any, _res: any, next: any) => next(),
   fileOperationsLimiter: (_req: any, _res: any, next: any) => next(),

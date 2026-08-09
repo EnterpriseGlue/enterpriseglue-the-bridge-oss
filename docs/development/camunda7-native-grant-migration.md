@@ -182,8 +182,8 @@ The migration run proves configuration creation, not a real user's identity
 membership. A browser/integration test must create or synchronize a
 representative user into each imported EnterpriseGlue group and test both the
 target resource allow and a sibling-resource deny using Effective Access and
-the protected Mission Control route. For shared engines also test resolved,
-unmapped, and conflicting runtime-tenant rows.
+the protected Mission Control route. Also retain denial evidence proving a
+shared engine is rejected before native inventory or evidence persistence is called.
 
 ## Authenticated local browser evidence
 
@@ -201,8 +201,8 @@ identities and grants; it does not require a customer environment or an IdP.
 - Two synthetic EnterpriseGlue identities: a member of each imported group and
   a non-member. Create membership only through the configured identity-source
   synchronization path, not the manual group-membership API.
-- For a shared engine, one each of resolved, unmapped, and conflicting runtime
-  tenant rows. For a dedicated engine, record the default-tenant result.
+- One dedicated-engine owning-tenant case and one shared-engine rejection case
+  proving no native inventory read occurs.
 
 ### Procedure and retained evidence
 
@@ -235,7 +235,7 @@ or non-member deny, every unsupported source row to remain manual or blocked,
 no native Camunda write during inventory, a current-clean artifact for every
 lane above, and a rollback that removes the imported allow without changing the
 engine. Stop and roll back if a preview is truncated, a receipt/hash changes, a
-shared tenant is unresolved, an unexpected object is proposed for archive, a
+shared engine is accepted, an unexpected object is proposed for archive, a
 protected-route deny becomes an allow, or browser evidence cannot be captured.
 For a future customer import, repeat the user-facing workflow with that
 customer's approved change record; it is operational adoption evidence, not a

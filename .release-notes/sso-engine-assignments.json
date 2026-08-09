@@ -23,15 +23,19 @@
     "required": true,
     "instructions": [
       "Back up the application database and configuration before upgrading.",
+      "Confirm that no legacy provider-specific SSO providers, mappings, or user identity columns contain required production data; 0.11.0 removes those obsolete structures under the documented greenfield SSO assumption.",
       "Allow the application to run the TypeORM authorization, identity, and engine-governance migrations; do not execute hand-written database-specific SQL.",
       "Review existing engine registrations and assign explicit tenancy before using the external engine provisioning API.",
+      "Set the production engine endpoint host allowlist before enabling direct-engine, customer-sidecar, or OAuth token traffic; private endpoints require an exact host entry plus the explicit private-host opt-in, and production enforcement cannot be disabled.",
+      "Set the production identity-provider host allowlist before enabling direct OIDC, SAML, or LDAP; private identity services require an exact host entry and explicit private-network opt-in.",
       "Review SSO mappings, engine authority modes, configuration ownership, and break-glass administrator membership before enabling SSO enforcement.",
+      "Before decommissioning any mirrored-backstop engine, retry or roll back until no queued/running task, owned native grant, or pending native side effect remains; decommission preserves the engine and run/task evidence, and physical deletion is restricted to engines with no backstop history.",
       "Retain the generated migration, authorization, identity-reconciliation, and image-security evidence with the release record."
     ]
   },
   "configuration": [
     "Adds JSON configuration for identity providers, identity mappings, provider display and login labels, login behavior, engine registration, engine tenancy, governance ownership, and reconciliation.",
-    "Adds enterprise-authoritative, engine-native, mirrored-backstop, and credentialless customer-sidecar engine integration settings.",
+    "Adds EnterpriseGlue-authoritative runtime authorization plus mirrored-engine-backstop settings for direct engines and credentialless customer-sidecar integrations; engine-native authority is not available in 0.11.0.",
     "Configuration-managed providers, mappings, roles, grants, engines, and governance settings are presented as configuration-owned and cannot be mutated through the portal."
   ],
   "api": {
@@ -45,24 +49,37 @@
   },
   "database": {
     "migrations": [
-      "Authorization, identity, and engine-governance migration series through 1700000000107",
+      "Authorization, identity, and engine-governance migration series through 1700000000109",
       "1700000000104 add identity-mapping ownership mode",
       "1700000000105 add platform-governance settings ownership",
       "1700000000106 add login-experience metadata",
-      "1700000000107 consolidate login-provider preference"
+      "1700000000107 consolidate login-provider preference",
+      "1700000000108 add portable external-engine registration ownership and active-external-id identities",
+      "1700000000109 classify legacy projects, project targets, project role assignments, and project permission grants into explicit tenant ownership and make project/target tenant columns required"
     ],
-    "rollbackSupported": true,
+    "rollbackSupported": false,
     "notes": [
-      "Clean install, upgrade, interrupted retry, schema equivalence, service behavior, rollback, and cleanup are qualified across PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.",
+      "Clean install, upgrade, interrupted retry, schema equivalence, service behavior, safe migration-stage rollback where implemented, and cleanup are qualified across PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.",
       "The legacy SAML signature hardening migration resolves and updates the configured schema-qualified provider table instead of assuming the database default schema.",
-      "Existing SSO rows and the OSS default-tenant fallback are preserved; compatibility aliases remain where documented."
+      "Provider-neutral identity data is the 0.11.0 source of truth. Obsolete legacy SSO provider/mapping tables and legacy provider-specific user identity columns are removed without conversion under the documented greenfield SSO assumption.",
+      "The OSS default-tenant fallback and documented HTTP route aliases are preserved; they do not restore the removed legacy SSO persistence model.",
+      "Migration 1700000000109 is an irreversible ownership-classification boundary: tenantless/default legacy project data becomes tenant-default, contradictory project-target/assignment/grant ownership blocks the upgrade before writes, and TypeORM revert is unsupported.",
+      "A full downgrade across the irreversible migration boundary is not supported by TypeORM revert; restore the pre-upgrade database backup together with the matching pre-upgrade application images."
     ]
   },
   "security": [
     "Identity-provider entitlements are reconciled after every successful OIDC, Entra-compatible OIDC, SAML, and LDAP login so removed grants are revoked promptly.",
+    "A complete authoritative LDAP snapshot deactivates identities no longer present, removes only that provider's memberships, revokes its sessions, and preserves manual or other-provider access; incomplete snapshots never trigger absence-based removals.",
+    "Direct identity-provider endpoints use a production fail-closed host allowlist, reject redirects, bound remote responses, and bind callbacks to the canonical EnterpriseGlue origin and path.",
+    "SAML assertions require the expected IdP issuer plus signed request correlation, initiating-browser cookie binding, audience, recipient, and certificate validation; unsolicited and login-CSRF responses are rejected.",
+    "Pre-authentication identity flows are independently rate-limited, and LDAP directory reconciliation uses bounded concurrency plus per-identity and whole-run group-query budgets; incomplete runs stop without applying absence-based removals.",
+    "Administrator recovery performs constant-work credential verification, exposes one generic failure response, transactionally claims the active canonical administrator membership before issuing a session, and rechecks that live membership for every recovery-marked access or refresh token.",
     "Tenant and resource boundaries are enforced in the backend, including sibling and cross-tenant denials.",
     "Process-variable redaction is performed by the backend before values reach EnterpriseGlue clients.",
-    "Engine endpoints, sidecar trust boundaries, configuration secrets, callback state, sessions, and break-glass access have fail-closed validation and dedicated regression coverage."
+    "Engine endpoints, including sidecar and OAuth token URLs, use a production-enforced fail-closed host allowlist; private endpoints require an exact entry and explicit opt-in, and hostname validation is backed by deployment egress controls rather than treated as DNS pinning.",
+    "Sidecar trust boundaries, configuration secrets, callback state, sessions, and break-glass access have fail-closed validation and dedicated regression coverage.",
+    "Mirrored-backstop tasks renew and fence durable leases, retain retryable grant progress until confirmed deletion, compensate grants after authorization-source drift, and expose only keyed opaque commitments for protected native identifiers.",
+    "Engine decommission is blocked before mutation until mirrored-backstop native ownership is retired; decommission preserves evidence, and physical deletion cannot erase any mapping, run, or task history."
   ],
   "documentation": [
     "Administrator configuration: `docs/how-to/configure-authorization-and-engines.md` and `docs/how-to/auth-sso.md`",
@@ -75,12 +92,18 @@
   ],
   "knownLimitations": [
     "Protected real-OpenShift evidence remains deferred by release decision.",
-    "Real customer identity-provider credentials are not stored in CI; provider-specific behavior is covered with disposable local protocol services and Entra-compatible emulation."
+    "Real customer identity-provider credentials are not stored in CI; provider-specific behavior is covered with disposable local protocol services and Entra-compatible emulation.",
+    "The claims-only provider mode is a non-login namespace for separately verified host/plugin integrations; the 0.11 base application does not ship a gateway-header or reverse-proxy claims-ingestion route.",
+    "Engine-native authority is deferred and unavailable; use EnterpriseGlue-authoritative access or the documented mirrored engine backstop.",
+    "Camunda 7 native-grant migration is supported only for a dedicated engine owned by the active tenant; shared-engine migration is rejected before native inventory is read or retained.",
+    "OIDC and SAML connection actions verify only bounded metadata reachability; client registration, token exchange, and complete SAML trust are proven during a controlled sign-in."
   ],
   "rollback": [
-    "Roll back backend and frontend images together and run the documented TypeORM migration rollback for the matching application version.",
+    "Do not run TypeORM revert across the 0.11.0 irreversible SSO and identity migration boundary.",
+    "For a full downgrade, stop the deployment and restore the captured pre-upgrade database backup together with the matching pre-upgrade backend and frontend images.",
     "Preserve classification reports, transition previews, mapping versions, reconciliation summaries, and release evidence before rollback.",
-    "Do not repair engine topology, ownership, or SSO state with direct database edits."
+    "Do not repair engine topology, ownership, or SSO state with direct database edits.",
+    "For a mirrored-backstop engine, retire every owned or pending native side effect before decommissioning; do not use physical deletion to remove backstop evidence."
   ],
   "validation": [
     "Backend and frontend unit, integration, typecheck, lint, and browser suites",

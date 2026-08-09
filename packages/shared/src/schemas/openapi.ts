@@ -2306,7 +2306,7 @@ registry.registerPath({
   path: '/api/identity/providers/{key}/test-connection',
   ...authzExtension('platform.sso.providers.manage', 'POST', '/api/identity/providers/{key}/test-connection'),
   request: { params: z.object({ key: z.string() }) },
-  responses: { 200: { description: 'Protocol-specific identity provider connection result', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderConnectionTestResponseSchema } } }, 404: { description: 'Identity provider not found' } },
+  responses: { 200: { description: 'Protocol-specific identity provider reachability result; OIDC/SAML metadata checks do not prove a complete sign-in', content: { 'application/json': { schema: identityProviderMigrationSchemas.IdentityProviderConnectionTestResponseSchema } } }, 404: { description: 'Identity provider not found' } },
 });
 registry.registerPath({
   method: 'delete',
@@ -2977,8 +2977,7 @@ registry.registerPath({
   request: { body: { content: { 'application/json': { schema: z.object({ email: z.string().email(), password: z.string() }) } } } },
   responses: {
     200: { description: 'Canonical platform-administrator recovery login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
-    401: { description: 'Invalid credentials' },
-    403: { description: 'Administrator recovery is unavailable for this account' },
+    401: { description: 'Invalid credentials or recovery is unavailable' },
   },
 });
 

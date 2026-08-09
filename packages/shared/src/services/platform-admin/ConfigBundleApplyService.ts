@@ -35,6 +35,7 @@ import {
 } from './ConfigBundleDiffService.js';
 import { configBundlePreviewService, type ConfigBundlePolicyContext, type ConfigBundlePreviewInput } from './ConfigBundlePreviewService.js';
 import { configBundleSecretPreflightService } from './ConfigBundleSecretPreflightService.js';
+import { operatorSafeConfigBundleFailure } from './ConfigBundleSafeDiagnostics.js';
 import { configBundleIdentityReplayTaskService } from './ConfigBundleIdentityReplayTaskService.js';
 import { configBundleRuntimeReconciliationTaskService } from './ConfigBundleRuntimeReconciliationTaskService.js';
 import { archiveIdentityProviderInStore, identityProviderService } from './IdentityProviderService.js';
@@ -226,10 +227,6 @@ function parseStoredResult(value: string | null, bundleApiVersion?: string | nul
   } catch {
     return null;
   }
-}
-
-function errorSummary(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000);
 }
 
 function auditApplyChangeSummary(change: ConfigBundleDiffChange): Record<string, unknown> {
@@ -721,6 +718,7 @@ class ConfigBundleApplyService {
           .filter((change) => change.objectType === 'engine_backstop_mapping')
           .map((change) => [change.key, change]),
       );
+      const backstopMappingTenantId = tenantId || fail('Backstop mappings require a concrete tenant-scoped configuration bundle', 422);
       for (const mapping of desiredEngineBackstopMappings) {
         const change = backstopMappingChangesByKey.get(mapping.key);
         if (!change || change.operation === 'noop') continue;
@@ -741,6 +739,7 @@ class ConfigBundleApplyService {
         if (!nativeGroupId) fail(`Backstop mapping ${mapping.key} secret reference resolved to an empty native group identifier`, 422);
         const result = await engineBackstopGroupMappingService.write({
           engineId: engine.id,
+          tenantId: backstopMappingTenantId,
           request: { mappings: [{ authzGroupId: group.id, nativeGroupId, isActive: mapping.isActive }] },
           actorId: input.actorId,
           source: 'config',
@@ -1139,7 +1138,11 @@ class ConfigBundleApplyService {
           mode: manifest.mode,
           canonicalHash: diff.canonicalHash,
           changes: diff.changes.filter((change) => change.operation !== 'noop').map(auditApplyChangeSummary),
-          secretReferences: secretPreflight.references.map(({ reference }) => reference),
+          secretReferenceSummary: {
+            count: secretPreflight.references.length,
+            available: secretPreflight.references.filter(({ available }) => available).length,
+            unavailable: secretPreflight.references.filter(({ available }) => !available).length,
+          },
           redaction: 'Config payload and secret values omitted',
           ciProvenance: input.ciProvenance || null,
         },
@@ -1259,7 +1262,7 @@ class ConfigBundleApplyService {
       if (applyRunId) {
         await dataSource.getRepository(ConfigBundleApplyRun).update({ id: applyRunId }, {
           status: 'failed',
-          errorMessage: errorSummary(error),
+          errorMessage: operatorSafeConfigBundleFailure('apply'),
           completedAt: Date.now(),
           updatedAt: Date.now(),
         });

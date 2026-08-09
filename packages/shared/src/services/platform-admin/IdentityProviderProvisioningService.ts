@@ -5,11 +5,13 @@ import { externalIdentityKey, externalIdentityService } from './ExternalIdentity
 import { authzGroupService } from './AuthzGroupService.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import type { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityReconciliationCheckpoint } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityReconciliationCheckpoint.js';
 import type { OidcIdentityClaims } from './GenericOidcService.js';
 import type { IdentityProviderType } from './IdentityProviderAdapter.js';
 import { hasIncompleteOidcGroupClaims } from './IdentityProviderAdapter.js';
 import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
+import { IsNull, MoreThan } from 'typeorm';
 
 /** The canonical user snapshot returned after external identity reconciliation. */
 export interface ProvisionedIdentityUser {
@@ -29,6 +31,10 @@ interface ProvisioningResult {
   user: ProvisionedIdentityUser;
   groupMembershipsCreated: number;
   groupMembershipsRemoved: number;
+}
+interface ReconciliationLeaseFence {
+  providerId: string;
+  leaseId: string;
 }
 
 function requiredEmail(claims: OidcIdentityClaims): string {
@@ -99,8 +105,12 @@ class IdentityProviderProvisioningService {
     return (await this.provisionLdapUserForReconciliation(provider, input)).user;
   }
 
-  async provisionLdapUserForReconciliation(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisioningResult> {
-    return this.provision(provider, { ...input, providerType: 'ldap', emailVerified: true });
+  async provisionLdapUserForReconciliation(
+    provider: IdentityProvider,
+    input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>,
+    leaseFence?: ReconciliationLeaseFence,
+  ): Promise<ProvisioningResult> {
+    return this.provision(provider, { ...input, providerType: 'ldap', emailVerified: true }, leaseFence);
   }
 
   async reconcileLdapLogin(provider: IdentityProvider, input: Omit<ProvisionIdentityInput, 'providerType' | 'emailVerified'>): Promise<ProvisionedIdentityUser> {
@@ -138,13 +148,13 @@ class IdentityProviderProvisioningService {
     }
   }
 
-  private async provision(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisioningResult> {
+  private async provision(provider: IdentityProvider, input: ProvisionIdentityInput, leaseFence?: ReconciliationLeaseFence): Promise<ProvisioningResult> {
     // A new subject can arrive through a direct login while a scheduled directory
     // page is creating the same link. Retry the full transaction once after the
     // database's unique constraint resolves that first-writer race.
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.provisionOnce(provider, input);
+        return await this.provisionOnce(provider, input, leaseFence);
       } catch (error) {
         if (attempt === 0 && isUniqueConstraintError(error)) continue;
         throw error;
@@ -153,7 +163,7 @@ class IdentityProviderProvisioningService {
     throw new Error('Identity provisioning retry exhausted');
   }
 
-  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput): Promise<ProvisioningResult> {
+  private async provisionOnce(provider: IdentityProvider, input: ProvisionIdentityInput, leaseFence?: ReconciliationLeaseFence): Promise<ProvisioningResult> {
     // A group-overage marker means the provider did not supply a complete group
     // result. Reject it before creating or updating any local identity state so
     // an authoritative mapping can never interpret it as an empty entitlement set.
@@ -166,6 +176,33 @@ class IdentityProviderProvisioningService {
     const now = Date.now();
     const dataSource = await getDataSource();
     return dataSource.transaction(async (manager) => {
+      const providerWhere = {
+        id: provider.id,
+        isEnabled: true,
+        protocol: provider.protocol,
+        authenticationMode: provider.authenticationMode,
+        directoryTenantId: provider.directoryTenantId ?? IsNull(),
+        configurationJson: provider.configurationJson,
+        ...(Number.isFinite(Number(provider.updatedAt)) ? { updatedAt: provider.updatedAt } : {}),
+      };
+      // A conditional no-op update acquires the provider row for this
+      // transaction. Disable/trust edits either happen first (and this fails)
+      // or happen afterward and clean up everything this transaction wrote.
+      const providerClaim = await manager.getRepository(IdentityProvider).update(providerWhere, { isEnabled: true });
+      if (providerClaim.affected !== 1) {
+        throw new Error('Identity provider changed or was disabled while sign-in was in progress');
+      }
+      if (leaseFence) {
+        if (leaseFence.providerId !== provider.id) throw new Error('LDAP reconciliation lease does not match the identity provider');
+        const leaseClaim = await manager.getRepository(IdentityReconciliationCheckpoint).update({
+          providerId: provider.id,
+          leaseId: leaseFence.leaseId,
+          leaseExpiresAt: MoreThan(now),
+        }, { updatedAt: now });
+        if (leaseClaim.affected !== 1) {
+          throw new Error('LDAP reconciliation lease was lost before identity provisioning');
+        }
+      }
       const userRepo = manager.getRepository(User);
       const externalIdentityRepo = manager.getRepository(ExternalIdentity);
       const identityKey = externalIdentityKey({ tenantId: provider.tenantId, providerId: provider.id, subjectId: input.subjectId });

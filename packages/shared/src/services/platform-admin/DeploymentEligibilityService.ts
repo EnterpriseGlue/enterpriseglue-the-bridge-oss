@@ -19,6 +19,11 @@ import type {
   DeploymentEligibilityCheck as SharedDeploymentEligibilityCheck,
   DeploymentEligibilityEvaluateResponse as SharedDeploymentEligibilityEvaluateResponse,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { isEngineVisibleInTenancyContext } from '../../engine-tenancy/visibility.js';
+import {
+  OSS_DEFAULT_TENANT_ID,
+  normalizeTenantIdForPersistence,
+} from '../../authz/tenant-scope.js';
 
 export interface DeploymentEligibilityInput {
   userId?: string;
@@ -162,6 +167,10 @@ export class DeploymentEligibilityService {
   }
 
   async evaluate(input: DeploymentEligibilityInput): Promise<DeploymentEligibilityResult> {
+    input = {
+      ...input,
+      tenantId: normalizeTenantIdForPersistence(input.tenantId) || OSS_DEFAULT_TENANT_ID,
+    };
     const mode = input.mode || 'manual';
     const checks: DeploymentEligibilityCheck[] = [];
 
@@ -184,9 +193,9 @@ export class DeploymentEligibilityService {
 
       const engine = await dataSource.getRepository(Engine).findOne({
         where: { id: input.engineId },
-        select: ['id', 'tenantId', 'type', 'baseUrl', 'connectionMode', 'authType', 'environmentTagId', 'environmentLocked', 'deploymentIntegration'],
+        select: ['id', 'tenantId', 'tenancyMode', 'type', 'baseUrl', 'connectionMode', 'authType', 'environmentTagId', 'environmentLocked', 'deploymentIntegration'],
       });
-      if (!engine || !this.isTenantVisible(engine.tenantId, input.tenantId)) {
+      if (!engine || !isEngineVisibleInTenancyContext(engine, input.tenantId)) {
         checks.push({
           id: 'engine.exists',
           allowed: false,
@@ -350,19 +359,21 @@ export class DeploymentEligibilityService {
         return allow(input, mode, checks);
       }
       return deny(input, mode, checks);
-    } catch (error: any) {
+    } catch {
       checks.push({
         id: 'authorization.resolver',
         allowed: false,
-        reason: error?.message || 'Deployment eligibility resolution failed',
+        reason: 'Deployment eligibility resolution failed',
+        remediation: 'Retry the request and inspect protected server diagnostics if the failure persists.',
       });
       return deny(input, mode, checks);
     }
   }
 
   private isTenantVisible(rowTenantId: string | null | undefined, tenantId?: string | null): boolean {
-    const normalizedTenantId = tenantId?.trim() || null;
-    return !normalizedTenantId || !rowTenantId || rowTenantId === normalizedTenantId;
+    const normalizedTenantId = normalizeTenantIdForPersistence(tenantId) || OSS_DEFAULT_TENANT_ID;
+    const normalizedRowTenantId = normalizeTenantIdForPersistence(rowTenantId);
+    return normalizedRowTenantId === normalizedTenantId;
   }
 
   protected getEngineCapabilities(type: unknown) {

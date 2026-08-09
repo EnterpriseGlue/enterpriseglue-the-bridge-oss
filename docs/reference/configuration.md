@@ -105,11 +105,86 @@ OpenShift ConfigMap projection to mount the non-secret JSON payload.
 
 ### Engine endpoint policy
 
-Production outbound engine traffic fails closed unless `EG_ENGINE_ALLOWED_HOSTS` contains the endpoint host. Use comma-separated exact host names or narrowly scoped `*.suffix` patterns. The policy covers direct engine, customer-sidecar, and OAuth client-credentials token URLs; redirects remain disabled and TLS certificates use the runtime's normal verification.
+Production outbound engine traffic always enforces this policy and fails closed
+unless `EG_ENGINE_ALLOWED_HOSTS` contains the endpoint host. Use comma-separated
+exact host names or narrowly scoped organizational patterns such as
+`*.engines.example.com`; top-level/effective-suffix patterns such as `*.com`
+and `*.co.uk` are rejected. The policy covers direct engine,
+customer-sidecar, and OAuth client-credentials token URLs; redirects remain
+disabled and TLS certificates use the runtime's normal verification.
 
-- `EG_ENGINE_ALLOWED_HOSTS`: Required for production engine traffic.
-- `EG_ENFORCE_ENGINE_ENDPOINT_POLICY`: Defaults to `true` in production; set `true` to test the policy in another environment.
-- `EG_ALLOW_INSECURE_ENGINE_HTTP`: Defaults to `false`; an explicit temporary migration override for a reviewed private-network HTTP endpoint. Prefer HTTPS and remove this override after migration.
+- `EG_ENGINE_ALLOWED_HOSTS`: Required for production engine traffic. Private
+  address literals, loopback, single-label, `.local`, and Docker-local hosts
+  require an exact entry; a wildcard never authorizes them.
+- `EG_ENFORCE_ENGINE_ENDPOINT_POLICY`: Production enforces the policy even if
+  this variable is unset or `false`; set `true` to exercise the same policy in
+  another environment.
+- `EG_ENGINE_ALLOW_PRIVATE_HOSTS`: Defaults to `false`. Set `true` only for a
+  reviewed private/address-literal/Docker-local engine or sidecar and only with
+  an exact `EG_ENGINE_ALLOWED_HOSTS` entry.
+- `EG_ALLOW_INSECURE_ENGINE_HTTP`: Defaults to `false`; a separate, explicit
+  temporary migration override for a reviewed private-network HTTP endpoint.
+  The private-host opt-in and exact allowlist entry are still required. Prefer
+  HTTPS and remove this override after migration.
+
+Host allowlisting validates the configured name and address literals; it is
+not DNS pinning. Allowlist only names below a reviewed administrative boundary,
+and enforce network egress rules that block private, loopback, and cloud-metadata
+destinations reached through an unexpected DNS answer.
+
+### Identity-provider endpoint and pre-authentication policy
+
+Production OIDC, SAML, and LDAP traffic fails closed until
+`EG_IDENTITY_PROVIDER_ALLOWED_HOSTS` contains each reviewed provider host.
+OIDC discovery-derived authorization, token, and JWKS hosts are validated
+again; HTTP redirects are rejected and remote response bodies are capped at
+1 MiB. Related public IdP hosts may use a narrowly scoped organizational
+subdomain entry such as `*.login.example.com`; top-level/effective-suffix
+patterns such as `*.com` and `*.co.uk` are rejected. Private-address
+literals, single-label, `.local`, loopback, and Docker-local providers additionally
+require `EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS=true` and an **exact** host
+entry; wildcards never authorize a private provider.
+
+- `EG_IDENTITY_PROVIDER_ALLOWED_HOSTS`: Required for production direct OIDC,
+  SAML metadata/SSO, and LDAPS traffic.
+- `EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY`: Defaults to `true` in
+  production; production cannot disable the policy. Set `true` to exercise it
+  in a local or test environment.
+- `EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS`: Defaults to `false`. Enable only
+  for a reviewed private-host/address-literal IdP or directory together with
+  an exact allowlist entry. Host allowlisting does not pin DNS answers; review
+  DNS ownership and enforce private-network/metadata egress controls outside
+  the application for every allowlisted name.
+- `EG_IDENTITY_FLOW_RATE_LIMIT_MAX`: Successful and failed unauthenticated
+  provider discovery/start/callback requests allowed per IP per 15 minutes;
+  defaults to `300` in production.
+- `SSO_DIAGNOSTICS_INTERVAL_MS`: Scheduler cadence for authoritative LDAP
+  reconciliation. Production defaults to `60000` and treats an omitted, zero,
+  or malformed value as `60000`; non-production stays disabled unless a
+  positive interval is configured. Per-provider `intervalSeconds` still
+  controls when each LDAP provider is due.
+- `EG_LDAP_RECONCILIATION_IDENTITY_LIMIT`: Maximum identities accepted in one
+  authoritative LDAP reconciliation run; defaults to `10000` and is capped at
+  `50000`. Exceeding it stops the run before removals are applied.
+- `EG_LDAP_RECONCILIATION_CONCURRENCY`: Bounded group-resolution worker count
+  for one directory reconciliation; defaults to `4` and is capped at `16`.
+- `EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT`: Aggregate reverse-group query
+  budget for the complete reconciliation; defaults to `10000` and is capped at
+  `100000`.
+- `EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT`: Aggregate group-entry budget for
+  the complete reconciliation; defaults to `100000` and is capped at `500000`.
+  An aggregate-budget failure stops the run before any absence-based access
+  removal is applied.
+- `EG_LDAP_GROUP_SEARCH_QUERY_LIMIT`: Maximum reverse-group lookup queries per
+  login/reconciliation identity; defaults to `100` and is capped at `1000`.
+- `EG_LDAP_GROUP_SEARCH_RESULT_LIMIT`: Maximum returned/unique groups accepted
+  per identity; defaults to `5000` and is capped at `10000`. Cycles are
+  deduplicated and every budget failure is fail closed. The per-identity limits
+  apply inside the aggregate reconciliation limits.
+
+OIDC and SAML callback URLs are not outbound allowlist targets. They must use
+the exact `FRONTEND_URL` origin and canonical protocol path:
+`/api/auth/identity/callback` or `/api/auth/providers/saml/callback`.
 
 `/health` exposes sanitized bootstrap state for diagnostics. `/ready` returns
 `503` after a non-fail-closed bootstrap error. Successful apply receipts report

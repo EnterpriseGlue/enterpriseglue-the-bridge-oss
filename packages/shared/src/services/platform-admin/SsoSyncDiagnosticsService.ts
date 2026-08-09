@@ -156,9 +156,7 @@ export function setSsoSyncDiagnosticsClockForTest(clock?: () => number): void { 
 
 function errorMessage(error: unknown): string {
   if (error instanceof IdentityProviderFailure) return `Identity provider failure: ${error.code}`;
-  if (error instanceof Error) return sanitizeDiagnosticText(error.message);
-  if (typeof error === 'string') return sanitizeDiagnosticText(error);
-  return 'Unknown SSO sync error';
+  return 'Identity provider synchronization failed; inspect protected server logs';
 }
 
 function toRunView(run: SsoSyncRun): SsoSyncRunView {
@@ -285,7 +283,7 @@ class SsoSyncDiagnosticsServiceClass {
     if (!runId) return;
     try {
       const message = errorMessage(error); const details = withCorrelation(input.details, input.correlationId);
-      const code = error instanceof IdentityProviderFailure ? error.code : error instanceof Error && error.name ? error.name : 'IdentityProviderSyncError';
+      const code = error instanceof IdentityProviderFailure ? error.code : 'IdentityProviderSyncError';
       await (await getDataSource()).getRepository(SsoSyncRun).update({ id: runId }, { status: 'failed', completedAt: diagnosticNow(), errorCode: code, errorMessage: message, details: stringifyDetails(details) });
       await this.recordEvent(runId, { tenantId: input.tenantId, providerId: input.providerId, userId: input.userId, severity: 'error', type: 'identity_provider_sync_failed', message, details });
     } catch (diagnosticError) { logger.warn('Failed to mark identity provider sync run as failed:', diagnosticError); }

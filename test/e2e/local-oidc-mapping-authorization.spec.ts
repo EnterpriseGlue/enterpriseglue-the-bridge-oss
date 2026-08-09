@@ -147,7 +147,7 @@ async function createProviderThroughUi(page: Page, providerKey: string): Promise
   const providerRow = page.getByRole('row').filter({ hasText: providerKey });
   await providerRow.getByRole('button', { name: 'Provider actions' }).click();
   await page.getByRole('menuitem', { name: 'Test connection' }).click();
-  await expect(page.getByText(`Connection verified: ${providerDisplayName}`, { exact: true })).toBeVisible();
+  await expect(page.getByText(`Provider metadata reachable: ${providerDisplayName}`, { exact: true })).toBeVisible();
 }
 
 async function createMappingThroughUi(page: Page, providerKey: string, groupKey: string, groupName: string, engine: Engine): Promise<void> {

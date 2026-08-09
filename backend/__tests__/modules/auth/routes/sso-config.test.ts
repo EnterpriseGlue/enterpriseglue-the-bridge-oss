@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import { identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import ssoConfigRoute from '../../../../../packages/backend-host/src/modules/auth/routes/sso-config.js';
 
@@ -25,6 +26,7 @@ describe('tenant SSO configuration', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ssoRequired: true });
+    expect(identityFlowLimiter).toHaveBeenCalledOnce();
     expect(ordinaryLocalPasswordEnabled).toHaveBeenCalledWith('tenant-default');
   });
 

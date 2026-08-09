@@ -74,12 +74,16 @@ describe('configBundleRuntimeReconciliationTaskService', () => {
       engineSetIdsJson: '["set-1"]', runtimeResourceSetIdsJson: '[]', engineIdsJson: '[]',
       attempts: 1, nextAttemptAt: null, lastError: null,
     }]);
-    materializeEngineSet.mockRejectedValueOnce(new Error('materialization unavailable'));
+    materializeEngineSet.mockRejectedValueOnce(new Error('env://ENGINE_TOKEN Bearer secret-value https://private.internal'));
     findOne.mockResolvedValueOnce({ id: 'apply-run-2', resultJson: JSON.stringify({ reconciliation: { status: 'completed' } }) });
 
     await expect(configBundleRuntimeReconciliationTaskService.runNext()).resolves.toMatchObject({
-      taskId: 'runtime-task-2', status: 'queued', attempts: 2, lastError: 'materialization unavailable',
+      taskId: 'runtime-task-2', status: 'queued', attempts: 2,
+      lastError: 'Configuration runtime reconciliation failed; inspect protected server logs',
     });
+    expect(JSON.stringify(update.mock.calls)).not.toContain('ENGINE_TOKEN');
+    expect(JSON.stringify(update.mock.calls)).not.toContain('secret-value');
+    expect(JSON.stringify(update.mock.calls)).not.toContain('private.internal');
     expect(update).toHaveBeenLastCalledWith({ id: 'apply-run-2' }, expect.objectContaining({
       resultJson: expect.stringContaining('"status":"failed"'),
     }));

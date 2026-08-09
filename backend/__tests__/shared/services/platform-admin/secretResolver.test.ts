@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -64,6 +64,32 @@ describe('SecretResolver', () => {
     expect(secretResolver.normalizeForStorage(null)).toBeNull();
   });
 
+  it('encrypts colon-shaped plaintext and rejects malformed versioned ciphertext', () => {
+    const colonPlaintext = 'foo:bar:baz';
+    const stored = secretResolver.normalizeForStorage(colonPlaintext)!;
+    expect(stored).toMatch(/^v2:/);
+    expect(stored).not.toBe(colonPlaintext);
+    expect(secretResolver.resolveStored(stored)).toBe(colonPlaintext);
+    expect(() => secretResolver.normalizeForStorage('v2:not-base64:still:not:ciphertext')).toThrow('malformed');
+  });
+
+  it('does not accept malformed legacy-looking values as encrypted credentials', () => {
+    const malformedLegacy = 'YWJj:ZGVm:Z2hp';
+    expect(isEncrypted(malformedLegacy)).toBe(false);
+    const stored = secretResolver.normalizeForStorage(malformedLegacy)!;
+    expect(stored).toMatch(/^v2:/);
+    expect(secretResolver.resolveStored(stored)).toBe(malformedLegacy);
+  });
+
+  it('fails closed when recognized authenticated ciphertext is tampered', () => {
+    const parts = secretResolver.storeEncryptedLocal('provider-secret').split(':');
+    const ciphertext = Buffer.from(parts[4], 'base64');
+    ciphertext[0] ^= 1;
+    const tampered = [...parts.slice(0, 4), ciphertext.toString('base64')].join(':');
+    expect(isEncrypted(tampered)).toBe(true);
+    expect(() => secretResolver.resolveStored(tampered)).toThrow();
+  });
+
   it('resolves file references only from the configured secret root', () => {
     const root = mkdtempSync(join(tmpdir(), 'enterpriseglue-secret-root-'));
     const secretPath = join(root, 'oidc-client-secret');
@@ -93,6 +119,60 @@ describe('SecretResolver', () => {
       expect(fileResolver.checkExternalReference('docker://oidc-client-secret')).toEqual({ available: false, reason: 'docker_secret_provider_not_configured' });
       expect(() => resolver.resolveStored('ref:docker://../outside')).toThrow('docker://<secret-name>');
       expect(() => fileResolver.resolveStored('ref:docker://oidc-client-secret')).toThrow('EG_CONFIG_SECRET_PROVIDER=docker');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects file references that escape the configured root through a symlink', () => {
+    const root = mkdtempSync(join(tmpdir(), 'enterpriseglue-secret-root-'));
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'enterpriseglue-outside-secret-'));
+    const outsideSecret = join(outsideRoot, 'secret');
+    const linkedSecret = join(root, 'linked-secret');
+    writeFileSync(outsideSecret, 'must-not-be-read');
+    symlinkSync(outsideSecret, linkedSecret);
+    const resolver = new SecretResolver(() => ({ provider: 'file', fileRoot: root }));
+    try {
+      const reference = pathToFileURL(linkedSecret).toString();
+      expect(resolver.checkExternalReference(reference)).toEqual({ available: false, reason: 'file_outside_root' });
+      expect(() => resolver.resolveStored(`ref:${reference}`)).toThrow('outside EG_CONFIG_SECRET_FILE_ROOT');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects Docker secret symlinks that resolve outside the configured root', () => {
+    const root = mkdtempSync(join(tmpdir(), 'enterpriseglue-docker-secret-root-'));
+    const outsideRoot = mkdtempSync(join(tmpdir(), 'enterpriseglue-outside-secret-'));
+    const outsideSecret = join(outsideRoot, 'secret');
+    writeFileSync(outsideSecret, 'must-not-be-read');
+    symlinkSync(outsideSecret, join(root, 'oidc-client-secret'));
+    const resolver = new SecretResolver(() => ({ provider: 'docker', fileRoot: root }));
+    try {
+      expect(resolver.checkExternalReference('docker://oidc-client-secret'))
+        .toEqual({ available: false, reason: 'docker_secret_unavailable' });
+      expect(() => resolver.resolveStored('ref:docker://oidc-client-secret')).toThrow('unavailable');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['file', 'docker'] as const)('supports in-root projected-volume rotation symlinks for %s secrets', (provider) => {
+    const root = mkdtempSync(join(tmpdir(), 'enterpriseglue-projected-secret-root-'));
+    const versionedDirectory = join(root, '..2026_08_09_01');
+    mkdirSync(versionedDirectory);
+    writeFileSync(join(versionedDirectory, 'oidc-client-secret'), 'projected-secret');
+    symlinkSync('..2026_08_09_01', join(root, '..data'));
+    symlinkSync(join('..data', 'oidc-client-secret'), join(root, 'oidc-client-secret'));
+    const resolver = new SecretResolver(() => ({ provider, fileRoot: root }));
+    const reference = provider === 'file'
+      ? pathToFileURL(join(root, 'oidc-client-secret')).toString()
+      : 'docker://oidc-client-secret';
+    try {
+      expect(resolver.checkExternalReference(reference)).toEqual({ available: true });
+      expect(resolver.resolveStored(`ref:${reference}`)).toBe('projected-secret');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -3,7 +3,8 @@ import { PlatformSettingsService } from '@enterpriseglue/shared/services/platfor
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
 import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
-import { encrypt, isEncrypted, safeDecrypt } from '@enterpriseglue/shared/services/encryption.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { blindIndex, encrypt, isEncrypted, safeDecrypt } from '@enterpriseglue/shared/services/encryption.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -11,18 +12,27 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   encrypt: vi.fn((value: string) => `enc:${value}`),
+  decrypt: vi.fn((value: string) => value.startsWith('encrypted:') ? value.slice('encrypted:'.length) : value.startsWith('enc:') ? value.slice(4) : value),
+  blindIndex: vi.fn((_domain: string, value: string) => value.includes('replacement.example.test') ? 'd'.repeat(64) : 'c'.repeat(64)),
   isEncrypted: vi.fn((value: string) => value.startsWith('v2:') || value.startsWith('enc:')),
   safeDecrypt: vi.fn((value: string) => value.startsWith('enc:') ? value.slice(4) : value),
 }));
 
 describe('PlatformSettingsService', () => {
-  const service = new PlatformSettingsService();
+  const currentBackstopCommitments = vi.fn(async () => ({
+    sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), connectionCommitment: 'c'.repeat(64),
+  }));
+  const service = new PlatformSettingsService(currentBackstopCommitments);
 
   beforeEach(() => {
     vi.clearAllMocks();
     (encrypt as unknown as Mock).mockImplementation((value: string) => `enc:${value}`);
     (isEncrypted as unknown as Mock).mockImplementation((value: string) => value.startsWith('v2:') || value.startsWith('enc:'));
     (safeDecrypt as unknown as Mock).mockImplementation((value: string) => value.startsWith('enc:') ? value.slice(4) : value);
+    (blindIndex as unknown as Mock).mockImplementation((_domain: string, value: string) => value.includes('replacement.example.test') ? 'd'.repeat(64) : 'c'.repeat(64));
+    currentBackstopCommitments.mockResolvedValue({
+      sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), connectionCommitment: 'c'.repeat(64),
+    });
   });
 
   it('returns defaults when settings missing', async () => {
@@ -77,7 +87,7 @@ describe('PlatformSettingsService', () => {
         projectEngineTargetMode: 'hybrid',
         engineAccessAuthority: 'sso_managed',
         projectAccessAuthority: 'manual',
-        engineRuntimeAuthorizationMode: 'mirrored_engine_backstop',
+        engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
         accessGovernanceOwnershipMode: 'config_warn',
         accessGovernanceDriftStatus: 'drifted',
       }),
@@ -320,23 +330,56 @@ describe('PlatformSettingsService', () => {
 
   it('requires a successful backstop receipt before enabling mirrored mode', async () => {
     const repo = { findOneBy: vi.fn().mockResolvedValue({ id: 'default' }), insert: vi.fn(), update: vi.fn() };
-    const backstopRepo = { findOne: vi.fn().mockResolvedValue(null) };
+    const backstopRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+    const engine = {
+      id: 'engine-1', type: 'operaton', lifecycleStatus: 'active', baseUrl: 'https://engine.example.test/engine-rest',
+      connectionMode: 'direct', authType: 'basic', username: 'service-account', passwordEnc: 'encrypted-secret',
+      oauthTokenUrl: null, oauthScopes: null, oauthAudience: null,
+    };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue(engine) };
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === PlatformSettings) return repo;
         if (entity === EngineBackstopSyncRun) return backstopRepo;
+        if (entity === Engine) return engineRepo;
         throw new Error('Unexpected repository');
       },
     });
     await expect(service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1'))
-      .rejects.toThrow('requires at least one successful');
+      .rejects.toThrow('requires at least one active');
     expect(repo.update).not.toHaveBeenCalled();
 
-    backstopRepo.findOne.mockResolvedValue({ id: 'run-1', status: 'succeeded' });
+    backstopRepo.find.mockResolvedValue([{
+      id: 'run-1', engineId: 'engine-1', status: 'succeeded', rollbackOfRunId: null, observedOfRunId: null,
+      tenantId: 'tenant-a', sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64),
+      encryptedDetailedSnapshot: `encrypted:${JSON.stringify({
+        version: 1, ownershipForRunId: 'run-1', connectionCommitment: 'c'.repeat(64),
+        ownedGrants: [{ id: 'native-1', nativeGroupId: 'operators', camundaResourceType: 6, resourceKey: 'payments' }],
+      })}`,
+      detailedSnapshotExpiresAt: null,
+    }]);
     await service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1');
     expect(repo.update).toHaveBeenCalledWith({ id: 'default' }, expect.objectContaining({
       engineRuntimeAuthorizationMode: 'mirrored_engine_backstop',
     }));
+
+    backstopRepo.findOne.mockResolvedValue({ status: 'out_of_sync' });
+    await expect(service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1'))
+      .rejects.toThrow('requires at least one active');
+
+    backstopRepo.findOne.mockResolvedValue(null);
+    currentBackstopCommitments.mockResolvedValue({
+      sourceHash: 'changed'.padEnd(64, 'c'), desiredHash: 'b'.repeat(64), connectionCommitment: 'c'.repeat(64),
+    });
+    await expect(service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1'))
+      .rejects.toThrow('requires at least one active');
+
+    currentBackstopCommitments.mockResolvedValue({
+      sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), connectionCommitment: 'c'.repeat(64),
+    });
+    engineRepo.findOne.mockResolvedValue({ ...engine, baseUrl: 'https://replacement.example.test/engine-rest' });
+    await expect(service.update({ engineRuntimeAuthorizationMode: 'mirrored_engine_backstop' }, 'admin-1'))
+      .rejects.toThrow('requires at least one active');
   });
 
   it('persists the credentialless customer-sidecar policy', async () => {

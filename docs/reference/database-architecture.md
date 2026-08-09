@@ -93,7 +93,7 @@ entities, invariants, lifecycle, and current rollout status.
   This prevents a new installation from replaying historical migrations
   against a schema that already contains their final state.
 - Release qualification runs seven engine-tenancy lifecycle stages on all five
-  supported adapters and all four supported upgrade baselines.
+  supported adapters and all five supported upgrade baselines.
 
 ## Adapter Layer
 

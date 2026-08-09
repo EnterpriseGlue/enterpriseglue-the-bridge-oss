@@ -1,12 +1,17 @@
 # Configure Authorization, Identity, And Engines
 
-Summary: Target operator workflow for configuring EnterpriseGlue roles, groups, identity mappings, engines, Engine Sets, runtime-resource access, and project-engine targets.
+Summary: Operator workflow for configuring EnterpriseGlue roles, groups, identity mappings, engines, Engine Sets, runtime-resource access, and project-engine targets.
 
 Audience: Platform administrators, identity administrators, engine operators, and deployment engineers.
 
-Status: **Incremental implementation guide for the RBAC/config refactor.** Platform Settings, Access Control, SSO, Engines, JSON bundle preview/apply/export, runtime-resource sets, provider-neutral identity mapping foundations, mandatory sign-in reconciliation for OIDC/SAML/LDAP, engine ingestion controls, and customer-sidecar transport are implemented in this worktree. Deployment startup automation and other unchecked roadmap items remain target work; use only the documented implemented routes/settings in production.
+Status: **Implemented operator guide for 0.11.0.** Platform Settings, Access Control, Identity Providers, Engines, JSON bundle preview/apply/export and startup bootstrap, runtime-resource sets, mandatory sign-in reconciliation for OIDC/SAML/LDAP, engine ingestion controls, and customer-sidecar transport are implemented. Real OpenShift rollout evidence remains an explicit deferred external-acceptance gate rather than a 0.11.0 release blocker; engine-native authority and gateway-claims ingestion are not part of 0.11.0.
 
-Current UI progress: Access Control includes modular Effective Access, SSO diagnostics, assignment-source ownership tags, and role-assignment form logic isolated for continued component extraction. See the live implementation tracker in [the architecture plan](../architecture/11-json-driven-authz-and-engine-registration.md).
+Current UI evidence: Access Control, identity providers and mappings,
+configuration ownership, engine modes, Effective Access, responsive behavior,
+and accessibility are covered by the maintained
+[identity/access UI evidence report](../development/identity-access-ui-evidence-report.md).
+The architecture plan remains design history rather than an unfinished
+operator checklist.
 
 Related design:
 
@@ -172,7 +177,7 @@ CI/CD should perform these steps:
 6. Verify readiness, expected hash, and no unresolved high-risk drift.
 7. Retain the previous bundle and apply receipt for rollback.
 
-See [Deploy Authorization Configuration](./deploy-authorization-config.md) for the implemented API/CLI workflow and the remaining bootstrap-deployment work.
+See [Deploy Authorization Configuration](./deploy-authorization-config.md) for the implemented API/CLI and startup-bootstrap workflows, evidence lanes, and the separately deferred real-cluster OpenShift acceptance step.
 
 ## Configure Roles And Groups
 
@@ -278,7 +283,11 @@ Required sequence:
 3. Create entitlement-to-group mappings.
 4. Preview mappings with representative test identities.
 5. Set friendly provider presentation metadata and enable the provider while retaining a canonical local recovery administrator.
-6. Test `/admin-recovery`, then reconcile existing external identities before disabling ordinary local login.
+6. Test `/admin-recovery`, remove the test administrator membership while its
+   browser/API session remains open, and prove the next authenticated request
+   plus refresh both fail. Restore the approved recovery membership only after
+   that evidence, then reconcile existing external identities before disabling
+   ordinary local login.
 
 Every direct provider session executes step 6 again with fresh upstream
 evidence before the session is issued. `sync.triggers` must include `login`
@@ -305,7 +314,7 @@ mapping rows.
 LDAP changes the authentication adapter, not RBAC:
 
 - `direct`: EnterpriseGlue performs bind/search authentication and normalizes LDAP group DNs or attributes.
-- `claims_only`: a trusted upstream login layer authenticates the user and provides verified identity attributes.
+- `claims_only`: a non-login provider namespace reserved for a separately verified host/plugin integration. EnterpriseGlue 0.11 base routes do not ingest gateway headers or reverse-proxy claims; use `direct` for built-in OIDC, SAML, or LDAP sign-in.
 
 LDAP groups map to the same internal groups used by OIDC and SAML. Store stable group identifiers or normalized DNs, not mutable display labels where a stable id is available.
 
@@ -562,7 +571,7 @@ endpoint never bypasses login policy for administrators.
 ## Implementation Checklist
 
 - [x] ✅ Implement bundle schemas, services, preview/diff/apply/export/history APIs, OpenAPI contracts, authorization metadata, and the API-driven CLI lifecycle.
-- [ ] ⬜ Add screenshots and exact UI navigation after the role editor, Identity, Configuration, Engine connection, and diagnostics surfaces are complete.
+- [x] ✅ Publish exact UI navigation and the maintained screenshot/evidence set for role editing, Identity, Configuration, engine connection, and diagnostics surfaces.
 - [x] ✅ Replace target API notices with the current executable API and CI CLI examples.
 - [x] ✅ Add schema-validated headless OIDC and direct/shared/customer-sidecar engine examples, including the current engine registration options.
 - [x] ✅ Validate every executable JSON example in these how-to guides in CI against the shared Zod schemas; validate engine API examples through the OpenAPI contract suite.

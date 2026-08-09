@@ -17,8 +17,13 @@ for Platform Settings, read-only UI behavior, and headless bundle ownership.
 
 ## Request Contract
 
-Manual create, manual update, and external registration requests accept the
-same optional `tenancy` object.
+External registration requires an explicit `tenancy` object; omission is
+rejected with HTTP 400 before an engine is read or written. Manual portal/API
+create may omit `tenancy` for the documented compatibility behavior: the
+server persists the authenticated request tenant, or `tenant-default` for a
+local OSS request with no tenant context. A normal manual update may omit
+tenancy and cannot change topology; use the acknowledged transition workflow
+for a dedicated/shared topology change.
 
 Dedicated in the authenticated request tenant:
 
@@ -266,12 +271,22 @@ POST /engines-api/external/engines/decommission
 ```
 
 An authoritative bundle retires a configuration-owned engine by omitting it.
-Manual owners use `DELETE /engines-api/engines/{id}`. All three paths remove
+Manual owners normally use the same decommission lifecycle. Physical
+`DELETE /engines-api/engines/{id}` is reserved for an engine with no backstop
+mapping, run, or task history. All lifecycle paths remove
 direct engine and runtime-resource assignments, leave no active mapping or
 runtime-inventory row, remove set materializations, retire engine-bound Runtime
 Resource Sets and deployment targets, and deny existing sessions immediately.
-External/config paths retain inactive history; manual deletion removes the
-owned rows.
+External/config decommission retains inactive engine and backstop history.
+Physical deletion removes the complete non-backstop dependency graph in one
+transaction and deletes the engine last.
+
+Before decommissioning an engine that used `mirrored_engine_backstop`, retry or
+roll back until there is no queued/running task and no durable owned-grant or
+pending-side-effect journal. The lifecycle mutation is rejected atomically
+while any of those markers remains. A successful decommission deactivates
+backstop mappings and preserves run/task evidence; it never discards the only
+record needed to retire a native authorization.
 
 A later external upsert of the same `externalId` or bundle apply of the same
 engine key is a create, not an update of the retired row. The response has a

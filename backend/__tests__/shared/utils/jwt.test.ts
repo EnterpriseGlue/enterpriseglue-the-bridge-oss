@@ -22,6 +22,15 @@ describe('jwt utils', () => {
     expect(payload.type).toBe('refresh');
   });
 
+  it('binds both break-glass token types to live administrator recovery', () => {
+    expect(verifyToken(generateAccessToken(user, { administratorRecovery: true }))).toMatchObject({
+      type: 'access', recovery: 'platform_administrator',
+    });
+    expect(verifyToken(generateRefreshToken(user, { administratorRecovery: true }))).toMatchObject({
+      type: 'refresh', recovery: 'platform_administrator',
+    });
+  });
+
   it('emits only the canonical principal identity in onboarding tokens', () => {
     const payload = verifyToken(generateOnboardingToken({
       userId: user.id,

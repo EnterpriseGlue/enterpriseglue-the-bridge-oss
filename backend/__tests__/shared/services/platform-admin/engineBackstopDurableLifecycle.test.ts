@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
 import { EngineBackstopSyncTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncTask.js';
 import { EngineBackstopSyncService } from '@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js';
@@ -12,6 +13,7 @@ vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   encrypt: vi.fn((value: string) => `encrypted:${value}`),
   decrypt: vi.fn((value: string) => value.replace('encrypted:', '')),
   hash: vi.fn((value: string) => Buffer.from(value).toString('hex').padEnd(64, '0').slice(0, 64)),
+  blindIndex: vi.fn((_domain: string, value: string) => Buffer.from(value).toString('hex').padEnd(64, '0').slice(0, 64)),
 }));
 
 const sourceHash = 'a'.repeat(64);
@@ -60,26 +62,52 @@ function setup() {
       }));
     }),
     update: vi.fn(async (criteria: any, values: any) => {
+      const leaseOperator = criteria.leaseExpiresAt as { _type?: string; _value?: number } | undefined;
       const matched = tasks.filter((row) => {
         if (criteria.id && row.id !== criteria.id) return false;
         if (criteria.runId && row.runId !== criteria.runId) return false;
         if (criteria.status && row.status !== criteria.status) return false;
         if (criteria.leaseId && row.leaseId !== criteria.leaseId) return false;
-        if (criteria.leaseExpiresAt && (row.leaseExpiresAt === null || row.leaseExpiresAt > Date.now())) return false;
+        if (leaseOperator?._type === 'lessThanOrEqual' && (row.leaseExpiresAt === null || row.leaseExpiresAt > Number(leaseOperator._value))) return false;
+        if (leaseOperator?._type === 'moreThan' && (row.leaseExpiresAt === null || row.leaseExpiresAt <= Number(leaseOperator._value))) return false;
         return true;
       });
       matched.forEach((row) => Object.assign(row, values));
       return { affected: matched.length };
     }),
   };
-  vi.mocked(getDataSource).mockResolvedValue({
-    getRepository: (entity: unknown) => {
+  const engine = {
+    id: 'engine-1',
+    baseUrl: 'https://engine.example.test/engine-rest',
+    type: 'operaton',
+    connectionMode: 'customer_sidecar',
+    authType: 'none',
+    username: null,
+    passwordEnc: null,
+    oauthTokenUrl: null,
+    oauthScopes: null,
+    oauthAudience: null,
+    lifecycleStatus: 'active',
+  };
+  const engineRepository = {
+    update: vi.fn(async () => ({ affected: 1 })),
+    createQueryBuilder: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      getOne: vi.fn(async () => engine),
+    })),
+  };
+  const getRepository = (entity: unknown) => {
       if (entity === EngineBackstopSyncRun) return runRepository;
       if (entity === EngineBackstopSyncTask) return taskRepository;
+      if (entity === Engine) return engineRepository;
       throw new Error('Unexpected repository');
-    },
+  };
+  vi.mocked(getDataSource).mockResolvedValue({
+    getRepository,
+    transaction: async (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
   } as any);
-  return { runs, tasks, runRepository, taskRepository };
+  return { runs, tasks, runRepository, taskRepository, engine };
 }
 
 describe('mirrored-backstop durable lifecycle', () => {
@@ -87,19 +115,26 @@ describe('mirrored-backstop durable lifecycle', () => {
 
   it('persists a sanitized preview, collapses concurrent apply requests, and rolls back only recorded native IDs', async () => {
     const state = setup();
+    let nativeAuthorizationIds: string[] = [];
     const nativeClient = {
-      createAuthorization: vi.fn(async () => ({ id: 'native-auth-1' })),
-      deleteAuthorization: vi.fn(async () => undefined),
-      readAuthorization: vi.fn(),
+      createAuthorization: vi.fn(async () => {
+        nativeAuthorizationIds = ['native-auth-1'];
+        return { id: 'native-auth-1' };
+      }),
+      deleteAuthorization: vi.fn(async (_engineId: string, id: string) => {
+        nativeAuthorizationIds = nativeAuthorizationIds.filter((candidate) => candidate !== id);
+      }),
+      readAuthorization: vi.fn(async () => ({ type: 1, permissions: ['READ'], groupId: 'native-operators', resourceType: 6, resourceId: 'payments' })),
+      listExactAuthorizationIds: vi.fn(async () => [...nativeAuthorizationIds]),
     };
     const service = new EngineBackstopSyncService({
       runService: new EngineBackstopSyncRunService(),
       taskService: new EngineBackstopSyncTaskService(),
       nativeClient,
       projectionBuilder: async () => ({
-        engine: { id: 'engine-1', type: 'operaton', connectionMode: 'customer_sidecar', lifecycleStatus: 'active' } as any,
+        engine: state.engine as any,
         tenantId: 'tenant-a', projection: projection(), sourceHash, desiredHash,
-        capability: { nativeAuthorizationWrite: true },
+        capability: { nativeAuthorizationWrite: true, directTrustedEndpoint: false },
       }),
     });
 

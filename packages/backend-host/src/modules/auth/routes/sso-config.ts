@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { apiLimiter, identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { resolveTenantContext } from '@enterpriseglue/shared/middleware/tenant.js';
 import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 
@@ -14,7 +14,7 @@ const router = Router();
  * provider-neutral identity providers. Full tenant-based SSO enforcement is
  * an EE-only feature.
  */
-router.get('/api/t/:tenantSlug/auth/sso-config', apiLimiter, resolveTenantContext({ required: true }), asyncHandler(async (req, res) => {
+router.get('/api/t/:tenantSlug/auth/sso-config', apiLimiter, identityFlowLimiter, resolveTenantContext({ required: true }), asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim();
   if (!tenantSlug) {
     return res.status(400).json({ error: 'Tenant slug is required' });

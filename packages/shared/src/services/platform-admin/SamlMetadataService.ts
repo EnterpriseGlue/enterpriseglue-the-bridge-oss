@@ -1,4 +1,5 @@
 import { secretResolver } from './SecretResolver.js';
+import { readBoundedIdentityProviderResponse, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
 
 const MAX_METADATA_BYTES = 1024 * 1024;
 
@@ -13,9 +14,7 @@ function metadataSource(configurationJson: string): { url: URL | null; xml: stri
     if (!xml) throw new Error('SAML metadataXmlRef is unavailable');
     return { url: null, xml };
   }
-  let url: URL;
-  try { url = new URL(value); } catch { throw new Error('SAML metadataUrl must be a valid URL'); }
-  if (url.protocol !== 'https:') throw new Error('SAML metadataUrl must use HTTPS');
+  const url = validateIdentityProviderEndpointUrl(value, 'SAML metadataUrl', ['https:']);
   return { url, xml: null };
 }
 
@@ -24,11 +23,12 @@ class SamlMetadataService {
     const source = metadataSource(configurationJson);
     const metadata = source.url
       ? await (async () => {
-        const response = await fetch(source.url!, { headers: { accept: 'application/samlmetadata+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(10_000) });
-        if (!response.ok) throw new Error(`SAML metadata request failed (${response.status})`);
-        const contentLength = Number(response.headers.get('content-length') || 0);
-        if (contentLength > MAX_METADATA_BYTES) throw new Error('SAML metadata exceeds the maximum allowed size');
-        return response.text();
+        const response = await fetch(source.url!, { redirect: 'error', headers: { accept: 'application/samlmetadata+xml, application/xml, text/xml' }, signal: AbortSignal.timeout(10_000) });
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined);
+          throw new Error(`SAML metadata request failed (${response.status})`);
+        }
+        return (await readBoundedIdentityProviderResponse(response, 'SAML metadata', MAX_METADATA_BYTES)).toString('utf8');
       })()
       : source.xml!;
     if (Buffer.byteLength(metadata, 'utf8') > MAX_METADATA_BYTES) throw new Error('SAML metadata exceeds the maximum allowed size');

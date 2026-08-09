@@ -5,6 +5,7 @@ import { AppError } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { Request, Response, NextFunction } from 'express';
 
@@ -109,6 +110,26 @@ describe('auth middleware', () => {
       (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'access', email: 'user@example.com', authSessionVersion: 0 });
       (getDataSource as any).mockResolvedValue({
         getRepository: () => ({ findOneBy: vi.fn().mockResolvedValue({ isActive: true, isEmailVerified: true, email: 'user@example.com', authSessionVersion: 1 }) }),
+      });
+
+      await requireAuth(req as Request, res as Response, next);
+
+      expect(req.user).toBeUndefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+      expect((next as any).mock.calls[0][0]?.message).toContain('Session has been revoked');
+    });
+
+    it('rejects an existing administrator-recovery access session after membership expires or is removed', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({
+        principalType: 'user', principalId: 'user-1', type: 'access', authSessionVersion: 2, recovery: 'platform_administrator',
+      });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: (entity: unknown) => {
+          if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, isEmailVerified: true, email: 'admin@example.com', authSessionVersion: 2 }) };
+          if (entity === AuthzGroupMembership) return { find: vi.fn().mockResolvedValue([]) };
+          throw new Error('Unexpected repository');
+        },
       });
 
       await requireAuth(req as Request, res as Response, next);
@@ -405,6 +426,26 @@ describe('auth middleware', () => {
 
       expect(req.user).toBeUndefined();
       expect(next).toHaveBeenCalled();
+    });
+
+    it('continues anonymously when an administrator-recovery membership is no longer active', async () => {
+      req.headers = { authorization: `Bearer ${TEST_BEARER_TOKEN}` };
+      (jwt.verifyToken as any).mockReturnValue({
+        userId: 'user-1', type: 'access', authSessionVersion: 2, recovery: 'platform_administrator',
+      });
+      (getDataSource as any).mockResolvedValue({
+        getRepository: (entity: unknown) => {
+          if (entity === User) return { findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', isActive: true, authSessionVersion: 2 }) };
+          if (entity === AuthzGroupMembership) return { find: vi.fn().mockResolvedValue([]) };
+          throw new Error('Unexpected repository');
+        },
+      });
+
+      await optionalAuth(req as Request, res as Response, next);
+
+      expect(req.user).toBeUndefined();
+      expect(bpmnRequestContext.updateBpmnEngineRequestContext).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledWith();
     });
 
     it('ignores malformed tokens without attempting verification', async () => {

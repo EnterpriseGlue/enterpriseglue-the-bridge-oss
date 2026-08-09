@@ -72,7 +72,9 @@ guides to:
    [production enablement checklist](../how-to/configure-engine-tenancy.md#production-enablement-checklist)
    once for a decentralized dedicated engine and once for a centralized shared
    engine; and
-10. identify the compatibility warning, metrics, and rollback conditions.
+10. prove omitted external tenancy receives HTTP 400 before persistence, no
+    warning/default behavior remains, and identify the database/application
+    restore conditions for the irreversible 0.11.0 boundary.
 
 Use local placeholder engines and identities. No deployed customer identity
 provider or credential is required.

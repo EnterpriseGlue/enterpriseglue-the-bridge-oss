@@ -1,18 +1,22 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { createHash } from 'node:crypto';
 
-const { getDataSource, encrypt, decrypt, generateId } = vi.hoisted(() => ({
+const { getDataSource, encrypt, decrypt, blindIndex, generateId } = vi.hoisted(() => ({
   getDataSource: vi.fn(),
   encrypt: vi.fn((value: string) => `encrypted:${value}`),
   decrypt: vi.fn((value: string) => value.replace(/^encrypted:/, '')),
+  blindIndex: vi.fn((_domain: string, _value: string) => 'd'.repeat(64)),
   generateId: vi.fn(() => 'import-run-1'),
 }));
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource }));
-vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({ encrypt, decrypt }));
+vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({ encrypt, decrypt, blindIndex }));
 vi.mock('@enterpriseglue/shared/utils/id.js', () => ({ generateId }));
 
 import {
   CamundaNativeGrantEvidenceLimitError,
   CamundaNativeGrantImportRunService,
+  assertCamundaNativeGrantMigrationContext,
+  camundaNativeGrantMigrationCommitments,
   DEFAULT_CAMUNDA_NATIVE_GRANT_SNAPSHOT_RETENTION_MS,
   MAX_CAMUNDA_NATIVE_GRANT_CLASSIFICATIONS_BYTES,
   MAX_CAMUNDA_NATIVE_GRANT_ENCRYPTED_EVIDENCE_BYTES,
@@ -81,6 +85,30 @@ describe('CamundaNativeGrantImportRunService', () => {
     expect(stored.classificationsJson).not.toContain('native-operations');
     expect(stored.classificationsJson).not.toContain('payments-order');
     expect(stored.createdById).toBe('operator-1');
+    expect(blindIndex).toHaveBeenCalledWith('camunda-native-import:camunda-group', 'native-operations');
+  });
+
+  it('binds a migration preview to the exact engine connection, topology, and active runtime inventory', () => {
+    blindIndex.mockImplementation((domain: string, value: string) => createHash('sha256').update(`${domain}\u0000${value}`).digest('hex'));
+    const engine = {
+      id: 'engine-1', type: 'camunda7', baseUrl: 'https://engine.example.test/engine-rest', connectionMode: 'direct',
+      authType: 'basic', username: 'migration-reader', passwordEnc: 'encrypted-secret', oauthTokenUrl: null, oauthScopes: null,
+      oauthAudience: null, tenancyMode: 'dedicated', tenantId: 'tenant-a', runtimeAccessScope: 'resource_aware',
+    };
+    const resources = [{
+      id: 'resource-1', engineId: 'engine-1', resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: 'runtime-a',
+      tenantId: 'tenant-a', isActive: true, tenantResolutionStatus: 'resolved', updatedAt: 10,
+    }];
+    const detail = { contextCommitments: camundaNativeGrantMigrationCommitments(engine, resources) };
+
+    expect(() => assertCamundaNativeGrantMigrationContext(detail, engine, resources)).not.toThrow();
+    expect(() => assertCamundaNativeGrantMigrationContext(detail, { ...engine, baseUrl: 'https://replacement.example.test/engine-rest' }, resources))
+      .toThrow('engine connection or topology changed');
+    expect(() => assertCamundaNativeGrantMigrationContext(detail, engine, [{ ...resources[0], resourceKey: 'refunds' }]))
+      .toThrow('runtime-resource inventory changed');
+    expect(JSON.stringify(detail)).not.toContain(engine.baseUrl);
+    expect(JSON.stringify(detail)).not.toContain('payments');
+    blindIndex.mockImplementation(() => 'd'.repeat(64));
   });
 
   it('returns a detailed snapshot only while it is retained and never in the summary', async () => {

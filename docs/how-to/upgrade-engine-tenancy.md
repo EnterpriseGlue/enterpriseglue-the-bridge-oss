@@ -13,9 +13,33 @@ administrators, and security reviewers.
    configuration-bundle, and role-assignment state.
 3. Record the current application version, schema/migration version, and
    configuration bundle hash.
-4. Confirm a local break-glass platform administrator can sign in.
+4. Confirm a local break-glass platform administrator can sign in, then prove
+   a membership removal invalidates both a concurrent recovery attempt and an
+   already-open recovery access/refresh session. Restore the approved recovery
+   membership only after capturing that evidence.
 5. Run the current engine-tenancy foundation, provisioning, mapping,
    authorization, runtime, transition, operations, and documentation lanes.
+
+### 0.11.0 irreversible identity boundary
+
+The 0.11.0 migration series is not wholly reversible. Migrations
+`1700000000089` through `1700000000095` remove the obsolete legacy SSO
+provider/mapping tables and provider-specific user identity columns, and later
+migrations such as `1700000000100` deliberately provide no downgrade path.
+Migration `1700000000109` is also irreversible: it classifies historical
+tenantless/default OSS projects, project targets, project role assignments,
+and project permission grants as `tenant-default`, then requires tenant
+ownership on projects and targets. It stops before writes when a target,
+assignment, or grant contradicts its project's tenant. Restore the pre-upgrade
+database and matching application images to cross this boundary backward.
+They do not convert or preserve legacy SSO data. This release assumes no
+customer production SSO data exists in those structures.
+
+Before starting 0.11.0, verify that the removed structures contain no required
+data and capture a full database backup plus the matching pre-upgrade backend
+and frontend images. Stop the upgrade if that assumption is false. Do not run
+TypeORM revert across this boundary; the only full downgrade is restoring the
+captured database and matching application pair.
 
 No deployed SSO provider is required for the tenancy upgrade. Use local users,
 groups, API clients, and service accounts for the authorization evidence.
@@ -34,7 +58,10 @@ the mapping table and indexes, then classifies legacy rows conservatively:
 The migration never infers shared topology from `resource_aware` and never
 attaches a null row to the local default tenant. Apply normal repository
 migrations for the configured PostgreSQL, MySQL, SQL Server, Oracle, or Spanner
-adapter; do not copy vendor-specific SQL between adapters.
+adapter; do not copy vendor-specific SQL between adapters. The topology
+migration itself is reversible where its `down()` implementation exists, but
+that does not make the complete 0.11.0 identity/authorization migration
+sequence reversible.
 
 ## Observe and Classify
 

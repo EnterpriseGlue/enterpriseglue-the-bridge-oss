@@ -6,6 +6,7 @@ import refreshRouter from '../../../../../packages/backend-host/src/modules/auth
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
@@ -120,7 +121,7 @@ describe('POST /api/auth/refresh', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.expiresIn).toBe(3600);
-    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser);
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, { administratorRecovery: false });
   });
 
   it('refreshes a canonical-principal refresh token without legacy user fields', async () => {
@@ -137,7 +138,32 @@ describe('POST /api/auth/refresh', () => {
     const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
 
     expect(response.status).toBe(200);
-    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser);
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, { administratorRecovery: false });
+  });
+
+  it('rejects an existing administrator-recovery refresh session after membership expires or is removed', async () => {
+    const mockUser = { id: 'user-1', email: 'admin@example.com', isActive: true, authSessionVersion: 2 };
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(mockUser) };
+    const refreshTokenRepo = { find: vi.fn() };
+    const membershipRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    (jwt.verifyToken as any).mockReturnValue({
+      principalType: 'user', principalId: 'user-1', authSessionVersion: 2, type: 'refresh', recovery: 'platform_administrator',
+    });
+
+    const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Session has been revoked');
+    expect(refreshTokenRepo.find).not.toHaveBeenCalled();
+    expect(jwt.generateAccessToken).not.toHaveBeenCalled();
   });
 
   it('rejects missing refresh token', async () => {

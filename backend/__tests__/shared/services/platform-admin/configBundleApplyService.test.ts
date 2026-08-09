@@ -387,8 +387,8 @@ describe('configBundleApplyService', () => {
           key: 'identity.corporate-oidc', type: 'oidc', enabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory',
           displayName: 'Microsoft Entra ID', organization: 'Example Corporation', displayOrder: 10, preferred: true, loginDomains: ['example.com'],
           allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'],
-          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
-          oidc: { issuerUrl: 'https://login.example.test/tenant/v2.0', clientId: 'enterpriseglue-web', clientSecretRef: 'env://CORPORATE_OIDC_CLIENT_SECRET', callbackUrl: 'https://enterpriseglue.example.test/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue-web' },
+          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
+          oidc: { issuerUrl: 'https://login.example.test/tenant/v2.0', clientId: 'enterpriseglue-web', clientSecretRef: 'env://CORPORATE_OIDC_CLIENT_SECRET', callbackUrl: 'http://localhost:5173/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue-web' },
           ownershipMode: 'config_warn',
         }],
       },
@@ -412,7 +412,7 @@ describe('configBundleApplyService', () => {
       key: 'identity.corporate-oidc', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory', ownershipMode: 'config_warn',
       displayName: 'Microsoft Entra ID', organization: 'Example Corporation', displayOrder: 10, isPreferred: true, loginDomainsJson: '["example.com"]',
       configurationJson: expect.stringContaining('"expectedAudience":"enterpriseglue-web"'),
-      syncJson: expect.stringContaining('"connectorCapability":"graph"'),
+      syncJson: expect.stringContaining('"connectorCapability":"claim_only"'),
     }));
   });
 
@@ -1094,8 +1094,37 @@ describe('configBundleApplyService', () => {
     const applyAudit = auditInsert.mock.calls.map((args) => args[0] as { details: string; action: string }).find((entry) => entry.action === 'authz.config_bundle.apply');
     expect(applyAudit).toBeDefined();
     expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
-    expect(applyAudit!.details).toContain('"secretReferences":["PAYMENTS_ENGINE_PASSWORD"]');
+    expect(applyAudit!.details).toContain('"secretReferenceSummary":{"count":1,"available":0,"unavailable":1}');
+    expect(applyAudit!.details).not.toContain('PAYMENTS_ENGINE_PASSWORD');
     expect(applyAudit!.details).not.toContain('passwordRef');
+  });
+
+  it('stores only an operator-safe error when config apply execution fails', async () => {
+    const { dataSource, configRunRepo } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+    dataSource.transaction.mockRejectedValueOnce(new Error(
+      'env://PAYMENTS_ENGINE_TOKEN Bearer secret-value https://private.internal/config',
+    ));
+
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      idempotencyKey: 'failed-apply-safe-diagnostics',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toThrow('PAYMENTS_ENGINE_TOKEN');
+
+    expect(configRunRepo.update).toHaveBeenCalledWith(
+      { id: expect.any(String) },
+      expect.objectContaining({
+        status: 'failed',
+        errorMessage: 'Configuration bundle apply failed; inspect protected server logs',
+      }),
+    );
+    expect(JSON.stringify(configRunRepo.update.mock.calls)).not.toContain('PAYMENTS_ENGINE_TOKEN');
+    expect(JSON.stringify(configRunRepo.update.mock.calls)).not.toContain('secret-value');
+    expect(JSON.stringify(configRunRepo.update.mock.calls)).not.toContain('private.internal');
   });
 
   it('applies a config-managed shared engine in fail-closed mapping state', async () => {
@@ -1392,7 +1421,7 @@ describe('configBundleApplyService', () => {
       './identity-providers.json': { identityProviders: [{
         key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
         sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
-        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'secret/entra', callbackUrl: 'https://app.example.test/callback', scopes: ['openid', 'profile'] },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'secret/entra', callbackUrl: 'http://localhost:5173/api/auth/identity/callback', scopes: ['openid', 'profile'] },
       }] },
     };
     const preview = configBundlePreviewService.preview({ bundle: providerBundle, files: providerFiles });
@@ -1500,7 +1529,7 @@ describe('configBundleApplyService', () => {
       './identity-providers.json': { identityProviders: [{
         key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
         sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
-        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', callbackUrl: 'http://localhost:5173/api/auth/identity/callback', scopes: ['openid'] },
       }] },
       './identity-mappings.json': { identityMappings: [{ key: 'mapping.operations', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operations' }] },
       './project-engine-targets.json': { projectEngineTargets: [{ key: 'target.payments', projectRef: { id: projectId }, engineRef: { engineKey: 'engine.payments' }, allowManualDeploy: true }] },

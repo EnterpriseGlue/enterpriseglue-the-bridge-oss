@@ -87,6 +87,19 @@ describe('EngineBackstopProjectionService', () => {
     expect(projection.classifications[0]).toMatchObject({ disposition: 'blocked', reasonCodes: ['runtime_resource_cross_tenant'] });
   });
 
+  it('rejects a stale cross-tenant runtime resource on a dedicated engine', () => {
+    const projection = service.project(context({
+      candidates: [{
+        ...context().candidates[0],
+        tenantId: 'tenant-a',
+        resource: { ...context().candidates[0].resource, tenantId: 'tenant-b', tenantResolutionStatus: 'resolved' },
+      }],
+    }), 100);
+
+    expect(projection.desiredGrants).toEqual([]);
+    expect(projection.classifications[0]).toMatchObject({ disposition: 'blocked', reasonCodes: ['runtime_resource_cross_tenant'] });
+  });
+
   it('fails closed on a shared engine when the native resource key is active in another tenant', () => {
     const projection = service.project(context({
       tenancyMode: 'shared',

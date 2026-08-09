@@ -31,7 +31,7 @@ EnterpriseGlue now models engine topology explicitly:
 - bounded operational metrics report resolution health and provisioning
   fallback adoption without exposing identifiers; and
 - the same engine-tenancy migration and mapping contract passes all 35
-  lifecycle stage cells and all twenty upgrade-baseline observations across
+  lifecycle stage cells and all 25 upgrade-baseline observations across
   PostgreSQL, MySQL, SQL Server, Oracle, and Spanner with one equivalent
   logical-schema fingerprint.
 
@@ -56,6 +56,10 @@ The earliest removal conditions are documented in
 6. Run the
    [five-database qualification](../development/engine-tenancy-database-qualification.md)
    from the exact clean release commit.
+7. Before decommissioning a mirrored-backstop engine, retry or roll back to
+   zero owned grants and pending side effects. Decommission preserves run/task
+   evidence; physical deletion is allowed only when the engine has no
+   backstop mapping, run, or task history.
 
 ## Security Impact
 
@@ -64,6 +68,8 @@ inventory proves one resolved same-tenant resource. Broad engine or Engine Set
 grants do not bypass this boundary. Metrics and errors remain sanitized.
 Decommission also invalidates already-authenticated sessions immediately; a
 later owner registration cannot reactivate the retired stable ID.
+It fails without mutation while a backstop task or durable native ownership
+journal remains, preventing native grants from being orphaned.
 
 ## Rollback
 

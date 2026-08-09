@@ -824,7 +824,21 @@ export const ProjectEngineTargetModeSchema = z.enum(['manual', 'ci', 'api', 'imp
 export const ProjectEngineTargetStatusSchema = z.enum(['active', 'disabled', 'archived']);
 export const ProjectEngineTargetSourceSchema = z.enum(['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation', 'config']);
 export const ProjectEngineTargetApprovalStatusSchema = z.enum(['not_required', 'pending', 'approved', 'rejected']);
-export const ProjectEngineTargetDiagnosticsSchema = z.record(z.string(), z.unknown());
+const ProjectEngineTargetDiagnosticValueSchema = z.string().trim().min(1).max(255)
+  .refine((value) => !/^(?:https?|ldaps?):\/\//i.test(value), 'Diagnostic values must not contain endpoint URLs');
+export const ProjectEngineTargetDiagnosticsSchema = z.object({
+  source: z.enum(['external_registration_api', 'config_bundle', 'manual', 'ci', 'api', 'import', 'system', 'automation']).optional(),
+  owner: ProjectEngineTargetDiagnosticValueSchema.optional(),
+  confidence: z.enum(['low', 'medium', 'high']).optional(),
+  externalSystemId: ProjectEngineTargetDiagnosticValueSchema.optional(),
+  externalProjectId: ProjectEngineTargetDiagnosticValueSchema.nullable().optional(),
+  externalEngineId: ProjectEngineTargetDiagnosticValueSchema.nullable().optional(),
+  externalTargetId: ProjectEngineTargetDiagnosticValueSchema.nullable().optional(),
+}).strict().superRefine((value, ctx) => {
+  if (new TextEncoder().encode(JSON.stringify(value)).byteLength > 4_096) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Project engine target diagnostics exceed 4096 bytes' });
+  }
+});
 
 export const ProjectEngineTargetSchema = z.object({
   id: z.string(),
@@ -1426,8 +1440,8 @@ export const PublicLoginMethodsResponseSchema = z.object({
 });
 
 export const IdentityProviderConnectionTestResponseSchema = z.discriminatedUnion('protocol', [
-  z.object({ status: z.literal('connected'), protocol: z.literal('oidc'), issuer: z.string() }),
-  z.object({ status: z.literal('connected'), protocol: z.literal('saml'), entityDescriptorCount: z.number().int().nonnegative() }),
+  z.object({ status: z.literal('metadata_reachable'), protocol: z.literal('oidc'), issuer: z.string() }),
+  z.object({ status: z.literal('metadata_reachable'), protocol: z.literal('saml'), entityDescriptorCount: z.number().int().nonnegative() }),
   z.object({ status: z.literal('connected'), protocol: z.literal('ldap'), sampledIdentities: z.number().int().nonnegative() }),
 ]);
 

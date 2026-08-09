@@ -11,6 +11,7 @@ import { getDatabaseType } from '@enterpriseglue/shared/db/adapters/QueryHelpers
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 
 const getActivePlatformAdministratorUserIds = vi.hoisted(() => vi.fn().mockResolvedValue(new Set()));
+const claimActivePlatformAdministratorMembership = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 const loginMethodService = vi.hoisted(() => ({ ordinaryLocalPasswordEnabled: vi.fn().mockResolvedValue(true) }));
 const recordLoginExperienceMetric = vi.hoisted(() => vi.fn());
@@ -29,6 +30,7 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
   getActivePlatformAdministratorUserIds,
+  claimActivePlatformAdministratorMembership,
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js', () => ({
@@ -75,6 +77,8 @@ describe('auth login routes', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
     getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());
+    claimActivePlatformAdministratorMembership.mockResolvedValue(true);
+    (verifyPassword as unknown as Mock).mockResolvedValue(false);
     loginMethodService.ordinaryLocalPasswordEnabled.mockResolvedValue(true);
     authSessionService.issue.mockResolvedValue({ accessToken: 'access-token', refreshToken: 'refresh-token', expiresIn: 900 });
 
@@ -153,16 +157,21 @@ describe('auth login routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.user).toMatchObject({ id: 'break-glass-1', platformRole: 'admin' });
-    expect(getActivePlatformAdministratorUserIds).toHaveBeenCalledWith(['break-glass-1'], expect.any(Object));
+    expect(claimActivePlatformAdministratorMembership).toHaveBeenCalledWith('break-glass-1', expect.any(Object));
+    expect(getActivePlatformAdministratorUserIds).not.toHaveBeenCalled();
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).toHaveBeenCalledWith(expect.any(Object), 'break-glass-1');
+    expect(authSessionService.issue).toHaveBeenCalledWith(expect.objectContaining({ id: 'break-glass-1' }), expect.objectContaining({
+      administratorRecovery: true,
+      store: expect.any(Object),
+    }));
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith({ method: 'recovery', event: 'selected' });
     expect(recordLoginExperienceMetric).toHaveBeenCalledWith(expect.objectContaining({ method: 'recovery', event: 'succeeded' }));
   });
 
   it('revokes break-glass access immediately when the canonical administrator membership is removed', async () => {
-    getActivePlatformAdministratorUserIds
-      .mockResolvedValueOnce(new Set(['break-glass-1']))
-      .mockResolvedValueOnce(new Set());
+    claimActivePlatformAdministratorMembership
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
     (verifyPassword as unknown as Mock).mockResolvedValue(true);
     userRepo.createQueryBuilder.mockReturnValue({
       where: vi.fn().mockReturnThis(),
@@ -190,15 +199,40 @@ describe('auth login routes', () => {
       .send({ email: 'break-glass@example.com', password: 'Password123!' });
 
     expect(beforeRemoval.status).toBe(200);
-    expect(afterRemoval.status).toBe(403);
-    expect(afterRemoval.body.error).toContain('Administrator recovery is unavailable.');
-    expect(getActivePlatformAdministratorUserIds).toHaveBeenNthCalledWith(1, ['break-glass-1'], expect.any(Object));
-    expect(getActivePlatformAdministratorUserIds).toHaveBeenNthCalledWith(2, ['break-glass-1'], expect.any(Object));
-    expect(verifyPassword).toHaveBeenCalledTimes(1);
+    expect(afterRemoval.status).toBe(401);
+    expect(afterRemoval.body.error).toBe('Invalid email or password');
+    expect(claimActivePlatformAdministratorMembership).toHaveBeenNthCalledWith(1, 'break-glass-1', expect.any(Object));
+    expect(claimActivePlatformAdministratorMembership).toHaveBeenNthCalledWith(2, 'break-glass-1', expect.any(Object));
+    expect(verifyPassword).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not issue recovery after administrator membership is removed during password verification', async () => {
+    getActivePlatformAdministratorUserIds.mockResolvedValue(new Set(['break-glass-1']));
+    claimActivePlatformAdministratorMembership.mockResolvedValue(false);
+    (verifyPassword as unknown as Mock).mockResolvedValue(true);
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn().mockResolvedValue({
+        id: 'break-glass-1', email: 'break-glass@example.com', authProvider: 'local',
+        passwordHash: 'local-password-hash', failedLoginAttempts: 0, lockedUntil: null,
+        isEmailVerified: true, createdByUserId: null,
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/auth/recovery/login')
+      .send({ email: 'break-glass@example.com', password: 'Password123!' });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Invalid email or password');
+    expect(authSessionService.issue).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
   });
 
   it('keeps local non-administrator accounts blocked while SSO is active', async () => {
-    getActivePlatformAdministratorUserIds.mockResolvedValue(new Set());
+    claimActivePlatformAdministratorMembership.mockResolvedValue(false);
+    (verifyPassword as unknown as Mock).mockResolvedValue(true);
     userRepo.createQueryBuilder.mockReturnValue({
       where: vi.fn().mockReturnThis(),
       andWhere: vi.fn().mockReturnThis(),
@@ -215,9 +249,117 @@ describe('auth login routes', () => {
       .post('/api/auth/recovery/login')
       .send({ email: 'local@example.com', password: 'Password123!' });
 
-    expect(response.status).toBe(403);
-    expect(verifyPassword).not.toHaveBeenCalled();
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Invalid email or password');
+    expect(verifyPassword).toHaveBeenCalledWith('Password123!', 'local-password-hash');
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+  });
+
+  it('makes missing, non-local, non-administrator, and wrong-password recovery failures indistinguishable', async () => {
+    const getOne = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'sso-user-1', email: 'sso@example.com', authProvider: 'oidc', passwordHash: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'local-user-1', email: 'local@example.com', authProvider: 'local',
+        passwordHash: 'local-hash', failedLoginAttempts: 0, lockedUntil: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'admin-1', email: 'admin@example.com', authProvider: 'local',
+        passwordHash: 'admin-hash', failedLoginAttempts: 0, lockedUntil: null,
+      });
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne,
+    });
+    (verifyPassword as unknown as Mock)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    claimActivePlatformAdministratorMembership.mockResolvedValue(false);
+
+    const responses = [];
+    for (const email of ['missing@example.com', 'sso@example.com', 'local@example.com', 'admin@example.com']) {
+      responses.push(await request(app)
+        .post('/api/auth/recovery/login')
+        .send({ email, password: 'CandidatePassword123!' }));
+    }
+
+    expect(responses.map(({ status, body }) => ({ status, body }))).toEqual([
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+    ]);
+    expect(verifyPassword).toHaveBeenCalledTimes(4);
+    expect(claimActivePlatformAdministratorMembership).toHaveBeenCalledTimes(1);
+    expect(authSessionService.issue).not.toHaveBeenCalled();
+  });
+
+  it('locks an existing local recovery account after five generic credential failures', async () => {
+    const localUser = {
+      id: 'admin-1', email: 'admin@example.com', authProvider: 'local', passwordHash: 'admin-hash',
+      failedLoginAttempts: 0, lockedUntil: null as number | null, isEmailVerified: true, createdByUserId: null,
+    };
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn(async () => localUser),
+    });
+    userRepo.update.mockImplementation(async (_criteria, values) => {
+      Object.assign(localUser, values);
+      return { affected: 1 };
+    });
+    (verifyPassword as unknown as Mock).mockResolvedValue(false);
+
+    const responses = [];
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      responses.push(await request(app)
+        .post('/api/auth/recovery/login')
+        .send({ email: localUser.email, password: 'WrongPassword123!' }));
+    }
+    const lockedResponse = await request(app)
+      .post('/api/auth/recovery/login')
+      .send({ email: localUser.email, password: 'WrongPassword123!' });
+
+    expect(responses.map(({ status, body }) => ({ status, error: body.error }))).toEqual(
+      Array.from({ length: 5 }, () => ({ status: 401, error: 'Invalid email or password' })),
+    );
+    expect(localUser.failedLoginAttempts).toBe(5);
+    expect(localUser.lockedUntil).toEqual(expect.any(Number));
+    expect(lockedResponse.status).toBe(401);
+    expect(lockedResponse.body.error).toBe('Invalid email or password');
+    expect(userRepo.update).toHaveBeenCalledTimes(5);
+    expect(claimActivePlatformAdministratorMembership).not.toHaveBeenCalled();
+  });
+
+  it('resets recovery lockout counters only after valid credentials and an active administrator claim', async () => {
+    const localUser = {
+      id: 'admin-1', email: 'admin@example.com', authProvider: 'local', passwordHash: 'admin-hash',
+      failedLoginAttempts: 4, lockedUntil: null, isEmailVerified: true, createdByUserId: null,
+      firstName: 'Platform', lastName: 'Admin', mustResetPassword: false,
+    };
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne: vi.fn(async () => localUser),
+    });
+    (verifyPassword as unknown as Mock).mockResolvedValue(true);
+    claimActivePlatformAdministratorMembership.mockResolvedValue(true);
+
+    const response = await request(app)
+      .post('/api/auth/recovery/login')
+      .send({ email: localUser.email, password: 'CorrectPassword123!' });
+
+    expect(response.status).toBe(200);
+    expect(userRepo.update).toHaveBeenCalledWith({ id: 'admin-1' }, expect.objectContaining({
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    }));
+    expect(authSessionService.issue).toHaveBeenCalledTimes(1);
   });
 
   it('blocks local login for an enabled direct provider-neutral identity provider', async () => {
@@ -229,7 +371,7 @@ describe('auth login routes', () => {
     expect(loginMethodService.ordinaryLocalPasswordEnabled).toHaveBeenCalledWith(null);
   });
 
-  it('blocks local login for non-local accounts', async () => {
+  it('returns the generic credential failure for non-local accounts after constant-work verification', async () => {
     const getOne = vi.fn().mockResolvedValue({
       id: 'user-1',
       email: 'user@example.com',
@@ -251,9 +393,37 @@ describe('auth login routes', () => {
       .post('/api/auth/login')
       .send({ email: 'user@example.com', password: 'Password123!' });
 
-    expect(response.status).toBe(403);
-    expect(response.body.error).toContain('Local login is disabled for this account. Please use SSO.');
-    expect(verifyPassword as unknown as Mock).not.toHaveBeenCalled();
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: 'Invalid email or password', code: 'UNAUTHORIZED' });
+    expect(verifyPassword as unknown as Mock).toHaveBeenCalledWith('Password123!', expect.stringMatching(/^\$2b\$/));
+  });
+
+  it('makes missing, non-local, and wrong-password ordinary login failures externally equivalent', async () => {
+    const getOne = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'sso-user', authProvider: 'oidc', passwordHash: null })
+      .mockResolvedValueOnce({
+        id: 'local-user', authProvider: 'local', passwordHash: 'local-hash',
+        failedLoginAttempts: 0, lockedUntil: null,
+      });
+    userRepo.createQueryBuilder.mockReturnValue({
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getOne,
+    });
+    (verifyPassword as unknown as Mock).mockResolvedValue(false);
+
+    const responses = [];
+    for (const email of ['missing@example.com', 'sso@example.com', 'local@example.com']) {
+      responses.push(await request(app).post('/api/auth/login').send({ email, password: 'CandidatePassword123!' }));
+    }
+
+    expect(responses.map(({ status, body }) => ({ status, body }))).toEqual([
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+      { status: 401, body: { error: 'Invalid email or password', code: 'UNAUTHORIZED' } },
+    ]);
+    expect(verifyPassword).toHaveBeenCalledTimes(3);
   });
 
   it('logs in local account and sets auth cookies', async () => {

@@ -8,8 +8,9 @@ Audience: Developers, security reviewers, operators, and release managers.
 
 ## Result
 
-Status: **Implemented and passing for the completed local qualification
-slices on 24 July 2026; full release qualification remains incomplete.**
+Status: **Implementation and maintained local qualification are complete. The
+generated exact-commit release-evidence index is the authority for whether the
+current candidate is `pending_approval`, qualified, stale, dirty, or failed.**
 
 The guarded Docker-hosted PostgreSQL/Chromium enforcement journey passes. The
 fine-grained access browser matrix also passes nine tests in each of Chromium,
@@ -19,8 +20,8 @@ stale/multi-tab state, refresh, and browser-history restoration.
 
 The engine-tenancy database matrix passes PostgreSQL 18.4, MySQL 8.4.10, SQL
 Server 16.0.4265.3, Oracle 21.0.0.0.0, and Spanner emulator 1.5.30. All 35
-adapter/stage cells and all twenty adapter/upgrade-baseline observations pass.
-Clean install and all four upgrade paths converge on one logical-schema
+adapter/stage cells and 25/25 adapter/upgrade-baseline observations pass.
+Clean install and all five upgrade paths converge on one logical-schema
 fingerprint:
 `95a8dc5b0d4d97026587e2e41b63ef3536cc5abe681a3d944c5111de69ae753e`.
 
@@ -235,7 +236,13 @@ and emits the numeric public contract. A route test proves the normalization.
 `TEN-API-014`: manual engine deletion previously left runtime inventory,
 tenant mappings, materializations, and runtime-scoped assignments behind.
 Deletion now removes the complete dependent tenancy graph transactionally, and
-the route test asserts every affected repository call.
+the route test asserts every affected repository call, engine-last ordering,
+and rollback on an injected mid-delete failure. Physical deletion is rejected
+for every engine with a backstop mapping, run, or task so ownership evidence
+cannot be erased. Portal, external, and configuration decommission paths are
+rejected before mutation while a backstop task or durable owned/pending-native
+journal remains; once retired, decommission preserves run/task evidence and
+deactivates mappings.
 
 `TEN-AUTHZ-008`: generic null-tenant visibility could make an unowned dedicated
 engine look platform-wide or default-tenant. Engine lookup, collection,
@@ -383,7 +390,7 @@ pnpm run test:engine-tenancy:database-matrix
 ```
 
 It writes `database-matrix.json` only as release-qualified when all five
-targets, all 35 stage cells, all twenty baseline observations, and one equivalent
+targets, all 35 stage cells, all 25 baseline observations, and one equivalent
 logical schema pass. See
 [Qualify Engine Tenancy on Every Supported Database](./engine-tenancy-database-qualification.md)
 for prerequisites, focused diagnosis, cleanup, and rollback conditions.
@@ -409,18 +416,17 @@ disposable PostgreSQL/browser services. CI retains the result directory for
 
 ## Acceptance and Compatibility Follow-up
 
-The implementation and release qualification at
-`b7514d76e7a885fe710350d9f3275fb857d552a2` are complete: the local
-PostgreSQL/Chromium topology-enforcement slice, three-browser fine-grained
-session-state and accessibility slices, complete five-adapter database slice,
-and all same-commit release-evidence gates pass. Engineering, security, and
-independent-operator reviews are retained against the release commit, with each
-reviewer recorded as `human` or `delegated-agent`.
+For each candidate, regenerate the local PostgreSQL/Chromium topology slice,
+three-browser fine-grained session/accessibility slice, five-adapter database
+slice, and exact-commit release-evidence index. Engineering, security, and
+independent-operator reviews are retained against that same candidate, with
+each reviewer recorded as `human` or `delegated-agent`. Historical artifacts
+from another commit are traceability only and never approve a new candidate.
 
-The only follow-up is intentional compatibility retention: keep omitted-tenancy
-provisioning until the published external API deprecation window formally
-closes. Do not remove the warning/counter branch merely because local evidence
-passes.
+The external provisioning compatibility window is closed. Omitted tenancy is
+rejected with HTTP 400 before persistence, and no warning, counter, or default
+branch remains. The first-party UI and JSON/API examples always submit an
+explicit dedicated or shared declaration.
 
 None of these open gates permits null tenant state to authorize an existing
 engine or an unresolved shared resource. Phase 9 of the

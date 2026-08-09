@@ -31,10 +31,18 @@ export const IdentityProviderSyncConfigurationSchema = z.object({
     .refine((triggers) => triggers.includes('login'), 'Sign-in reconciliation is mandatory'),
   intervalSeconds: z.number().int().min(60).max(86_400).optional(),
   requiredForLogin: z.literal(true).default(true),
-  incompleteEntitlements: z.enum(['fail_closed', 'preserve_previous']).default('fail_closed'),
-  connectorCapability: z.enum(['claim_only', 'ldap_directory', 'scim', 'graph']).default('claim_only'),
+  incompleteEntitlements: z.literal('fail_closed').default('fail_closed'),
+  connectorCapability: z.enum(['claim_only', 'ldap_directory']).default('claim_only'),
   scheduled: z.boolean().default(false),
-}).strict();
+}).strict().superRefine((sync, context) => {
+  const scheduledTrigger = sync.triggers.includes('scheduled');
+  if (scheduledTrigger !== sync.scheduled) {
+    context.addIssue({ code: 'custom', path: ['scheduled'], message: 'The scheduled flag and scheduled trigger must be enabled or disabled together' });
+  }
+  if ((sync.scheduled || scheduledTrigger) && sync.connectorCapability !== 'ldap_directory') {
+    context.addIssue({ code: 'custom', path: ['scheduled'], message: 'Scheduled reconciliation is available only for an LDAP directory connector' });
+  }
+});
 
 /**
  * Repairs pre-mandatory persisted records while preserving their optional
@@ -52,6 +60,7 @@ export function normalizeIdentityProviderSyncForMandatoryLogin(value: unknown): 
     ...source,
     triggers: ['login', ...triggers.filter((trigger) => trigger !== 'login')],
     requiredForLogin: true,
+    incompleteEntitlements: 'fail_closed',
   };
 }
 
@@ -78,6 +87,7 @@ export const SamlIdentityProviderConfigurationSchema = IdentityProviderAuthoriza
   metadataUrl: z.string().url().optional(),
   metadataXmlRef: IdentityProviderSecretReferenceSchema.optional(),
   entityId: z.string().min(1).max(2000),
+  idpEntityId: z.string().min(1).max(2000),
   callbackUrl: z.string().url(),
   ssoUrl: z.string().url(),
   nameIdAttribute: z.string().min(1).max(255),
@@ -174,7 +184,7 @@ export const ExternalIdentitySchema = z.object({
   directoryTenantId: z.string().nullable(),
   userId: z.string().min(1),
   emailHint: z.string().nullable(),
-  status: z.enum(['active', 'deactivated', 'archived', 'unlinked']),
+  status: z.enum(['active', 'deactivated', 'archived', 'unlinked', 'provider_disabled', 'directory_inactive']),
   linkedAt: z.number().int().nonnegative(),
   lastSeenAt: z.number().int().nonnegative(),
   createdAt: z.number().int().nonnegative(),

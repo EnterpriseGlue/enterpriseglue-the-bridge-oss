@@ -38,6 +38,12 @@ import {
 import {
   ConsolidateLoginProviderPreference1700000000107,
 } from '@enterpriseglue/shared/db/migrations/1700000000107-consolidate-login-provider-preference.js';
+import {
+  AddExternalEngineRegistrationIdentities1700000000108,
+} from '@enterpriseglue/shared/db/migrations/1700000000108-add-external-engine-registration-identities.js';
+import {
+  RequireProjectTenantOwnership1700000000109,
+} from '@enterpriseglue/shared/db/migrations/1700000000109-require-project-tenant-ownership.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
@@ -46,6 +52,11 @@ import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/en
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
 import {
   engineTenantMappingService,
 } from '@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js';
@@ -92,6 +103,11 @@ const ids = {
   migrationProvider: `${runId}-migration-provider`,
   migrationGroup: `${runId}-migration-group`,
   migrationMapping: `${runId}-migration-mapping`,
+  migrationExternalRegistration: `${runId}-external-registration`,
+  migrationProject: `${runId}-project`,
+  migrationProjectTarget: `${runId}-project-target`,
+  migrationProjectAssignment: `${runId}-project-assignment`,
+  migrationProjectGrant: `${runId}-project-grant`,
 };
 
 function normalizeName(value) {
@@ -149,6 +165,11 @@ async function logicalSchema(queryRunner, dataSource) {
       await tableDetails(queryRunner, dataSource, IdentityEntitlementMapping, 'identity_entitlement_mappings'),
       await tableDetails(queryRunner, dataSource, IdentityProvider, 'identity_providers'),
       await tableDetails(queryRunner, dataSource, PlatformSettings, 'platform_settings'),
+      await tableDetails(queryRunner, dataSource, ExternalEngineRegistration, 'external_engine_registrations'),
+      await tableDetails(queryRunner, dataSource, Project, 'projects'),
+      await tableDetails(queryRunner, dataSource, ProjectEngineTarget, 'project_engine_targets'),
+      await tableDetails(queryRunner, dataSource, RbacRoleAssignment, 'role_assignments'),
+      await tableDetails(queryRunner, dataSource, PermissionGrant, 'permission_grants'),
     ],
   };
   value.tables.sort((left, right) => left.table.localeCompare(right.table));
@@ -390,6 +411,141 @@ async function qualifyRecentMigrationBaselines(queryRunner, dataSource, expected
   );
 }
 
+async function makeTenantColumnNullable(queryRunner, dataSource, entity) {
+  const path = metadataPath(dataSource, entity);
+  const table = await queryRunner.getTable(path);
+  const current = table?.columns.find((column) => normalizeName(column.name) === 'tenant_id');
+  assert.ok(current, `${database}: ${entity.name}.tenant_id is missing`);
+  if (current.isNullable) return;
+  const nullable = current.clone();
+  nullable.isNullable = true;
+  nullable.default = undefined;
+  if (database === 'spanner') {
+    const dependentIndexes = table.indices.filter((index) => index.columnNames.map(normalizeName).includes('tenant_id'));
+    for (const index of dependentIndexes) await queryRunner.dropIndex(path, index);
+    const tablePath = path.split('.').filter(Boolean).map((part) => queryRunner.connection.driver.escape(part)).join('.');
+    const columnName = queryRunner.connection.driver.escape('tenant_id');
+    const columnType = queryRunner.connection.driver.createFullType(nullable);
+    await queryRunner.updateDDL(`ALTER TABLE ${tablePath} ALTER COLUMN ${columnName} ${columnType}`);
+    for (const index of dependentIndexes) await queryRunner.createIndex(path, index);
+    return;
+  }
+  const dependentIndexes = database === 'mssql'
+    ? table.indices.filter((index) => index.columnNames.map(normalizeName).includes('tenant_id'))
+    : [];
+  for (const index of dependentIndexes) await queryRunner.dropIndex(path, index);
+  await queryRunner.changeColumn(path, current, nullable);
+  for (const index of dependentIndexes) await queryRunner.createIndex(path, index);
+}
+
+async function qualifyExternalIdentityAndProjectTenantBaseline(queryRunner, dataSource, expectedFingerprint) {
+  const externalIdentity = new AddExternalEngineRegistrationIdentities1700000000108();
+  const projectTenantOwnership = new RequireProjectTenantOwnership1700000000109();
+  const now = Date.now();
+
+  await dataSource.getRepository(ExternalEngineRegistration).insert(entityRowWithDefaults(
+    dataSource,
+    ExternalEngineRegistration,
+    {
+      id: ids.migrationExternalRegistration,
+      engineId: ids.legacyEngine,
+      externalId: `${runId}-external-id`,
+      sourceIdentity: `${runId}-pre-0108-source`,
+      activeExternalIdIdentity: `${runId}-pre-0108-active`,
+      registrationSource: 'user',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ));
+  await dataSource.getRepository(Project).insert({
+    id: ids.migrationProject,
+    name: 'Tenant qualification project',
+    ownerId: `${runId}-owner`,
+    tenantId: 'tenant-default',
+    createdAt: now,
+    updatedAt: now,
+  });
+  await dataSource.getRepository(ProjectEngineTarget).insert(entityRowWithDefaults(
+    dataSource,
+    ProjectEngineTarget,
+    {
+      id: ids.migrationProjectTarget,
+      tenantId: 'tenant-default',
+      projectId: ids.migrationProject,
+      engineId: ids.legacyEngine,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ));
+  await dataSource.getRepository(RbacRoleAssignment).insert(entityRowWithDefaults(
+    dataSource,
+    RbacRoleAssignment,
+    {
+      id: ids.migrationProjectAssignment,
+      tenantId: 'tenant-default',
+      principalType: 'user',
+      principalId: `${runId}-principal`,
+      assignmentKey: `${runId}-legacy-assignment-key`,
+      roleId: `${runId}-role`,
+      scopeType: 'project',
+      scopeId: ids.migrationProject,
+      source: 'manual',
+      createdAt: now,
+      updatedAt: now,
+    },
+  ));
+  await dataSource.getRepository(PermissionGrant).insert(entityRowWithDefaults(
+    dataSource,
+    PermissionGrant,
+    {
+      id: ids.migrationProjectGrant,
+      tenantId: 'tenant-default',
+      userId: `${runId}-principal`,
+      permission: 'project:deploy',
+      resourceType: 'project',
+      resourceId: ids.migrationProject,
+      createdAt: now,
+    },
+  ));
+
+  await externalIdentity.down(queryRunner);
+  await makeTenantColumnNullable(queryRunner, dataSource, Project);
+  await makeTenantColumnNullable(queryRunner, dataSource, ProjectEngineTarget);
+  await dataSource.getRepository(Project).update({ id: ids.migrationProject }, { tenantId: null });
+  await dataSource.getRepository(ProjectEngineTarget).update({ id: ids.migrationProjectTarget }, { tenantId: null });
+  await dataSource.getRepository(RbacRoleAssignment).update({ id: ids.migrationProjectAssignment }, { tenantId: null });
+  await dataSource.getRepository(PermissionGrant).update({ id: ids.migrationProjectGrant }, { tenantId: null });
+
+  await externalIdentity.up(queryRunner);
+  await projectTenantOwnership.up(queryRunner);
+  await externalIdentity.up(queryRunner);
+  await projectTenantOwnership.up(queryRunner);
+
+  const registration = await dataSource.getRepository(ExternalEngineRegistration).findOneByOrFail({
+    id: ids.migrationExternalRegistration,
+  });
+  const project = await dataSource.getRepository(Project).findOneByOrFail({ id: ids.migrationProject });
+  const target = await dataSource.getRepository(ProjectEngineTarget).findOneByOrFail({ id: ids.migrationProjectTarget });
+  const assignment = await dataSource.getRepository(RbacRoleAssignment).findOneByOrFail({ id: ids.migrationProjectAssignment });
+  const grant = await dataSource.getRepository(PermissionGrant).findOneByOrFail({ id: ids.migrationProjectGrant });
+  assert.match(registration.sourceIdentity, /^[a-f0-9]{64}$/);
+  assert.match(registration.activeExternalIdIdentity, /^[a-f0-9]{64}$/);
+  assert.equal(project.tenantId, 'tenant-default');
+  assert.equal(target.tenantId, 'tenant-default');
+  assert.equal(assignment.tenantId, 'tenant-default');
+  assert.notEqual(assignment.assignmentKey, `${runId}-legacy-assignment-key`);
+  assert.equal(grant.tenantId, 'tenant-default');
+  const projectTable = await queryRunner.getTable(metadataPath(dataSource, Project));
+  const targetTable = await queryRunner.getTable(metadataPath(dataSource, ProjectEngineTarget));
+  assert.equal(projectTable?.columns.find((column) => normalizeName(column.name) === 'tenant_id')?.isNullable, false);
+  assert.equal(targetTable?.columns.find((column) => normalizeName(column.name) === 'tenant_id')?.isNullable, false);
+  assert.equal(
+    fingerprint(await logicalSchema(queryRunner, dataSource)),
+    expectedFingerprint,
+    `${database}: external identity/project tenancy upgrade schema differs from clean install`,
+  );
+}
+
 async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerprint) {
   const foundation = new AddEngineTenancyFoundation1700000000096();
   const reference = new AddEngineTenantMappingReference1700000000097();
@@ -398,6 +554,7 @@ async function qualifyUpgradeBaselines(queryRunner, dataSource, expectedFingerpr
   const widenEvidence = new WidenCamundaNativeGrantEvidence1700000000100();
   await seedLegacyRows(dataSource);
   await qualifyRecentMigrationBaselines(queryRunner, dataSource, expectedFingerprint);
+  await qualifyExternalIdentityAndProjectTenantBaseline(queryRunner, dataSource, expectedFingerprint);
 
   // Simulate an upgrade from immediately before the native-grant importer,
   // including the idempotent receipt-column follow-up migration.
@@ -463,6 +620,8 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   const governanceOwnership = new AddPlatformGovernanceSettingsOwnership1700000000105();
   const loginExperience = new AddLoginExperienceMetadata1700000000106();
   const providerPreference = new ConsolidateLoginProviderPreference1700000000107();
+  const externalIdentity = new AddExternalEngineRegistrationIdentities1700000000108();
+  const projectTenantOwnership = new RequireProjectTenantOwnership1700000000109();
   const engines = await queryRunner.getTable(metadataPath(dataSource, Engine));
   const resources = await queryRunner.getTable(metadataPath(dataSource, RuntimeResource));
   const engineIndex = engines?.indices.find((candidate) =>
@@ -489,6 +648,7 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   // committed. This is especially important for adapters whose DDL is not
   // transactionally rolled back (Oracle and Spanner).
   await providerPreference.down(queryRunner);
+  await externalIdentity.down(queryRunner);
   await queryRunner.dropColumn(metadataPath(dataSource, IdentityEntitlementMapping), 'ownership_mode');
   await queryRunner.dropColumn(metadataPath(dataSource, PlatformSettings), 'access_governance_source_hash');
   await queryRunner.dropColumn(metadataPath(dataSource, IdentityProvider), 'organization');
@@ -497,10 +657,14 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   await governanceOwnership.up(queryRunner);
   await loginExperience.up(queryRunner);
   await providerPreference.up(queryRunner);
+  await externalIdentity.up(queryRunner);
+  await projectTenantOwnership.up(queryRunner);
   await mappingOwnership.up(queryRunner);
   await governanceOwnership.up(queryRunner);
   await loginExperience.up(queryRunner);
   await providerPreference.up(queryRunner);
+  await externalIdentity.up(queryRunner);
+  await projectTenantOwnership.up(queryRunner);
 
   const recoveredMapping = await dataSource.getRepository(IdentityEntitlementMapping).findOneByOrFail({
     id: ids.migrationMapping,
@@ -513,7 +677,7 @@ async function qualifyInterruptedRetry(queryRunner, dataSource, expectedFingerpr
   );
   observation.stages.interrupted_retry = {
     status: 'passed',
-    simulatedInterruption: 'foundation indexes and recent ownership/login columns absent after partial DDL',
+    simulatedInterruption: 'foundation indexes, ownership/login columns, and external-registration identity claims absent after partial DDL',
     retryExecutions: 2,
   };
 }
@@ -691,10 +855,20 @@ async function qualifyCleanup(dataSource) {
   const identityProviderRepository = dataSource.getRepository(IdentityProvider);
   const groupRepository = dataSource.getRepository(AuthzGroup);
   const settingsRepository = dataSource.getRepository(PlatformSettings);
+  const externalRegistrationRepository = dataSource.getRepository(ExternalEngineRegistration);
+  const projectTargetRepository = dataSource.getRepository(ProjectEngineTarget);
+  const projectAssignmentRepository = dataSource.getRepository(RbacRoleAssignment);
+  const permissionGrantRepository = dataSource.getRepository(PermissionGrant);
+  const projectRepository = dataSource.getRepository(Project);
   await mappingRepository.delete({ engineId: ids.serviceEngine });
   await resourceRepository.delete({ id: ids.serviceResource });
   await engineRepository.delete({ id: ids.serviceEngine });
   await resourceRepository.delete({ id: ids.legacyResource });
+  await projectTargetRepository.delete({ id: ids.migrationProjectTarget });
+  await projectAssignmentRepository.delete({ id: ids.migrationProjectAssignment });
+  await permissionGrantRepository.delete({ id: ids.migrationProjectGrant });
+  await projectRepository.delete({ id: ids.migrationProject });
+  await externalRegistrationRepository.delete({ id: ids.migrationExternalRegistration });
   await engineRepository.delete({ id: ids.legacyEngine });
   await identityMappingRepository.delete({ id: ids.migrationMapping });
   await identityProviderRepository.delete({ id: ids.migrationProvider });
@@ -708,6 +882,8 @@ async function qualifyCleanup(dataSource) {
   assert.equal(await identityMappingRepository.countBy({ id: ids.migrationMapping }), 0);
   assert.equal(await identityProviderRepository.countBy({ id: ids.migrationProvider }), 0);
   assert.equal(await groupRepository.countBy({ id: ids.migrationGroup }), 0);
+  assert.equal(await projectRepository.countBy({ id: ids.migrationProject }), 0);
+  assert.equal(await externalRegistrationRepository.countBy({ id: ids.migrationExternalRegistration }), 0);
   observation.stages.cleanup = {
     status: 'passed',
     ownedRowsRemaining: 0,

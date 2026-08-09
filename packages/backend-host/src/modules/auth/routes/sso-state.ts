@@ -1,6 +1,7 @@
 import type { Request } from 'express';
+import { randomBytes } from 'node:crypto';
 import { config } from '@enterpriseglue/shared/config/index.js';
-import { signSamlRelayState, verifySamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
+import { signOidcState, signSamlRelayState, verifyOidcState, verifySamlRelayState } from '@enterpriseglue/shared/utils/samlRelayState.js';
 
 export interface SsoState {
   timestamp: number;
@@ -10,11 +11,14 @@ export interface SsoState {
   identityProviderTenantId?: string;
   tenantSlug?: string;
   returnTo?: string;
+  samlRequestId?: string;
 }
 
 const TENANT_SLUG_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9._-]{1,160}$/;
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
+const STATE_FUTURE_SKEW_MS = 60 * 1000;
+const SAML_REQUEST_ID_PATTERN = /^_[A-Za-z0-9_-]{32,160}$/;
 
 function sanitizeTenantSlug(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
@@ -47,20 +51,25 @@ function sanitizeReturnTo(value: unknown, tenantSlug?: string): string | undefin
   }
 }
 
-export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }): string {
+export function createSamlRequestId(): string {
+  return `_${randomBytes(32).toString('base64url')}`;
+}
+
+export function buildSsoState(req: Request, providerId?: string, identityProvider?: { key: string; tenantId?: string | null }, samlRequestId?: string): string {
   const tenantSlug = sanitizeTenantSlug(req.params?.tenantSlug) || sanitizeTenantSlug(req.query.tenantSlug);
   const returnTo = sanitizeReturnTo(req.query.returnTo, tenantSlug);
   const payload: SsoState = {
     timestamp: Date.now(),
-    nonce: Math.random().toString(36).substring(7),
+    nonce: randomBytes(32).toString('base64url'),
     ...(sanitizeProviderId(providerId) ? { providerId: sanitizeProviderId(providerId) } : {}),
     ...(sanitizeProviderId(identityProvider?.key) ? { identityProviderKey: sanitizeProviderId(identityProvider?.key) } : {}),
     ...(sanitizeProviderId(identityProvider?.tenantId) ? { identityProviderTenantId: sanitizeProviderId(identityProvider?.tenantId) } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
     ...(returnTo ? { returnTo } : {}),
+    ...(samlRequestId && SAML_REQUEST_ID_PATTERN.test(samlRequestId) ? { samlRequestId } : {}),
   };
 
-  return Buffer.from(JSON.stringify(payload)).toString('base64');
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
 /**
@@ -68,25 +77,31 @@ export function buildSsoState(req: Request, providerId?: string, identityProvide
  * cookie. The signed RelayState keeps provider/tenant/return-path binding
  * intact without relaxing the session cookie policy.
  */
-export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }): string {
-  const state = buildSsoState(req, providerId, identityProvider);
+export function buildSignedSamlState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }, samlRequestId: string): string {
+  const state = buildSsoState(req, providerId, identityProvider, samlRequestId);
   return signSamlRelayState(state);
+}
+
+export function buildSignedOidcState(req: Request, providerId: string, identityProvider: { key: string; tenantId?: string | null }): string {
+  return signOidcState(buildSsoState(req, providerId, identityProvider));
 }
 
 export function parseSsoState(rawState: unknown): SsoState | null {
   if (typeof rawState !== 'string' || !rawState) return null;
 
   try {
-    const decoded = Buffer.from(rawState, 'base64').toString('utf8');
+    const decoded = Buffer.from(rawState, 'base64url').toString('utf8');
     const parsed = JSON.parse(decoded) as Partial<SsoState>;
     if (typeof parsed.timestamp !== 'number' || typeof parsed.nonce !== 'string') return null;
-    if (Date.now() - parsed.timestamp > STATE_MAX_AGE_MS) return null;
+    const age = Date.now() - parsed.timestamp;
+    if (age > STATE_MAX_AGE_MS || age < -STATE_FUTURE_SKEW_MS) return null;
 
     const tenantSlug = sanitizeTenantSlug(parsed.tenantSlug);
     const providerId = sanitizeProviderId(parsed.providerId);
     const identityProviderKey = sanitizeProviderId(parsed.identityProviderKey);
     const identityProviderTenantId = sanitizeProviderId(parsed.identityProviderTenantId);
     const returnTo = sanitizeReturnTo(parsed.returnTo, tenantSlug);
+    const samlRequestId = typeof parsed.samlRequestId === 'string' && SAML_REQUEST_ID_PATTERN.test(parsed.samlRequestId) ? parsed.samlRequestId : undefined;
     return {
       timestamp: parsed.timestamp,
       nonce: parsed.nonce,
@@ -95,6 +110,7 @@ export function parseSsoState(rawState: unknown): SsoState | null {
       ...(identityProviderTenantId ? { identityProviderTenantId } : {}),
       ...(tenantSlug ? { tenantSlug } : {}),
       ...(returnTo ? { returnTo } : {}),
+      ...(samlRequestId ? { samlRequestId } : {}),
     };
   } catch {
     return null;
@@ -103,6 +119,10 @@ export function parseSsoState(rawState: unknown): SsoState | null {
 
 export function parseSignedSamlState(rawState: unknown): SsoState | null {
   return parseSsoState(verifySamlRelayState(rawState));
+}
+
+export function parseSignedOidcState(rawState: unknown): SsoState | null {
+  return parseSsoState(verifyOidcState(rawState));
 }
 
 export function getSsoReturnPath(state: SsoState | null): string {

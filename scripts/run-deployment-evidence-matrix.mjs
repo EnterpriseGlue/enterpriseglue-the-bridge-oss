@@ -19,7 +19,7 @@ const allowedEnvironmentClasses = new Set([
   'local_container',
   'external_openshift',
 ]);
-const allowedGates = new Set(['pull_request', 'local_release', 'release']);
+const allowedGates = new Set(['pull_request', 'local_release', 'release', 'external_acceptance']);
 const laneIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
 const coverageIdPattern = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$/;
 
@@ -66,7 +66,7 @@ export function validateMatrix(matrix, packageScripts, repositoryRoot = root) {
     assertion(Array.isArray(lane.gates) && lane.gates.length > 0, `${lane.id} requires gates`);
     assertion(new Set(lane.gates).size === lane.gates.length, `${lane.id} contains duplicate gates`);
     lane.gates.forEach((gate) => assertion(allowedGates.has(gate), `${lane.id} has invalid gate ${gate}`));
-    assertion(lane.gates.includes('release'), `${lane.id} must contribute to the release gate`);
+    assertion(lane.gates.includes('release') || lane.gates.includes('external_acceptance'), `${lane.id} must contribute to the release or external-acceptance gate`);
     assertion(Array.isArray(lane.prerequisites) && lane.prerequisites.length > 0, `${lane.id} requires prerequisites`);
     assertion(Array.isArray(lane.artifacts) && lane.artifacts.length > 0, `${lane.id} requires artifact descriptions`);
     assertion(lane.artifacts.some((artifact) => /sanitized lane receipt/i.test(artifact)), `${lane.id} must retain a sanitized lane receipt`);
@@ -87,7 +87,7 @@ export function validateMatrix(matrix, packageScripts, repositoryRoot = root) {
         `${lane.id} requires an externalProcedure`,
       );
       assertion(existsSync(path.join(repositoryRoot, lane.externalProcedure)), `${lane.id} external procedure does not exist`);
-      assertion(lane.gates.length === 1 && lane.gates[0] === 'release', `${lane.id} must remain an explicit release-only external gate`);
+      assertion(lane.gates.length === 1 && lane.gates[0] === 'external_acceptance', `${lane.id} must remain an explicit external-acceptance gate`);
     } else {
       assertion(typeof lane.script === 'string' && lane.script.startsWith('test:'), `${lane.id} requires a test script`);
       assertion(Boolean(packageScripts[lane.script]), `${lane.id} references missing package script ${lane.script}`);
@@ -240,6 +240,7 @@ export function buildEvidenceIndex(matrix, resultsDirectory, context) {
     sourceState: context.sourceState,
     manifestHash: context.manifestHash,
     releaseCommitQualified: gateStatus.release.status === 'passed' && context.sourceState === 'clean',
+    externalAcceptanceQualified: gateStatus.external_acceptance.status === 'passed' && context.sourceState === 'clean',
     externalEvidenceComplete: external.length > 0 && external.every((lane) => lane.status === 'passed'),
     pendingExternalLaneIds: external.filter((lane) => lane.status !== 'passed').map((lane) => lane.id),
     gateStatus,

@@ -96,7 +96,7 @@ test('rejects missing coverage, missing scripts, duplicate lanes, and a local cl
   assert.throws(() => validateMatrix(localOpenShift, packageJson.scripts, root), /failed-rollout retention must remain an external gate/);
 });
 
-test('marks absent external evidence pending and never promotes a local-only index to release-qualified', () => {
+test('keeps deferred OpenShift evidence pending without blocking the local 0.11 release gate', () => {
   withResults((directory) => {
     for (const lane of matrix.lanes.filter((candidate) => candidate.environmentClass !== 'external_openshift')) {
       writeFileSync(path.join(directory, 'lanes', `${lane.id}.json`), JSON.stringify(laneReceipt(lane)));
@@ -104,11 +104,13 @@ test('marks absent external evidence pending and never promotes a local-only ind
     const index = buildEvidenceIndex(matrix, directory, context);
     assert.equal(index.gateStatus.pull_request.status, 'passed');
     assert.equal(index.gateStatus.local_release.status, 'passed');
-    assert.equal(index.gateStatus.release.status, 'pending');
+    assert.equal(index.gateStatus.release.status, 'passed');
+    assert.equal(index.gateStatus.external_acceptance.status, 'pending');
     assert.equal(index.externalEvidenceComplete, false);
     assert.deepEqual(index.pendingExternalLaneIds, ['external-openshift-rollout']);
-    assert.equal(index.releaseCommitQualified, false);
-    assert.equal(index.releaseStatus, 'pending-evidence');
+    assert.equal(index.releaseCommitQualified, true);
+    assert.equal(index.externalAcceptanceQualified, false);
+    assert.equal(index.releaseStatus, 'release-qualified');
   });
 });
 
@@ -120,6 +122,7 @@ test('requires same-commit sanitized receipts for every release lane', () => {
     const complete = buildEvidenceIndex(matrix, directory, context);
     assert.equal(complete.gateStatus.release.status, 'passed');
     assert.equal(complete.externalEvidenceComplete, true);
+    assert.equal(complete.externalAcceptanceQualified, true);
     assert.equal(complete.releaseCommitQualified, true);
 
     const staleLane = matrix.lanes[0];

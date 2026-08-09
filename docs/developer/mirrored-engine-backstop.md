@@ -11,8 +11,8 @@ authorization system. Its invariants are enforced in the following order:
    group from representing more than one EnterpriseGlue group on an engine.
 3. `EngineBackstopSyncService` re-materializes the source before apply,
    compares source and desired hashes to preview evidence, and calls only
-   `/authorization/create`, id-specific `/authorization/{id}` reads, or
-   id-specific deletes.
+   `/authorization/create`, the four-parameter exact-match recovery query,
+   id-specific `/authorization/{id}` reads, or id-specific deletes.
 4. `EngineBackstopSyncRun` encrypts native IDs and exact resource keys. Normal
    APIs expose only opaque references, counts, and reason codes.
 
@@ -81,16 +81,22 @@ ownership-only rollback for native grant lifecycle changes.
 ## Native ownership protocol
 
 The sync receipt stores `{ id, nativeGroupId, camundaResourceType,
-resourceKey }` only in encrypted detail. Reconciliation does the following:
+resourceKey }` only in encrypted detail. Full preview/projection and
+classification detail has a maximum 30-day retention. Reconciliation does the
+following:
 
 1. retain a prior owned grant when its exact desired identity still exists;
 2. create each new exact desired grant and persist its native ID immediately;
 3. delete only tracked old IDs that are no longer desired; and
-4. retain the encrypted ownership record for the configured 30-day maximum.
+4. compact any run that may have caused a native side effect to the minimum
+   encrypted owned-grant/pending-create/pending-delete journal and retain it
+   without expiry until every tracked or ambiguous side effect is retired.
 
 On a partial failure, the recorded IDs remain with the failed run so retry or
-rollback does not need to infer native ownership. A missing or expired receipt
-is a hard stop for deletion.
+rollback does not need to infer native ownership. Once the journal is empty,
+bounded retention resumes and cleanup may purge it. A required missing or
+unreadable ownership journal is a hard stop for deletion; ordinary full-preview
+expiry is not allowed to orphan native grants.
 
 `EngineBackstopSyncTask` has a database unique key on `run_id` and a renewable
 lease. Concurrent enqueue requests re-read the winning row after a unique-key
@@ -106,7 +112,8 @@ versioning requirements are in the
 
 For an engine registered with `connectionMode: customer_sidecar`, the sync
 receipt selects `CustomerSidecarBackstopNativeClient`. It has the same bounded
-surface as the direct adapter: create one exact group `READ` grant, then read
+surface as the direct adapter: create one exact group `READ` grant, query only
+the same exact group/resource tuple to recover an interrupted create, then read
 or delete only an ID retained in encrypted ownership evidence. It uses the
 shared BPMN connection resolver, so calls go to the registered sidecar URL with
 the normal request/engine/operation metadata and operation class
@@ -120,7 +127,8 @@ the sync task closed; no direct-engine fallback occurs.
 
 `test/e2e/operaton-container/customer-sidecar-reference.mjs` is the executable
 reference adapter used by the Docker contract. It accepts only `POST
-/authorization/create` plus ID-addressed `GET`/`DELETE` authorization calls,
+/authorization/create`, the four-parameter exact-match `GET /authorization`
+recovery query, plus ID-addressed `GET`/`DELETE` authorization calls,
 forwards only the JSON content type and sidecar-owned upstream authentication,
 and turns an unavailable downstream engine into a sanitized `502`. Its minimal
 container image can be built with:

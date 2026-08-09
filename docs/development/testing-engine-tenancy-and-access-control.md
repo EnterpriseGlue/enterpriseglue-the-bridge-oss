@@ -49,7 +49,7 @@ The complete functional denominator is explicit:
 | Provisioning journeys | 14/14 |
 | Provisioning channel executions | 30/30 |
 | Database lifecycle stages | 35/35 |
-| Database upgrade-baseline observations | 20/20 |
+| Database upgrade-baseline observations | 25/25 |
 | Database logical-schema equivalence | 1 fingerprint |
 | Functional browser executions | 27/27 |
 | Browser accessibility executions | 27/27 |
@@ -130,11 +130,11 @@ pnpm run test:engine-tenancy:database-matrix
 
 It uses disposable localhost Docker containers and no deployed database or
 customer credentials. PostgreSQL, MySQL, SQL Server, Oracle, and the Spanner
-emulator must each pass clean install, all four supported upgrade baselines,
+emulator must each pass clean install, all five supported upgrade baselines,
 interrupted retry, schema equivalence, the real mapping-service transaction,
 rollback, and cleanup.
 
-The database denominator is exactly 35 adapter/stage cells, twenty
+The database denominator is exactly 35 adapter/stage cells, 25
 adapter/baseline observations, and one logical-schema equivalence set. A
 focused target or dirty-worktree run is useful for diagnosis but never counts
 as release evidence. Full prerequisites, versions, development commands,

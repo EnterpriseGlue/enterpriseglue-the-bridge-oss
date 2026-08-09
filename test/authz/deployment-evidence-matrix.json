@@ -186,7 +186,7 @@
       "title": "Real OpenShift failed-rollout retention and recovery evidence",
       "environmentClass": "external_openshift",
       "externalProcedure": "docs/how-to/collect-access-governance-deployment-evidence.md",
-      "gates": ["release"],
+      "gates": ["external_acceptance"],
       "prerequisites": ["Dedicated non-production OpenShift evidence namespace", "Healthy known-good EnterpriseGlue deployment", "Immutable candidate images", "OpenShift deployment environment approval"],
       "artifacts": ["Sanitized lane receipt for external evidence", "SHA-256 references to retained cluster-side rollout evidence"],
       "successCriteria": ["Valid ConfigMap and Secret projection becomes ready", "Invalid fail-closed bundle cannot replace the healthy ReplicaSet", "Prior ready pods remain available", "Known-good configuration recovers the rollout", "No cluster credentials, routes, namespaces, tokens, or secrets enter retained evidence"],

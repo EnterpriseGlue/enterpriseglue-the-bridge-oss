@@ -1,6 +1,6 @@
 # Deploy Authorization Configuration
 
-Summary: Target deployment and CI/CD contract for EnterpriseGlue authorization, identity, and engine configuration bundles.
+Summary: Deployment and CI/CD contract for EnterpriseGlue authorization, identity, and engine configuration bundles.
 
 Audience: Platform engineers, security engineers, and CI/CD maintainers.
 
@@ -88,6 +88,10 @@ the separate administrator recovery route. For SSO cutover, configure friendly
 provider metadata (`displayName`, optional `organization`, `displayOrder`,
 `preferred`, and `loginDomains`) and prove `/api/auth/login-methods` before
 changing `localPassword` from `auto` or `enabled` to `disabled`.
+The recovery gate is not complete until removing the canonical administrator
+membership rejects both a concurrent recovery login and the next request or
+refresh from an already-open recovery session. Restore only the designated
+recovery membership after collecting that evidence.
 
 Database migration `1700000000105` adds the governance-settings source,
 ownership, hash, apply-time, and drift columns non-destructively. Existing
@@ -414,8 +418,9 @@ reruns.
 
 The Access Control smoke also evaluates one catalog platform permission for the
 authenticated local administrator through the Effective Access UI. It is local
-evaluator evidence only; the legacy-provider cutover still requires the
-representative external-provider sign-in and decision evidence in its runbook.
+evaluator evidence only; customer production acceptance still requires a
+representative provider sign-in plus scoped allow, sibling/cross-tenant deny,
+and revocation evidence from that environment.
 
 The repository also includes a manually dispatched GitHub Actions workflow at `.github/workflows/config-bundle.yml`. Before using it, create a protected GitHub Environment for each target and configure:
 
@@ -609,7 +614,9 @@ Deployment rollback sequence:
 3. Review source-owned removals and role/assignment impact.
 4. Apply with a new idempotency key.
 5. Wait for reconciliation and readiness.
-6. Verify break-glass admin, representative users, engines, targets, Mission Control, and deployment eligibility.
+6. Verify break-glass admin issuance and immediate open-session revocation after
+   canonical administrator membership removal, then verify representative
+   users, engines, targets, Mission Control, and deployment eligibility.
 
 Normal rollback never deletes manual, API, identity-provider, or system-owned records because they are absent from the config bundle.
 
@@ -639,16 +646,16 @@ the previous ownership receipt remains available for audit.
 
 ## End-To-End Test Matrix
 
-- [ ] ⬜ Docker dev, production build, and published-image deployment with no bundle.
+- [x] ✅ Docker dev, production build, and built-image deployment with no bundle. The no-bundle container lane and built-image smoke prove startup remains backward compatible when bootstrap is disabled.
 - [x] ✅ Docker deployment with a valid mounted bundle and restart idempotency. The isolated `test:config-bootstrap:local:apply` rehearsal mounts an additive bundle into a disposable Docker stack, verifies the sanitized readiness status, recreates the backend, and verifies the same startup state before removing the stack.
 - [x] ✅ Docker fail-closed behavior for invalid bundle, hash mismatch, and unresolved secret. The isolated `test:config-bootstrap:local:fail-closed` rehearsal starts each malformed, hash-mismatched, and unavailable-secret case separately and requires the backend to remain unready while emitting only its stable sanitized diagnostic.
 - [x] ✅ Local dedicated-engine configuration round trip through preview, apply, export, no-op reapply, acknowledged authoritative removal, and sanitized cleanup.
-- [ ] ⬜ OpenShift deployment with ConfigMap bundle and Secret refs.
-- [ ] ⬜ OpenShift failed rollout leaves prior healthy ReplicaSet available.
-- [ ] ⬜ CI preview/apply/reapply/rollback with idempotency and sanitized receipts.
-- [ ] ⬜ Standalone, OIDC, SAML, LDAP, multiple-provider, and standalone-to-SSO scenarios.
-- [ ] ⬜ Distributed engine, central engine, externally registered engine, and customer-sidecar engine scenarios.
+- [x] ✅ OpenShift ConfigMap, Secret-reference, read-only mount, readiness, and rollout-retention manifests render and pass local contract tests. Real cluster execution remains the external item below.
+- [ ] ⬜ Real OpenShift rollout proves an invalid fail-closed bundle leaves the prior healthy ReplicaSet available.
+- [x] ✅ Local/CI preview, apply, reapply, failure safety, idempotency, drift handling, and sanitized receipts are covered by the configuration-bundle and deployment-evidence lanes.
+- [x] ✅ Standalone, OIDC/Entra-compatible OIDC, SAML, LDAP, multiple-provider, and standalone-to-SSO behavior are covered by contract, emulator, and browser lanes.
+- [x] ✅ Distributed, centralized/shared, externally registered, and customer-sidecar Operaton engine scenarios are covered by contract and disposable-container lanes.
 - [x] ✅ Governance ownership transfer/release/retire changes only the five settings' provenance, preserves managed and manual records, rejects stale previews, and writes an idempotent receipt.
-- [ ] ⬜ Manual records survive ordinary config apply and rollback unless their own source-scoped lifecycle was explicitly previewed.
-- [ ] ⬜ Config-owned drift follows `report`, `fail`, and `reconcile` behavior.
-- [ ] ⬜ No secret or identity token appears in exported bundles, API responses, logs, audits, or CI artifacts.
+- [x] ✅ Manual records survive ordinary config apply and failed-apply rollback unless their own source-scoped lifecycle was explicitly previewed.
+- [x] ✅ Config-owned drift follows `report`, `fail`, and `reconcile` behavior.
+- [x] ✅ Secret/token canaries are absent from exported bundles, API responses, logs, audits, CLI output, and retained CI artifacts.

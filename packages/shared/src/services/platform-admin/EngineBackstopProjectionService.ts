@@ -100,7 +100,7 @@ export class EngineBackstopProjectionService {
     if (context.tenancyMode === 'shared' && (!context.tenantId || candidate.resource.tenantId !== context.tenantId || candidate.tenantId !== context.tenantId)) {
       return unsupported(candidate, 'runtime_resource_cross_tenant');
     }
-    if (context.tenancyMode === 'dedicated' && context.tenantId && candidate.tenantId !== context.tenantId) {
+    if (context.tenancyMode === 'dedicated' && (!context.tenantId || candidate.tenantId !== context.tenantId || candidate.resource.tenantId !== context.tenantId)) {
       return unsupported(candidate, 'runtime_resource_cross_tenant');
     }
     if (context.tenancyMode === 'shared' && candidate.resource.nativeAuthorizationKeyCrossTenant) {

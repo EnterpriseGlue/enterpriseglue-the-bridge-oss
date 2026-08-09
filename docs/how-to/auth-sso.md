@@ -33,14 +33,53 @@ The tenant login page reads the sanitized, policy-resolved
 `GET /api/t/{tenantSlug}/auth/login-methods` contract. Redirect providers start
 at `/api/t/{tenantSlug}/auth/providers/{providerId}/start`; LDAP submits to
 `/api/t/{tenantSlug}/auth/providers/{providerId}/login`; OIDC and SAML callbacks
-remain platform callback URLs because their signed state carries the resolved
-tenant, provider record, and safe return path. The global
+remain platform callback URLs. OIDC binds provider, tenant, and return path
+through exact HttpOnly cookie equality plus a cryptographic state nonce, PKCE,
+and ID-token nonce; SAML carries the same context in signed, expiring
+RelayState plus a short-lived HttpOnly browser transaction cookie. Production
+uses `SameSite=None; Secure` so the IdP's cross-site POST can return it; the
+callback clears and verifies it before parsing the assertion. The global
 `/api/auth/login-methods` and provider start/login routes remain default-tenant
 compatibility aliases for older clients. The older
 `GET /api/auth/providers/enabled` response remains a compatibility contract
 for older clients, but new clients must use `login-methods`.
 
 Create **Identity Mappings** from stable upstream entitlements to internal groups, then grant platform, project, engine, or runtime-resource roles to those groups. Test the connection and perform a controlled sign-in before enabling SSO enforcement.
+
+### Production endpoint policy
+
+Before enabling a direct provider in production, add every reviewed OIDC,
+SAML, or LDAP host to `EG_IDENTITY_PROVIDER_ALLOWED_HOSTS`. Production always
+enforces this allowlist. OIDC discovery-derived authorization, token, and JWKS
+URLs are revalidated, redirects are rejected, and response bodies are bounded.
+Prefer exact token/JWKS hosts. If multiple controlled public hosts require a
+wildcard, scope it below the organizational boundary (for example,
+`*.login.example.com`); `*.com` and `*.co.uk` are rejected.
+Private-address literals, loopback, single-label, `.local`, and Docker-local endpoints also need
+`EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS=true` plus an **exact** host entry;
+private-host wildcards are rejected.
+
+The application policy validates schemes, host allowlists, and address
+literals; it does not pin DNS resolution. Only allowlist names under reviewed
+administrative control, and use network egress policy to block private and
+cloud-metadata destinations reached through unexpected DNS answers.
+
+Authoritative LDAP removals run through the background scheduler. Production
+uses a fail-safe `SSO_DIAGNOSTICS_INTERVAL_MS=60000` cadence when the variable
+is omitted, zero, or malformed; the provider's `sync.intervalSeconds` controls
+how often that provider is due. Outside production, set a positive scheduler
+interval explicitly when testing scheduled reconciliation.
+
+Provider callback URLs do not belong in that allowlist. They must match the
+configured `FRONTEND_URL` origin and exactly one canonical path:
+
+- OIDC: `/api/auth/identity/callback`
+- SAML: `/api/auth/providers/saml/callback`
+
+For a deliberately local emulator, set
+`EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY=true`, allowlist the exact local
+host names, and set the private-host opt-in. This exercises production policy
+without weakening it. See [Configuration](../reference/configuration.md#identity-provider-endpoint-and-pre-authentication-policy).
 
 ### Mandatory sign-in reconciliation
 
@@ -63,6 +102,14 @@ mandatory fresh reconciliation at sign-in. OIDC/Entra obtains fresh verified
 claims through the sign-in flow. A future Graph or SCIM poller would be a
 separate background capability, not an opt-out from this requirement.
 
+After a complete, non-truncated LDAP snapshot, users previously known to that
+provider but now deleted, disabled, or outside the authoritative enumeration
+filter are marked inactive. EnterpriseGlue removes only that provider's mapped
+memberships, revokes its refresh sessions, and invalidates current access
+tokens; manual and other-provider access remains. Enumeration, group-budget,
+bind, or network failure is incomplete evidence and never triggers this
+absence-based sweep.
+
 ### Portal language and API values
 
 The portal uses outcome-based language. JSON and REST interfaces retain stable
@@ -71,11 +118,10 @@ machine values:
 | Portal wording | JSON/API value | Exact behavior |
 | --- | --- | --- |
 | **Users sign in through this provider** | `authenticationMode: "direct"` | The provider appears as a sign-in method. |
-| **Accept trusted claims from a gateway** | `authenticationMode: "claims_only"` | EnterpriseGlue accepts verified upstream identity facts; the provider is not shown on the login page. |
+| **Managed by a verified host integration** | `authenticationMode: "claims_only"` | Non-login namespace reserved for a separately verified host/plugin integration. The 0.11 base application exposes no gateway-header or reverse-proxy claims-ingestion route, and the provider is not shown on the login page. |
 | **Add and remove members to match the provider** | `syncMode: "authoritative"` | Provider-managed membership is added and removed to match fresh provider evidence. Other providers and manual membership are not changed. |
 | **Add matching members only** | `syncMode: "additive"` | Matching membership is added; an upstream removal does not remove the existing membership. |
 | **Block sign-in until the refresh succeeds** | `sync.incompleteEntitlements: "fail_closed"` | No session is issued when membership evidence is incomplete. |
-| **Keep previous memberships until a refresh succeeds** | `sync.incompleteEntitlements: "preserve_previous"` | Earlier provider-managed access remains temporarily; the portal shows a warning. |
 | **Managed by configuration** | `ownershipMode: "config_locked"` | Fields and destructive actions are read-only in the portal and rejected again by mutation APIs. |
 | **Configuration-linked** | `ownershipMode: "config_warn"` | A portal/API edit is allowed, records drift, and may be overwritten by the next bundle apply. |
 
@@ -98,9 +144,9 @@ as a compatibility fallback, even when the browser uses `/t/default/login`.
 In a tenant-aware deployment, the `/api/t/{tenantSlug}/auth/*` routes run the
 pre-authentication tenant resolver before discovery or credential handling;
 EnterpriseGlue never enumerates providers from other tenants. The signed
-OIDC/SAML state records the selected provider and tenant, so the callback cannot
-switch scope. Do not implement multi-tenant login by sending `x-tenant-slug` to
-the global compatibility aliases.
+OIDC cookie-bound state and signed SAML RelayState record the selected provider
+and tenant, so the callback cannot switch scope. Do not implement multi-tenant
+login by sending `x-tenant-slug` to the global compatibility aliases.
 
 At most one provider can be preferred in each tenant scope. The service changes
 the previous preferred row and the new preferred row in one TypeORM transaction,
@@ -136,7 +182,8 @@ against the current policy and previews automatic redirect, work-email
 discovery, provider chooser, local-password, and no-method states. It is a
 presentation preview, not a connection test. Provider forms start without
 premature error states, validate fields after interaction, and focus the first
-invalid field after submission. Always run **Test connection** before enabling
+invalid field after submission. Always run **Test connection** and then a
+controlled sign-in before enabling
 a provider.
 
 The login page exposes password fields to browsers and password managers with
@@ -197,15 +244,31 @@ non-advertised `/admin-recovery` page and
 `POST /api/auth/recovery/login`. It accepts only an active local account with
 a password and an active canonical Platform Administrator membership.
 Verified-email linking does not replace that account's local authentication
-method or password. Removing its administrator membership closes recovery
-immediately. Monitor and audit use of this route, test it before SSO
+method or password. Recovery-session issuance is serialized with canonical
+administrator membership changes. Removing that membership closes new recovery
+immediately. Recovery access and refresh tokens carry a recovery marker, and
+both validation paths recheck the live canonical membership, so an open
+recovery browser or API session fails on its next authenticated request or
+refresh rather than retaining ordinary or administrator access. Removing a
+manual administrator membership additionally advances the user's persisted
+session version and revokes that user's stored refresh sessions. The person
+must sign in again through an otherwise enabled ordinary/SSO method for any
+remaining non-administrator access. Missing accounts, non-local accounts,
+non-administrators, and wrong passwords all return the same generic credential
+failure; detailed failure
+reasons are available only in the sanitized audit trail. Monitor and audit use
+of this route, test both new-login and open-session revocation before SSO
 enforcement, and keep its URL in the operator runbook rather than on the
 ordinary login page.
 
 Unlinking a provider identity marks that provider/subject link and normalized
 snapshot as unlinked, removes only memberships sourced from that provider,
-and revokes only refresh sessions issued through that provider for the linked
-user. Other provider links, local credentials, and manual access remain intact.
+and marks refresh sessions issued through that provider as revoked. To make
+the access removal immediate, EnterpriseGlue also advances the user's global
+session version, invalidating every access and refresh token already issued to
+that user. Other provider links, local credentials, and manual access remain
+intact as authorization sources, but the user must sign in again through one
+of those still-valid methods before using them.
 The unlinked subject fails closed. An administrator can use the provider's
 **Resolve external identity conflict** action to explicitly unlink a confirmed
 subject/account pair; that action is audited and cannot transfer the subject to
@@ -364,6 +427,103 @@ mapping itself stays platform-wide.
 }
 ```
 
+The equivalent fully headless SAML provider file is shown below. The expected
+IdP entity ID is separate from EnterpriseGlue's service-provider entity ID and
+is pinned during assertion validation. `signingCertificateRef` contains only a
+secret reference. The optional metadata URL is a bounded reachability check;
+runtime sign-in independently enforces issuer, request correlation, audience,
+recipient, and signature trust.
+
+<!-- enterpriseglue-config-schema: ConfigIdentityProvidersFileSchema -->
+```json
+{
+  "identityProviders": [
+    {
+      "key": "identity.corporate-saml",
+      "displayName": "Corporate SAML",
+      "organization": "Example Corporation",
+      "displayOrder": 10,
+      "preferred": true,
+      "loginDomains": ["example.com"],
+      "type": "saml",
+      "enabled": true,
+      "authenticationMode": "direct",
+      "allowVerifiedEmailLinking": false,
+      "sync": {
+        "triggers": ["login", "manual"],
+        "requiredForLogin": true,
+        "incompleteEntitlements": "fail_closed",
+        "connectorCapability": "claim_only",
+        "scheduled": false
+      },
+      "saml": {
+        "entityId": "https://enterpriseglue.example.test/saml",
+        "idpEntityId": "https://idp.example.test/saml",
+        "callbackUrl": "https://enterpriseglue.example.test/api/auth/providers/saml/callback",
+        "ssoUrl": "https://idp.example.test/sso",
+        "metadataUrl": "https://idp.example.test/metadata.xml",
+        "nameIdAttribute": "nameID",
+        "emailAttribute": "email",
+        "groupAttribute": "groups",
+        "signingCertificateRef": "env://CORPORATE_SAML_SIGNING_CERT",
+        "signatureAlgorithm": "sha256"
+      },
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
+The equivalent direct LDAP file requires LDAPS, a bind-password reference, a
+stable immutable subject attribute, and an explicit group membership model.
+Scheduled reconciliation is additional coverage for users who have not signed
+in; every LDAP sign-in still performs mandatory fresh reconciliation first.
+
+<!-- enterpriseglue-config-schema: ConfigIdentityProvidersFileSchema -->
+```json
+{
+  "identityProviders": [
+    {
+      "key": "identity.corporate-ldap",
+      "displayName": "Corporate directory",
+      "organization": "Example Corporation",
+      "displayOrder": 10,
+      "preferred": false,
+      "loginDomains": ["example.com"],
+      "type": "ldap",
+      "enabled": true,
+      "authenticationMode": "direct",
+      "allowVerifiedEmailLinking": false,
+      "sync": {
+        "triggers": ["login", "manual", "scheduled"],
+        "requiredForLogin": true,
+        "incompleteEntitlements": "fail_closed",
+        "connectorCapability": "ldap_directory",
+        "scheduled": true,
+        "intervalSeconds": 300
+      },
+      "ldap": {
+        "url": "ldaps://directory.example.test:636",
+        "bindDn": "cn=enterpriseglue,ou=services,dc=example,dc=test",
+        "bindPasswordRef": "env://CORPORATE_LDAP_BIND_PASSWORD",
+        "userBaseDn": "ou=people,dc=example,dc=test",
+        "userSearchFilter": "(&(mail={username})(employeeType=active))",
+        "userEnumerationFilter": "(&(objectClass=person)(employeeType=active))",
+        "pageSize": 200,
+        "subjectAttribute": "entryUUID",
+        "emailAttribute": "mail",
+        "groupBaseDn": "ou=groups,dc=example,dc=test",
+        "groupIdAttribute": "entryUUID",
+        "membershipMode": "group_search",
+        "nestedGroups": true,
+        "tlsTrustRef": "env://CORPORATE_LDAP_CA"
+      },
+      "ownershipMode": "config_locked"
+    }
+  ]
+}
+```
+
 `identity-mappings.json`:
 
 <!-- enterpriseglue-config-schema: ConfigIdentityMappingsFileSchema -->
@@ -386,17 +546,41 @@ mapping itself stays platform-wide.
 }
 ```
 
-Every provider option is available in the configuration bundle and the direct
-provider API: OIDC supports `groupClaim` and `expectedAudience`; SAML supports
+Every supported provider option is available in the configuration bundle and the direct
+provider API: OIDC supports `groupClaim` and an optional `expectedAudience`
+confirmation that must equal `clientId`; SAML supports
 metadata by URL or secret reference plus certificate/signature settings; LDAP
 supports immutable subject/email attributes, nested groups, paging, and an
 optional TLS trust reference. The external IdP client, redirect-URI trust, and
 upstream group membership are still configured at the IdP—usually through that
 provider's own IaC—not in EnterpriseGlue's bundle.
 
+For OIDC and SAML, **Test connection** proves only that bounded, allowlisted
+provider metadata is reachable and structurally usable. It does not validate
+the OIDC client secret, callback registration, token exchange, or the complete
+SAML trust pair. A controlled sign-in is the required end-to-end proof before
+switching to SSO-only access. The LDAP action performs a bounded LDAPS bind and
+directory enumeration; it still does not replace a controlled user sign-in.
+
+`sync.incompleteEntitlements` has one supported value: `fail_closed`. If fresh
+provider evidence cannot be normalized and reconciled, EnterpriseGlue does not
+issue a session. The API, JSON schema, and portal do not offer a stale-access
+fallback.
+
 For CI, supply `CORPORATE_OIDC_CLIENT_SECRET` through the configured secret
 provider, run secret preflight, then apply the exact preview hash. Never put
 the value itself in JSON or commit it to the repository.
+
+### Troubleshoot direct provider setup
+
+| Symptom | Check | Safe recovery |
+| --- | --- | --- |
+| Provider create/test reports that a host is not permitted | Confirm every configured and discovery-derived host is reviewed and present in `EG_IDENTITY_PROVIDER_ALLOWED_HOSTS`. Private endpoints require an exact entry plus the private-host opt-in. | Correct the allowlist and restart; do not disable the production policy. |
+| OIDC discovery or callback fails | Confirm issuer equality, canonical callback origin/path, provider-bound cookie state, PKCE, nonce, and the IdP redirect registration. | Keep local login policy unchanged, correct the provider, then retry a controlled sign-in. |
+| SAML metadata is reachable but sign-in fails | Metadata reachability is not a trust match. Confirm `idpEntityId`, signing certificate reference, canonical callback, audience/recipient, and that the response contains the issued `InResponseTo` value. | Correct the IdP/SP trust pair; do not accept unsolicited assertions or remove issuer pinning. |
+| LDAP test exceeds an identity, group, or aggregate budget | Compare the directory population, group nesting, and filters with `EG_LDAP_RECONCILIATION_IDENTITY_LIMIT`, `EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT`, `EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT`, and the per-identity `EG_LDAP_GROUP_SEARCH_*` limits. | Narrow the authoritative filters or deliberately raise a bounded limit; the failed run applies no absence-based removals. |
+| Sign-in fails during membership refresh | Inspect the sanitized sync-run events and mapping configuration. Mandatory reconciliation is fail closed for every direct provider. | Fix the provider/mapping evidence and sign in again; stale membership is never used to issue a new session. |
+| SSO policy prevents administrator access | Use the separate `/admin-recovery` route with the active canonical local platform administrator. | Disable or correct only the affected provider/mapping, verify recovery and controlled sign-in, then re-enable enforcement. |
 
 In this example, an administrator can still view existing engine members and
 their source lineage, but cannot add, edit, or remove engine access through the
@@ -444,8 +628,9 @@ or apply receipts.
 
 For Entra OIDC, use a tenant-specific issuer URL in the form
 `https://login.microsoftonline.com/<tenant-id>/v2.0`, set
-`directoryTenantId`, and set `expectedAudience` to the Entra app registration's
-client ID. When an ID token contains `tid`, EnterpriseGlue requires it to
+`directoryTenantId`. If `expectedAudience` is present, set it to the same Entra
+app registration client ID as `clientId`; it cannot replace the client
+audience. When an ID token contains `tid`, EnterpriseGlue requires it to
 equal `directoryTenantId` before it writes an external identity or any mapped
 membership. Map immutable Entra group object IDs or app-role values—never display
 names. Prefer app roles for business personas because group-overage markers can

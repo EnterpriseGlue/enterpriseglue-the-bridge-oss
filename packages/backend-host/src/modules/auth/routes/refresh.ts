@@ -11,6 +11,7 @@ import { IsNull, MoreThan } from 'typeorm';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 const router = Router();
 
@@ -51,6 +52,10 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
     throw Errors.unauthorized('Session has been revoked');
   }
+  if (payload.recovery === 'platform_administrator'
+    && !(await getActivePlatformAdministratorUserIds([user.id], dataSource)).has(user.id)) {
+    throw Errors.unauthorized('Session has been revoked');
+  }
 
   // Verify refresh token exists and is not revoked
   const tokenResult = await refreshTokenRepo.find({
@@ -77,7 +82,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
 
   // Generate new access token
-  const accessToken = generateAccessToken(user);
+  const accessToken = generateAccessToken(user, { administratorRecovery: payload.recovery === 'platform_administrator' });
 
   // Set new access token as httpOnly cookie
   res.cookie('accessToken', accessToken, {

@@ -16,6 +16,7 @@ import { isOssDefaultTenantId, OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/sha
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, type DataSource, type EntityManager, type FindOptionsWhere } from 'typeorm';
 import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
+import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
 
 /** Compatibility exports; shared schemas remain the canonical vocabulary. */
 export type IdentityProviderProtocol = SchemaIdentityProviderProtocol;
@@ -42,7 +43,7 @@ export interface IdentityProviderInput {
   driftStatus?: string | null;
 }
 
-export type IdentityConnectorCapability = 'claim_only' | 'ldap_directory' | 'scim' | 'graph';
+export type IdentityConnectorCapability = 'claim_only' | 'ldap_directory';
 
 function isDirectLoginProvider(provider: IdentityProvider): boolean {
   return provider.isEnabled
@@ -106,17 +107,35 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
   ensureAuthorizationAttributeKeys(configuration);
   const rawSecrets = findRawSecretFields(configuration);
   if (rawSecrets.length) throw Errors.validation(`Provider configuration must use secret references: ${rawSecrets.join(', ')}`);
-  if (protocol === 'oidc' && (typeof configuration.issuerUrl !== 'string' || typeof configuration.clientId !== 'string')) throw Errors.validation('OIDC providers require issuerUrl and clientId');
+  if (protocol === 'oidc') {
+    if (typeof configuration.issuerUrl !== 'string' || typeof configuration.clientId !== 'string') throw Errors.validation('OIDC providers require issuerUrl and clientId');
+    if (typeof configuration.expectedAudience === 'string' && configuration.expectedAudience.trim() !== configuration.clientId.trim()) {
+      throw Errors.validation('OIDC expectedAudience must equal clientId');
+    }
+    try {
+      validateIdentityProviderEndpointUrl(configuration.issuerUrl, 'OIDC issuerUrl', ['https:']);
+      if (typeof configuration.callbackUrl === 'string') validateIdentityProviderCallbackUrl(configuration.callbackUrl, 'oidc');
+    } catch (error) { throw Errors.validation(error instanceof Error ? error.message : 'OIDC endpoint configuration is invalid'); }
+  }
   if (protocol === 'saml') {
-    for (const field of ['entityId', 'callbackUrl', 'ssoUrl', 'signingCertificateRef']) {
+    for (const field of ['entityId', 'idpEntityId', 'callbackUrl', 'ssoUrl', 'signingCertificateRef']) {
       if (typeof configuration[field] !== 'string' || !String(configuration[field]).trim()) throw Errors.validation(`SAML providers require ${field}`);
     }
+    try {
+      validateIdentityProviderCallbackUrl(String(configuration.callbackUrl), 'saml');
+      validateIdentityProviderEndpointUrl(String(configuration.ssoUrl), 'SAML ssoUrl', ['https:']);
+      if (typeof configuration.metadataUrl === 'string' && configuration.metadataUrl.trim()) {
+        validateIdentityProviderEndpointUrl(configuration.metadataUrl, 'SAML metadataUrl', ['https:']);
+      }
+    } catch (error) { throw Errors.validation(error instanceof Error ? error.message : 'SAML endpoint configuration is invalid'); }
     if (configuration.signatureAlgorithm !== undefined && configuration.signatureAlgorithm !== 'sha256' && configuration.signatureAlgorithm !== 'sha512') {
       throw Errors.validation('SAML signatureAlgorithm must be sha256 or sha512');
     }
   }
   if (protocol === 'ldap') {
     if (typeof configuration.url !== 'string' || !String(configuration.url).startsWith('ldaps://')) throw Errors.validation('LDAP providers require an ldaps:// URL');
+    try { validateIdentityProviderEndpointUrl(String(configuration.url), 'LDAP URL', ['ldaps:']); }
+    catch (error) { throw Errors.validation(error instanceof Error ? error.message : 'LDAP endpoint configuration is invalid'); }
     for (const field of ['bindDn', 'bindPasswordRef', 'userBaseDn', 'userSearchFilter', 'groupBaseDn', 'groupIdAttribute']) {
       if (typeof configuration[field] !== 'string' || !String(configuration[field]).trim()) throw Errors.validation(`LDAP providers require ${field}`);
     }
@@ -128,7 +147,7 @@ function ensureConfig(protocol: IdentityProviderProtocol, configuration: Record<
   }
 }
 
-function ensureSync(sync: Record<string, unknown> | undefined): void {
+function ensureSync(protocol: IdentityProviderProtocol, sync: Record<string, unknown> | undefined): void {
   if (!sync) return;
   if (sync.triggers !== undefined && (!Array.isArray(sync.triggers) || sync.triggers.some((trigger) => !['login', 'scheduled', 'manual'].includes(String(trigger))))) {
     throw Errors.validation('Identity provider synchronization triggers are invalid');
@@ -140,8 +159,18 @@ function ensureSync(sync: Record<string, unknown> | undefined): void {
     throw Errors.validation('Sign-in reconciliation is mandatory');
   }
   const connector = sync.connectorCapability;
-  if (connector !== undefined && !['claim_only', 'ldap_directory', 'scim', 'graph'].includes(String(connector))) {
+  if (connector !== undefined && !['claim_only', 'ldap_directory'].includes(String(connector))) {
     throw Errors.validation('Unsupported identity connector capability');
+  }
+  if (connector === 'ldap_directory' && protocol !== 'ldap') {
+    throw Errors.validation('LDAP directory reconciliation is available only for LDAP providers');
+  }
+  const scheduledTrigger = Array.isArray(sync.triggers) && sync.triggers.includes('scheduled');
+  if (scheduledTrigger !== (sync.scheduled === true)) {
+    throw Errors.validation('The scheduled flag and scheduled trigger must be enabled or disabled together');
+  }
+  if ((sync.scheduled === true || scheduledTrigger) && connector !== 'ldap_directory') {
+    throw Errors.validation('Scheduled reconciliation is available only for an LDAP directory connector');
   }
   if (connector === 'ldap_directory' && sync.scheduled === true && sync.intervalSeconds !== undefined && (!Number.isInteger(sync.intervalSeconds) || Number(sync.intervalSeconds) < 60)) {
     throw Errors.validation('Scheduled LDAP reconciliation intervalSeconds must be at least 60');
@@ -153,9 +182,13 @@ function ensureSync(sync: Record<string, unknown> | undefined): void {
  * Provider mappings stay available for an intentional re-enable, while only
  * memberships derived from those mappings are removed.
  */
-export async function archiveIdentityProviderInStore(manager: EntityManager, provider: IdentityProvider): Promise<IdentityProviderArchiveResult> {
+export async function archiveIdentityProviderInStore(manager: DataSource | EntityManager, provider: IdentityProvider): Promise<IdentityProviderArchiveResult> {
   const now = Date.now();
   const tenantScope = provider.tenantId ? { tenantId: provider.tenantId } : { tenantId: IsNull() };
+  // Disable first. This row write serializes with provider-bound session issue
+  // and provisioning transactions, so cleanup cannot be followed by a stale
+  // callback creating a fresh provider session.
+  await manager.getRepository(IdentityProvider).update({ id: provider.id }, { isEnabled: false, updatedAt: now });
   const mappingRepo = manager.getRepository(IdentityEntitlementMapping);
   const mappingWhere: FindOptionsWhere<IdentityEntitlementMapping> = { ...tenantScope, providerId: provider.id };
   const mappings = await mappingRepo.find({ where: mappingWhere });
@@ -193,8 +226,6 @@ export async function archiveIdentityProviderInStore(manager: EntityManager, pro
       providerUserSessionsInvalidated += 1;
     }
   }
-  await manager.getRepository(IdentityProvider).update({ id: provider.id }, { isEnabled: false, updatedAt: now });
-
   return {
     providerId: provider.id,
     providerManagedMembershipsRemoved: memberships.affected || 0,
@@ -248,7 +279,7 @@ class IdentityProviderServiceClass {
     const tenantId = normalized(input.tenantId); const key = input.key.trim();
     if (!key) throw Errors.validation('Identity provider key is required');
     ensureConfig(input.protocol, input.configuration);
-    ensureSync(input.sync);
+    ensureSync(input.protocol, input.sync);
     const sync = normalizeIdentityProviderSyncForMandatoryLogin(input.sync);
     if (!store) {
       const dataSource = await getDataSource();
@@ -294,7 +325,20 @@ class IdentityProviderServiceClass {
       driftStatus: input.driftStatus ?? null,
       updatedAt: now,
     };
-    if (existing) { await repo.update({ id: existing.id }, values); return { ...existing, ...values } as IdentityProvider; }
+    if (existing) {
+      const securityConfigurationChanged = existing.protocol !== values.protocol
+        || existing.authenticationMode !== values.authenticationMode
+        || existing.directoryTenantId !== values.directoryTenantId
+        || existing.configurationJson !== values.configurationJson;
+      // A disable or trust-boundary edit revokes sessions and provider-owned
+      // memberships in the same transaction. A still-enabled trust edit is
+      // re-enabled by the values update and must be proven again by sign-in.
+      if (existing.isEnabled && (values.isEnabled === false || securityConfigurationChanged)) {
+        await archiveIdentityProviderInStore(store, existing);
+      }
+      await repo.update({ id: existing.id }, values);
+      return { ...existing, ...values } as IdentityProvider;
+    }
     const provider = { id: providerId, tenantId, key, providerKeyIdentity, ...values, createdAt: now } as unknown as IdentityProvider;
     await repo.insert(provider); return provider;
   }

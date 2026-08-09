@@ -65,4 +65,14 @@ describe('identityReconciliationCheckpointService', () => {
     await expect(identityReconciliationCheckpointService.acquire('provider-1', 'tenant-a')).resolves.toBeNull();
     expect(repo.update).not.toHaveBeenCalled();
   });
+
+  it('renews and completes only the current unexpired lease owner', async () => {
+    const repo = setup({ id: 'checkpoint-1' });
+
+    await expect(identityReconciliationCheckpointService.renew('provider-1', 'lease-1', 90_000)).resolves.toBe(true);
+    expect(repo.update).toHaveBeenNthCalledWith(1, expect.objectContaining({ providerId: 'provider-1', leaseId: 'lease-1' }), expect.objectContaining({ leaseExpiresAt: 1_090_000 }));
+
+    repo.update.mockResolvedValueOnce({ affected: 0 });
+    await expect(identityReconciliationCheckpointService.complete('provider-1', 'stale-lease', null)).resolves.toBe(false);
+  });
 });

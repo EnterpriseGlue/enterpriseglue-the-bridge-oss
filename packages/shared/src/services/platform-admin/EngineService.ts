@@ -19,9 +19,13 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
-import { In, type EntityManager } from 'typeorm';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
+import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
+import { EngineBackstopSyncTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncTask.js';
+import { In, IsNull, Not, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import {
   engineTenancyVisibilityWhere,
   isEngineVisibleInTenancyContext,
@@ -87,6 +91,45 @@ function engineGovernanceSourceRef(engineId: string, slot: 'owner' | 'delegate')
 }
 
 export class EngineService {
+  /**
+   * Native backstop side effects must be retired before an engine connection
+   * can leave service. The durable no-expiry journal is the ownership marker;
+   * bounded preview/history evidence alone does not block decommission.
+   */
+  async assertBackstopRetirementComplete(
+    engineId: string,
+    store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+  ): Promise<void> {
+    const dataSource = store || await getDataSource();
+    const activeTask = await dataSource.getRepository(EngineBackstopSyncTask).findOne({
+      where: { engineId, status: In(['queued', 'running']) },
+      select: ['id'],
+    });
+    const retainedJournal = await dataSource.getRepository(EngineBackstopSyncRun).findOne({
+      where: {
+        engineId,
+        encryptedDetailedSnapshot: Not(IsNull()),
+        detailedSnapshotExpiresAt: IsNull(),
+      },
+      select: ['id'],
+    });
+    if (activeTask || retainedJournal) {
+      throw Errors.conflict('Engine lifecycle change is blocked while mirrored-backstop native grants or pending operations remain; complete retry or rollback and verify zero retained ownership before decommissioning');
+    }
+  }
+
+  /** Physical deletion is reserved for engines with no retained backstop history. */
+  async hasBackstopHistory(
+    engineId: string,
+    store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+  ): Promise<boolean> {
+    const dataSource = store || await getDataSource();
+    const task = await dataSource.getRepository(EngineBackstopSyncTask).findOne({ where: { engineId }, select: ['id'] });
+    const run = await dataSource.getRepository(EngineBackstopSyncRun).findOne({ where: { engineId }, select: ['id'] });
+    const mapping = await dataSource.getRepository(EngineBackstopGroupMapping).findOne({ where: { engineId }, select: ['id'] });
+    return Boolean(task || run || mapping);
+  }
+
   /**
    * Get user's role on an engine
    */
@@ -328,10 +371,18 @@ export class EngineService {
     input: { lastAppliedAt?: number | null } = {},
     store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
   ): Promise<void> {
-    const dataSource = store || await getDataSource();
+    if (!store) {
+      const dataSource = await getDataSource();
+      await dataSource.transaction((manager) => this.decommissionEngine(id, input, manager));
+      return;
+    }
+    const dataSource = store;
     const engineRepo = dataSource.getRepository(Engine);
+    const engineClaim = await engineRepo.update({ id }, { id });
+    if (engineClaim.affected !== 1) throw new Error('Engine not found');
     const engine = await engineRepo.findOne({ where: { id } });
     if (!engine) throw new Error('Engine not found');
+    await this.assertBackstopRetirementComplete(id, dataSource);
 
     const now = Date.now();
     const runtimeResourceRepo = dataSource.getRepository(RuntimeResource);
@@ -386,6 +437,10 @@ export class EngineService {
       { status: 'archived', updatedAt: now },
     );
     await dataSource.getRepository(EngineSetMaterialization).delete({ engineId: id });
+    await dataSource.getRepository(EngineBackstopGroupMapping).update(
+      { engineId: id },
+      { isActive: false, updatedAt: now },
+    );
 
     await engineRepo.update({ id }, {
       lifecycleStatus: 'decommissioned',

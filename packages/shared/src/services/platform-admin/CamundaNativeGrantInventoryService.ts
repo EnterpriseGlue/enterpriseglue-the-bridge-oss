@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import { camundaGet } from '../bpmn-engine-client.js';
+import { blindIndex } from '../encryption.js';
 import {
   CamundaNativeAuthorizationExportSchema,
   CamundaNativeAuthorizationSchema,
@@ -106,7 +106,7 @@ function canonicalAuthorizations(authorizations: CamundaNativeAuthorization[]): 
 }
 
 function inventoryHash(authorizations: CamundaNativeAuthorization[]): string {
-  return createHash('sha256').update(stableJson(authorizations), 'utf8').digest('hex');
+  return blindIndex('camunda-native-inventory-v1', stableJson(authorizations));
 }
 
 function normalizeResourceKind(resourceType: CamundaNativeAuthorization['resourceType']): CamundaNativeGrantResourceKind | null {

@@ -139,18 +139,18 @@ describe('identity provider routes', () => {
     const response = await request(app).post('/api/identity/providers/entra/test-connection');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: 'connected', protocol: 'oidc', issuer: 'https://login.example.test' });
+    expect(response.body).toEqual({ status: 'metadata_reachable', protocol: 'oidc', issuer: 'https://login.example.test' });
     expect(service.testConnection).toHaveBeenCalledWith(JSON.parse(provider.configurationJson));
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'identity.provider.connection_test', resourceId: 'provider-1' }));
   });
 
   it('tests SAML metadata and returns a sanitized descriptor count', async () => {
-    service.getByKey.mockResolvedValue({ ...provider, protocol: 'saml', configurationJson: JSON.stringify({ entityId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', metadataUrl: 'https://idp.example.test/metadata.xml' }) });
+    service.getByKey.mockResolvedValue({ ...provider, protocol: 'saml', configurationJson: JSON.stringify({ entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test', callbackUrl: 'http://localhost:5173/api/auth/providers/saml/callback', metadataUrl: 'https://idp.example.test/metadata.xml' }) });
 
     const response = await request(app).post('/api/identity/providers/entra/test-connection');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: 'connected', protocol: 'saml', entityDescriptorCount: 2 });
+    expect(response.body).toEqual({ status: 'metadata_reachable', protocol: 'saml', entityDescriptorCount: 2 });
     expect(service.testSamlMetadata).toHaveBeenCalledWith(expect.stringContaining('metadata.xml'));
   });
 
@@ -192,19 +192,19 @@ describe('identity provider routes', () => {
         issuerUrl: 'https://login.example.test', clientId: 'client-1', callbackUrl: 'https://app.example.test/api/auth/identity/callback', scopes: ['openid'],
         allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'], groupClaim: 'groups', expectedAudience: 'enterpriseglue',
       },
-      sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+      sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
     });
     expect(response.status).toBe(200);
     expect(service.upsert).toHaveBeenCalledWith(expect.objectContaining({
       key: 'entra', protocol: 'oidc', isEnabled: false,
       configuration: expect.objectContaining({ allowVerifiedEmailLinking: true, expectedAudience: 'enterpriseglue' }),
-      sync: expect.objectContaining({ triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph' }),
+      sync: expect.objectContaining({ triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only' }),
     }));
   });
 
   it('rejects a provider update that attempts to disable mandatory sign-in reconciliation', async () => {
     const response = await request(app).put('/api/identity/providers/entra').send({
-      sync: { triggers: ['manual'], requiredForLogin: false, incompleteEntitlements: 'preserve_previous', connectorCapability: 'graph', scheduled: false },
+      sync: { triggers: ['manual'], requiredForLogin: false, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
     });
 
     expect(response.status).toBe(400);

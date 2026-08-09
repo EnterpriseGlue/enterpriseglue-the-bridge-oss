@@ -6,6 +6,7 @@ import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 /**
  * Authentication middleware
@@ -107,6 +108,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       throw Errors.unauthorized('User not found or inactive');
     }
     if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
+      throw Errors.unauthorized('Session has been revoked');
+    }
+    if (payload.recovery === 'platform_administrator'
+      && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
       throw Errors.unauthorized('Session has been revoked');
     }
 
@@ -212,11 +217,14 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
     const tokenPayload = readOptionalAuthPayload(req);
     const payload = tokenPayload ? normalizeUserJwtPayload(tokenPayload) : null;
     if (payload?.type === 'access') {
-      const user = await (await getDataSource()).getRepository(User).findOneBy({
+      const dataSource = await getDataSource();
+      const user = await dataSource.getRepository(User).findOneBy({
         id: payload.userId,
         isActive: true,
       });
-      if (user && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
+      const recoveryIsCurrent = payload.recovery !== 'platform_administrator'
+        || (await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId);
+      if (user && recoveryIsCurrent && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
         req.user = { ...payload, email: user.email };
         // Optional authentication must establish the same tenant-aware request
         // context as required authentication. If the enterprise resolver cannot

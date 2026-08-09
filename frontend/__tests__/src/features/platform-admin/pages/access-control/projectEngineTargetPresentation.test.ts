@@ -7,7 +7,7 @@ const target: ProjectEngineTarget = {
   environment: null, status: 'active', source: 'external', sourceRef: 'external:target-1', ownershipMode: 'manual', sourceHash: null, lastAppliedAt: null, driftStatus: null,
   externalSystemId: 'system-1', externalProjectId: 'external-project-1', externalEngineId: 'external-engine-1', externalTargetId: 'external-target-1',
   allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: true, allowImport: false, createdById: null, approvedById: null, approvalStatus: 'approved', approvedAt: null,
-  policyTags: ['production'], diagnostics: { owner: 'platform', nested: { safe: true } }, lastSeenAt: null, createdAt: 1, updatedAt: 1,
+  policyTags: ['production'], diagnostics: { owner: 'platform', confidence: 'high' }, lastSeenAt: null, createdAt: 1, updatedAt: 1,
 };
 
 describe('projectEngineTargetPresentation', () => {
@@ -20,7 +20,7 @@ describe('projectEngineTargetPresentation', () => {
   it('renders compact deployment mode, external reference, diagnostic, and eligibility summaries', () => {
     expect(formatProjectEngineTargetModes(target)).toBe('CI, API');
     expect(formatProjectEngineTargetExternalRefs(target)).toBe('system=system-1, project=external-project-1, engine=external-engine-1, target=external-target-1');
-    expect(formatProjectEngineTargetDiagnostics(target)).toBe('Policies: production | owner: platform, nested: {"safe":true}');
+    expect(formatProjectEngineTargetDiagnostics(target)).toBe('Policies: production | owner: platform, confidence: high');
     expect(formatDeploymentEligibility({
       allowed: false, decision: 'deny', mode: 'manual', projectId: 'project-1', engineId: 'engine-1', checks: [], reasons: ['target_archived'],
     })).toBe('target_archived');

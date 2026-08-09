@@ -18,7 +18,7 @@ Audience: Developers and architects.
 - [Docker Compose Deployment](how-to/deploy-docker.md)
 - [OpenShift Deployment](how-to/deploy-openshift.md)
 - [Deployment Runbook](how-to/deployment-runbook.md)
-- [Deploy Authorization Configuration (Target)](how-to/deploy-authorization-config.md)
+- [Deploy Authorization Configuration](how-to/deploy-authorization-config.md)
 - [Collect Access-Governance Deployment Evidence](how-to/collect-access-governance-deployment-evidence.md)
 
 ## Configuration
@@ -29,7 +29,7 @@ Audience: Developers and architects.
 - [Migrate Governance Settings Ownership](how-to/migrate-governance-settings-ownership.md)
 - [Customer Sidecar Backstop Adapter API](reference/customer-sidecar-backstop-adapter-api.md)
 - [Auth and SSO Setup](how-to/auth-sso.md)
-- [Configure Authorization, Identity, and Engines (Target)](how-to/configure-authorization-and-engines.md)
+- [Configure Authorization, Identity, and Engines](how-to/configure-authorization-and-engines.md)
 - [Enable Mirrored Camunda 7 or Operaton Authorization Backstop](how-to/enable-mirrored-engine-backstop.md)
 - [Customer Sidecar Readiness Runbook](how-to/customer-sidecar-readiness-runbook.md)
 - [Configure Dedicated and Shared Engine Tenancy](how-to/configure-engine-tenancy.md)

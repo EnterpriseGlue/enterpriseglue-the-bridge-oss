@@ -38,7 +38,7 @@ Headless login clients should use the tenant-scoped public contract:
 | Method and path | Purpose |
 | --- | --- |
 | `GET /api/t/{tenantSlug}/auth/login-methods` | Read only the sanitized login methods resolved for that tenant. |
-| `GET /api/t/{tenantSlug}/auth/providers/{providerId}/start` | Start the exact OIDC or SAML provider in that tenant and bind it into signed state. |
+| `GET /api/t/{tenantSlug}/auth/providers/{providerId}/start` | Start the exact provider. OIDC uses cryptographic state with exact HttpOnly cookie equality, PKCE, and nonce; SAML uses signed RelayState. |
 | `POST /api/t/{tenantSlug}/auth/providers/{providerId}/login` | Submit direct LDAP credentials to the exact provider in that tenant. |
 | `GET /api/auth/identity/callback` | Complete OIDC using the tenant and provider already bound into state. |
 | `POST /api/auth/providers/saml/callback` | Complete SAML using signed RelayState. |
@@ -60,7 +60,7 @@ the enum values:
 | EnterpriseGlue only | `engineRuntimeAuthorizationMode: "enterpriseglue_authoritative"` / `governance.runtimeAuthorizationAuthority: "enterpriseglue_authoritative"` |
 | EnterpriseGlue with engine read-access backup | `engineRuntimeAuthorizationMode: "mirrored_engine_backstop"` / `governance.runtimeAuthorizationAuthority: "mirrored_engine_backstop"` |
 | Users sign in through this provider | `authenticationMode: "direct"` |
-| Accept trusted claims from a gateway | `authenticationMode: "claims_only"` |
+| Managed by a verified host integration | `authenticationMode: "claims_only"` (non-login namespace; no gateway-claims ingress is shipped in the 0.11 base application) |
 | Add and remove members to match the provider | `syncMode: "authoritative"` |
 | Add matching members only | `syncMode: "additive"` |
 | Managed by configuration | `ownershipMode: "config_locked"` |

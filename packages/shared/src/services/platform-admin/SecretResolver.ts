@@ -1,7 +1,7 @@
 import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
-import { accessSync, constants, readFileSync, statSync } from 'node:fs';
+import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { config } from '@enterpriseglue/shared/config/index.js';
 
 export type StoredSecretKind = 'encrypted_local' | 'external_ref' | 'legacy';
@@ -28,9 +28,43 @@ const DOCKER_SECRET_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/;
 
 function isPathWithinRoot(root: string, filePath: string): boolean {
   const pathFromRoot = relative(root, filePath);
-  return !pathFromRoot.startsWith('..')
-    && pathFromRoot !== ''
-    && !pathFromRoot.includes(`..${process.platform === 'win32' ? '\\' : '/'}`);
+  return pathFromRoot !== ''
+    && pathFromRoot !== '..'
+    && !pathFromRoot.startsWith(`..${sep}`)
+    && !isAbsolute(pathFromRoot);
+}
+
+class SecretFileBoundaryError extends Error {
+  constructor(readonly kind: 'outside_root' | 'unavailable') {
+    super(kind);
+  }
+}
+
+function resolveRegularSecretFile(rootInput: string, fileInput: string): string {
+  const configuredRoot = resolve(rootInput);
+  const requestedPath = resolve(fileInput);
+  if (!isPathWithinRoot(configuredRoot, requestedPath)) {
+    throw new SecretFileBoundaryError('outside_root');
+  }
+
+  try {
+    const canonicalRoot = realpathSync(configuredRoot);
+    if (!statSync(canonicalRoot).isDirectory()) {
+      throw new SecretFileBoundaryError('unavailable');
+    }
+
+    const canonicalPath = realpathSync(requestedPath);
+    if (!isPathWithinRoot(canonicalRoot, canonicalPath)) {
+      throw new SecretFileBoundaryError('outside_root');
+    }
+    if (!statSync(canonicalPath).isFile()) {
+      throw new SecretFileBoundaryError('unavailable');
+    }
+    return canonicalPath;
+  } catch (error) {
+    if (error instanceof SecretFileBoundaryError) throw error;
+    throw new SecretFileBoundaryError('unavailable');
+  }
 }
 
 /**
@@ -50,7 +84,11 @@ export class SecretResolver {
 
   normalizeForStorage(value: string | null | undefined): string | null {
     if (!value) return null;
-    if (this.isExternalReference(value) || isEncrypted(value)) return value;
+    if (this.isExternalReference(value)) return value;
+    if (value.startsWith('v2:') && !isEncrypted(value)) {
+      throw new Error('Encrypted secret value is malformed');
+    }
+    if (isEncrypted(value)) return value;
     // Upgrade the legacy marker on its next write rather than perpetuating it.
     return this.storeEncryptedLocal(this.resolveStored(value) || value);
   }
@@ -78,8 +116,7 @@ export class SecretResolver {
       if (!DOCKER_SECRET_NAME.test(name)) return { available: false, reason: 'docker_secret_invalid_name' };
       try {
         const root = resolve(settings.fileRoot || DEFAULT_DOCKER_SECRET_ROOT);
-        const filePath = resolve(root, name);
-        if (!isPathWithinRoot(root, filePath)) return { available: false, reason: 'docker_secret_invalid_name' };
+        const filePath = resolveRegularSecretFile(root, resolve(root, name));
         accessSync(filePath, constants.R_OK);
         return statSync(filePath).size > 0
           ? { available: true }
@@ -94,15 +131,15 @@ export class SecretResolver {
       if (settings.provider !== 'file' || !settings.fileRoot) return { available: false, reason: 'file_provider_not_configured' };
       try {
         const root = resolve(settings.fileRoot);
-        const filePath = resolve(fileURLToPath(reference));
-        if (!isPathWithinRoot(root, filePath)) {
-          return { available: false, reason: 'file_outside_root' };
-        }
+        const filePath = resolveRegularSecretFile(root, resolve(fileURLToPath(reference)));
         accessSync(filePath, constants.R_OK);
         return statSync(filePath).size > 0
           ? { available: true }
           : { available: false, reason: 'file_unavailable' };
-      } catch {
+      } catch (error) {
+        if (error instanceof SecretFileBoundaryError && error.kind === 'outside_root') {
+          return { available: false, reason: 'file_outside_root' };
+        }
         return { available: false, reason: 'file_unavailable' };
       }
     }
@@ -131,11 +168,8 @@ export class SecretResolver {
           throw new Error('Docker secret reference must use docker://<secret-name>');
         }
         const root = resolve(settings.fileRoot || DEFAULT_DOCKER_SECRET_ROOT);
-        const filePath = resolve(root, name);
-        if (!isPathWithinRoot(root, filePath)) {
-          throw new Error('Docker secret reference must use docker://<secret-name>');
-        }
         try {
+          const filePath = resolveRegularSecretFile(root, resolve(root, name));
           return readFileSync(filePath, 'utf8');
         } catch {
           throw new Error('Docker secret reference is unavailable');
@@ -147,8 +181,16 @@ export class SecretResolver {
           throw new Error('File-backed secret references require EG_CONFIG_SECRET_PROVIDER=file and EG_CONFIG_SECRET_FILE_ROOT');
         }
         const root = resolve(settings.fileRoot);
-        const filePath = resolve(fileURLToPath(reference));
-        if (!isPathWithinRoot(root, filePath)) {
+        let filePath: string;
+        try {
+          filePath = resolveRegularSecretFile(root, resolve(fileURLToPath(reference)));
+        } catch (error) {
+          if (error instanceof SecretFileBoundaryError && error.kind === 'outside_root') {
+            throw new Error('File-backed secret reference is outside EG_CONFIG_SECRET_FILE_ROOT');
+          }
+          throw new Error('File-backed secret reference is unavailable');
+        }
+        if (!isPathWithinRoot(realpathSync(root), filePath)) {
           throw new Error('File-backed secret reference is outside EG_CONFIG_SECRET_FILE_ROOT');
         }
         return readFileSync(filePath, 'utf8');

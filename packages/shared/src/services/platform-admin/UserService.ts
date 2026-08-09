@@ -301,7 +301,15 @@ export class UserService {
         if (normalizeRoleValue(input.platformRole) === 'admin') {
           await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, id);
         } else {
-          await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
+          const removal = await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
+          if (removal.removed) {
+            // A break-glass session is deliberately indistinguishable from a
+            // normal local session after issue. Invalidate every existing
+            // access/refresh session when its manual administrator membership
+            // is removed so recovery access cannot outlive the recovery grant.
+            await userRepo.update({ id }, { authSessionVersion: Number(existing.authSessionVersion || 0) + 1 });
+            await manager.getRepository(RefreshToken).update({ userId: id }, { revokedAt: updateData.updatedAt });
+          }
         }
       }
       const updatedUser = await userRepo.findOneBy({ id });

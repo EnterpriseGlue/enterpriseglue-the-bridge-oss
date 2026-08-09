@@ -1,15 +1,19 @@
-import { DataSource, EntityManager, In, IsNull } from 'typeorm';
+import { DataSource, EntityManager, In, IsNull, MoreThan } from 'typeorm';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
 import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityReconciliationCheckpoint } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityReconciliationCheckpoint.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { SsoNormalizedIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoNormalizedIdentity.js';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { externalIdentityService } from './ExternalIdentityService.js';
 import { getIdentityProviderAdapter, type IdentityProviderType } from './IdentityProviderAdapter.js';
 import { identityEntitlementMappingService, isHumanIdentityEntitlementType, matchesIdentityEntitlement, type IdentityEntitlementMatchOperator } from './IdentityEntitlementMappingService.js';
+import { identityProviderMembershipSourceRefs } from './IdentityEntitlementMappingService.js';
 import type { IdentityClaims } from './IdentityClaims.js';
-
-type SsoNormalizedIdentityStore = DataSource | EntityManager;
 
 export interface UpsertSsoNormalizedIdentityInput {
   tenantId?: string | null;
@@ -70,6 +74,13 @@ export interface PreviewNormalizedIdentityMembershipsResult {
   }>;
 }
 
+export interface DeactivateMissingProviderIdentitiesResult {
+  identitiesDeactivated: number;
+  providerManagedMembershipsRemoved: number;
+  providerRefreshSessionsRevoked: number;
+  providerUserSessionsInvalidated: number;
+}
+
 function normalizeNullableText(value?: string | null): string | null {
   const normalized = value?.trim();
   return normalized || null;
@@ -84,9 +95,9 @@ function normalizeRequiredText(value: string, field: string): string {
 }
 
 function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
+  const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
   return Array.from(new Set(
-    value
+    source
       .map((item) => typeof item === 'string' ? item.trim() : String(item ?? '').trim())
       .filter(Boolean)
   ));
@@ -136,8 +147,8 @@ function encodeReplayCursor(identity: SsoNormalizedIdentity): string {
  * raw protocol payload: it can contain JWT assertions, SAML attributes, LDAP
  * directory data, or unrelated PII.
  */
-export function allowlistedIdentityClaims(claims: IdentityClaims, authorizationAttributeKeys: string[] = []): IdentityClaims {
-  const source = claims as Record<string, unknown>;
+export function allowlistedIdentityClaims(claims: Record<string, unknown>, authorizationAttributeKeys: string[] = []): IdentityClaims {
+  const source = claims;
   const groups = normalizeStringArray(source.groups ?? source.group ?? source.memberOf).sort();
   const roles = normalizeStringArray(source.roles ?? source.role ?? source.appRoles).sort();
   const scopes = normalizeStringArray(source.scp ?? source.scope)
@@ -166,7 +177,7 @@ function adapterType(providerType: string): IdentityProviderType {
 class SsoNormalizedIdentityServiceClass {
   async upsertIdentity(input: UpsertSsoNormalizedIdentityInput): Promise<{ id: string; created: boolean; groupMembershipsCreated: number; groupMembershipsRemoved: number }> {
     const dataSource = await getDataSource();
-    return this.upsertIdentityInStore(dataSource, input);
+    return dataSource.transaction((manager) => this.upsertIdentityInStore(manager, input));
   }
 
   async upsertIdentityWithManager(
@@ -174,6 +185,118 @@ class SsoNormalizedIdentityServiceClass {
     input: UpsertSsoNormalizedIdentityInput
   ): Promise<{ id: string; created: boolean; groupMembershipsCreated: number; groupMembershipsRemoved: number }> {
     return this.upsertIdentityInStore(manager, input);
+  }
+
+  /**
+   * Applies the absence half of one complete authoritative directory snapshot.
+   * Callers must never invoke this after a truncated or failed enumeration.
+   * Only memberships owned by mappings for this provider are removed; manual
+   * and other-provider access remain intact. Session-version invalidation makes
+   * the removal immediate for already-issued access tokens.
+   */
+  async deactivateMissingProviderIdentities(input: {
+    tenantId?: string | null;
+    providerId: string;
+    seenProviderSubjects: string[];
+    leaseId: string;
+    providerUpdatedAt: number;
+    providerProtocol: IdentityProvider['protocol'];
+    providerAuthenticationMode: IdentityProvider['authenticationMode'];
+    providerDirectoryTenantId: string | null;
+    providerConfigurationJson: string;
+    cursor: string | null;
+    now?: number;
+  }): Promise<DeactivateMissingProviderIdentitiesResult> {
+    const tenantId = normalizeNullableText(input.tenantId);
+    const providerId = normalizeRequiredText(input.providerId, 'providerId');
+    const leaseId = normalizeRequiredText(input.leaseId, 'leaseId');
+    if (!Number.isSafeInteger(input.providerUpdatedAt) || input.providerUpdatedAt < 0) throw new Error('providerUpdatedAt must be a non-negative safe integer');
+    const seen = new Set(input.seenProviderSubjects.map((subject) => subject.trim()).filter(Boolean));
+    const now = input.now ?? Date.now();
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async (manager) => {
+      // Fence the entire destructive absence phase in the same transaction.
+      // The no-op conditional writes acquire row locks before any membership
+      // mutation; provider edits or a successor lease make this transaction
+      // fail with zero absence writes.
+      const providerClaim = await manager.getRepository(IdentityProvider).update({
+        id: providerId,
+        isEnabled: true,
+        updatedAt: input.providerUpdatedAt,
+        protocol: input.providerProtocol,
+        authenticationMode: input.providerAuthenticationMode,
+        directoryTenantId: input.providerDirectoryTenantId || IsNull(),
+        configurationJson: input.providerConfigurationJson,
+      }, { updatedAt: input.providerUpdatedAt });
+      if (providerClaim.affected !== 1) throw new Error('LDAP provider changed before authoritative absence removal');
+      const checkpointClaim = await manager.getRepository(IdentityReconciliationCheckpoint).update({
+        providerId,
+        leaseId,
+        leaseExpiresAt: MoreThan(now),
+      }, { updatedAt: now });
+      if (checkpointClaim.affected !== 1) throw new Error('LDAP reconciliation lease was lost before authoritative absence removal');
+      const completeCheckpoint = async (): Promise<void> => {
+        const completed = await manager.getRepository(IdentityReconciliationCheckpoint).update({ providerId, leaseId }, {
+          cursor: input.cursor,
+          lastSuccessAt: now,
+          leaseId: null,
+          leaseExpiresAt: null,
+          updatedAt: now,
+        });
+        if (completed.affected !== 1) throw new Error('LDAP reconciliation lease was lost before checkpoint completion');
+      };
+      const tenantScope = tenantId ? { tenantId } : { tenantId: IsNull() };
+      const normalizedRepo = manager.getRepository(SsoNormalizedIdentity);
+      const active = await normalizedRepo.find({ where: { ...tenantScope, providerId, providerStatus: 'active' } as any });
+      const missing = active.filter((identity) => !seen.has(identity.providerSubject));
+      if (missing.length === 0) {
+        await completeCheckpoint();
+        return { identitiesDeactivated: 0, providerManagedMembershipsRemoved: 0, providerRefreshSessionsRevoked: 0, providerUserSessionsInvalidated: 0 };
+      }
+
+      const userIds = Array.from(new Set(missing.map((identity) => identity.userId)));
+      const subjectIds = Array.from(new Set(missing.map((identity) => identity.providerSubject)));
+      const mappings = await manager.getRepository(IdentityEntitlementMapping).find({ where: { ...tenantScope, providerId } as any });
+      const sourceRefs = Array.from(new Set(mappings.flatMap((mapping) => identityProviderMembershipSourceRefs(providerId, mapping.id))));
+      const chunks = <T>(values: T[]): T[][] => Array.from({ length: Math.ceil(values.length / 500) }, (_entry, index) => values.slice(index * 500, (index + 1) * 500));
+
+      let membershipsRemoved = 0;
+      for (const userChunk of chunks(userIds)) {
+        for (const sourceChunk of chunks(sourceRefs)) {
+          const result = await manager.getRepository(AuthzGroupMembership).delete({ ...tenantScope, userId: In(userChunk), source: 'identity_provider', sourceRef: In(sourceChunk) } as any);
+          membershipsRemoved += result.affected || 0;
+        }
+      }
+      let identitiesDeactivated = 0;
+      for (const identityChunk of chunks(missing.map((identity) => identity.id))) {
+        const result = await normalizedRepo.update({ id: In(identityChunk) }, { providerStatus: 'directory_inactive', lastProviderCheckAt: now, updatedAt: now });
+        identitiesDeactivated += result.affected || 0;
+      }
+      for (const subjectChunk of chunks(subjectIds)) {
+        await manager.getRepository(ExternalIdentity).update({ ...tenantScope, providerId, subjectId: In(subjectChunk) } as any, { status: 'directory_inactive', updatedAt: now });
+      }
+      let refreshSessionsRevoked = 0;
+      for (const userChunk of chunks(userIds)) {
+        const result = await manager.getRepository(RefreshToken).update({ userId: In(userChunk), identityProviderId: providerId, revokedAt: IsNull() }, { revokedAt: now });
+        refreshSessionsRevoked += result.affected || 0;
+      }
+      let userSessionsInvalidated = 0;
+      const userRepo = manager.getRepository(User);
+      for (const userChunk of chunks(userIds)) {
+        const users = await userRepo.find({ where: { id: In(userChunk) }, select: ['id', 'authSessionVersion'] });
+        for (const user of users) {
+          await userRepo.update({ id: user.id }, { authSessionVersion: (user.authSessionVersion || 0) + 1 });
+          userSessionsInvalidated += 1;
+        }
+      }
+      await completeCheckpoint();
+      return {
+        identitiesDeactivated,
+        providerManagedMembershipsRemoved: membershipsRemoved,
+        providerRefreshSessionsRevoked: refreshSessionsRevoked,
+        providerUserSessionsInvalidated: userSessionsInvalidated,
+      };
+    });
   }
 
   /**
@@ -216,7 +339,7 @@ class SsoNormalizedIdentityServiceClass {
           directoryTenantId: identity.providerTenantId,
           observedAt: identity.lastSeenAt,
         });
-        const change = await identityEntitlementMappingService.syncMembershipsInStore(dataSource, identity.userId, identity.tenantId, normalized);
+        const change = await dataSource.transaction((manager) => identityEntitlementMappingService.syncMembershipsInStore(manager, identity.userId, identity.tenantId, normalized));
         result.created += change.created;
         result.removed += change.removed;
       } catch {
@@ -324,7 +447,7 @@ class SsoNormalizedIdentityServiceClass {
   }
 
   private async upsertIdentityInStore(
-    store: SsoNormalizedIdentityStore,
+    store: EntityManager,
     input: UpsertSsoNormalizedIdentityInput
   ): Promise<{ id: string; created: boolean; groupMembershipsCreated: number; groupMembershipsRemoved: number }> {
     const tenantId = normalizeNullableText(input.tenantId);

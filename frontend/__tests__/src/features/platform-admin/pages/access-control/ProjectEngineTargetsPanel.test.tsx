@@ -17,7 +17,7 @@ const externalTarget: React.ComponentProps<typeof ProjectEngineTargetsPanel>['ta
   externalSystemId: 'system-1', externalProjectId: 'external-project-1', externalEngineId: 'external-engine-1', externalTargetId: 'external-target-1',
   allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: true, allowImport: false,
   createdById: null, approvedById: null, approvalStatus: 'approved', approvedAt: 1,
-  policyTags: ['production'], diagnostics: { source: 'external' }, lastSeenAt: 1,
+  policyTags: ['production'], diagnostics: { source: 'external_registration_api' }, lastSeenAt: 1,
   createdAt: 1, updatedAt: 1,
 };
 

@@ -22,6 +22,8 @@ import {
 } from '@enterpriseglue/shared/authz/permission-actions.js';
 import {
   isTenantVisibleForAuthz,
+  normalizeTenantIdForPersistence,
+  OSS_DEFAULT_TENANT_ID,
   tenantIdsForAuthz,
 } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { engineAccessService } from '@enterpriseglue/shared/services/platform-admin/EngineAccessService.js';
@@ -269,6 +271,14 @@ function isTenantVisible(rowTenantId: string | null | undefined, tenantId?: stri
   return isTenantVisibleForAuthz(rowTenantId, tenantId);
 }
 
+function effectiveProjectTenantId(tenantId?: string | null): string {
+  return normalizeTenantIdForPersistence(tenantId) || OSS_DEFAULT_TENANT_ID;
+}
+
+function isProjectTenantVisible(rowTenantId: string | null | undefined, tenantId?: string | null): boolean {
+  return normalizeTenantIdForPersistence(rowTenantId) === effectiveProjectTenantId(tenantId);
+}
+
 type TenantVisibleEngine = Pick<Engine, 'tenantId' | 'tenancyMode'>;
 type RuntimeGuardEngine = Pick<Engine, 'tenancyMode' | 'runtimeAccessScope'>;
 
@@ -348,7 +358,7 @@ async function resolveVisibleProjectById(
   if (!project) {
     throw Errors.notFound('Project not found');
   }
-  if (!isTenantVisible(project.tenantId, tenantId)) {
+  if (!isProjectTenantVisible(project.tenantId, tenantId)) {
     throw Errors.forbidden('Project not accessible in this tenant');
   }
   return project;
@@ -541,7 +551,7 @@ async function resolveProjectVisibleCollection(
     options.collectionIdsFrom || 'query'
   );
   if (requestedIds.length === 0) {
-    const tenantId = req.tenant?.tenantId || null;
+    const tenantId = effectiveProjectTenantId(req.tenant?.tenantId);
     const hasCollectionWideAccess = await permissionService.hasPermission(action.permissionId, {
       userId: req.user!.userId,
       tenantId,
@@ -551,12 +561,13 @@ async function resolveProjectVisibleCollection(
       const dataSource = await getDataSource();
       const visibleTenantIds = tenantIdsForAuthz(tenantId);
       const rows = await dataSource.getRepository(Project).find({
-        where: visibleTenantIds.length > 0
-          ? [{ tenantId: In(visibleTenantIds) }, { tenantId: IsNull() }]
-          : undefined,
-        select: ['id'],
+        where: { tenantId: In(visibleTenantIds) },
+        select: ['id', 'tenantId'],
       });
-      requestedIds = rows.map((row) => String(row.id)).sort();
+      requestedIds = rows
+        .filter((row) => isProjectTenantVisible(row.tenantId, tenantId))
+        .map((row) => String(row.id))
+        .sort();
     } else {
       requestedIds = await permissionService.getKnownProjectIdsForUser(
         req.user!.userId,
@@ -574,13 +585,16 @@ async function resolveProjectVisibleCollection(
     select: ['id', 'tenantId'],
   });
   const existingIds = new Set(rows.map((row) => String(row.id)));
+  const visibleIds = new Set(rows
+    .filter((row) => isProjectTenantVisible(row.tenantId, req.tenant?.tenantId))
+    .map((row) => String(row.id)));
   const allowedIds = new Set<string>();
 
   for (const projectId of requestedIds) {
-    if (!existingIds.has(projectId)) continue;
+    if (!visibleIds.has(projectId)) continue;
     const allowed = await permissionService.hasPermission(action.permissionId, {
       userId: req.user!.userId,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId: effectiveProjectTenantId(req.tenant?.tenantId),
       resourceType: 'project',
       resourceId: projectId,
     });
@@ -827,7 +841,7 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
         const collection = await resolveProjectVisibleCollection(req, action, options);
         const policy = await policyService.evaluateGate(action.permissionId, {
           userId: req.user.userId,
-          tenantId: req.tenant?.tenantId || null,
+          tenantId: effectiveProjectTenantId(req.tenant?.tenantId),
           resourceType: 'project',
         });
         if (policy.decision === 'deny') {
@@ -861,7 +875,9 @@ export function requireAction(actionId: string, options: RequireActionOptions = 
       const resource = await resolveActionResource(req, resolverId, options);
       const context: PermissionContext = {
         userId: req.user.userId,
-        tenantId: req.tenant?.tenantId || null,
+        tenantId: resource.type === 'project'
+          ? effectiveProjectTenantId(req.tenant?.tenantId)
+          : req.tenant?.tenantId || null,
         resourceType: resource.type,
         resourceId: resource.id || undefined,
       };
@@ -1061,6 +1077,7 @@ async function resolveInvitationTarget(req: Request): Promise<{
       target: { resourceType, resourceId, requiredPermissions },
       context: {
         ...baseContext,
+        tenantId: effectiveProjectTenantId(req.tenant?.tenantId),
         resourceType: 'project',
         resourceId,
       },

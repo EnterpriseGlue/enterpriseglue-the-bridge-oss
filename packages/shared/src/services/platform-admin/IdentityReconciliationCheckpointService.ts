@@ -1,6 +1,6 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { IdentityReconciliationCheckpoint } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityReconciliationCheckpoint.js';
-import { IsNull } from 'typeorm';
+import { IsNull, MoreThan } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
 class IdentityReconciliationCheckpointService {
@@ -49,18 +49,35 @@ class IdentityReconciliationCheckpointService {
     return { leaseId, cursor: row.cursor };
   }
 
-  async complete(providerId: string, leaseId: string, cursor: string | null): Promise<void> {
+  /**
+   * Renews only a lease that is still owned and unexpired. Returning false is
+   * the caller's signal to stop before applying any more authoritative writes.
+   */
+  async renew(providerId: string, leaseId: string, leaseMs = 60_000): Promise<boolean> {
     const repo = (await getDataSource()).getRepository(IdentityReconciliationCheckpoint);
-    const row = await repo.findOne({ where: { providerId, leaseId } });
-    if (row) {
-      await repo.update({ id: row.id }, {
-        cursor,
-        lastSuccessAt: Date.now(),
-        leaseId: null,
-        leaseExpiresAt: null,
-        updatedAt: Date.now(),
-      });
-    }
+    const now = Date.now();
+    const result = await repo.update({
+      providerId,
+      leaseId,
+      leaseExpiresAt: MoreThan(now),
+    }, {
+      leaseExpiresAt: now + leaseMs,
+      updatedAt: now,
+    });
+    return result.affected === 1;
+  }
+
+  async complete(providerId: string, leaseId: string, cursor: string | null): Promise<boolean> {
+    const repo = (await getDataSource()).getRepository(IdentityReconciliationCheckpoint);
+    const now = Date.now();
+    const result = await repo.update({ providerId, leaseId, leaseExpiresAt: MoreThan(now) }, {
+      cursor,
+      lastSuccessAt: now,
+      leaseId: null,
+      leaseExpiresAt: null,
+      updatedAt: now,
+    });
+    return result.affected === 1;
   }
 
   async release(providerId: string, leaseId: string): Promise<void> {

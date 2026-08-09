@@ -30,22 +30,25 @@ vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   authLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
+  identityFlowLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   shouldUseSecureCookies: () => false,
   config: {
     frontendUrl: 'http://frontend.test',
+    jwtSecret: 'identity-flow-test-secret-that-is-long-enough',
     jwtAccessTokenExpires: 900,
     jwtRefreshTokenExpires: 604800,
   },
 }));
 
 describe('provider-neutral OIDC browser flow', () => {
-  const protocol = new MockOidcProvider();
+  const protocol = new MockOidcProvider({ callbackUrl: 'http://frontend.test/api/auth/identity/callback' });
   const providerA = {
     id: 'provider-oidc-a',
     tenantId: null,
     key: 'identity.oidc.a',
+    updatedAt: 1234,
     protocol: 'oidc',
     isEnabled: true,
     authenticationMode: 'direct',

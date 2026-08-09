@@ -3,6 +3,8 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'external_engine_registrations', schema: 'main' })
 @Unique('uq_external_engine_registrations_engine', ['engineId'])
+@Unique('uq_external_engine_registrations_source_identity', ['sourceIdentity'])
+@Unique('uq_external_engine_registrations_active_external_identity', ['activeExternalIdIdentity'])
 @Index('idx_external_engine_registrations_engine', ['engineId'])
 @Index('idx_external_engine_registrations_external_id', ['externalId'])
 @Index('idx_external_engine_registrations_api_client', ['apiClientId'])
@@ -15,6 +17,14 @@ export class ExternalEngineRegistration extends AppBaseEntity {
 
   @Column({ name: 'external_id', type: 'text' })
   externalId!: string;
+
+  /** Stable idempotency key for the owning source plus external engine id. */
+  @Column({ name: 'source_identity', type: 'text' })
+  sourceIdentity!: string;
+
+  /** Global active external-id claim. Replaced with a unique tombstone on decommission. */
+  @Column({ name: 'active_external_id_identity', type: 'text' })
+  activeExternalIdIdentity!: string;
 
   @Column({ name: 'labels_json', type: 'text', nullable: true })
   labelsJson!: string | null;

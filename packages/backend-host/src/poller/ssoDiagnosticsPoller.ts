@@ -5,6 +5,7 @@ import { ldapReconciliationService } from '@enterpriseglue/shared/services/platf
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
+const PRODUCTION_SSO_SCHEDULER_INTERVAL_MS = 60_000;
 
 export interface SsoDiagnosticsPollerOptions {
   intervalMs?: number;
@@ -19,7 +20,11 @@ export interface SsoDiagnosticsPollerOptions {
 
 function parsePositiveInterval(value: string | undefined): number {
   const parsed = Number(value || 0);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  // Scheduled LDAP is an authoritative revocation path. Production may tune
+  // its cadence but cannot silently turn the scheduler off with an omitted,
+  // zero, or malformed value.
+  return process.env.NODE_ENV === 'production' ? PRODUCTION_SSO_SCHEDULER_INTERVAL_MS : 0;
 }
 
 function parseNullableList(value: string | undefined, defaultValue: Array<string | null>): Array<string | null> {

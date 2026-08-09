@@ -6,6 +6,7 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import {
   AccessGovernanceDriftStatusSchema,
   AccessAuthorityModeSchema,
@@ -24,9 +25,11 @@ import {
   type ProjectEngineTargetPolicyMode,
   type SsoProviderSelectionMode,
 } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
-import { encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
-import type { DataSource, EntityManager } from 'typeorm';
+import { decrypt, encrypt, isEncrypted, safeDecrypt } from '../encryption.js';
+import { In, IsNull, type DataSource, type EntityManager } from 'typeorm';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { EngineBackstopSyncDetailSchema } from '../../schemas/platform-admin/engine-backstop.js';
+import { engineBackstopConnectionCommitment, engineBackstopSyncService } from './EngineBackstopSyncService.js';
 
 const DEFAULT_PII_SCOPES = ['processDetails', 'history', 'logs', 'errors', 'audit'];
 export const DEFAULT_ENGINE_ONBOARDING_MODE: EngineOnboardingMode = 'manual_allowed';
@@ -129,6 +132,46 @@ export interface PlatformSettingsData {
 export class PlatformSettingsService {
   private readonly DEFAULT_ID = 'default';
 
+  constructor(private readonly currentBackstopCommitments: (input: { engineId: string; tenantId?: string | null }) => Promise<{ sourceHash: string; desiredHash: string; connectionCommitment: string }> =
+    (input) => engineBackstopSyncService.currentProjectionCommitments(input)) {}
+
+  private async hasCurrentMirroredBackstopCertification(store: DataSource | EntityManager): Promise<boolean> {
+    const runs = await store.getRepository(EngineBackstopSyncRun).find({
+      where: { status: 'succeeded', rollbackOfRunId: IsNull(), observedOfRunId: IsNull() },
+      order: { completedAt: 'DESC', id: 'DESC' },
+      take: 100,
+    });
+    for (const run of runs) {
+      if (!run.encryptedDetailedSnapshot || run.detailedSnapshotExpiresAt !== null) continue;
+      let detail;
+      try {
+        detail = EngineBackstopSyncDetailSchema.parse(JSON.parse(decrypt(run.encryptedDetailedSnapshot)));
+      } catch {
+        continue;
+      }
+      if (!('ownershipForRunId' in detail) || detail.ownershipForRunId !== run.id || detail.ownedGrants.length === 0) continue;
+      const engine = await store.getRepository(Engine).findOne({
+        where: { id: run.engineId, lifecycleStatus: 'active', type: In(['camunda7', 'operaton']) },
+      });
+      if (!engine || engineBackstopConnectionCommitment(engine) !== detail.connectionCommitment) continue;
+      try {
+        const current = await this.currentBackstopCommitments({ engineId: run.engineId, tenantId: run.tenantId });
+        if (current.connectionCommitment !== detail.connectionCommitment
+          || current.sourceHash !== run.sourceHash
+          || current.desiredHash !== run.desiredHash) continue;
+      } catch {
+        continue;
+      }
+      const latestObservation = await store.getRepository(EngineBackstopSyncRun).findOne({
+        where: { observedOfRunId: run.id },
+        order: { createdAt: 'DESC', id: 'DESC' },
+      });
+      if (latestObservation?.status === 'out_of_sync') continue;
+      return true;
+    }
+    return false;
+  }
+
   /**
    * Get platform settings
    */
@@ -197,6 +240,12 @@ export class PlatformSettingsService {
       ? settings.accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
       : 'manual';
 
+    const configuredRuntimeAuthorizationMode = normalizeEngineRuntimeAuthorizationMode(settings.engineRuntimeAuthorizationMode);
+    const engineRuntimeAuthorizationMode = configuredRuntimeAuthorizationMode === 'mirrored_engine_backstop'
+      && !await this.hasCurrentMirroredBackstopCertification(dataSource)
+      ? DEFAULT_ENGINE_RUNTIME_AUTHORIZATION_MODE
+      : configuredRuntimeAuthorizationMode;
+
     return {
       defaultEnvironmentTagId: settings.defaultEnvironmentTagId,
       syncPushEnabled: settings.syncPushEnabled,
@@ -207,7 +256,7 @@ export class PlatformSettingsService {
       projectEngineTargetMode,
       engineAccessAuthority,
       projectAccessAuthority,
-      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode(settings.engineRuntimeAuthorizationMode),
+      engineRuntimeAuthorizationMode,
       accessGovernanceSourceRef: settings.accessGovernanceSourceRef ?? null,
       accessGovernanceOwnershipMode,
       accessGovernanceSourceHash: settings.accessGovernanceSourceHash ?? null,
@@ -349,12 +398,8 @@ export class PlatformSettingsService {
     }
 
     if (data.engineRuntimeAuthorizationMode === 'mirrored_engine_backstop') {
-      const successfulRun = await dataSource.getRepository(EngineBackstopSyncRun).findOne({
-        where: { status: 'succeeded' },
-        order: { completedAt: 'DESC', id: 'DESC' },
-      });
-      if (!successfulRun) {
-        throw new Error('mirrored_engine_backstop requires at least one successful, retained Camunda 7 or Operaton backstop synchronization');
+      if (!await this.hasCurrentMirroredBackstopCertification(dataSource)) {
+        throw new Error('mirrored_engine_backstop requires at least one active Camunda 7 or Operaton engine with a current, retained, non-empty ownership receipt and no newer out-of-sync observation');
       }
     }
 

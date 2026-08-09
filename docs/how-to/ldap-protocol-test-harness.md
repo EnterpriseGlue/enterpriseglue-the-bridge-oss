@@ -113,11 +113,10 @@ credentials, TLS private keys, and the temporary environment file are removed
 and are never retained as artifacts. The command finishes by removing the
 dedicated Docker project and volume.
 
-The CI workflow is intentionally advisory while its fresh-stack behavior is
-observed. Once stable, change its documented `continue-on-error` setting to
-`false` and add it to branch protection. It is not evidence for a customer
-provider cutover: those still require the customer-owned IdP and Effective
-Access acceptance procedure.
+The CI workflow provides repeatable provider-neutral protocol evidence without
+customer credentials. It does not replace customer production acceptance:
+that environment still needs its own IdP sign-in, scoped allow,
+sibling/cross-tenant deny, reconciliation, and immediate-revocation evidence.
 
 ## Real Microsoft Entra ID rehearsal
 

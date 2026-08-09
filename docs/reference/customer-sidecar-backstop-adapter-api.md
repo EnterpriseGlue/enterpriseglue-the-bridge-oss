@@ -22,10 +22,12 @@ EnterpriseGlue's public registration and backstop APIs are described in the
 and the generated OpenAPI document. This document describes the separate,
 customer-owned HTTP boundary behind the registered sidecar endpoint.
 
-Backward-compatible v1 additions may add optional response fields. A new
-method, route shape, required request field, or broader engine permission
-requires a new adapter-contract version and a new security/compatibility test
-suite. A sidecar must reject operations it does not explicitly support.
+Backward-compatible v1 additions may add optional response fields. The exact
+match inventory route below is part of the greenfield v1 release contract and
+is required for interrupted-create recovery. Any other new method, route shape,
+required request field, or broader engine permission requires a new
+adapter-contract version and a new security/compatibility test suite. A sidecar
+must reject operations it does not explicitly support.
 
 ## Register the sidecar with EnterpriseGlue
 
@@ -56,6 +58,7 @@ EnterpriseGlue calls only the following paths relative to the registered
 | Method | Path | Required behavior |
 | --- | --- | --- |
 | `POST` | `/engine-rest/authorization/create` | Accept one exact Camunda-compatible group `READ` authorization and return a successful JSON object containing a non-empty `id`. |
+| `GET` | `/engine-rest/authorization?type=1&groupId={exactGroup}&resourceType={6-or-10}&resourceId={exactKey}` | Return at most 1,000 rows matching exactly this group, resource type, and non-wildcard resource key. This bounded query is used only to recover an interrupted create. Reject missing, duplicate, wildcard, or extra query parameters. |
 | `GET` | `/engine-rest/authorization/{authorizationId}` | Return only that authorization. Return `404` when the tracked authorization no longer exists. Never convert this into a collection/list request. |
 | `DELETE` | `/engine-rest/authorization/{authorizationId}` | Delete only the ID addressed in the request. Return a successful engine-compatible response. |
 
@@ -78,7 +81,9 @@ Content-Type: application/json
 definition. The adapter must reject user, service-account, wildcard,
 engine-wide, task, process-instance, deployment, administration, and
 tenant-administration grants. It must also reject all paths other than the
-three forms above, including authorization-list endpoints.
+four forms above. In particular, reject unfiltered or partially filtered
+authorization-list endpoints; the exact-match query is not a general native
+authorization inventory.
 
 ## Headers and trust boundary
 

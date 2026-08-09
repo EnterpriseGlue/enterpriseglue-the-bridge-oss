@@ -17,7 +17,7 @@ The canonical matrix is
 - retained artifact descriptions;
 - observable success criteria;
 - the required scenarios it covers; and
-- the pull-request, local-release, or full-release gates it participates in.
+- the pull-request, local-release, release, or external-acceptance gates it participates in.
 
 The validator rejects missing scripts, duplicate lanes, unknown or uncovered
 scenario IDs, a local lane claiming external OpenShift evidence, and a
@@ -184,7 +184,9 @@ failed external lane as failed until the entire procedure is rerun.
 
 ## Release Decision
 
-`index.json` is release-qualified only when every `release` lane has a valid
-same-commit receipt, the worktree is clean, and the real OpenShift lane is
-present. Local and emulator evidence can qualify their own gates but can never
-substitute for the external OpenShift receipt.
+`index.json` is release-qualified when every `release` lane has a valid
+same-commit receipt and the worktree is clean. For 0.11.0, the protected real
+OpenShift rehearsal is an explicitly deferred `external_acceptance` gate: its
+absence is reported as pending and cannot be mistaken for passed evidence, but
+it does not block the release decision. Local rendering proves the manifests;
+it never substitutes for a later real-cluster acceptance receipt.

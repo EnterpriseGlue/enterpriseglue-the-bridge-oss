@@ -181,16 +181,40 @@ export const EngineBackstopOwnedGrantSchema = z.object({
   resourceKey: z.string().min(1).max(255),
 }).strict();
 
+export const EngineBackstopPendingCreateSchema = z.object({
+  nativeGroupId: z.string().min(1).max(255),
+  camundaResourceType: z.union([z.literal(6), z.literal(10)]),
+  resourceKey: z.string().min(1).max(255),
+  /** Exact matching IDs observed before the remote create call. */
+  beforeAuthorizationIds: z.array(z.string().min(1).max(255)).max(10_000),
+}).strict();
+
 const EngineBackstopProjectionDetailSchema = z.object({
   version: z.literal(1),
   projection: EngineBackstopProjectionSchema,
+  /** Keyed commitment to endpoint, transport, and engine credential identity. */
+  connectionCommitment: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000).optional(),
+  /** Grants created by this run and subject to compensation on source drift. */
+  createdByRun: z.array(EngineBackstopOwnedGrantSchema).max(50_000).optional(),
+  /** Known extant owned grants that still require a remote delete. */
+  pendingDelete: z.array(EngineBackstopOwnedGrantSchema).max(50_000).optional(),
+  /** At most one create is in flight because native writes are sequential. */
+  pendingCreate: z.array(EngineBackstopPendingCreateSchema).max(1).optional(),
+}).strict();
+
+const EngineBackstopOwnershipDetailSchema = z.object({
+  version: z.literal(1),
+  ownershipForRunId: z.string().min(1).max(255),
+  connectionCommitment: z.string().regex(/^[a-f0-9]{64}$/),
+  ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000),
 }).strict();
 
 const EngineBackstopRollbackDetailSchema = z.object({
   version: z.literal(1),
   rollbackOfRunId: z.string().min(1).max(255),
   ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000),
+  connectionCommitment: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 
 const EngineBackstopDriftDetailSchema = z.object({
@@ -198,6 +222,7 @@ const EngineBackstopDriftDetailSchema = z.object({
   observedOfRunId: z.string().min(1).max(255),
   projection: EngineBackstopProjectionSchema,
   ownedGrants: z.array(EngineBackstopOwnedGrantSchema).max(50_000),
+  connectionCommitment: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 
 /**
@@ -207,6 +232,7 @@ const EngineBackstopDriftDetailSchema = z.object({
  */
 export const EngineBackstopSyncDetailSchema = z.union([
   EngineBackstopProjectionDetailSchema,
+  EngineBackstopOwnershipDetailSchema,
   EngineBackstopRollbackDetailSchema,
   EngineBackstopDriftDetailSchema,
 ]);

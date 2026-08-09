@@ -82,15 +82,20 @@ to the mapped group before relying on the backstop.
    permission, and configuration-apply permission. It rechecks the current
    EnterpriseGlue source hash immediately before calling the native engine.
 3. For each proposed grant, the compatible native-authorization adapter creates the exact group
-   `READ` authorization through `/authorization/create`. It records the native
-   authorization id and grant identity only in encrypted run detail.
+   `READ` authorization through `/authorization/create`. Before and after each
+   native side effect it persists the exact native authorization id, grant
+   identity, and pending operation only in an encrypted side-effect journal.
 4. On a later apply or rollback, the adapter deletes only native authorization
    ids recorded as owned by this backstop. It never searches-and-deletes a
    matching customer-created authorization.
 5. A durable task/retry receipt records the canonical input hash, result hash,
-   opaque counts, adapter capability, timestamps, failure class, and the
-   encrypted owned-id snapshot. A failed or stale task remains visible and does
-   not silently change EnterpriseGlue's authoritative decision.
+   opaque counts/classifications, adapter capability, timestamps, and failure
+   class. Its full encrypted preview/projection detail expires within 30 days.
+   Once a native create/delete may have occurred, that payload is compacted to
+   the minimum encrypted ownership/pending-side-effect journal and retained
+   without an expiry until every tracked or ambiguous native side effect is
+   explicitly retired. A failed or stale task remains visible and does not
+   silently change EnterpriseGlue's authoritative decision.
 6. A read-only drift check compares only tracked owned ids with the live
    `/authorization` representation. Missing or altered tracked grants become
    `out_of_sync`; unrelated native grants are reported only as aggregate
@@ -103,7 +108,8 @@ trusted endpoint. A direct engine uses its configured integration account. A
 the normal sanitized request/engine/operation metadata to the registered proxy,
 and lets the customer-owned proxy authenticate its own engine hop. No downstream
 peer token or engine credential is stored or forwarded by EnterpriseGlue. The
-sidecar must allow only create, tracked-ID read, and tracked-ID delete calls for
+sidecar must allow only exact create, bounded exact-match recovery inventory,
+tracked-ID read, and tracked-ID delete calls for
 the backstop operation class; a rejection fails closed with no direct fallback.
 
 ## Data and API Design
@@ -115,9 +121,14 @@ migration, are:
   encrypted native group id, ownership/source fields, active state, and source
   hash;
 - `EngineBackstopSyncRun`: engine/tenant, status, desired/result hashes,
-  opaque classifications/counts, mode/catalog version, and encrypted native
-  detail with a maximum 30-day retention. Read-only observations link to their
-  source apply receipt without replacing its ownership evidence; and
+  sanitized opaque classifications/counts, and mode/catalog version. The
+  encrypted payload is deliberately two-phase: full preview/projection and
+  classification detail has a maximum 30-day retention; after any native side
+  effect, it is replaced by a minimal ownership/pending-create/pending-delete
+  journal with no expiry until every tracked native grant and ambiguous side
+  effect is retired. Once the journal is empty, normal bounded expiry and purge
+  resume. Read-only observations link to their source apply receipt without
+  replacing its ownership journal; and
 - `EngineBackstopSyncTask`: bounded leasing/retry state for a requested apply,
   source hash, and run id.
 
@@ -172,8 +183,11 @@ owned-id evidence.
 Rollback deletes only native authorization ids retained by the selected,
 successful run. It leaves EnterpriseGlue groups, roles, assignments, runtime
 resources, engine registration, credentials, external IdP membership, and all
-unrelated native engine authorizations unchanged. After encrypted detail expires, a
-new preview is required; no broad native delete is permitted.
+unrelated native engine authorizations unchanged. A routine 30-day preview-detail
+expiry therefore cannot orphan a native grant: the minimal encrypted ownership
+journal remains until the grant is rolled back or superseded and retired. If a
+required journal is missing or unreadable, synchronization and rollback fail
+closed; a new preview cannot justify a broad or inferred native delete.
 
 ## Delivery Slices and Acceptance
 
@@ -190,12 +204,12 @@ new preview is required; no broad native delete is permitted.
    proves no downstream credential crosses that hop. The read-only tracked-ID drift check creates a
    linked sanitized receipt and is complete; it never inventories or changes
    unrelated native grants.
-4. **Product workflow** — the guarded API and configuration-bundle mapping
-   input are complete. The bundle supports secret preflight, hash-bound
-   diff/apply, source-safe archive, and opaque export. Effective Access links,
-   browser accessibility, and direct-user identity-provider certification remain
-   planned work; see
-   `15-authorization-program-status.md`.
+4. **Product workflow** — the guarded API, configuration-bundle mapping,
+   Effective Access links, browser flow, and accessibility evidence are
+   complete. The bundle supports secret preflight, hash-bound diff/apply,
+   source-safe archive, and opaque export. Only representative customer-side
+   direct-user identity-provider certification remains environment-dependent;
+   see `15-authorization-program-status.md`.
 
 Acceptance requires 100% coverage of the supported reverse-projection matrix;
 an explicit disposition for every unsupported source shape; native create,

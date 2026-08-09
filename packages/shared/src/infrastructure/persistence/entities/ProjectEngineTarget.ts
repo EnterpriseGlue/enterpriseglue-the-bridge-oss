@@ -10,8 +10,8 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Index('idx_project_engine_targets_source', ['source', 'sourceRef'])
 @Index('idx_project_engine_targets_external', ['externalSystemId', 'externalTargetId'])
 export class ProjectEngineTarget extends AppBaseEntity {
-  @Column({ name: 'tenant_id', type: 'text', nullable: true })
-  tenantId!: string | null;
+  @Column({ name: 'tenant_id', type: 'text' })
+  tenantId!: string;
 
   @Column({ name: 'project_id', type: 'text' })
   projectId!: string;

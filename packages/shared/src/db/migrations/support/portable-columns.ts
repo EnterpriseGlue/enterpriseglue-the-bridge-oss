@@ -134,15 +134,23 @@ export async function addRequiredColumnWithBackfill(
   const requiredColumn = finalColumn.clone();
   requiredColumn.isNullable = false;
   if (migrationDatabase(queryRunner) === 'spanner') {
+    const dependentIndexes = (table?.indices || []).filter((index) => index.columnNames.includes(finalColumn.name));
+    for (const index of dependentIndexes) await queryRunner.dropIndex(tableName, index);
     requiredColumn.default = undefined;
     const columnType = queryRunner.connection.driver.createFullType(requiredColumn);
     await (queryRunner as QueryRunner & { updateDDL(sql: string): Promise<void> }).updateDDL(
       `ALTER TABLE ${tablePath} ALTER COLUMN ${columnName} ${columnType} NOT NULL`,
     );
+    for (const index of dependentIndexes) await queryRunner.createIndex(tableName, index);
     return;
   }
 
+  const dependentIndexes = migrationDatabase(queryRunner) === 'mssql'
+    ? (table?.indices || []).filter((index) => index.columnNames.includes(finalColumn.name))
+    : [];
+  for (const index of dependentIndexes) await queryRunner.dropIndex(tableName, index);
   await queryRunner.changeColumn(tableName, existing, requiredColumn);
+  for (const index of dependentIndexes) await queryRunner.createIndex(tableName, index);
 }
 
 export async function addNullableColumnIfMissing(

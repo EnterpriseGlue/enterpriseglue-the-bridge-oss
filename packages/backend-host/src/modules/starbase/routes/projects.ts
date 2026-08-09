@@ -25,6 +25,7 @@ import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persi
 import { In, IsNull, type EntityManager } from 'typeorm';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
 import { engineTenancyVisibilityWhere } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import {
@@ -394,12 +395,14 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
   const id = generateId();
   const now = unixTimestamp();
   const dataSource = await getDataSource();
+  const effectiveTenantId = req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
 
   await dataSource.transaction(async (manager: EntityManager) => {
     await manager.getRepository(Project).insert({
       id,
       name: trimmed,
       ownerId: userId,
+      tenantId: effectiveTenantId,
       createdAt: now,
       updatedAt: now
     });
@@ -433,7 +436,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
 
     await writeProjectMemberRoleAssignments(manager, {
       projectId: id,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId: effectiveTenantId,
       userId,
       roles: ['owner'],
       createdById: null,
@@ -445,6 +448,7 @@ r.post('/starbase-api/projects', apiLimiter, requireAuth, projectCreateLimiter, 
         manager,
         projectId: id,
         userId,
+        tenantId: effectiveTenantId,
         importData: preparedImport,
       });
     }

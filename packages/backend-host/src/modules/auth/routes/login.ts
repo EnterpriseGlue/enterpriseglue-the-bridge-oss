@@ -12,7 +12,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
-import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { claimActivePlatformAdministratorMembership, getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
@@ -26,10 +26,15 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
+// A real bcrypt hash keeps credential verification work comparable when the
+// supplied account is missing or is not backed by a local password.
+const DUMMY_RECOVERY_PASSWORD_HASH = '$2b$10$FulX.IcV.dB1ngCEwjZdZ.528DLnKVfgdxe67s/ca43vzSUj3KSZ6';
+const RECOVERY_CREDENTIAL_ERROR = 'Invalid email or password';
+
 /**
  * Authenticate a local credential. Ordinary login obeys the configured login
  * policy; administrator recovery is a deliberately separate route and checks
- * canonical administrator membership before verifying a password.
+ * canonical administrator membership only after verifying a password.
  */
 async function authenticateLocal(req: Request, res: Response, recovery: boolean): Promise<void> {
   const { email, password } = req.body;
@@ -56,21 +61,43 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
   const user = await qb.getOne();
 
   let preloadedPlatformAdministratorUserIds: Set<string> | null = null;
+  let recoveryPasswordValid: boolean | null = null;
   if (recovery) {
-    if (user?.authProvider === 'local' && user.passwordHash) {
-      preloadedPlatformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
-    }
-    if (!user || !preloadedPlatformAdministratorUserIds?.has(user.id)) {
+    const localPasswordHash = user?.authProvider === 'local' && user.passwordHash
+      ? user.passwordHash
+      : DUMMY_RECOVERY_PASSWORD_HASH;
+    recoveryPasswordValid = await verifyPassword(password, localPasswordHash);
+    if (!user || user.authProvider !== 'local' || !user.passwordHash) {
+      const reason = !user
+        ? 'recovery_user_not_found'
+        : 'recovery_local_credential_unavailable';
       await logAudit({
         tenantId: req.tenant?.tenantId,
         userId: user?.id,
         action: AuditActions.LOGIN_FAILED,
         ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
         userAgent: req.headers['user-agent'],
-        details: { email, reason: 'administrator_recovery_unavailable' },
+        details: { email, reason },
       });
-      throw Errors.forbidden('Administrator recovery is unavailable.');
+      throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
     }
+  }
+
+  if (!recovery && (!user || user.authProvider !== 'local' || !user.passwordHash)) {
+    await verifyPassword(password, DUMMY_RECOVERY_PASSWORD_HASH);
+    await logAudit({
+      tenantId: req.tenant?.tenantId,
+      userId: user?.id,
+      action: AuditActions.LOGIN_FAILED,
+      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      details: {
+        email,
+        reason: !user ? 'user_not_found' : 'local_login_not_allowed_for_auth_provider',
+        ...(user ? { authProvider: user.authProvider } : {}),
+      },
+    });
+    throw Errors.unauthorized('Invalid email or password');
   }
 
   if (!user) {
@@ -108,6 +135,9 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
       userAgent: req.headers['user-agent'],
       details: { email, reason: 'account_locked' },
     });
+    if (recovery) {
+      throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+    }
     res.status(423).json({
       error: 'Account is temporarily locked due to failed login attempts',
       lockedUntil: unlockTime
@@ -116,7 +146,9 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
   }
 
   // Verify password
-  const isValidPassword = await verifyPassword(password, user.passwordHash);
+  const isValidPassword = recovery
+    ? recoveryPasswordValid === true
+    : await verifyPassword(password, user.passwordHash);
 
   if (!isValidPassword) {
     // Increment failed login attempts
@@ -141,10 +173,13 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
       action: lockedUntil ? AuditActions.ACCOUNT_LOCKED : AuditActions.LOGIN_FAILED,
       ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
       userAgent: req.headers['user-agent'],
-      details: { email, reason: 'invalid_password', failedAttempts },
+      details: { email, reason: recovery ? 'recovery_invalid_password' : 'invalid_password', failedAttempts },
     });
 
     if (lockedUntil) {
+      if (recovery) {
+        throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+      }
       res.status(423).json({
         error: 'Account locked due to too many failed attempts. Try again in 15 minutes.',
         lockedUntil: new Date(lockedUntil).toISOString()
@@ -157,7 +192,11 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
 
   // Password is correct: update login state and ensure the canonical baseline
   // assignment at the same command boundary.
-  await dataSource.transaction(async (manager) => {
+  let session = null as Awaited<ReturnType<typeof authSessionService.issue>> | null;
+  const recoveryMembershipClaimed = await dataSource.transaction(async (manager) => {
+    if (recovery && !await claimActivePlatformAdministratorMembership(user.id, manager)) {
+      return false;
+    }
     await manager.getRepository(User).update({ id: user.id }, {
       failedLoginAttempts: 0,
       lockedUntil: null,
@@ -165,7 +204,31 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
       updatedAt: Date.now()
     });
     await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
+    if (recovery) {
+      session = await authSessionService.issue(user, {
+        userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        ipAddress: req.ip,
+        administratorRecovery: true,
+        store: manager,
+      });
+    }
+    return true;
   });
+
+  if (!recoveryMembershipClaimed) {
+    await logAudit({
+      tenantId: req.tenant?.tenantId,
+      userId: user.id,
+      action: AuditActions.LOGIN_FAILED,
+      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      details: { email, reason: 'recovery_administrator_membership_unavailable' },
+    });
+    throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+  }
+  if (recovery) {
+    preloadedPlatformAdministratorUserIds = new Set([user.id]);
+  }
 
   // Log successful login
   await logAudit({
@@ -177,7 +240,7 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
     details: { email, ...(recovery ? { recovery: 'platform_administrator' } : {}) },
   });
 
-  const session = await authSessionService.issue(user, {
+  session ||= await authSessionService.issue(user, {
     userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     ipAddress: req.ip,
   });

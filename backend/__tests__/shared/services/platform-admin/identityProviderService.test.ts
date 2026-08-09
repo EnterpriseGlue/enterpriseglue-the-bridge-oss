@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
@@ -24,11 +24,16 @@ describe('identityProviderService', () => {
     transaction.mockImplementation(async (work: (store: typeof manager) => Promise<unknown>) => work(manager));
     (getDataSource as any).mockResolvedValue({ ...manager, transaction });
   });
+  afterEach(() => {
+    delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY;
+    delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS;
+    delete process.env.EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS;
+  });
   it('creates OIDC providers with secret references only', async () => {
     const provider = await identityProviderService.upsert({ key: 'entra', protocol: 'oidc', configuration: { issuerUrl: 'https://login.example.test', clientId: 'client', clientSecretRef: 'EG_ENTRA_SECRET' } });
     expect(provider.key).toBe('entra');
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ protocol: 'oidc', providerKeyIdentity: 'platform:entra', configurationJson: expect.stringContaining('clientSecretRef') }));
-    expect(JSON.parse(insert.mock.calls[0][0].syncJson)).toEqual({ triggers: ['login'], requiredForLogin: true });
+    expect(JSON.parse(insert.mock.calls[0][0].syncJson)).toEqual({ triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' });
   });
 
   it('normalizes login presentation metadata and keeps one preferred provider per scope', async () => {
@@ -64,6 +69,21 @@ describe('identityProviderService', () => {
     const configuration = { issuerUrl: 'https://login.example.test', clientId: 'client' };
     await expect(identityProviderService.upsert({ key: 'manual-only', protocol: 'oidc', configuration, sync: { triggers: ['manual'] } })).rejects.toThrow('Sign-in reconciliation is mandatory');
     await expect(identityProviderService.upsert({ key: 'not-required', protocol: 'oidc', configuration, sync: { triggers: ['login'], requiredForLogin: false } })).rejects.toThrow('Sign-in reconciliation is mandatory');
+    expect(insert).not.toHaveBeenCalled();
+  });
+  it('never lets expectedAudience replace the OIDC client audience', async () => {
+    await expect(identityProviderService.upsert({
+      key: 'wrong-audience', protocol: 'oidc',
+      configuration: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue-web', expectedAudience: 'other-client' },
+    })).rejects.toThrow('expectedAudience must equal clientId');
+    expect(insert).not.toHaveBeenCalled();
+  });
+  it('rejects unsupported or contradictory background connector declarations', async () => {
+    const configuration = { issuerUrl: 'https://login.example.test', clientId: 'client' };
+    await expect(identityProviderService.upsert({ key: 'graph', protocol: 'oidc', configuration, sync: { triggers: ['login'], connectorCapability: 'graph' } })).rejects.toThrow('Unsupported identity connector capability');
+    await expect(identityProviderService.upsert({ key: 'scim', protocol: 'oidc', configuration, sync: { triggers: ['login'], connectorCapability: 'scim' } })).rejects.toThrow('Unsupported identity connector capability');
+    await expect(identityProviderService.upsert({ key: 'ldap-on-oidc', protocol: 'oidc', configuration, sync: { triggers: ['login'], connectorCapability: 'ldap_directory' } })).rejects.toThrow('only for LDAP providers');
+    await expect(identityProviderService.upsert({ key: 'false-schedule', protocol: 'oidc', configuration, sync: { triggers: ['login', 'scheduled'], connectorCapability: 'claim_only', scheduled: false } })).rejects.toThrow('scheduled flag and scheduled trigger');
     expect(insert).not.toHaveBeenCalled();
   });
   it('uses a non-null tenant-plus-key identity for provider lookup and writes', async () => {
@@ -138,8 +158,16 @@ describe('identityProviderService', () => {
   });
   it('rejects SHA-1 SAML provider configuration', async () => {
     await expect(identityProviderService.upsert({ key: 'saml', protocol: 'saml', configuration: {
-      entityId: 'enterpriseglue', callbackUrl: 'https://app.example.test/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'SAML_CERT', signatureAlgorithm: 'sha1',
+      entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test', callbackUrl: 'http://localhost:5173/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'SAML_CERT', signatureAlgorithm: 'sha1',
     } })).rejects.toThrow('sha256 or sha512');
+  });
+  it('rejects an unsafe SAML metadata URL before persistence', async () => {
+    process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY = 'true';
+    process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS = 'idp.example.test';
+    await expect(identityProviderService.upsert({ key: 'saml', protocol: 'saml', configuration: {
+      entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test', callbackUrl: 'http://localhost:5173/api/auth/providers/saml/callback', ssoUrl: 'https://idp.example.test/sso', metadataUrl: 'https://attacker.example.test/metadata', signingCertificateRef: 'SAML_CERT',
+    } })).rejects.toThrow('SAML metadataUrl host is not permitted');
+    expect(insert).not.toHaveBeenCalled();
   });
   it('requires a complete direct LDAP configuration', async () => {
     await expect(identityProviderService.upsert({ key: 'ldap', protocol: 'ldap', configuration: { url: 'ldaps://directory.test' } })).rejects.toThrow('bindDn');

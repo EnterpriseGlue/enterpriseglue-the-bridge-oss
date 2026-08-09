@@ -9,12 +9,14 @@ import rateLimit from 'express-rate-limit';
  * Helper to properly generate IP-based keys with IPv6 support
  */
 function getClientIdentifier(req: any): string {
-  // Prefer authenticated principals, then API clients, and finally the network address.
+  // Prefer authenticated principals, then API clients, and finally Express's
+  // proxy-trust-aware address. Never read X-Forwarded-For directly: Express
+  // has already resolved req.ip according to the configured trust boundary.
   const identity = req.user?.userId
     ? `user:${req.user.userId}`
     : req.apiClient?.id
       ? `api-client:${req.apiClient.id}`
-      : `ip:${(req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || req.socket.remoteAddress}`;
+      : `ip:${req.ip || req.socket.remoteAddress}`;
 
   const prefix = typeof req.rateLimitKeyPrefix === 'string' && req.rateLimitKeyPrefix.trim()
     ? `${req.rateLimitKeyPrefix.trim()}:`
@@ -89,6 +91,24 @@ export const authLimiter = rateLimit({
   message: { error: 'Too many login attempts, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+/**
+ * Counts successful and failed unauthenticated identity discovery, redirect,
+ * and callback requests. This is separate from authLimiter because provider
+ * starts can trigger outbound discovery even when no password is submitted.
+ */
+export const identityFlowLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: (() => {
+    const configured = Number(process.env.EG_IDENTITY_FLOW_RATE_LIMIT_MAX);
+    return Number.isInteger(configured) && configured > 0 ? configured : process.env.NODE_ENV === 'production' ? 300 : 1000000;
+  })(),
+  skipSuccessfulRequests: false,
+  message: { error: 'Too many identity provider requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => getClientIdentifier(req),
 });
 
 /**

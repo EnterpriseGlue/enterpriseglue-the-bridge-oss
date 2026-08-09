@@ -21,6 +21,7 @@ import {
   ENTERPRISEGLUE_CONFIG_API_VERSION_V1BETA1,
   type ConfigBundleContractMetadata,
 } from '../../schemas/platform-admin/config-bundle.js';
+import { normalizeIdentityProviderSyncForMandatoryLogin } from '../../schemas/platform-admin/identity.js';
 
 function json(value: string | null | undefined): Record<string, unknown> {
   try { const parsed = value ? JSON.parse(value) : {}; return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
@@ -245,7 +246,7 @@ class ConfigBundleExportService {
         allowVerifiedEmailLinking: allowVerifiedEmailLinking === true,
         ...(Array.isArray(authorizationAttributeKeys) && authorizationAttributeKeys.length > 0 ? { authorizationAttributeKeys } : {}),
         directoryTenantId: provider.directoryTenantId || undefined,
-        sync: json(provider.syncJson),
+        sync: normalizeIdentityProviderSyncForMandatoryLogin(json(provider.syncJson)),
         [provider.protocol]: protocolConfiguration,
         ownershipMode: provider.ownershipMode,
       };

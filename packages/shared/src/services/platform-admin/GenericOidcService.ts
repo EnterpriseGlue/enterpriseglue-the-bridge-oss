@@ -2,6 +2,7 @@ import { createHash, createPublicKey, randomBytes } from 'node:crypto';
 import jwt, { type JwtPayload } from 'jsonwebtoken';
 import { secretResolver } from './SecretResolver.js';
 import { IdentityProviderFailure, classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
+import { readBoundedIdentityProviderJson, validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
 
 export interface GenericOidcProviderConfiguration {
   issuerUrl: string;
@@ -36,13 +37,6 @@ export interface OidcIdentityClaims extends JwtPayload {
   nonce?: string;
 }
 
-function requireHttpsUrl(value: string, field: string): URL {
-  let url: URL;
-  try { url = new URL(value); } catch { throw new Error(`${field} must be a valid URL`); }
-  if (url.protocol !== 'https:') throw new Error(`${field} must use HTTPS`);
-  return url;
-}
-
 function base64Url(value: Buffer): string {
   return value.toString('base64url');
 }
@@ -56,9 +50,12 @@ function config(input: Record<string, unknown>): GenericOidcProviderConfiguratio
   const clientId = typeof input.clientId === 'string' ? input.clientId : '';
   const callbackUrl = typeof input.callbackUrl === 'string' ? input.callbackUrl : '';
   const scopes = Array.isArray(input.scopes) ? input.scopes.filter((scope): scope is string => typeof scope === 'string' && Boolean(scope.trim())) : [];
-  requireHttpsUrl(issuerUrl, 'OIDC issuerUrl');
-  requireHttpsUrl(callbackUrl, 'OIDC callbackUrl');
+  validateIdentityProviderEndpointUrl(issuerUrl, 'OIDC issuerUrl', ['https:']);
+  validateIdentityProviderCallbackUrl(callbackUrl, 'oidc');
   if (!clientId.trim()) throw new Error('OIDC clientId is required');
+  if (typeof input.expectedAudience === 'string' && input.expectedAudience.trim() !== clientId.trim()) {
+    throw new Error('OIDC expectedAudience must equal clientId; ID tokens are always audience-bound to this client');
+  }
   if (!scopes.includes('openid')) throw new Error('OIDC scopes must include openid');
   return {
     issuerUrl: normalizeIssuer(issuerUrl), clientId: clientId.trim(), callbackUrl,
@@ -68,13 +65,16 @@ function config(input: Record<string, unknown>): GenericOidcProviderConfiguratio
 }
 
 async function fetchJson(url: URL): Promise<Record<string, unknown>> {
-  const response = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
-  if (!response.ok) throw new Error(`OIDC discovery request failed (${response.status})`);
-  return await response.json() as Record<string, unknown>;
+  const response = await fetch(url, { redirect: 'error', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error(`OIDC discovery request failed (${response.status})`);
+  }
+  return readBoundedIdentityProviderJson(response, 'OIDC provider response');
 }
 
 async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
-  const issuer = requireHttpsUrl(issuerUrl, 'OIDC issuerUrl');
+  const issuer = validateIdentityProviderEndpointUrl(issuerUrl, 'OIDC issuerUrl', ['https:']);
   const document = await fetchJson(new URL('.well-known/openid-configuration', `${issuer.toString().replace(/\/$/, '')}/`));
   const expectedIssuer = normalizeIssuer(issuer.toString());
   const discoveredIssuer = typeof document.issuer === 'string' ? normalizeIssuer(document.issuer) : '';
@@ -82,9 +82,9 @@ async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
   const authorizationEndpoint = typeof document.authorization_endpoint === 'string' ? document.authorization_endpoint : '';
   const tokenEndpoint = typeof document.token_endpoint === 'string' ? document.token_endpoint : '';
   const jwksUri = typeof document.jwks_uri === 'string' ? document.jwks_uri : '';
-  requireHttpsUrl(authorizationEndpoint, 'OIDC authorization endpoint');
-  requireHttpsUrl(tokenEndpoint, 'OIDC token endpoint');
-  requireHttpsUrl(jwksUri, 'OIDC JWKS URI');
+  validateIdentityProviderEndpointUrl(authorizationEndpoint, 'OIDC authorization endpoint', ['https:']);
+  validateIdentityProviderEndpointUrl(tokenEndpoint, 'OIDC token endpoint', ['https:']);
+  validateIdentityProviderEndpointUrl(jwksUri, 'OIDC JWKS URI', ['https:']);
   return { issuer: discoveredIssuer, authorization_endpoint: authorizationEndpoint, token_endpoint: tokenEndpoint, jwks_uri: jwksUri };
 }
 
@@ -128,10 +128,13 @@ export class GenericOidcService {
       const clientSecret = resolveSecretReference(provider.clientSecretRef);
       if (clientSecret) body.set('client_secret', clientSecret);
       const response = await fetch(metadata.token_endpoint, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),
+        method: 'POST', redirect: 'error', headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' }, body, signal: AbortSignal.timeout(10_000),
       });
-      if (!response.ok) throw new Error(`OIDC token exchange failed (${response.status})`);
-      const tokens = await response.json() as { id_token?: unknown };
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new Error(`OIDC token exchange failed (${response.status})`);
+      }
+      const tokens = await readBoundedIdentityProviderJson(response, 'OIDC token response') as { id_token?: unknown };
       if (typeof tokens.id_token !== 'string') throw new Error('OIDC token response did not include an ID token');
       return await this.verifyIdToken(tokens.id_token, metadata, provider, input.nonce);
     } catch (error) { throw classifyIdentityProviderFailure(error); }
@@ -140,15 +143,25 @@ export class GenericOidcService {
   private async verifyIdToken(token: string, metadata: OidcDiscoveryDocument, provider: GenericOidcProviderConfiguration, nonce: string): Promise<OidcIdentityClaims> {
     const decoded = jwt.decode(token, { complete: true });
     if (!decoded || typeof decoded === 'string' || !decoded.header.kid || !decoded.header.alg || decoded.header.alg === 'none') throw new Error('OIDC ID token header is invalid');
-    const jwks = await fetchJson(requireHttpsUrl(metadata.jwks_uri, 'OIDC JWKS URI'));
+    const jwks = await fetchJson(validateIdentityProviderEndpointUrl(metadata.jwks_uri, 'OIDC JWKS URI', ['https:']));
     const keys = Array.isArray(jwks.keys) ? jwks.keys : [];
     const jwk = keys.find((key) => key && typeof key === 'object' && (key as Record<string, unknown>).kid === decoded.header.kid) as JsonWebKey | undefined;
     if (!jwk) throw new Error('OIDC signing key was not found in the provider JWKS');
     const key = createPublicKey({ key: jwk, format: 'jwk' });
     const claims = jwt.verify(token, key, {
       algorithms: ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], issuer: metadata.issuer,
-      audience: provider.expectedAudience || provider.clientId,
+      audience: provider.clientId,
     }) as OidcIdentityClaims;
+    const audiences = typeof claims.aud === 'string'
+      ? [claims.aud]
+      : Array.isArray(claims.aud) ? claims.aud.filter((audience): audience is string => typeof audience === 'string' && Boolean(audience)) : [];
+    const authorizedParty = typeof claims.azp === 'string' && claims.azp.trim() ? claims.azp.trim() : null;
+    if (audiences.length > 1 && !authorizedParty) {
+      throw new IdentityProviderFailure('invalid_signature', 'OIDC ID token with multiple audiences must include an authorized party');
+    }
+    if (authorizedParty && authorizedParty !== provider.clientId) {
+      throw new IdentityProviderFailure('invalid_signature', 'OIDC ID token authorized party does not match the configured client');
+    }
     if (!claims.sub) throw new IdentityProviderFailure('missing_subject', 'OIDC ID token subject is invalid');
     if (claims.nonce !== nonce) throw new IdentityProviderFailure('invalid_signature', 'OIDC ID token nonce is invalid');
     return claims;

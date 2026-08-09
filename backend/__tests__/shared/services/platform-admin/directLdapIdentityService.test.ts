@@ -12,7 +12,16 @@ const provider = {
 } as any;
 
 describe('direct LDAP identity service', () => {
-  afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; delete process.env.LDAP_CA_CERTIFICATE; });
+  afterEach(() => { setLdapClientFactoryForTest(); delete process.env.LDAP_BIND_SECRET; delete process.env.LDAP_CA_CERTIFICATE; delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY; delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS; delete process.env.EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS; delete process.env.EG_LDAP_RECONCILIATION_IDENTITY_LIMIT; delete process.env.EG_LDAP_RECONCILIATION_CONCURRENCY; delete process.env.EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT; delete process.env.EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT; delete process.env.EG_LDAP_GROUP_SEARCH_QUERY_LIMIT; delete process.env.EG_LDAP_GROUP_SEARCH_RESULT_LIMIT; });
+
+  it('blocks an unlisted directory before opening an LDAP client', async () => {
+    process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY = 'true';
+    process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS = 'approved.example.test';
+    const factory = vi.fn();
+    setLdapClientFactoryForTest(factory);
+    await expect(directLdapIdentityService.authenticate(provider, 'person@example.test', testUserPassword)).rejects.toThrow('not permitted');
+    expect(factory).not.toHaveBeenCalled();
+  });
 
   it('uses a service lookup then user bind and returns a stable user id with group DNs', async () => {
     process.env.LDAP_BIND_SECRET = serviceBindPassword;
@@ -108,6 +117,38 @@ describe('direct LDAP identity service', () => {
     await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', testUserPassword)).resolves.toMatchObject({ groups: ['group-operators', 'group-admins'] });
   });
 
+  it('deduplicates group cycles and fails closed when nested group fan-out exceeds its query budget', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    process.env.EG_LDAP_GROUP_SEARCH_QUERY_LIMIT = '1';
+    const nestedProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), groupIdAttribute: 'entryUUID', membershipMode: 'group_search', nestedGroups: true }) };
+    const client = { bind: vi.fn().mockResolvedValue(undefined), search: vi.fn()
+      .mockResolvedValueOnce({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'user-1', mail: 'person@example.test' }] })
+      .mockResolvedValueOnce({ searchEntries: [
+        { dn: 'cn=operators,ou=groups,dc=example,dc=test', entryUUID: 'group-operators' },
+        { dn: 'cn=operators,ou=groups,dc=example,dc=test', entryUUID: 'group-operators' },
+      ] }), unbind: vi.fn().mockResolvedValue(undefined) };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', testUserPassword)).rejects.toThrow('query safety limit');
+    expect(client.unbind).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when one group-search response exceeds its result budget', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    process.env.EG_LDAP_GROUP_SEARCH_RESULT_LIMIT = '1';
+    const groupSearchProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), groupIdAttribute: 'entryUUID', membershipMode: 'group_search' }) };
+    const client = { bind: vi.fn().mockResolvedValue(undefined), search: vi.fn()
+      .mockResolvedValueOnce({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'user-1', mail: 'person@example.test' }] })
+      .mockResolvedValueOnce({ searchEntries: [
+        { dn: 'cn=operators,ou=groups,dc=example,dc=test', entryUUID: 'group-operators' },
+        { dn: 'cn=admins,ou=groups,dc=example,dc=test', entryUUID: 'group-admins' },
+      ] }), unbind: vi.fn().mockResolvedValue(undefined) };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.authenticate(groupSearchProvider, 'person@example.test', testUserPassword)).rejects.toThrow('result safety limit');
+    expect(client.unbind).toHaveBeenCalledOnce();
+  });
+
   it('fails closed when nested groups are requested with memberOf mode', async () => {
     await expect(directLdapIdentityService.authenticate({ ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), nestedGroups: true }) }, 'person@example.test', testUserPassword))
       .rejects.toThrow('Nested LDAP groups require group_search membership mode');
@@ -152,6 +193,103 @@ describe('direct LDAP identity service', () => {
     ]));
     expect(client.searchPaginated).toHaveBeenCalledWith('ou=users,dc=example,dc=test', expect.objectContaining({ paged: { pageSize: 1 } }));
     expect(client.search).not.toHaveBeenCalled();
+  });
+
+  it('stops and unbinds before an authoritative LDAP enumeration exceeds its safety budget', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    process.env.EG_LDAP_RECONCILIATION_IDENTITY_LIMIT = '1';
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn(),
+      searchPaginated: vi.fn(async function* () {
+        yield { searchEntries: [{ dn: 'uid=first,ou=users,dc=example,dc=test', entryUUID: 'first-id', mail: 'first@example.test' }] };
+        yield { searchEntries: [{ dn: 'uid=second,ou=users,dc=example,dc=test', entryUUID: 'second-id', mail: 'second@example.test' }] };
+      }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.listDirectoryPage(provider)).rejects.toThrow('stopped without applying removals');
+    expect(client.unbind).toHaveBeenCalledOnce();
+  });
+
+  it('rejects authoritative reconciliation when the directory client cannot prove paged enumeration completeness', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue({ searchEntries: [] }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.listDirectoryPage(provider)).rejects.toThrow('requires paged directory search support');
+    expect(client.search).not.toHaveBeenCalled();
+    expect(client.unbind).toHaveBeenCalledOnce();
+  });
+
+  it('bounds reverse-group lookups across the complete LDAP reconciliation run', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    process.env.EG_LDAP_RECONCILIATION_CONCURRENCY = '1';
+    process.env.EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT = '2';
+    const groupSearchProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), membershipMode: 'group_search' }) };
+    const entries = ['first', 'second', 'third'].map((name) => ({ dn: `uid=${name},ou=users,dc=example,dc=test`, entryUUID: `${name}-id`, mail: `${name}@example.test` }));
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn().mockResolvedValue({ searchEntries: [] }),
+      searchPaginated: vi.fn(async function* () { yield { searchEntries: entries }; }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.listDirectoryPage(groupSearchProvider)).rejects.toThrow('LDAP reconciliation group search exceeded the configured 2-query safety limit');
+    expect(client.search).toHaveBeenCalledTimes(2);
+    expect(client.unbind).toHaveBeenCalledOnce();
+  });
+
+  it('uses a bounded worker pool for directory group resolution', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    process.env.EG_LDAP_RECONCILIATION_CONCURRENCY = '2';
+    const groupSearchProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), membershipMode: 'group_search' }) };
+    const entries = ['first', 'second', 'third', 'fourth'].map((name) => ({ dn: `uid=${name},ou=users,dc=example,dc=test`, entryUUID: `${name}-id`, mail: `${name}@example.test` }));
+    let active = 0;
+    let maximumActive = 0;
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn(async () => {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        active -= 1;
+        return { searchEntries: [] };
+      }),
+      searchPaginated: vi.fn(async function* () { yield { searchEntries: entries }; }),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.listDirectoryPage(groupSearchProvider)).resolves.toMatchObject({ identities: expect.any(Array), nextCursor: null });
+    expect(maximumActive).toBe(2);
+    expect(client.search).toHaveBeenCalledTimes(4);
+  });
+
+  it('fails closed instead of accepting a truncated nested-group hierarchy', async () => {
+    process.env.LDAP_BIND_SECRET = serviceBindPassword;
+    const nestedProvider = { ...provider, configurationJson: JSON.stringify({ ...JSON.parse(provider.configurationJson), groupIdAttribute: 'entryUUID', membershipMode: 'group_search', nestedGroups: true }) };
+    const groupEntries = Array.from({ length: 10 }, (_entry, index) => ({
+      dn: `cn=level-${index + 1},ou=groups,dc=example,dc=test`,
+      entryUUID: `group-level-${index + 1}`,
+    }));
+    const client = {
+      bind: vi.fn().mockResolvedValue(undefined),
+      search: vi.fn()
+        .mockResolvedValueOnce({ searchEntries: [{ dn: 'uid=person,ou=users,dc=example,dc=test', entryUUID: 'user-1', mail: 'person@example.test' }] })
+        .mockImplementation(async () => ({ searchEntries: [groupEntries.shift()] })),
+      unbind: vi.fn().mockResolvedValue(undefined),
+    };
+    setLdapClientFactoryForTest(() => client);
+
+    await expect(directLdapIdentityService.authenticate(nestedProvider, 'person@example.test', testUserPassword)).rejects.toThrow('nested group search exceeded the configured depth safety limit');
+    expect(client.unbind).toHaveBeenCalledOnce();
   });
 
   it('rejects an insecure LDAP URL before opening a directory client', async () => {

@@ -43,7 +43,10 @@ Before preview:
 1. Confirm the intended target bundle key and whether portal edits should be
    warned (`config_warn`) or blocked (`config_locked`).
 2. Export and retain the current owning bundle and its latest apply receipt.
-3. Verify break-glass Platform Admin access.
+3. Verify break-glass Platform Admin access and prove that removing the
+   canonical membership immediately rejects a concurrent recovery login plus
+   the next request and refresh from an already-open recovery session. Restore
+   the approved recovery membership after recording the evidence.
 4. Confirm the actor has configuration bundle view, preview, and apply
    permission.
 5. Stop concurrent governance-setting and configuration-bundle changes for

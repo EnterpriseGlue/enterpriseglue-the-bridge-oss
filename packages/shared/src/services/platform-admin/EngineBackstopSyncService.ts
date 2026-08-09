@@ -11,9 +11,12 @@ import {
 import { getDataSource } from '../../db/data-source.js';
 import { Engine } from '../../infrastructure/persistence/entities/Engine.js';
 import { EngineSetMaterialization } from '../../infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { EngineSet } from '../../infrastructure/persistence/entities/EngineSet.js';
+import { RbacRole } from '../../infrastructure/persistence/entities/RbacRole.js';
 import { RbacRoleAssignment } from '../../infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { RbacRolePermission } from '../../infrastructure/persistence/entities/RbacRolePermission.js';
 import { RuntimeResource } from '../../infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '../../infrastructure/persistence/entities/RuntimeResourceSet.js';
 import { RuntimeResourceSetMaterialization } from '../../infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
 import { Errors } from '../../middleware/errorHandler.js';
 import {
@@ -27,11 +30,11 @@ import {
   type EngineBackstopSyncRollbackRequest,
   type EngineBackstopSyncRunSummary,
 } from '../../schemas/platform-admin/engine-backstop.js';
-import { hash } from '../encryption.js';
+import { blindIndex } from '../encryption.js';
 import { engineBackstopGroupMappingService, type EngineBackstopGroupMappingService } from './EngineBackstopGroupMappingService.js';
 import { engineBackstopProjectionService, type EngineBackstopProjectionService } from './EngineBackstopProjectionService.js';
-import { engineBackstopSyncRunService, type EngineBackstopSyncRunService } from './EngineBackstopSyncRunService.js';
-import { engineBackstopSyncTaskService, type EngineBackstopSyncTaskService, type EngineBackstopSyncTaskResult } from './EngineBackstopSyncTaskService.js';
+import { engineBackstopSyncRunService, type EngineBackstopSyncRunService, type UpdateEngineBackstopRunInput } from './EngineBackstopSyncRunService.js';
+import { EngineBackstopTaskLeaseLostError, engineBackstopSyncTaskService, type EngineBackstopSyncTaskService, type EngineBackstopSyncTaskResult } from './EngineBackstopSyncTaskService.js';
 
 /** A grant owned by EnterpriseGlue on either compatible native engine. */
 export interface CamundaCompatibleBackstopOwnedGrant {
@@ -46,6 +49,8 @@ export interface EngineBackstopNativeAuthorizationClient {
   deleteAuthorization(engineId: string, authorizationId: string): Promise<void>;
   /** Returns only an ID-addressed grant; it never inventories unrelated native grants. */
   readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null>;
+  /** Bounded exact-match inventory used only to recover an interrupted create journal. */
+  listExactAuthorizationIds(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]>;
   /**
    * An optional path for callers that have already resolved the persisted
    * engine. It avoids a second data-source lookup while retaining the normal
@@ -54,6 +59,35 @@ export interface EngineBackstopNativeAuthorizationClient {
   createAuthorizationWithConnection?(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }>;
   deleteAuthorizationWithConnection?(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<void>;
   readAuthorizationWithConnection?(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<unknown | null>;
+  listExactAuthorizationIdsWithConnection?(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]>;
+}
+
+function exactAuthorizationQuery(input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): string {
+  const query = new URLSearchParams({
+    type: '1',
+    groupId: input.nativeGroupId,
+    resourceType: String(input.camundaResourceType),
+    resourceId: input.resourceKey,
+  });
+  return `/authorization?${query.toString()}`;
+}
+
+function exactAuthorizationIds(response: unknown, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): string[] {
+  if (!Array.isArray(response)) throw new Error('Compatible engine exact authorization inventory did not return an array');
+  if (response.length > 1_000) throw new Error('Compatible engine exact authorization inventory exceeded the safety limit');
+  const ids = response.flatMap((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return [];
+    const value = row as Record<string, unknown>;
+    const id = typeof value.id === 'string' ? value.id.trim() : '';
+    return id
+      && Number(value.type) === 1
+      && value.groupId === input.nativeGroupId
+      && Number(value.resourceType) === input.camundaResourceType
+      && value.resourceId === input.resourceKey
+      ? [id]
+      : [];
+  });
+  return [...new Set(ids)].sort();
 }
 
 /**
@@ -100,7 +134,15 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
   }
 
   async deleteAuthorization(engineId: string, authorizationId: string): Promise<void> {
-    await this.transport.delete(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
+    try {
+      await this.transport.delete(engineId, `/authorization/${encodeURIComponent(authorizationId)}`);
+    } catch (error) {
+      // Delete is deliberately idempotent so a lease successor can resume
+      // after the prior worker completed the remote call but lost its lease
+      // before persisting progress.
+      if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return;
+      throw error;
+    }
   }
 
   async readAuthorization(engineId: string, authorizationId: string): Promise<unknown | null> {
@@ -110,6 +152,10 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
       if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return null;
       throw error;
     }
+  }
+
+  async listExactAuthorizationIds(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]> {
+    return exactAuthorizationIds(await this.transport.get(engineId, exactAuthorizationQuery(input)), input);
   }
 
   async createAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
@@ -126,7 +172,12 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
   }
 
   async deleteAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<void> {
-    await camundaDeleteWithConnection(engine, `/authorization/${encodeURIComponent(authorizationId)}`);
+    try {
+      await camundaDeleteWithConnection(engine, `/authorization/${encodeURIComponent(authorizationId)}`);
+    } catch (error) {
+      if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return;
+      throw error;
+    }
   }
 
   async readAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, authorizationId: string): Promise<unknown | null> {
@@ -136,6 +187,10 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
       if (error instanceof BpmnEngineOperationError && Number(error.details?.engineStatus) === 404) return null;
       throw error;
     }
+  }
+
+  async listExactAuthorizationIdsWithConnection(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]> {
+    return exactAuthorizationIds(await camundaGetWithConnection(engine, exactAuthorizationQuery(input)), input);
   }
 }
 
@@ -162,17 +217,33 @@ interface ProjectionBuild {
   projection: EngineBackstopProjection;
   sourceHash: string;
   desiredHash: string;
+  connectionCommitment: string;
   capability: Record<string, boolean>;
 }
 
-export type EngineBackstopProjectionBuilder = (input: { engineId: string; tenantId?: string | null }) => Promise<ProjectionBuild>;
+interface ExecutableBackstopTask {
+  id: string;
+  leaseId: string;
+  engineId: string;
+  tenantId: string | null;
+  runId: string;
+  sourceHash: string;
+  operation: 'apply' | 'rollback' | 'drift_check';
+  assertLease: () => Promise<void>;
+}
+
+interface PendingBackstopCreate extends Omit<CamundaCompatibleBackstopOwnedGrant, 'id'> {
+  beforeAuthorizationIds: string[];
+}
+
+export type EngineBackstopProjectionBuilder = (input: { engineId: string; tenantId?: string | null }) => Promise<Omit<ProjectionBuild, 'connectionCommitment'> & { connectionCommitment?: string }>;
 
 export interface EngineBackstopSyncDependencies {
   projectionBuilder?: EngineBackstopProjectionBuilder;
   projectionService?: EngineBackstopProjectionService;
   mappingService?: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
-  runService?: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
-  taskService?: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'runNext'>;
+  runService?: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'getLatestSuccessfulApply' | 'updateRun' | 'updateRunWithTaskLease'>;
+  taskService?: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'retryNow' | 'runNext'>;
   /** Applies to both transports and preserves existing test/custom injections. */
   nativeClient?: EngineBackstopNativeAuthorizationClient;
   /** Optional direct-engine client; defaults to the Camunda-compatible transport. */
@@ -191,6 +262,48 @@ function stableJson(value: unknown): string {
     .join(',')}}`;
 }
 
+function protectedCommitment(domain: string, value: unknown): string {
+  return blindIndex(`engine-backstop:${domain}:v1`, stableJson(value));
+}
+
+export function engineBackstopConnectionCommitment(engine: BackstopEngineConnectionSource): string {
+  let baseUrl = String(engine.baseUrl || '').trim();
+  try {
+    const parsed = new URL(baseUrl);
+    parsed.hash = '';
+    parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+    baseUrl = parsed.toString();
+  } catch {
+    // Invalid endpoints are rejected by the engine boundary. Keeping the
+    // trimmed value here still produces a deterministic fail-closed receipt.
+  }
+  let oauthTokenUrl = engine.oauthTokenUrl?.trim() || null;
+  if (oauthTokenUrl) {
+    try {
+      const parsed = new URL(oauthTokenUrl);
+      parsed.hash = '';
+      parsed.pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+      oauthTokenUrl = parsed.toString();
+    } catch {
+      // The engine boundary rejects invalid token endpoints. Preserve a
+      // deterministic commitment so durable operations still fail closed.
+    }
+  }
+  const oauthScopes = engine.oauthScopes
+    ? [...new Set(engine.oauthScopes.split(/\s+/).map((scope) => scope.trim()).filter(Boolean))].sort().join(' ')
+    : null;
+  return protectedCommitment('engine-connection', {
+    id: engine.id,
+    baseUrl,
+    connectionMode: engine.connectionMode,
+    authType: engine.authType || 'none',
+    authenticationPrincipal: engine.username?.trim() || null,
+    oauthTokenUrl,
+    oauthScopes,
+    oauthAudience: engine.oauthAudience?.trim() || null,
+  });
+}
+
 function normalizeTenant(value?: string | null): string | null {
   return value?.trim() || null;
 }
@@ -199,9 +312,9 @@ function desiredIdentity(grant: Pick<CamundaBackstopOwnedGrant, 'nativeGroupId' 
   return `${grant.nativeGroupId}\u0000${grant.camundaResourceType}\u0000${grant.resourceKey}`;
 }
 
-function parseOwnedGrants(detail: unknown): CamundaBackstopOwnedGrant[] {
+function parseGrantField(detail: unknown, field: 'ownedGrants' | 'createdByRun'): CamundaBackstopOwnedGrant[] {
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return [];
-  const raw = (detail as Record<string, unknown>).ownedGrants;
+  const raw = (detail as Record<string, unknown>)[field];
   if (!Array.isArray(raw)) return [];
   const owned = raw.flatMap((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
@@ -217,9 +330,49 @@ function parseOwnedGrants(detail: unknown): CamundaBackstopOwnedGrant[] {
   return [...new Map(owned.map((grant) => [grant.id, grant])).values()];
 }
 
+function parseOwnedGrants(detail: unknown): CamundaBackstopOwnedGrant[] {
+  return parseGrantField(detail, 'ownedGrants');
+}
+
+function parseCreatedByRun(detail: unknown): CamundaBackstopOwnedGrant[] {
+  return parseGrantField(detail, 'createdByRun');
+}
+
+function parsePendingCreate(detail: unknown): PendingBackstopCreate[] {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return [];
+  const raw = (detail as Record<string, unknown>).pendingCreate;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+    const value = item as Record<string, unknown>;
+    const nativeGroupId = typeof value.nativeGroupId === 'string' ? value.nativeGroupId.trim() : '';
+    const resourceKey = typeof value.resourceKey === 'string' ? value.resourceKey.trim() : '';
+    const camundaResourceType = value.camundaResourceType === 6 || value.camundaResourceType === 10 ? value.camundaResourceType : null;
+    const beforeAuthorizationIds = Array.isArray(value.beforeAuthorizationIds)
+      ? [...new Set(value.beforeAuthorizationIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim())).map((id) => id.trim()))].sort()
+      : [];
+    return nativeGroupId && resourceKey && camundaResourceType
+      ? [{ nativeGroupId, resourceKey, camundaResourceType: camundaResourceType as 6 | 10, beforeAuthorizationIds }]
+      : [];
+  }).slice(0, 1);
+}
+
+function connectionCommitmentFromDetail(detail: unknown): string | null {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
+  const value = (detail as Record<string, unknown>).connectionCommitment;
+  return typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : null;
+}
+
 function projectionFromDetail(detail: unknown): EngineBackstopProjection {
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) throw new Error('Backstop preview detail is invalid');
   return EngineBackstopProjectionSchema.parse((detail as Record<string, unknown>).projection);
+}
+
+function projectionFromDetailOrEmpty(detail: unknown): EngineBackstopProjection {
+  if (detail && typeof detail === 'object' && !Array.isArray(detail) && 'projection' in detail) {
+    return projectionFromDetail(detail);
+  }
+  return EngineBackstopProjectionSchema.parse({ classifications: [], desiredGrants: [] });
 }
 
 function matchesOwnedGrant(authorization: unknown, grant: CamundaBackstopOwnedGrant): boolean {
@@ -277,8 +430,8 @@ export class EngineBackstopSyncService {
   private readonly connectionCache = new Map<string, BackstopEngineConnection>();
   private readonly projectionService: EngineBackstopProjectionService;
   private readonly mappingService: Pick<EngineBackstopGroupMappingService, 'activeProjectionMappings'>;
-  private readonly runService: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'updateRun'>;
-  private readonly taskService: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'runNext'>;
+  private readonly runService: Pick<EngineBackstopSyncRunService, 'createPreview' | 'getSummary' | 'getDetailedSnapshot' | 'listForEngine' | 'getLatestSuccessfulApply' | 'updateRun' | 'updateRunWithTaskLease'>;
+  private readonly taskService: Pick<EngineBackstopSyncTaskService, 'enqueue' | 'retryNow' | 'runNext'>;
   private readonly directNativeClient: EngineBackstopNativeAuthorizationClient;
   private readonly customerSidecarNativeClient: EngineBackstopNativeAuthorizationClient;
   private readonly projectionBuilder?: EngineBackstopProjectionBuilder;
@@ -301,6 +454,7 @@ export class EngineBackstopSyncService {
       sourceHash: built.sourceHash,
       desiredHash: built.desiredHash,
       projection: built.projection,
+      connectionCommitment: built.connectionCommitment,
       capability: this.transportCapability(built),
       actorId: input.actorId || null,
     });
@@ -311,21 +465,34 @@ export class EngineBackstopSyncService {
     const run = await this.runService.getSummary(input.runId);
     const tenantId = normalizeTenant(input.tenantId);
     if (!run || run.engineId !== input.engineId.trim() || run.tenantId !== tenantId) throw Errors.notFound('Backstop sync run');
-    if (run.status !== 'previewed' && run.status !== 'failed') {
-      throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'Only a previewed or retryable failed backstop run may be applied');
+    if (!['previewed', 'failed', 'queued', 'running'].includes(run.status)) {
+      throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'Only a previewed or retryable in-progress/failed backstop run may be applied');
     }
     if (run.desiredHash !== request.desiredHash) {
       throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'The reviewed desired hash does not match the preview; create a new preview');
     }
     const built = await this.buildProjection({ engineId: run.engineId, tenantId: run.tenantId });
-    if (built.sourceHash !== run.sourceHash || built.desiredHash !== run.desiredHash) {
+    const sourceChanged = built.sourceHash !== run.sourceHash || built.desiredHash !== run.desiredHash;
+    const failedDetail = sourceChanged && run.status === 'failed' ? await this.runService.getDetailedSnapshot(run.id) : null;
+    const needsCompensation = parseCreatedByRun(failedDetail).length > 0 || parsePendingCreate(failedDetail).length > 0;
+    if (sourceChanged && !needsCompensation) {
       throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed since preview; create and review a new preview');
     }
-    await this.runService.updateRun({ id: run.id, status: 'queued' });
+    if (run.status === 'previewed' || run.status === 'failed') {
+      await this.runService.updateRun({ id: run.id, status: 'queued' });
+    }
     await this.taskService.enqueue({ engineId: run.engineId, tenantId: run.tenantId, runId: run.id, sourceHash: run.sourceHash, operation: 'apply' });
+    if (needsCompensation && run.status !== 'running') await this.taskService.retryNow(run.id);
     const task = await this.taskService.runNext((task) => this.executeTask(task), { runId: run.id });
     const updated = await this.runService.getSummary(run.id);
     if (!updated) throw Errors.notFound('Backstop sync run');
+    if (sourceChanged) {
+      const remaining = await this.runService.getDetailedSnapshot(run.id);
+      if (parseCreatedByRun(remaining).length > 0) {
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed since preview; stale-run grant cleanup is still pending and must complete before a new preview is applied');
+      }
+      throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed since preview; grants created by the failed run were compensated and a new preview is required');
+    }
     return { run: updated, task };
   }
 
@@ -339,16 +506,19 @@ export class EngineBackstopSyncService {
     }
     const sourceDetail = await this.runService.getDetailedSnapshot(sourceRun.id);
     if (!sourceDetail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The owned-grant receipt expired; no broad native delete is permitted');
-    const projection = projectionFromDetail(sourceDetail);
+    const projection = projectionFromDetailOrEmpty(sourceDetail);
+    const connectionCommitment = connectionCommitmentFromDetail(sourceDetail);
+    if (!connectionCommitment) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The ownership receipt is not bound to an engine connection; create a new preview');
     const rollbackRun = await this.runService.createPreview({
       engineId: sourceRun.engineId, tenantId: sourceRun.tenantId, sourceHash: sourceRun.sourceHash, desiredHash: sourceRun.desiredHash,
-      projection, capability: sourceRun.capability, actorId: input.actorId || null,
+      projection, connectionCommitment, capability: sourceRun.capability, actorId: input.actorId || null,
     });
     await this.runService.updateRun({
       id: rollbackRun.id,
       status: 'queued',
       rollbackOfRunId: sourceRun.id,
-      detailedSnapshot: { version: 1, rollbackOfRunId: sourceRun.id, ownedGrants: parseOwnedGrants(sourceDetail) },
+      retainDetailedSnapshot: parseOwnedGrants(sourceDetail).length > 0,
+      detailedSnapshot: { version: 1, rollbackOfRunId: sourceRun.id, connectionCommitment, ownedGrants: parseOwnedGrants(sourceDetail) },
     });
     await this.taskService.enqueue({ engineId: rollbackRun.engineId, tenantId: rollbackRun.tenantId, runId: rollbackRun.id, sourceHash: rollbackRun.sourceHash, operation: 'rollback' });
     const task = await this.taskService.runNext((task) => this.executeTask(task), { runId: rollbackRun.id });
@@ -370,15 +540,17 @@ export class EngineBackstopSyncService {
     }
     const sourceDetail = await this.runService.getDetailedSnapshot(sourceRun.id);
     if (!sourceDetail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The owned-grant receipt expired; no native drift conclusion is permitted');
-    const projection = projectionFromDetail(sourceDetail);
+    const projection = projectionFromDetailOrEmpty(sourceDetail);
+    const connectionCommitment = connectionCommitmentFromDetail(sourceDetail);
+    if (!connectionCommitment) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The ownership receipt is not bound to an engine connection; create a new preview');
     const observation = await this.runService.createPreview({
       engineId: sourceRun.engineId, tenantId: sourceRun.tenantId, sourceHash: sourceRun.sourceHash, desiredHash: sourceRun.desiredHash,
-      projection, capability: sourceRun.capability, actorId: input.actorId || null,
+      projection, connectionCommitment, capability: sourceRun.capability, actorId: input.actorId || null,
     });
     const ownedGrants = parseOwnedGrants(sourceDetail);
     await this.runService.updateRun({
       id: observation.id, status: 'queued', observedOfRunId: sourceRun.id,
-      detailedSnapshot: { version: 1, observedOfRunId: sourceRun.id, projection, ownedGrants },
+      detailedSnapshot: { version: 1, observedOfRunId: sourceRun.id, projection, connectionCommitment, ownedGrants },
     });
     await this.taskService.enqueue({ engineId: observation.engineId, tenantId: observation.tenantId, runId: observation.id, sourceHash: observation.sourceHash, operation: 'drift_check' });
     const task = await this.taskService.runNext((next) => this.executeTask(next), { runId: observation.id });
@@ -387,119 +559,312 @@ export class EngineBackstopSyncService {
     return { run: updated, task };
   }
 
-  private async executeTask(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string; operation: 'apply' | 'rollback' | 'drift_check' }): Promise<Record<string, unknown>> {
+  private async executeTask(task: ExecutableBackstopTask): Promise<Record<string, unknown>> {
     if (task.operation === 'rollback') return this.executeRollback(task);
     if (task.operation === 'drift_check') return this.executeDriftCheck(task);
     if (task.operation !== 'apply') throw new Error(`Unsupported backstop task operation: ${task.operation}`);
     const run = await this.runService.getSummary(task.runId);
     if (!run) throw new Error('Backstop sync run was not found');
     try {
-      const built = await this.buildProjection({ engineId: task.engineId, tenantId: task.tenantId });
-      if (built.sourceHash !== task.sourceHash || built.sourceHash !== run.sourceHash || built.desiredHash !== run.desiredHash) {
-        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed while the task was queued; create a new preview');
-      }
       const detail = await this.runService.getDetailedSnapshot(run.id);
       const projection = projectionFromDetail(detail);
-      const currentOwned = parseOwnedGrants(detail);
-      const priorOwned = currentOwned.length > 0 ? currentOwned : await this.ownedGrantsFromPriorRun(run);
+      const reviewedConnectionCommitment = connectionCommitmentFromDetail(detail);
+      if (!reviewedConnectionCommitment) {
+        throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The preview is not bound to an engine connection; create a new preview');
+      }
+      let owned = parseOwnedGrants(detail);
+      let createdByRun = parseCreatedByRun(detail);
+      let pendingCreate = parsePendingCreate(detail);
+      const built = await this.buildProjection({ engineId: task.engineId, tenantId: task.tenantId });
+      if (built.connectionCommitment !== reviewedConnectionCommitment) {
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'The engine endpoint, transport, or authentication identity changed since preview; create and review a new preview');
+      }
       const nativeClient = this.nativeClientForRun(run);
+      const persistProgress = async (pendingDelete: CamundaBackstopOwnedGrant[] = []): Promise<void> => {
+        const retainsNativeSideEffectJournal = owned.length > 0
+          || createdByRun.length > 0
+          || pendingDelete.length > 0
+          || pendingCreate.length > 0;
+        await this.updateTaskRun(task, {
+          id: run.id,
+          status: 'running',
+          retainDetailedSnapshot: retainsNativeSideEffectJournal,
+          detailedSnapshot: { version: 1, projection, connectionCommitment: reviewedConnectionCommitment, ownedGrants: owned, createdByRun, pendingDelete, pendingCreate },
+        });
+      };
+      const compensateCreated = async (): Promise<number> => {
+        const uncompensated: CamundaBackstopOwnedGrant[] = [];
+        for (const item of [...createdByRun].reverse()) {
+          try {
+            await task.assertLease();
+            await this.deleteAuthorization(nativeClient, built.engine, item.id);
+            await task.assertLease();
+            owned = owned.filter((grant) => grant.id !== item.id);
+          } catch (error) {
+            if (error instanceof EngineBackstopTaskLeaseLostError) throw error;
+            uncompensated.push(item);
+          }
+        }
+        createdByRun = uncompensated.reverse();
+        await persistProgress();
+        return createdByRun.length;
+      };
+      for (const journal of pendingCreate) {
+        await task.assertLease();
+        const afterAuthorizationIds = await this.listExactAuthorizationIds(nativeClient, built.engine, journal);
+        await task.assertLease();
+        const before = new Set(journal.beforeAuthorizationIds);
+        const createdIds = afterAuthorizationIds.filter((id) => !before.has(id));
+        if (createdIds.length !== 1) {
+          throw backstopError(
+            'ENGINE_BACKSTOP_PREVIEW_NOT_USABLE',
+            createdIds.length === 0
+              ? 'An interrupted native grant create has no uniquely observable result; keep the journal and inspect the exact engine grant before retrying'
+              : 'An interrupted native grant create is ambiguous because multiple new exact grants were observed; keep the journal and resolve it manually',
+          );
+        }
+        const adopted = { nativeGroupId: journal.nativeGroupId, camundaResourceType: journal.camundaResourceType, resourceKey: journal.resourceKey, id: createdIds[0] };
+        if (!owned.some((grant) => grant.id === adopted.id)) owned = [...owned, adopted];
+        if (!createdByRun.some((grant) => grant.id === adopted.id)) createdByRun = [...createdByRun, adopted];
+        pendingCreate = [];
+        await persistProgress();
+      }
+      if (built.sourceHash !== task.sourceHash || built.sourceHash !== run.sourceHash || built.desiredHash !== run.desiredHash) {
+        if (createdByRun.length > 0 && await compensateCreated() > 0) {
+          throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed and one or more grants from the stale run could not be compensated; inspect the retained failed-run receipt');
+        }
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed while the task was queued; create a new preview');
+      }
+      let priorOwnershipRunId: string | null = null;
+      if (owned.length === 0) {
+        const priorOwnership = await this.ownedGrantsFromPriorRun(run, reviewedConnectionCommitment);
+        owned = priorOwnership.grants;
+        priorOwnershipRunId = priorOwnership.runId;
+      }
       const desired = projection.desiredGrants.map((grant) => ({
         nativeGroupId: grant.nativeGroupId,
         camundaResourceType: grant.camundaResourceType,
         resourceKey: grant.resourceKey,
       }));
       const desiredByIdentity = new Map(desired.map((grant) => [desiredIdentity(grant), grant]));
-      const existingByIdentity = new Map(priorOwned.map((grant) => [desiredIdentity(grant), grant]));
+      const existingByIdentity = new Map(owned.map((grant) => [desiredIdentity(grant), grant]));
       const retained = [...existingByIdentity.values()].filter((grant) => desiredByIdentity.has(desiredIdentity(grant)));
-      let owned = [...retained];
-      await this.runService.updateRun({ id: run.id, status: 'running', detailedSnapshot: { version: 1, projection, ownedGrants: owned } });
+      let pendingDelete = owned.filter((grant) => !desiredByIdentity.has(desiredIdentity(grant)));
+      const pendingDeleteCount = pendingDelete.length;
+      // Never omit an extant ID from the durable receipt before the matching
+      // remote delete has completed and lease ownership is re-confirmed.
+      await persistProgress(pendingDelete);
       for (const grant of desired) {
         if (existingByIdentity.has(desiredIdentity(grant))) continue;
-        const created = await this.createAuthorization(nativeClient, built.engine, grant);
-        owned = [...owned, { ...grant, id: created.id }];
-        await this.runService.updateRun({ id: run.id, status: 'running', detailedSnapshot: { version: 1, projection, ownedGrants: owned } });
+        await task.assertLease();
+        const beforeAuthorizationIds = await this.listExactAuthorizationIds(nativeClient, built.engine, grant);
+        await task.assertLease();
+        pendingCreate = [{ ...grant, beforeAuthorizationIds }];
+        await persistProgress(pendingDelete);
+        let created: { id: string };
+        try {
+          created = await this.createAuthorization(nativeClient, built.engine, grant);
+        } catch (error) {
+          // A transport error can happen after the engine committed the grant.
+          // Keep the durable intent so a successor exact-inventories and
+          // adopts the unique new ID instead of creating a duplicate.
+          throw error;
+        }
+        await task.assertLease();
+        const afterAuthorizationIds = await this.listExactAuthorizationIds(nativeClient, built.engine, grant);
+        await task.assertLease();
+        const newlyObservedIds = afterAuthorizationIds.filter((id) => !beforeAuthorizationIds.includes(id));
+        if (beforeAuthorizationIds.includes(created.id) || newlyObservedIds.length !== 1 || newlyObservedIds[0] !== created.id) {
+          throw backstopError(
+            'ENGINE_BACKSTOP_PREVIEW_NOT_USABLE',
+            'The compatible engine did not prove unique ownership of the newly created authorization; the retained create journal requires manual review',
+          );
+        }
+        const createdAuthorization = await this.readAuthorization(nativeClient, built.engine, created.id);
+        await task.assertLease();
+        const ownedGrant = { ...grant, id: created.id };
+        if (!matchesOwnedGrant(createdAuthorization, ownedGrant)) {
+          throw backstopError(
+            'ENGINE_BACKSTOP_PREVIEW_NOT_USABLE',
+            'The compatible engine returned an authorization that does not exactly match the requested group READ grant; the retained create journal requires manual review',
+          );
+        }
+        createdByRun = [...createdByRun, ownedGrant];
+        owned = [...owned, ownedGrant];
+        pendingCreate = [];
+        await persistProgress(pendingDelete);
+        const current = await this.buildProjection({ engineId: task.engineId, tenantId: task.tenantId });
+        if (current.sourceHash !== task.sourceHash || current.desiredHash !== run.desiredHash) {
+          if (await compensateCreated() > 0) {
+            throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed during apply and one or more newly created grants could not be compensated; inspect the retained failed-run receipt');
+          }
+          throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed during apply; newly created grants were removed and a new preview is required');
+        }
       }
-      const retainedIds = new Set(retained.map((grant) => grant.id));
-      for (const grant of priorOwned) {
-        if (retainedIds.has(grant.id)) continue;
+      const currentBeforeDelete = await this.buildProjection({ engineId: task.engineId, tenantId: task.tenantId });
+      if (currentBeforeDelete.sourceHash !== task.sourceHash || currentBeforeDelete.desiredHash !== run.desiredHash) {
+        if (await compensateCreated() > 0) {
+          throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed before prior grants could be retired and one or more newly created grants could not be compensated; inspect the retained failed-run receipt');
+        }
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed before prior grants could be retired; create a new preview');
+      }
+      for (const grant of [...pendingDelete]) {
+        await task.assertLease();
         await this.deleteAuthorization(nativeClient, built.engine, grant.id);
+        await task.assertLease();
+        owned = owned.filter((item) => item.id !== grant.id);
+        pendingDelete = pendingDelete.filter((item) => item.id !== grant.id);
+        await persistProgress(pendingDelete);
       }
-      const resultHash = hash(stableJson(owned
+      await task.assertLease();
+      const finalProjection = await this.buildProjection({ engineId: task.engineId, tenantId: task.tenantId });
+      if (finalProjection.sourceHash !== task.sourceHash || finalProjection.desiredHash !== run.desiredHash) {
+        if (await compensateCreated() > 0) {
+          throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed before apply completed and one or more newly created grants could not be compensated; inspect the retained failed-run receipt');
+        }
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'Authorization source changed before apply completed; create a new preview and reconcile the retained receipt');
+      }
+      const resultHash = protectedCommitment('apply-result', owned
         .map(({ id, ...grant }) => ({ ...grant, id }))
-        .sort((left, right) => left.id.localeCompare(right.id))));
-      const completed = await this.runService.updateRun({
+        .sort((left, right) => left.id.localeCompare(right.id)));
+      if (priorOwnershipRunId) {
+        await this.updateTaskRun(task, {
+          id: priorOwnershipRunId,
+          status: 'rolled_back',
+          completed: true,
+          retainDetailedSnapshot: false,
+          detailedSnapshot: { version: 1, ownershipForRunId: priorOwnershipRunId, connectionCommitment: reviewedConnectionCommitment, ownedGrants: [] },
+        });
+      }
+      const completed = await this.updateTaskRun(task, {
         id: run.id, status: 'succeeded', resultHash, completed: true,
-        detailedSnapshot: { version: 1, projection, ownedGrants: owned },
+        retainDetailedSnapshot: owned.length > 0,
+        detailedSnapshot: { version: 1, ownershipForRunId: run.id, connectionCommitment: reviewedConnectionCommitment, ownedGrants: owned },
       });
       if (!completed) throw new Error('Backstop sync run disappeared during apply');
-      return { createdCount: owned.length - retained.length, retainedCount: retained.length, deletedCount: priorOwned.length - retained.length, resultHash };
+      return { createdCount: createdByRun.length, retainedCount: retained.length, deletedCount: pendingDeleteCount, resultHash };
     } catch (error) {
-      await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
+      if (!(error instanceof EngineBackstopTaskLeaseLostError)) {
+        await this.updateTaskRun(task, { id: task.runId, status: 'failed', completed: true });
+      }
       throw error;
     }
   }
 
-  private async executeRollback(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string }): Promise<Record<string, unknown>> {
+  private async executeRollback(task: ExecutableBackstopTask): Promise<Record<string, unknown>> {
     const rollbackRun = await this.runService.getSummary(task.runId);
     if (!rollbackRun || !rollbackRun.rollbackOfRunId) throw new Error('Backstop rollback run is invalid');
     try {
       const detail = await this.runService.getDetailedSnapshot(rollbackRun.id);
-      const ownedGrants = parseOwnedGrants(detail);
+      let ownedGrants = parseOwnedGrants(detail);
       if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The rollback receipt expired; no broad native delete is permitted');
+      const reviewedConnectionCommitment = connectionCommitmentFromDetail(detail);
+      const currentConnectionSource = await this.connectionSourceForEngine(rollbackRun.engineId);
+      if (!reviewedConnectionCommitment || !currentConnectionSource || engineBackstopConnectionCommitment(currentConnectionSource) !== reviewedConnectionCommitment) {
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'The engine endpoint, transport, or authentication identity changed since the owned grants were recorded; rollback is blocked');
+      }
       const nativeClient = this.nativeClientForRun(rollbackRun);
-      const connection = this.usesConnection(nativeClient) ? await this.connectionForEngine(rollbackRun.engineId) : null;
-      await this.runService.updateRun({ id: rollbackRun.id, status: 'running', detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
-      for (const grant of ownedGrants) await this.deleteAuthorization(nativeClient, connection, grant.id, rollbackRun.engineId);
-      const resultHash = hash(stableJson(ownedGrants.map((grant) => grant.id).sort()));
-      await this.runService.updateRun({ id: rollbackRun.id, status: 'rolled_back', resultHash, completed: true, detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, ownedGrants } });
-      await this.runService.updateRun({ id: rollbackRun.rollbackOfRunId, status: 'rolled_back', completed: true });
-      return { deletedCount: ownedGrants.length, resultHash };
+      const connection = this.usesConnection(nativeClient) ? this.toConnection(currentConnectionSource) : null;
+      await this.updateTaskRun(task, {
+        id: rollbackRun.id,
+        status: 'running',
+        retainDetailedSnapshot: ownedGrants.length > 0,
+        detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, connectionCommitment: reviewedConnectionCommitment, ownedGrants },
+      });
+      const deletedCount = ownedGrants.length;
+      for (const grant of [...ownedGrants]) {
+        await task.assertLease();
+        await this.deleteAuthorization(nativeClient, connection, grant.id, rollbackRun.engineId);
+        await task.assertLease();
+        ownedGrants = ownedGrants.filter((item) => item.id !== grant.id);
+        await this.updateTaskRun(task, {
+          id: rollbackRun.id,
+          status: 'running',
+          retainDetailedSnapshot: ownedGrants.length > 0,
+          detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, connectionCommitment: reviewedConnectionCommitment, ownedGrants },
+        });
+      }
+      await task.assertLease();
+      const resultHash = protectedCommitment('rollback-result', { rollbackOfRunId: rollbackRun.rollbackOfRunId, deletedCount });
+      await this.updateTaskRun(task, {
+        id: rollbackRun.id,
+        status: 'rolled_back',
+        resultHash,
+        completed: true,
+        retainDetailedSnapshot: false,
+        detailedSnapshot: { version: 1, rollbackOfRunId: rollbackRun.rollbackOfRunId, connectionCommitment: reviewedConnectionCommitment, ownedGrants },
+      });
+      await this.updateTaskRun(task, {
+        id: rollbackRun.rollbackOfRunId,
+        status: 'rolled_back',
+        completed: true,
+        retainDetailedSnapshot: false,
+        detailedSnapshot: { version: 1, ownershipForRunId: rollbackRun.rollbackOfRunId, connectionCommitment: reviewedConnectionCommitment, ownedGrants: [] },
+      });
+      return { deletedCount, resultHash };
     } catch (error) {
-      await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
+      if (!(error instanceof EngineBackstopTaskLeaseLostError)) {
+        await this.updateTaskRun(task, { id: task.runId, status: 'failed', completed: true });
+      }
       throw error;
     }
   }
 
-  private async executeDriftCheck(task: { engineId: string; tenantId: string | null; runId: string; sourceHash: string }): Promise<Record<string, unknown>> {
+  private async executeDriftCheck(task: ExecutableBackstopTask): Promise<Record<string, unknown>> {
     const observation = await this.runService.getSummary(task.runId);
     if (!observation?.observedOfRunId) throw new Error('Backstop drift-check run is invalid');
     try {
       const detail = await this.runService.getDetailedSnapshot(observation.id);
       if (!detail) throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The drift-check receipt expired before it could be read');
       const ownedGrants = parseOwnedGrants(detail);
+      const reviewedConnectionCommitment = connectionCommitmentFromDetail(detail);
+      const currentConnectionSource = await this.connectionSourceForEngine(observation.engineId);
+      if (!reviewedConnectionCommitment || !currentConnectionSource || engineBackstopConnectionCommitment(currentConnectionSource) !== reviewedConnectionCommitment) {
+        throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'The engine endpoint, transport, or authentication identity changed since the owned grants were recorded; drift check is blocked');
+      }
       const nativeClient = this.nativeClientForRun(observation);
-      const connection = this.usesConnection(nativeClient) ? await this.connectionForEngine(observation.engineId) : null;
-      await this.runService.updateRun({ id: observation.id, status: 'running', detailedSnapshot: detail });
+      const connection = this.usesConnection(nativeClient) ? this.toConnection(currentConnectionSource) : null;
+      await this.updateTaskRun(task, { id: observation.id, status: 'running', detailedSnapshot: detail });
       let intactCount = 0;
       let missingCount = 0;
       let alteredCount = 0;
       for (const grant of ownedGrants) {
+        await task.assertLease();
         const nativeGrant = await this.readAuthorization(nativeClient, connection, grant.id, observation.engineId);
         if (nativeGrant === null) missingCount += 1;
         else if (matchesOwnedGrant(nativeGrant, grant)) intactCount += 1;
         else alteredCount += 1;
       }
       const outOfSync = missingCount > 0 || alteredCount > 0;
-      const resultHash = hash(stableJson({ observedOfRunId: observation.observedOfRunId, ownedGrantIds: ownedGrants.map((grant) => grant.id).sort(), intactCount, missingCount, alteredCount }));
-      await this.runService.updateRun({
+      await task.assertLease();
+      const resultHash = protectedCommitment('drift-result', { observedOfRunId: observation.observedOfRunId, ownedGrantIds: ownedGrants.map((grant) => grant.id).sort(), intactCount, missingCount, alteredCount });
+      await this.updateTaskRun(task, {
         id: observation.id, status: outOfSync ? 'out_of_sync' : 'succeeded', resultHash, completed: true, detailedSnapshot: detail,
       });
       return { observedGrantCount: ownedGrants.length, intactCount, missingCount, alteredCount, outOfSync, resultHash };
     } catch (error) {
-      await this.runService.updateRun({ id: task.runId, status: 'failed', completed: true });
+      if (!(error instanceof EngineBackstopTaskLeaseLostError)) {
+        await this.updateTaskRun(task, { id: task.runId, status: 'failed', completed: true });
+      }
       throw error;
     }
   }
 
-  private async ownedGrantsFromPriorRun(run: EngineBackstopSyncRunSummary): Promise<CamundaBackstopOwnedGrant[]> {
-    const history = await this.runService.listForEngine({ engineId: run.engineId, tenantId: run.tenantId, limit: 100 });
-    const prior = history.find((item) => item.id !== run.id && item.status === 'succeeded');
-    if (!prior) return [];
+  private async ownedGrantsFromPriorRun(run: EngineBackstopSyncRunSummary, connectionCommitment: string): Promise<{ grants: CamundaBackstopOwnedGrant[]; runId: string | null }> {
+    const prior = await this.runService.getLatestSuccessfulApply({
+      engineId: run.engineId,
+      tenantId: run.tenantId,
+      excludeRunId: run.id,
+    });
+    if (!prior) return { grants: [], runId: null };
     const detail = await this.runService.getDetailedSnapshot(prior.id);
     if (!detail) {
-      throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The prior owned-grant receipt expired; do not apply until it is recovered or explicitly retired', 409);
+      throw backstopError('ENGINE_BACKSTOP_PREVIEW_NOT_USABLE', 'The latest successful apply has no durable ownership journal; do not apply until it is recovered or explicitly retired', 409);
     }
-    return parseOwnedGrants(detail);
+    if (connectionCommitmentFromDetail(detail) !== connectionCommitment) {
+      throw backstopError('ENGINE_BACKSTOP_SOURCE_CHANGED', 'The latest successful apply belongs to a different engine connection generation; retire or recover that ownership before applying a new preview', 409);
+    }
+    return { grants: parseOwnedGrants(detail), runId: prior.id };
   }
 
   private transportCapability(built: ProjectionBuild): Record<string, boolean> {
@@ -515,11 +880,18 @@ export class EngineBackstopSyncService {
     return run.capability.customerSidecarTransport ? this.customerSidecarNativeClient : this.directNativeClient;
   }
 
+  private async updateTaskRun(task: ExecutableBackstopTask, input: UpdateEngineBackstopRunInput): Promise<EngineBackstopSyncRunSummary> {
+    const updated = await this.runService.updateRunWithTaskLease({ ...input, taskId: task.id, leaseId: task.leaseId, taskRunId: task.runId });
+    if (!updated) throw new EngineBackstopTaskLeaseLostError('Engine backstop task lease was lost before durable run progress could be written');
+    return updated;
+  }
+
   private usesConnection(nativeClient: EngineBackstopNativeAuthorizationClient): boolean {
     return Boolean(
       nativeClient.createAuthorizationWithConnection
       || nativeClient.deleteAuthorizationWithConnection
-      || nativeClient.readAuthorizationWithConnection,
+      || nativeClient.readAuthorizationWithConnection
+      || nativeClient.listExactAuthorizationIdsWithConnection,
     );
   }
 
@@ -538,13 +910,11 @@ export class EngineBackstopSyncService {
     };
   }
 
-  private async connectionForEngine(engineId: string): Promise<BackstopEngineConnection | null> {
-    const cached = this.connectionCache.get(engineId);
-    if (cached) return cached;
+  private async connectionSourceForEngine(engineId: string): Promise<BackstopEngineConnectionSource | null> {
     // Do not hydrate unrelated Engine metadata merely to execute a receipt.
-    // This keeps durable rollback/drift reads narrowly scoped and compatible
-    // with databases that pre-date non-connection Engine columns.
-    const engine = await (await getDataSource()).getRepository(Engine)
+    // Durable rollback/drift deliberately bypass the process cache so a
+    // replacement endpoint can never inherit an older ownership receipt.
+    return (await getDataSource()).getRepository(Engine)
       .createQueryBuilder('engine')
       .select([
         'engine.id',
@@ -559,9 +929,10 @@ export class EngineBackstopSyncService {
       ])
       .where('engine.id = :engineId', { engineId })
       .getOne();
-    const connection = this.toConnection(engine);
-    if (connection) this.connectionCache.set(connection.id, connection);
-    return connection;
+  }
+
+  private async connectionForEngine(engineId: string): Promise<BackstopEngineConnection | null> {
+    return this.toConnection(await this.connectionSourceForEngine(engineId));
   }
 
   private async createAuthorization(nativeClient: EngineBackstopNativeAuthorizationClient, engine: BackstopEngineConnectionSource | null, grant: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
@@ -585,12 +956,21 @@ export class EngineBackstopSyncService {
     return nativeClient.readAuthorization(connection?.id || engine?.id || fallbackEngineId, authorizationId);
   }
 
+  private async listExactAuthorizationIds(nativeClient: EngineBackstopNativeAuthorizationClient, engine: BackstopEngineConnectionSource | null, grant: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>, fallbackEngineId = ''): Promise<string[]> {
+    const connection = this.toConnection(engine);
+    if (connection && nativeClient.listExactAuthorizationIdsWithConnection) {
+      return nativeClient.listExactAuthorizationIdsWithConnection(connection, grant);
+    }
+    return nativeClient.listExactAuthorizationIds(connection?.id || engine?.id || fallbackEngineId, grant);
+  }
+
   private async buildProjection(input: { engineId: string; tenantId?: string | null }): Promise<ProjectionBuild> {
     if (this.projectionBuilder) {
       const built = await this.projectionBuilder(input);
+      const connectionCommitment = engineBackstopConnectionCommitment(built.engine);
       const connection = this.toConnection(built.engine);
       if (connection) this.connectionCache.set(connection.id, connection);
-      return built;
+      return { ...built, connectionCommitment };
     }
     const dataSource = await getDataSource();
     const engineId = input.engineId.trim();
@@ -604,16 +984,23 @@ export class EngineBackstopSyncService {
       : normalizeTenant(engine.tenantId);
     if (engine.tenancyMode === 'shared' && !tenantId) throw backstopError('ENGINE_BACKSTOP_TENANT_REQUIRED', 'A shared engine requires a concrete tenant for backstop synchronization');
     if (engine.tenancyMode !== 'shared' && requestedTenantId !== tenantId) throw backstopError('ENGINE_BACKSTOP_TENANT_REQUIRED', 'The requested tenant does not match the dedicated engine tenant');
-    const [mappings, assignments, rolePermissions, resources, resourceSetMaterializations, engineSetMaterializations] = await Promise.all([
+    const [mappings, roles, assignments, rolePermissions, resources, resourceSets, resourceSetMaterializations, engineSets, engineSetMaterializations] = await Promise.all([
       this.mappingService.activeProjectionMappings(engineId, tenantId),
+      dataSource.getRepository(RbacRole).find(),
       dataSource.getRepository(RbacRoleAssignment).find(),
       dataSource.getRepository(RbacRolePermission).find(),
       dataSource.getRepository(RuntimeResource).find({ where: { engineId, isActive: true } }),
+      dataSource.getRepository(RuntimeResourceSet).find({ where: { engineId, isArchived: false } }),
       dataSource.getRepository(RuntimeResourceSetMaterialization).find(),
+      dataSource.getRepository(EngineSet).find({ where: { isArchived: false } }),
       dataSource.getRepository(EngineSetMaterialization).find({ where: { engineId } }),
     ]);
+    const usableRoleIds = new Set(roles
+      .filter((role) => !role.isArchived && ((role.tenantId || null) === tenantId || ((role.tenantId || null) === null && role.kind === 'system')))
+      .map((role) => role.id));
     const permissionsByRole = new Map<string, string[]>();
     for (const permission of rolePermissions) {
+      if (!usableRoleIds.has(permission.roleId)) continue;
       permissionsByRole.set(permission.roleId, [...(permissionsByRole.get(permission.roleId) || []), permission.permissionId]);
     }
     const resourcesById = new Map(resources.map((resource) => [resource.id, resource]));
@@ -631,13 +1018,23 @@ export class EngineBackstopSyncService {
       return (tenantIdsByNativeAuthorizationKey.get(key)?.size || 0) > 1;
     };
     const resourceIdsBySet = new Map<string, string[]>();
+    const usableResourceSetIds = new Set(resourceSets
+      .filter((set) => (set.tenantId || null) === tenantId)
+      .map((set) => set.id));
     for (const materialization of resourceSetMaterializations) {
+      if (!usableResourceSetIds.has(materialization.runtimeResourceSetId)) continue;
       resourceIdsBySet.set(materialization.runtimeResourceSetId, [...(resourceIdsBySet.get(materialization.runtimeResourceSetId) || []), materialization.runtimeResourceId]);
     }
-    const engineSetIds = new Set(engineSetMaterializations.map((materialization) => materialization.engineSetId));
+    const usableEngineSetIds = new Set(engineSets
+      .filter((set) => (set.tenantId || null) === tenantId)
+      .map((set) => set.id));
+    const engineSetIds = new Set(engineSetMaterializations
+      .filter((materialization) => usableEngineSetIds.has(materialization.engineSetId) && (materialization.tenantId || null) === tenantId)
+      .map((materialization) => materialization.engineSetId));
     const candidates: EngineBackstopProjectionCandidate[] = [];
     for (const assignment of assignments) {
       if ((assignment.tenantId || null) !== tenantId) continue;
+      if (!usableRoleIds.has(assignment.roleId)) continue;
       const permissionIds = [...new Set(permissionsByRole.get(assignment.roleId) || [])].sort();
       if (!permissionIds.includes('engine:instance:view')) continue;
       if (assignment.scopeType === 'engine_runtime_resource') {
@@ -661,18 +1058,21 @@ export class EngineBackstopSyncService {
       engineId, engineType: engine.type, tenancyMode: engine.tenancyMode === 'shared' ? 'shared' : 'dedicated', tenantId,
       mappings, candidates,
     });
-    const sourceHash = hash(stableJson({
+    const connectionCommitment = engineBackstopConnectionCommitment(engine);
+    const sourceHash = protectedCommitment('source', {
       engine: { id: engineId, tenancyMode: engine.tenancyMode, tenantId, runtimeAccessScope: engine.runtimeAccessScope },
+      connectionCommitment,
       mappings: mappings.map((mapping) => ({ ...mapping })).sort((left, right) => left.authzGroupId.localeCompare(right.authzGroupId)),
-      candidates: candidates.sort((left, right) => left.sourceAssignmentId.localeCompare(right.sourceAssignmentId)),
-    }));
-    const desiredHash = hash(stableJson(projection.desiredGrants));
+      candidates: candidates.sort((left, right) => stableJson(left).localeCompare(stableJson(right))),
+    });
+    const desiredHash = protectedCommitment('desired', projection.desiredGrants);
     const built = {
       engine,
       tenantId,
       projection,
       sourceHash,
       desiredHash,
+      connectionCommitment,
       capability: {
         nativeAuthorizationWrite: true,
         directTrustedEndpoint: engine.connectionMode !== 'customer_sidecar',
@@ -682,6 +1082,16 @@ export class EngineBackstopSyncService {
     const connection = this.toConnection(built.engine);
     if (connection) this.connectionCache.set(connection.id, connection);
     return built;
+  }
+
+  /** Read-only current commitments used to certify that retained native grants still match canonical access. */
+  async currentProjectionCommitments(input: { engineId: string; tenantId?: string | null }): Promise<Pick<ProjectionBuild, 'sourceHash' | 'desiredHash' | 'connectionCommitment'>> {
+    const built = await this.buildProjection(input);
+    return {
+      sourceHash: built.sourceHash,
+      desiredHash: built.desiredHash,
+      connectionCommitment: built.connectionCommitment,
+    };
   }
 }
 

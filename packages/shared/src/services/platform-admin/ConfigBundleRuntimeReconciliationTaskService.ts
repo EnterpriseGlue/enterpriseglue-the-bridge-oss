@@ -5,6 +5,7 @@ import { ConfigBundleRuntimeReconciliationTask } from '@enterpriseglue/shared/in
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { engineSetService } from './EngineSetService.js';
 import { runtimeResourceInventoryService } from './RuntimeResourceInventoryService.js';
+import { operatorSafeConfigBundleFailure } from './ConfigBundleSafeDiagnostics.js';
 
 const ACTIVE_STATUSES: Array<ConfigBundleRuntimeReconciliationTask['status']> = ['queued', 'running'];
 const DEFAULT_LEASE_MS = 60_000;
@@ -195,7 +196,7 @@ class ConfigBundleRuntimeReconciliationTaskService {
           leaseExpiresAt: null,
           attempts,
           nextAttemptAt: Date.now() + retryDelay(attempts),
-          lastError: error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000),
+          lastError: operatorSafeConfigBundleFailure('runtime_reconciliation'),
           updatedAt: Date.now(),
         };
         await repo.update({ id: candidate.id, leaseId }, failed);

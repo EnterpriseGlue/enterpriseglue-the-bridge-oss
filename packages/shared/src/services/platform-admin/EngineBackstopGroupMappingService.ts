@@ -14,12 +14,13 @@ import {
   type EngineBackstopGroupMappingWriteRequest,
   type EngineBackstopGroupMappingWriteResponse,
 } from '../../schemas/platform-admin/engine-backstop.js';
-import { decrypt, encrypt, hash } from '../encryption.js';
+import { blindIndex, decrypt, encrypt, hash } from '../encryption.js';
 import { generateId } from '../../utils/id.js';
-import type { DataSource, EntityManager } from 'typeorm';
+import { In, type DataSource, type EntityManager } from 'typeorm';
 
 export interface WriteEngineBackstopGroupMappingsInput {
   engineId: string;
+  tenantId: string;
   request: EngineBackstopGroupMappingWriteRequest;
   actorId?: string | null;
   source?: 'manual' | 'config';
@@ -37,7 +38,7 @@ function mappingError(
 }
 
 function nativeGroupReference(nativeGroupId: string): string {
-  return `native-engine-group-${hash(nativeGroupId).slice(0, 24)}`;
+  return `native-engine-group-${blindIndex('engine-backstop-native-group', nativeGroupId).slice(0, 24)}`;
 }
 
 /** Legacy rows used a Camunda-specific opaque prefix for the same hash. */
@@ -46,7 +47,7 @@ function legacyNativeGroupReference(nativeGroupId: string): string {
 }
 
 function mappingSourceHash(input: { engineId: string; authzGroupId: string; nativeGroupId: string; isActive: boolean }): string {
-  return hash([input.engineId, input.authzGroupId, input.nativeGroupId, String(input.isActive)].join('\u0000'));
+  return blindIndex('engine-backstop-mapping-source-v1', [input.engineId, input.authzGroupId, input.nativeGroupId, String(input.isActive)].join('\u0000'));
 }
 
 function summaryFor(mapping: EngineBackstopGroupMapping): EngineBackstopGroupMappingSummary {
@@ -75,12 +76,14 @@ function normalized(value: string): string {
  * before the native operation.
  */
 export class EngineBackstopGroupMappingService {
-  async list(engineId: string): Promise<EngineBackstopGroupMappingSummary[]> {
+  async list(engineId: string, tenantId: string): Promise<EngineBackstopGroupMappingSummary[]> {
     const dataSource = await getDataSource();
-    await this.engineFor(dataSource, engineId);
+    const requestTenantId = this.requiredTenant(tenantId);
+    const engine = await this.engineFor(dataSource, engineId);
+    this.assertEngineVisibleToTenant(engine, requestTenantId);
     const rows = await dataSource.getRepository(EngineBackstopGroupMapping).find({
-      where: { engineId: normalized(engineId) },
-      order: { tenantId: 'ASC', authzGroupId: 'ASC', createdAt: 'ASC' },
+      where: { engineId: normalized(engineId), tenantId: requestTenantId },
+      order: { authzGroupId: 'ASC', createdAt: 'ASC' },
     });
     return rows.map(summaryFor);
   }
@@ -88,6 +91,7 @@ export class EngineBackstopGroupMappingService {
   async write(input: WriteEngineBackstopGroupMappingsInput, manager?: EntityManager): Promise<EngineBackstopGroupMappingWriteResponse> {
     const request = EngineBackstopGroupMappingWriteRequestSchema.parse(input.request);
     const engineId = normalized(input.engineId);
+    const requestTenantId = this.requiredTenant(input.tenantId);
     const source = input.source || 'manual';
     const sourceRef = input.sourceRef?.trim() || null;
     const nativeGroupSecretRef = input.nativeGroupSecretRef?.trim() || null;
@@ -98,6 +102,7 @@ export class EngineBackstopGroupMappingService {
       throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'A config-owned mapping write must use one stable mapping key');
     }
     const engine = await this.engineFor(readStore, engineId);
+    this.assertEngineVisibleToTenant(engine, requestTenantId);
     const seenGroups = new Set<string>();
     const seenNativeReferences = new Set<string>();
     const resolved: Array<{ item: (typeof request.mappings)[number]; group: AuthzGroup; reference: string; legacyReference: string }> = [];
@@ -112,11 +117,20 @@ export class EngineBackstopGroupMappingService {
       seenGroups.add(authzGroupId);
       seenNativeReferences.add(reference);
       const group = await readStore.getRepository(AuthzGroup).findOne({ where: { id: authzGroupId } });
-      this.assertGroupUsable(engine, group, authzGroupId);
+      this.assertGroupUsable(engine, group, authzGroupId, requestTenantId);
       resolved.push({ item: { ...item, authzGroupId, nativeGroupId }, group: group!, reference, legacyReference });
     }
 
     const persist = async (store: EntityManager) => {
+      const engineClaim = await store.getRepository(Engine).update(
+        { id: engineId, lifecycleStatus: 'active' },
+        { id: engineId },
+      );
+      if (engineClaim.affected !== 1) {
+        throw mappingError('ENGINE_BACKSTOP_ENGINE_INACTIVE', 'Backstop mappings require an active engine', 409);
+      }
+      const currentEngine = await this.engineFor(store, engineId);
+      this.assertEngineVisibleToTenant(currentEngine, requestTenantId);
       const repo = store.getRepository(EngineBackstopGroupMapping);
       const existing = await repo.find({ where: { engineId } });
       const existingForSource = source === 'config' && sourceRef
@@ -126,6 +140,9 @@ export class EngineBackstopGroupMappingService {
         throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'More than one persisted mapping is associated with this stable config key', 409);
       }
       const sourceRow = existingForSource[0];
+      if (sourceRow && (sourceRow.tenantId || null) !== requestTenantId) {
+        throw mappingError('ENGINE_BACKSTOP_MAPPING_CONFLICT', 'The configuration source is already bound to another tenant', 409);
+      }
       const byGroup = new Map(existing.map((row) => [row.authzGroupId, row]));
       const byNativeReference = new Map(existing.map((row) => [row.nativeGroupReference, row]));
       const bySourceRef = new Map(existingForSource.map((row) => [row.sourceRef, row]));
@@ -198,8 +215,15 @@ export class EngineBackstopGroupMappingService {
       order: { authzGroupId: 'ASC' },
     });
     const expectedTenantId = tenantId?.trim() || null;
+    const tenantRows = rows.filter((row) => (row.tenantId || null) === expectedTenantId);
+    const groups = tenantRows.length === 0 ? [] : await dataSource.getRepository(AuthzGroup).find({
+      where: { id: In([...new Set(tenantRows.map((row) => row.authzGroupId))]) },
+    });
+    const usableGroupIds = new Set(groups
+      .filter((group) => !group.isArchived && (group.tenantId || null) === expectedTenantId)
+      .map((group) => group.id));
     return rows
-      .filter((row) => (row.tenantId || null) === expectedTenantId)
+      .filter((row) => (row.tenantId || null) === expectedTenantId && usableGroupIds.has(row.authzGroupId))
       .map((row) => {
         try {
           return EngineBackstopGroupMappingInputSchema.parse({
@@ -225,12 +249,24 @@ export class EngineBackstopGroupMappingService {
     return engine;
   }
 
-  private assertGroupUsable(engine: Engine, group: AuthzGroup | null, groupId: string): void {
+  private requiredTenant(tenantId: string): string {
+    const value = tenantId?.trim();
+    if (!value) throw mappingError('ENGINE_BACKSTOP_GROUP_NOT_USABLE', 'A tenant context is required for mirrored backstop mappings', 400);
+    return value;
+  }
+
+  private assertEngineVisibleToTenant(engine: Engine, tenantId: string): void {
+    if (engine.tenancyMode === 'dedicated' && (engine.tenantId || null) !== tenantId) {
+      throw mappingError('ENGINE_BACKSTOP_GROUP_NOT_USABLE', 'The dedicated engine belongs to another tenant', 404);
+    }
+  }
+
+  private assertGroupUsable(engine: Engine, group: AuthzGroup | null, groupId: string, tenantId: string): void {
     if (!group || group.isArchived) {
       throw mappingError('ENGINE_BACKSTOP_GROUP_NOT_USABLE', 'The EnterpriseGlue authorization group does not exist or is archived', 404);
     }
-    if (engine.tenancyMode === 'dedicated' && (group.tenantId || null) !== (engine.tenantId || null)) {
-      throw mappingError('ENGINE_BACKSTOP_GROUP_NOT_USABLE', 'A dedicated engine requires a group from its own tenant', 409);
+    if ((group.tenantId || null) !== tenantId) {
+      throw mappingError('ENGINE_BACKSTOP_GROUP_NOT_USABLE', 'A mirrored backstop mapping requires a group from the active tenant', 409);
     }
     if (!groupId) {
       throw mappingError('ENGINE_BACKSTOP_GROUP_NOT_USABLE', 'An EnterpriseGlue authorization group is required');

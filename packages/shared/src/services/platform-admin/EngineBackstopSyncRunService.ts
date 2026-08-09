@@ -1,7 +1,9 @@
-import { IsNull, LessThanOrEqual, Not } from 'typeorm';
+import { IsNull, LessThanOrEqual, MoreThan, Not, type EntityManager, type Repository } from 'typeorm';
 import { getDataSource } from '../../db/data-source.js';
 import { EngineBackstopSyncRun } from '../../infrastructure/persistence/entities/EngineBackstopSyncRun.js';
-import { decrypt, encrypt, hash } from '../encryption.js';
+import { EngineBackstopSyncTask } from '../../infrastructure/persistence/entities/EngineBackstopSyncTask.js';
+import { Engine } from '../../infrastructure/persistence/entities/Engine.js';
+import { blindIndex, decrypt, encrypt } from '../encryption.js';
 import { generateId } from '../../utils/id.js';
 import {
   EngineBackstopProjectionSchema,
@@ -32,10 +34,31 @@ export interface CreateEngineBackstopPreviewInput {
   sourceHash: string;
   desiredHash: string;
   projection: EngineBackstopProjection;
+  connectionCommitment?: string;
   capability?: Record<string, boolean>;
   actorId?: string | null;
   now?: number;
   snapshotRetentionMs?: number;
+}
+
+export interface UpdateEngineBackstopRunInput {
+  id: string;
+  status: EngineBackstopSyncRun['status'];
+  resultHash?: string | null;
+  detailedSnapshot?: EngineBackstopSyncDetail;
+  rollbackOfRunId?: string | null;
+  observedOfRunId?: string | null;
+  completed?: boolean;
+  /** Keeps the encrypted ownership journal until all native grants are retired. */
+  retainDetailedSnapshot?: boolean;
+  now?: number;
+}
+
+export interface EngineBackstopTaskLeaseFence {
+  taskId: string;
+  leaseId: string;
+  /** The task may fence a linked source receipt during rollback finalization. */
+  taskRunId?: string;
 }
 
 function optionalId(value?: string | null): string | null {
@@ -49,7 +72,7 @@ function requiredHash(value: string, field: string): string {
 }
 
 function opaqueReference(prefix: string, value: string): string {
-  return `${prefix}-${hash(value).slice(0, 24)}`;
+  return `${prefix}-${blindIndex(`engine-backstop:${prefix}`, value).slice(0, 24)}`;
 }
 
 function byteLength(value: string): number {
@@ -136,6 +159,33 @@ function summaryFor(run: EngineBackstopSyncRun, now = Date.now()): EngineBacksto
   });
 }
 
+function updateValues(input: UpdateEngineBackstopRunInput, now: number) {
+  return {
+    status: input.status,
+    ...(input.resultHash === undefined ? {} : { resultHash: input.resultHash === null ? null : requiredHash(input.resultHash, 'Result hash') }),
+    ...(input.detailedSnapshot === undefined ? {} : { encryptedDetailedSnapshot: encryptedDetail(input.detailedSnapshot) }),
+    ...(input.rollbackOfRunId === undefined ? {} : { rollbackOfRunId: optionalId(input.rollbackOfRunId) }),
+    ...(input.observedOfRunId === undefined ? {} : { observedOfRunId: optionalId(input.observedOfRunId) }),
+    ...(input.completed ? { completedAt: now } : {}),
+    ...(input.retainDetailedSnapshot === true
+      ? { detailedSnapshotExpiresAt: null }
+      : input.retainDetailedSnapshot === false
+        ? { detailedSnapshotExpiresAt: now + DEFAULT_ENGINE_BACKSTOP_SNAPSHOT_RETENTION_MS }
+        : {}),
+    updatedAt: now,
+  };
+}
+
+async function updateRunInRepository(repository: Repository<EngineBackstopSyncRun>, input: UpdateEngineBackstopRunInput, now: number): Promise<EngineBackstopSyncRunSummary | null> {
+  const id = input.id.trim();
+  const current = await repository.findOne({ where: { id } });
+  if (!current) return null;
+  const values = updateValues(input, now);
+  const updated = await repository.update({ id }, values);
+  if (updated.affected !== 1) return null;
+  return summaryFor({ ...current, ...values } as EngineBackstopSyncRun, now);
+}
+
 /** Persists sanitized preview receipts; native operations are handled separately. */
 export class EngineBackstopSyncRunService {
   async createPreview(input: CreateEngineBackstopPreviewInput): Promise<EngineBackstopSyncRunSummary> {
@@ -161,7 +211,11 @@ export class EngineBackstopSyncRunService {
       capabilityJson: JSON.stringify(input.capability || {}),
       countsJson: JSON.stringify(countsFor(classifications, projection.desiredGrants.length)),
       classificationsJson,
-      encryptedDetailedSnapshot: encryptedDetail({ version: 1, projection }),
+      encryptedDetailedSnapshot: encryptedDetail({
+        version: 1,
+        projection,
+        ...(input.connectionCommitment ? { connectionCommitment: requiredHash(input.connectionCommitment, 'Connection commitment') } : {}),
+      }),
       detailedSnapshotExpiresAt: now + retention,
       rollbackOfRunId: null,
       observedOfRunId: null,
@@ -170,7 +224,15 @@ export class EngineBackstopSyncRunService {
       createdAt: now,
       updatedAt: now,
     };
-    await (await getDataSource()).getRepository(EngineBackstopSyncRun).insert(run);
+    const dataSource = await getDataSource();
+    await dataSource.transaction(async (manager) => {
+      const engineClaim = await manager.getRepository(Engine).update(
+        { id: engineId, lifecycleStatus: 'active' },
+        { id: engineId },
+      );
+      if (engineClaim.affected !== 1) throw new Error('Backstop previews require an active engine');
+      await manager.getRepository(EngineBackstopSyncRun).insert(run);
+    });
     return summaryFor(run as EngineBackstopSyncRun, now);
   }
 
@@ -193,6 +255,25 @@ export class EngineBackstopSyncRunService {
     return runs.map(summaryFor);
   }
 
+  async getLatestSuccessfulApply(input: { engineId: string; tenantId?: string | null; excludeRunId?: string | null }): Promise<EngineBackstopSyncRunSummary | null> {
+    const engineId = input.engineId.trim();
+    if (!engineId) throw new Error('Engine id is required');
+    const tenantId = optionalId(input.tenantId);
+    const excludeRunId = optionalId(input.excludeRunId);
+    const run = await (await getDataSource()).getRepository(EngineBackstopSyncRun).findOne({
+      where: {
+        engineId,
+        tenantId: tenantId === null ? IsNull() : tenantId,
+        status: 'succeeded',
+        rollbackOfRunId: IsNull(),
+        observedOfRunId: IsNull(),
+        ...(excludeRunId ? { id: Not(excludeRunId) } : {}),
+      },
+      order: { completedAt: 'DESC', id: 'DESC' },
+    });
+    return run ? summaryFor(run) : null;
+  }
+
   /** Caller must enforce the dedicated native-detail permission before use. */
   async getDetailedSnapshot(id: string, now = Date.now()): Promise<EngineBackstopSyncDetail | null> {
     const run = await (await getDataSource()).getRepository(EngineBackstopSyncRun).findOne({ where: { id: id.trim() } });
@@ -200,23 +281,30 @@ export class EngineBackstopSyncRunService {
     return EngineBackstopSyncDetailSchema.parse(JSON.parse(decrypt(run.encryptedDetailedSnapshot)));
   }
 
-  async updateRun(input: { id: string; status: EngineBackstopSyncRun['status']; resultHash?: string | null; detailedSnapshot?: EngineBackstopSyncDetail; rollbackOfRunId?: string | null; observedOfRunId?: string | null; completed?: boolean; now?: number }): Promise<EngineBackstopSyncRunSummary | null> {
-    const id = input.id.trim();
-    const repository = (await getDataSource()).getRepository(EngineBackstopSyncRun);
-    const current = await repository.findOne({ where: { id } });
-    if (!current) return null;
+  async updateRun(input: UpdateEngineBackstopRunInput): Promise<EngineBackstopSyncRunSummary | null> {
     const now = input.now ?? Date.now();
-    const values = {
-      status: input.status,
-      ...(input.resultHash === undefined ? {} : { resultHash: input.resultHash === null ? null : requiredHash(input.resultHash, 'Result hash') }),
-      ...(input.detailedSnapshot === undefined ? {} : { encryptedDetailedSnapshot: encryptedDetail(input.detailedSnapshot) }),
-      ...(input.rollbackOfRunId === undefined ? {} : { rollbackOfRunId: optionalId(input.rollbackOfRunId) }),
-      ...(input.observedOfRunId === undefined ? {} : { observedOfRunId: optionalId(input.observedOfRunId) }),
-      ...(input.completed ? { completedAt: now } : {}),
-      updatedAt: now,
-    };
-    await repository.update({ id }, values);
-    return summaryFor({ ...current, ...values } as EngineBackstopSyncRun, now);
+    return updateRunInRepository((await getDataSource()).getRepository(EngineBackstopSyncRun), input, now);
+  }
+
+  /**
+   * Claims the current unexpired task lease and mutates its run in one database
+   * transaction. A superseded worker therefore cannot overwrite a successor's
+   * progress receipt or final status after its last heartbeat.
+   */
+  async updateRunWithTaskLease(input: UpdateEngineBackstopRunInput & EngineBackstopTaskLeaseFence): Promise<EngineBackstopSyncRunSummary | null> {
+    const dataSource = await getDataSource();
+    const now = input.now ?? Date.now();
+    return dataSource.transaction(async (manager: EntityManager) => {
+      const taskClaim = await manager.getRepository(EngineBackstopSyncTask).update({
+        id: input.taskId.trim(),
+        runId: (input.taskRunId || input.id).trim(),
+        status: 'running',
+        leaseId: input.leaseId.trim(),
+        leaseExpiresAt: MoreThan(now),
+      }, { updatedAt: now });
+      if (taskClaim.affected !== 1) return null;
+      return updateRunInRepository(manager.getRepository(EngineBackstopSyncRun), input, now);
+    });
   }
 
   async purgeExpiredDetailedSnapshots(now = Date.now()): Promise<number> {

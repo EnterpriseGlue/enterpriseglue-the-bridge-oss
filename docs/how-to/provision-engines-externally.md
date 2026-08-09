@@ -16,7 +16,7 @@ group access to the engine. For those independent controls, see
 
 These contracts have the same persisted engine-tenancy behavior on
 PostgreSQL, MySQL, SQL Server, Oracle, and Spanner. The supported adapter
-matrix covers clean install, all four upgrade baselines, retry, schema
+matrix covers clean install, all five upgrade baselines, retry, schema
 equivalence, the real mapping transaction, rollback, and cleanup. See the
 [database qualification runbook](../development/engine-tenancy-database-qualification.md)
 for its exact scope and evidence.
@@ -249,6 +249,13 @@ as inactive evidence while removing every direct engine/runtime assignment,
 active mapping, active inventory record, Engine Set materialization, Runtime
 Resource Set materialization, and active deployment target.
 
+If the engine has used `mirrored_engine_backstop`, first retry or roll back all
+backstop work until there are no queued/running tasks, owned native grants, or
+pending native side effects. The decommission request returns a conflict and
+makes no lifecycle or assignment change while any such evidence remains.
+After retirement is complete, decommission deactivates backstop mappings but
+preserves the engine plus its run/task receipts for audit and recovery.
+
 `TEN-API-012`: runtime validation and OpenAPI use the same strict external
 decommission request schema.
 
@@ -267,7 +274,8 @@ curl --fail-with-body \
 
 After decommission, verify the lifecycle status, zero active mappings and
 inventory rows, empty materializations, denied connection tests, denied
-already-authenticated sessions, and retained sanitized audit history. If the
+already-authenticated sessions, zero retained native ownership/pending state,
+and retained sanitized audit and backstop history. If the
 owning system registers the same `externalId` again, EnterpriseGlue creates a
 new active engine with a new stable engine ID; it does not update the retired
 row. Update downstream references to the new ID.

@@ -4,6 +4,7 @@ import { ConfigBundleIdentityReplayTask } from '@enterpriseglue/shared/infrastru
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { ssoNormalizedIdentityService } from './SsoNormalizedIdentityService.js';
 import { ssoSyncDiagnosticsService } from './SsoSyncDiagnosticsService.js';
+import { operatorSafeConfigBundleFailure } from './ConfigBundleSafeDiagnostics.js';
 
 const ACTIVE_STATUSES: Array<ConfigBundleIdentityReplayTask['status']> = ['queued', 'running'];
 const DEFAULT_PAGE_LIMIT = 500;
@@ -186,7 +187,7 @@ class ConfigBundleIdentityReplayTaskService {
         const retryAt = Date.now() + retryDelay(attempts);
         await repo.update({ id: candidate.id, leaseId }, {
           status: 'queued', leaseId: null, leaseExpiresAt: null, attempts,
-          nextAttemptAt: retryAt, lastError: error instanceof Error ? error.message.slice(0, 2000) : String(error).slice(0, 2000), updatedAt: Date.now(),
+          nextAttemptAt: retryAt, lastError: operatorSafeConfigBundleFailure('identity_replay'), updatedAt: Date.now(),
         });
         await ssoSyncDiagnosticsService.failRun(candidate.syncRunId, error, {
           tenantId: candidate.tenantId,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-const { camundaGet } = vi.hoisted(() => ({ camundaGet: vi.fn() }));
+const { camundaGet, blindIndex } = vi.hoisted(() => ({ camundaGet: vi.fn(), blindIndex: vi.fn(() => 'd'.repeat(64)) }));
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({ camundaGet }));
+vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({ blindIndex }));
 import {
   CAMUNDA_NATIVE_GRANT_MAPPING_CATALOG_VERSION,
   CamundaNativeGrantInventoryService,
@@ -40,6 +41,7 @@ describe('CamundaNativeGrantInventoryService', () => {
     expect(readPage).toHaveBeenCalledTimes(2);
     expect(result.authorizations.map((authorization) => authorization.id)).toEqual(['authorization-a', 'authorization-b']);
     expect(result.inventoryHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(blindIndex).toHaveBeenCalledWith('camunda-native-inventory-v1', expect.stringContaining('authorization-a'));
     expect(result.truncated).toBe(false);
   });
 

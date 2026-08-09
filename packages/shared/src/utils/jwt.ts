@@ -20,6 +20,8 @@ export interface JwtPayload {
   principalType?: 'user';
   principalId?: string;
   authSessionVersion?: number;
+  /** Marks a break-glass session that must retain live platform-administrator membership. */
+  recovery?: 'platform_administrator';
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
   tenantSlug?: string;
@@ -57,11 +59,12 @@ export function normalizeUserJwtPayload(payload: JwtPayload): UserJwtPayload {
 /**
  * Generate an access token (short-lived)
  */
-export function generateAccessToken(user: User | any): string {
+export function generateAccessToken(user: User | any, options: { administratorRecovery?: boolean } = {}): string {
   const payload: JwtPayload = {
     principalType: 'user',
     principalId: user.id,
     authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
+    ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     type: 'access',
   };
 
@@ -73,11 +76,12 @@ export function generateAccessToken(user: User | any): string {
 /**
  * Generate a refresh token (long-lived)
  */
-export function generateRefreshToken(user: User | any): string {
+export function generateRefreshToken(user: User | any, options: { administratorRecovery?: boolean } = {}): string {
   const payload: JwtPayload = {
     principalType: 'user',
     principalId: user.id,
     authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
+    ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     type: 'refresh',
   };
 

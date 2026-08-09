@@ -310,7 +310,7 @@ corepack pnpm@11.0.8 run test:saml:local-rehearsal
 ```
 
 As with OIDC, this is local protocol and browser-flow evidence only. It does
-not authorize a legacy-provider cutover or compatibility-path removal.
+not replace customer production acceptance against that customer's IdP.
 
 ### Live local direct-LDAP sign-in
 
@@ -335,7 +335,7 @@ corepack pnpm@11.0.8 run test:ldap:local-rehearsal
 This lane accepts only local browser targets and a Docker-local LDAP host. It
 does not print directory credentials, bound secrets, certificates, cookies, or
 tokens. Like OIDC and SAML, it is local protocol/browser evidence only and
-does not authorize compatibility-path removal or a deployed-provider cutover.
+does not replace customer production acceptance against that customer's IdP.
 When the active compose environment already exports `ADMIN_EMAIL` and
 `ADMIN_PASSWORD`, the runner uses those values; it loads the disposable
 `.local/docker/env/oidc-rehearsal.env` fallback only when no administrator
@@ -366,12 +366,14 @@ database, so `localPassword: auto` exposes the ordinary local form. For a
 local stack that keeps SSO enabled, test the canonical administrator only at
 `/admin-recovery`; a query parameter on `/login` cannot bypass login policy.
 The backend checks active local credentials and canonical Platform
-Administrator membership on every recovery attempt.
+Administrator membership on every recovery attempt. Removing that membership
+also invalidates access and refresh tokens already issued to the recovery
+session; keep the browser open and prove the next request and refresh fail.
 
 The Access Control smoke also evaluates one catalog platform permission for the
 authenticated local administrator through the Effective Access UI. This proves
-the local evaluator path; it does not replace representative external-provider
-sign-in evidence required for a legacy-provider cutover.
+the local evaluator path; it does not replace representative customer-provider
+sign-in and authorization evidence in the target environment.
 
 When no existing disposable account is available, the local Compose stack can
 run the equivalent smoke with a temporary canonical administrator fixture. It

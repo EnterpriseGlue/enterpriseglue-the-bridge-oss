@@ -77,4 +77,40 @@ describe('configBundleRemoteSourceService', () => {
     await expect(configBundleRemoteSourceService.import('https://raw.githubusercontent.com/acme/config/main/bundle.json')).rejects.toThrow('exceeds the 1 MB limit');
     await expect(configBundleRemoteSourceService.import('https://raw.githubusercontent.com/acme/config/main/bundle.json')).rejects.toThrow('not a valid bundle envelope');
   });
+
+  it('cancels non-success and declared oversized responses without reading their bodies', async () => {
+    const failedCancel = vi.fn().mockResolvedValue(undefined);
+    const oversizedCancel = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, body: { cancel: failedCancel } })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: vi.fn((name: string) => name === 'content-length' ? String(1024 * 1024 + 1) : null) },
+        body: { cancel: oversizedCancel },
+      }));
+
+    await expect(configBundleRemoteSourceService.import('https://raw.githubusercontent.com/acme/config/main/bundle.json')).rejects.toThrow('request failed (503)');
+    await expect(configBundleRemoteSourceService.import('https://raw.githubusercontent.com/acme/config/main/bundle.json')).rejects.toThrow('exceeds the 1 MB limit');
+    expect(failedCancel).toHaveBeenCalledTimes(1);
+    expect(oversizedCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops a chunked remote bundle as soon as the streaming limit is exceeded', async () => {
+    const cancel = vi.fn().mockResolvedValue(undefined);
+    const releaseLock = vi.fn();
+    const read = vi.fn()
+      .mockResolvedValueOnce({ done: false, value: new Uint8Array(1024 * 1024) })
+      .mockResolvedValueOnce({ done: false, value: new Uint8Array(1) });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: vi.fn().mockReturnValue(null) },
+      body: { getReader: () => ({ read, cancel, releaseLock }) },
+    }));
+
+    await expect(configBundleRemoteSourceService.import('https://raw.githubusercontent.com/acme/config/main/bundle.json')).rejects.toThrow('exceeds the 1 MB limit');
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+  });
 });

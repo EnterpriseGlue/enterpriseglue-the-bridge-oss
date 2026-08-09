@@ -18,9 +18,10 @@ engine that was added through the UI or an external registration API.
 
 ## Prerequisites
 
-- The engine is a reachable `camunda7` engine with active runtime inventory.
-- Its tenancy diagnostics are healthy. A shared engine needs resolved runtime
-  tenants for every imported process/decision resource.
+- The engine is a reachable, active, **dedicated** `camunda7` engine owned by
+  the active EnterpriseGlue tenant, with active runtime inventory. Version
+  0.11 rejects shared-engine migration before reading or retaining native
+  authorization inventory.
 - The operator has native-grant preview, sensitive-detail, draft, configuration
   preview, and configuration apply permissions. Sensitive detail is separate
   because it can reveal native group identifiers.
@@ -90,7 +91,7 @@ expect expired native group or resource identifiers to be recoverable.
 ## Stop conditions
 
 Do not apply when an inventory is truncated, a resource is unresolved or
-ambiguous, a shared-engine tenant is unresolved, an ownership conflict is
+ambiguous, the engine is shared or outside the active tenant, an ownership conflict is
 reported, a draft/rollback hash changes, or any expected Effective Access deny
 case is allowed. Native Camunda access can remain in place as a separately
 governed direct-access path during this migration.

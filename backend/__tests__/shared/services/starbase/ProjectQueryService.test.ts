@@ -75,6 +75,7 @@ describe('ProjectQueryService', () => {
     const result = await projectQueryService.createProject({
       name: 'Project One',
       ownerId: 'user-1',
+      tenantId: 'tenant-default',
       preparedImport,
     });
 
@@ -82,6 +83,7 @@ describe('ProjectQueryService', () => {
       id: 'project-1',
       name: 'Project One',
       ownerId: 'user-1',
+      tenantId: 'tenant-default',
       createdAt: 123456,
       updatedAt: 123456,
     });
@@ -112,6 +114,7 @@ describe('ProjectQueryService', () => {
       manager,
       projectId: 'project-1',
       userId: 'user-1',
+      tenantId: 'tenant-default',
       importData: preparedImport,
     });
     expect(result).toEqual({

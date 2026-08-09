@@ -28,3 +28,23 @@ export async function getActivePlatformAdministratorUserIds(
       .map((membership) => String(membership.userId))
   );
 }
+
+/**
+ * Claims one current administrator-membership row for the surrounding
+ * transaction. The no-op update serializes administrator removal with
+ * break-glass session issue across replicas.
+ */
+export async function claimActivePlatformAdministratorMembership(
+  userId: string,
+  manager: EntityManager,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const repo = manager.getRepository(AuthzGroupMembership);
+  const memberships = await repo.find({ where: { groupId: PLATFORM_ADMINISTRATORS_GROUP_ID, userId } });
+  for (const membership of memberships) {
+    if (membership.expiresAt !== null && Number(membership.expiresAt) <= now) continue;
+    const claim = await repo.update({ id: membership.id, updatedAt: membership.updatedAt }, { updatedAt: membership.updatedAt });
+    if (claim.affected === 1) return true;
+  }
+  return false;
+}

@@ -29,8 +29,9 @@ credential.
   `engine:instance:view` at an exact runtime resource or runtime-resource-set
   scope.
 - The native engine group already contains the intended direct users.
-- The configured engine service identity may call the engine's authorization
-  create, id-specific read, and id-specific delete REST endpoints.
+- The configured engine service identity may call only the engine's
+  authorization create, strictly filtered exact-match recovery read,
+  id-specific read, and id-specific delete REST endpoints.
 
 ## Workflow
 
@@ -106,13 +107,22 @@ credential.
    desired projection changed, it rejects the apply and requires a new preview.
 
 4. Verify the sanitized status and, for a suitably authorized operator, the
-   short-lived detail receipt.
+   detail receipt.
 
    ```text
    GET /engines-api/engines/{engineId}/backstop/status
    GET /engines-api/engines/{engineId}/backstop/sync/{runId}
    GET /engines-api/engines/{engineId}/backstop/sync/{runId}/detail
    ```
+
+   Full encrypted preview/projection and classification detail expires within
+   30 days. If native work has started, EnterpriseGlue replaces that full
+   payload with a minimal encrypted ownership and pending-side-effect journal.
+   That journal has no expiry while it contains a tracked native grant,
+   pending create/delete, or ambiguous side effect; it is the evidence used by
+   retry, drift check, superseding apply, and rollback. Sanitized hashes,
+   counts, and opaque classifications remain in the ordinary run receipt and
+   never reveal native identifiers.
 
 5. Run a read-only drift check before relying on direct native access and after
    any suspected native-side change. It reads only the authorization IDs in
@@ -140,7 +150,9 @@ credential.
 
 ## Rollback
 
-Rollback requires a successful run with retained encrypted ownership evidence.
+Rollback requires a successful run with its minimal encrypted ownership
+journal. That journal is retained beyond the 30-day full-preview window until
+all backstop-owned native grants are retired.
 It deletes only authorization IDs that EnterpriseGlue recorded as created by
 that run. It never searches for, edits, or deletes matching customer-created
 engine authorizations.
@@ -152,9 +164,32 @@ POST /engines-api/engines/{engineId}/backstop/sync/{runId}/rollback
 }
 ```
 
-If the ownership evidence has expired, the operation stops. Do not replace it
-with a wildcard or manually inferred delete; investigate the native grants and
-recreate an explicit reviewed mapping instead.
+After all tracked grants and pending side effects have been retired, the empty
+journal returns to bounded retention and may be purged. If a required
+ownership journal is unexpectedly missing or unreadable, the operation stops.
+Do not replace it with a wildcard or manually inferred delete; investigate the
+exact native grants and restore explicit ownership evidence through the
+reviewed recovery procedure before any further synchronization.
+
+## Before decommissioning or deleting the engine
+
+Retire the native backstop before changing the engine lifecycle:
+
+1. Let every queued or running backstop task finish, or retry the failed task.
+2. Roll back the last successful apply, or apply an empty reviewed projection,
+   until the receipt reports zero owned grants and no pending create/delete.
+3. Verify a final drift check and the backstop status show no unresolved native
+   side effect.
+4. Only then decommission the engine through the portal, external API, or
+   configuration bundle.
+
+Decommissioning is rejected while a task or non-expiring ownership/pending
+side-effect journal remains. A successful decommission preserves the engine
+and its run/task evidence and deactivates its backstop mappings. Physical
+`DELETE /engines-api/engines/{engineId}` is more restrictive: it is available
+only for an engine that has never created a backstop mapping, preview/run, or
+task. Once backstop history exists, retire native grants and decommission the
+engine instead; EnterpriseGlue does not erase that ownership evidence.
 
 ## What is intentionally not mirrored
 

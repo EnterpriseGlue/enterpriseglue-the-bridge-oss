@@ -110,11 +110,12 @@ fi
 provider_payload="$(jq -nc \
   --arg key "$provider_key" \
   --arg entityId "$entity_id" \
+  --arg idpEntityId "$issuer_url" \
   --arg callbackUrl "$callback_url" \
   --arg ssoUrl "${issuer_url%/}/protocol/saml" \
   --arg metadataUrl "$metadata_url" \
   --arg signingCertificateRef "$certificate_ref" \
-  '{key:$key,protocol:"saml",isEnabled:true,authenticationMode:"direct",configuration:{entityId:$entityId,callbackUrl:$callbackUrl,ssoUrl:$ssoUrl,metadataUrl:$metadataUrl,signingCertificateRef:$signingCertificateRef,signatureAlgorithm:"sha256",nameIdAttribute:"nameID",emailAttribute:"email",groupAttribute:"groups"}}')"
+  '{key:$key,protocol:"saml",isEnabled:true,authenticationMode:"direct",configuration:{entityId:$entityId,idpEntityId:$idpEntityId,callbackUrl:$callbackUrl,ssoUrl:$ssoUrl,metadataUrl:$metadataUrl,signingCertificateRef:$signingCertificateRef,signatureAlgorithm:"sha256",nameIdAttribute:"nameID",emailAttribute:"email",groupAttribute:"groups"},sync:{triggers:["login","manual"],requiredForLogin:true,incompleteEntitlements:"fail_closed",connectorCapability:"claim_only",scheduled:false}}')"
 all_cookies="$session_cookies;$csrf_cookie"
 provider_status="$(curl "${curl_args[@]}" --output /dev/null --write-out '%{http_code}' \
   --header 'Content-Type: application/json' \

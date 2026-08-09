@@ -6,6 +6,7 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
 import { AppError, Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
 import { secretResolver } from './platform-admin/SecretResolver.js'
+import { blindIndex } from './encryption.js'
 import { getBpmnEngineRequestContext } from './bpmn-engine-request-context.js'
 import { logAudit } from './audit.js'
 import type {
@@ -132,9 +133,10 @@ const TRANSIENT_ENGINE_STATUSES = new Set([429, 502, 503, 504])
  * their existing local-engine ergonomics unless enforcement is opted in.
  */
 function isEngineEndpointPolicyEnforced(): boolean {
+  if (process.env.NODE_ENV === 'production') return true
   if (process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY === 'true') return true
   if (process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY === 'false') return false
-  return process.env.NODE_ENV === 'production'
+  return false
 }
 
 function isInsecureEngineHttpAllowed(): boolean {
@@ -153,10 +155,69 @@ function isAllowedEngineEndpointHost(host: string, allowedHosts: string[]): bool
   return allowedHosts.some((pattern) => {
     if (pattern.startsWith('*.')) {
       const suffix = pattern.slice(2)
-      return suffix.length > 0 && normalizedHost.endsWith(`.${suffix}`)
+      const labels = suffix.split('.')
+      // Keep wildcards below a narrow organizational suffix. This rejects
+      // public or multi-tenant boundaries such as *.com, *.co.uk,
+      // *.github.io, *.appspot.com, and *.cloudfront.net.
+      const narrowSuffix = labels.length >= 3
+        && labels.every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))
+      return narrowSuffix && normalizedHost.endsWith(`.${suffix}`)
     }
+    if (pattern.includes('*')) return false
     return normalizedHost === pattern
   })
+}
+
+function parseIpv4(host: string): number[] | null {
+  const parts = host.split('.')
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return null
+  const values = parts.map(Number)
+  return values.some((value) => value < 0 || value > 255) ? null : values
+}
+
+function isPrivateIpv4Literal(host: string): boolean {
+  const octets = parseIpv4(host)
+  if (!octets) return false
+  const [first, second] = octets
+  return first === 0 || first === 10 || first === 127
+    || (first === 100 && second >= 64 && second <= 127)
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+    || (first === 198 && (second === 18 || second === 19))
+    || first >= 224
+}
+
+function ipv4MappedIpv6Octets(host: string): number[] | null {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '')
+  if (!normalized.startsWith('::ffff:')) return null
+  const tail = normalized.slice('::ffff:'.length)
+  const dotted = parseIpv4(tail)
+  if (dotted) return dotted
+  const groups = tail.split(':')
+  if (groups.length !== 2 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) return null
+  const high = Number.parseInt(groups[0], 16)
+  const low = Number.parseInt(groups[1], 16)
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff]
+}
+
+function isPrivateEngineHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  const mapped = ipv4MappedIpv6Octets(normalized)
+  return normalized === 'localhost' || normalized === 'host.docker.internal' || normalized.endsWith('.local')
+    || (!normalized.includes('.') && !normalized.includes(':'))
+    || isPrivateIpv4Literal(normalized)
+    || normalized === '::' || normalized === '::1' || normalized.startsWith('fe80:')
+    || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('ff')
+    || (mapped !== null && isPrivateIpv4Literal(mapped.join('.')))
+}
+
+function isEngineMetadataHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  const mapped = ipv4MappedIpv6Octets(normalized)
+  return normalized === 'metadata' || normalized === 'metadata.google.internal'
+    || normalized === '169.254.169.254' || normalized === 'fd00:ec2::254'
+    || mapped?.join('.') === '169.254.169.254'
 }
 
 async function boundEngineResponseBody(
@@ -277,7 +338,18 @@ export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine en
       throw Errors.validation(`${label} must use HTTPS when endpoint policy is enforced`)
     }
     const allowedHosts = engineEndpointAllowedHosts()
-    if (!isAllowedEngineEndpointHost(parsed.hostname, allowedHosts)) {
+    if (isEngineMetadataHost(parsed.hostname)) {
+      throw Errors.validation(`${label} host is not permitted by endpoint policy`)
+    }
+    const privateHost = isPrivateEngineHost(parsed.hostname)
+    if (privateHost && process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS !== 'true') {
+      throw Errors.validation(`${label} host is private; set EG_ENGINE_ALLOW_PRIVATE_HOSTS=true and add the exact reviewed host to the allowlist`)
+    }
+    const normalizedHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+    if (privateHost && !allowedHosts.some((entry) => !entry.startsWith('*.') && entry === normalizedHost)) {
+      throw Errors.validation(`${label} private host must have an exact endpoint-policy allowlist entry`)
+    }
+    if (!privateHost && !isAllowedEngineEndpointHost(parsed.hostname, allowedHosts)) {
       throw Errors.validation(`${label} host is not permitted by endpoint policy`)
     }
   }
@@ -293,7 +365,7 @@ export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string 
   if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
 
   parsed.hostname = 'host.docker.internal'
-  return parsed.toString()
+  return validateBpmnEngineEndpointUrl(parsed.toString(), 'Engine endpoint URL').toString()
 }
 
 async function getEngine(engineId: string): Promise<EngineCfg> {
@@ -381,10 +453,12 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
 
   const cacheKey = [
     cfg.id,
+    cfg.baseUrl,
     cfg.oauthTokenUrl,
     cfg.username,
     cfg.oauthScopes || '',
     cfg.oauthAudience || '',
+    blindIndex('engine-oauth-client-secret-v1', password),
   ].join('\n')
   const cached = oauthTokenCache.get(cacheKey)
   const now = Date.now()
@@ -410,19 +484,32 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   } catch {
     throw Errors.authFailed('Engine OAuth2 token request failed')
   }
-  if (!response.ok) {
-    await response.text().catch(() => '')
-    throw Errors.authFailed(`Engine OAuth2 token request failed with status ${response.status}`)
-  }
-
-  const payload = await (await boundEngineResponseBody(response, {
+  const boundedResponse = await boundEngineResponseBody(response, {
     method: 'POST',
     path: '/oauth2/token',
     connectionMode: cfg.connectionMode,
-  })).json() as { access_token?: string; expires_in?: number }
-  if (!payload.access_token) throw Errors.authFailed('Engine OAuth2 token response did not include an access token')
+  })
+  if (!boundedResponse.ok) {
+    await boundedResponse.body?.cancel().catch(() => undefined)
+    throw Errors.authFailed(`Engine OAuth2 token request failed with status ${boundedResponse.status}`)
+  }
 
-  const expiresInMs = Math.max(60, Number(payload.expires_in || 300)) * 1000
+  const payload = await boundedResponse.json() as { access_token?: unknown; expires_in?: unknown }
+  if (
+    typeof payload.access_token !== 'string'
+    || payload.access_token.length === 0
+    || payload.access_token.length > 16 * 1024
+    || /[\r\n]/.test(payload.access_token)
+  ) {
+    throw Errors.authFailed('Engine OAuth2 token response did not include a valid access token')
+  }
+
+  const expiresInSeconds = typeof payload.expires_in === 'number'
+    && Number.isFinite(payload.expires_in)
+    && payload.expires_in > 0
+    ? Math.min(Math.max(Math.floor(payload.expires_in), 60), 3600)
+    : 300
+  const expiresInMs = expiresInSeconds * 1000
   oauthTokenCache.set(cacheKey, { token: payload.access_token, expiresAt: now + expiresInMs })
   return payload.access_token
 }
@@ -492,7 +579,7 @@ export async function fetchBpmnEngineEndpoint(
       response = await fetch(connection.url, {
         ...init,
         method,
-        redirect: init?.redirect || 'error',
+        redirect: 'error',
         headers: { ...connection.headers, ...(init?.headers || {}) },
         signal,
       })

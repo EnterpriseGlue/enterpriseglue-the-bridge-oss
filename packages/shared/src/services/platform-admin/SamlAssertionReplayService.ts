@@ -10,7 +10,8 @@ const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 export interface ConsumeSamlAssertionInput {
   providerId: string;
   tenantId?: string | null;
-  samlResponse: string;
+  /** Canonical AuthnRequest id already validated against the signed assertion. */
+  requestId: string;
   now?: number;
   ttlMs?: number;
 }
@@ -26,18 +27,21 @@ function normalizeTenantId(tenantId?: string | null): string | null {
   return tenantId?.trim() || null;
 }
 
-/** Stores a short-lived hash of a consumed SAML response and rejects replay. */
+/** Stores a short-lived provider-scoped hash of a consumed AuthnRequest id. */
 class SamlAssertionReplayService {
   async consume(input: ConsumeSamlAssertionInput): Promise<void> {
     const providerId = input.providerId.trim();
     if (!providerId) throw Errors.validation('Identity provider id is required');
-    if (!input.samlResponse) throw Errors.validation('SAML response is required');
+    const requestId = input.requestId.trim();
+    if (!/^_[A-Za-z0-9_-]{32,160}$/.test(requestId)) throw Errors.validation('A valid SAML request id is required');
 
     const now = input.now ?? Date.now();
     const ttlMs = input.ttlMs ?? DEFAULT_REPLAY_TTL_MS;
     if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw Errors.validation('SAML replay TTL must be positive');
 
-    const responseHash = createHash('sha256').update(input.samlResponse, 'utf8').digest('hex');
+    // Hash the canonical request identifier rather than the base64/XML wrapper:
+    // equivalent encodings of one signed assertion must share one replay key.
+    const responseHash = createHash('sha256').update(requestId, 'utf8').digest('hex');
     const repository = (await getDataSource()).getRepository(SamlAssertionReplay);
     await repository.delete({ expiresAt: LessThanOrEqual(now) });
 

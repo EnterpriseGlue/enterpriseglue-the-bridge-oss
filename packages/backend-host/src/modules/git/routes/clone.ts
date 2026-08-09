@@ -24,6 +24,7 @@ import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import {
   CloneFromGitRequestSchema,
   CloneFromGitResponseSchema,
@@ -184,10 +185,12 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(CloneFromGit
     const projectId = generateId();
     const now = unixTimestamp();
 
+    const effectiveTenantId = req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
     await projectRepo.insert({
       id: projectId,
       name: finalProjectName,
       ownerId: userId,
+      tenantId: effectiveTenantId,
       createdAt: now,
       updatedAt: now,
     });
@@ -221,7 +224,7 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(CloneFromGit
 
     await writeProjectMemberRoleAssignments(dataSource, {
       projectId,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId: effectiveTenantId,
       userId,
       roles: ['owner'],
       createdById: null,

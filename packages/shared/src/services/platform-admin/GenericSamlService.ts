@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { secretResolver } from './SecretResolver.js';
 import { classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
+import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
 
 const require = createRequire(import.meta.url);
 const nodeSaml = require('@node-saml/node-saml');
@@ -10,6 +11,7 @@ type SignatureAlgorithm = 'sha256' | 'sha512';
 
 export interface GenericSamlProviderConfiguration {
   entityId: string;
+  idpEntityId: string;
   callbackUrl: string;
   ssoUrl: string;
   signingCertificateRef: string;
@@ -27,14 +29,6 @@ export interface GenericSamlUserClaims {
   lastName: string | null;
   directoryTenantId: string | null;
   claims: Record<string, unknown>;
-}
-
-function requireHttpsUrl(value: unknown, field: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`SAML ${field} is required`);
-  let url: URL;
-  try { url = new URL(value); } catch { throw new Error(`SAML ${field} must be a valid URL`); }
-  if (url.protocol !== 'https:') throw new Error(`SAML ${field} must use HTTPS`);
-  return url.toString();
 }
 
 function required(value: unknown, field: string): string {
@@ -71,8 +65,9 @@ function configuration(raw: Record<string, unknown>): GenericSamlProviderConfigu
   const signatureAlgorithm: SignatureAlgorithm = raw.signatureAlgorithm === 'sha512' ? 'sha512' : 'sha256';
   return {
     entityId: required(raw.entityId, 'entityId'),
-    callbackUrl: requireHttpsUrl(raw.callbackUrl, 'callbackUrl'),
-    ssoUrl: requireHttpsUrl(raw.ssoUrl, 'ssoUrl'),
+    idpEntityId: required(raw.idpEntityId, 'idpEntityId'),
+    callbackUrl: validateIdentityProviderCallbackUrl(required(raw.callbackUrl, 'callbackUrl'), 'saml').toString(),
+    ssoUrl: validateIdentityProviderEndpointUrl(required(raw.ssoUrl, 'ssoUrl'), 'SAML ssoUrl', ['https:']).toString(),
     signingCertificateRef: required(raw.signingCertificateRef, 'signingCertificateRef'),
     signatureAlgorithm,
     nameIdAttribute: typeof raw.nameIdAttribute === 'string' ? raw.nameIdAttribute.trim() || undefined : undefined,
@@ -93,7 +88,10 @@ function records(value: unknown): Array<Record<string, unknown>> {
  * signed response to our configured ACS URL here, after signature validation
  * and without including raw assertion data in any error.
  */
-function requireExpectedRecipient(profile: SamlProfile, callbackUrl: string): void {
+function requireExpectedRecipientAndRequest(profile: SamlProfile, callbackUrl: string, expectedRequestId: string): void {
+  if (profile.inResponseTo !== expectedRequestId) {
+    throw new Error('SAML response does not match the issued authentication request');
+  }
   const getAssertion = profile.getAssertion;
   if (typeof getAssertion !== 'function') throw new Error('SAML response did not include a validated assertion');
   const assertion = getAssertion();
@@ -109,9 +107,31 @@ function requireExpectedRecipient(profile: SamlProfile, callbackUrl: string): vo
   if (!recipients.some((recipient) => recipient === callbackUrl)) {
     throw new Error('SAML response recipient does not match the callback URL');
   }
+  const requestIds = confirmations
+    .flatMap((data) => records(data.$))
+    .map((attributes) => attributes.InResponseTo)
+    .filter((requestId): requestId is string => typeof requestId === 'string' && Boolean(requestId));
+  if (!requestIds.some((requestId) => requestId === expectedRequestId)) {
+    throw new Error('SAML subject confirmation does not match the issued authentication request');
+  }
 }
 
-function client(raw: Record<string, unknown>): { config: GenericSamlProviderConfiguration; saml: any } {
+function requestCorrelationCache(expectedRequestId: string) {
+  return {
+    async saveAsync(key: string, value: string) {
+      return key === expectedRequestId ? { value, createdAt: Date.now() } : null;
+    },
+    async getAsync(key: string) {
+      return key === expectedRequestId ? new Date().toISOString() : null;
+    },
+    async removeAsync(key: string | null) {
+      return key === expectedRequestId ? key : null;
+    },
+  };
+}
+
+function client(raw: Record<string, unknown>, expectedRequestId: string): { config: GenericSamlProviderConfiguration; saml: any } {
+  if (!/^_[A-Za-z0-9_-]{32,160}$/.test(expectedRequestId)) throw new Error('SAML authentication request id is invalid');
   const config = configuration(raw);
   const certificate = secretResolver.resolveStored(config.signingCertificateRef.startsWith('ref:') ? config.signingCertificateRef : `ref:${config.signingCertificateRef}`);
   if (!certificate) throw new Error('SAML signing certificate reference is unavailable');
@@ -121,9 +141,13 @@ function client(raw: Record<string, unknown>): { config: GenericSamlProviderConf
       issuer: config.entityId,
       callbackUrl: config.callbackUrl,
       entryPoint: config.ssoUrl,
+      idpIssuer: config.idpEntityId,
       idpCert: normalizePemCertificate(certificate),
       signatureAlgorithm: config.signatureAlgorithm,
-      validateInResponseTo: 'never',
+      validateInResponseTo: 'always',
+      requestIdExpirationPeriodMs: 10 * 60 * 1000,
+      cacheProvider: requestCorrelationCache(expectedRequestId),
+      generateUniqueId: () => expectedRequestId,
       acceptedClockSkewMs: 300_000,
       wantAssertionsSigned: true,
       wantAuthnResponseSigned: true,
@@ -132,21 +156,22 @@ function client(raw: Record<string, unknown>): { config: GenericSamlProviderConf
 }
 
 export class GenericSamlService {
-  async createAuthorizationRequest(raw: Record<string, unknown>, relayState: string): Promise<{ url: string; entryPoint: string }> {
+  async createAuthorizationRequest(raw: Record<string, unknown>, relayState: string, requestId: string): Promise<{ url: string; entryPoint: string }> {
     try {
-      const { config, saml } = client(raw);
+      const { config, saml } = client(raw, requestId);
       return { url: await saml.getAuthorizeUrlAsync(relayState, undefined, {}), entryPoint: config.ssoUrl };
     } catch (error) { throw classifyIdentityProviderFailure(error); }
   }
 
-  async validatePostResponse(raw: Record<string, unknown>, samlResponse: string): Promise<SamlProfile> {
+  async validatePostResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string): Promise<SamlProfile> {
     try {
-      const { config, saml } = client(raw);
+      const { config, saml } = client(raw, expectedRequestId);
       const { profile, loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
       if (loggedOut) throw new Error('Unexpected SAML logout response');
       if (!profile) throw new Error('SAML assertion did not contain a profile');
       const normalizedProfile = profile as SamlProfile;
-      requireExpectedRecipient(normalizedProfile, config.callbackUrl);
+      if (normalizedProfile.issuer !== config.idpEntityId) throw new Error('SAML assertion issuer does not match the configured identity provider');
+      requireExpectedRecipientAndRequest(normalizedProfile, config.callbackUrl, expectedRequestId);
       return normalizedProfile;
     } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
   }

@@ -16,7 +16,7 @@ The complete denominator is:
 
 - five database adapters;
 - seven required stages per adapter, or **35/35 stage cells**;
-- four supported upgrade baselines per adapter, or **20/20 baseline
+- five supported upgrade baselines per adapter, or **25/25 baseline
   observations**; and
 - one equivalent logical-schema fingerprint across all five adapters.
 
@@ -32,10 +32,21 @@ The required stages are:
 
 The supported baselines are the schemas immediately before the engine-tenancy
 foundation migration, the portable tenant-reference migration, the access
-governance ownership migrations, and login-experience migrations `0106` and
-`0107`. The last baseline proves deterministic duplicate-preference cleanup,
+governance ownership migrations, login-experience migrations `0106` and
+`0107`, and the external-registration/project-tenancy ownership boundary in
+`0108` and `0109`. The login baseline proves deterministic duplicate-preference cleanup,
 the portable per-scope preferred-provider unique index, removal of the obsolete
-redirect flag, and idempotent interrupted retry on all five adapters.
+redirect flag, and idempotent interrupted retry on all five adapters. Every
+clean install and supported baseline then runs through `0109`. Migration `0108` backfills
+portable non-null source-owner and active-external-id identities for external
+engine registrations and adds their two unique constraints. Qualification must
+stop on a duplicate active external id or duplicate source claim rather than
+silently selecting a registration. Migration `0109` classifies tenantless OSS
+projects, project targets, project-scoped role assignments, and project
+permission grants into `tenant-default`, recomputes canonical assignment keys,
+blocks contradictory ownership before writes, and makes Project/target tenant
+columns required. The worker runs both migrations twice to prove interrupted
+retry idempotency on every adapter.
 
 The same contract also qualifies the Camunda 7 native-grant import receipt:
 migrations `0098` and `0099` create, remove, recreate, and retry its opaque
@@ -136,13 +147,13 @@ The worker uses the canonical `runMigrations` path and the real
 `EngineTenantMappingService` transaction. It proves the engine-tenancy schema
 and service lifecycle against each adapter, including a deliberate failed
 transaction and an idempotent retry. It also verifies the native-grant receipt
-schema is equivalent after a clean install, all four applicable upgrade paths, and
+schema is equivalent after a clean install, all five applicable upgrade paths, and
 the `0098`/`0099` add/remove/retry sequence.
 
 The lane intentionally does not run unrelated application seed catalogs.
 Those have their own ownership and qualification scope. Therefore,
 **100% database qualification here means 35/35 engine-tenancy lifecycle stage
-cells, 20/20 supported-baseline observations, and one equivalent schema—not
+cells, 25/25 supported-baseline observations, and one equivalent schema—not
 100% of unrelated monorepo database behavior.**
 
 ## Stop, Roll Back, and Recover

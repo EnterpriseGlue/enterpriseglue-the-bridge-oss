@@ -27,6 +27,7 @@ import {
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
 import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import {
   CreateOnlineProjectRequestSchema,
   CreateOnlineProjectResponseSchema,
@@ -156,10 +157,12 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(Crea
     const projectId = generateId();
     const now = Date.now();
     
+    const effectiveTenantId = req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
     await projectRepo.insert({
       id: projectId,
       name: projectNameTrim,
       ownerId: userId,
+      tenantId: effectiveTenantId,
       createdAt: Math.floor(now / 1000),
       updatedAt: Math.floor(now / 1000),
     });
@@ -192,7 +195,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(Crea
 
     await writeProjectMemberRoleAssignments(dataSource, {
       projectId,
-      tenantId: req.tenant?.tenantId || null,
+      tenantId: effectiveTenantId,
       userId,
       roles: ['owner'],
       createdById: null,
@@ -204,6 +207,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(Crea
         manager: dataSource.manager,
         projectId,
         userId,
+        tenantId: effectiveTenantId,
         importData: preparedImport,
       });
     }

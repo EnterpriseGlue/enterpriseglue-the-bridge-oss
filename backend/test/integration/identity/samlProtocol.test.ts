@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
-import { MockSamlHttpsServer, MockSamlIdentityProvider } from '../../identity-mocks/index.js';
+import { MOCK_SAML_REQUEST_ID, MockSamlHttpsServer, MockSamlIdentityProvider } from '../../identity-mocks/index.js';
 
 const configuration = {
   entityId: 'enterpriseglue-ai',
-  callbackUrl: 'https://app.example.test/api/auth/providers/saml/callback',
+  idpEntityId: 'https://saml-mock.example.test',
+  callbackUrl: 'http://localhost:5173/api/auth/providers/saml/callback',
   ssoUrl: 'https://idp.example.test/sso',
   signingCertificateRef: 'EG_SAML_PROTOCOL_CERT',
   nameIdAttribute: 'urn:example:subject',
@@ -39,7 +40,8 @@ describe('loopback SAML protocol mock', () => {
     await expect(genericSamlService.validatePostResponse({
       ...configuration,
       ssoUrl: `${transport.issuer}/sso`,
-    }, response!)).resolves.toMatchObject({ nameID: 'person@example.test', role: 'operator' });
+      idpEntityId: transport.issuer,
+    }, response!, MOCK_SAML_REQUEST_ID)).resolves.toMatchObject({ nameID: 'person@example.test', role: 'operator' });
   });
 
   it('applies in-process subject and multi-valued group changes to the next browser-post assertion', async () => {
@@ -56,8 +58,8 @@ describe('loopback SAML protocol mock', () => {
     const response = html.match(/name="SAMLResponse" value="([^"]+)"/)?.[1];
     const profile = await genericSamlService.validatePostResponse({
       ...configuration,
-      ssoUrl: `${transport.issuer}/sso`,
-    }, response!);
+      ssoUrl: `${transport.issuer}/sso`, idpEntityId: transport.issuer,
+    }, response!, MOCK_SAML_REQUEST_ID);
 
     expect(profile).toMatchObject({
       nameID: 'changed@example.test',
@@ -74,7 +76,7 @@ describe('loopback SAML protocol mock', () => {
     const provider = new MockSamlIdentityProvider();
     process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
 
-    await expect(genericSamlService.validatePostResponse(configuration, provider.signedResponse(options)))
+    await expect(genericSamlService.validatePostResponse(configuration, provider.signedResponse(options), MOCK_SAML_REQUEST_ID))
       .rejects.toThrow();
   });
 
@@ -83,7 +85,7 @@ describe('loopback SAML protocol mock', () => {
     provider.setAttributes({ nameID: '', 'urn:example:email': 'NoNameId@Example.test' });
     process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
 
-    const profile = await genericSamlService.validatePostResponse(configuration, provider.signedResponse());
+    const profile = await genericSamlService.validatePostResponse(configuration, provider.signedResponse(), MOCK_SAML_REQUEST_ID);
     expect(genericSamlService.extractUserClaims(configuration, profile)).toMatchObject({
       subjectId: 'NoNameId@Example.test',
       email: 'nonameid@example.test',
@@ -94,7 +96,7 @@ describe('loopback SAML protocol mock', () => {
     const provider = new MockSamlIdentityProvider();
     process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
 
-    await expect(genericSamlService.validatePostResponse(configuration, Buffer.from('<not-saml/>').toString('base64')))
+    await expect(genericSamlService.validatePostResponse(configuration, Buffer.from('<not-saml/>').toString('base64'), MOCK_SAML_REQUEST_ID))
       .rejects.toThrow();
   });
 });

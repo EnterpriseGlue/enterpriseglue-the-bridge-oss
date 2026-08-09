@@ -25,6 +25,13 @@ describe('authorization route inventory validation', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('documents recovery failures without exposing administrator membership', () => {
+    const responses = generateOpenApi().paths['/api/auth/recovery/login'].post.responses;
+
+    expect(responses['401']?.description).toBe('Invalid credentials or recovery is unavailable');
+    expect(responses['403']).toBeUndefined();
+  });
+
   it('documents bounded Camunda native-grant receipt history with its dedicated read action', () => {
     const operation = generateOpenApi().paths['/engines-api/engines/{id}/camunda-native-grants/imports'].get;
 

@@ -58,6 +58,7 @@ export interface ApplyPreparedEngineImportInput {
   manager: EntityManager;
   projectId: string;
   userId: string;
+  tenantId: string;
   importData: PreparedEngineImport;
 }
 
@@ -250,6 +251,7 @@ export async function applyPreparedEngineImportToProject({
   manager,
   projectId,
   userId,
+  tenantId,
   importData,
 }: ApplyPreparedEngineImportInput): Promise<void> {
   const now = unixTimestamp();
@@ -301,7 +303,7 @@ export async function applyPreparedEngineImportToProject({
   } else {
     await targetRepo.insert({
       id: generateId(),
-      tenantId: null,
+      tenantId,
       projectId,
       engineId: importData.engineId,
       status: 'active',

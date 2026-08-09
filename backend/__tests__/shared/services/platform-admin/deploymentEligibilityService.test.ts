@@ -30,11 +30,12 @@ describe('deploymentEligibilityService', () => {
   } = {}) {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
-        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-default' }) };
         if (entity === Engine) return {
           findOne: vi.fn().mockResolvedValue({
             id: 'engine-1',
-            tenantId: null,
+            tenantId: 'tenant-default',
+            tenancyMode: 'dedicated',
             baseUrl: options.baseUrl ?? 'https://engine.example.test',
             type: options.engineType ?? 'camunda7',
             connectionMode: options.connectionMode ?? 'direct',
@@ -105,8 +106,8 @@ describe('deploymentEligibilityService', () => {
       projectId: 'project-1',
       engineId: 'engine-1',
     }));
-    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'manual', undefined);
-    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'ci', undefined);
+    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'manual', 'tenant-default');
+    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'ci', 'tenant-default');
   });
 
   it('denies deployment with explicit reasons when the target mode is unavailable', async () => {
@@ -254,7 +255,7 @@ describe('deploymentEligibilityService', () => {
       'project-1',
       'engine-1',
       'manual',
-      undefined,
+      'tenant-default',
     );
     expect((deploymentEligibilityService as any).evaluatePolicyGate).toHaveBeenCalledWith(
       'project:deploy',
@@ -333,7 +334,7 @@ describe('deploymentEligibilityService', () => {
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
-    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'import', undefined);
+    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'import', 'tenant-default');
     expect(result.checks.map((check) => check.id)).toEqual(expect.arrayContaining([
       'project.permission.files_create',
       'engine.permission.deploy_view',
@@ -393,6 +394,6 @@ describe('deploymentEligibilityService', () => {
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
-    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'api', undefined);
+    expect(projectEngineTargetService.hasActiveTarget).toHaveBeenCalledWith('project-1', 'engine-1', 'api', 'tenant-default');
   });
 });

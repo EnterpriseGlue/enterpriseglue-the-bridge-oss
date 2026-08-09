@@ -12,7 +12,12 @@ import type {
   ProjectEngineTargetSource as SharedProjectEngineTargetSource,
   ProjectEngineTargetStatus as SharedProjectEngineTargetStatus,
 } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
+import { ProjectEngineTargetDiagnosticsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { ProjectEngineTargetPolicyMode } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import {
+  OSS_DEFAULT_TENANT_ID,
+  normalizeTenantIdForPersistence,
+} from '@enterpriseglue/shared/authz/tenant-scope.js';
 import {
   engineTenancyVisibilityWhere,
   isEngineVisibleInTenancyContext,
@@ -114,13 +119,17 @@ export interface ProjectEngineTargetFilters {
 }
 
 function normalizeTenantId(tenantId?: string | null): string | null {
-  const normalized = tenantId?.trim();
-  return normalized || null;
+  return normalizeTenantIdForPersistence(tenantId);
+}
+
+function effectiveTenantId(tenantId?: string | null): string {
+  return normalizeTenantId(tenantId) || OSS_DEFAULT_TENANT_ID;
 }
 
 function isTenantVisible(rowTenantId: string | null | undefined, tenantId?: string | null): boolean {
   const normalizedTenantId = normalizeTenantId(tenantId);
-  return !normalizedTenantId || !rowTenantId || rowTenantId === normalizedTenantId;
+  const normalizedRowTenantId = normalizeTenantId(rowTenantId);
+  return normalizedRowTenantId === (normalizedTenantId || OSS_DEFAULT_TENANT_ID);
 }
 
 function modeAllowed(target: ProjectEngineTarget, mode: ProjectEngineTargetMode): boolean {
@@ -167,16 +176,19 @@ function parsePolicyTags(value: string | null | undefined): string[] {
 
 function stringifyDiagnostics(value: Record<string, unknown> | null | undefined): string | null | undefined {
   if (typeof value === 'undefined') return undefined;
-  return value ? JSON.stringify(value) : null;
+  if (value === null) return null;
+  const parsed = ProjectEngineTargetDiagnosticsSchema.safeParse(value);
+  if (!parsed.success) {
+    throw Errors.validation('Project-engine target diagnostics must contain only bounded, non-sensitive metadata');
+  }
+  return JSON.stringify(parsed.data);
 }
 
 function parseDiagnostics(value: string | null | undefined): Record<string, unknown> | null {
   if (!value) return null;
   try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : null;
+    const parsed = ProjectEngineTargetDiagnosticsSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
@@ -220,7 +232,9 @@ function toTargetView(
     projectName: project?.name || null,
     engineId: target.engineId,
     engineName: engine?.name || null,
-    engineBaseUrl: engine?.baseUrl || null,
+    // Project/target readers do not implicitly receive engine connection
+    // settings. Those remain behind the dedicated engine-detail permission.
+    engineBaseUrl: null,
     environment: environment ? {
       id: environment.id,
       name: environment.name,
@@ -283,7 +297,7 @@ export class ProjectEngineTargetService {
     this.assertCanSetTargetSource(input.source, input.allowSourceOwnedMutation);
     await this.assertManualTargetManagementAllowed(input.allowSourceOwnedMutation);
     const dataStore = store || await getDataSource();
-    await this.assertProjectAndEngineVisible(dataStore, input.projectId, input.engineId, input.tenantId);
+    const projectTenantId = await this.assertProjectAndEngineVisible(dataStore, input.projectId, input.engineId, input.tenantId);
     const targetRepo = dataStore.getRepository(ProjectEngineTarget);
     const existing = await targetRepo.findOne({ where: { projectId: input.projectId, engineId: input.engineId } });
     const now = Date.now();
@@ -298,7 +312,7 @@ export class ProjectEngineTargetService {
       const policyTagsJson = stringifyPolicyTags(input.policyTags);
       const diagnosticsJson = stringifyDiagnostics(input.diagnostics);
       await targetRepo.update({ id: existing.id }, {
-        tenantId: normalizeTenantId(input.tenantId) ?? existing.tenantId,
+        tenantId: projectTenantId,
         status: input.status || 'active',
         source,
         sourceRef: input.sourceRef ?? existing.sourceRef,
@@ -327,7 +341,7 @@ export class ProjectEngineTargetService {
     const approvedById = input.approvedById ?? (approvalStatus === 'approved' ? input.createdById || null : null);
     await targetRepo.insert({
       id,
-      tenantId: normalizeTenantId(input.tenantId),
+      tenantId: projectTenantId,
       projectId: input.projectId,
       engineId: input.engineId,
       status: input.status || 'active',
@@ -552,9 +566,11 @@ export class ProjectEngineTargetService {
     projectId: string,
     engineId: string,
     tenantId?: string | null
-  ): Promise<void> {
+  ): Promise<string> {
     const project = await dataSource.getRepository(Project).findOne({ where: { id: projectId }, select: ['id', 'tenantId'] });
-    if (!project || !isTenantVisible(project.tenantId, tenantId)) {
+    const projectTenantId = normalizeTenantId(project?.tenantId);
+    const requestTenantId = effectiveTenantId(tenantId);
+    if (!project || !projectTenantId || projectTenantId !== requestTenantId) {
       throw Errors.notFound('Project', projectId);
     }
     const engine = await dataSource.getRepository(Engine).findOne({
@@ -564,9 +580,10 @@ export class ProjectEngineTargetService {
     const topologyMatchesProject = engine?.tenancyMode === 'shared'
       ? !engine.tenantId
       : Boolean(engine?.tenantId && project.tenantId === engine.tenantId);
-    if (!engine || !isEngineVisibleInTenancyContext(engine, tenantId) || !topologyMatchesProject) {
+    if (!engine || !isEngineVisibleInTenancyContext(engine, requestTenantId) || !topologyMatchesProject) {
       throw Errors.notFound('Engine', engineId);
     }
+    return projectTenantId;
   }
 
   private async decorateTargets(dataSource: DataSource, targets: ProjectEngineTarget[]): Promise<ProjectEngineTargetView[]> {

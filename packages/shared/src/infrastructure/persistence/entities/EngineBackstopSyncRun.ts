@@ -3,7 +3,10 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 /**
  * Sanitized receipt for a preview/apply/rollback of backstop-owned Camunda
- * authorizations. The owned native identifiers are encrypted and expire.
+ * authorizations. The encrypted payload is two-phase: full preview detail
+ * expires within 30 days; once a native side effect is possible it is replaced
+ * by a minimal ownership/pending-operation journal with no expiry until every
+ * tracked native grant and pending side effect is retired.
  */
 @Entity({ name: 'engine_backstop_sync_runs', schema: 'main' })
 @Index('idx_engine_backstop_sync_run_engine_created', ['engineId', 'createdAt'])

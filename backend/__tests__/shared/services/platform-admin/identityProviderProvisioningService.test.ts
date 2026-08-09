@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const stores = vi.hoisted(() => ({
   externalIdentity: { findOne: vi.fn(), insert: vi.fn(), update: vi.fn() },
   user: { findOneBy: vi.fn(), insert: vi.fn(), update: vi.fn() },
+  identityProvider: { update: vi.fn() },
+  reconciliationCheckpoint: { update: vi.fn() },
 }));
 const manager = vi.hoisted(() => ({
   getRepository: vi.fn(),
@@ -23,7 +25,15 @@ import { identityProviderProvisioningService } from '@enterpriseglue/shared/serv
 describe('IdentityProviderProvisioningService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    manager.getRepository.mockImplementation((entity: { name: string }) => entity.name === 'ExternalIdentity' ? stores.externalIdentity : stores.user);
+    manager.getRepository.mockImplementation((entity: { name: string }) => entity.name === 'ExternalIdentity'
+      ? stores.externalIdentity
+      : entity.name === 'IdentityProvider'
+        ? stores.identityProvider
+        : entity.name === 'IdentityReconciliationCheckpoint'
+          ? stores.reconciliationCheckpoint
+        : stores.user);
+    stores.identityProvider.update.mockResolvedValue({ affected: 1 });
+    stores.reconciliationCheckpoint.update.mockResolvedValue({ affected: 1 });
     stores.externalIdentity.findOne.mockResolvedValue(null);
     stores.externalIdentity.insert.mockResolvedValue(undefined);
     stores.externalIdentity.update.mockResolvedValue(undefined);
@@ -125,6 +135,68 @@ describe('IdentityProviderProvisioningService', () => {
     expect(stores.externalIdentity.findOne).not.toHaveBeenCalled();
     expect(stores.user.findOneBy).not.toHaveBeenCalled();
     expect(stores.user.insert).not.toHaveBeenCalled();
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+    expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a provider is disabled or changed before the provisioning transaction', async () => {
+    stores.identityProvider.update.mockResolvedValueOnce({ affected: 0 });
+    const provider = { id: 'provider-1', tenantId: 'tenant-1', isEnabled: true, updatedAt: 50, configurationJson: '{}' } as any;
+
+    await expect(identityProviderProvisioningService.provisionOidcUser(provider, {
+      sub: 'subject-1', email: 'person@example.test', email_verified: true,
+    } as any)).rejects.toThrow('changed or was disabled');
+
+    expect(stores.externalIdentity.findOne).not.toHaveBeenCalled();
+    expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
+  });
+
+  it('claims the exact provider generation and reconciliation lease before scheduled LDAP identity writes', async () => {
+    const provider = {
+      id: 'provider-1', tenantId: 'tenant-1', isEnabled: true, updatedAt: 50,
+      protocol: 'ldap', authenticationMode: 'direct', directoryTenantId: 'directory-1',
+      configurationJson: '{"url":"ldaps://directory.example.test"}',
+    } as any;
+
+    await identityProviderProvisioningService.provisionLdapUserForReconciliation(provider, {
+      subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
+    }, { providerId: provider.id, leaseId: 'lease-1' });
+
+    expect(stores.identityProvider.update).toHaveBeenCalledWith({
+      id: provider.id,
+      isEnabled: true,
+      updatedAt: 50,
+      protocol: 'ldap',
+      authenticationMode: 'direct',
+      directoryTenantId: 'directory-1',
+      configurationJson: provider.configurationJson,
+    }, { isEnabled: true });
+    expect(stores.reconciliationCheckpoint.update).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: provider.id,
+      leaseId: 'lease-1',
+      leaseExpiresAt: expect.any(Object),
+    }), expect.objectContaining({ updatedAt: expect.any(Number) }));
+    expect(stores.externalIdentity.findOne).toHaveBeenCalled();
+  });
+
+  it('makes zero identity or membership writes when a scheduled LDAP worker has lost its lease', async () => {
+    stores.reconciliationCheckpoint.update.mockResolvedValueOnce({ affected: 0 });
+    const provider = {
+      id: 'provider-1', tenantId: 'tenant-1', isEnabled: true, updatedAt: 50,
+      protocol: 'ldap', authenticationMode: 'direct', directoryTenantId: null,
+      configurationJson: '{"url":"ldaps://directory.example.test"}',
+    } as any;
+
+    await expect(identityProviderProvisioningService.provisionLdapUserForReconciliation(provider, {
+      subjectId: 'subject-1', email: 'person@example.test', claims: { sub: 'subject-1', email: 'person@example.test' },
+    }, { providerId: provider.id, leaseId: 'superseded-lease' })).rejects.toThrow('lease was lost');
+
+    expect(stores.externalIdentity.findOne).not.toHaveBeenCalled();
+    expect(stores.externalIdentity.insert).not.toHaveBeenCalled();
+    expect(stores.externalIdentity.update).not.toHaveBeenCalled();
+    expect(stores.user.findOneBy).not.toHaveBeenCalled();
+    expect(stores.user.insert).not.toHaveBeenCalled();
+    expect(stores.user.update).not.toHaveBeenCalled();
     expect(ssoNormalizedIdentityService.upsertIdentityWithManager).not.toHaveBeenCalled();
     expect(authzGroupService.ensureAuthenticatedUserMembershipWithManager).not.toHaveBeenCalled();
   });
