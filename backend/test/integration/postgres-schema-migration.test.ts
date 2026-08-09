@@ -226,7 +226,7 @@ describe('Postgres schema auto-migration', () => {
         `INSERT INTO ${quoteIdentifier(versioningDriftSchema)}.${quoteIdentifier('projects')}
           (id, name, owner_id, tenant_id, created_at, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [projectId, `${seedPrefix}-project`, `${seedPrefix}-owner`, null, now, now]
+        [projectId, `${seedPrefix}-project`, `${seedPrefix}-owner`, 'tenant-default', now, now]
       );
 
       await pool.query(
