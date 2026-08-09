@@ -57,7 +57,9 @@ async function loginAs(page: Page, email: string, password: string) {
   const passwordInput = page.locator('#password');
   await emailInput.fill(email);
   await expect(emailInput).toHaveValue(email);
-  await passwordInput.fill(password);
+  await passwordInput.click();
+  await expect(passwordInput).toBeFocused();
+  await passwordInput.pressSequentially(password);
   await expect(passwordInput).toHaveValue(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
