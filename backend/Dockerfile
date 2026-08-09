@@ -2,8 +2,12 @@ FROM node:24-alpine
 
 WORKDIR /repo
 
-# Install pnpm globally
-RUN npm install -g pnpm@11.0.8
+# Install patched package managers globally. npm 11.19.0 still bundles
+# brace-expansion 5.0.7, so replace that bundled copy with its patched release.
+RUN npm install -g npm@11.19.0 pnpm@11.19.0 brace-expansion@5.0.9 \
+    && rm -rf /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
+    && cp -R /usr/local/lib/node_modules/brace-expansion /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
+    && rm -rf /usr/local/lib/node_modules/brace-expansion
 
 # Copy every manifest that affects pnpm's frozen-lockfile resolution.
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -14,8 +18,8 @@ COPY --chown=node:node packages/enterprise-plugin-api/package.json packages/ente
 COPY --chown=node:node packages/frontend-host/package.json packages/frontend-host/
 COPY --chown=node:node frontend/package.json frontend/
 
-RUN apk upgrade --no-cache zlib \
-    && pnpm install --frozen-lockfile \
+RUN apk upgrade --no-cache \
+    && CI=true pnpm install --filter webmodeler-backend... --frozen-lockfile \
     && chown -R node:node /repo/node_modules \
     && mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
     && chown -R node:node /etc/enterpriseglue /var/run/secrets/enterpriseglue

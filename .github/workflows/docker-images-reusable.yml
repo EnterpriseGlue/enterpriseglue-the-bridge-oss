@@ -270,7 +270,7 @@ jobs:
           docker run --rm --entrypoint '' \
             "${COMMON_ENV[@]}" \
             "${{ steps.meta.outputs.backend_image }}:${{ steps.meta.outputs.backend_temp_tag }}" \
-            node --input-type=module -e "import fs from 'fs'; const paths=['/usr/bin/npm','/usr/bin/npx','/usr/lib/node_modules/npm']; const found=paths.filter((p)=>fs.existsSync(p)); const db=fs.existsSync('/lib/apk/db/installed') ? fs.readFileSync('/lib/apk/db/installed','utf8') : ''; if(found.length || db.includes('P:npm\n')){console.error('npm must not be present in final backend image', { found, hasNpmPackage: db.includes('P:npm\n') }); process.exit(1)} console.log('backend runtime contract ok: npm absent');"
+            node --input-type=module -e "import fs from 'fs'; const paths=['/usr/bin/npm','/usr/bin/npx','/usr/lib/node_modules/npm']; const found=paths.filter((p)=>fs.existsSync(p)); const db=fs.existsSync('/lib/apk/db/installed') ? fs.readFileSync('/lib/apk/db/installed','utf8') : ''; const npmPackages=[...db.matchAll(/^P:(npm(?:-[0-9]+)?)$/gm)].map((match)=>match[1]); if(found.length || npmPackages.length){console.error('npm must not be present in final backend image', { found, npmPackages }); process.exit(1)} console.log('backend runtime contract ok: npm absent');"
 
       - name: Verify backend temporary image ref
         shell: bash

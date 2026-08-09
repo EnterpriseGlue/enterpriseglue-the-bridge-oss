@@ -18,7 +18,7 @@ COPY frontend/package.json frontend/
 # BuildKit cache mount hydrates pnpm store across builds. `sharing=locked` serializes
 # concurrent multi-platform builds safely. --frozen-lockfile ensures reproducible installs.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
-    pnpm install --frozen-lockfile
+    pnpm install --filter webmodeler-backend... --frozen-lockfile
 
 # Build OSS packages (shared must be built before backend-host)
 COPY packages packages
@@ -45,14 +45,15 @@ COPY frontend/package.json frontend/
 
 # BuildKit cache mount for pnpm store — same rationale as the build stage above.
 RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
-    pnpm install --frozen-lockfile \
-    && pnpm add --filter webmodeler-backend --save-dev mysql2 mssql
+    pnpm install --filter webmodeler-backend... --frozen-lockfile
 
 FROM cgr.dev/chainguard/node:latest-dev AS runtime-base
 USER root
-RUN apk upgrade --no-cache \
-    && apk del --no-network npm \
-    && rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
+RUN set -eux; \
+    apk upgrade --no-cache; \
+    npm_packages="$(awk -F: '$1 == "P" && $2 ~ /^npm(-[0-9]+)?$/ { print $2 }' /lib/apk/db/installed)"; \
+    if [ -n "${npm_packages}" ]; then apk del --no-network ${npm_packages}; fi; \
+    rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
 USER 65532
 
 FROM runtime-base

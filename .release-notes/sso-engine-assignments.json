@@ -94,14 +94,14 @@
   "packages": [
     {
       "name": "@enterpriseglue/shared",
-      "previousVersion": "0.3.5",
-      "newVersion": "0.3.6",
+      "previousVersion": "0.3.7",
+      "newVersion": "0.3.8",
       "impact": "patch"
     },
     {
       "name": "@enterpriseglue/backend-host",
-      "previousVersion": "0.2.10",
-      "newVersion": "0.2.11",
+      "previousVersion": "0.2.11",
+      "newVersion": "0.2.12",
       "impact": "patch"
     },
     {

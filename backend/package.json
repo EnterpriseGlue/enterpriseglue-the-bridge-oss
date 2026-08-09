@@ -25,6 +25,7 @@
     "db:cleanup-test-data": "tsx scripts/cleanup-test-data.ts"
   },
   "dependencies": {
+    "@enterpriseglue/backend-host": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^8.4.3",
     "@azure/msal-node": "^5.0.6",
     "@gitbeaker/rest": "^43.8.0",
@@ -46,6 +47,8 @@
     "jsonwebtoken": "^9.0.2",
     "ldapts": "^9.0.0",
     "morgan": "^1.11.0",
+    "mssql": "^12.7.0",
+    "mysql2": "^3.23.2",
     "nodemailer": "^9.0.1",
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
@@ -56,7 +59,7 @@
     "sql.js": "^1.13.0",
     "swagger-ui-express": "^5.0.0",
     "typeorm": "^0.3.31",
-    "undici": "^7.28.0",
+    "undici": "^7.29.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
