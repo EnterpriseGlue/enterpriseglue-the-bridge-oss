@@ -36,6 +36,8 @@ const bundle = {
   imports: ['./roles.json', './groups.json'],
 };
 
+let persistedPlatformSettings: unknown = null;
+
 function mockDataSource(
   roles: unknown[] = [],
   groups: unknown[] = [],
@@ -71,7 +73,7 @@ function mockDataSource(
       if (entity === RuntimeResource) return { find: vi.fn().mockResolvedValue(runtimeResources) };
       if (entity === Project) return { find: vi.fn().mockResolvedValue(projects) };
       if (entity === AuthzGroupMembership) return { find: vi.fn().mockResolvedValue(groupMemberships) };
-      if (entity === PlatformSettings) return { findOneBy: vi.fn().mockResolvedValue(null) };
+      if (entity === PlatformSettings) return { findOneBy: vi.fn().mockResolvedValue(persistedPlatformSettings) };
       throw new Error('Unexpected repository');
     },
   });
@@ -79,7 +81,43 @@ function mockDataSource(
 }
 
 describe('configBundleDiffService', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    persistedPlatformSettings = null;
+  });
+
+  it('treats a matching login-only policy as a no-op when platform settings already exist', async () => {
+    persistedPlatformSettings = {
+      id: 'default',
+      localPasswordLoginMode: 'auto',
+      ssoProviderSelectionMode: 'auto_redirect_single',
+    };
+    mockDataSource();
+
+    const result = await configBundleDiffService.diff({
+      bundle: {
+        apiVersion: 'enterpriseglue.ai/v1beta1',
+        kind: 'EnterpriseGlueConfigBundle',
+        metadata: { key: 'acme.login', owner: 'platform' },
+        tenantKey: 'acme',
+        mode: 'authoritative',
+        login: {
+          localPassword: 'auto',
+          providerSelection: 'auto_redirect_single',
+        },
+        imports: ['./engines.json'],
+      },
+      files: { './engines.json': { engines: [] } },
+    }, 'tenant-a');
+
+    expect(result).toMatchObject({ valid: true, errors: [] });
+    expect(result.changes).toContainEqual(expect.objectContaining({
+      objectType: 'platform_settings',
+      key: 'login-policy',
+      operation: 'noop',
+      currentId: 'default',
+    }));
+  });
 
   it('does not echo a rejected plaintext credential in persisted-state diff errors', async () => {
     const plaintext = 'diff-secret-must-not-leak';

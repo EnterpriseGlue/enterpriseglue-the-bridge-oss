@@ -353,7 +353,7 @@ class ConfigBundleDiffService {
       dataSource.getRepository(RuntimeResource).find(),
       dataSource.getRepository(Project).find(),
       dataSource.getRepository(AuthzGroupMembership).find(),
-      explicitGovernanceSettings
+      explicitGovernanceSettings || explicitLoginPolicy
         ? dataSource.getRepository(PlatformSettings).findOneBy({ id: 'default' })
         : Promise.resolve(null),
     ]);
