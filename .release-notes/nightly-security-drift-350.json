@@ -43,8 +43,8 @@
   ],
   "knownLimitations": [],
   "rollback": [
-    "Redeploy the previous backend image only if operational rollback is required; doing so reintroduces the reported vulnerabilities.",
-    "No database rollback is necessary."
+    "Do not roll back only the security image during a full 0.11.0 rollback; restoring the previous backend image reintroduces the reported vulnerabilities.",
+    "The security remediation itself adds no migration; follow the combined 0.11.0 pre-upgrade database-backup restore procedure when rolling back the release."
   ],
   "validation": [
     "Build the production backend image for AMD64 and ARM64 and verify npm executables, directories, and package database entries are absent.",

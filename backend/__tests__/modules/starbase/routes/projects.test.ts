@@ -149,7 +149,10 @@ describe('starbase projects routes', () => {
         switch (entity?.name) {
           case 'Project':
             return {
-              findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null }),
+              findOne: vi.fn().mockResolvedValue({
+                id: projectId,
+                tenantId: routeMocks.tenantId || 'tenant-default',
+              }),
             };
           case 'EngineProjectAccess':
             return {
@@ -273,7 +276,7 @@ describe('starbase projects routes', () => {
 
     const projectRepo = {
       find: vi.fn().mockResolvedValue([]),
-      findOne: vi.fn().mockResolvedValue({ id: 'p1', name: 'Test Project' }),
+      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default', name: 'Test Project' }),
       save: vi.fn().mockResolvedValue({ id: 'p1', name: 'Test Project' }),
       update: vi.fn().mockResolvedValue({ affected: 1 }),
       delete: vi.fn().mockResolvedValue({ affected: 1 }),
@@ -300,8 +303,8 @@ describe('starbase projects routes', () => {
       find: vi.fn((options?: any) => {
         if (Array.isArray(options?.select) && options.select.includes('tenantId')) {
           return Promise.resolve([
-            { id: projectId, tenantId: null },
-            { id: deniedProjectId, tenantId: null },
+            { id: projectId, tenantId: 'tenant-default' },
+            { id: deniedProjectId, tenantId: 'tenant-default' },
           ]);
         }
         return Promise.resolve([
@@ -337,7 +340,7 @@ describe('starbase projects routes', () => {
       .get('/starbase-api/projects')
       .expect(200);
 
-    expect(permissionService.getKnownProjectIdsForUser).toHaveBeenCalledWith('user-1', null);
+    expect(permissionService.getKnownProjectIdsForUser).toHaveBeenCalledWith('user-1', 'tenant-default');
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'project',
@@ -418,7 +421,7 @@ describe('starbase projects routes', () => {
 
   it('renames a project through project.projects.update', async () => {
     const projectRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null }),
+      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' }),
       update: vi.fn().mockResolvedValue({ affected: 1 }),
     };
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -444,7 +447,7 @@ describe('starbase projects routes', () => {
 
   it('denies project rename before handler work when project.projects.update is missing', async () => {
     const projectRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null }),
+      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' }),
       update: vi.fn().mockResolvedValue({ affected: 1 }),
     };
     (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission !== 'project:settings:manage');
@@ -465,7 +468,7 @@ describe('starbase projects routes', () => {
 
   it('deletes a project through project.projects.delete', async () => {
     const projectRepo = {
-      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null }),
+      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' }),
     };
     const assignmentDelete = vi.fn().mockResolvedValue(undefined);
     (getDataSource as unknown as Mock).mockResolvedValue({

@@ -93,6 +93,7 @@ describe('EngineAccessService', () => {
     expect(result.status).toBe('approved');
     expect(accessRepo.insert).toHaveBeenCalled();
     expect(targetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
       projectId: 'project-1',
       engineId: 'engine-1',
       source: 'legacy',
@@ -129,6 +130,23 @@ describe('EngineAccessService', () => {
     const result = await service.requestAccess('project-1', 'engine-1', 'user-1');
     expect(result.status).toBe('pending');
     expect(requestRepo.insert).toHaveBeenCalled();
+  });
+
+  it('does not persist legacy engine access for a project without tenant ownership', async () => {
+    const accessRepo = { insert: vi.fn() };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === EngineProjectAccess) return accessRepo;
+        if (entity === Project) return projectRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(service.grantAccess('project-1', 'engine-1', 'user-1', true))
+      .rejects.toThrow('Project must have a tenant');
+    expect(accessRepo.insert).not.toHaveBeenCalled();
   });
 
   it('rejects a cross-tenant project and engine before evaluating auto-approval', async () => {

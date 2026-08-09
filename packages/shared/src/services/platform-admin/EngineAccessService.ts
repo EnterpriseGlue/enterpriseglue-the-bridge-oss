@@ -156,6 +156,13 @@ export class EngineAccessService {
   ): Promise<{ id: string }> {
     const dataSource = await getDataSource();
     const accessRepo = dataSource.getRepository(EngineProjectAccess);
+    const project = await dataSource.getRepository(Project).findOne({
+      where: { id: projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project?.tenantId) {
+      throw new Error('Project must have a tenant before engine access can be granted');
+    }
     const id = generateId();
 
     await accessRepo.insert({
@@ -167,7 +174,13 @@ export class EngineAccessService {
       createdAt: Date.now(),
     });
 
-    await projectEngineTargetService.ensureTargetFromLegacyAccess(projectId, engineId, grantedById, autoApproved);
+    await projectEngineTargetService.ensureTargetFromLegacyAccess(
+      projectId,
+      engineId,
+      grantedById,
+      autoApproved,
+      project.tenantId,
+    );
 
     return { id };
   }

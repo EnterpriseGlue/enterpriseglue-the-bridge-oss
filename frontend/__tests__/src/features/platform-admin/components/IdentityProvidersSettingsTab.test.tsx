@@ -267,7 +267,7 @@ describe('IdentityProvidersSettingsTab', () => {
     fireEvent.change(within(modal).getByLabelText('Client ID'), { target: { value: 'enterpriseglue-web' } });
     fireEvent.change(within(modal).getByLabelText('Callback URL'), { target: { value: 'https://app.example.test/api/auth/identity/callback' } });
     fireEvent.change(within(modal).getByLabelText('Group claim (optional)'), { target: { value: 'groups' } });
-    fireEvent.change(within(modal).getByLabelText('Expected audience (optional)'), { target: { value: 'enterpriseglue-web' } });
+    fireEvent.change(within(modal).getByLabelText('Audience confirmation (optional)'), { target: { value: 'enterpriseglue-web' } });
     expect(within(modal).queryByRole('option', { name: 'SCIM directory API' })).not.toBeInTheDocument();
     expect(within(modal).queryByRole('option', { name: 'Directory graph API' })).not.toBeInTheDocument();
     expect(within(modal).getByText('Memberships are refreshed at every sign-in')).toBeInTheDocument();

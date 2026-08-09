@@ -15,7 +15,7 @@
   },
   "scripts": {
     "build": "pnpm run clean && tsc && pnpm run build:copy",
-    "build:copy": "cp -r src/db/adapters/sql dist/db/adapters/ && cp src/contracts/members.d.ts src/contracts/members.js src/contracts/roles.d.ts src/contracts/roles.js dist/contracts/",
+    "build:copy": "node scripts/copy-build-assets.mjs",
     "clean": "rm -rf dist"
   },
   "files": [

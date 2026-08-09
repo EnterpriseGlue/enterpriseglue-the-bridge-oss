@@ -429,8 +429,10 @@ export function renderReleaseNotes(fragments, { version = 'next', baseRef = '' }
   const databaseItems = fragments.flatMap((fragment) => [
     ...fragment.database.migrations.map((migration) => `Migration: ${migration}.`),
     ...fragment.database.notes,
-    `Database rollback supported: ${fragment.database.rollbackSupported ? 'yes' : 'no'}.`,
   ])
+  databaseItems.push(
+    `Database rollback supported for the combined release: ${fragments.every((fragment) => fragment.database.rollbackSupported) ? 'yes' : 'no'}.`,
+  )
   output += section('Database migrations', databaseItems)
   output += section('Security', fragments.flatMap((fragment) => fragment.security))
   output += section('Documentation', fragments.flatMap((fragment) => fragment.documentation))

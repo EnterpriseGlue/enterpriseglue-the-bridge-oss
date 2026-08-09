@@ -132,6 +132,22 @@ test('renderer produces audience, compatibility, package, rollback, and evidence
   assert.match(output, /Audiences: users, administrators, operators, developers, security/)
 })
 
+test('renderer reports one conservative database rollback verdict across fragments', () => {
+  const rollbackSafe = structuredClone(fragment)
+  rollbackSafe.id = 'image-only-fix'
+  rollbackSafe.breaking = false
+  rollbackSafe.type = 'security'
+  rollbackSafe.api.compatibility = 'none'
+  rollbackSafe.api.changes = []
+  rollbackSafe.database.rollbackSupported = true
+  rollbackSafe.packages = []
+
+  const output = renderReleaseNotes([rollbackSafe, fragment], { version: '0.11.0', baseRef: 'v0.10.7' })
+  assert.equal((output.match(/Database rollback supported for the combined release:/g) || []).length, 1)
+  assert.match(output, /Database rollback supported for the combined release: no\./)
+  assert.doesNotMatch(output, /Database rollback supported: yes\./)
+})
+
 test('baseline detects a stale manifest and accepts a prepared release PR', () => {
   const changelog = '# Changelog\n\n## [0.11.0]\n\n## [0.10.5]\n'
   assert.throws(

@@ -1508,7 +1508,7 @@ describe('platform-admin authz routes', () => {
           return {
             findOne: vi.fn().mockResolvedValue({
               id: 'project-1',
-              tenantId: null,
+              tenantId: 'tenant-default',
               name: 'Project One',
             }),
           };
@@ -1517,7 +1517,7 @@ describe('platform-admin authz routes', () => {
           return {
             findOne: vi.fn().mockResolvedValue({
               id: 'target-1',
-              tenantId: null,
+              tenantId: 'tenant-default',
               projectId: 'project-1',
               engineId: 'engine-1',
               status: 'inactive',
