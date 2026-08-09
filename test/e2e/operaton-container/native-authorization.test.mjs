@@ -6,6 +6,8 @@ import { promisify } from 'node:util';
 import {
   EngineBackstopSyncService,
 } from '../../../packages/shared/dist/services/platform-admin/EngineBackstopSyncService.js';
+import { getDataSource } from '../../../packages/shared/dist/db/data-source.js';
+import { Engine } from '../../../packages/shared/dist/infrastructure/persistence/entities/Engine.js';
 
 const execFileAsync = promisify(execFile);
 // Pin the fixture image so the Operaton compatibility claim is reproducible.
@@ -124,6 +126,54 @@ async function deployFixture(baseUrl, filename, deploymentName) {
   return adminRequest(baseUrl, '/deployment/create', { method: 'POST', form });
 }
 
+async function persistDirectEngine(baseUrl) {
+  const repository = (await getDataSource()).getRepository(Engine);
+  const id = 'operaton-direct-engine';
+  const previous = await repository.createQueryBuilder('engine')
+    .select([
+      'engine.id',
+      'engine.name',
+      'engine.baseUrl',
+      'engine.type',
+      'engine.connectionMode',
+      'engine.authType',
+      'engine.username',
+      'engine.passwordEnc',
+      'engine.oauthTokenUrl',
+      'engine.oauthScopes',
+      'engine.oauthAudience',
+      'engine.lifecycleStatus',
+      'engine.createdAt',
+      'engine.updatedAt',
+    ])
+    .where('engine.id = :id', { id })
+    .getOne();
+  const now = Date.now();
+  const connection = {
+    id,
+    name: 'Synthetic Operaton direct engine',
+    baseUrl,
+    type: 'operaton',
+    connectionMode: 'direct',
+    authType: 'basic',
+    username: 'demo',
+    passwordEnc: 'demo',
+    oauthTokenUrl: null,
+    oauthScopes: null,
+    oauthAudience: null,
+    lifecycleStatus: 'active',
+    createdAt: previous?.createdAt || now,
+    updatedAt: now,
+  };
+  if (previous) await repository.update({ id }, connection);
+  else await repository.insert(connection);
+
+  return async () => {
+    if (previous) await repository.update({ id }, previous);
+    else await repository.delete({ id });
+  };
+}
+
 function inMemoryRunAndTaskServices() {
   const runs = new Map();
   const details = new Map();
@@ -154,13 +204,27 @@ function inMemoryRunAndTaskServices() {
         updatedAt: now,
       };
       runs.set(run.id, run);
-      details.set(run.id, { version: 1, projection: input.projection });
+      details.set(run.id, {
+        version: 1,
+        projection: input.projection,
+        connectionCommitment: input.connectionCommitment,
+      });
       return run;
     },
     async getSummary(id) { return runs.get(id) || null; },
     async getDetailedSnapshot(id) { return details.get(id) || null; },
     async listForEngine(input) {
       return [...runs.values()].filter((run) => run.engineId === input.engineId && run.tenantId === (input.tenantId || null));
+    },
+    async getLatestSuccessfulApply(input) {
+      return [...runs.values()]
+        .filter((run) => run.engineId === input.engineId
+          && run.tenantId === (input.tenantId || null)
+          && run.status === 'succeeded'
+          && !run.rollbackOfRunId
+          && !run.observedOfRunId
+          && run.id !== input.excludeRunId)
+        .sort((left, right) => (right.completedAt || right.updatedAt) - (left.completedAt || left.updatedAt))[0] || null;
     },
     async updateRun({ id, detailedSnapshot, ...values }) {
       const run = runs.get(id);
@@ -170,17 +234,20 @@ function inMemoryRunAndTaskServices() {
       if (detailedSnapshot !== undefined) details.set(id, detailedSnapshot);
       return run;
     },
+    async updateRunWithTaskLease(input) {
+      return this.updateRun(input);
+    },
   };
   const taskService = {
     async enqueue(input) {
-      const task = { id: `direct-task-${++nextTask}`, ...input };
+      const task = { id: `direct-task-${++nextTask}`, leaseId: `direct-lease-${nextTask}`, ...input };
       tasks.push(task);
       return task;
     },
     async runNext(execute, { runId } = {}) {
       const task = tasks.find((candidate) => candidate.runId === runId);
       if (!task) return null;
-      await execute(task);
+      await execute({ ...task, assertLease: async () => undefined });
       return { taskId: task.id, runId: task.runId, operation: task.operation, status: 'completed', attempts: 0, nextAttemptAt: null, lastError: null };
     },
   };
@@ -249,6 +316,7 @@ test('direct EnterpriseGlue backstop grants enforce exact Operaton process and d
   skip: !enabled && 'set EG_RUN_OPERATON_CONTAINER_TESTS=1 to run the disposable Docker contract',
 }, async () => {
   const { name, baseUrl } = await startOperaton({ authorizationEnforced: true });
+  let restoreEngine;
   try {
     const groupId = `egdirectoperators${Date.now().toString(36)}`;
     const allowedAuthorization = basicAuthorization('egdirectallowed', 'fixturepassword');
@@ -273,6 +341,17 @@ test('direct EnterpriseGlue backstop grants enforce exact Operaton process and d
     await adminRequest(baseUrl, `/group/${groupId}/members/egdirectallowed`, { method: 'PUT' });
     await deployFixture(baseUrl, 'authorization-process.bpmn', 'eg-direct-authorization-process-fixture');
     await deployFixture(baseUrl, 'authorization-decision.dmn', 'eg-direct-authorization-decision-fixture');
+    await adminRequest(baseUrl, '/authorization/create', {
+      method: 'POST',
+      body: {
+        type: 1,
+        permissions: ['READ'],
+        userId: 'demo',
+        resourceType: 4,
+        resourceId: '*',
+      },
+    });
+    restoreEngine = await persistDirectEngine(baseUrl);
 
     const { runService, taskService } = inMemoryRunAndTaskServices();
     const sourceHash = 'c'.repeat(64);
@@ -341,6 +420,7 @@ test('direct EnterpriseGlue backstop grants enforce exact Operaton process and d
     assert.equal(afterProcessRollback.response.status, 404);
     assert.equal(afterDecisionRollback.response.status, 404);
   } finally {
+    await restoreEngine?.();
     await removeContainer(name);
   }
 });

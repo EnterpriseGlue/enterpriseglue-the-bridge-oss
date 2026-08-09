@@ -5,6 +5,7 @@ import { fetch } from 'undici';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
   camundaGet,
+  camundaGetWithConnection,
   camundaPost,
   fetchBpmnEngineEndpoint,
   MAX_ENGINE_RESPONSE_BYTES,
@@ -85,6 +86,20 @@ describe('bpmn-engine-client', () => {
         'X-EnterpriseGlue-Operation-Class': 'engine.read',
       }),
     });
+  });
+
+  it('normalizes a connection-aware GET query without appending it twice', async () => {
+    await camundaGetWithConnection({
+      id: 'engine-1',
+      baseUrl: 'http://localhost:8080/engine-rest',
+      connectionMode: 'direct',
+      authType: 'none',
+    }, '/authorization?type=1&groupIdIn=operators', { resourceType: 6, resourceId: 'payments' });
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost:8080/engine-rest/authorization?type=1&groupIdIn=operators&resourceType=6&resourceId=payments',
+      expect.objectContaining({ method: 'GET', redirect: 'error' }),
+    );
   });
 
   it('resolves credentialless sidecars without exposing endpoint or credential details in diagnostics', async () => {

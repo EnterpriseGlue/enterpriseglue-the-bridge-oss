@@ -719,9 +719,11 @@ async function camundaGetUsingConnection<T = unknown>(engineId: string, cfg: Eng
       else url.searchParams.set(k, String(v))
     }
   }
+  const queryIndex = path.indexOf('?')
+  const requestPath = `${queryIndex >= 0 ? path.slice(0, queryIndex) : path}${url.search}`
   const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
   try {
-    const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: `${path}${url.search}` })
+    const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: requestPath })
     if (!res.ok) {
       await res.text().catch(() => '')
       throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status, connectionMode: diagnostics.connectionMode })

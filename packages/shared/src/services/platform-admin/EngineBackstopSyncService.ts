@@ -62,10 +62,13 @@ export interface EngineBackstopNativeAuthorizationClient {
   listExactAuthorizationIdsWithConnection?(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]>;
 }
 
-function exactAuthorizationQuery(input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): string {
+function exactAuthorizationQuery(
+  input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>,
+  groupParameter: 'groupId' | 'groupIdIn',
+): string {
   const query = new URLSearchParams({
     type: '1',
-    groupId: input.nativeGroupId,
+    [groupParameter]: input.nativeGroupId,
     resourceType: String(input.camundaResourceType),
     resourceId: input.resourceKey,
   });
@@ -118,7 +121,10 @@ const bpmnNativeAuthorizationTransport: EngineBackstopNativeAuthorizationTranspo
  * turns a generic BPMN endpoint into a native authorization writer.
  */
 export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNativeAuthorizationClient {
-  constructor(private readonly transport: EngineBackstopNativeAuthorizationTransport = bpmnNativeAuthorizationTransport) {}
+  constructor(
+    private readonly transport: EngineBackstopNativeAuthorizationTransport = bpmnNativeAuthorizationTransport,
+    private readonly exactGroupParameter: 'groupId' | 'groupIdIn' = 'groupIdIn',
+  ) {}
 
   async createAuthorization(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
     const response = await this.transport.post(engineId, '/authorization/create', {
@@ -155,7 +161,7 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
   }
 
   async listExactAuthorizationIds(engineId: string, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]> {
-    return exactAuthorizationIds(await this.transport.get(engineId, exactAuthorizationQuery(input)), input);
+    return exactAuthorizationIds(await this.transport.get(engineId, exactAuthorizationQuery(input, this.exactGroupParameter)), input);
   }
 
   async createAuthorizationWithConnection(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<{ id: string }> {
@@ -190,7 +196,7 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
   }
 
   async listExactAuthorizationIdsWithConnection(engine: EngineConnectionInput & { id: string }, input: Omit<CamundaCompatibleBackstopOwnedGrant, 'id'>): Promise<string[]> {
-    return exactAuthorizationIds(await camundaGetWithConnection(engine, exactAuthorizationQuery(input)), input);
+    return exactAuthorizationIds(await camundaGetWithConnection(engine, exactAuthorizationQuery(input, this.exactGroupParameter)), input);
   }
 }
 
@@ -201,7 +207,11 @@ export class CamundaCompatibleBackstopNativeClient implements EngineBackstopNati
  * EnterpriseGlue therefore sends no downstream engine credential or peer
  * token; the customer-owned sidecar authenticates its own engine hop.
  */
-export class CustomerSidecarBackstopNativeClient extends CamundaCompatibleBackstopNativeClient {}
+export class CustomerSidecarBackstopNativeClient extends CamundaCompatibleBackstopNativeClient {
+  constructor(transport: EngineBackstopNativeAuthorizationTransport = bpmnNativeAuthorizationTransport) {
+    super(transport, 'groupId');
+  }
+}
 
 /** @deprecated Use CamundaCompatibleBackstopNativeClient. */
 export const Camunda7BackstopNativeClient = CamundaCompatibleBackstopNativeClient;

@@ -1030,6 +1030,24 @@ describe('CamundaCompatibleBackstopNativeClient', () => {
   });
 
   it.each([
+    ['direct engine', new CamundaCompatibleBackstopNativeClient(), 'groupIdIn'],
+    ['customer sidecar', new CustomerSidecarBackstopNativeClient(), 'groupId'],
+  ])('uses the compatible exact-match group filter for a %s', async (_transport, client, groupParameter) => {
+    vi.mocked(camundaGet).mockResolvedValue([{
+      id: 'native-auth-1', type: 1, groupId: 'operators', resourceType: 6, resourceId: 'payments',
+    }]);
+
+    await expect(client.listExactAuthorizationIds('engine-1', {
+      nativeGroupId: 'operators', camundaResourceType: 6, resourceKey: 'payments',
+    })).resolves.toEqual(['native-auth-1']);
+
+    expect(camundaGet).toHaveBeenCalledWith(
+      'engine-1',
+      `/authorization?type=1&${groupParameter}=operators&resourceType=6&resourceId=payments`,
+    );
+  });
+
+  it.each([
     ['direct', new CamundaCompatibleBackstopNativeClient()],
     ['customer sidecar', new CustomerSidecarBackstopNativeClient()],
   ])('rejects a %s exact-match recovery response above the 1,000-row contract limit', async (_transport, client) => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -92,7 +92,7 @@ const observation = {
   },
 };
 
-const runId = `dbq-${database}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const runId = `dbq-${database}-${Date.now()}-${randomUUID().slice(0, 8)}`;
 const ids = {
   legacyEngine: `${runId}-legacy-engine`,
   legacyResource: `${runId}-legacy-resource`,
