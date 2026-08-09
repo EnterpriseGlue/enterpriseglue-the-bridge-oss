@@ -18,6 +18,7 @@ test('preflight arguments select explicit comparison, release, and preview targe
   )
   assert.throws(() => parsePreflightArgs(['--unknown', 'value']), /Unknown option/)
   assert.equal(parsePreflightArgs(['--skip-recommend']).skipRecommend, true)
+  assert.equal(parsePreflightArgs(['--allow-pending']).allowPending, true)
 })
 
 test('preflight runs one deterministic sequence and always builds the preview', () => {
@@ -66,4 +67,16 @@ test('non-PR preflight can skip version recommendation while retaining validatio
     runCommand: (args) => calls.push(args[0]),
   })
   assert.deepEqual(calls, ['baseline', 'validate', 'preview'])
+})
+
+test('release merge-group preflight explicitly allows the prepared manifest', () => {
+  const calls = []
+  runPreflight({
+    baseRef: 'v0.10.7',
+    releaseBase: 'v0.10.7',
+    allowPending: true,
+    runToolTests: () => {},
+    runCommand: (args) => calls.push(args),
+  })
+  assert.deepEqual(calls[0], ['baseline', '--allow-pending'])
 })
