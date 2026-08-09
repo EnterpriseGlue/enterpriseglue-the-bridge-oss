@@ -11,6 +11,7 @@ import {
   portableText,
   sqlBooleanLiteral,
 } from '@enterpriseglue/shared/db/migrations/support/portable-columns.js';
+import { UpgradeLegacySamlSignatures1700000000065 } from '@enterpriseglue/shared/db/migrations/1700000000065-upgrade-legacy-saml-signatures.js';
 
 function runner(database: string) {
   return {
@@ -86,5 +87,54 @@ describe('portable migration columns', () => {
     expect(updateDDL).toHaveBeenCalledWith(
       'ALTER TABLE `platform_settings` ALTER COLUMN `mode` string(4096) NOT NULL',
     );
+  });
+});
+
+describe('portable data migrations', () => {
+  it.each([
+    ['postgres', 'tenant_auth.sso_providers', '"tenant_auth"."sso_providers"'],
+    ['mysql', 'tenant_auth.sso_providers', '`tenant_auth`.`sso_providers`'],
+    ['mssql', 'tenant_auth.sso_providers', '[tenant_auth].[sso_providers]'],
+    ['oracle', 'TENANT_AUTH.SSO_PROVIDERS', '"TENANT_AUTH"."SSO_PROVIDERS"'],
+  ])('targets the resolved %s schema-qualified table', async (database, resolvedName, escapedName) => {
+    const escape = (value: string): string => {
+      if (database === 'mysql') return `\`${value}\``;
+      if (database === 'mssql') return `[${value}]`;
+      return `"${value}"`;
+    };
+    const query = vi.fn(async () => undefined);
+    const queryRunner = {
+      connection: {
+        getMetadata: vi.fn(() => { throw new Error('legacy table is not entity-backed'); }),
+        driver: { escape },
+      },
+      getTable: vi.fn(async () => ({
+        name: resolvedName,
+        findColumnByName: (name: string) => name === 'signature_algorithm' ? { name } : undefined,
+      })),
+      query,
+    } as any;
+
+    await new UpgradeLegacySamlSignatures1700000000065().up(queryRunner);
+
+    expect(queryRunner.getTable).toHaveBeenCalledWith('sso_providers');
+    expect(query).toHaveBeenCalledOnce();
+    expect(query.mock.calls[0]?.[0]).toContain(`UPDATE ${escapedName}`);
+  });
+
+  it('is a no-op when the legacy table or signature column is absent', async () => {
+    const query = vi.fn(async () => undefined);
+    const queryRunner = {
+      connection: {
+        getMetadata: vi.fn(() => { throw new Error('legacy table is not entity-backed'); }),
+        driver: { escape: (value: string) => `"${value}"` },
+      },
+      getTable: vi.fn(async () => undefined),
+      query,
+    } as any;
+
+    await new UpgradeLegacySamlSignatures1700000000065().up(queryRunner);
+
+    expect(query).not.toHaveBeenCalled();
   });
 });

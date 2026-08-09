@@ -53,8 +53,12 @@ async function login(page: Page) {
 
 async function loginAs(page: Page, email: string, password: string) {
   await page.goto('/login?local=1');
-  await page.getByLabel(/email/i).pressSequentially(email);
-  await page.getByLabel('Password', { exact: true }).pressSequentially(password);
+  const emailInput = page.getByLabel(/email/i);
+  const passwordInput = page.getByLabel('Password', { exact: true });
+  await emailInput.fill(email);
+  await passwordInput.fill(password);
+  await expect(emailInput).toHaveValue(email);
+  await expect(passwordInput).toHaveValue(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -130,11 +134,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(groupFixture.password).toBeTruthy();
     expect(groupFixture.engineId).toBeTruthy();
 
-    await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).pressSequentially(groupFixture.email!);
-    await page.getByLabel('Password', { exact: true }).pressSequentially(groupFixture.password!);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    await loginAs(page, groupFixture.email!, groupFixture.password!);
 
     const inventory = await request(page, '/engines-api/engines');
     expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
@@ -206,11 +206,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(fixture.expiredPassword).toBeTruthy();
     expect(fixture.expiredEngineId).toBeTruthy();
 
-    await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).pressSequentially(fixture.expiredEmail!);
-    await page.getByLabel('Password', { exact: true }).pressSequentially(fixture.expiredPassword!);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    await loginAs(page, fixture.expiredEmail!, fixture.expiredPassword!);
 
     const inventory = await request(page, '/engines-api/engines');
     expect(inventory.status, JSON.stringify(inventory.body)).toBe(200);
@@ -225,11 +221,7 @@ test.describe('Smoke: fine-grained local engine access', () => {
     expect(fixture.groupPassword).toBeTruthy();
     expect(fixture.groupScopedEngineId).toBeTruthy();
 
-    await page.goto('/login?local=1');
-    await page.getByLabel(/email/i).pressSequentially(fixture.groupEmail!);
-    await page.getByLabel('Password', { exact: true }).pressSequentially(fixture.groupPassword!);
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
+    await loginAs(page, fixture.groupEmail!, fixture.groupPassword!);
 
     const before = await request(page, '/api/authz/me/permissions');
     expect(before.status, JSON.stringify(before.body)).toBe(200);

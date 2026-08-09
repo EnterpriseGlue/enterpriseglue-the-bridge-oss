@@ -18,9 +18,15 @@ export class UpgradeLegacySamlSignatures1700000000065 implements MigrationInterf
 
   async up(queryRunner: QueryRunner): Promise<void> {
     const tableName = tablePath(queryRunner, 'SsoProvider', 'sso_providers');
-    if (!(await queryRunner.hasTable(tableName)) || !(await queryRunner.hasColumn(tableName, 'signature_algorithm'))) return;
+    const table = await queryRunner.getTable(tableName);
+    if (!table?.findColumnByName('signature_algorithm')) return;
+
+    // QueryRunner resolves an unqualified fallback against the configured
+    // database/schema. Reuse that resolved name so the data update targets the
+    // same table when the deployment does not use the default schema.
+    const resolvedTableName = table.name;
     await queryRunner.query(
-      `UPDATE ${escapeTablePath(queryRunner, tableName)}
+      `UPDATE ${escapeTablePath(queryRunner, resolvedTableName)}
        SET ${queryRunner.connection.driver.escape('signature_algorithm')} = 'sha256'
        WHERE ${queryRunner.connection.driver.escape('type')} = 'saml'
          AND ${queryRunner.connection.driver.escape('signature_algorithm')} = 'sha1'`,

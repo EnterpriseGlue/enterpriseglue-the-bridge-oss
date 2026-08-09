@@ -106,9 +106,10 @@ attach_local_service "$frontend_tls_container" frontend-tls
 attach_local_service "$mock_container" camunda-mock
 
 # Corepack has no bundled pnpm binary in the image. Prime the immutable
-# lockfile dependencies without forwarding the environment file, mounting the
-# source read-only, or attaching to the application network. The test container
-# below is always egress-isolated and runs offline from these named volumes.
+# lockfile dependencies without forwarding the environment file or attaching
+# to the application network. A frozen lockfile prevents dependency resolution
+# from mutating the checkout. The test container below is always
+# egress-isolated and runs offline from these named volumes.
 linux_volumes=(
   -v eg_playwright_linux_root_node_modules:/work/node_modules
   -v eg_playwright_linux_backend_node_modules:/work/backend/node_modules
@@ -119,18 +120,19 @@ linux_volumes=(
   -v eg_playwright_linux_pnpm_store:/root/.local/share/pnpm/store
   -v eg_playwright_linux_corepack:/root/.cache/node/corepack
 )
-if ! docker run --rm --network none \
+if ! docker run --rm --init --network none \
   -e COREPACK_HOME=/root/.cache/node/corepack \
-  -v "$repo_root:/work:ro" \
-  -v eg_playwright_linux_corepack:/root/.cache/node/corepack \
+  -v "$repo_root:/work" \
+  "${linux_volumes[@]}" \
   -w /work \
-  "$container_image" bash -lc 'corepack pnpm --version >/dev/null' >/dev/null 2>&1; then
+  "$container_image" \
+  bash -lc 'corepack pnpm install --frozen-lockfile --offline >/dev/null' >/dev/null 2>&1; then
   echo "[authz-webkit-container] Priming pinned Linux test dependencies without application credentials."
   docker run --rm --init \
     --network bridge \
     -e COREPACK_HOME=/root/.cache/node/corepack \
     -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-    -v "$repo_root:/work:ro" \
+    -v "$repo_root:/work" \
     "${linux_volumes[@]}" \
     -w /work \
     "$container_image" \

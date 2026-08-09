@@ -32,7 +32,9 @@ async function openPermissions(page: Page, failPermissions = false): Promise<voi
 }
 
 function permissionLabelCell(page: Page): Locator {
-  return page.getByRole('cell', { name: permission.label, exact: true });
+  // The cell deliberately exposes the human label first and the immutable
+  // permission key as secondary administrative detail.
+  return page.getByRole('cell', { name: new RegExp(`^${permission.label}\\b`) });
 }
 
 async function contrastRatio(locator: Locator): Promise<number> {

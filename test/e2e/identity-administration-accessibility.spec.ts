@@ -8,14 +8,18 @@ const fulfillJson = (route: Route, body: unknown, status = 200) => route.fulfill
   body: JSON.stringify(body),
 });
 
-async function openIdentitySettings(page: Page, tabName: 'Identity Providers' | 'Identity Mappings'): Promise<MockBrowserIdentityStack> {
-  const stack = new MockBrowserIdentityStack();
-  await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
-  await page.goto('/admin/settings');
+async function activateSettingsTab(page: Page, tabName: 'Identity Providers' | 'Identity Mappings'): Promise<void> {
   const tab = page.getByRole('tab', { name: tabName, exact: true });
   await tab.focus();
   await page.keyboard.press('Enter');
   await expect(tab).toHaveAttribute('aria-selected', 'true');
+}
+
+async function openIdentitySettings(page: Page, tabName: 'Identity Providers' | 'Identity Mappings'): Promise<MockBrowserIdentityStack> {
+  const stack = new MockBrowserIdentityStack();
+  await stack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
+  await page.goto('/admin/settings');
+  await activateSettingsTab(page, tabName);
   return stack;
 }
 
@@ -107,7 +111,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
       sourceRef: 'config_bundle:e2e.identity.lifecycle',
     }]));
     await page.reload();
-    await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
+    await activateSettingsTab(page, 'Identity Mappings');
     const mappingsPanel = page.getByLabel('Identity Mappings', { exact: true });
     await expect(mappingsPanel.getByText('Managed by configuration', { exact: true })).toBeVisible();
     await mappingsPanel.getByRole('button', { name: 'Mapping actions' }).click();
@@ -131,7 +135,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
       sourceRef: 'config_bundle:e2e.identity.warning',
     }]));
     await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+    await activateSettingsTab(page, 'Identity Providers');
     const providersPanel = page.getByLabel('Identity Providers', { exact: true });
     await expect(providersPanel.getByText('Configuration-linked', { exact: true })).toBeVisible();
     await expect(providersPanel.getByText('Local changes are allowed, but the next configuration apply may overwrite them.', { exact: true })).toBeVisible();
@@ -150,7 +154,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
       ownershipMode: 'config_warn',
     }]));
     await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
+    await activateSettingsTab(page, 'Identity Mappings');
     const mappingsPanel = page.getByLabel('Identity Mappings', { exact: true });
     await expect(mappingsPanel.getByText('Configuration-linked', { exact: true })).toBeVisible();
     await expect(mappingsPanel.getByText('Local changes are allowed, but the next configuration apply may overwrite them.', { exact: true })).toBeVisible();
@@ -170,7 +174,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
       { ...stack.mapping, id: 'mapping-additive', externalId: 'contractors', syncMode: 'additive' },
     ]));
     await page.goto('/admin/settings');
-    await page.getByRole('tab', { name: 'Identity Mappings', exact: true }).click();
+    await activateSettingsTab(page, 'Identity Mappings');
     const mappingsPanel = page.getByLabel('Identity Mappings', { exact: true });
     await expect(mappingsPanel.getByText('Keep in sync', { exact: true })).toBeVisible();
     await expect(mappingsPanel.getByText('Add and remove members', { exact: true })).toBeVisible();
@@ -233,7 +237,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
       sourceRef: null,
     });
     await page.reload();
-    await page.getByRole('tab', { name: 'Identity Providers', exact: true }).click();
+    await activateSettingsTab(page, 'Identity Providers');
     await captureManualScreenshot(page, '18-identity-providers-list.jpg');
     const providersPanel = page.getByLabel('Identity Providers', { exact: true });
     await providersPanel.getByRole('button', { name: 'Provider actions' }).click();

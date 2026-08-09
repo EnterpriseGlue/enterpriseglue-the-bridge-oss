@@ -54,6 +54,7 @@
     "rollbackSupported": true,
     "notes": [
       "Clean install, upgrade, interrupted retry, schema equivalence, service behavior, rollback, and cleanup are qualified across PostgreSQL, MySQL, SQL Server, Oracle, and Spanner.",
+      "The legacy SAML signature hardening migration resolves and updates the configured schema-qualified provider table instead of assuming the database default schema.",
       "Existing SSO rows and the OSS default-tenant fallback are preserved; compatibility aliases remain where documented."
     ]
   },
