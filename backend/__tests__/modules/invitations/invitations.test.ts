@@ -173,7 +173,7 @@ describe('invitation and onboarding routes', () => {
     };
 
     projectRepo = {
-      findOne: vi.fn().mockResolvedValue({ name: 'Project One' }),
+      findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-default', name: 'Project One' }),
     };
 
     engineRepo = {

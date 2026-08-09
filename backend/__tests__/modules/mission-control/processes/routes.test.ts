@@ -8,6 +8,7 @@ import { EngineDeploymentArtifact } from '@enterpriseglue/shared/db/entities/Eng
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import {
@@ -137,6 +138,14 @@ describe('mission-control processes routes', () => {
         }
         if (entity === FileCommitVersion) {
           return fileVersionRepo;
+        }
+        if (entity === Project) {
+          return {
+            findOne: vi.fn(async ({ where }: any) => ({
+              id: String(where?.id),
+              tenantId: 'tenant-a',
+            })),
+          };
         }
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },

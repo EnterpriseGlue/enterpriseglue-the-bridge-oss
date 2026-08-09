@@ -92,7 +92,7 @@ describe('starbase versions routes', () => {
     fileUpdate = vi.fn().mockResolvedValue(undefined);
     projectFindOne = vi.fn().mockImplementation(async ({ where }: any) => ({
       id: String(where?.id || projectId),
-      tenantId: null,
+      tenantId: 'tenant-default',
     }));
 
     (getDataSource as unknown as Mock).mockResolvedValue({

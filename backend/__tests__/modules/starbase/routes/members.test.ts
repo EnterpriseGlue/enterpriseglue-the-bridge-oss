@@ -27,7 +27,7 @@ function entityName(entity: unknown): string | undefined {
 
 function projectRepository() {
   return {
-    findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null, name: 'Project One' }),
+    findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default', name: 'Project One' }),
   };
 }
 
@@ -221,7 +221,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -258,7 +258,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -296,7 +296,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return memberRepo;
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -436,7 +436,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return memberRepo;
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -479,7 +479,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -550,7 +550,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -592,7 +592,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -774,7 +774,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -819,7 +819,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return { find: vi.fn().mockResolvedValue([]) };
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });
@@ -917,7 +917,7 @@ describe('starbase members routes', () => {
       getRepository: (entity: unknown) => {
         if (entity === User || entityName(entity) === 'User') return userRepo;
         if (entity === ProjectMember || entityName(entity) === 'ProjectMember') return memberRepo;
-        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ name: 'Project One' }) };
+        if (entity === Project || entityName(entity) === 'Project') return { findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: authMocks.tenantId || 'tenant-default', name: 'Project One' }) };
         return { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
       },
     });

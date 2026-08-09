@@ -63,7 +63,7 @@ describe('starbase files routes - list', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
 
-    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
+    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' });
     fileFind = vi.fn().mockResolvedValue([
       {
         id: '33333333-3333-4333-8333-333333333333',
@@ -139,7 +139,7 @@ describe('starbase files routes - list', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'project',
-      tenantId: null,
+      tenantId: 'tenant-default',
       resourceId: projectId,
     }));
     expect(fileFind).toHaveBeenCalledWith({

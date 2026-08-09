@@ -57,7 +57,7 @@ describe('starbase comments routes', () => {
       async (permission: string) => permission === 'project:files:view'
     );
 
-    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
+    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' });
     fileFindOne = vi.fn().mockResolvedValue({ id: fileId, projectId });
     commentCount = vi.fn().mockResolvedValue(1);
     commentInsert = vi.fn().mockResolvedValue(undefined);

@@ -151,7 +151,7 @@ describe('git sync routes', () => {
         if (entity === Project) {
           return {
             find: vi.fn().mockResolvedValue([]),
-            findOne: vi.fn(async ({ where }: any) => ({ id: String(where?.id), tenantId: null })),
+            findOne: vi.fn(async ({ where }: any) => ({ id: String(where?.id), tenantId: 'tenant-a' })),
           };
         }
         return {

@@ -100,7 +100,7 @@ describe('git project connection routes', () => {
         }
         if (entity === Project) {
           return {
-            findOne: vi.fn(async ({ where }: any) => ({ id: String(where?.id), tenantId: null })),
+            findOne: vi.fn(async ({ where }: any) => ({ id: String(where?.id), tenantId: 'tenant-a' })),
           };
         }
         return {

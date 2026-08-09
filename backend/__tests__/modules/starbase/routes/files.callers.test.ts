@@ -65,7 +65,7 @@ describe('starbase files routes - callers', () => {
 
     projectFindOne = vi.fn().mockResolvedValue({
       id: '22222222-2222-2222-2222-222222222222',
-      tenantId: null,
+      tenantId: 'tenant-default',
     });
     fileFindOne = vi.fn();
     fileFind = vi.fn();

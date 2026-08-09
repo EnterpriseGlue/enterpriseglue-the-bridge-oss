@@ -87,7 +87,7 @@ describe('versioning routes', () => {
 
   function projectRepository(overrides: Record<string, unknown> = {}) {
     return {
-      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: null }),
+      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' }),
       ...overrides,
     };
   }
@@ -156,7 +156,7 @@ describe('versioning routes', () => {
   });
 
   it('includes uncommitted status through the project collection action permission', async () => {
-    const projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: null }]);
+    const projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Project) return { find: projectFind };
@@ -188,7 +188,7 @@ describe('versioning routes', () => {
   });
 
   it('filters denied projects from batch uncommitted status before VCS work starts', async () => {
-    const projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: null }]);
+    const projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Project) return { find: projectFind };

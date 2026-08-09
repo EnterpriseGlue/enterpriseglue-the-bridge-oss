@@ -96,7 +96,7 @@ describe('starbase files routes - detail and download', () => {
         dmnDecisionId: null,
       });
     projectFindOne
-      .mockResolvedValueOnce({ id: projectId, tenantId: null })
+      .mockResolvedValueOnce({ id: projectId, tenantId: 'tenant-default' })
       .mockResolvedValueOnce({ name: 'Billing Project' });
   }
 
@@ -109,7 +109,7 @@ describe('starbase files routes - detail and download', () => {
         type: 'dmn',
         xml: '<definitions><decision id="Decision_1"></decision></definitions>',
       });
-    projectFindOne.mockResolvedValueOnce({ id: projectId, tenantId: null });
+    projectFindOne.mockResolvedValueOnce({ id: projectId, tenantId: 'tenant-default' });
   }
 
   it('returns file detail when project.files.read is granted through project.byFileId', async () => {
@@ -137,14 +137,14 @@ describe('starbase files routes - detail and download', () => {
     expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
       userId: 'user-1',
       resourceType: 'project',
-      tenantId: null,
+      tenantId: 'tenant-default',
       resourceId: projectId,
     }));
   });
 
   it('denies file detail before handler work when project.files.read is missing', async () => {
     fileFindOne.mockResolvedValueOnce({ id: fileId, projectId });
-    projectFindOne.mockResolvedValueOnce({ id: projectId, tenantId: null });
+    projectFindOne.mockResolvedValueOnce({ id: projectId, tenantId: 'tenant-default' });
     (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
 
     const response = await request(app).get(`/starbase-api/files/${fileId}`);

@@ -93,8 +93,8 @@ describe('git repositories routes', () => {
         }
         if (entity === Project) {
           return {
-            find: vi.fn(async () => rawRows.map((row) => ({ id: String(row.projectId), tenantId: null }))),
-            findOne: vi.fn(async ({ where }: any) => ({ id: String(where?.id), tenantId: null })),
+            find: vi.fn(async () => rawRows.map((row) => ({ id: String(row.projectId), tenantId: 'tenant-a' }))),
+            findOne: vi.fn(async ({ where }: any) => ({ id: String(where?.id), tenantId: 'tenant-a' })),
           };
         }
         return {};

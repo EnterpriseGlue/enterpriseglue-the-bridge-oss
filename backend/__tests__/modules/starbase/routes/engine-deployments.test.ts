@@ -77,7 +77,7 @@ describe('starbase engine-deployments routes', () => {
     fileCommitVersionFind = vi.fn().mockResolvedValue([]);
     projectFindOne = vi.fn().mockResolvedValue({
       id: '11111111-1111-4111-8111-111111111111',
-      tenantId: null,
+      tenantId: 'tenant-1',
     });
 
     (getDataSource as unknown as Mock).mockResolvedValue({

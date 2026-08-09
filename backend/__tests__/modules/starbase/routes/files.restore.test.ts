@@ -66,7 +66,7 @@ describe('starbase files routes - restore from commit', () => {
 
     fileFindOne = vi.fn();
     fileUpdate = vi.fn().mockResolvedValue({ affected: 1 });
-    projectFindOne = vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null });
+    projectFindOne = vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-default' });
     commitFindOne = vi.fn();
     fileVersionFindOne = vi.fn();
     snapshotsGetMany = vi.fn();

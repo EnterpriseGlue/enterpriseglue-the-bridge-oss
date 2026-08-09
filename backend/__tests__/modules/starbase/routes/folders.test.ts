@@ -102,7 +102,7 @@ describe('starbase folders routes', () => {
       ].includes(permission)
     );
 
-    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null, name: 'Project One' });
+    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default', name: 'Project One' });
     folderFind = vi.fn().mockResolvedValue([
       { id: folderId, name: 'Test Folder', projectId, parentFolderId: null, createdBy: 'user-1', updatedBy: 'user-1', createdAt: 1000, updatedAt: 2000 },
     ]);

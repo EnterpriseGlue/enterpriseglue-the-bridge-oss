@@ -69,7 +69,7 @@ describe('starbase files routes - mutations', () => {
     app.use(errorHandler);
     vi.clearAllMocks();
 
-    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: null });
+    projectFindOne = vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' });
     fileFind = vi.fn().mockResolvedValue([]);
     fileFindOne = vi.fn().mockResolvedValue({
       id: fileId,
