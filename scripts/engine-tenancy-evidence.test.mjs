@@ -108,6 +108,10 @@ test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(releaseIndexWriter, /pending_approval/);
   assert.match(releaseIndexWriter, /documentationReviewEvidencePending/);
   assert.match(releaseIndexWriter, /passedGateCount === gateDefinitions\.length/);
+  assert.match(browserWriter, /testCountPerBrowser: 12/);
+  assert.match(browserWriter, /totalPassingExecutions: 36/);
+  assert.match(releaseIndexWriter, /value\.testCountPerBrowser === 12/);
+  assert.match(releaseIndexWriter, /value\.totalPassingExecutions === 36/);
   for (const matrixContract of [
     'constraint-derived-authorization-state-space',
     'canonicalInputHash',

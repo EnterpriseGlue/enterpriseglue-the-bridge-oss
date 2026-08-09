@@ -139,7 +139,8 @@ const gateDefinitions = [
     label: 'Chromium, Firefox, and WebKit',
     path: 'test/results/engine-tenancy-release/browser-matrix.json',
     passes: (value) => value.status === 'passed'
-      && value.totalPassingExecutions === 27
+      && value.testCountPerBrowser === 12
+      && value.totalPassingExecutions === 36
       && requiredBrowsers
         .every((browser) => value.verifiedTargets?.browsers?.includes(browser)),
   },
