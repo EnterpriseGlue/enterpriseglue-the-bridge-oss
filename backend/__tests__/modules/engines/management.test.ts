@@ -17,11 +17,12 @@ const permissionServiceMock = vi.hoisted(() => ({
   hasPermission: vi.fn().mockResolvedValue(false),
 }));
 const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const authContext = vi.hoisted(() => ({ tenantId: null as string | null }));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'owner-1', email: 'owner@example.com' };
-    req.tenant = { tenantId: null };
+    req.tenant = { tenantId: authContext.tenantId };
     next();
   },
 }));
@@ -155,7 +156,7 @@ describe('engines management routes', () => {
     if (name === 'Project') {
       return {
         find: vi.fn().mockResolvedValue([]),
-        findOne: vi.fn().mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', tenantId: null }),
+        findOne: vi.fn().mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', tenantId: 'tenant-default' }),
       };
     }
     return {
@@ -171,6 +172,7 @@ describe('engines management routes', () => {
     app.use(managementRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    authContext.tenantId = null;
     accessAuthorityDecisionMock.mockResolvedValue(null);
     permissionServiceMock.hasPermission.mockResolvedValue(true);
     (engineService.getEngineRole as any).mockResolvedValue(null);
@@ -500,11 +502,20 @@ describe('engines management routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([{ id: 'request-1', status: 'pending' }]);
+    expect(engineAccessService.getPendingRequests).toHaveBeenCalledWith('e1', null);
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:project-access:view', expect.objectContaining({
       userId: 'owner-1',
       resourceType: 'engine',
       resourceId: 'e1',
     }));
+  });
+
+  it('passes the active tenant to shared-engine request listing', async () => {
+    authContext.tenantId = 'tenant-a';
+
+    await request(app).get('/engines-api/engines/e1/access-requests').expect(200);
+
+    expect(engineAccessService.getPendingRequests).toHaveBeenCalledWith('e1', 'tenant-a');
   });
 
   it('approves engine access requests through scoped project-access-approve permission without broad members-manage permission', async () => {
@@ -513,7 +524,7 @@ describe('engines management routes', () => {
     const response = await request(app).post('/engines-api/engines/e1/access-requests/request-1/approve');
 
     expect(response.status).toBe(200);
-    expect(engineAccessService.approveRequest).toHaveBeenCalledWith('request-1', 'owner-1');
+    expect(engineAccessService.approveRequest).toHaveBeenCalledWith('request-1', 'e1', 'owner-1', null);
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:project-access:approve', expect.objectContaining({
       userId: 'owner-1',
       resourceType: 'engine',
@@ -527,7 +538,7 @@ describe('engines management routes', () => {
     const response = await request(app).post('/engines-api/engines/e1/access-requests/request-1/deny');
 
     expect(response.status).toBe(200);
-    expect(engineAccessService.denyRequest).toHaveBeenCalledWith('request-1', 'owner-1');
+    expect(engineAccessService.denyRequest).toHaveBeenCalledWith('request-1', 'e1', 'owner-1', null);
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:project-access:deny', expect.objectContaining({
       userId: 'owner-1',
       resourceType: 'engine',
@@ -541,7 +552,7 @@ describe('engines management routes', () => {
     const response = await request(app).delete('/engines-api/engines/e1/projects/project-1');
 
     expect(response.status).toBe(204);
-    expect(engineAccessService.revokeAccess).toHaveBeenCalledWith('project-1', 'e1');
+    expect(engineAccessService.revokeAccess).toHaveBeenCalledWith('project-1', 'e1', null);
     expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:project-access:revoke', expect.objectContaining({
       userId: 'owner-1',
       resourceType: 'engine',

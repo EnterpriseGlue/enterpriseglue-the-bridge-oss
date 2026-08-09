@@ -890,7 +890,7 @@ router.get(
     try {
       const engineId = String(req.params.engineId);
 
-      const requests = await engineAccessService.getPendingRequests(engineId);
+      const requests = await engineAccessService.getPendingRequests(engineId, req.tenant?.tenantId || null);
       res.json(requests);
     } catch (error) {
       logger.error('Get access requests error:', error);
@@ -914,9 +914,10 @@ router.post(
   asyncHandler(async (req, res) => {
     try {
       const requestId = String(req.params.requestId);
+      const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
 
-      await engineAccessService.approveRequest(requestId, userId);
+      await engineAccessService.approveRequest(requestId, engineId, userId, req.tenant?.tenantId || null);
 
       res.json({ message: 'Access request approved' });
     } catch (error) {
@@ -941,9 +942,10 @@ router.post(
   asyncHandler(async (req, res) => {
     try {
       const requestId = String(req.params.requestId);
+      const engineId = String(req.params.engineId);
       const userId = req.user!.userId;
 
-      await engineAccessService.denyRequest(requestId, userId);
+      await engineAccessService.denyRequest(requestId, engineId, userId, req.tenant?.tenantId || null);
 
       res.json({ message: 'Access request denied' });
     } catch (error) {
@@ -970,7 +972,7 @@ router.delete(
       const engineId = String(req.params.engineId);
       const projectId = String(req.params.projectId);
 
-      await engineAccessService.revokeAccess(projectId, engineId);
+      await engineAccessService.revokeAccess(projectId, engineId, req.tenant?.tenantId || null);
 
       res.status(204).send();
     } catch (error) {

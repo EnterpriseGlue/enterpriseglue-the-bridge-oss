@@ -446,9 +446,14 @@ export class ProjectEngineTargetService {
     }, store);
   }
 
-  async archiveLegacyTarget(projectId: string, engineId: string, tenantId?: string | null): Promise<void> {
+  async archiveLegacyTarget(
+    projectId: string,
+    engineId: string,
+    tenantId?: string | null,
+    store?: DataSource | EntityManager,
+  ): Promise<void> {
     if (!engineId || engineId === '__env__') return;
-    const dataSource = await getDataSource();
+    const dataSource = store || await getDataSource();
     const repo = dataSource.getRepository(ProjectEngineTarget);
     const existing = await repo.findOne({ where: { projectId, engineId } });
     if (!existing || !isTenantVisible(existing.tenantId, tenantId)) return;

@@ -15,7 +15,7 @@ import {
 } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { isEngineVisibleInTenancyContext } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import type { DataSource, EntityManager } from 'typeorm';
+import { In, type DataSource, type EntityManager } from 'typeorm';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { EnginePermissions, permissionService, ProjectPermissions } from './permissions.js';
 
@@ -58,6 +58,29 @@ export class EngineAccessService {
       throw new Error('Project and engine must belong to the same tenant');
     }
     return { project, engine, tenantId: effectiveTenantId };
+  }
+
+  private async claimVisibleTopology(
+    manager: EntityManager,
+    projectId: string,
+    engineId: string,
+    tenantId: string,
+  ): Promise<void> {
+    const projectClaim = await manager.getRepository(Project).update(
+      { id: projectId, tenantId },
+      { id: projectId },
+    );
+    if (projectClaim.affected !== 1) {
+      throw new Error('Project and engine must belong to the same tenant');
+    }
+    const engineClaim = await manager.getRepository(Engine).update(
+      { id: engineId, lifecycleStatus: 'active' },
+      { id: engineId },
+    );
+    if (engineClaim.affected !== 1) {
+      throw new Error('Project and engine must belong to the same tenant');
+    }
+    await this.assertVisibleTopology(manager, projectId, engineId, tenantId);
   }
 
   /**
@@ -197,115 +220,184 @@ export class EngineAccessService {
   ): Promise<{ id: string }> {
     const dataSource = await getDataSource();
     const effectiveTenantId = this.effectiveTenantId(tenantId);
-    return dataSource.transaction(async (manager) => {
-      const projectClaim = await manager.getRepository(Project).update(
-        { id: projectId, tenantId: effectiveTenantId },
-        { id: projectId },
-      );
-      if (projectClaim.affected !== 1) {
-        throw new Error('Project and engine must belong to the same tenant');
-      }
-      const engineClaim = await manager.getRepository(Engine).update(
-        { id: engineId, lifecycleStatus: 'active' },
-        { id: engineId },
-      );
-      if (engineClaim.affected !== 1) {
-        throw new Error('Project and engine must belong to the same tenant');
-      }
-      await this.assertVisibleTopology(manager, projectId, engineId, effectiveTenantId);
+    return dataSource.transaction((manager) => this.grantAccessWithManager(manager, {
+      projectId,
+      engineId,
+      grantedById,
+      autoApproved,
+      tenantId: effectiveTenantId,
+    }));
+  }
 
-      const id = generateId();
-      await manager.getRepository(EngineProjectAccess).insert({
+  private async grantAccessWithManager(
+    manager: EntityManager,
+    input: {
+      projectId: string;
+      engineId: string;
+      grantedById: string;
+      autoApproved: boolean;
+      tenantId: string;
+    },
+  ): Promise<{ id: string }> {
+    await this.claimVisibleTopology(manager, input.projectId, input.engineId, input.tenantId);
+
+    const accessRepo = manager.getRepository(EngineProjectAccess);
+    const existingAccess = await accessRepo.findOne({
+      where: { projectId: input.projectId, engineId: input.engineId },
+      select: ['id'],
+    });
+    const id = existingAccess?.id || generateId();
+    if (!existingAccess) {
+      await accessRepo.insert({
         id,
-        engineId,
-        projectId,
-        grantedById,
-        autoApproved,
+        engineId: input.engineId,
+        projectId: input.projectId,
+        grantedById: input.grantedById,
+        autoApproved: input.autoApproved,
         createdAt: Date.now(),
       });
-      const materialized = await projectEngineTargetService.ensureTargetFromLegacyAccess(
-        projectId,
-        engineId,
-        grantedById,
-        autoApproved,
-        effectiveTenantId,
-        manager,
-      );
-      if (!materialized) {
-        const existingTarget = await manager.getRepository(ProjectEngineTarget).findOne({
-          where: { projectId, engineId, tenantId: effectiveTenantId, status: 'active' },
-          select: ['id', 'allowManualDeploy'],
-        });
-        if (!existingTarget?.allowManualDeploy) {
-          throw new Error('Engine access requires an active project-engine target in the same tenant');
-        }
+    }
+    const materialized = await projectEngineTargetService.ensureTargetFromLegacyAccess(
+      input.projectId,
+      input.engineId,
+      input.grantedById,
+      input.autoApproved,
+      input.tenantId,
+      manager,
+    );
+    if (!materialized) {
+      const existingTarget = await manager.getRepository(ProjectEngineTarget).findOne({
+        where: {
+          projectId: input.projectId,
+          engineId: input.engineId,
+          tenantId: input.tenantId,
+          status: 'active',
+        },
+        select: ['id', 'allowManualDeploy'],
+      });
+      if (!existingTarget?.allowManualDeploy) {
+        throw new Error('Engine access requires an active project-engine target in the same tenant');
       }
-      return { id };
-    });
+    }
+    return { id };
   }
 
   /**
    * Revoke project access to an engine
    */
-  async revokeAccess(projectId: string, engineId: string): Promise<void> {
+  async revokeAccess(projectId: string, engineId: string, tenantId?: string | null): Promise<void> {
     const dataSource = await getDataSource();
-    const accessRepo = dataSource.getRepository(EngineProjectAccess);
-    await accessRepo.delete({ projectId, engineId });
-    await projectEngineTargetService.archiveLegacyTarget(projectId, engineId);
+    const effectiveTenantId = this.effectiveTenantId(tenantId);
+    await dataSource.transaction(async (manager) => {
+      await this.claimVisibleTopology(manager, projectId, engineId, effectiveTenantId);
+      await manager.getRepository(EngineProjectAccess).delete({ projectId, engineId });
+      await projectEngineTargetService.archiveLegacyTarget(
+        projectId,
+        engineId,
+        effectiveTenantId,
+        manager,
+      );
+    });
   }
 
   /**
    * Get pending access requests for an engine
    */
-  async getPendingRequests(engineId: string): Promise<AccessRequest[]> {
+  async getPendingRequests(engineId: string, tenantId?: string | null): Promise<AccessRequest[]> {
     const dataSource = await getDataSource();
+    const effectiveTenantId = this.effectiveTenantId(tenantId);
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: engineId, lifecycleStatus: 'active' },
+      select: ['id', 'tenantId', 'tenancyMode', 'lifecycleStatus'],
+    });
+    if (!engine || !isEngineVisibleInTenancyContext(engine, effectiveTenantId)) return [];
     const requestRepo = dataSource.getRepository(EngineAccessRequest);
-    return requestRepo.find({ where: { engineId, status: 'pending' } });
+    const requests = await requestRepo.find({ where: { engineId, status: 'pending' } });
+    const projectIds = Array.from(new Set(requests.map((request) => request.projectId)));
+    if (projectIds.length === 0) return [];
+    const projects = await dataSource.getRepository(Project).find({
+      where: { id: In(projectIds) },
+      select: ['id', 'tenantId'],
+    });
+    const visibleProjectIds = new Set(projects
+      .filter((project) => project.tenantId === effectiveTenantId)
+      .filter((project) => engine.tenancyMode === 'shared'
+        ? !engine.tenantId
+        : engine.tenantId === project.tenantId)
+      .map((project) => project.id));
+    return requests.filter((request) => visibleProjectIds.has(request.projectId));
   }
 
   /**
    * Approve an access request
    */
-  async approveRequest(requestId: string, reviewedById: string): Promise<void> {
+  async approveRequest(
+    requestId: string,
+    engineId: string,
+    reviewedById: string,
+    tenantId?: string | null,
+  ): Promise<void> {
     const dataSource = await getDataSource();
-    const requestRepo = dataSource.getRepository(EngineAccessRequest);
-    const now = Date.now();
-
-    // Get the request
-    const request = await requestRepo.findOne({ where: { id: requestId } });
-
-    if (!request) {
-      throw new Error('Request not found');
-    }
-
-    // Grant access
-    const project = await dataSource.getRepository(Project).findOne({
-      where: { id: request.projectId },
-      select: ['id', 'tenantId'],
-    });
-    if (!project?.tenantId) throw new Error('Project not found');
-    await this.grantAccess(request.projectId, request.engineId, reviewedById, false, project.tenantId);
-
-    // Update request status
-    await requestRepo.update({ id: requestId }, {
-      status: 'approved',
-      reviewedById,
-      reviewedAt: now,
+    const effectiveTenantId = this.effectiveTenantId(tenantId);
+    await dataSource.transaction(async (manager) => {
+      const requestRepo = manager.getRepository(EngineAccessRequest);
+      const requestClaim = await requestRepo.update(
+        { id: requestId, engineId, status: 'pending' },
+        { id: requestId },
+      );
+      const request = await requestRepo.findOne({ where: { id: requestId, engineId } });
+      if (!request) throw new Error('Access request not found or is no longer pending');
+      await this.claimVisibleTopology(manager, request.projectId, engineId, effectiveTenantId);
+      if (requestClaim.affected !== 1) {
+        if (request.status === 'approved') return;
+        throw new Error('Access request not found or is no longer pending');
+      }
+      if (request.status !== 'pending') throw new Error('Access request not found or is no longer pending');
+      await this.grantAccessWithManager(manager, {
+        projectId: request.projectId,
+        engineId,
+        grantedById: reviewedById,
+        autoApproved: false,
+        tenantId: effectiveTenantId,
+      });
+      const updated = await requestRepo.update(
+        { id: requestId, engineId, status: 'pending' },
+        { status: 'approved', reviewedById, reviewedAt: Date.now() },
+      );
+      if (updated.affected !== 1) throw new Error('Access request changed while it was being approved');
     });
   }
 
   /**
    * Deny an access request
    */
-  async denyRequest(requestId: string, reviewedById: string): Promise<void> {
+  async denyRequest(
+    requestId: string,
+    engineId: string,
+    reviewedById: string,
+    tenantId?: string | null,
+  ): Promise<void> {
     const dataSource = await getDataSource();
-    const requestRepo = dataSource.getRepository(EngineAccessRequest);
-    const now = Date.now();
-
-    await requestRepo.update({ id: requestId }, {
-      status: 'denied',
-      reviewedById,
-      reviewedAt: now,
+    const effectiveTenantId = this.effectiveTenantId(tenantId);
+    await dataSource.transaction(async (manager) => {
+      const requestRepo = manager.getRepository(EngineAccessRequest);
+      const requestClaim = await requestRepo.update(
+        { id: requestId, engineId, status: 'pending' },
+        { id: requestId },
+      );
+      const request = await requestRepo.findOne({ where: { id: requestId, engineId } });
+      if (!request) throw new Error('Access request not found or is no longer pending');
+      await this.claimVisibleTopology(manager, request.projectId, engineId, effectiveTenantId);
+      if (requestClaim.affected !== 1) {
+        if (request.status === 'denied') return;
+        throw new Error('Access request not found or is no longer pending');
+      }
+      if (request.status !== 'pending') throw new Error('Access request not found or is no longer pending');
+      const updated = await requestRepo.update(
+        { id: requestId, engineId, status: 'pending' },
+        { status: 'denied', reviewedById, reviewedAt: Date.now() },
+      );
+      if (updated.affected !== 1) throw new Error('Access request changed while it was being denied');
     });
   }
 }
