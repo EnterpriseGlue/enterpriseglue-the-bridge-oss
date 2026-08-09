@@ -53,11 +53,11 @@ async function login(page: Page) {
 
 async function loginAs(page: Page, email: string, password: string) {
   await page.goto('/login?local=1');
-  const emailInput = page.getByLabel(/email/i);
-  const passwordInput = page.getByLabel('Password', { exact: true });
+  const emailInput = page.locator('#email');
+  const passwordInput = page.locator('#password');
   await emailInput.fill(email);
-  await passwordInput.fill(password);
   await expect(emailInput).toHaveValue(email);
+  await passwordInput.fill(password);
   await expect(passwordInput).toHaveValue(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
