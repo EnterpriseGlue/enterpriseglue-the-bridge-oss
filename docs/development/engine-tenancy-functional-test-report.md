@@ -13,8 +13,8 @@ generated exact-commit release-evidence index is the authority for whether the
 current candidate is `pending_approval`, qualified, stale, dirty, or failed.**
 
 The guarded Docker-hosted PostgreSQL/Chromium enforcement journey passes. The
-fine-grained access browser matrix also passes nine tests in each of Chromium,
-Firefox, and WebKit: 27 browser executions covering login, Effective Access,
+fine-grained access browser matrix also passes twelve tests in each of Chromium,
+Firefox, and WebKit: 36 browser executions covering login, Effective Access,
 direct/group/runtime custom-role scope, expiry, revocation, direct URL,
 stale/multi-tab state, refresh, and browser-history restoration.
 
@@ -63,7 +63,7 @@ readiness metrics, and cleanup through the real browser and HTTP stack.
 | Databases | PostgreSQL, MySQL, SQL Server, Oracle, and Spanner disposable qualification targets; PostgreSQL for the live HTTP/browser stack |
 | Frontend | Local TLS endpoint |
 | Backend | Local readiness and metrics endpoints |
-| Browser | Chromium for topology enforcement; Chromium, Firefox, and WebKit for the 27-execution fine-grained access matrix |
+| Browser | Chromium for topology enforcement; Chromium, Firefox, and WebKit for the 36-execution fine-grained access matrix |
 | Identity | Disposable canonical local platform administrator |
 | Engine transport | Local Camunda-compatible test endpoint |
 | Customer or deployed IdP data | None |
@@ -127,10 +127,10 @@ meaning of 100% functional coverage are documented in
 | **Focused-lane total** | **1,333** |
 | PostgreSQL custom-role/model/machine-principal tests | **7** |
 | Live browser enforcement | **1** |
-| Fine-grained access browser matrix | **27** |
+| Fine-grained access browser matrix | **36** |
 | Real-service provisioning channel executions | **30** |
 | Database lifecycle stage cells | **35** |
-| Database upgrade-baseline observations | **20** |
+| Database upgrade-baseline observations | **25** |
 | Equivalent logical-schema fingerprints | **1** |
 
 The shared package build and backend/frontend type checks also passed. The

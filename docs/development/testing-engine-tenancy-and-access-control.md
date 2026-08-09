@@ -51,7 +51,7 @@ The complete functional denominator is explicit:
 | Database lifecycle stages | 35/35 |
 | Database upgrade-baseline observations | 25/25 |
 | Database logical-schema equivalence | 1 fingerprint |
-| Functional browser executions | 27/27 |
+| Functional browser executions | 36/36 |
 | Browser accessibility executions | 27/27 |
 | Targeted security mutants | 9/9 |
 | Declared critical source modules | 100% statements, branches, functions, and lines per file |

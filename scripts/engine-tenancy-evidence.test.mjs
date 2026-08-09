@@ -36,6 +36,18 @@ const provisioningJourneyRegistry = JSON.parse(readFileSync(
   'utf8',
 ));
 const playwrightConfig = readFileSync(new URL('../test/e2e/playwright.config.ts', import.meta.url), 'utf8');
+const browserQualificationGuide = readFileSync(
+  new URL('../docs/development/testing-engine-tenancy-and-access-control.md', import.meta.url),
+  'utf8',
+);
+const functionalTestReport = readFileSync(
+  new URL('../docs/development/engine-tenancy-functional-test-report.md', import.meta.url),
+  'utf8',
+);
+const engineTenancyPlan = readFileSync(
+  new URL('../docs/architecture/12-engine-tenancy-and-external-provisioning-plan.md', import.meta.url),
+  'utf8',
+);
 
 test('writes sanitized commit, schema, target, waiver, and requirement traceability evidence', () => {
   const manifestCommand = packageJson.scripts['test:engine-tenancy:manifest'];
@@ -112,6 +124,14 @@ test('builds a fail-closed same-commit release evidence index', () => {
   assert.match(browserWriter, /totalPassingExecutions: 36/);
   assert.match(releaseIndexWriter, /value\.testCountPerBrowser === 12/);
   assert.match(releaseIndexWriter, /value\.totalPassingExecutions === 36/);
+  assert.match(browserQualificationGuide, /Functional browser executions \| 36\/36/);
+  assert.match(functionalTestReport, /twelve tests in each of Chromium/);
+  assert.match(functionalTestReport, /Fine-grained access browser matrix \| \*\*36\*\*/);
+  assert.match(functionalTestReport, /Database upgrade-baseline observations \| \*\*25\*\*/);
+  assert.match(
+    engineTenancyPlan,
+    /36 authorization executions plus 27 database-free accessibility executions/,
+  );
   for (const matrixContract of [
     'constraint-derived-authorization-state-space',
     'canonicalInputHash',
