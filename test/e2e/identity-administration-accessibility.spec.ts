@@ -272,7 +272,7 @@ test.describe('Identity Provider and Mapping accessibility release checks', () =
     await providerDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await page.getByRole('button', { name: 'Add provider', exact: true }).click();
     await page.getByLabel('Protocol', { exact: true }).selectOption('saml');
-    const entityId = page.getByLabel('Service provider entity ID', { exact: true });
+    const entityId = page.getByLabel('EnterpriseGlue service provider entity ID', { exact: true });
     await expect(entityId).toBeVisible();
     await entityId.scrollIntoViewIfNeeded();
     await captureManualScreenshot(page, '20-identity-provider-editor-saml.jpg');
