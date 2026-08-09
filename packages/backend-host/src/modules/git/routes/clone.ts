@@ -5,8 +5,8 @@
 
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -23,24 +23,20 @@ import { credentialService } from '@enterpriseglue/shared/services/git/Credentia
 import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
+import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import {
+  CloneFromGitRequestSchema,
+  CloneFromGitResponseSchema,
+  RepositoryInfoRequestSchema,
+  RepositoryInfoResponseSchema,
+} from '@enterpriseglue/shared/schemas/git/repository.js';
 
 const router = Router();
 
-const repoInfoSchema = z.object({
-  providerId: z.string(),
-  repoUrl: z.string(),
-});
+type RepoInfoBody = import('@enterpriseglue/shared/schemas/git/repository.js').RepositoryInfoRequest;
 
-type RepoInfoBody = z.infer<typeof repoInfoSchema>;
-
-const cloneSchema = z.object({
-  providerId: z.string(),
-  repoUrl: z.string(),
-  branch: z.string().optional(),
-  projectName: z.string().optional(),
-});
-
-type CloneBody = z.infer<typeof cloneSchema>;
+type CloneBody = import('@enterpriseglue/shared/schemas/git/repository.js').CloneFromGitRequest;
 
 // Git provider types
 type GitProviderType = 'github' | 'gitlab' | 'azure-devops' | 'bitbucket';
@@ -49,7 +45,7 @@ type GitProviderType = 'github' | 'gitlab' | 'azure-devops' | 'bitbucket';
  * POST /git-api/repo-info
  * Get repository info (branches, default branch) before cloning
  */
-router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfoSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(RepositoryInfoRequestSchema), requireAction('project.create.git.inspect', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const { providerId, repoUrl } = req.body as RepoInfoBody;
   const userId = req.user!.userId;
 
@@ -99,7 +95,7 @@ router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfo
     // Get branches
     const branches = await client.getBranches(repoUrlStr);
 
-    res.json({
+    res.json(RepositoryInfoResponseSchema.parse({
       name: repoInfo.name,
       fullName: repoInfo.fullName,
       defaultBranch: repoInfo.defaultBranch,
@@ -107,7 +103,7 @@ router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfo
         name: b.name,
         isDefault: b.isDefault,
       })),
-    });
+    }));
   } catch (error: any) {
     logger.error('Failed to get repo info', { providerId: providerIdStr, repoUrl: repoUrlStr, error });
     throw Errors.internal(error.message || 'Failed to get repository info');
@@ -118,7 +114,7 @@ router.post('/git-api/repo-info', apiLimiter, requireAuth, validateBody(repoInfo
  * POST /git-api/clone
  * Clone a repository and create a new project
  */
-router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(CloneFromGitRequestSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const { providerId, repoUrl, branch: requestedBranch, projectName } = req.body as CloneBody;
   const userId = req.user!.userId;
 
@@ -189,10 +185,12 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
     const projectId = generateId();
     const now = unixTimestamp();
 
+    const effectiveTenantId = req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
     await projectRepo.insert({
       id: projectId,
       name: finalProjectName,
       ownerId: userId,
+      tenantId: effectiveTenantId,
       createdAt: now,
       updatedAt: now,
     });
@@ -223,6 +221,15 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       })
       .orIgnore()
       .execute();
+
+    await writeProjectMemberRoleAssignments(dataSource, {
+      projectId,
+      tenantId: effectiveTenantId,
+      userId,
+      roles: ['owner'],
+      createdById: null,
+      createdAt: membershipNow,
+    });
 
     logger.info('Created project for clone', { projectId, projectName: finalProjectName });
 
@@ -419,13 +426,13 @@ router.post('/git-api/clone', apiLimiter, requireAuth, validateBody(cloneSchema)
       }
     }
 
-    res.status(201).json({
+    res.status(201).json(CloneFromGitResponseSchema.parse({
       projectId,
       projectName: finalProjectName,
       filesImported,
       foldersCreated: sortedFolders.length,
       repositoryId,
-    });
+    }));
   } catch (error: any) {
     logger.error('Failed to clone repository', { providerId: providerIdStr, repoUrl: repoUrlStr, error });
     throw Errors.internal(error.message || 'Failed to clone repository');

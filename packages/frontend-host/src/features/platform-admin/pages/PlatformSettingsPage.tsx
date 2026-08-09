@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { Settings } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
-import { 
+import {
   SkeletonText,
-  InlineNotification, 
-  Modal, 
-  TextInput, 
-  TextArea, 
+  InlineNotification,
+  Modal,
+  TextInput,
+  TextArea,
   ComboBox,
   Tabs,
   TabList,
@@ -14,9 +14,9 @@ import {
   TabPanels,
   TabPanel,
 } from '@carbon/react';
-import { 
-  usePlatformSettings, 
-  useUpdatePlatformSettings, 
+import {
+  usePlatformSettings,
+  useUpdatePlatformSettings,
   useEnvironmentTags,
   useCreateEnvironmentTag,
   useUpdateEnvironmentTag,
@@ -32,8 +32,20 @@ import {
   useAdminGitProviders,
   useUpdateGitProvider,
 } from '../hooks/useAdminApi';
-import type { EnvironmentTag, ProjectGovernanceItem, EngineGovernanceItem, UserListItem } from '../../../api/platform-admin';
-import SsoSettingsTab from '../components/SsoSettingsTab';
+import type {
+  EnvironmentTag,
+  ProjectGovernanceItem,
+  EngineGovernanceItem,
+  AccessAuthorityMode,
+  EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
+  ProjectEngineTargetPolicyMode,
+  UserListItem,
+} from '../../../api/platform-admin';
+import IdentityProvidersSettingsTab from '../components/IdentityProvidersSettingsTab';
+import IdentityMappingsSettingsTab from '../components/IdentityMappingsSettingsTab';
+import ConfigurationBundleSettingsTab from '../components/ConfigurationBundleSettingsTab';
+import RoleLibrarySettingsTab from '../components/RoleLibrarySettingsTab';
 import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
 import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
@@ -42,6 +54,20 @@ import EmailConfigurations from '../../../pages/admin/EmailConfigurations';
 import EmailTemplates from '../../../pages/admin/EmailTemplates';
 import BrandingSettingsTab from '../components/BrandingSettingsTab';
 import { PiiRedactionSettingsSection } from '../components/PiiRedactionSettingsSection';
+import { AuthContext } from '../../../contexts/AuthContext';
+import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils';
+import { evaluateActionSnapshot } from '../../../shared/auth/guards';
+import {
+  ACCESS_CONTROL_PLATFORM_PERMISSIONS,
+  hasAnyPlatformPermission,
+  PlatformPermission,
+  PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS,
+} from '../../../shared/auth/permissions';
+
+const AccessControl = React.lazy(() => import('./AccessControl'));
+const AuthzPolicies = React.lazy(() => import('./AuthzPolicies'));
+const AuthzAuditLog = React.lazy(() => import('./AuthzAuditLog'));
+const AuditLogViewer = React.lazy(() => import('../../../pages/AuditLogViewer'));
 
 // Predefined colors for environment tags
 const TAG_COLORS = [
@@ -55,17 +81,123 @@ const TAG_COLORS = [
   '#a2191f', // Dark Red
 ];
 
-type PlatformSettingsSection = 'git' | 'projects' | 'invite-domains' | 'pii-redaction' | 'engines' | 'sso' | 'email' | 'email-templates' | 'branding';
+type PlatformSettingsSectionVisibility =
+  | 'settings'
+  | 'settings-or-git-manage'
+  | 'settings-or-governance-read'
+  | 'identity-providers'
+  | 'identity-mappings'
+  | 'configuration'
+  | 'access-control'
+  | 'authz-policies'
+  | 'audit';
+
+const PLATFORM_SETTINGS_SECTION_REGISTRY = [
+  { id: 'git', label: 'Git', visibility: 'settings-or-git-manage' },
+  { id: 'projects', label: 'Projects', visibility: 'settings-or-governance-read' },
+  { id: 'invite-domains', label: 'Invite Domains', visibility: 'settings' },
+  { id: 'pii-redaction', label: 'PII Redaction', visibility: 'settings' },
+  { id: 'engines', label: 'Engines', visibility: 'settings-or-governance-read' },
+  { id: 'identity-providers', label: 'Identity Providers', visibility: 'identity-providers' },
+  { id: 'identity-mappings', label: 'Identity Mappings', visibility: 'identity-mappings' },
+  { id: 'configuration', label: 'Configuration', visibility: 'configuration' },
+  { id: 'role-library', label: 'Role Library', visibility: 'access-control' },
+  { id: 'access-control', label: 'Access Control', visibility: 'access-control' },
+  { id: 'authz-policies', label: 'Authorization Policies', visibility: 'authz-policies' },
+  { id: 'authz-audit', label: 'Authorization Audit', visibility: 'audit' },
+  { id: 'audit-logs', label: 'System Audit Logs', visibility: 'audit' },
+  { id: 'email', label: 'Email', visibility: 'settings' },
+  { id: 'email-templates', label: 'Email Templates', visibility: 'settings' },
+  { id: 'branding', label: 'Branding', visibility: 'settings' },
+] as const satisfies ReadonlyArray<{ id: string; label: string; visibility: PlatformSettingsSectionVisibility }>;
+
+type PlatformSettingsSection = typeof PLATFORM_SETTINGS_SECTION_REGISTRY[number]['id'];
+const PLATFORM_SETTINGS_SECTION_BY_ID = new Map(PLATFORM_SETTINGS_SECTION_REGISTRY.map((section) => [section.id, section]));
 
 interface PlatformSettingsPageProps {
   section?: PlatformSettingsSection;
 }
 
 export default function PlatformSettingsPage({ section }: PlatformSettingsPageProps) {
-  const { data: settings, isLoading, error } = usePlatformSettings();
-  const { data: envTags, isLoading: envLoading } = useEnvironmentTags();
-  const { data: gitProviders, isLoading: gitProvidersLoading } = useAdminGitProviders();
+  const authContext = useContext(AuthContext);
+  const platformResource = { type: 'platform' as const, id: null };
+  const hasPermissionSnapshot = Boolean(authContext?.permissions);
+  const permissionSnapshot = authContext?.permissions ?? null;
+  const settingsReadDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.settings.read', platformResource);
+  const settingsManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.settings.manage', platformResource);
+  const governanceReadDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.read', platformResource);
+  const governanceManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.manage', platformResource);
+  const governanceSettingsManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.settings.manage', platformResource);
+  const engineAccessManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.engine-access.manage', platformResource);
+  const projectAccessManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.governance.project-access.manage', platformResource);
+  const gitProvidersManageDecision = evaluateActionSnapshot(authContext?.permissions ?? null, 'platform.git.providers.manage', platformResource);
+  const canViewPlatformSettingsHub = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS);
+  const canReadSettings = !hasPermissionSnapshot || settingsReadDecision.allowed;
+  const canManageSettings = !hasPermissionSnapshot || settingsManageDecision.allowed;
+  const canReadGovernance = !hasPermissionSnapshot || governanceReadDecision.allowed;
+  const canManageGovernance = !hasPermissionSnapshot || governanceManageDecision.allowed;
+  const canManageGitProviders = !hasPermissionSnapshot || gitProvidersManageDecision.allowed;
+  const canViewAccessControl = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, ACCESS_CONTROL_PLATFORM_PERMISSIONS);
+  const canViewSsoMappings = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
+    PlatformPermission.SSO_ASSIGNMENTS_VIEW,
+    PlatformPermission.SSO_ASSIGNMENTS_MANAGE,
+  ]);
+  const canViewIdentityProviders = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
+    PlatformPermission.SSO_PROVIDERS_VIEW,
+    PlatformPermission.SSO_PROVIDERS_MANAGE,
+  ]);
+  const canViewConfiguration = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [
+    PlatformPermission.CONFIG_BUNDLES_VIEW,
+    PlatformPermission.CONFIG_BUNDLES_PREVIEW,
+    PlatformPermission.CONFIG_BUNDLES_APPLY,
+    PlatformPermission.CONFIG_BUNDLES_EXPORT,
+  ]);
+  const canViewAuthzPolicies = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUTHZ_ROLES_MANAGE]);
+  const canViewAudit = !hasPermissionSnapshot || hasAnyPlatformPermission(permissionSnapshot, [PlatformPermission.AUDIT_VIEW]);
+  const sectionVisibility: Record<PlatformSettingsSectionVisibility, boolean> = {
+    settings: canReadSettings,
+    'settings-or-git-manage': canReadSettings || canManageGitProviders,
+    'settings-or-governance-read': canReadSettings || canReadGovernance,
+    'identity-providers': canViewIdentityProviders,
+    'identity-mappings': canViewSsoMappings,
+    configuration: canViewConfiguration,
+    'access-control': canViewAccessControl,
+    'authz-policies': canViewAuthzPolicies,
+    audit: canViewAudit,
+  };
+  const settingsReadUnavailableReason = hasPermissionSnapshot && !settingsReadDecision.allowed ? settingsReadDecision.reason : null;
+  const settingsManageUnavailableReason = hasPermissionSnapshot && !settingsManageDecision.allowed ? settingsManageDecision.reason : null;
+  const governanceReadUnavailableReason = hasPermissionSnapshot && !governanceReadDecision.allowed ? governanceReadDecision.reason : null;
+  const governanceManageUnavailableReason = hasPermissionSnapshot && !governanceManageDecision.allowed ? governanceManageDecision.reason : null;
+  const gitProvidersManageUnavailableReason = hasPermissionSnapshot && !gitProvidersManageDecision.allowed ? gitProvidersManageDecision.reason : null;
+
+  const { data: settings, isLoading, error } = usePlatformSettings({ enabled: canReadSettings });
+  const hasServerActionAvailability = Boolean(permissionSnapshot?.platformActionAvailability);
+  const legacyGovernanceSettingsConfigLocked = settings?.governanceBehavior?.governanceSettingsMutations === 'blocked'
+    || settings?.accessGovernanceOwnershipMode === 'config_locked';
+  const canManageGovernanceSettings = canManageSettings
+    && (hasServerActionAvailability ? governanceSettingsManageDecision.allowed : !legacyGovernanceSettingsConfigLocked);
+  const governanceSettingsUnavailableReason = hasServerActionAvailability
+    ? governanceSettingsManageDecision.reason
+    : legacyGovernanceSettingsConfigLocked
+      ? `Managed by ${settings?.accessGovernanceSourceRef || 'configuration'}`
+      : settingsManageUnavailableReason;
+  const canManageEngineGovernance = canManageGovernance
+    && (!hasServerActionAvailability || engineAccessManageDecision.allowed);
+  const canManageProjectGovernance = canManageGovernance
+    && (!hasServerActionAvailability || projectAccessManageDecision.allowed);
+  const engineGovernanceUnavailableReason = hasServerActionAvailability && !engineAccessManageDecision.allowed
+    ? engineAccessManageDecision.reason
+    : governanceManageUnavailableReason;
+  const projectGovernanceUnavailableReason = hasServerActionAvailability && !projectAccessManageDecision.allowed
+    ? projectAccessManageDecision.reason
+    : governanceManageUnavailableReason;
+  const { data: envTags, isLoading: envLoading } = useEnvironmentTags({ enabled: canReadSettings });
+  const { data: gitProviders, isLoading: gitProvidersLoading } = useAdminGitProviders({ enabled: canManageGitProviders });
   const updateSettings = useUpdatePlatformSettings();
+  const settingsUpdateError = updateSettings.isError
+    ? getUiErrorMessage(updateSettings.error, 'Failed to save platform settings')
+    : null;
   const updateGitProvider = useUpdateGitProvider();
   const createTag = useCreateEnvironmentTag();
   const updateTag = useUpdateEnvironmentTag();
@@ -100,9 +232,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const [inviteDomainInput, setInviteDomainInput] = useState('');
 
   // Governance hooks - fetch all projects/engines for ComboBox
-  const { data: allProjects, isLoading: projectsLoading } = useProjectsGovernance(undefined);
-  const { data: allEngines, isLoading: enginesLoading } = useEnginesGovernance(undefined);
-  const { data: allUsers } = useAdminUsers({ limit: 100 });
+  const { data: allProjects, isLoading: projectsLoading } = useProjectsGovernance(undefined, { enabled: canReadGovernance });
+  const { data: allEngines, isLoading: enginesLoading } = useEnginesGovernance(undefined, { enabled: canReadGovernance });
+  const { data: allUsers } = useAdminUsers({ limit: 100 }, { enabled: canReadGovernance });
   const assignProjectOwner = useAssignProjectOwner();
   const assignProjectDelegate = useAssignProjectDelegate();
   const assignEngineOwner = useAssignEngineOwner();
@@ -115,18 +247,21 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const openCreateModal = () => {
+    if (!canManageSettings) return;
     resetForm();
     setCreateModalOpen(true);
   };
 
   const openEditModal = (tag: EnvironmentTag) => {
+    if (!canManageSettings) return;
     setFormName(tag.name);
-    setFormColor(tag.color);
+    setFormColor(tag.color ?? TAG_COLORS[0]);
     setFormManualDeploy(tag.manualDeployAllowed);
     setEditingTag(tag);
   };
 
   const handleCreateTag = () => {
+    if (!canManageSettings) return;
     createTag.mutate(
       { name: formName, color: formColor, manualDeployAllowed: formManualDeploy },
       { onSuccess: () => { setCreateModalOpen(false); resetForm(); } }
@@ -134,7 +269,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const handleUpdateTag = () => {
-    if (!editingTag) return;
+    if (!canManageSettings || !editingTag) return;
     updateTag.mutate(
       { id: editingTag.id, name: formName, color: formColor, manualDeployAllowed: formManualDeploy },
       { onSuccess: () => { setEditingTag(null); resetForm(); } }
@@ -142,7 +277,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const handleDeleteTag = () => {
-    if (!deleteConfirmTag) return;
+    if (!canManageSettings || !deleteConfirmTag) return;
     deleteTag.mutate(deleteConfirmTag.id, {
       onSuccess: () => setDeleteConfirmTag(null),
     });
@@ -169,7 +304,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   const handleDrop = (e: React.DragEvent, targetTagId: string) => {
     e.preventDefault();
-    if (!draggedTagId || draggedTagId === targetTagId || !envTags) return;
+    if (!canManageSettings || !draggedTagId || draggedTagId === targetTagId || !envTags) return;
 
     const currentOrder = envTags.map((t: EnvironmentTag) => t.id);
     const draggedIndex = currentOrder.indexOf(draggedTagId);
@@ -192,6 +327,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
 
   // Governance handlers
   const openAssignModal = (type: typeof assignModalType, target: { id: string; name: string }) => {
+    const canAssign = type === 'engineOwner' || type === 'engineDelegate'
+      ? canManageEngineGovernance
+      : canManageProjectGovernance;
+    if (!canAssign) return;
     setAssignModalType(type);
     setAssignTarget(target);
     setSelectedUser(null);
@@ -208,7 +347,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const handleAssign = () => {
-    if (!assignTarget || !selectedUser || !assignReason.trim()) return;
+    const canAssign = assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+      ? canManageEngineGovernance
+      : canManageProjectGovernance;
+    if (!canAssign || !assignTarget || !selectedUser || !assignReason.trim()) return;
 
     const payload = { userId: selectedUser.id, reason: assignReason };
     const onSuccess = () => closeAssignModal();
@@ -229,15 +371,16 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     }
   };
 
-  const isAssigning = assignProjectOwner.isPending || assignProjectDelegate.isPending || 
+  const isAssigning = assignProjectOwner.isPending || assignProjectDelegate.isPending ||
                       assignEngineOwner.isPending || assignEngineDelegate.isPending;
 
   const handleToggle = (key: 'syncPushEnabled' | 'syncPullEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => {
+    if (!canManageSettings) return;
     updateSettings.mutate({ [key]: value });
   };
 
   const handleDeployRoleToggle = (role: string, checked: boolean) => {
-    if (!settings) return;
+    if (!canManageSettings || !settings) return;
     const current = Array.isArray(settings.defaultDeployRoles) ? settings.defaultDeployRoles : [];
     const updated = checked
       ? [...current, role]
@@ -245,9 +388,38 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     updateSettings.mutate({ defaultDeployRoles: updated });
   };
 
-  const headerTitle = section
-    ? `${section.charAt(0).toUpperCase()}${section.slice(1)} Settings`
-    : 'Platform Settings';
+  const handleEngineOnboardingModeChange = (mode: EngineOnboardingMode) => {
+    if (!canManageGovernanceSettings) return;
+    updateSettings.mutate({ engineOnboardingMode: mode });
+  };
+
+  const handleProjectEngineTargetModeChange = (mode: ProjectEngineTargetPolicyMode) => {
+    if (!canManageGovernanceSettings) return;
+    updateSettings.mutate({ projectEngineTargetMode: mode });
+  };
+
+  const handleEngineAccessAuthorityChange = (mode: AccessAuthorityMode) => {
+    if (!canManageGovernanceSettings) return;
+    updateSettings.mutate({ engineAccessAuthority: mode });
+  };
+
+  const handleProjectAccessAuthorityChange = (mode: AccessAuthorityMode) => {
+    if (!canManageGovernanceSettings) return;
+    updateSettings.mutate({ projectAccessAuthority: mode });
+  };
+
+  const handleEngineRuntimeAuthorizationModeChange = (mode: EngineRuntimeAuthorizationMode) => {
+    if (!canManageGovernanceSettings) return;
+    updateSettings.mutate({ engineRuntimeAuthorizationMode: mode });
+  };
+
+  const handleCredentiallessCustomerSidecarsEnabledChange = (enabled: boolean) => {
+    if (!canManageSettings) return;
+    updateSettings.mutate({ credentiallessCustomerSidecarsEnabled: enabled });
+  };
+
+  const sectionLabel = section ? PLATFORM_SETTINGS_SECTION_BY_ID.get(section)?.label || null : null;
+  const headerTitle = sectionLabel || 'Platform Settings';
   const headerSubtitle = section
     ? 'Configure platform defaults for this area'
     : 'Configure global platform behavior and defaults';
@@ -259,8 +431,13 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       gitProvidersLoading={gitProvidersLoading}
       onToggle={handleToggle}
       onUpdateGitProvider={async (id, updates) => {
+        if (!canManageGitProviders) return;
         await updateGitProvider.mutateAsync({ id, updates });
       }}
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageGitProviders={canManageGitProviders}
+      gitProvidersUnavailableReason={gitProvidersManageUnavailableReason}
     />
   );
 
@@ -274,6 +451,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       setProjectComboKey={setProjectComboKey}
       onAssignOwner={(target) => openAssignModal('projectOwner', target)}
       onAssignDelegate={(target) => openAssignModal('projectDelegate', target)}
+      canReadGovernance={canReadGovernance}
+      canManageGovernance={canManageProjectGovernance}
+      governanceReadUnavailableReason={governanceReadUnavailableReason}
+      governanceManageUnavailableReason={projectGovernanceUnavailableReason}
+      projectAccessAuthority={settings?.projectAccessAuthority || 'manual'}
     />
   );
 
@@ -285,7 +467,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       setInviteDomainInput={setInviteDomainInput}
       addInviteDomain={addInviteDomain}
       removeInviteDomain={removeInviteDomain}
-      onToggleInviteAllowAll={(checked) => updateSettings.mutate({ inviteAllowAllDomains: checked } as any)}
+      onToggleInviteAllowAll={(checked) => {
+        if (canManageSettings) updateSettings.mutate({ inviteAllowAllDomains: checked } as any);
+      }}
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
     />
   );
 
@@ -293,7 +479,10 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     <PiiRedactionSettingsSection
       settings={settings}
       saving={piiSaving || updateSettings.isPending}
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
       onSave={async (updates) => {
+        if (!canManageSettings) return;
         setPiiSaving(true);
         try {
           await updateSettings.mutateAsync(updates);
@@ -315,6 +504,12 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       setEngineComboKey={setEngineComboKey}
       onAssignOwner={(target) => openAssignModal('engineOwner', target)}
       onAssignDelegate={(target) => openAssignModal('engineDelegate', target)}
+      onEngineOnboardingModeChange={handleEngineOnboardingModeChange}
+      onProjectEngineTargetModeChange={handleProjectEngineTargetModeChange}
+      onEngineAccessAuthorityChange={handleEngineAccessAuthorityChange}
+      onProjectAccessAuthorityChange={handleProjectAccessAuthorityChange}
+      onEngineRuntimeAuthorizationModeChange={handleEngineRuntimeAuthorizationModeChange}
+      onCredentiallessCustomerSidecarsEnabledChange={handleCredentiallessCustomerSidecarsEnabledChange}
       onDeployRoleToggle={handleDeployRoleToggle}
       envTags={envTags}
       envLoading={envLoading}
@@ -328,41 +523,112 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onDragEnd={handleDragEnd}
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
+      canManageGovernanceSettings={canManageGovernanceSettings}
+      governanceSettingsUnavailableReason={governanceSettingsUnavailableReason}
+      canReadGovernance={canReadGovernance}
+      canManageGovernance={canManageEngineGovernance}
+      governanceReadUnavailableReason={governanceReadUnavailableReason}
+      governanceManageUnavailableReason={engineGovernanceUnavailableReason}
+      settingsSaveState={updateSettings.isPending ? 'saving' : updateSettings.isError ? 'error' : updateSettings.isSuccess ? 'saved' : 'idle'}
     />
   );
 
-  const renderSso = () => <SsoSettingsTab />;
+  const renderIdentityProviders = () => <IdentityProvidersSettingsTab
+    loginPolicy={settings ? {
+      localPasswordLoginMode: settings.localPasswordLoginMode,
+      ssoProviderSelectionMode: settings.ssoProviderSelectionMode,
+    } : null}
+    canManageLoginPolicy={canManageSettings}
+    loginPolicyUnavailableReason={settingsManageUnavailableReason}
+    onLoginPolicyChange={(change) => updateSettings.mutate(change)}
+  />;
+  const renderIdentityMappings = () => <IdentityMappingsSettingsTab />;
+  const renderConfiguration = () => <ConfigurationBundleSettingsTab />;
+  const renderRoleLibrary = () => <RoleLibrarySettingsTab />;
 
-  const renderEmail = () => <EmailConfigurations embedded />;
+  const renderAdminSurface = (children: React.ReactNode) => (
+    <React.Suspense fallback={<SkeletonText paragraph lineCount={6} />}>
+      {children}
+    </React.Suspense>
+  );
 
-  const renderEmailTemplates = () => <EmailTemplates embedded />;
+  const renderAccessControl = () => renderAdminSurface(<AccessControl />);
 
-  const renderBranding = () => <BrandingSettingsTab />;
 
-  const renderSection = () => {
-    switch (section) {
-      case 'git':
-        return renderGit();
-      case 'projects':
-        return renderProjects();
-      case 'invite-domains':
-        return renderInviteDomains();
-      case 'pii-redaction':
-        return renderPiiRedaction();
-      case 'engines':
-        return renderEngines();
-      case 'sso':
-        return renderSso();
-      case 'email':
-        return renderEmail();
-      case 'email-templates':
-        return renderEmailTemplates();
-      case 'branding':
-        return renderBranding();
-      default:
-        return null;
-    }
+  const renderAuthzPolicies = () => renderAdminSurface(<AuthzPolicies />);
+
+  const renderAuthzAudit = () => renderAdminSurface(<AuthzAuditLog />);
+
+  const renderAuditLogs = () => renderAdminSurface(<AuditLogViewer />);
+
+  const renderEmail = () => (
+    <EmailConfigurations
+      embedded
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
+    />
+  );
+
+  const renderEmailTemplates = () => (
+    <EmailTemplates
+      embedded
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
+    />
+  );
+
+  const renderBranding = () => (
+    <BrandingSettingsTab
+      canManageSettings={canManageSettings}
+      settingsUnavailableReason={settingsManageUnavailableReason}
+    />
+  );
+
+  const sectionRenderers: Record<PlatformSettingsSection, () => React.ReactNode> = {
+    git: renderGit,
+    projects: renderProjects,
+    'invite-domains': renderInviteDomains,
+    'pii-redaction': renderPiiRedaction,
+    engines: renderEngines,
+    'identity-providers': renderIdentityProviders,
+    'identity-mappings': renderIdentityMappings,
+    configuration: renderConfiguration,
+    'role-library': renderRoleLibrary,
+    'access-control': renderAccessControl,
+    'authz-policies': renderAuthzPolicies,
+    'authz-audit': renderAuthzAudit,
+    'audit-logs': renderAuditLogs,
+    email: renderEmail,
+    'email-templates': renderEmailTemplates,
+    branding: renderBranding,
   };
+  const platformSettingsTabs = PLATFORM_SETTINGS_SECTION_REGISTRY
+    .filter((tab) => sectionVisibility[tab.visibility])
+    .map((tab) => ({ ...tab, render: sectionRenderers[tab.id] }));
+
+  const scrollPlatformSettingsTabIntoView = (selectedTab: HTMLElement) => {
+    if (typeof window === 'undefined') return;
+    const centerSelectedTab = () => {
+      const tabList = selectedTab.closest<HTMLElement>(
+        '[role="tablist"][aria-label="Platform settings tabs"]',
+      );
+      if (!tabList || !selectedTab) return;
+      const centeredScrollLeft = selectedTab.offsetLeft
+        - ((tabList.clientWidth - selectedTab.offsetWidth) / 2);
+      tabList.scrollTo({
+        left: Math.max(0, centeredScrollLeft),
+        behavior: 'auto',
+      });
+    };
+    window.requestAnimationFrame(centerSelectedTab);
+    window.setTimeout(centerSelectedTab, 250);
+  };
+
+  const selectedSectionTab = section
+    ? platformSettingsTabs.find((tab) => tab.id === section)
+    : null;
 
   const normalizedInviteDomains = Array.isArray((settings as any)?.inviteAllowedDomains)
     ? ((settings as any).inviteAllowedDomains as string[]).map((d) => String(d || '').trim().toLowerCase()).filter(Boolean)
@@ -371,6 +637,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   const inviteAllowAll = (settings as any)?.inviteAllowAllDomains ?? true;
 
   const addInviteDomain = () => {
+    if (!canManageSettings) return;
     const raw = String(inviteDomainInput || '').trim().toLowerCase();
     if (!raw) return;
     const domain = raw.includes('@') ? raw.split('@').pop() || '' : raw;
@@ -382,6 +649,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
   };
 
   const removeInviteDomain = (domain: string) => {
+    if (!canManageSettings) return;
     const next = (normalizedInviteDomains || []).filter((d) => d !== domain);
     updateSettings.mutate({ inviteAllowedDomains: next } as any);
   };
@@ -434,6 +702,64 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     );
   }
 
+  if (!canViewPlatformSettingsHub) {
+    return (
+      <PageLayout
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--spacing-5)',
+          background: 'var(--color-bg-primary)',
+          minHeight: '100vh',
+        }}
+      >
+        <PageHeader
+          icon={Settings}
+          title={headerTitle}
+          subtitle={headerSubtitle}
+          gradient={PAGE_GRADIENTS.red}
+        />
+        <div style={{ padding: 'var(--spacing-5)' }}>
+          <InlineNotification
+            kind="error"
+            title="Platform settings unavailable"
+            subtitle="No Platform Settings or platform administration permissions are available for the current user."
+            hideCloseButton
+          />
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (platformSettingsTabs.length === 0) {
+    return (
+      <PageLayout
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--spacing-5)',
+          background: 'var(--color-bg-primary)',
+          minHeight: '100vh',
+        }}
+      >
+        <PageHeader
+          icon={Settings}
+          title={headerTitle}
+          subtitle={headerSubtitle}
+          gradient={PAGE_GRADIENTS.red}
+        />
+        <div style={{ padding: 'var(--spacing-5)' }}>
+          <InlineNotification
+            kind="info"
+            title="No available settings tabs"
+            subtitle={settingsReadUnavailableReason || 'No tab permissions are available for the current user.'}
+            hideCloseButton
+          />
+        </div>
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout
       style={{
@@ -451,113 +777,53 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         gradient={PAGE_GRADIENTS.red}
       />
 
+      {settingsUpdateError && (
+        <div style={{ paddingInline: 'var(--spacing-5)' }}>
+          <InlineNotification
+            kind="error"
+            title="Platform settings not saved"
+            subtitle={settingsUpdateError}
+            hideCloseButton
+          />
+        </div>
+      )}
+
       {section ? (
         <div style={{ paddingInline: 0, paddingBlock: 'var(--cds-layout-density-padding-inline-local)' }}>
-          {renderSection()}
+          {selectedSectionTab ? selectedSectionTab.render() : (
+            <InlineNotification
+              kind="error"
+              title="Settings tab unavailable"
+              subtitle="The current user does not have permission to open this Platform Settings tab."
+              hideCloseButton
+            />
+          )}
         </div>
       ) : (
         <Tabs>
-          <TabList aria-label="Platform settings tabs">
-            <Tab>Git</Tab>
-            <Tab>Projects</Tab>
-            <Tab>Invite Domains</Tab>
-            <Tab>PII Redaction</Tab>
-            <Tab>Engines</Tab>
-            <Tab>SSO</Tab>
-            <Tab>Email</Tab>
-            <Tab>Email Templates</Tab>
-            <Tab>Branding</Tab>
+          <TabList aria-label="Platform settings tabs" className="eg-scrollable-tab-list" scrollIntoView>
+            {platformSettingsTabs.map((tab) => (
+              <Tab
+                key={tab.id}
+                onClick={(event) => scrollPlatformSettingsTabIntoView(event.currentTarget as HTMLElement)}
+                onFocus={(event) => scrollPlatformSettingsTabIntoView(event.currentTarget as HTMLElement)}
+              >
+                {tab.label}
+              </Tab>
+            ))}
           </TabList>
           <TabPanels>
-            {/* Tab 1: Git */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderGit()}
-            </TabPanel>
-
-            {/* Tab 2: Projects */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderProjects()}
-            </TabPanel>
-
-            {/* Tab 3: Invite Domains */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderInviteDomains()}
-            </TabPanel>
-
-            {/* Tab 4: PII Redaction */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderPiiRedaction()}
-            </TabPanel>
-
-            {/* Tab 5: Engines */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderEngines()}
-            </TabPanel>
-
-            {/* Tab 6: SSO */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderSso()}
-            </TabPanel>
-
-            {/* Tab 7: Email */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderEmail()}
-            </TabPanel>
-
-            {/* Tab 8: Email Templates */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderEmailTemplates()}
-            </TabPanel>
-
-            {/* Tab 9: Branding */}
-            <TabPanel
-              style={{
-                paddingInline: 0,
-                paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
-              }}
-            >
-              {renderBranding()}
-            </TabPanel>
+            {platformSettingsTabs.map((tab) => (
+              <TabPanel
+                key={tab.id}
+                style={{
+                  paddingInline: 0,
+                  paddingBlock: 'var(--cds-layout-density-padding-inline-local)',
+                }}
+              >
+                {tab.render()}
+              </TabPanel>
+            ))}
           </TabPanels>
         </Tabs>
       )}
@@ -570,7 +836,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         primaryButtonText="Create"
         secondaryButtonText="Cancel"
         onRequestSubmit={handleCreateTag}
-        primaryButtonDisabled={!formName.trim() || createTag.isPending}
+        primaryButtonDisabled={!formName.trim() || createTag.isPending || !canManageSettings}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
           <TextInput
@@ -579,12 +845,21 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
             placeholder="e.g., Development"
             value={formName}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormName(e.target.value)}
+            disabled={!canManageSettings}
           />
           <div>
             <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: '12px', fontWeight: 500 }}>Color</label>
             <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
               {TAG_COLORS.map((c) => (
-                <button key={c} type="button" onClick={() => setFormColor(c)} style={{ width: 28, height: 28, borderRadius: 4, background: c, border: formColor === c ? '3px solid var(--color-text-primary)' : '2px solid transparent', cursor: 'pointer' }} />
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    if (canManageSettings) setFormColor(c);
+                  }}
+                  disabled={!canManageSettings}
+                  style={{ width: 28, height: 28, borderRadius: 4, background: c, border: formColor === c ? '3px solid var(--color-text-primary)' : '2px solid transparent', cursor: canManageSettings ? 'pointer' : 'default' }}
+                />
               ))}
             </div>
           </div>
@@ -597,7 +872,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
                   name="deploy-mode"
                   checked={!formManualDeploy}
                   onChange={() => setFormManualDeploy(false)}
-                  style={{ cursor: 'pointer' }}
+                  disabled={!canManageSettings}
+                  style={{ cursor: canManageSettings ? 'pointer' : 'default' }}
                 />
                 <span style={{ fontSize: '14px' }}>CI/CD Only</span>
                 <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>— Deployments only via pipelines</span>
@@ -608,7 +884,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
                   name="deploy-mode"
                   checked={formManualDeploy}
                   onChange={() => setFormManualDeploy(true)}
-                  style={{ cursor: 'pointer' }}
+                  disabled={!canManageSettings}
+                  style={{ cursor: canManageSettings ? 'pointer' : 'default' }}
                 />
                 <span style={{ fontSize: '14px' }}>Manual Allowed</span>
                 <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>— Users can trigger deployments manually</span>
@@ -626,7 +903,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         primaryButtonText="Save"
         secondaryButtonText="Cancel"
         onRequestSubmit={handleUpdateTag}
-        primaryButtonDisabled={!formName.trim() || updateTag.isPending}
+        primaryButtonDisabled={!formName.trim() || updateTag.isPending || !canManageSettings}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
           <TextInput
@@ -634,12 +911,21 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
             labelText="Name"
             value={formName}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormName(e.target.value)}
+            disabled={!canManageSettings}
           />
           <div>
             <label style={{ display: 'block', marginBottom: 'var(--spacing-2)', fontSize: '12px', fontWeight: 500 }}>Color</label>
             <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
               {TAG_COLORS.map((c) => (
-                <button key={c} type="button" onClick={() => setFormColor(c)} style={{ width: 28, height: 28, borderRadius: 4, background: c, border: formColor === c ? '3px solid var(--color-text-primary)' : '2px solid transparent', cursor: 'pointer' }} />
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    if (canManageSettings) setFormColor(c);
+                  }}
+                  disabled={!canManageSettings}
+                  style={{ width: 28, height: 28, borderRadius: 4, background: c, border: formColor === c ? '3px solid var(--color-text-primary)' : '2px solid transparent', cursor: canManageSettings ? 'pointer' : 'default' }}
+                />
               ))}
             </div>
           </div>
@@ -652,7 +938,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
                   name="edit-deploy-mode"
                   checked={!formManualDeploy}
                   onChange={() => setFormManualDeploy(false)}
-                  style={{ cursor: 'pointer' }}
+                  disabled={!canManageSettings}
+                  style={{ cursor: canManageSettings ? 'pointer' : 'default' }}
                 />
                 <span style={{ fontSize: '14px' }}>CI/CD Only</span>
                 <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>— Deployments only via pipelines</span>
@@ -663,7 +950,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
                   name="edit-deploy-mode"
                   checked={formManualDeploy}
                   onChange={() => setFormManualDeploy(true)}
-                  style={{ cursor: 'pointer' }}
+                  disabled={!canManageSettings}
+                  style={{ cursor: canManageSettings ? 'pointer' : 'default' }}
                 />
                 <span style={{ fontSize: '14px' }}>Manual Allowed</span>
                 <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>— Users can trigger deployments manually</span>
@@ -682,7 +970,7 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         secondaryButtonText="Cancel"
         danger
         onRequestSubmit={handleDeleteTag}
-        primaryButtonDisabled={deleteTag.isPending}
+        primaryButtonDisabled={deleteTag.isPending || !canManageSettings}
       >
         <p>Are you sure you want to delete <strong>{deleteConfirmTag?.name}</strong>? This may affect engines using this environment.</p>
       </Modal>
@@ -700,7 +988,11 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
         primaryButtonText={isAssigning ? 'Assigning...' : 'Assign'}
         secondaryButtonText="Cancel"
         onRequestSubmit={handleAssign}
-        primaryButtonDisabled={!selectedUser || !assignReason.trim() || isAssigning}
+        primaryButtonDisabled={!selectedUser || !assignReason.trim() || isAssigning || (
+          assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+            ? !canManageEngineGovernance
+            : !canManageProjectGovernance
+        )}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingTop: 'var(--spacing-4)' }}>
           <ComboBox
@@ -709,10 +1001,13 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
             titleText="Select User"
             placeholder="Find a user..."
             items={allUsers || []}
-            itemToString={(item: UserListItem | null) => 
+            itemToString={(item: UserListItem | null) =>
               item ? `${item.firstName || ''} ${item.lastName || ''} (${item.email})`.trim() : ''
             }
             selectedItem={selectedUser}
+            disabled={assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+              ? !canManageEngineGovernance
+              : !canManageProjectGovernance}
             onChange={({ selectedItem }: { selectedItem?: UserListItem | null }) => {
               setSelectedUser(selectedItem ?? null);
             }}
@@ -736,6 +1031,9 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
             value={assignReason}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setAssignReason(e.target.value)}
             rows={3}
+            disabled={assignModalType === 'engineOwner' || assignModalType === 'engineDelegate'
+              ? !canManageEngineGovernance
+              : !canManageProjectGovernance}
           />
         </div>
       </Modal>

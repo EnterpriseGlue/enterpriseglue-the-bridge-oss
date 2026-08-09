@@ -1,0 +1,11 @@
+services:
+  backend:
+    environment:
+      # The disposable Keycloak SAML signing certificate is fetched into the
+      # ignored local directory by the rehearsal helper. It is public IdP
+      # material, but uses the same opaque file-reference boundary as a
+      # production certificate reference.
+      EG_CONFIG_SECRET_PROVIDER: file
+      EG_CONFIG_SECRET_FILE_ROOT: /etc/enterpriseglue/local-identity-secrets
+    volumes:
+      - ${LOCAL_IDENTITY_SECRET_DIR:-./.local/docker/identity-secrets}:/etc/enterpriseglue/local-identity-secrets:ro

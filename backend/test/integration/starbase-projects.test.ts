@@ -9,6 +9,8 @@ let authToken = '';
 let userId = '';
 let otherToken = '';
 let otherUserId = '';
+let adminToken = '';
+let adminUserId = '';
 let seededProjectId = '';
 let createdProjectIds: string[] = [];
 
@@ -24,10 +26,14 @@ describe('Starbase projects', () => {
 
     const seededProject = await seedProject(userId, `${prefix}-engine-access-project`);
     seededProjectId = seededProject.id;
+
+    const admin = await seedAdditionalUser(prefix, 'admin', { platformRole: 'admin' });
+    adminUserId = admin.id;
+    adminToken = admin.token;
   });
 
   afterAll(async () => {
-    await cleanupSeededData(prefix, [seededProjectId, ...createdProjectIds], [userId, otherUserId]);
+    await cleanupSeededData(prefix, [seededProjectId, ...createdProjectIds], [userId, otherUserId, adminUserId]);
   });
 
   it('creates and lists projects for the owner', async () => {
@@ -53,6 +59,20 @@ describe('Starbase projects', () => {
     expect(listResponse.status).toBe(200);
     const names = (listResponse.body || []).map((p: any) => p.name);
     expect(names).toContain(`${prefix}-project`);
+  });
+
+  it('does not grant project visibility to a platform admin without project membership', async () => {
+    const app = createApp({
+      includeRateLimiting: false,
+    });
+
+    const response = await request(app)
+      .get('/t/default/starbase-api/projects')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    const projectIds = (response.body || []).map((p: any) => p.id);
+    expect(projectIds).not.toContain(seededProjectId);
   });
 
   it('renames a project', async () => {

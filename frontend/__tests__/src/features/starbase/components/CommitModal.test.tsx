@@ -42,6 +42,24 @@ vi.mock('@src/shared/api/client', () => ({
   },
 }));
 
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    permissions: {
+      userId: 'user-1',
+      platform: [],
+      projects: [
+        {
+          projectId: 'project-1',
+          permissions: ['project:versions:create', 'project:git:commit'],
+        },
+      ],
+      engines: [],
+      generatedAt: 1,
+    },
+    hasProjectPermission: vi.fn().mockReturnValue(true),
+  }),
+}));
+
 describe('CommitModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();

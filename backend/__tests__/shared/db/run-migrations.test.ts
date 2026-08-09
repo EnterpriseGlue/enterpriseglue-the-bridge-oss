@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { runMigrations } from '@enterpriseglue/shared/db/run-migrations.js';
+import {
+  LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
+  projectLegacyLocalRoleAssignmentsOnce,
+  runMigrations,
+} from '@enterpriseglue/shared/db/run-migrations.js';
 import { getDataSource, adapter } from '@enterpriseglue/shared/db/data-source.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -101,7 +106,7 @@ describe('runMigrations bootstrap behavior', () => {
 
   it('runs synchronize when any core bootstrap table is missing', async () => {
     const bootstrapRunner = createBootstrapRunner(
-      vi.fn(async (tablePath: string) => tablePath !== 'main.sso_providers')
+      vi.fn(async (tablePath: string) => tablePath !== 'main.refresh_tokens')
     );
     const integrityRunner = createIntegrityRunner();
 
@@ -112,12 +117,10 @@ describe('runMigrations bootstrap behavior', () => {
       getMetadata: vi.fn((entity: any) => {
         const byName: Record<string, string> = {
           User: 'main.users',
-          SsoProvider: 'main.sso_providers',
           RefreshToken: 'main.refresh_tokens',
           EnvironmentTag: 'main.environment_tags',
           PlatformSettings: 'main.platform_settings',
           EmailTemplate: 'main.email_templates',
-          SsoClaimsMapping: 'main.sso_claims_mappings',
           GitProvider: 'main.git_providers',
         };
         return { tablePath: byName[entity.name] ?? `main.${String(entity.name).toLowerCase()}` };
@@ -135,6 +138,110 @@ describe('runMigrations bootstrap behavior', () => {
     expect(dataSource.runMigrations).not.toHaveBeenCalled();
     expect(bootstrapRunner.release).toHaveBeenCalledTimes(1);
     expect(integrityRunner.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('records historical migrations without replay when a fresh current schema is synchronized', async () => {
+    const bootstrapRunner = createBootstrapRunner(vi.fn().mockResolvedValue(false));
+    const integrityRunner = createIntegrityRunner();
+
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: `main.${String(entity.name).toLowerCase()}`,
+      })),
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations();
+
+    expect(dataSource.synchronize).toHaveBeenCalledTimes(1);
+    expect(dataSource.runMigrations).toHaveBeenCalledTimes(1);
+    expect(dataSource.runMigrations).toHaveBeenCalledWith({ fake: true });
+    expect(dataSource.showMigrations).not.toHaveBeenCalled();
+    expect(bootstrapRunner.release).toHaveBeenCalledTimes(1);
+    expect(integrityRunner.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fake the migration baseline when a non-core canonical table already exists', async () => {
+    const bootstrapRunner = createBootstrapRunner(
+      vi.fn(async (tablePath: string) => tablePath === 'main.engines'),
+    );
+    const integrityRunner = createIntegrityRunner();
+
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      entityMetadatas: [
+        { tablePath: 'main.users' },
+        { tablePath: 'main.engines' },
+      ],
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: `main.${String(entity.name).toLowerCase()}`,
+      })),
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations();
+
+    expect(dataSource.synchronize).toHaveBeenCalledTimes(1);
+    expect(dataSource.runMigrations).toHaveBeenCalledTimes(1);
+    expect(dataSource.runMigrations).toHaveBeenCalledWith();
+    expect(dataSource.runMigrations).not.toHaveBeenCalledWith({ fake: true });
+  });
+
+  it('records a fresh Spanner migration baseline with explicit IDs', async () => {
+    (adapter.getDatabaseType as unknown as Mock).mockReturnValue('spanner');
+    (adapter.getSchemaName as unknown as Mock).mockReturnValue('');
+
+    const insert = vi.fn().mockResolvedValue(undefined);
+    const bootstrapRunner = {
+      ...createBootstrapRunner(vi.fn().mockResolvedValue(false)),
+      createTable: vi.fn().mockResolvedValue(undefined),
+    };
+    const integrityRunner = createIntegrityRunner();
+    const dataSource = {
+      createQueryRunner: vi.fn()
+        .mockReturnValueOnce(bootstrapRunner)
+        .mockReturnValueOnce(integrityRunner),
+      getMetadata: vi.fn((entity: any) => ({
+        tablePath: String(entity.name).toLowerCase(),
+      })),
+      synchronize: vi.fn().mockResolvedValue(undefined),
+      showMigrations: vi.fn().mockResolvedValue(true),
+      runMigrations: vi.fn().mockResolvedValue(undefined),
+      options: {},
+      migrations: [
+        { name: 'FirstMigration1700000000001' },
+        { name: 'SecondMigration1700000000002' },
+      ],
+      driver: {
+        instanceDatabase: {
+          table: vi.fn().mockReturnValue({ insert }),
+        },
+      },
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await runMigrations();
+
+    expect(dataSource.runMigrations).not.toHaveBeenCalled();
+    expect(bootstrapRunner.createTable).toHaveBeenCalledTimes(1);
+    expect(insert).toHaveBeenCalledWith([
+      { id: 1, timestamp: 1700000000001, name: 'FirstMigration1700000000001' },
+      { id: 2, timestamp: 1700000000002, name: 'SecondMigration1700000000002' },
+    ]);
   });
 
   it('skips synchronize when all core bootstrap tables already exist', async () => {
@@ -395,5 +502,42 @@ describe('runMigrations bootstrap behavior', () => {
     expect(integrityRunner.__repos.fileSnapshotRepo.update).toHaveBeenCalledWith({ id: 'fs-1' }, { mainFileId: 'file-1' });
     expect(bootstrapRunner.release).toHaveBeenCalledTimes(1);
     expect(integrityRunner.release).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('projectLegacyLocalRoleAssignmentsOnce', () => {
+  it('projects retained local rows once and records a durable marker in the same transaction', async () => {
+    const stateRepo = {
+      findOneBy: vi.fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY }),
+      upsert: vi.fn().mockResolvedValue(undefined),
+    };
+    const manager = { getRepository: vi.fn().mockReturnValue(stateRepo) };
+    const dataSource = {
+      transaction: vi.fn(async (callback: (transactionManager: typeof manager) => unknown) => callback(manager)),
+    };
+    const syncLegacyRoleAssignments = vi.spyOn(permissionService, 'syncLegacyRoleAssignments')
+      .mockResolvedValue({ scannedProjects: 2, scannedEngines: 3, upserted: 4, removed: 1 });
+
+    try {
+      await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 123)).resolves.toEqual({
+        scannedProjects: 2,
+        scannedEngines: 3,
+        upserted: 4,
+        removed: 1,
+      });
+      await expect(projectLegacyLocalRoleAssignmentsOnce(dataSource as never, 124)).resolves.toBeNull();
+
+      expect(syncLegacyRoleAssignments).toHaveBeenCalledTimes(1);
+      expect(syncLegacyRoleAssignments).toHaveBeenCalledWith({ now: 123 }, manager);
+      expect(stateRepo.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
+        completedAt: 123,
+        details: JSON.stringify({ scannedProjects: 2, scannedEngines: 3, upserted: 4, removed: 1 }),
+      }), { conflictPaths: ['key'], skipUpdateIfNoValuesChanged: true });
+    } finally {
+      syncLegacyRoleAssignments.mockRestore();
+    }
   });
 });

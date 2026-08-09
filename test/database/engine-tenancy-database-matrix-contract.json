@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "engine-tenancy-database-matrix-contract",
+  "databases": {
+    "postgres": {
+      "image": "postgres:18-alpine",
+      "port": 56432,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "mysql": {
+      "image": "mysql:8.4",
+      "port": 53306,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "mssql": {
+      "image": "mcr.microsoft.com/mssql/server:2022-latest",
+      "port": 51433,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "oracle": {
+      "image": "gvenzl/oracle-xe:21-slim-faststart",
+      "port": 51521,
+      "platform": "linux/amd64",
+      "versionSource": "database"
+    },
+    "spanner": {
+      "image": "gcr.io/cloud-spanner-emulator/emulator:1.5.30",
+      "port": 59010,
+      "platform": "linux/amd64",
+      "versionSource": "container_image"
+    }
+  },
+  "upgradeBaselines": [
+    {
+      "id": "pre_engine_tenancy",
+      "description": "Existing engines and runtime inventory immediately before the engine-tenancy foundation migration."
+    },
+    {
+      "id": "engine_tenancy_foundation_v1",
+      "description": "Foundation schema before the tenant-reference round-trip migration."
+    },
+    {
+      "id": "pre_access_governance_ownership",
+      "description": "Populated identity mappings and platform settings immediately before ownership metadata migrations 0104 and 0105."
+    },
+    {
+      "id": "pre_login_experience",
+      "description": "Populated identity providers and platform settings immediately before login-experience migrations 0106 and 0107."
+    },
+    {
+      "id": "pre_external_identity_and_project_tenancy",
+      "description": "Populated external registration and tenantless project authorization rows immediately before ownership migrations 0108 and 0109."
+    }
+  ],
+  "requiredStages": [
+    "clean_install",
+    "upgrade_baselines",
+    "interrupted_retry",
+    "schema_equivalence",
+    "service_behavior",
+    "rollback",
+    "cleanup"
+  ],
+  "requiredTables": {
+    "engines": [
+      "tenancy_mode",
+      "tenant_mapping_strategy",
+      "tenant_mapping_version",
+      "tenant_resolution_status",
+      "last_tenant_reconciled_at"
+    ],
+    "engine_tenant_mappings": [
+      "engine_id",
+      "external_tenant_id",
+      "enterprise_tenant_id",
+      "tenant_reference_json",
+      "strategy",
+      "source",
+      "source_ref",
+      "ownership_mode",
+      "is_active"
+    ],
+    "runtime_resources": [
+      "tenant_id",
+      "tenant_resolution_status",
+      "tenant_mapping_id",
+      "tenant_mapping_version",
+      "tenant_resolution_details_json",
+      "engine_id",
+      "resource_kind",
+      "resource_key",
+      "runtime_tenant_id"
+    ],
+    "camunda_native_grant_import_runs": [
+      "id",
+      "engine_id",
+      "tenant_id",
+      "source_kind",
+      "status",
+      "input_hash",
+      "mapping_catalog_version",
+      "inventory_truncated",
+      "normalized_counts_json",
+      "classifications_json",
+      "encrypted_detailed_snapshot",
+      "detailed_snapshot_expires_at",
+      "draft_hash",
+      "applied_config_bundle_run_id",
+      "rollback_config_bundle_run_id",
+      "rolled_back_at"
+    ],
+    "identity_entitlement_mappings": [
+      "ownership_mode"
+    ],
+    "identity_providers": [
+      "display_name",
+      "organization",
+      "display_order",
+      "is_preferred",
+      "preferred_scope_identity",
+      "login_domains_json"
+    ],
+    "platform_settings": [
+      "access_governance_source_ref",
+      "access_governance_ownership_mode",
+      "access_governance_source_hash",
+      "access_governance_last_applied_at",
+      "access_governance_drift_status",
+      "local_password_login_mode",
+      "sso_provider_selection_mode"
+    ],
+    "external_engine_registrations": [
+      "engine_id",
+      "external_id",
+      "source_identity",
+      "active_external_id_identity"
+    ],
+    "projects": [
+      "tenant_id"
+    ],
+    "project_engine_targets": [
+      "tenant_id",
+      "project_id",
+      "engine_id"
+    ],
+    "role_assignments": [
+      "tenant_id",
+      "assignment_key"
+    ],
+    "permission_grants": [
+      "tenant_id",
+      "resource_type",
+      "resource_id"
+    ]
+  },
+  "requiredIndexes": {
+    "engines": [
+      "idx_engines_tenancy_mode",
+      "idx_engines_tenant_resolution_status"
+    ],
+    "engine_tenant_mappings": [
+      "idx_engine_tenant_mappings_engine_active",
+      "idx_engine_tenant_mappings_enterprise_tenant"
+    ],
+    "runtime_resources": [
+      "idx_runtime_resources_tenant_resolution"
+    ],
+    "camunda_native_grant_import_runs": [
+      "idx_camunda_native_grant_import_engine_created",
+      "idx_camunda_native_grant_import_snapshot_expiry",
+      "idx_camunda_native_grant_import_status_updated"
+    ],
+    "identity_providers": [
+      "uq_identity_providers_preferred_scope_identity"
+    ],
+    "external_engine_registrations": [
+      "uq_external_engine_registrations_source_identity",
+      "uq_external_engine_registrations_active_external_identity"
+    ]
+  }
+}

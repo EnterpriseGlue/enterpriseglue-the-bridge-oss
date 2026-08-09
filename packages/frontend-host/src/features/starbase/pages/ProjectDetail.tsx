@@ -39,17 +39,41 @@ import SyncModal from '../../git/components/SyncModal'
 import { ProjectGitSettings } from '../../git/components/ProjectGitSettings'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
+import { getAccessibleEngines, requestEngineProjectAccess } from '../../mission-control/engines/api/engines'
+import { filesApi } from '../../../api/starbase/files'
+import { foldersApi } from '../../../api/starbase/folders'
+import { projectsApi } from '../../../api/starbase/projects'
+import { PlatformPermission, ProjectPermission } from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { useToast } from '../../../shared/notifications/ToastProvider'
 import { StarbaseTableShell } from '../components/StarbaseTableShell'
-import { ProjectContentsTable } from './components/ProjectContentsTable'
+import {
+  ProjectContentsTable,
+  type ProjectDetailBulkAction,
+  type ProjectDetailRowAction,
+  type ProjectDetailToolbarAction,
+} from './components/ProjectContentsTable'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type {
+  AuthzGroup as SharedAuthzGroup,
+  AuthzGroupMembership as SharedAuthzGroupMembership,
+  AuthzPrincipalType as SharedAuthzPrincipalType,
+  RoleAssignmentCreate,
+  RoleAssignmentCreateResponse,
+  RoleAssignment as SharedRoleAssignment,
+  RoleSummary as SharedRoleSummary,
+} from '@enterpriseglue/shared/schemas/platform-admin/authz.js'
+import {
+  EditableProjectRoleSchema,
+  type EditableProjectRole,
+} from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
 import { ProjectMembersModal } from './components/ProjectMembersModal'
-import { ProjectMembersManagementModals } from './components/ProjectMembersManagementModals'
+import { ProjectMembersManagementModals, type ProjectScopedCustomRole } from './components/ProjectMembersManagementModals'
 import { ProjectDetailHeader } from './components/ProjectDetailHeader'
 import { downloadBlob, toSafeDownloadFilename, toSafeDownloadFilenameWithExtension } from '../../../utils/safeDom'
 import { renderDiagramToPdf } from '../utils/renderDiagramToPdf'
-import { canDeployProject, type ProjectEngineAccessData } from '../utils/deployEligibility'
 
 // Import extracted utilities and components
 import {
@@ -57,10 +81,8 @@ import {
   Project,
   UserSearchItem,
   FolderSummary,
-  ProjectContents,
   ProjectRole,
   ProjectMember,
-  ProjectMembersResponse,
   ProjectPendingInvite,
   COLLABORATORS_PANEL_WIDTH,
   memberHeaders,
@@ -70,7 +92,147 @@ import {
   getFileIcon,
 } from '../components/project-detail/project-detail-utils'
 import { EngineAccessModal } from '../components/project-detail/EngineAccessModal'
+import { ProjectDeploymentTargetsModal } from '../components/project-detail/ProjectDeploymentTargetsModal'
 import { FolderLoader, CurrentPath, TreePicker } from '../components/project-detail/FolderTreeHelpers'
+
+/** Project ownership changes only through the dedicated ownership-transfer flow. */
+function editableProjectRoles(roles: readonly ProjectRole[]): EditableProjectRole[] {
+  return roles.flatMap((projectRole) => {
+    const parsed = EditableProjectRoleSchema.safeParse(projectRole)
+    return parsed.success ? [parsed.data] : []
+  })
+}
+
+function getProjectDetailBulkActionId(action: ProjectDetailBulkAction): string {
+  if (action === 'download') return 'project.files.read'
+  if (action === 'delete') return 'project.files.delete'
+  if (action === 'move') return 'project.files.update'
+  if (action === 'sync') return 'project.git.sync.run'
+  return 'project.deploy.create'
+}
+
+function getProjectDetailBulkActionPermission(action: ProjectDetailBulkAction, syncPermissions: string[]): string {
+  if (action === 'download') return ProjectPermission.FILES_VIEW
+  if (action === 'delete') return ProjectPermission.FILES_DELETE
+  if (action === 'move') return ProjectPermission.FILES_EDIT
+  if (action === 'sync') return syncPermissions[0] ?? ProjectPermission.GIT_PUSH
+  return ProjectPermission.DEPLOY
+}
+
+function buildProjectDetailBulkDiagnosticDecision(
+  projectId: string,
+  action: ProjectDetailBulkAction,
+  reason: string | null | undefined,
+  syncPermissions: string[]
+): UiAuthzDecision | null {
+  if (!reason) return null
+
+  return {
+    actionId: getProjectDetailBulkActionId(action),
+    allowed: false,
+    diagnostics: {
+      explainUrl: '/admin/access-control?tab=effective-access',
+      remediation: ['Ask a platform administrator to review effective access.'],
+    },
+    permissionId: getProjectDetailBulkActionPermission(action, syncPermissions),
+    reason,
+    resourceId: projectId,
+    resourceType: 'project',
+    state: 'disabled',
+  }
+}
+
+function getProjectDetailToolbarActionId(action: ProjectDetailToolbarAction): string {
+  if (action === 'members') return 'project.members.read'
+  if (action === 'engineAccess') return 'project.deployment-options.read'
+  return 'project.files.create'
+}
+
+function getProjectDetailToolbarActionPermission(action: ProjectDetailToolbarAction): string {
+  if (action === 'members') return ProjectPermission.MEMBERS_VIEW
+  if (action === 'engineAccess') return ProjectPermission.FILES_VIEW
+  return ProjectPermission.FILES_CREATE
+}
+
+function buildProjectDetailToolbarDiagnosticDecision(
+  projectId: string,
+  action: ProjectDetailToolbarAction,
+  reason: string | null | undefined
+): UiAuthzDecision | null {
+  if (!reason) return null
+
+  return {
+    actionId: getProjectDetailToolbarActionId(action),
+    allowed: false,
+    diagnostics: {
+      explainUrl: '/admin/access-control?tab=effective-access',
+      remediation: ['Ask a platform administrator to review effective access.'],
+    },
+    permissionId: getProjectDetailToolbarActionPermission(action),
+    reason,
+    resourceId: projectId,
+    resourceType: 'project',
+    state: 'disabled',
+  }
+}
+
+type ScopedProjectRoleAssignment = SharedRoleAssignment
+type ProjectAssignmentPrincipalType = SharedAuthzPrincipalType
+
+type ProjectAuthzGroupSummary = SharedAuthzGroup
+type ProjectAuthzGroupMembershipSummary = SharedAuthzGroupMembership
+
+export function formatProjectRoleAssignmentSourceLineage(assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef'> | null | undefined): string {
+  if (!assignment) return '-'
+  const sourceLabel = assignment.source === 'sso'
+    ? 'SSO-managed assignment'
+    : assignment.source === 'manual'
+      ? 'Manual assignment'
+      : assignment.source === 'system'
+        ? 'System-managed assignment'
+        : assignment.source === 'api'
+          ? 'API-managed assignment'
+          : assignment.source === 'legacy'
+            ? 'Legacy-derived assignment'
+            : `${assignment.source} assignment`
+  const parts = [sourceLabel]
+  if (assignment.sourceRef) parts.push(`Source ref ${assignment.sourceRef}`)
+  return parts.join('; ')
+}
+
+function formatProjectGroupLabel(group: Pick<ProjectAuthzGroupSummary, 'id' | 'key' | 'name'> | null | undefined, groupId: string | null | undefined): string {
+  return group?.name || group?.key || groupId || 'unknown group'
+}
+
+function formatProjectGroupMembershipSourceLineage(membership: Pick<ProjectAuthzGroupMembershipSummary, 'source' | 'sourceRef'> | null | undefined): string {
+  if (!membership) return 'Group membership lineage unavailable'
+  const sourceLabel = membership.source === 'sso'
+    ? 'SSO group membership'
+    : membership.source === 'manual'
+      ? 'Manual group membership'
+      : membership.source === 'api'
+        ? 'API-managed group membership'
+        : membership.source === 'automation'
+          ? 'Automation-managed group membership'
+          : membership.source === 'system'
+            ? 'System-managed group membership'
+            : `${membership.source || 'unknown'} group membership`
+  return membership.sourceRef ? `${sourceLabel}; Membership source ref ${membership.sourceRef}` : sourceLabel
+}
+
+export function formatProjectInheritedRoleAssignmentSourceLineage(
+  assignment: Pick<ScopedProjectRoleAssignment, 'source' | 'sourceRef' | 'principalId' | 'userId'> | null | undefined,
+  membership: Pick<ProjectAuthzGroupMembershipSummary, 'source' | 'sourceRef'> | null | undefined,
+  group?: Pick<ProjectAuthzGroupSummary, 'id' | 'key' | 'name'> | null
+): string {
+  if (!assignment) return '-'
+  const groupId = assignment.principalId || assignment.userId || null
+  return [
+    formatProjectRoleAssignmentSourceLineage(assignment),
+    `Inherited through group ${formatProjectGroupLabel(group, groupId)}`,
+    formatProjectGroupMembershipSourceLineage(membership),
+  ].join('; ')
+}
 
 export default function ProjectDetail() {
   const { projectId } = useParams()
@@ -79,7 +241,7 @@ export default function ProjectDetail() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = React.useState('')
   const queryClient = useQueryClient()
-  const { user } = useAuth()
+  const { user, hasPlatformPermission, hasProjectPermission, permissions } = useAuth()
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null)
   // Modal hooks
   const deleteFileModal = useModal<FileItem>()
@@ -90,10 +252,11 @@ export default function ProjectDetail() {
   const deployModal = useModal()
   const syncModal = useModal()
   const [gitSettingsOpen, setGitSettingsOpen] = React.useState(false)
+  const [deploymentTargetsOpen, setDeploymentTargetsOpen] = React.useState(false)
   const [batchDeleteIds, setBatchDeleteIds] = React.useState<string[] | null>(null)
   const [batchCancelSelection, setBatchCancelSelection] = React.useState<null | (() => void)>(null)
   const [batchMoveIds, setBatchMoveIds] = React.useState<string[] | null>(null)
-  
+
   const [busy, setBusy] = React.useState(false)
   const [newFolderName, setNewFolderName] = React.useState('')
   const folderId = searchParams.get('folder') || null
@@ -119,8 +282,10 @@ export default function ProjectDetail() {
 
   const [collaboratorsOpen, setCollaboratorsOpen] = React.useState(false)
   const addMemberModal = useModal()
+  const assignmentModal = useModal()
   const editRolesModal = useModal<ProjectMember>()
   const removeMemberModal = useModal<ProjectMember>()
+  const transferOwnershipModal = useModal<ProjectMember>()
   const [memberEmail, setMemberEmail] = React.useState('')
   const [memberEmailTouched, setMemberEmailTouched] = React.useState(false)
   const [memberUserSearch, setMemberUserSearch] = React.useState('')
@@ -129,13 +294,21 @@ export default function ProjectDetail() {
   const [memberDeliveryMethod, setMemberDeliveryMethod] = React.useState<'email' | 'manual'>('manual')
   const [memberInviteReveal, setMemberInviteReveal] = React.useState<{ email: string; inviteUrl: string; oneTimePassword: string } | null>(null)
   const [editRolesSelection, setEditRolesSelection] = React.useState<ProjectRole[]>(['viewer'])
+  const [editCustomRoleIds, setEditCustomRoleIds] = React.useState<string[]>([])
+  const [assignmentPrincipalType, setAssignmentPrincipalType] = React.useState<ProjectAssignmentPrincipalType>('user')
+  const [assignmentPrincipalIdInput, setAssignmentPrincipalIdInput] = React.useState('')
+  const [assignmentUserEmail, setAssignmentUserEmail] = React.useState('')
+  const [assignmentUserSearch, setAssignmentUserSearch] = React.useState('')
+  const [selectedAssignmentUser, setSelectedAssignmentUser] = React.useState<UserSearchItem | null>(null)
+  const [assignmentRoleId, setAssignmentRoleId] = React.useState('')
+  const [assignmentError, setAssignmentError] = React.useState('')
   const [collaboratorsSearch, setCollaboratorsSearch] = React.useState('')
   const [collaboratorsSearchExpanded, setCollaboratorsSearchExpanded] = React.useState(false)
 
   // Engine access state
   const [engineAccessOpen, setEngineAccessOpen] = React.useState(false)
   const [selectedEngineForRequest, setSelectedEngineForRequest] = React.useState<string | null>(null)
-  const memberManagementModalOpen = addMemberModal.isOpen || editRolesModal.isOpen || removeMemberModal.isOpen
+  const memberManagementModalOpen = addMemberModal.isOpen || assignmentModal.isOpen || editRolesModal.isOpen || removeMemberModal.isOpen || transferOwnershipModal.isOpen
 
   const openProjectMembers = React.useCallback(() => {
     setCollaboratorsSearch('')
@@ -162,7 +335,27 @@ export default function ProjectDetail() {
     setMemberDeliveryMethod('manual')
     setMemberInviteReveal(null)
   }, [])
-  
+
+  const resetAssignmentForm = React.useCallback(() => {
+    setAssignmentPrincipalType('user')
+    setAssignmentPrincipalIdInput('')
+    setAssignmentUserEmail('')
+    setAssignmentUserSearch('')
+    setSelectedAssignmentUser(null)
+    setAssignmentRoleId('')
+    setAssignmentError('')
+  }, [])
+
+  const closeAssignmentModal = React.useCallback(() => {
+    resetAssignmentForm()
+    assignmentModal.closeModal()
+  }, [assignmentModal, resetAssignmentForm])
+
+  const openAssignmentModal = React.useCallback(() => {
+    resetAssignmentForm()
+    assignmentModal.openModal()
+  }, [assignmentModal, resetAssignmentForm])
+
   const projectsQ = useQuery({
     queryKey: ['starbase', 'projects'],
     queryFn: () => apiClient.get<Project[]>('/starbase-api/projects'),
@@ -172,21 +365,21 @@ export default function ProjectDetail() {
 
   const enginesQ = useQuery({
     queryKey: ['engines','list'],
-    queryFn: () => apiClient.get<any[]>('/engines-api/engines'),
-    enabled: deployModal.isOpen,
+    queryFn: getAccessibleEngines,
+    enabled: deployModal.isOpen || deploymentTargetsOpen,
   })
   // Set default deploy engine when engines load or selected engine changes
   React.useEffect(() => {
     if (deployModal.isOpen && !deployEngineId) {
       const engines = enginesQ.data || []
-      if (selectedEngineId && engines.some((e: any) => e.id === selectedEngineId)) {
+      if (selectedEngineId && engines.some((engine) => engine.id === selectedEngineId)) {
         setDeployEngineId(selectedEngineId)
       } else if (engines.length === 1) {
         setDeployEngineId(engines[0].id)
       } else if (engines.length > 0) {
         // Select first engine alphabetically
-        const sorted = [...engines].sort((a: any, b: any) => 
-          (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
+        const sorted = [...engines].sort((a, b) =>
+          (a.name ?? a.baseUrl ?? '').localeCompare(b.name ?? b.baseUrl ?? '')
         )
         setDeployEngineId(sorted[0].id)
       }
@@ -195,10 +388,7 @@ export default function ProjectDetail() {
 
   const contentsQ = useQuery({
     queryKey: ['contents', projectId, folderId],
-    queryFn: () => apiClient.get<ProjectContents>(
-      `/starbase-api/projects/${projectId}/contents`,
-      folderId ? { folderId } : undefined
-    ),
+    queryFn: () => projectsApi.getContents(projectId!, folderId),
     enabled: !!projectId,
   })
 
@@ -218,13 +408,20 @@ export default function ProjectDetail() {
   // Show sync button only if: at least one sync option is enabled AND project has git connection
   // Also hide while loading to prevent flash
   const hasGitConnection = !gitRepoQ.isLoading && !!gitRepoQ.data
+  const vcsStatusReadDecision = evaluateActionSnapshot(
+    permissions,
+    'project.vcs.status.read',
+    { type: 'project', id: projectId || null }
+  )
+  const canReadVcsStatus = vcsStatusReadDecision.allowed ||
+    hasProjectPermission(projectId, ProjectPermission.FILES_VIEW)
 
   const uncommittedQ = useQuery({
     queryKey: ['uncommitted-files', projectId, 'main'],
     queryFn: () => apiClient.get<{ hasUncommittedChanges: boolean; uncommittedFileIds: string[]; uncommittedFolderIds: string[] }>(
       `/vcs-api/projects/${projectId}/uncommitted-files`
     ),
-    enabled: !!projectId && hasGitConnection,
+    enabled: !!projectId && hasGitConnection && canReadVcsStatus,
     staleTime: 30 * 1000,
     refetchInterval: 60 * 1000,
   })
@@ -241,8 +438,11 @@ export default function ProjectDetail() {
 
   // Fetch platform settings to determine if sync is enabled and who can deploy
   const { data: platformSettings } = usePlatformSyncSettings()
-  const anySyncEnabled = (platformSettings?.syncPushEnabled ?? true) || 
+  const anySyncEnabled = (platformSettings?.syncPushEnabled ?? true) ||
                          (platformSettings?.syncPullEnabled ?? false)
+  const projectAccessAuthority = platformSettings?.projectAccessAuthority || 'manual'
+  const projectActionAvailability = permissions?.projects.find((item) => item.resourceId === projectId)?.actionAvailability
+  const legacyManualProjectAccessEnabled = projectAccessAuthority !== 'sso_managed'
 
   // Fetch project-level Git connection info (for token warning banner)
   const gitConnectionQ = useQuery({
@@ -255,14 +455,18 @@ export default function ProjectDetail() {
   const showSyncButton = anySyncEnabled && hasGitConnection
 
   const handleBatchDelete = async () => {
+    if (!canDeleteFiles) return
     if (!batchDeleteIds || batchDeleteIds.length === 0) return
     try {
       setBusy(true)
       for (const id of batchDeleteIds) {
         const it = items.find((x) => x.id === id)
         if (!it) continue
-        const url = it.type === 'folder' ? `/starbase-api/folders/${id}` : `/starbase-api/files/${id}`
-        await apiClient.delete(url)
+        if (it.type === 'folder') {
+          await foldersApi.delete(id)
+        } else {
+          await filesApi.delete(id)
+        }
       }
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({
@@ -281,11 +485,10 @@ export default function ProjectDetail() {
   }
 
   async function submitUpdateDeployPermission(member: ProjectMember, allowed: boolean) {
+    if (!canManageMemberDeployGrant) return
     if (!projectId) return
     try {
-      await apiClient.put(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}/deploy-permission`, {
-        allowed,
-      })
+      await projectsApi.updateMemberDeployGrant(projectId, member.userId, allowed)
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
       showToast({ kind: 'success', title: allowed ? 'Deploy permission granted' : 'Deploy permission revoked' })
     } catch (e: any) {
@@ -397,6 +600,8 @@ export default function ProjectDetail() {
         : 'Loading...')
 
   async function downloadFile(fileId: string, name: string, type: Exclude<FileItem['type'], 'folder'>) {
+    if (!canViewFiles) return
+
     try {
       const blob = await apiClient.getBlob(`/starbase-api/files/${encodeURIComponent(fileId)}/download`)
       if (!blob || blob.size === 0) return
@@ -408,6 +613,8 @@ export default function ProjectDetail() {
   }
 
   async function downloadFileAsPdf(fileId: string, name: string, type: 'bpmn' | 'dmn') {
+    if (!canViewFiles) return
+
     try {
       // Reuse the authenticated source-XML endpoint; no new backend route needed.
       const blob = await apiClient.getBlob(`/starbase-api/files/${encodeURIComponent(fileId)}/download`)
@@ -432,6 +639,8 @@ export default function ProjectDetail() {
   }
 
   async function downloadFolder(folderId: string, name: string) {
+    if (!canViewFiles) return
+
     try {
       const blob = await apiClient.getBlob(`/starbase-api/folders/${encodeURIComponent(folderId)}/download`)
       if (!blob || blob.size === 0) return
@@ -443,6 +652,8 @@ export default function ProjectDetail() {
   }
 
   async function downloadProject(projectId: string, name: string) {
+    if (!canViewFiles) return
+
     try {
       const blob = await apiClient.getBlob(`/starbase-api/projects/${encodeURIComponent(projectId)}/download`)
       if (!blob || blob.size === 0) return
@@ -454,6 +665,7 @@ export default function ProjectDetail() {
   }
 
   async function uploadProjectZip(file: File) {
+    if (!canCreateFiles) return
     if (!projectId) return
     const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
     if (!isZip) {
@@ -484,6 +696,8 @@ export default function ProjectDetail() {
   }
 
   async function handleUploadSelection(file: File) {
+    if (!canCreateFiles) return
+
     const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed'
 
     if (isZip) {
@@ -503,6 +717,7 @@ export default function ProjectDetail() {
   }
 
   async function downloadSelection(selectedItems: FileItem[], cancelSelection: () => void) {
+    if (!canViewFiles) return
     if (!projectId || selectedItems.length === 0) return
     try {
       const fileIds = selectedItems.filter((item) => item.type !== 'folder').map((item) => item.id)
@@ -522,30 +737,27 @@ export default function ProjectDetail() {
 
   const membersQ = useQuery({
     queryKey: ['project-members', projectId],
-    queryFn: () => apiClient.get<ProjectMembersResponse>(`/starbase-api/projects/${projectId}/members`),
+    queryFn: () => projectsApi.getMembers(projectId!),
     enabled: !!projectId,
   })
 
   const myMembershipQ = useQuery({
     queryKey: ['project-members', projectId, 'me'],
-    queryFn: () => apiClient.get<ProjectMember | null>(`/starbase-api/projects/${projectId}/members/me`),
+    queryFn: () => projectsApi.getMyMembership(projectId!),
     enabled: !!projectId, // Always fetch - needed for deploy permission check
   })
 
   // Engine access query
   const engineAccessQ = useQuery({
     queryKey: ['project-engine-access', projectId],
-    queryFn: () => apiClient.get<ProjectEngineAccessData>(`/starbase-api/projects/${projectId}/engine-access`),
+    queryFn: () => projectsApi.getEngineAccess(projectId!),
     enabled: !!projectId,
   })
 
   // Engine access request mutation
   const requestEngineAccessM = useMutation({
     mutationFn: async (engineId: string) => {
-      return apiClient.post<{ autoApproved?: boolean }>(
-        `/engines-api/engines/${engineId}/request-access`,
-        { projectId }
-      )
+      return requestEngineProjectAccess(engineId, projectId!)
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['project-engine-access', projectId] })
@@ -561,20 +773,434 @@ export default function ProjectDetail() {
     },
   })
 
-  const myRoles = React.useMemo(() => {
-    const m = myMembershipQ.data
-    if (!m) return [] as ProjectRole[]
-    const roles = (Array.isArray(m.roles) && m.roles.length > 0 ? m.roles : [m.role]) as ProjectRole[]
-    return roles
-  }, [myMembershipQ.data])
-  const canManageMembers = myRoles.includes('owner') || myRoles.includes('delegate')
-  
-  // Check if user can deploy based on their role and defaultDeployRoles setting
-  const canDeployByRole = React.useMemo(() => {
-    return canDeployProject(myMembershipQ.data, engineAccessQ.data, platformSettings?.defaultDeployRoles)
-  }, [engineAccessQ.data, myMembershipQ.data, platformSettings?.defaultDeployRoles])
+  const hasProjectAction = React.useCallback((actionId: string) => (
+    evaluateActionSnapshot(permissions, actionId, { type: 'project', id: projectId || null }).allowed
+  ), [permissions, projectId])
 
-  const canAssignDelegate = React.useMemo(() => myRoles.includes('owner'), [myRoles])
+  const hasProjectPermissionForCurrentUser = React.useCallback((permission: string) => (
+    hasProjectPermission(projectId, permission)
+  ), [hasProjectPermission, projectId])
+
+  const hasProjectPermissionOrAction = React.useCallback((permission: string, actionId: string) => (
+    projectActionAvailability
+      ? hasProjectAction(actionId)
+      : hasProjectPermission(projectId, permission) || hasProjectAction(actionId)
+  ), [hasProjectAction, hasProjectPermission, projectActionAvailability, projectId])
+
+  const canViewFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_VIEW)
+  const canCreateFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_CREATE)
+  const canEditFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_EDIT)
+  const canDeleteFiles = hasProjectPermissionForCurrentUser(ProjectPermission.FILES_DELETE)
+  const canViewMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_VIEW) ||
+    hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
+  const canManageMembers = hasProjectPermissionForCurrentUser(ProjectPermission.MEMBERS_MANAGE)
+  const canManageMembersForMutation = projectActionAvailability ? false : canManageMembers
+  const canSearchMembers = canManageMembers || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_SEARCH, 'project.members.search')
+  const canInviteMembers = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_INVITE, 'project.members.invite')
+  const canAddMembers = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_ADD, 'project.members.add')
+  const canUpdateMemberRoles = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_UPDATE_ROLE, 'project.members.update-role')
+  const canRemoveMembers = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_REMOVE, 'project.members.remove')
+  const canManageMemberDeployGrant = canManageMembersForMutation || hasProjectPermissionOrAction(ProjectPermission.MEMBERS_MANAGE_DEPLOY_GRANT, 'project.members.deploy-grant.manage')
+  const canTransferOwnership = hasProjectPermissionOrAction(ProjectPermission.OWNERSHIP_TRANSFER, 'project.ownership.transfer')
+  const manualProjectAccessEnabled = projectActionAvailability ? true : legacyManualProjectAccessEnabled
+  const canOpenAddMember = manualProjectAccessEnabled && canSearchMembers && (canAddMembers || canInviteMembers)
+  const canAssignScopedProjectAccess = manualProjectAccessEnabled && (canAddMembers || canUpdateMemberRoles)
+  const canAssignDelegate = hasProjectPermissionForCurrentUser(ProjectPermission.DELEGATE_MANAGE)
+  const canManageProjectSettings = hasProjectPermissionForCurrentUser(ProjectPermission.PROJECT_SETTINGS)
+  const requestEngineAccessDecision = evaluateActionSnapshot(
+    permissions,
+    'project-engine-target.access.request',
+    { type: 'project', id: projectId || null }
+  )
+  const canRequestEngineAccess = requestEngineAccessDecision.allowed || canManageProjectSettings
+  const requestEngineAccessUnavailableReason = canRequestEngineAccess
+    ? null
+    : requestEngineAccessDecision.reason || `Missing permission ${ProjectPermission.PROJECT_SETTINGS}`
+  const canManageGitConnection = hasProjectPermissionForCurrentUser(ProjectPermission.GIT_CONNECT)
+  const hasDeployPermission = hasProjectPermissionOrAction(ProjectPermission.DEPLOY, 'project.deploy.create')
+  const canViewDeploymentOptions = canViewFiles
+  const canReadPlatformProjectEngineTargets = hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW) ||
+    hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE)
+  const canManagePlatformProjectEngineTargets = hasPlatformPermission(PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE)
+  const canInspectScopedProjectLineage = canViewMembers && (
+    hasPlatformPermission(PlatformPermission.AUTHZ_ROLES_VIEW) ||
+    hasPlatformPermission(PlatformPermission.AUTHZ_ROLES_MANAGE)
+  )
+  const canReadScopedProjectEngineTargets = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_VIEW) ||
+    hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
+  const canManageScopedProjectEngineTargets = hasProjectPermissionForCurrentUser(ProjectPermission.DEPLOYMENT_TARGETS_MANAGE)
+  const scopedDeploymentTargetManageDecision = evaluateActionSnapshot(
+    permissions,
+    'project.deployment-targets.manage',
+    { type: 'project', id: projectId || null },
+  )
+  const platformDeploymentTargetManageDecision = evaluateActionSnapshot(
+    permissions,
+    'platform.project-engine-targets.manage',
+    { type: 'platform', id: null },
+  )
+  const canReadProjectEngineTargets = canReadScopedProjectEngineTargets || canReadPlatformProjectEngineTargets
+  const deploymentTargetsApiScope = canManageScopedProjectEngineTargets || (canReadScopedProjectEngineTargets && !canReadPlatformProjectEngineTargets)
+    ? 'project'
+    : 'platform'
+  const deploymentTargetManageDecision = deploymentTargetsApiScope === 'project'
+    ? scopedDeploymentTargetManageDecision
+    : platformDeploymentTargetManageDecision
+  const hasServerDeploymentTargetAvailability = deploymentTargetsApiScope === 'project'
+    ? Boolean(projectActionAvailability)
+    : Boolean(permissions?.platformActionAvailability)
+  const legacyDeploymentTargetPolicyAllowed = platformSettings?.projectEngineTargetMode !== 'external_only'
+  const canManageProjectEngineTargets = (canManageScopedProjectEngineTargets || canManagePlatformProjectEngineTargets)
+    && (hasServerDeploymentTargetAvailability
+      ? deploymentTargetManageDecision.allowed
+      : legacyDeploymentTargetPolicyAllowed)
+
+  const getProjectPermissionUnavailableReason = React.useCallback((permission: string): string | null => (
+    hasProjectPermissionForCurrentUser(permission) ? null : `Missing permission ${permission}`
+  ), [hasProjectPermissionForCurrentUser])
+
+  const getProjectDetailRowActionUnavailableReason = React.useCallback((_item: FileItem, action: ProjectDetailRowAction): string | null => {
+    switch (action) {
+      case 'rename':
+      case 'move':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_EDIT)
+      case 'download':
+      case 'downloadPdf':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
+      case 'delete':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_DELETE)
+      default:
+        return null
+    }
+  }, [getProjectPermissionUnavailableReason])
+
+  const syncPermissions = React.useMemo(() => [
+    ...((platformSettings?.syncPushEnabled ?? true) ? [ProjectPermission.GIT_PUSH] : []),
+    ...((platformSettings?.syncPullEnabled ?? false) ? [ProjectPermission.GIT_PULL] : []),
+  ], [platformSettings?.syncPullEnabled, platformSettings?.syncPushEnabled])
+
+  const syncUnavailableReason = React.useMemo(() => {
+    if (!anySyncEnabled) return 'Sync is disabled by platform settings'
+    if (!hasGitConnection) return 'Project is not connected to Git'
+    if (syncPermissions.length === 0) return null
+    if (syncPermissions.some((permission) => hasProjectPermissionForCurrentUser(permission))) return null
+    const permissionText = syncPermissions.length === 1 ? syncPermissions[0] : syncPermissions.join(' or ')
+    return `Missing permission ${permissionText}`
+  }, [anySyncEnabled, hasGitConnection, hasProjectPermissionForCurrentUser, syncPermissions])
+
+  const getProjectDetailToolbarActionUnavailableReason = React.useCallback((action: ProjectDetailToolbarAction): string | null => {
+    switch (action) {
+      case 'members':
+        return canViewMembers ? null : getProjectPermissionUnavailableReason(ProjectPermission.MEMBERS_VIEW)
+      case 'engineAccess':
+        return canViewDeploymentOptions
+          ? null
+          : getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
+      case 'upload':
+      case 'create':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
+      default:
+        return null
+    }
+  }, [canViewDeploymentOptions, canViewMembers, getProjectPermissionUnavailableReason])
+
+  const getProjectDetailToolbarActionDiagnosticDecision = React.useCallback((
+    action: ProjectDetailToolbarAction,
+    reason?: string | null
+  ): UiAuthzDecision | null => (
+    buildProjectDetailToolbarDiagnosticDecision(projectId || '', action, reason)
+  ), [projectId])
+
+  const downloadProjectUnavailableReason = getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
+  const gitSettingsUnavailableReason = (canManageProjectSettings || canManageGitConnection)
+    ? null
+    : `Missing permission ${ProjectPermission.PROJECT_SETTINGS} or ${ProjectPermission.GIT_CONNECT}`
+  const deploymentTargetsUnavailableReason = canReadProjectEngineTargets
+    ? null
+    : `Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_VIEW} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW}`
+  const deploymentTargetsManageUnavailableReason = canManageProjectEngineTargets
+    ? null
+    : hasServerDeploymentTargetAvailability
+      ? deploymentTargetManageDecision.reason
+      : !legacyDeploymentTargetPolicyAllowed
+        ? 'Project deployment targets are externally managed by platform policy'
+        : `Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_MANAGE} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_MANAGE}`
+
+  const customProjectRolesQ = useQuery({
+    queryKey: ['project-members', projectId, 'custom-roles'],
+    queryFn: () => apiClient.get<SharedRoleSummary[]>('/api/authz/roles', {
+      scope: 'project',
+      assignable: 'true',
+      resourceType: 'project',
+      resourceId: projectId,
+    }),
+    enabled: !!projectId && (canAssignScopedProjectAccess || (collaboratorsOpen && canInspectScopedProjectLineage)),
+  })
+
+  const projectRoleAssignmentsQ = useQuery({
+    queryKey: ['project-members', projectId, 'custom-role-assignments'],
+    queryFn: () => apiClient.get<ScopedProjectRoleAssignment[]>('/api/authz/role-assignments', {
+      resourceType: 'project',
+      resourceId: projectId,
+    }),
+    enabled: !!projectId && (canAssignScopedProjectAccess || (collaboratorsOpen && canInspectScopedProjectLineage)),
+  })
+
+  const projectAuthzGroupsQ = useQuery({
+    queryKey: ['project-members', projectId, 'authz-groups'],
+    queryFn: () => apiClient.get<ProjectAuthzGroupSummary[]>('/api/authz/groups'),
+    enabled: !!projectId && collaboratorsOpen && canInspectScopedProjectLineage,
+  })
+
+  const projectGroupMembershipsQ = useQuery({
+    queryKey: ['project-members', projectId, 'authz-group-memberships'],
+    queryFn: () => apiClient.get<ProjectAuthzGroupMembershipSummary[]>('/api/authz/group-memberships'),
+    enabled: !!projectId && collaboratorsOpen && canInspectScopedProjectLineage,
+  })
+
+  const assignableProjectRoles = React.useMemo(() => (
+    (Array.isArray(customProjectRolesQ.data) ? customProjectRolesQ.data : [])
+      .filter((role) => role.scope === 'project' && role.isAssignable && !role.isArchived)
+  ), [customProjectRolesQ.data])
+
+  const customProjectRoles = React.useMemo(() => (
+    assignableProjectRoles.filter((role) => role.kind === 'custom')
+  ), [assignableProjectRoles])
+
+  const customProjectRoleNameById = React.useMemo(
+    () => new Map(customProjectRoles.map((role) => [role.id, role.name])),
+    [customProjectRoles]
+  )
+
+  const assignableProjectRoleNameById = React.useMemo(
+    () => new Map(assignableProjectRoles.map((role) => [role.id, role.name])),
+    [assignableProjectRoles]
+  )
+
+  const customProjectAssignmentsByUser = React.useMemo(() => {
+    const byUser = new Map<string, ScopedProjectRoleAssignment[]>()
+    for (const assignment of Array.isArray(projectRoleAssignmentsQ.data) ? projectRoleAssignmentsQ.data : []) {
+      if (assignment.resourceType !== 'project' || assignment.resourceId !== projectId) continue
+      if (!customProjectRoleNameById.has(assignment.roleId)) continue
+      const principalType = assignment.principalType || 'user'
+      if (principalType !== 'user') continue
+      const userId = assignment.principalId || assignment.userId
+      if (!userId) continue
+      const entries = byUser.get(userId) || []
+      entries.push(assignment)
+      byUser.set(userId, entries)
+    }
+    return byUser
+  }, [customProjectRoleNameById, projectId, projectRoleAssignmentsQ.data])
+
+  const inheritedCustomProjectAssignmentsByUser = React.useMemo(() => {
+    const byUser = new Map<string, Array<{ assignment: ScopedProjectRoleAssignment; membership: ProjectAuthzGroupMembershipSummary; group: ProjectAuthzGroupSummary | null }>>()
+    if (!canInspectScopedProjectLineage) return byUser
+    const groupsById = new Map<string, ProjectAuthzGroupSummary>()
+    for (const group of Array.isArray(projectAuthzGroupsQ.data) ? projectAuthzGroupsQ.data : []) {
+      groupsById.set(group.id, group)
+    }
+
+    const membershipsByGroup = new Map<string, ProjectAuthzGroupMembershipSummary[]>()
+    for (const membership of Array.isArray(projectGroupMembershipsQ.data) ? projectGroupMembershipsQ.data : []) {
+      if (!membership.groupId || !membership.userId) continue
+      const entries = membershipsByGroup.get(membership.groupId) || []
+      entries.push(membership)
+      membershipsByGroup.set(membership.groupId, entries)
+    }
+
+    for (const assignment of Array.isArray(projectRoleAssignmentsQ.data) ? projectRoleAssignmentsQ.data : []) {
+      if (assignment.resourceType !== 'project' || assignment.resourceId !== projectId) continue
+      if (!customProjectRoleNameById.has(assignment.roleId)) continue
+      if ((assignment.principalType || 'user') !== 'group') continue
+      const groupId = assignment.principalId || assignment.userId
+      if (!groupId) continue
+      const memberships = membershipsByGroup.get(groupId) || []
+      for (const membership of memberships) {
+        const entries = byUser.get(membership.userId) || []
+        entries.push({
+          assignment,
+          membership,
+          group: groupsById.get(groupId) || null,
+        })
+        byUser.set(membership.userId, entries)
+      }
+    }
+    return byUser
+  }, [
+    canInspectScopedProjectLineage,
+    customProjectRoleNameById,
+    projectAuthzGroupsQ.data,
+    projectGroupMembershipsQ.data,
+    projectId,
+    projectRoleAssignmentsQ.data,
+  ])
+
+  const customProjectRoleTagsByUser = React.useMemo(() => {
+    const byUser = new Map<string, Array<{ id: string; label: string; lineage?: string }>>()
+    customProjectAssignmentsByUser.forEach((assignments, userId) => {
+      byUser.set(userId, assignments.map((assignment) => ({
+        id: assignment.id,
+        label: customProjectRoleNameById.get(assignment.roleId) || assignment.roleName || 'Custom role',
+        lineage: formatProjectRoleAssignmentSourceLineage(assignment),
+      })))
+    })
+    inheritedCustomProjectAssignmentsByUser.forEach((entries, userId) => {
+      const current = byUser.get(userId) || []
+      byUser.set(userId, [
+        ...current,
+        ...entries.map(({ assignment, membership, group }) => ({
+          id: `${assignment.id}:${membership.id || membership.userId}`,
+          label: `${customProjectRoleNameById.get(assignment.roleId) || assignment.roleName || 'Custom role'} (via ${formatProjectGroupLabel(group, assignment.principalId || assignment.userId)})`,
+          lineage: formatProjectInheritedRoleAssignmentSourceLineage(assignment, membership, group),
+        })),
+      ])
+    })
+    return byUser
+  }, [customProjectAssignmentsByUser, customProjectRoleNameById, inheritedCustomProjectAssignmentsByUser])
+
+  const scopedProjectRoleAssignments = React.useMemo(() => (
+    (Array.isArray(projectRoleAssignmentsQ.data) ? projectRoleAssignmentsQ.data : [])
+      .filter((assignment) => assignment.resourceType === 'project' && assignment.resourceId === projectId)
+  ), [projectId, projectRoleAssignmentsQ.data])
+
+  const assignmentPrincipalId = assignmentPrincipalType === 'user'
+    ? selectedAssignmentUser?.id || ''
+    : assignmentPrincipalIdInput.trim()
+
+  const assignScopedProjectRoleM = useMutation({
+    mutationFn: ({ principalType, principalId, roleId }: { principalType: ProjectAssignmentPrincipalType; principalId: string; roleId: string }) => {
+      const payload: RoleAssignmentCreate = {
+        principalType,
+        principalId,
+        roleId,
+        resourceType: 'project',
+        resourceId: projectId,
+      }
+      return apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', payload)
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'custom-role-assignments'] })
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
+      closeAssignmentModal()
+      showToast({ kind: 'success', title: 'Access assigned' })
+    },
+    onError: (error: any) => {
+      const parsed = parseApiError(error, 'Failed to assign access')
+      setAssignmentError(parsed.message)
+    },
+  })
+
+  const removeScopedProjectRoleAssignmentM = useMutation({
+    mutationFn: (assignmentId: string) => apiClient.delete(`/api/authz/role-assignments/${encodeURIComponent(assignmentId)}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'custom-role-assignments'] })
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
+      showToast({ kind: 'success', title: 'Access removed' })
+    },
+    onError: (error: any) => {
+      const parsed = parseApiError(error, 'Failed to remove access')
+      showToast({ kind: 'error', title: 'Failed to remove access', subtitle: parsed.message })
+    },
+  })
+
+  const submitScopedProjectRoleAssignment = React.useCallback(() => {
+    if (!projectId) return
+
+    if (!assignmentRoleId) {
+      setAssignmentError('Select a role to assign')
+      return
+    }
+
+    if (assignmentPrincipalType === 'user' && !selectedAssignmentUser) {
+      setAssignmentError('Select an existing user from the lookup results')
+      return
+    }
+
+    if (!assignmentPrincipalId) {
+      setAssignmentError('Enter a principal identifier')
+      return
+    }
+
+    if (!canAssignScopedProjectAccess) {
+      setAssignmentError(`Missing permission ${ProjectPermission.MEMBERS_ADD} or ${ProjectPermission.MEMBERS_UPDATE_ROLE}`)
+      return
+    }
+
+    setAssignmentError('')
+    assignScopedProjectRoleM.mutate({
+      principalType: assignmentPrincipalType,
+      principalId: assignmentPrincipalId,
+      roleId: assignmentRoleId,
+    })
+  }, [
+    assignScopedProjectRoleM,
+    assignmentPrincipalId,
+    assignmentPrincipalType,
+    assignmentRoleId,
+    canAssignScopedProjectAccess,
+    projectId,
+    selectedAssignmentUser,
+  ])
+
+  async function syncProjectCustomRoleAssignments(userId: string, nextRoleIds: string[]) {
+    if (!projectId) return
+    const next = new Set(nextRoleIds)
+    const current = customProjectAssignmentsByUser.get(userId) || []
+    const currentRoleIds = new Set(current.map((assignment) => assignment.roleId))
+    await Promise.all([
+      ...nextRoleIds
+        .filter((roleId) => !currentRoleIds.has(roleId))
+        .map((roleId) => {
+          const payload: RoleAssignmentCreate = {
+            principalType: 'user',
+            principalId: userId,
+            roleId,
+            resourceType: 'project',
+            resourceId: projectId,
+          }
+          return apiClient.post<RoleAssignmentCreateResponse>('/api/authz/role-assignments', payload)
+        }),
+      ...current
+        .filter((assignment) => !next.has(assignment.roleId) && assignment.source === 'manual')
+        .map((assignment) => apiClient.delete(`/api/authz/role-assignments/${encodeURIComponent(assignment.id)}`)),
+    ])
+    await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'custom-role-assignments'] })
+  }
+
+  const canDeployProjectActions = React.useMemo(() => {
+    if (!hasDeployPermission) return false
+    return (engineAccessQ.data?.accessedEngines ?? []).some((engine) => (
+      engine.deploymentEligibility?.manual?.allowed ?? engine.manualDeployAllowed === true
+    ))
+  }, [engineAccessQ.data?.accessedEngines, hasDeployPermission])
+
+  const getProjectDetailBulkActionUnavailableReason = React.useCallback((_items: FileItem[], action: ProjectDetailBulkAction): string | null => {
+    switch (action) {
+      case 'download':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
+      case 'delete':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_DELETE)
+      case 'move':
+        return getProjectPermissionUnavailableReason(ProjectPermission.FILES_EDIT)
+      case 'sync':
+        return syncUnavailableReason
+      case 'deploy':
+        if (canDeployProjectActions) return null
+        if (!hasDeployPermission) return getProjectPermissionUnavailableReason(ProjectPermission.DEPLOY)
+        return 'No eligible deployment target'
+      default:
+        return null
+    }
+  }, [canDeployProjectActions, getProjectPermissionUnavailableReason, hasDeployPermission, syncUnavailableReason])
+
+  const getProjectDetailBulkActionDiagnosticDecision = React.useCallback((
+  _items: FileItem[],
+  action: ProjectDetailBulkAction,
+  reason?: string | null
+): UiAuthzDecision | null => (
+    buildProjectDetailBulkDiagnosticDecision(projectId || '', action, reason, syncPermissions)
+  ), [projectId, syncPermissions])
 
   const resolveMemberName = React.useCallback((member: ProjectMember) => {
     const userInfo = member.user
@@ -653,12 +1279,20 @@ export default function ProjectDetail() {
     queryFn: () => {
       const q = memberUserSearch.trim()
       if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
-      return apiClient.get<UserSearchItem[]>(
-        `/starbase-api/projects/${projectId}/members/user-search`,
-        q ? { q } : undefined
-      )
+      return projectsApi.searchMemberCandidates(projectId!, q)
     },
-    enabled: addMemberModal.isOpen && !!projectId && memberUserSearch.trim().length >= 2,
+    enabled: addMemberModal.isOpen && !!projectId && canSearchMembers && memberUserSearch.trim().length >= 2,
+    staleTime: 30 * 1000,
+  })
+
+  const assignmentUsersQ = useQuery({
+    queryKey: ['admin', 'users', 'search', 'project-role-assignment', assignmentUserSearch.trim()],
+    queryFn: () => {
+      const q = assignmentUserSearch.trim()
+      if (q.length < 2) return Promise.resolve([] as UserSearchItem[])
+      return apiClient.get<UserSearchItem[]>(`/api/admin/users/search?q=${encodeURIComponent(q)}`)
+    },
+    enabled: assignmentModal.isOpen && assignmentPrincipalType === 'user' && canSearchMembers && assignmentUserSearch.trim().length >= 2,
     staleTime: 30 * 1000,
   })
 
@@ -681,17 +1315,14 @@ export default function ProjectDetail() {
 
   const memberCapabilitiesQ = useQuery({
     queryKey: ['project-members', projectId, 'capabilities'],
-    queryFn: () => apiClient.get<{ ssoRequired: boolean; emailConfigured: boolean }>(`/starbase-api/projects/${projectId}/members/capabilities`),
-    enabled: addMemberModal.isOpen && !!projectId,
+    queryFn: () => projectsApi.getMemberCapabilities(projectId!),
+    enabled: addMemberModal.isOpen && !!projectId && canInviteMembers,
     staleTime: 30 * 1000,
   })
   const memberLookupQ = useQuery({
     queryKey: ['project-members', projectId, 'lookup', debouncedMemberEmail.toLowerCase()],
-    queryFn: () => apiClient.get<{ mode: 'invite' | 'direct-add' | 'existing-member'; user?: UserSearchItem | null }>(
-      `/starbase-api/projects/${projectId}/members/lookup`,
-      { email: debouncedMemberEmail.toLowerCase() }
-    ),
-    enabled: addMemberModal.isOpen && !!projectId && isValidEmail(debouncedMemberEmail),
+    queryFn: () => projectsApi.lookupMember(projectId!, debouncedMemberEmail.toLowerCase()),
+    enabled: addMemberModal.isOpen && !!projectId && canSearchMembers && isValidEmail(debouncedMemberEmail),
     staleTime: 30 * 1000,
   })
 
@@ -716,29 +1347,31 @@ export default function ProjectDetail() {
     const email = memberEmail.trim()
     if (!isValidEmail(email)) return
     const memberLookup = memberLookupQ.data
+    const memberMode = memberLookup?.mode || 'invite'
+    if (memberMode === 'existing-member') return
+    if (memberMode === 'direct-add' && !canAddMembers) return
+    if (memberMode === 'invite' && !canInviteMembers) return
     try {
+      const roles = editableProjectRoles(memberRoles)
       const body = {
         email,
-        roles: memberRoles.filter((r) => r !== 'owner'),
+        roles,
         ...(memberLookup?.mode === 'invite' ? { deliveryMethod: memberDeliveryMethod } : {}),
       }
-      const json = await apiClient.post<any>(`/starbase-api/projects/${projectId}/members`, body)
-      const invited = !!json?.invited
-      const emailSent = !!json?.emailSent
-      const emailError = typeof json?.emailError === 'string' ? String(json.emailError) : ''
-      const inviteUrl = typeof json?.inviteUrl === 'string' ? String(json.inviteUrl) : ''
-      const oneTimePassword = typeof json?.oneTimePassword === 'string' ? String(json.oneTimePassword) : ''
+      const json = await projectsApi.addMember(projectId, body)
 
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
 
-      if (invited) {
-        if (!emailSent && inviteUrl && oneTimePassword) {
+      if (json.invited) {
+        const inviteUrl = json.inviteUrl || ''
+        const oneTimePassword = json.oneTimePassword || ''
+        if (!json.emailSent && inviteUrl && oneTimePassword) {
           setMemberInviteReveal({ email, inviteUrl, oneTimePassword })
           return
         }
         resetAddMemberForm()
         addMemberModal.closeModal()
-        showToast({ kind: 'success', title: 'Member invited', subtitle: emailSent ? `Invite email sent to ${email}` : emailError || undefined })
+        showToast({ kind: 'success', title: 'Member invited', subtitle: json.emailSent ? `Invite email sent to ${email}` : json.emailError || undefined })
       } else {
         resetAddMemberForm()
         addMemberModal.closeModal()
@@ -751,11 +1384,12 @@ export default function ProjectDetail() {
   }
 
   async function submitReissuePendingInvite(invite: ProjectPendingInvite) {
+    if (!canInviteMembers) return
     if (!projectId) return
     try {
-      const json = await apiClient.post<any>(`/starbase-api/projects/${projectId}/pending-invites/${encodeURIComponent(invite.invitationId)}/reissue`, {})
-      const inviteUrl = typeof json?.inviteUrl === 'string' ? String(json.inviteUrl) : ''
-      const oneTimePassword = typeof json?.oneTimePassword === 'string' ? String(json.oneTimePassword) : ''
+      const json = await projectsApi.reissueManualMemberInvitation(projectId, invite.invitationId)
+      const inviteUrl = json.inviteUrl || ''
+      const oneTimePassword = json.oneTimePassword || ''
 
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
 
@@ -778,9 +1412,11 @@ export default function ProjectDetail() {
   }
 
   async function submitRemoveMember(member: ProjectMember) {
+    if (!canRemoveMembers) return
     if (!projectId) return
     try {
-      await apiClient.delete(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}`)
+      await projectsApi.removeMember(projectId, member.userId)
+      await syncProjectCustomRoleAssignments(member.userId, [])
       removeMemberModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
       showToast({ kind: 'success', title: 'Member removed' })
@@ -790,12 +1426,30 @@ export default function ProjectDetail() {
     }
   }
 
-  async function submitUpdateRoles(member: ProjectMember, roles: ProjectRole[]) {
+  async function submitTransferOwnership(member: ProjectMember) {
+    if (!canTransferOwnership) return
     if (!projectId) return
     try {
-      await apiClient.patch(`/starbase-api/projects/${projectId}/members/${encodeURIComponent(member.userId)}`, {
-        roles: roles.filter((r) => r !== 'owner'),
+      await projectsApi.transferOwnership(projectId, member.userId)
+      transferOwnershipModal.closeModal()
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
+      await queryClient.invalidateQueries({ queryKey: ['project-members', projectId, 'me'] })
+      await queryClient.invalidateQueries({ queryKey: ['starbase', 'projects'] })
+      showToast({ kind: 'success', title: 'Ownership transferred', subtitle: `${member.user?.email || member.userId} is now the project owner.` })
+    } catch (e: any) {
+      const parsed = parseApiError(e, 'Failed to transfer ownership')
+      showToast({ kind: 'error', title: 'Failed to transfer ownership', subtitle: parsed.message })
+    }
+  }
+
+  async function submitUpdateRoles(member: ProjectMember, roles: ProjectRole[]) {
+    if (!canUpdateMemberRoles) return
+    if (!projectId) return
+    try {
+      await projectsApi.updateMemberRoles(projectId, member.userId, {
+        roles: editableProjectRoles(roles),
       })
+      await syncProjectCustomRoleAssignments(member.userId, editCustomRoleIds)
       editRolesModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['project-members', projectId] })
       showToast({ kind: 'success', title: 'Roles updated' })
@@ -806,10 +1460,11 @@ export default function ProjectDetail() {
   }
 
   async function submitDeleteFile(file: FileItem) {
+    if (!canDeleteFiles) return
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.delete(`/starbase-api/files/${file.id}`)
+      await filesApi.delete(file.id)
       deleteFileModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({ kind: 'success', title: 'File deleted' })
@@ -822,10 +1477,11 @@ export default function ProjectDetail() {
   }
 
   async function submitDeleteFolder(folder: FolderSummary) {
+    if (!canDeleteFiles) return
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.delete(`/starbase-api/folders/${folder.id}`)
+      await foldersApi.delete(folder.id)
       deleteFolderModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       showToast({ kind: 'success', title: 'Folder deleted' })
@@ -838,10 +1494,11 @@ export default function ProjectDetail() {
   }
 
   async function submitMoveFile(file: FileItem, targetId: string | null) {
+    if (!canEditFiles) return
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.patch(`/starbase-api/files/${file.id}`, { folderId: targetId })
+      await filesApi.updateMetadata(file.id, { folderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
@@ -856,11 +1513,12 @@ export default function ProjectDetail() {
   }
 
   async function submitBatchMoveFiles(fileIds: string[], targetId: string | null) {
+    if (!canEditFiles) return
     if (!projectId || fileIds.length === 0) return
     try {
       setBusy(true)
       for (const fileId of fileIds) {
-        await apiClient.patch(`/starbase-api/files/${fileId}`, { folderId: targetId })
+        await filesApi.updateMetadata(fileId, { folderId: targetId })
       }
       moveModal.closeModal()
       setBatchMoveIds(null)
@@ -878,10 +1536,11 @@ export default function ProjectDetail() {
   }
 
   async function submitMoveFolder(folder: FolderSummary, targetId: string | null) {
+    if (!canEditFiles) return
     if (!projectId) return
     try {
       setBusy(true)
-      await apiClient.patch(`/starbase-api/folders/${folder.id}`, { parentFolderId: targetId })
+      await foldersApi.update(folder.id, { parentFolderId: targetId })
       moveModal.closeModal()
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, folderId] })
       await queryClient.invalidateQueries({ queryKey: ['contents', projectId, targetId ?? null] })
@@ -896,13 +1555,14 @@ export default function ProjectDetail() {
   }
 
   async function submitCreateFile() {
+    if (!canCreateFiles) return
     if (!projectId) return
     const name = newFileName.trim()
     if (!name) return
     const type = createFileModal.data ?? 'bpmn'
     try {
       setBusy(true)
-      const created = await apiClient.post<{ id?: string }>(`/starbase-api/projects/${projectId}/files`, {
+      const created = await filesApi.create(projectId, {
         name,
         type,
         folderId: folderId ?? null,
@@ -923,12 +1583,13 @@ export default function ProjectDetail() {
   }
 
   async function submitCreateFolder() {
+    if (!canCreateFiles) return
     if (!projectId) return
     const name = newFolderName.trim()
     if (!name) return
     try {
       setBusy(true)
-      const created = await apiClient.post<{ id?: string }>(`/starbase-api/projects/${projectId}/folders`, {
+      const created = await foldersApi.create(projectId, {
         name,
         parentFolderId: folderId ?? null,
       })
@@ -999,8 +1660,17 @@ export default function ProjectDetail() {
           projectName={projectName}
           subtitle={subtitle}
           projectId={projectId}
+          canDownloadProject={canViewFiles}
+          canOpenGitSettings={canManageProjectSettings || canManageGitConnection}
+          canOpenDeploymentTargets={canReadProjectEngineTargets}
+          downloadProjectUnavailableReason={downloadProjectUnavailableReason}
+          gitSettingsUnavailableReason={gitSettingsUnavailableReason}
+          deploymentTargetsUnavailableReason={deploymentTargetsUnavailableReason}
           onDownloadProject={downloadProject}
           onOpenGitSettings={() => setGitSettingsOpen(true)}
+          onOpenDeploymentTargets={() => {
+            if (canReadProjectEngineTargets) setDeploymentTargetsOpen(true)
+          }}
         />
 
         {/* Git token warning banner */}
@@ -1018,7 +1688,13 @@ export default function ProjectDetail() {
                 lowContrast
                 style={{ marginBottom: 0, flex: 1 }}
               />
-              <Button kind="ghost" size="sm" onClick={() => setGitSettingsOpen(true)}>
+              <Button
+                kind="ghost"
+                size="sm"
+                onClick={() => setGitSettingsOpen(true)}
+                disabled={!canManageGitConnection}
+                title={canManageGitConnection ? undefined : `Missing permission ${ProjectPermission.GIT_CONNECT}`}
+              >
                 Update token
               </Button>
             </div>
@@ -1069,7 +1745,18 @@ export default function ProjectDetail() {
               uncommittedFolderIdsSet={uncommittedFolderIdsSet}
               hasGitConnection={hasGitConnection}
               showSyncButton={showSyncButton}
-              canDeployByRole={canDeployByRole}
+              canDeployByRole={canDeployProjectActions}
+              canViewFiles={canViewFiles}
+              canCreateFiles={canCreateFiles}
+              canEditFiles={canEditFiles}
+              canDeleteFiles={canDeleteFiles}
+              canViewMembers={canViewMembers}
+              canManageEngineAccess={canViewDeploymentOptions}
+              getRowActionUnavailableReason={getProjectDetailRowActionUnavailableReason}
+              getBulkActionUnavailableReason={getProjectDetailBulkActionUnavailableReason}
+              getBulkActionDiagnosticDecision={getProjectDetailBulkActionDiagnosticDecision}
+              getToolbarActionUnavailableReason={getProjectDetailToolbarActionUnavailableReason}
+              getToolbarActionDiagnosticDecision={getProjectDetailToolbarActionDiagnosticDecision}
               onOpenSync={(cancelSelection) => {
                 setBatchCancelSelection(() => cancelSelection)
                 syncModal.openModal()
@@ -1090,15 +1777,25 @@ export default function ProjectDetail() {
                 }
                 if (uploadInputRef.current) uploadInputRef.current.value = ''
               }}
-              onOpenMembers={openProjectMembers}
-              onOpenEngineAccess={() => setEngineAccessOpen(true)}
-              onUploadClick={() => uploadInputRef.current?.click()}
+              onOpenMembers={() => {
+                if (canViewMembers) openProjectMembers()
+              }}
+              onOpenEngineAccess={() => {
+                if (canViewDeploymentOptions) setEngineAccessOpen(true)
+              }}
+              onUploadClick={() => {
+                if (canCreateFiles) uploadInputRef.current?.click()
+              }}
               onCreateFile={(type) => {
+                if (!canCreateFiles) return
                 createFileModal.openModal(type)
                 setNewFileName('')
               }}
-              onCreateFolder={() => newFolderModal.openModal()}
+              onCreateFolder={() => {
+                if (canCreateFiles) newFolderModal.openModal()
+              }}
               onMoveItem={(file) => {
+                if (!canEditFiles) return
                 setAllFolders(null)
                 setMoveTarget(folderId ?? 'ROOT')
                 if (file.type === 'folder') {
@@ -1118,9 +1815,10 @@ export default function ProjectDetail() {
               }}
               onDownloadSelection={downloadSelection}
               onDeleteItem={(file) => {
+                if (!canDeleteFiles) return
                 if (file.type === 'folder') {
                   if (!file.id) return
-                  apiClient.get(`/starbase-api/folders/${file.id}/delete-preview`)
+                  foldersApi.getDeletePreview(file.id)
                     .then((preview: any) => {
                       deleteFolderModal.openModal({ id: file.id, name: file.name, preview })
                     })
@@ -1133,6 +1831,7 @@ export default function ProjectDetail() {
               }}
               getFileIcon={getFileIcon}
               onOpenBatchMove={(ids, cancelSelection) => {
+                if (!canEditFiles) return
                 if (ids.length === 0) return
                 setBatchMoveIds(ids)
                 setBatchCancelSelection(() => cancelSelection)
@@ -1390,19 +2089,57 @@ export default function ProjectDetail() {
           collaboratorsSearchExpanded={collaboratorsSearchExpanded}
           setCollaboratorsSearchExpanded={setCollaboratorsSearchExpanded}
           canManageMembers={canManageMembers}
+          canAddMembers={canOpenAddMember}
+          canInviteMembers={canInviteMembers}
+          canUpdateMemberRoles={canUpdateMemberRoles}
+          canRemoveMembers={canRemoveMembers}
+          canManageMemberDeployGrant={canManageMemberDeployGrant}
+          canTransferOwnership={canTransferOwnership}
+          canAssignScopedAccess={canAssignScopedProjectAccess}
+          projectAccessAuthority={projectAccessAuthority}
+          scopedAssignmentsVisible={canAssignScopedProjectAccess || canInspectScopedProjectLineage}
+          scopedAssignmentsLoading={projectRoleAssignmentsQ.isLoading}
+          scopedAssignmentsError={projectRoleAssignmentsQ.isError}
+          scopedRoleAssignments={scopedProjectRoleAssignments}
+          scopedRoleNamesById={assignableProjectRoleNameById}
+          customRoleTagsByUser={customProjectRoleTagsByUser}
           onAddUser={() => {
+            if (!manualProjectAccessEnabled || !canOpenAddMember) return
             resetAddMemberForm()
             addMemberModal.openModal()
           }}
-          onReissuePendingInvite={(invite) => submitReissuePendingInvite(invite)}
+          onAssignAccess={() => {
+            if (!manualProjectAccessEnabled || !canAssignScopedProjectAccess) return
+            openAssignmentModal()
+          }}
+          onReissuePendingInvite={(invite) => {
+            if (!manualProjectAccessEnabled || !canInviteMembers) return
+            submitReissuePendingInvite(invite)
+          }}
           onEditRoles={(member) => {
+            if (!manualProjectAccessEnabled || !canUpdateMemberRoles) return
             const current = (Array.isArray(member.roles) && member.roles.length > 0 ? member.roles : [member.role]) as ProjectRole[]
-            const editable = current.filter((rr) => rr !== 'owner')
+            const editable = editableProjectRoles(current)
             setEditRolesSelection(editable.length ? editable : ['viewer'])
+            setEditCustomRoleIds((customProjectAssignmentsByUser.get(member.userId) || []).map((assignment) => assignment.roleId))
             editRolesModal.openModal(member)
           }}
-          onToggleDeploy={(member, next) => submitUpdateDeployPermission(member, next)}
-          onRemove={(member) => removeMemberModal.openModal(member)}
+          onToggleDeploy={(member, next) => {
+            if (!manualProjectAccessEnabled || !canManageMemberDeployGrant) return
+            submitUpdateDeployPermission(member, next)
+          }}
+          onRemove={(member) => {
+            if (!manualProjectAccessEnabled || !canRemoveMembers) return
+            removeMemberModal.openModal(member)
+          }}
+          onTransferOwnership={(member) => {
+            if (!manualProjectAccessEnabled || !canTransferOwnership) return
+            transferOwnershipModal.openModal(member)
+          }}
+          onRemoveScopedAssignment={(assignment) => {
+            if (!manualProjectAccessEnabled || !canAssignScopedProjectAccess || assignment.source !== 'manual') return
+            removeScopedProjectRoleAssignmentM.mutate(assignment.id)
+          }}
           tagTypeForRole={tagTypeForRole}
         />
 
@@ -1424,6 +2161,16 @@ export default function ProjectDetail() {
           memberRoles={memberRoles}
           setMemberRoles={setMemberRoles}
           canAssignDelegate={canAssignDelegate}
+          canAddMembers={canAddMembers}
+          canInviteMembers={canInviteMembers}
+          canUpdateMemberRoles={canUpdateMemberRoles}
+          canRemoveMembers={canRemoveMembers}
+          canAssignScopedAccess={canAssignScopedProjectAccess}
+          addMembersUnavailableReason={canAddMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_ADD}`}
+          inviteMembersUnavailableReason={canInviteMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_INVITE}`}
+          updateMemberRolesUnavailableReason={canUpdateMemberRoles ? null : `Missing permission ${ProjectPermission.MEMBERS_UPDATE_ROLE}`}
+          removeMembersUnavailableReason={canRemoveMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_REMOVE}`}
+          assignScopedAccessUnavailableReason={canAssignScopedProjectAccess ? null : `Missing permission ${ProjectPermission.MEMBERS_ADD} or ${ProjectPermission.MEMBERS_UPDATE_ROLE}`}
           isMemberEmailValid={isMemberEmailValid}
           memberLookupEmail={debouncedMemberEmail}
           memberLookup={memberLookupQ.data || null}
@@ -1433,18 +2180,45 @@ export default function ProjectDetail() {
           memberDeliveryMethod={memberDeliveryMethod}
           setMemberDeliveryMethod={setMemberDeliveryMethod}
           memberInviteReveal={memberInviteReveal}
+          customRoleOptions={assignableProjectRoles}
           resetAddMemberForm={resetAddMemberForm}
           submitAddMember={submitAddMember}
+          assignmentOpen={assignmentModal.isOpen}
+          onCloseAssignment={closeAssignmentModal}
+          assignmentPrincipalType={assignmentPrincipalType}
+          setAssignmentPrincipalType={setAssignmentPrincipalType}
+          assignmentPrincipalIdInput={assignmentPrincipalIdInput}
+          setAssignmentPrincipalIdInput={setAssignmentPrincipalIdInput}
+          assignmentUserEmail={assignmentUserEmail}
+          setAssignmentUserEmail={setAssignmentUserEmail}
+          assignmentUserSearch={assignmentUserSearch}
+          setAssignmentUserSearch={setAssignmentUserSearch}
+          assignmentUserSearchItems={(Array.isArray(assignmentUsersQ.data) ? assignmentUsersQ.data : []) as UserSearchItem[]}
+          selectedAssignmentUser={selectedAssignmentUser}
+          setSelectedAssignmentUser={setSelectedAssignmentUser}
+          assignmentRoleId={assignmentRoleId}
+          setAssignmentRoleId={setAssignmentRoleId}
+          assignmentError={assignmentError}
+          setAssignmentError={setAssignmentError}
+          assignmentSubmitting={assignScopedProjectRoleM.isPending}
+          submitScopedAssignment={submitScopedProjectRoleAssignment}
           editRolesOpen={editRolesModal.isOpen}
           editRolesMember={editRolesModal.data as ProjectMember | null}
           editRolesSelection={editRolesSelection}
           setEditRolesSelection={setEditRolesSelection}
+          editCustomRoleIds={editCustomRoleIds}
+          setEditCustomRoleIds={setEditCustomRoleIds}
           submitUpdateRoles={(member, roles) => submitUpdateRoles(member, roles)}
           onCloseEditRoles={() => editRolesModal.closeModal()}
           removeMemberOpen={removeMemberModal.isOpen}
           removeMemberData={removeMemberModal.data as ProjectMember | null}
           onCloseRemoveMember={() => removeMemberModal.closeModal()}
           submitRemoveMember={submitRemoveMember}
+          transferOwnershipOpen={transferOwnershipModal.isOpen}
+          transferOwnershipMember={transferOwnershipModal.data as ProjectMember | null}
+          onCloseTransferOwnership={() => transferOwnershipModal.closeModal()}
+          submitTransferOwnership={submitTransferOwnership}
+          transferOwnershipUnavailableReason={canTransferOwnership ? null : `Missing permission ${ProjectPermission.OWNERSHIP_TRANSFER}`}
         />
 
         {/* Engine Access Modal */}
@@ -1452,7 +2226,8 @@ export default function ProjectDetail() {
           open={engineAccessOpen}
           onClose={() => setEngineAccessOpen(false)}
           engineAccessQ={engineAccessQ}
-          canManageMembers={canManageMembers}
+          canRequestEngineAccess={canRequestEngineAccess}
+          requestEngineAccessUnavailableReason={requestEngineAccessUnavailableReason}
           myMembershipLoading={myMembershipQ.isLoading}
           selectedEngineForRequest={selectedEngineForRequest}
           setSelectedEngineForRequest={setSelectedEngineForRequest}
@@ -1478,6 +2253,23 @@ export default function ProjectDetail() {
             projectId={projectId}
             open={gitSettingsOpen}
             onClose={() => setGitSettingsOpen(false)}
+            canManageConnection={canManageGitConnection}
+            manageConnectionUnavailableReason={canManageGitConnection ? null : `Missing permission ${ProjectPermission.GIT_CONNECT}`}
+          />
+        )}
+        {projectId && (
+          <ProjectDeploymentTargetsModal
+            projectId={projectId}
+            open={deploymentTargetsOpen}
+            onClose={() => setDeploymentTargetsOpen(false)}
+            apiScope={deploymentTargetsApiScope}
+            projectEngineTargetMode={platformSettings?.projectEngineTargetMode}
+            engines={enginesQ.data || []}
+            enginesLoading={enginesQ.isLoading}
+            canReadTargets={canReadProjectEngineTargets}
+            canManageTargets={canManageProjectEngineTargets}
+            readTargetsUnavailableReason={deploymentTargetsUnavailableReason}
+            manageTargetsUnavailableReason={deploymentTargetsManageUnavailableReason}
           />
         )}
       </div>

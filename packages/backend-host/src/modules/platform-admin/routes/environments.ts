@@ -148,6 +148,7 @@ router.delete(
  */
 router.post(
   '/reorder',
+  requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
   validateBody(reorderSchema),
   asyncHandler(async (req, res) => {
     try {

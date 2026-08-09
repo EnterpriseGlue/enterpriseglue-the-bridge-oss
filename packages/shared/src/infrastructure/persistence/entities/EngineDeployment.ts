@@ -4,9 +4,10 @@ import { AppBaseEntity } from './BaseEntity.js';
 @Entity({ name: 'engine_deployments', schema: 'main' })
 @Index('idx_engine_deployments_project', ['projectId', 'deployedAt'])
 @Index('idx_engine_deployments_engine', ['engineId', 'deployedAt'])
+@Index('uq_engine_deployments_engine_camunda_deployment', ['engineId', 'camundaDeploymentId'], { unique: true })
 export class EngineDeployment extends AppBaseEntity {
-  @Column({ name: 'project_id', type: 'text' })
-  projectId!: string;
+  @Column({ name: 'project_id', type: 'text', nullable: true })
+  projectId!: string | null;
 
   @Column({ name: 'engine_id', type: 'text' })
   engineId!: string;
@@ -61,6 +62,23 @@ export class EngineDeployment extends AppBaseEntity {
 
   @Column({ name: 'raw_response', type: 'text', nullable: true })
   rawResponse!: string | null;
+
+  /** How this deployment record entered EnterpriseGlue's inventory. */
+  @Column({ name: 'ingestion_source', type: 'text', default: 'enterpriseglue_proxy' })
+  ingestionSource!: string;
+
+  /** complete, reported, discovered, or inferred; controls lineage-dependent UX. */
+  @Column({ name: 'lineage_quality', type: 'text', default: 'complete' })
+  lineageQuality!: string;
+
+  @Column({ name: 'reporting_principal_id', type: 'text', nullable: true })
+  reportingPrincipalId!: string | null;
+
+  @Column({ name: 'reconciled_at', type: 'bigint', nullable: true })
+  reconciledAt!: number | null;
+
+  @Column({ name: 'lineage_json', type: 'text', default: '{}' })
+  lineageJson!: string;
 
   @Column({ name: 'created_at', type: 'bigint' })
   createdAt!: number;

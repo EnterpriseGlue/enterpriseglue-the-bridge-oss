@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Dependencies"
+  short_description: "Audit and update EnterpriseGlue dependencies"
+  default_prompt: "Use $enterpriseglue-deps to help with this EnterpriseGlue task."

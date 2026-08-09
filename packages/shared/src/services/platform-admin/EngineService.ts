@@ -10,13 +10,34 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { In, IsNull } from 'typeorm';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
+import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
+import { EngineBackstopSyncRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncRun.js';
+import { EngineBackstopSyncTask } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopSyncTask.js';
+import { In, IsNull, Not, type EntityManager } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { canonicalRoleAssignmentKey } from '@enterpriseglue/shared/authz/role-assignment-identity.js';
+import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import {
+  engineTenancyVisibilityWhere,
+  isEngineVisibleInTenancyContext,
+} from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
+import { ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE, EnginePermissions, permissionService, SYSTEM_ROLE_IDS } from './permissions.js';
+
+export type EngineAccessRole = EngineRole | 'custom';
 
 export interface EngineWithDetails {
   engine: Engine;
-  role: EngineRole;
+  role: EngineAccessRole;
   environmentTag: EnvironmentTag | null;
 }
 
@@ -27,6 +48,7 @@ export interface EngineMemberWithUser {
   role: string;
   grantedById: string | null;
   createdAt: number;
+  source?: string;
   user: {
     id: string;
     email: string;
@@ -35,106 +57,152 @@ export interface EngineMemberWithUser {
   } | null;
 }
 
+export type ConfiguredEngineUpdate = Pick<Engine,
+  'name' | 'baseUrl' | 'type' | 'externalId' | 'labelsJson' | 'sourceHash' | 'lastAppliedAt' | 'ownershipMode'
+  | 'lifecycleStatus' | 'driftStatus' | 'authType' | 'username' | 'passwordEnc' | 'oauthTokenUrl' | 'oauthScopes'
+  | 'oauthAudience' | 'version' | 'environmentTagId' | 'runtimeAccessScope' | 'deploymentIntegration'
+  | 'tenancyMode' | 'tenantId' | 'tenantMappingStrategy' | 'tenantMappingVersion' | 'tenantResolutionStatus' | 'lastTenantReconciledAt'
+  | 'metadataDiscoveryEnabled' | 'deploymentDiscoveryEnabled' | 'reconciliationIntervalSeconds' | 'pipelineReceiptEnabled'
+  | 'connectionMode'>;
+
+const ENGINE_ACCESS_DISPLAY_SYSTEM_ROLE_IDS = [
+  SYSTEM_ROLE_IDS.ENGINE_OWNER,
+  SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
+  SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+  SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+] as const;
+
+const ENGINE_STANDARD_MEMBER_SYSTEM_ROLE_IDS = [
+  SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+  SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+] as const;
+
+const ENGINE_ACCESS_ROLE_PRECEDENCE = ['owner', 'delegate', 'operator', 'deployer'] as const;
+
+const ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID: Record<'operator' | 'deployer', string> = {
+  operator: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+  deployer: SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+};
+
+const ENGINE_GOVERNANCE_SOURCE = 'system';
+
+function engineGovernanceSourceRef(engineId: string, slot: 'owner' | 'delegate'): string {
+  return `engine:${engineId}:governance-${slot}`;
+}
+
 export class EngineService {
   /**
-   * Get user's role on an engine
+   * Native backstop side effects must be retired before an engine connection
+   * can leave service. The durable no-expiry journal is the ownership marker;
+   * bounded preview/history evidence alone does not block decommission.
    */
-  async getEngineRole(userId: string, engineId: string): Promise<EngineRole | null> {
-    const dataSource = await getDataSource();
-    const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(EngineMember);
-    
-    // Get engine to check owner/delegate
-    const engine = await engineRepo.findOne({ where: { id: engineId } });
-
-    if (!engine) return null;
-    
-    // Check if owner or delegate
-    if (engine.ownerId === userId) return 'owner';
-    if (engine.delegateId === userId) return 'delegate';
-    
-    // Check engine_members table
-    const membership = await memberRepo.findOne({
-      where: { engineId, userId }
+  async assertBackstopRetirementComplete(
+    engineId: string,
+    store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+  ): Promise<void> {
+    const dataSource = store || await getDataSource();
+    const activeTask = await dataSource.getRepository(EngineBackstopSyncTask).findOne({
+      where: { engineId, status: In(['queued', 'running']) },
+      select: ['id'],
     });
-    
-    return (membership?.role as EngineRole) || null;
+    const retainedJournal = await dataSource.getRepository(EngineBackstopSyncRun).findOne({
+      where: {
+        engineId,
+        encryptedDetailedSnapshot: Not(IsNull()),
+        detailedSnapshotExpiresAt: IsNull(),
+      },
+      select: ['id'],
+    });
+    if (activeTask || retainedJournal) {
+      throw Errors.conflict('Engine lifecycle change is blocked while mirrored-backstop native grants or pending operations remain; complete retry or rollback and verify zero retained ownership before decommissioning');
+    }
+  }
+
+  /** Physical deletion is reserved for engines with no retained backstop history. */
+  async hasBackstopHistory(
+    engineId: string,
+    store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+  ): Promise<boolean> {
+    const dataSource = store || await getDataSource();
+    const task = await dataSource.getRepository(EngineBackstopSyncTask).findOne({ where: { engineId }, select: ['id'] });
+    const run = await dataSource.getRepository(EngineBackstopSyncRun).findOne({ where: { engineId }, select: ['id'] });
+    const mapping = await dataSource.getRepository(EngineBackstopGroupMapping).findOne({ where: { engineId }, select: ['id'] });
+    return Boolean(task || run || mapping);
   }
 
   /**
-   * Check if user has access to engine with at least the required role
+   * Get user's role on an engine
    */
-  async hasEngineAccess(userId: string, engineId: string, requiredRoles: EngineRole[]): Promise<boolean> {
-    const role = await this.getEngineRole(userId, engineId);
-    if (!role) return false;
-    return requiredRoles.includes(role);
+  async getEngineRole(userId: string, engineId: string, tenantId?: string | null): Promise<EngineRole | null> {
+    const dataSource = await getDataSource();
+    const engineRepo = dataSource.getRepository(Engine);
+    const engine = await engineRepo.findOne({
+      where: { id: engineId },
+      select: ['id', 'tenantId', 'tenancyMode'],
+    });
+
+    if (!engine) return null;
+    if (!isEngineVisibleInTenancyContext(engine, tenantId)) return null;
+
+    return await permissionService.getAssignedEngineRole(userId, engineId, tenantId);
   }
 
   /**
    * Get all engines a user has access to, optionally filtered by tenant
    */
-  async getUserEngines(userId: string, tenantId?: string): Promise<EngineWithDetails[]> {
+  async getUserEngines(userId: string, tenantId?: string | null): Promise<EngineWithDetails[]> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(EngineMember);
     const tagRepo = dataSource.getRepository(EnvironmentTag);
     const results: EngineWithDetails[] = [];
-
-    // Get engines where user is owner (include null tenantId for legacy data)
-    const ownedEngines = tenantId
-      ? await engineRepo.find({ where: [{ ownerId: userId, tenantId }, { ownerId: userId, tenantId: IsNull() }] })
-      : await engineRepo.find({ where: { ownerId: userId } });
     const tagIds = new Set<string>();
-    ownedEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
-    
-    for (const engine of ownedEngines) {
-      results.push({
-        engine,
-        role: 'owner',
-        environmentTag: null, // Will populate below
+
+    // Canonical role assignments are the sole source of engine discovery.
+    const assignedEngineRoles = await permissionService.getAssignedEngineRoles(userId, tenantId);
+    const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .where('assignment.principalType = :principalType', { principalType: 'user' })
+      .andWhere('assignment.principalId = :principalId', { principalId: userId })
+      .andWhere('assignment.scopeType = :scopeType', { scopeType: 'engine' })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('rolePermission.permissionId IN (:...permissions)', { permissions: Object.values(EnginePermissions) });
+    if (tenantId) {
+      assignmentQb
+        .andWhere('(assignment.tenantId = :tenantId OR assignment.tenantId IS NULL)', { tenantId })
+        .andWhere('(role.tenantId = :tenantId OR role.tenantId IS NULL)', { tenantId });
+    }
+    const assignmentRows = await assignmentQb.getMany();
+    const allEngineRole = assignedEngineRoles.find((assignment) => assignment.engineId === null)?.role || null;
+    const hasAllEngineAssignment = assignmentRows.some((assignment) => assignment.scopeId === null);
+    const assignedEngineIds = Array.from(new Set([
+      ...assignedEngineRoles.map((assignment) => assignment.engineId),
+      ...assignmentRows.map((assignment) => assignment.scopeId),
+    ].filter((engineId): engineId is string => Boolean(engineId))));
+    let assignedEngines: Engine[] = [];
+
+    if (allEngineRole || hasAllEngineAssignment) {
+      assignedEngines = await engineRepo.find({ where: engineTenancyVisibilityWhere({}, tenantId) });
+    } else if (assignedEngineIds.length > 0) {
+      assignedEngines = await engineRepo.find({
+        where: engineTenancyVisibilityWhere({ id: In(assignedEngineIds) }, tenantId),
       });
     }
 
-    // Get engines where user is delegate (include null tenantId for legacy data)
-    const delegatedEngines = tenantId
-      ? await engineRepo.find({ where: [{ delegateId: userId, tenantId }, { delegateId: userId, tenantId: IsNull() }] })
-      : await engineRepo.find({ where: { delegateId: userId } });
-    delegatedEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
-    
-    for (const engine of delegatedEngines) {
-      const alreadyAdded = results.some(r => r.engine.id === engine.id);
-      if (!alreadyAdded) {
-        results.push({
-          engine,
-          role: 'delegate',
-          environmentTag: null,
-        });
+    for (const engine of assignedEngines) {
+      if (results.find(r => r.engine.id === engine.id)) {
+        continue;
       }
-    }
 
-    // Get engines where user is a member (operator/deployer)
-    const memberships = await memberRepo.find({ where: { userId } });
-
-    if (memberships.length > 0) {
-      const memberEngineIds = memberships.map(m => m.engineId);
-      // Filter member engines by tenant if specified (include null tenantId for legacy data)
-      const memberEngines = tenantId 
-        ? await engineRepo.find({ where: [{ id: In(memberEngineIds), tenantId }, { id: In(memberEngineIds), tenantId: IsNull() }] })
-        : await engineRepo.find({ where: { id: In(memberEngineIds) } });
-      memberEngines.forEach(e => e.environmentTagId && tagIds.add(e.environmentTagId));
-
-      for (const engine of memberEngines) {
-        if (!results.find(r => r.engine.id === engine.id)) {
-          const membership = memberships.find(m => m.engineId === engine.id);
-          const role = (membership?.role as EngineRole) || null;
-          if (!role) continue;
-          results.push({
-            engine,
-            role,
-            environmentTag: null,
-          });
-        }
-      }
+      const role = allEngineRole || assignedEngineRoles.find((assignment) => assignment.engineId === engine.id)?.role || 'custom';
+      if (!role) continue;
+      if (engine.environmentTagId) tagIds.add(engine.environmentTagId);
+      results.push({
+        engine,
+        role,
+        environmentTag: null,
+      });
     }
 
     // Fetch all environment tags at once
@@ -152,30 +220,33 @@ export class EngineService {
   }
 
   /**
-   * Get engine members (owner, delegate, operators, deployers)
-   * Includes owner and delegate from engines table plus members from engine_members table
+   * Get effective direct user assignments for an engine. Accountable owner and
+   * delegate columns remain governance metadata and are not an access source.
    */
   async getEngineMembers(engineId: string): Promise<EngineMemberWithUser[]> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
-    const memberRepo = dataSource.getRepository(EngineMember);
     const userRepo = dataSource.getRepository(User);
 
-    // Get engine to include owner and delegate
     const engine = await engineRepo.findOne({ where: { id: engineId } });
 
     if (!engine) {
       return [];
     }
 
-    // Get members from engine_members table
-    const members = await memberRepo.find({ where: { engineId } });
+    const assignmentMembers = await dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine' })
+      .andWhere('(assignment.scopeId = :engineId OR assignment.scopeId IS NULL)', { engineId })
+      .andWhere('assignment.principalType = :principalType', { principalType: 'user' })
+      .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_ACCESS_DISPLAY_SYSTEM_ROLE_IDS })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() })
+      .getMany();
 
-    // Collect all user IDs (owner, delegate, and members)
     const userIds = new Set<string>();
-    if (engine.ownerId) userIds.add(engine.ownerId);
-    if (engine.delegateId) userIds.add(engine.delegateId);
-    members.forEach(m => userIds.add(m.userId));
+    assignmentMembers.forEach((assignment) => {
+      if (assignment.principalId) userIds.add(assignment.principalId);
+    });
 
     // Get user details
     let userMap = new Map<string, { id: string; email: string; firstName: string | null; lastName: string | null }>();
@@ -188,51 +259,31 @@ export class EngineService {
       userMap = new Map(userList.map(u => [u.id, u]));
     }
 
-    const result: EngineMemberWithUser[] = [];
-
-    // Add owner first
-    if (engine.ownerId) {
-      result.push({
-        id: `owner-${engine.ownerId}`,
-        engineId,
-        userId: engine.ownerId,
-        role: 'owner',
-        grantedById: null,
-        createdAt: engine.createdAt || Date.now(),
-        user: userMap.get(engine.ownerId) || null,
-      });
-    }
-
-    // Add delegate
-    if (engine.delegateId) {
-      result.push({
-        id: `delegate-${engine.delegateId}`,
-        engineId,
-        userId: engine.delegateId,
-        role: 'delegate',
-        grantedById: engine.ownerId,
-        createdAt: engine.updatedAt || Date.now(),
-        user: userMap.get(engine.delegateId) || null,
-      });
-    }
-
-    // Add operators and deployers
-    for (const member of members) {
-      if (member.userId === engine.ownerId || member.userId === engine.delegateId) {
+    const resultByUserId = new Map<string, EngineMemberWithUser>();
+    for (const assignment of assignmentMembers) {
+      if (!assignment.principalId) continue;
+      const role = ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE[assignment.roleId];
+      if (!role) continue;
+      const existing = resultByUserId.get(assignment.principalId);
+      if (existing && ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(existing.role as typeof ENGINE_ACCESS_ROLE_PRECEDENCE[number]) <= ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(role)) {
         continue;
       }
-      result.push({
-        id: member.id,
-        engineId: member.engineId,
-        userId: member.userId,
-        role: member.role,
-        grantedById: member.grantedById,
-        createdAt: member.createdAt,
-        user: userMap.get(member.userId) || null,
+      resultByUserId.set(assignment.principalId, {
+        id: assignment.id,
+        engineId,
+        userId: assignment.principalId,
+        role,
+        grantedById: assignment.createdById,
+        createdAt: assignment.createdAt,
+        source: assignment.source,
+        user: userMap.get(assignment.principalId) || null,
       });
     }
 
-    return result;
+    return Array.from(resultByUserId.values()).sort((left, right) => {
+      const roleOrder = ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(left.role as typeof ENGINE_ACCESS_ROLE_PRECEDENCE[number]) - ENGINE_ACCESS_ROLE_PRECEDENCE.indexOf(right.role as typeof ENGINE_ACCESS_ROLE_PRECEDENCE[number]);
+      return roleOrder || left.createdAt - right.createdAt || left.userId.localeCompare(right.userId);
+    });
   }
 
   /**
@@ -241,7 +292,20 @@ export class EngineService {
   async assignDelegate(engineId: string, delegateId: string | null): Promise<void> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
+    const engine = await engineRepo.findOne({
+      where: { id: engineId },
+      select: ['id', 'ownerId', 'delegateId', 'tenantId', 'createdAt', 'updatedAt'],
+    });
+    if (!engine) {
+      throw new Error('Engine not found');
+    }
+
     await engineRepo.update({ id: engineId }, { delegateId, updatedAt: Date.now() });
+    await this.syncManagedEngineGovernanceAssignments(dataSource, {
+      ...engine,
+      delegateId,
+      updatedAt: Date.now(),
+    });
   }
 
   /**
@@ -250,11 +314,145 @@ export class EngineService {
   async transferOwnership(engineId: string, newOwnerId: string): Promise<void> {
     const dataSource = await getDataSource();
     const engineRepo = dataSource.getRepository(Engine);
+    const engine = await engineRepo.findOne({
+      where: { id: engineId },
+      select: ['id', 'ownerId', 'delegateId', 'tenantId', 'createdAt', 'updatedAt'],
+    });
+    if (!engine) {
+      throw new Error('Engine not found');
+    }
+
     await engineRepo.update({ id: engineId }, { 
       ownerId: newOwnerId, 
       delegateId: null,
       updatedAt: Date.now() 
     });
+    await this.syncManagedEngineGovernanceAssignments(dataSource, {
+      ...engine,
+      ownerId: newOwnerId,
+      delegateId: null,
+      updatedAt: Date.now(),
+    });
+  }
+
+  /**
+   * Materialize the owner/delegate grants for a newly-created engine.
+   * Creation commands call this directly so authorization is available before
+   * the command returns instead of depending on a later legacy reconciliation.
+   */
+  async createEngineWithGovernanceAssignments(
+    engine: Pick<Engine, 'id' | 'ownerId' | 'delegateId' | 'tenantId' | 'createdAt' | 'updatedAt'>,
+    providedStore?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+    withinTransaction = false,
+  ): Promise<void> {
+    const dataSource = providedStore || await getDataSource();
+    const create = async (manager: EntityManager) => {
+      await manager.getRepository(Engine).insert(engine);
+      await this.syncManagedEngineGovernanceAssignments(manager, engine);
+    };
+    if (withinTransaction) await create(dataSource as EntityManager);
+    else await (dataSource as Awaited<ReturnType<typeof getDataSource>>).transaction(create);
+  }
+
+  /** Shared configuration lifecycle write; callers resolve ownership before invoking this command. */
+  async updateConfiguredEngine(id: string, input: Partial<ConfiguredEngineUpdate>, store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager): Promise<void> {
+    const dataSource = store || await getDataSource();
+    await dataSource.getRepository(Engine).update({ id }, { ...input, updatedAt: Date.now() });
+  }
+
+  /**
+   * Retire every authorization path attached to an engine while preserving
+   * the engine, mapping, and inventory rows as inactive lifecycle evidence.
+   * Configuration-owned stable-key identities are released so a later
+   * re-provision creates a new engine ID instead of resurrecting this row.
+   */
+  async decommissionEngine(
+    id: string,
+    input: { lastAppliedAt?: number | null } = {},
+    store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+  ): Promise<void> {
+    if (!store) {
+      const dataSource = await getDataSource();
+      await dataSource.transaction((manager) => this.decommissionEngine(id, input, manager));
+      return;
+    }
+    const dataSource = store;
+    const engineRepo = dataSource.getRepository(Engine);
+    const engineClaim = await engineRepo.update({ id }, { id });
+    if (engineClaim.affected !== 1) throw new Error('Engine not found');
+    const engine = await engineRepo.findOne({ where: { id } });
+    if (!engine) throw new Error('Engine not found');
+    await this.assertBackstopRetirementComplete(id, dataSource);
+
+    const now = Date.now();
+    const runtimeResourceRepo = dataSource.getRepository(RuntimeResource);
+    const runtimeResourceSetRepo = dataSource.getRepository(RuntimeResourceSet);
+    const runtimeResources = await runtimeResourceRepo.find({
+      where: { engineId: id },
+      select: ['id'],
+    });
+    const runtimeResourceSets = await runtimeResourceSetRepo.find({
+      where: { engineId: id },
+      select: ['id'],
+    });
+    const runtimeResourceIds = runtimeResources.map((resource) => resource.id);
+    const runtimeResourceSetIds = runtimeResourceSets.map((resourceSet) => resourceSet.id);
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+
+    await dataSource.getRepository(EngineMember).delete({ engineId: id });
+    await assignmentRepo.delete({ scopeType: 'engine', scopeId: id });
+    if (runtimeResourceIds.length > 0) {
+      await assignmentRepo.delete({
+        scopeType: 'engine_runtime_resource',
+        scopeId: In(runtimeResourceIds),
+      });
+      await dataSource.getRepository(RuntimeResourceSetMaterialization).delete({
+        runtimeResourceId: In(runtimeResourceIds),
+      });
+    }
+    if (runtimeResourceSetIds.length > 0) {
+      await assignmentRepo.delete({
+        scopeType: 'engine_runtime_resource_set',
+        scopeId: In(runtimeResourceSetIds),
+      });
+      await dataSource.getRepository(RuntimeResourceSetMaterialization).delete({
+        runtimeResourceSetId: In(runtimeResourceSetIds),
+      });
+    }
+
+    await dataSource.getRepository(EngineTenantMapping).update(
+      { engineId: id },
+      { isActive: false, updatedAt: now },
+    );
+    await runtimeResourceRepo.update(
+      { engineId: id },
+      { isActive: false, updatedAt: now },
+    );
+    await runtimeResourceSetRepo.update(
+      { engineId: id },
+      { isArchived: true, updatedAt: now },
+    );
+    await dataSource.getRepository(ProjectEngineTarget).update(
+      { engineId: id },
+      { status: 'archived', updatedAt: now },
+    );
+    await dataSource.getRepository(EngineSetMaterialization).delete({ engineId: id });
+    await dataSource.getRepository(EngineBackstopGroupMapping).update(
+      { engineId: id },
+      { isActive: false, updatedAt: now },
+    );
+
+    await engineRepo.update({ id }, {
+      lifecycleStatus: 'decommissioned',
+      driftStatus: 'decommissioned',
+      ...(engine.registrationSource === 'config' ? { configKeyIdentity: null } : {}),
+      ...(input.lastAppliedAt === undefined ? {} : { lastAppliedAt: input.lastAppliedAt }),
+      updatedAt: now,
+    });
+  }
+
+  async decommissionConfiguredEngine(id: string, input: Pick<ConfiguredEngineUpdate, 'lastAppliedAt'>, store?: Awaited<ReturnType<typeof getDataSource>> | EntityManager): Promise<void> {
+    await this.decommissionEngine(id, input, store);
   }
 
   /**
@@ -266,21 +464,15 @@ export class EngineService {
     role: 'operator' | 'deployer',
     grantedById: string
   ): Promise<{ id: string }> {
-    const dataSource = await getDataSource();
-    const memberRepo = dataSource.getRepository(EngineMember);
-    const id = generateId();
-    const now = Date.now();
-
-    await memberRepo.insert({
-      id,
-      engineId,
-      userId,
-      role,
-      grantedById,
-      createdAt: now,
+    return permissionService.assignRole({
+      principalType: 'user',
+      principalId: userId,
+      roleId: ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[role],
+      resourceType: 'engine',
+      resourceId: engineId,
+      source: 'manual',
+      createdById: grantedById,
     });
-
-    return { id };
   }
 
   /**
@@ -289,38 +481,215 @@ export class EngineService {
   async updateEngineMemberRole(
     engineId: string,
     userId: string,
-    newRole: 'operator' | 'deployer'
+    newRole: 'operator' | 'deployer',
+    updatedById?: string
   ): Promise<void> {
     const dataSource = await getDataSource();
     const memberRepo = dataSource.getRepository(EngineMember);
     
     const existing = await memberRepo.findOne({ where: { engineId, userId } });
 
-    if (!existing) {
+    if (existing) {
+      await dataSource.transaction(async (manager) => {
+        await manager.getRepository(EngineMember).delete({ engineId, userId });
+
+        await manager.getRepository(EngineMember).insert({
+          id: generateId(),
+          engineId,
+          userId,
+          role: newRole,
+          grantedById: existing.grantedById,
+          createdAt: Date.now(),
+        });
+      });
+      await permissionService.assignRole({
+        principalType: 'user',
+        principalId: userId,
+        roleId: ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[newRole],
+        resourceType: 'engine',
+        resourceId: engineId,
+        source: 'manual',
+        createdById: updatedById || existing.grantedById || userId,
+      });
+      // An existing EngineMember row predates canonical member commands. Once
+      // it is changed, replace every matching historical projection so it
+      // cannot preserve the old role alongside the new manual assignment.
+      await this.removeLegacyEngineMemberAssignments(dataSource, engineId, userId);
+      return;
+    }
+
+    const assignments = await this.getDirectUserEngineMemberAssignments(dataSource, engineId, userId);
+    if (assignments.length === 0) {
       throw new Error('Member not found');
     }
 
-    await dataSource.transaction(async (manager) => {
-      await manager.getRepository(EngineMember).delete({ engineId, userId });
-
-      await manager.getRepository(EngineMember).insert({
-        id: generateId(),
-        engineId,
-        userId,
-        role: newRole,
-        grantedById: existing.grantedById,
-        createdAt: Date.now(),
-      });
+    const nextRoleId = ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[newRole];
+    await permissionService.assignRole({
+      principalType: 'user',
+      principalId: userId,
+      roleId: nextRoleId,
+      resourceType: 'engine',
+      resourceId: engineId,
+      source: 'manual',
+      createdById: updatedById || assignments[0]?.createdById || userId,
     });
+
+    await Promise.all(assignments
+      .filter((assignment) => assignment.roleId !== nextRoleId)
+      .map((assignment) => permissionService.removeRoleAssignment(assignment.id, updatedById))
+    );
   }
 
   /**
    * Remove a member from an engine
    */
-  async removeEngineMember(engineId: string, userId: string): Promise<void> {
+  async removeEngineMember(engineId: string, userId: string, removedById?: string): Promise<void> {
     const dataSource = await getDataSource();
     const memberRepo = dataSource.getRepository(EngineMember);
-    await memberRepo.delete({ engineId, userId });
+    const existing = await memberRepo.findOne({ where: { engineId, userId } });
+    if (existing) {
+      await memberRepo.delete({ engineId, userId });
+      await this.removeLegacyEngineMemberAssignments(dataSource, engineId, userId);
+    }
+
+    const assignments = await this.getDirectUserEngineMemberAssignments(dataSource, engineId, userId);
+    await Promise.all(assignments.map((assignment) => permissionService.removeRoleAssignment(assignment.id, removedById)));
+
+    if (!existing && assignments.length === 0) {
+      throw new Error('Member not found');
+    }
+  }
+
+  private async getDirectUserEngineMemberAssignments(dataSource: Awaited<ReturnType<typeof getDataSource>>, engineId: string, userId: string): Promise<RbacRoleAssignment[]> {
+    return dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine' })
+      .andWhere('assignment.scopeId = :engineId', { engineId })
+      .andWhere('assignment.principalType = :principalType', { principalType: 'user' })
+      .andWhere('assignment.principalId = :userId', { userId })
+      .andWhere('assignment.source = :source', { source: 'manual' })
+      .andWhere('assignment.roleId IN (:...roleIds)', { roleIds: ENGINE_STANDARD_MEMBER_SYSTEM_ROLE_IDS })
+      .getMany();
+  }
+
+  private async removeLegacyEngineMemberAssignments(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    engineId: string,
+    userId: string,
+    roles: Array<'operator' | 'deployer'> = ['operator', 'deployer'],
+  ): Promise<void> {
+    await dataSource.getRepository(RbacRoleAssignment).delete({
+      id: In(roles.map((role) => `legacy:engine:${engineId}:${userId}:${ENGINE_MEMBER_ROLE_TO_SYSTEM_ROLE_ID[role]}`)),
+    });
+  }
+
+  private async syncManagedEngineGovernanceAssignments(
+    dataSource: Awaited<ReturnType<typeof getDataSource>> | EntityManager,
+    engine: Pick<Engine, 'id' | 'ownerId' | 'delegateId' | 'tenantId' | 'createdAt' | 'updatedAt'>
+  ): Promise<void> {
+    const now = Date.now();
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const sourceRefs = [
+      engineGovernanceSourceRef(engine.id, 'owner'),
+      engineGovernanceSourceRef(engine.id, 'delegate'),
+    ];
+    const existing = await assignmentRepo.find({
+      where: {
+        scopeType: 'engine',
+        scopeId: engine.id,
+        source: ENGINE_GOVERNANCE_SOURCE,
+        sourceRef: In(sourceRefs),
+      },
+    });
+
+    const desired = [
+      {
+        slot: 'owner' as const,
+        userId: engine.ownerId,
+        roleId: SYSTEM_ROLE_IDS.ENGINE_OWNER,
+        sourceRef: engineGovernanceSourceRef(engine.id, 'owner'),
+        createdAt: engine.createdAt || now,
+      },
+      {
+        slot: 'delegate' as const,
+        userId: engine.delegateId,
+        roleId: SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
+        sourceRef: engineGovernanceSourceRef(engine.id, 'delegate'),
+        createdAt: engine.updatedAt || engine.createdAt || now,
+      },
+    ];
+
+    const desiredBySourceRef = new Map(desired.map((entry) => [entry.sourceRef, entry]));
+    const staleAssignments = existing.filter((assignment) => {
+      const entry = desiredBySourceRef.get(assignment.sourceRef || '');
+      return !entry?.userId || assignment.principalId !== entry.userId || assignment.roleId !== entry.roleId;
+    });
+    if (staleAssignments.length > 0) {
+      await assignmentRepo.delete({ id: In(staleAssignments.map((assignment) => assignment.id)) });
+    }
+
+    for (const entry of desired) {
+      if (!entry.userId) {
+        continue;
+      }
+
+      const current = existing.find((assignment) =>
+        !staleAssignments.some((stale) => stale.id === assignment.id) &&
+        assignment.sourceRef === entry.sourceRef &&
+        assignment.principalId === entry.userId &&
+        assignment.roleId === entry.roleId
+      );
+
+      if (current) {
+        await assignmentRepo.update({ id: current.id }, {
+          tenantId: engine.tenantId ?? null,
+        principalType: 'user',
+        principalId: entry.userId,
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: engine.tenantId ?? null,
+          principalType: 'user',
+          principalId: entry.userId,
+          roleId: entry.roleId,
+          scopeType: 'engine',
+          scopeId: engine.id,
+          source: ENGINE_GOVERNANCE_SOURCE,
+          sourceRef: entry.sourceRef,
+        }),
+        scopeType: 'engine',
+          scopeId: engine.id,
+          lastSeenAt: now,
+          updatedAt: now,
+        });
+        continue;
+      }
+
+      await assignmentRepo.insert({
+        id: `${ENGINE_GOVERNANCE_SOURCE}:engine:${engine.id}:${entry.slot}:${entry.userId}`,
+        tenantId: engine.tenantId ?? null,
+        principalType: 'user',
+        principalId: entry.userId,
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: engine.tenantId ?? null,
+          principalType: 'user',
+          principalId: entry.userId,
+          roleId: entry.roleId,
+          scopeType: 'engine',
+          scopeId: engine.id,
+          source: ENGINE_GOVERNANCE_SOURCE,
+          sourceRef: entry.sourceRef,
+        }),
+        roleId: entry.roleId,
+        scopeType: 'engine',
+        scopeId: engine.id,
+        source: ENGINE_GOVERNANCE_SOURCE,
+        sourceRef: entry.sourceRef,
+        expiresAt: null,
+        lastSeenAt: now,
+        createdById: null,
+        createdAt: Number(entry.createdAt || now),
+        updatedAt: now,
+      });
+    }
   }
 
   /**

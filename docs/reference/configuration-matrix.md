@@ -4,6 +4,13 @@ Summary: Required and optional environment variables for the platform.
 
 Audience: Developers and architects.
 
+This matrix lists current executable settings; see [Deploy Authorization Configuration](../how-to/deploy-authorization-config.md) for the configuration-bundle operating procedure.
+
+Engine topology is not an environment-variable switch. Declare
+dedicated/shared topology in the UI/API or `engines.json`, and shared mappings
+in `engine-tenant-mappings.json`. See
+[Configure Dedicated and Shared Engine Tenancy](../how-to/configure-engine-tenancy.md).
+
 ## Backend (Common Required)
 | Variable | Required | Default (Docker) | Notes |
 | --- | --- | --- | --- |
@@ -85,23 +92,45 @@ Audience: Developers and architects.
 | EMAIL_SMTP_SECURE | No | SMTP TLS flag when `EMAIL_PROVIDER=smtp` |
 | EMAIL_SMTP_USER | No | SMTP username when `EMAIL_PROVIDER=smtp` |
 | CAMUNDA_BASE_URL | No | External Camunda engine |
+| EG_ENGINE_ALLOWED_HOSTS | Required for production engine traffic | unset | Comma-separated exact host names or narrow organizational patterns such as `*.engines.example.com` for direct engines, sidecars, and OAuth token endpoints; public/effective-suffix patterns are rejected and private hosts require an exact entry |
+| EG_ENFORCE_ENGINE_ENDPOINT_POLICY | No | true in production | Enforce HTTPS and `EG_ENGINE_ALLOWED_HOSTS`; production cannot disable the policy, while `true` exercises it outside production |
+| EG_ENGINE_ALLOW_PRIVATE_HOSTS | No | false | Additional explicit opt-in for a reviewed private/address-literal/single-label/loopback/Docker-local engine or sidecar; also requires an exact allowlist entry |
+| EG_ALLOW_INSECURE_ENGINE_HTTP | No | false | Separate temporary migration override for an allowlisted private HTTP endpoint; it does not bypass the private-host opt-in |
+| EG_IDENTITY_PROVIDER_ALLOWED_HOSTS | Required for production direct SSO | unset | Comma-separated exact OIDC/SAML/LDAP hosts or narrow organizational patterns such as `*.login.example.com`; broad public/effective-suffix patterns are rejected and private hosts require an exact entry |
+| EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY | No | true in production | Enforce HTTPS/LDAPS, host allowlisting, redirect rejection, and bounded responses; production cannot disable it |
+| EG_IDENTITY_PROVIDER_ALLOW_PRIVATE_HOSTS | No | false | Additional explicit opt-in for a private/single-label/loopback identity endpoint; also requires an exact allowlist entry |
+| EG_IDENTITY_FLOW_RATE_LIMIT_MAX | No | 300 in production | Successful and failed unauthenticated provider start/callback requests allowed per IP per 15 minutes |
+| SSO_DIAGNOSTICS_INTERVAL_MS | No | 60000 in production; disabled outside production | Scheduler cadence for authoritative LDAP reconciliation. Production treats omitted, zero, or malformed values as 60000 so scheduled revocation cannot silently stop |
+| EG_LDAP_RECONCILIATION_IDENTITY_LIMIT | No | 10000 | Hard identity budget for one authoritative LDAP reconciliation; maximum 50000 |
+| EG_LDAP_RECONCILIATION_CONCURRENCY | No | 4 | Bounded worker count for group resolution during directory reconciliation; maximum 16 |
+| EG_LDAP_RECONCILIATION_GROUP_QUERY_LIMIT | No | 10000 | Aggregate reverse-group query budget for one complete reconciliation; maximum 100000 |
+| EG_LDAP_RECONCILIATION_GROUP_RESULT_LIMIT | No | 100000 | Aggregate returned group-entry budget for one complete reconciliation; maximum 500000 |
+| EG_LDAP_GROUP_SEARCH_QUERY_LIMIT | No | 100 | Hard reverse-group query budget per identity; maximum 1000 |
+| EG_LDAP_GROUP_SEARCH_RESULT_LIMIT | No | 5000 | Hard returned/unique-group budget per identity; maximum 10000 |
 | CAMUNDA_USERNAME | No | Camunda auth |
 | CAMUNDA_PASSWORD | No | Camunda auth |
-| MICROSOFT_CLIENT_ID | No | Microsoft Entra ID |
-| MICROSOFT_CLIENT_SECRET | No | Microsoft Entra ID |
-| MICROSOFT_TENANT_ID | No | Microsoft Entra ID |
-| MICROSOFT_REDIRECT_URI | No | Microsoft Entra ID |
-| GOOGLE_CLIENT_ID | No | Google OAuth |
-| GOOGLE_CLIENT_SECRET | No | Google OAuth |
-| GOOGLE_REDIRECT_URI | No | Google OAuth |
+| Identity provider credentials | Platform Settings | Configure OIDC, SAML, or LDAP providers as `IdentityProvider` records with secret references; set the production endpoint allowlist separately; legacy `MICROSOFT_*` and `GOOGLE_*` environment variables are unsupported. SCIM and Microsoft Graph scheduled reconciliation are deferred. |
+| RUNTIME_INVENTORY_RECONCILIATION_INTERVAL_MS | No | disabled | Positive milliseconds for scheduled runtime inventory refresh of active resource-aware engines |
+| RUNTIME_INVENTORY_RECONCILIATION_TENANT_IDS | No | global | Comma-separated tenant ids; use `global`/`null` for the OSS/default tenant |
+| RUNTIME_INVENTORY_RECONCILIATION_RUN_ON_START | No | false | Run a reconciliation pass after backend startup |
+| EG_CONFIG_BUNDLE_PATH | No | unset | Absolute path to a mounted JSON configuration envelope or folder-style ZIP archive |
+| EG_CONFIG_BOOTSTRAP_MODE | No | disabled | `disabled`, `validate`, or `apply`; no bundle is read when disabled |
+| EG_CONFIG_EXPECTED_SHA256 | No | unset | Optional SHA-256 of the mounted payload |
+| EG_CONFIG_EXPECTED_TENANT_SCOPE | No | unset | Expected `platform` or tenant scope; required for bootstrap apply |
+| EG_CONFIG_FAIL_CLOSED | No | true in production | Stop startup after a configured bootstrap failure |
+| EG_CONFIG_REQUIRE_SECRET_PREFLIGHT | No | false | Require referenced `env://`, `file://`, or `docker://` secrets to be available before configured bootstrap validation or apply |
+| EG_CONFIG_MAX_BYTES | No | 1048576 | Maximum mounted payload size in bytes |
+| EG_CONFIG_SECRET_PROVIDER | No | env | `env`, `file`, or `docker` secret-reference provider |
+| EG_CONFIG_SECRET_FILE_ROOT | No | unset | Required allowed root for `file://`; optional Docker secret mount root (defaults to `/run/secrets`) |
 
-SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Settings → SSO**
-using provider fields (`entityId`, `ssoUrl`, `certificate`, `signatureAlgorithm`), not
+SAML 2.0 (including Microsoft Entra as IdP) is configured via **Platform Settings → Identity Providers**
+using provider fields (`entityId`, `idpEntityId`, `ssoUrl`, `signingCertificateRef`, `signatureAlgorithm`), not
 via dedicated backend environment variables.
 
-SSO callbacks are global:
-- Microsoft OAuth: `/api/auth/microsoft/callback`
-- SAML ACS / Reply URL: `/api/auth/saml/callback`
+Provider-neutral SSO callbacks are global:
+
+- OIDC (including Microsoft Entra ID): `/api/auth/identity/callback`
+- SAML ACS / Reply URL: `/api/auth/providers/saml/callback`
 
 Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 `RelayState`; do not register `/api/t/:tenantSlug/...` callback URLs with Entra.

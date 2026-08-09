@@ -11,7 +11,7 @@ vi.mock('react-split-pane', () => ({
 }));
 
 vi.mock('@src/components/EngineSelector', () => ({
-  useSelectedEngine: () => null,
+  useSelectedEngine: () => 'engine-1',
 }));
 
 vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
@@ -19,7 +19,7 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
   return {
     ...actual,
     useProcessesData: () => ({
-      defsQ: { data: [] },
+      defsQ: { data: [], isSuccess: true },
       defItems: [],
       versions: [],
       currentKey: '',
@@ -79,6 +79,7 @@ describe('ProcessesOverviewPage empty state', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/0 Process Instances/i)).toBeInTheDocument();
+      expect(screen.getByText('No visible process definitions')).toBeInTheDocument();
     });
   });
 });

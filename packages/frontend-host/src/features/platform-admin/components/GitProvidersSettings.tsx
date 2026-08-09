@@ -9,49 +9,42 @@ import {
   SkeletonText,
   Modal,
 } from '@carbon/react';
+import type {
+  GitProviderAdminSummary,
+  UpdateGitProviderRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 import { GitProviderIcon } from '../../shared/components/GitProviderIcon';
 
-interface GitProvider {
-  id: string;
-  name: string;
-  type: string;
-  baseUrl: string;
-  apiUrl: string;
-  customBaseUrl: string | null;
-  customApiUrl: string | null;
-  isActive: boolean;
-  displayOrder: number;
-  supportsOAuth: boolean;
-  supportsPAT: boolean;
-  projectConnectionsCount?: number;
-  gitConnectionsCount?: number;
-  hasProjectConnections?: boolean;
-  hasGitConnections?: boolean;
-}
-
 interface GitProvidersSettingsProps {
-  providers: GitProvider[];
+  providers: GitProviderAdminSummary[];
   isLoading: boolean;
-  onUpdateProvider: (id: string, updates: Partial<GitProvider>) => Promise<void>;
+  onUpdateProvider: (id: string, updates: UpdateGitProviderRequest) => Promise<void>;
+  canManageProviders?: boolean;
+  unavailableReason?: string | null;
 }
 
 export default function GitProvidersSettings({
   providers,
   isLoading,
   onUpdateProvider,
+  canManageProviders = true,
+  unavailableReason,
 }: GitProvidersSettingsProps) {
-  const [configProvider, setConfigProvider] = useState<GitProvider | null>(null);
+  const [configProvider, setConfigProvider] = useState<GitProviderAdminSummary | null>(null);
   const [formData, setFormData] = useState<{ useCustomUrl: boolean; customBaseUrl: string; customApiUrl: string }>({
     useCustomUrl: false,
     customBaseUrl: '',
     customApiUrl: '',
   });
   const [saving, setSaving] = useState<string | null>(null);
-  const [disableConfirmProvider, setDisableConfirmProvider] = useState<GitProvider | null>(null);
+  const [disableConfirmProvider, setDisableConfirmProvider] = useState<GitProviderAdminSummary | null>(null);
   const [disableConfirmText, setDisableConfirmText] = useState('');
   const [disableSubmitting, setDisableSubmitting] = useState(false);
+  const disabledReason = unavailableReason || 'Missing permission platform:git-providers:manage';
 
-  const handleToggleProvider = async (provider: GitProvider, enabled: boolean) => {
+  const handleToggleProvider = async (provider: GitProviderAdminSummary, enabled: boolean) => {
+    if (!canManageProviders) return false;
+
     if (enabled) {
       try {
         await onUpdateProvider(provider.id, { isActive: true });
@@ -93,6 +86,7 @@ export default function GitProvidersSettings({
 
   const handleConfirmDisable = async () => {
     if (!disableConfirmProvider) return;
+    if (!canManageProviders) return;
     if (disableConfirmText.trim().toLowerCase() !== 'disable') return;
 
     setDisableSubmitting(true);
@@ -107,7 +101,8 @@ export default function GitProvidersSettings({
     }
   };
 
-  const handleOpenConfig = (provider: GitProvider) => {
+  const handleOpenConfig = (provider: GitProviderAdminSummary) => {
+    if (!canManageProviders) return;
     setConfigProvider(provider);
     setFormData({
       useCustomUrl: !!provider.customBaseUrl,
@@ -117,9 +112,10 @@ export default function GitProvidersSettings({
   };
 
   const handleSaveProvider = async (providerId: string) => {
+    if (!canManageProviders) return;
     setSaving(providerId);
     try {
-      const updates: Partial<GitProvider> = {
+      const updates: UpdateGitProviderRequest = {
         customBaseUrl: formData.useCustomUrl ? formData.customBaseUrl || null : null,
         customApiUrl: formData.useCustomUrl ? formData.customApiUrl || null : null,
       };
@@ -170,6 +166,16 @@ export default function GitProvidersSettings({
           Configure which Git providers are available for online project creation. You can enable/disable
           providers and override URLs for self-hosted instances.
         </p>
+        {!canManageProviders && (
+          <InlineNotification
+            kind="warning"
+            title="Git provider management unavailable"
+            subtitle={disabledReason}
+            hideCloseButton
+            lowContrast
+            style={{ marginTop: 'var(--spacing-3)' }}
+          />
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -195,7 +201,13 @@ export default function GitProvidersSettings({
                   Custom
                 </Tag>
               )}
-              <Button kind="tertiary" size="sm" onClick={() => handleOpenConfig(provider)}>
+              <Button
+                kind="tertiary"
+                size="sm"
+                disabled={!canManageProviders}
+                title={!canManageProviders ? disabledReason : undefined}
+                onClick={() => handleOpenConfig(provider)}
+              >
                 Configure
               </Button>
             </div>
@@ -210,10 +222,10 @@ export default function GitProvidersSettings({
         primaryButtonText={saving ? 'Saving...' : 'Save changes'}
         secondaryButtonText="Cancel"
         onRequestSubmit={() => {
-          if (!configProvider) return;
+          if (!configProvider || !canManageProviders) return;
           handleSaveProvider(configProvider.id);
         }}
-        primaryButtonDisabled={!!saving}
+        primaryButtonDisabled={!!saving || !canManageProviders}
       >
         {configProvider && (
           <div
@@ -233,6 +245,7 @@ export default function GitProvidersSettings({
                 size="sm"
                 toggled={configProvider.isActive}
                 onToggle={async (checked) => {
+                  if (!canManageProviders) return;
                   const applied = await handleToggleProvider(configProvider, checked);
                   if (applied) {
                     setConfigProvider({ ...configProvider, isActive: checked });
@@ -240,6 +253,7 @@ export default function GitProvidersSettings({
                   }
                   setConfigProvider(null);
                 }}
+                disabled={!canManageProviders}
               />
               <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
                 {configProvider.isActive
@@ -261,6 +275,7 @@ export default function GitProvidersSettings({
               labelText="Use custom URL (for self-hosted instances)"
               checked={formData.useCustomUrl}
               onChange={(_, { checked }) => setFormData({ ...formData, useCustomUrl: checked })}
+              disabled={!canManageProviders}
             />
 
             {formData.useCustomUrl && (
@@ -272,6 +287,7 @@ export default function GitProvidersSettings({
                   value={formData.customBaseUrl}
                   onChange={(e) => setFormData({ ...formData, customBaseUrl: e.target.value })}
                   helperText="Enter your self-hosted instance URL"
+                  disabled={!canManageProviders}
                 />
 
                 <TextInput
@@ -281,6 +297,7 @@ export default function GitProvidersSettings({
                   value={formData.customApiUrl}
                   onChange={(e) => setFormData({ ...formData, customApiUrl: e.target.value })}
                   helperText="Enter your self-hosted API endpoint"
+                  disabled={!canManageProviders}
                 />
 
                 <InlineNotification
@@ -305,7 +322,7 @@ export default function GitProvidersSettings({
         danger
         onRequestSubmit={handleConfirmDisable}
         primaryButtonDisabled={
-          disableSubmitting || disableConfirmText.trim().toLowerCase() !== 'disable'
+          disableSubmitting || !canManageProviders || disableConfirmText.trim().toLowerCase() !== 'disable'
         }
       >
         {disableConfirmProvider && (
@@ -344,6 +361,7 @@ export default function GitProvidersSettings({
               labelText='To confirm, type "disable"'
               value={disableConfirmText}
               onChange={(e) => setDisableConfirmText(e.target.value)}
+              disabled={!canManageProviders}
             />
           </div>
         )}

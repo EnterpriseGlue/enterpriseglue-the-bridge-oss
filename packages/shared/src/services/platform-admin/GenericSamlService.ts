@@ -1,0 +1,202 @@
+import { createRequire } from 'node:module';
+import { secretResolver } from './SecretResolver.js';
+import { classifyIdentityProviderFailure } from './IdentityProviderFailure.js';
+import { validateIdentityProviderCallbackUrl, validateIdentityProviderEndpointUrl } from './IdentityProviderEndpointPolicy.js';
+
+const require = createRequire(import.meta.url);
+const nodeSaml = require('@node-saml/node-saml');
+
+type SamlProfile = Record<string, unknown>;
+type SignatureAlgorithm = 'sha256' | 'sha512';
+
+export interface GenericSamlProviderConfiguration {
+  entityId: string;
+  idpEntityId: string;
+  callbackUrl: string;
+  ssoUrl: string;
+  signingCertificateRef: string;
+  signatureAlgorithm: SignatureAlgorithm;
+  nameIdAttribute?: string;
+  emailAttribute?: string;
+  groupAttribute?: string;
+}
+
+export interface GenericSamlUserClaims {
+  subjectId: string;
+  email: string;
+  displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  directoryTenantId: string | null;
+  claims: Record<string, unknown>;
+}
+
+function required(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`SAML ${field} is required`);
+  return value.trim();
+}
+
+function normalizePemCertificate(input: string): string {
+  const trimmed = input.trim();
+  if (trimmed.includes('BEGIN CERTIFICATE')) return trimmed.replace(/\r\n/g, '\n');
+  const body = trimmed.replace(/\s+/g, '');
+  const lines = body.match(/.{1,64}/g) || [];
+  return `-----BEGIN CERTIFICATE-----\n${lines.join('\n')}\n-----END CERTIFICATE-----`;
+}
+
+function values(value: unknown): string[] {
+  const source = Array.isArray(value) ? value : value == null ? [] : [value];
+  return Array.from(new Set(source.map((entry) => String(entry).trim()).filter(Boolean)));
+}
+
+function first(profile: SamlProfile, ...keys: Array<string | undefined>): string | null {
+  for (const key of keys) {
+    if (!key) continue;
+    const value = values(profile[key])[0];
+    if (value) return value;
+  }
+  return null;
+}
+
+function configuration(raw: Record<string, unknown>): GenericSamlProviderConfiguration {
+  if (raw.signatureAlgorithm !== undefined && raw.signatureAlgorithm !== 'sha256' && raw.signatureAlgorithm !== 'sha512') {
+    throw new Error('SAML signatureAlgorithm must be sha256 or sha512');
+  }
+  const signatureAlgorithm: SignatureAlgorithm = raw.signatureAlgorithm === 'sha512' ? 'sha512' : 'sha256';
+  return {
+    entityId: required(raw.entityId, 'entityId'),
+    idpEntityId: required(raw.idpEntityId, 'idpEntityId'),
+    callbackUrl: validateIdentityProviderCallbackUrl(required(raw.callbackUrl, 'callbackUrl'), 'saml').toString(),
+    ssoUrl: validateIdentityProviderEndpointUrl(required(raw.ssoUrl, 'ssoUrl'), 'SAML ssoUrl', ['https:']).toString(),
+    signingCertificateRef: required(raw.signingCertificateRef, 'signingCertificateRef'),
+    signatureAlgorithm,
+    nameIdAttribute: typeof raw.nameIdAttribute === 'string' ? raw.nameIdAttribute.trim() || undefined : undefined,
+    emailAttribute: typeof raw.emailAttribute === 'string' ? raw.emailAttribute.trim() || undefined : undefined,
+    groupAttribute: typeof raw.groupAttribute === 'string' ? raw.groupAttribute.trim() || undefined : undefined,
+  };
+}
+
+function records(value: unknown): Array<Record<string, unknown>> {
+  const source = Array.isArray(value) ? value : [value];
+  return source.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object');
+}
+
+/**
+ * node-saml verifies XML signatures and assertion audience, but its POST
+ * validator intentionally does not enforce the HTTP-POST recipient when
+ * InResponseTo validation is disabled. Direct provider callbacks bind the
+ * signed response to our configured ACS URL here, after signature validation
+ * and without including raw assertion data in any error.
+ */
+function requireExpectedRecipientAndRequest(profile: SamlProfile, callbackUrl: string, expectedRequestId: string): void {
+  if (profile.inResponseTo !== expectedRequestId) {
+    throw new Error('SAML response does not match the issued authentication request');
+  }
+  const getAssertion = profile.getAssertion;
+  if (typeof getAssertion !== 'function') throw new Error('SAML response did not include a validated assertion');
+  const assertion = getAssertion();
+  const parsedAssertions = records(assertion).flatMap((entry) => records(entry.Assertion));
+  const confirmations = parsedAssertions
+    .flatMap((entry) => records(entry.Subject))
+    .flatMap((subject) => records(subject.SubjectConfirmation))
+    .flatMap((confirmation) => records(confirmation.SubjectConfirmationData));
+  const recipients = confirmations
+    .flatMap((data) => records(data.$))
+    .map((attributes) => attributes.Recipient)
+    .filter((recipient): recipient is string => typeof recipient === 'string' && Boolean(recipient));
+  if (!recipients.some((recipient) => recipient === callbackUrl)) {
+    throw new Error('SAML response recipient does not match the callback URL');
+  }
+  const requestIds = confirmations
+    .flatMap((data) => records(data.$))
+    .map((attributes) => attributes.InResponseTo)
+    .filter((requestId): requestId is string => typeof requestId === 'string' && Boolean(requestId));
+  if (!requestIds.some((requestId) => requestId === expectedRequestId)) {
+    throw new Error('SAML subject confirmation does not match the issued authentication request');
+  }
+}
+
+function requestCorrelationCache(expectedRequestId: string) {
+  return {
+    async saveAsync(key: string, value: string) {
+      return key === expectedRequestId ? { value, createdAt: Date.now() } : null;
+    },
+    async getAsync(key: string) {
+      return key === expectedRequestId ? new Date().toISOString() : null;
+    },
+    async removeAsync(key: string | null) {
+      return key === expectedRequestId ? key : null;
+    },
+  };
+}
+
+function client(raw: Record<string, unknown>, expectedRequestId: string): { config: GenericSamlProviderConfiguration; saml: any } {
+  if (!/^_[A-Za-z0-9_-]{32,160}$/.test(expectedRequestId)) throw new Error('SAML authentication request id is invalid');
+  const config = configuration(raw);
+  const certificate = secretResolver.resolveStored(config.signingCertificateRef.startsWith('ref:') ? config.signingCertificateRef : `ref:${config.signingCertificateRef}`);
+  if (!certificate) throw new Error('SAML signing certificate reference is unavailable');
+  return {
+    config,
+    saml: new nodeSaml.SAML({
+      issuer: config.entityId,
+      callbackUrl: config.callbackUrl,
+      entryPoint: config.ssoUrl,
+      idpIssuer: config.idpEntityId,
+      idpCert: normalizePemCertificate(certificate),
+      signatureAlgorithm: config.signatureAlgorithm,
+      validateInResponseTo: 'always',
+      requestIdExpirationPeriodMs: 10 * 60 * 1000,
+      cacheProvider: requestCorrelationCache(expectedRequestId),
+      generateUniqueId: () => expectedRequestId,
+      acceptedClockSkewMs: 300_000,
+      wantAssertionsSigned: true,
+      wantAuthnResponseSigned: true,
+    }),
+  };
+}
+
+export class GenericSamlService {
+  async createAuthorizationRequest(raw: Record<string, unknown>, relayState: string, requestId: string): Promise<{ url: string; entryPoint: string }> {
+    try {
+      const { config, saml } = client(raw, requestId);
+      return { url: await saml.getAuthorizeUrlAsync(relayState, undefined, {}), entryPoint: config.ssoUrl };
+    } catch (error) { throw classifyIdentityProviderFailure(error); }
+  }
+
+  async validatePostResponse(raw: Record<string, unknown>, samlResponse: string, expectedRequestId: string): Promise<SamlProfile> {
+    try {
+      const { config, saml } = client(raw, expectedRequestId);
+      const { profile, loggedOut } = await saml.validatePostResponseAsync({ SAMLResponse: samlResponse });
+      if (loggedOut) throw new Error('Unexpected SAML logout response');
+      if (!profile) throw new Error('SAML assertion did not contain a profile');
+      const normalizedProfile = profile as SamlProfile;
+      if (normalizedProfile.issuer !== config.idpEntityId) throw new Error('SAML assertion issuer does not match the configured identity provider');
+      requireExpectedRecipientAndRequest(normalizedProfile, config.callbackUrl, expectedRequestId);
+      return normalizedProfile;
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'invalid_signature'); }
+  }
+
+  extractUserClaims(raw: Record<string, unknown>, profile: SamlProfile): GenericSamlUserClaims {
+    try {
+      const config = configuration(raw);
+      const nameId = first(profile, config.nameIdAttribute, 'nameID', 'nameId', 'NameID');
+      const email = first(profile, config.emailAttribute, 'email', 'mail', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress') || (nameId?.includes('@') ? nameId : null);
+      if (!email) throw new Error('SAML assertion must contain an email address');
+      const subjectId = nameId || first(profile, 'oid', 'http://schemas.microsoft.com/identity/claims/objectidentifier') || email;
+      const groups = values(profile[config.groupAttribute || 'groups']);
+      const claims: Record<string, unknown> = { ...profile, sub: subjectId, email: email.toLowerCase() };
+      if (groups.length) claims.groups = groups;
+      return {
+        subjectId,
+        email: email.toLowerCase(),
+        displayName: first(profile, 'name', 'displayName', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name'),
+        firstName: first(profile, 'given_name', 'givenName', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname'),
+        lastName: first(profile, 'family_name', 'surname', 'sn', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname'),
+        directoryTenantId: first(profile, 'tid', 'tenantid', 'http://schemas.microsoft.com/identity/claims/tenantid'),
+        claims,
+      };
+    } catch (error) { throw classifyIdentityProviderFailure(error, 'missing_subject'); }
+  }
+}
+
+export const genericSamlService = new GenericSamlService();

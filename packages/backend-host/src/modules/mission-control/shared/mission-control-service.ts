@@ -16,12 +16,22 @@ import {
   getUserOperationLog,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 
-export async function listProcessDefinitions(engineId: string, params: { key?: string; nameLike?: string; latest?: string }) {
-  const { key, nameLike, latest } = params
+export async function listProcessDefinitions(engineId: string, params: {
+  key?: string
+  tenantIdIn?: string[]
+  withoutTenantId?: boolean
+  nameLike?: string
+  latest?: string
+  maxResults?: number
+}) {
+  const { key, tenantIdIn, withoutTenantId, nameLike, latest, maxResults } = params
   const query: Record<string, any> = {}
   if (key) query.key = key
+  if (tenantIdIn?.length) query.tenantIdIn = tenantIdIn
+  if (withoutTenantId) query.withoutTenantId = true
   if (nameLike) query.nameLike = nameLike
   if (latest) query.latestVersion = latest === 'true' || latest === '1'
+  if (maxResults !== undefined) query.maxResults = maxResults
   return camundaGet<any[]>(engineId, '/process-definition', query)
 }
 
@@ -33,7 +43,11 @@ export async function getProcessDefinitionXmlById(engineId: string, id: string) 
   return camundaGet<any>(engineId, `/process-definition/${encodeURIComponent(id)}/xml`)
 }
 
-export async function resolveProcessDefinition(engineId: string, params: { key?: string; version?: string }) {
+export async function resolveProcessDefinition(
+  engineId: string,
+  params: { key?: string; version?: string },
+  runtimeTenantId?: string,
+) {
   const { key, version } = params
   if (!key || !version) {
     throw new Error('key and version are required')
@@ -41,6 +55,11 @@ export async function resolveProcessDefinition(engineId: string, params: { key?:
   const defs = await camundaGet<any[]>(engineId, '/process-definition', {
     key,
     version: Number(version),
+    ...(runtimeTenantId === undefined
+      ? {}
+      : runtimeTenantId
+        ? { tenantIdIn: [runtimeTenantId] }
+        : { withoutTenantId: true }),
   })
   if (!defs || defs.length === 0) {
     const err: any = new Error('Process definition not found')
@@ -180,6 +199,9 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     activityId,
     startedAfter,
     startedBefore,
+    tenantIdIn,
+    withoutTenantId,
+    maxResults,
   } = query as {
     processDefinitionKey?: string
     processDefinitionId?: string
@@ -192,6 +214,9 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     activityId?: string
     startedAfter?: string
     startedBefore?: string
+    tenantIdIn?: string[]
+    withoutTenantId?: boolean
+    maxResults?: number
   }
 
   const wantActive = active === 'true' || active === '1'
@@ -210,11 +235,17 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
     endTime: string | null
     state: 'ACTIVE' | 'SUSPENDED' | 'COMPLETED' | 'CANCELED' | 'INCIDENT'
     hasIncident?: boolean
+    tenantId?: string | null
   }> = []
   const seen = new Set<string>()
 
   async function pushRuntime(params: Record<string, any>) {
-    const runtime = await camundaGet<any[]>(engineId, '/process-instance', params)
+    const runtime = await camundaGet<any[]>(engineId, '/process-instance', {
+      ...params,
+      tenantIdIn,
+      withoutTenantId,
+      maxResults,
+    })
     for (const r of runtime) {
       if (seen.has(r.id)) continue
       seen.add(r.id)
@@ -230,6 +261,7 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
         startTime: null,
         endTime: null,
         state: r.suspended ? 'SUSPENDED' : 'ACTIVE',
+        tenantId: typeof r.tenantId === 'string' ? r.tenantId : null,
       })
     }
   }
@@ -295,7 +327,12 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
   }
 
   if (wantCompleted || wantCanceled) {
-    const histParams: Record<string, any> = { finished: true }
+    const histParams: Record<string, any> = {
+      finished: true,
+      tenantIdIn,
+      withoutTenantId,
+      maxResults,
+    }
     if (processDefinitionKey) histParams.processDefinitionKey = processDefinitionKey
     if (processDefinitionId) histParams.processDefinitionId = processDefinitionId
     if (superProcessInstanceId) histParams.superProcessInstanceId = superProcessInstanceId
@@ -378,6 +415,7 @@ export async function listProcessInstancesDetailed(engineId: string, query: any)
           startTime: h.startTime || null,
           endTime: h.endTime || null,
           state: isCanceled ? 'CANCELED' : 'COMPLETED',
+          tenantId: typeof h.tenantId === 'string' ? h.tenantId : null,
         })
       }
     }
@@ -413,18 +451,28 @@ export async function getProcessInstanceById(engineId: string, id: string) {
 }
 
 export async function getProcessInstanceVariables(engineId: string, id: string) {
-  const histVars = await camundaGet<any[]>(engineId, '/history/variable-instance', { processInstanceId: id })
-  const varsWithExecutionScope = (histVars || []).filter((v: any) => v?.executionId !== undefined && v?.executionId !== null)
-  const globalScopeVars = varsWithExecutionScope.length > 0
-    ? varsWithExecutionScope.filter((v: any) => String(v.executionId) === id)
-    : (histVars || [])
-
+  // This compatibility handler is mounted before the newer process-instance
+  // router. Its endpoint must therefore read the same live state that the
+  // variable editor updates. History is an audit trail and can legitimately
+  // lag a runtime write; using it here made an accepted edit appear lost.
+  const runtimeVariables = await camundaGet<Record<string, any>>(
+    engineId,
+    `/process-instance/${encodeURIComponent(id)}/variables`,
+  )
   const out: Record<string, { value: any; type: string }> = {}
-  for (const v of globalScopeVars) {
-    if (!v || !v.name) continue
-    out[v.name] = {
-      value: v.value,
-      type: v.type || (v.value !== null && v.value !== undefined ? typeof v.value : 'Unknown'),
+  for (const [name, variable] of Object.entries(runtimeVariables || {})) {
+    if (!name || variable === undefined) continue
+    if (variable && typeof variable === 'object' && !Array.isArray(variable)) {
+      const value = Object.prototype.hasOwnProperty.call(variable, 'value') ? variable.value : variable
+      out[name] = {
+        value,
+        type: variable.type || (value !== null && value !== undefined ? typeof value : 'Unknown'),
+      }
+    } else {
+      out[name] = {
+        value: variable,
+        type: variable !== null ? typeof variable : 'Unknown',
+      }
     }
   }
   return out

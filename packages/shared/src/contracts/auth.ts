@@ -8,6 +8,21 @@ export function normalizePlatformRole(role?: string | null): PlatformRole {
 
 export type AdminUserStatus = 'active' | 'inactive' | 'pending';
 
+/**
+ * Identity bound to the current authenticated request. This is intentionally
+ * separate from the persisted user profile: a user may have a different
+ * tenant scope on a subsequent request.
+ */
+export interface AuthenticatedSessionContext {
+  principal: {
+    type: 'user';
+    id: string;
+  };
+  tenant: {
+    id: string | null;
+  };
+}
+
 export interface User {
   id: string;
   email: string;
@@ -24,6 +39,8 @@ export interface User {
   adminStatus?: AdminUserStatus;
   failedLoginAttempts?: number;
   lockedUntil?: number | null;
+  /** Present on responses produced by an authenticated session endpoint. */
+  session?: AuthenticatedSessionContext;
 }
 
 export interface LoginRequest {
@@ -78,6 +95,9 @@ export interface CreateUserRequest {
   email: string;
   firstName?: string;
   lastName?: string;
+  /** Canonical user-management access selection. */
+  role?: PlatformRole;
+  /** @deprecated Use `role`; retained for older API clients only. */
   platformRole?: PlatformRole;
   sendEmail?: boolean;
 }
@@ -93,6 +113,9 @@ export interface CreateUserResponse {
 export interface UpdateUserRequest {
   firstName?: string;
   lastName?: string;
+  /** Canonical user-management access selection. */
+  role?: PlatformRole;
+  /** @deprecated Use `role`; retained for older API clients only. */
   platformRole?: PlatformRole;
   isActive?: boolean;
 }
@@ -100,6 +123,27 @@ export interface UpdateUserRequest {
 export interface ApiError {
   error: string;
   details?: any;
+}
+
+export interface EffectiveResourcePermissions {
+  resourceId: string;
+  permissions: string[];
+}
+
+export interface EffectiveEngineResourcePermissions extends EffectiveResourcePermissions {
+  /** Coarse runtime-navigation permissions; never contains resource keys or tenant lineage. */
+  runtimePermissions: string[];
+}
+
+export interface CurrentUserPermissions {
+  userId: string;
+  /** Request-derived tenant context for this evaluated snapshot. */
+  tenantId: string | null;
+  platform: string[];
+  projects: EffectiveResourcePermissions[];
+  engines: EffectiveEngineResourcePermissions[];
+  authorizationVersion?: string;
+  generatedAt: number;
 }
 
 export interface UserCapabilities {

@@ -123,7 +123,7 @@ describe('decisions API', () => {
       });
 
       const callUrl = vi.mocked(apiClient.get).mock.calls[0][0] as string;
-      expect(callUrl).toContain('/mission-control-api/history/decision-instances?');
+      expect(callUrl).toContain('/mission-control-api/history/decisions?');
       expect(callUrl).toContain('engineId=eng-1');
       expect(callUrl).toContain('decisionDefinitionId=d1');
       expect(callUrl).toContain('decisionDefinitionKey=decision1');
@@ -139,7 +139,7 @@ describe('decisions API', () => {
       await listDecisionInstances({});
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/history/decision-instances?',
+        '/mission-control-api/history/decisions?',
         undefined,
         { credentials: 'include' }
       );

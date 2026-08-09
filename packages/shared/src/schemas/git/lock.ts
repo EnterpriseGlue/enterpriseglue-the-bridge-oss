@@ -80,6 +80,15 @@ export const LockResponseSchema = z.object({
   userName: z.string().optional(),
 });
 
+export const LockListResponseSchema = z.object({
+  locks: z.array(LockResponseSchema),
+}).strict();
+
+export const LockHeartbeatResponseSchema = z.object({
+  success: z.literal(true),
+  lock: LockResponseSchema.optional(),
+}).strict();
+
 // Types
 export type Lock = z.infer<typeof LockSelectSchema>;
 export type LockInsert = z.infer<typeof LockInsertSchema>;
@@ -88,3 +97,5 @@ export type ReleaseLockRequest = z.infer<typeof ReleaseLockRequestSchema>;
 export type LockHeartbeatRequest = z.infer<typeof LockHeartbeatRequestSchema>;
 export type LockHolder = z.infer<typeof LockHolderSchema>;
 export type LockResponse = z.infer<typeof LockResponseSchema>;
+export type LockListResponse = z.infer<typeof LockListResponseSchema>;
+export type LockHeartbeatResponse = z.infer<typeof LockHeartbeatResponseSchema>;

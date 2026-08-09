@@ -36,6 +36,28 @@ export const GitProviderSchema = GitProviderSchemaRaw.transform((p) => ({
   updatedAt: Number(p.updatedAt),
 }));
 
+/** Administrator-only provider inventory with safe connection-usage indicators. */
+export const GitProviderAdminSummarySchema = GitProviderSchemaRaw.extend({
+  projectConnectionsCount: z.number().int().nonnegative(),
+  gitConnectionsCount: z.number().int().nonnegative(),
+  hasProjectConnections: z.boolean(),
+  hasGitConnections: z.boolean(),
+});
+
+/** Administrator-only mutable provider settings; secret values are write-only. */
+export const UpdateGitProviderRequestSchema = z.object({
+  isActive: z.boolean().optional(),
+  customBaseUrl: z.string().url().nullable().optional(),
+  customApiUrl: z.string().url().nullable().optional(),
+  oauthClientId: z.string().nullable().optional(),
+  oauthClientSecret: z.string().nullable().optional(),
+  oauthScopes: z.string().nullable().optional(),
+  displayOrder: z.number().int().optional(),
+});
+
+/** Sanitized update response: persistent OAuth client settings never leave the route. */
+export const GitProviderAdminUpdateResponseSchema = GitProviderSchemaRaw;
+
 // Git Provider - Insert schema
 export const GitProviderInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -47,3 +69,6 @@ export const GitProviderInsertSchema = z.object({
 
 // Types
 export type GitProvider = z.infer<typeof GitProviderSchema>;
+export type GitProviderAdminSummary = z.infer<typeof GitProviderAdminSummarySchema>;
+export type UpdateGitProviderRequest = z.infer<typeof UpdateGitProviderRequestSchema>;
+export type GitProviderAdminUpdateResponse = z.infer<typeof GitProviderAdminUpdateResponseSchema>;

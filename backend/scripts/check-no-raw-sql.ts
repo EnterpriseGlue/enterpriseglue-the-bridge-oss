@@ -21,19 +21,32 @@ const maybeProcess = (globalThis as any).process as
   | { cwd?: () => string; exit?: (code?: number) => void }
   | undefined;
 
-const ROOT = maybeProcess?.cwd ? maybeProcess.cwd() : '.';
-// OSS canonical scope: enforce against runtime, scripts, and tests.
-// Keep broad to prevent regressions from reintroducing raw SQL usage anywhere in backend code.
-const TARGET_DIRS = ['src', 'scripts', 'test', '__tests__'];
+const CWD = maybeProcess?.cwd ? maybeProcess.cwd() : '.';
+const ROOT = path.basename(CWD) === 'backend' ? path.dirname(CWD) : CWD;
+// Enforce the production runtime across workspace packages. Migrations and the
+// two explicit database-infrastructure modules are reviewed separately because
+// database-specific SQL is sometimes required there.
+const TARGET_DIRS = [
+  'backend/src',
+  'packages/backend-host/src',
+  'packages/shared/src',
+];
 const FILE_EXTENSIONS = new Set(['.ts', '.js']);
 const IGNORED_DIRS = new Set(['node_modules', 'dist', '.git', 'migrations']);
 const IGNORED_FILES = new Set(['check-no-raw-sql.ts']);
+const ALLOWED_INFRASTRUCTURE_FILES = new Set([
+  'packages/shared/src/db/db-pool.ts',
+  'packages/shared/src/db/run-migrations.ts',
+]);
 
 const RAW_QUERY_PATTERNS: Pattern[] = [
   { label: 'dataSource.query(', regex: /\bdataSource\.query\s*\(/ },
   { label: 'queryRunner.query(', regex: /\bqueryRunner\.query\s*\(/ },
   { label: 'manager.query(', regex: /\bmanager\.query\s*\(/ },
   { label: 'repository.query(', regex: /\brepository\.query\s*\(/ },
+  { label: 'pool.query(', regex: /\bpool\.query\s*\(/ },
+  { label: 'client.query(', regex: /\bclient\.query\s*\(/ },
+  { label: 'connection.query(', regex: /\bconnection\.query\s*\(/ },
   { label: 'getConnectionPool().query(', regex: /\bgetConnectionPool\s*\(\s*\)\.query\s*\(/ },
   { label: '*.getCreateSchemaSQL(', regex: /\.\s*getCreateSchemaSQL\s*\(/ },
 ];
@@ -62,6 +75,9 @@ async function collectFiles(dirPath: string, out: string[]): Promise<void> {
 }
 
 async function scanFile(filePath: string): Promise<Violation[]> {
+  const relativePath = path.relative(ROOT, filePath).split(path.sep).join('/');
+  if (ALLOWED_INFRASTRUCTURE_FILES.has(relativePath)) return [];
+
   const src = await fs.readFile(filePath, 'utf8');
   const lines = src.split(/\r?\n/);
   const violations: Violation[] = [];

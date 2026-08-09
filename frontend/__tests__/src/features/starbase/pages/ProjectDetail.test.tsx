@@ -4,10 +4,16 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import ProjectDetail from '@src/features/starbase/pages/ProjectDetail'
+import ProjectDetail, { formatProjectInheritedRoleAssignmentSourceLineage, formatProjectRoleAssignmentSourceLineage } from '@src/features/starbase/pages/ProjectDetail'
 import { apiClient } from '@src/shared/api/client'
 
 let projectFileName = 'Alpha.bpmn'
+let projectMemberRoles: Array<'owner' | 'delegate' | 'developer' | 'editor' | 'viewer'> = ['owner']
+
+const authMocks = vi.hoisted(() => ({
+  hasPlatformPermission: vi.fn(),
+  hasProjectPermission: vi.fn(),
+}))
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
@@ -30,6 +36,8 @@ vi.mock('@src/shared/hooks/useTenantNavigate', () => ({
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({
     user: { id: 'user-1' },
+    hasPlatformPermission: authMocks.hasPlatformPermission,
+    hasProjectPermission: authMocks.hasProjectPermission,
   }),
 }))
 
@@ -54,27 +62,45 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
 }))
 
 vi.mock('@src/features/starbase/pages/components/ProjectContentsTable', () => ({
-  ProjectContentsTable: ({ items, onDeleteItem, onMoveItem, onDownloadFile, setBatchDeleteIds, setBatchCancelSelection }: any) => (
+  ProjectContentsTable: ({
+    items,
+    canDeleteFiles = true,
+    canEditFiles = true,
+    canViewFiles = true,
+    onDeleteItem,
+    onMoveItem,
+    onDownloadFile,
+    setBatchDeleteIds,
+    setBatchCancelSelection,
+  }: any) => (
     <div>
       <div>{items[0]?.name}</div>
-      <button type="button" onClick={() => onDeleteItem(items[0])}>
-        Trigger delete
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setBatchDeleteIds([items[0].id])
-          setBatchCancelSelection(() => () => {})
-        }}
-      >
-        Trigger batch delete
-      </button>
-      <button type="button" onClick={() => onMoveItem(items[0])}>
-        Trigger move
-      </button>
-      <button type="button" onClick={() => onDownloadFile(items[0])}>
-        Trigger download
-      </button>
+      {canDeleteFiles && (
+        <button type="button" onClick={() => onDeleteItem(items[0])}>
+          Trigger delete
+        </button>
+      )}
+      {canDeleteFiles && (
+        <button
+          type="button"
+          onClick={() => {
+            setBatchDeleteIds([items[0].id])
+            setBatchCancelSelection(() => () => {})
+          }}
+        >
+          Trigger batch delete
+        </button>
+      )}
+      {canEditFiles && (
+        <button type="button" onClick={() => onMoveItem(items[0])}>
+          Trigger move
+        </button>
+      )}
+      {canViewFiles && (
+        <button type="button" onClick={() => onDownloadFile(items[0])}>
+          Trigger download
+        </button>
+      )}
     </div>
   ),
 }))
@@ -136,9 +162,45 @@ function renderWithProviders() {
 }
 
 describe('ProjectDetail', () => {
+  it('formats project role assignment source lineage', () => {
+    expect(formatProjectRoleAssignmentSourceLineage({
+      source: 'sso',
+      sourceRef: 'sso-group:release-ops',
+    })).toBe('SSO-managed assignment; Source ref sso-group:release-ops')
+    expect(formatProjectRoleAssignmentSourceLineage({
+      source: 'manual',
+      sourceRef: null,
+    })).toBe('Manual assignment')
+  })
+
+  it('formats inherited project role assignment source lineage', () => {
+    expect(formatProjectInheritedRoleAssignmentSourceLineage(
+      {
+        source: 'manual',
+        sourceRef: 'assignment-ref',
+        principalId: 'group-1',
+        userId: '',
+      },
+      {
+        source: 'sso',
+        sourceRef: 'group:release-ops',
+      },
+      {
+        id: 'group-1',
+        key: 'release-ops',
+        name: 'Release Ops',
+      }
+    )).toBe('Manual assignment; Source ref assignment-ref; Inherited through group Release Ops; SSO group membership; Membership source ref group:release-ops')
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     projectFileName = 'Alpha.bpmn'
+    projectMemberRoles = ['owner']
+    authMocks.hasPlatformPermission.mockReturnValue(false)
+    authMocks.hasProjectPermission.mockImplementation((_projectId: string, permission: string) => (
+      ['project:files:view', 'project:files:edit', 'project:files:delete'].includes(permission)
+    ))
 
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/starbase-api/projects') {
@@ -183,8 +245,8 @@ describe('ProjectDetail', () => {
       if (url === '/starbase-api/projects/project-1/members/me') {
         return {
           userId: 'user-1',
-          role: 'owner',
-          roles: ['owner'],
+          role: projectMemberRoles[0] || 'viewer',
+          roles: projectMemberRoles,
           deployAllowed: true,
         }
       }
@@ -220,6 +282,36 @@ describe('ProjectDetail', () => {
     await userEvent.click(screen.getByRole('button', { name: /trigger delete/i }))
 
     expect(await screen.findByText(/you're about to delete the file "Alpha\.bpmn"\./i)).toBeDefined()
+  })
+
+  it('opens file delete when scoped RBAC grants delete without a legacy delete role', async () => {
+    projectMemberRoles = ['viewer']
+    authMocks.hasProjectPermission.mockImplementation((_projectId: string, permission: string) =>
+      permission === 'project:files:delete'
+    )
+
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha.bpmn')).toBeDefined()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: /trigger delete/i }))
+
+    expect(await screen.findByText(/you're about to delete the file "Alpha\.bpmn"\./i)).toBeDefined()
+  })
+
+  it('hides file delete when neither role nor RBAC grants delete', async () => {
+    projectMemberRoles = ['viewer']
+    authMocks.hasProjectPermission.mockReturnValue(false)
+
+    renderWithProviders()
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha.bpmn')).toBeDefined()
+    })
+
+    expect(screen.queryByRole('button', { name: /trigger delete/i })).toBeNull()
   })
 
   it('opens the move modal from table actions', async () => {

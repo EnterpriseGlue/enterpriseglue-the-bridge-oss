@@ -4,7 +4,8 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js'
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js'
-import { requireDeployPermission } from '@enterpriseglue/shared/middleware/deployAuth.js'
+import { requireApiDeploymentEligibility } from '@enterpriseglue/shared/middleware/apiClientAuth.js'
+import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js'
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
@@ -14,11 +15,15 @@ import { File as FileEntity } from '@enterpriseglue/shared/infrastructure/persis
 import { Folder } from '@enterpriseglue/shared/infrastructure/persistence/entities/Folder.js'
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js'
 import { In } from 'typeorm'
-import { fetch, FormData } from 'undici'
-import { Buffer } from 'node:buffer'
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js'
+import { FormData } from 'undici'
+import { fetchBpmnEngineEndpoint } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js'
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js'
+import { deploymentReceiptService } from '@enterpriseglue/shared/services/platform-admin/DeploymentReceiptService.js'
+import { DeploymentHistoryViewSchema, DeploymentLineageViewSchema, DeploymentReceiptCreateSchema, type DeploymentLineageIssue, type DeploymentLineageReadiness } from '@enterpriseglue/shared/schemas/platform-admin/deployment-receipt.js'
+import { EngineDeploymentRequestSchema } from '@enterpriseglue/shared/schemas/mission-control/deployment.js'
+import { auditLog } from '@enterpriseglue/shared/services/audit.js'
 import {
   sanitize,
   hashContent,
@@ -39,19 +44,9 @@ import type {
   DmnDebugMeta,
   FileGitCommitInfo,
 } from '../../../types/deployment.js'
-import { ENGINE_VIEW_ROLES, ENGINE_MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js'
 
 // Validation schemas
-const deployResourcesSchema = z.object({
-  resources: z.object({
-    fileIds: z.array(z.string()).optional(),
-    folderId: z.string().optional(),
-    projectId: z.string().optional(),
-  }).optional(),
-  deploymentName: z.string().optional(),
-  enableDuplicateFiltering: z.boolean().optional(),
-  deployChangedOnly: z.boolean().optional(),
-}).passthrough()
+const deployResourcesSchema = EngineDeploymentRequestSchema
 
 // Type for Camunda definition in deployment response
 interface CamundaDefinitionItem {
@@ -71,6 +66,51 @@ interface DeploymentResponseData {
   [key: string]: unknown;
 }
 
+function deploymentLineageDiagnostics(row: EngineDeployment, artifacts: EngineDeploymentArtifact[]) {
+  const linkedArtifacts = artifacts.filter((artifact) => Boolean(artifact.projectId && artifact.fileId));
+  const versionedArtifacts = linkedArtifacts.filter((artifact) => Boolean(artifact.fileGitCommitId || artifact.fileUpdatedAt));
+  const issues: DeploymentLineageIssue[] = [];
+  if (!row.projectId) issues.push('missing_project_lineage');
+  if (!artifacts.length) issues.push('no_artifacts_recorded');
+  else if (!linkedArtifacts.length) issues.push('artifacts_missing_file_lineage');
+  if (row.lineageQuality === 'reported' && !row.reportingPrincipalId) issues.push('missing_reporting_principal');
+  if (row.lineageQuality === 'inferred') issues.push('inference_not_validated');
+
+  let readiness: DeploymentLineageReadiness = 'incomplete';
+  if (row.lineageQuality === 'discovered') readiness = 'inventory_only';
+  else if (row.lineageQuality === 'inferred') readiness = 'validation_required';
+  else if (row.lineageQuality === 'reported' && row.projectId && linkedArtifacts.length) readiness = 'version_resolution_required';
+  else if (row.lineageQuality === 'complete' && row.projectId && linkedArtifacts.length) readiness = 'bridge_ready';
+
+  return {
+    lineageReadiness: readiness,
+    lineageIssues: issues,
+    artifactCount: artifacts.length,
+    linkedArtifactCount: linkedArtifacts.length,
+    versionedArtifactCount: versionedArtifacts.length,
+  };
+}
+
+/**
+ * PostgreSQL returns BIGINT columns as strings.  Normalize persisted epoch
+ * fields at this HTTP boundary while rejecting malformed or unsafe values.
+ */
+function persistedEpoch(value: unknown, field: string, nullable = false): number | null {
+  if (value === null || value === undefined) {
+    if (nullable) return null
+    throw new Error(`${field} is missing from the persisted deployment record`)
+  }
+  const normalized = typeof value === 'string' ? value.trim() : value
+  if (typeof normalized === 'string' && !/^\d+$/.test(normalized)) {
+    throw new Error(`${field} is invalid in the persisted deployment record`)
+  }
+  const timestamp = typeof normalized === 'number' ? normalized : Number(normalized)
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
+    throw new Error(`${field} is invalid in the persisted deployment record`)
+  }
+  return timestamp
+}
+
 const r = Router()
 
 // Helpers - now imported from deployment-utils.ts
@@ -80,16 +120,57 @@ async function getEngineById(engineId: string): Promise<EngineConnectionInfo> {
   const engineRepo = dataSource.getRepository(Engine)
   const row = await engineRepo.findOne({ where: { id: engineId } })
   if (!row) throw Object.assign(new Error('Engine not found'), { status: 404 })
-  return { id: row.id, baseUrl: row.baseUrl, username: row.username ?? null, passwordEnc: row.passwordEnc ?? null }
+  return {
+    id: row.id,
+    baseUrl: row.baseUrl,
+    connectionMode: row.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
+    deploymentIntegration: row.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy',
+    authType: row.authType ?? null,
+    username: row.username ?? null,
+    passwordEnc: row.passwordEnc ?? null,
+    oauthTokenUrl: row.oauthTokenUrl ?? null,
+    oauthScopes: row.oauthScopes ?? null,
+    oauthAudience: row.oauthAudience ?? null,
+  }
 }
 
-function authHeaders(e: { username?: string|null; passwordEnc?: string|null }): Record<string,string> {
-  const h: Record<string,string> = {}
-  if (e.username) {
-    const token = Buffer.from(`${e.username}:${e.passwordEnc ?? ''}`).toString('base64')
-    h['Authorization'] = `Basic ${token}`
+function requireDeploymentIntegration(expected: 'enterpriseglue_proxy' | 'direct_engine') {
+  return async function requireConfiguredDeploymentIntegration(req: Request, _res: Response, next: NextFunction) {
+    try {
+      const engineId = String(req.params.engineId || '')
+      if (!engineId) throw Errors.validation('engineId is required')
+      const engine = await (await getDataSource()).getRepository(Engine).findOne({
+        where: { id: engineId },
+        select: ['id', 'deploymentIntegration'],
+      })
+      if (!engine) throw Errors.notFound('Engine')
+      const actual = engine.deploymentIntegration === 'direct_engine' ? 'direct_engine' : 'enterpriseglue_proxy'
+      if (actual !== expected) {
+        throw Errors.conflict(expected === 'enterpriseglue_proxy'
+          ? 'This engine is configured for direct deployment. Deploy through the customer pipeline and submit a deployment receipt.'
+          : 'Deployment receipts are available only for engines configured for direct deployment.')
+      }
+      return next()
+    } catch (error) {
+      return next(error instanceof Error ? error : Errors.internal('Deployment integration validation failed'))
+    }
   }
-  return h
+}
+
+function requirePipelineReceiptsEnabled(req: Request, _res: Response, next: NextFunction) {
+  void (async () => {
+    const engine = await (await getDataSource()).getRepository(Engine).findOne({ where: { id: String(req.params.engineId) }, select: ['id', 'pipelineReceiptEnabled'] })
+    if (!engine) throw Errors.notFound('Engine')
+    if (engine.pipelineReceiptEnabled === false) throw Errors.conflict('Pipeline deployment receipts are disabled for this engine')
+    next()
+  })().catch(next)
+}
+
+function deploymentActorId(req: Request): string {
+  if (req.user?.userId) return req.user.userId
+  if (req.apiClient?.id) return `api_client:${req.apiClient.id}`
+  if (req.serviceAccount?.id) return `service_account:${req.serviceAccount.id}`
+  throw Errors.unauthorized('Deployment actor required')
 }
 
 /**
@@ -234,7 +315,12 @@ async function inferDeployAuthIds(req: Request, res: Response, next: NextFunctio
   }
 }
 
-r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'manual',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+}), requireDeploymentIntegration('enterpriseglue_proxy'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const files = await resolveFilesFromRequest(req)
     const folderMap = await buildFolderLookup()
@@ -356,10 +442,16 @@ r.post('/engines-api/engines/:engineId/deployments/preview', apiLimiter, require
   }
 }))
 
-r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireDeployPermission(), asyncHandler(async (req: Request, res: Response) => {
+async function createEngineDeployment(req: Request, res: Response) {
   try {
     const deployTotalStart = Date.now()
     const engine = await getEngineById(String(req.params.engineId))
+    if (engine.deploymentIntegration === 'direct_engine') {
+      return res.status(409).json({
+        error: 'Direct deployment engine',
+        message: 'This engine is configured for direct deployment. Deploy through the customer pipeline and submit a deployment receipt.',
+      })
+    }
     const resolveStart = Date.now()
     const files = await resolveFilesFromRequest(req)
     logger.info('Engine deploy: files resolved', { count: files.length, ms: Date.now() - resolveStart })
@@ -432,8 +524,13 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
     logger.info('Engine deploy: form built', { resources: used.size, ms: Date.now() - formBuildStart })
 
     const camundaStart = Date.now()
-    const url = String(engine.baseUrl || '').replace(/\/$/, '') + '/deployment/create'
-    const r2 = await fetch(url, { method: 'POST', headers: { ...authHeaders(engine) }, body: form as any })
+    const { response: r2 } = await fetchBpmnEngineEndpoint(engine, {
+      engineId: actualEngineId,
+      method: 'POST',
+      path: '/deployment/create',
+      contentType: null,
+      retry: 'never',
+    }, { body: form as any })
     const text = await r2.text()
     logger.info('Engine deploy: Camunda response', { status: r2.status, ms: Date.now() - camundaStart })
     if (!r2.ok) {
@@ -558,7 +655,7 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
         camundaDeploymentId: data && typeof data === 'object' && data.id ? String(data.id) : null,
         camundaDeploymentName: data && typeof data === 'object' && data.name ? String(data.name) : null,
         camundaDeploymentTime: data && typeof data === 'object' && data.deploymentTime ? String(data.deploymentTime) : null,
-        deployedBy: req.user!.userId,
+        deployedBy: deploymentActorId(req),
         deployedAt: now,
         enableDuplicateFiltering: !!duplicate,
         deployChangedOnly: !!changedOnly,
@@ -566,6 +663,15 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
         status: 'success',
         errorMessage: null,
         rawResponse: JSON.stringify(data),
+        ingestionSource: 'enterpriseglue_proxy',
+        lineageQuality: 'complete',
+        reportingPrincipalId: null,
+        reconciledAt: now,
+        lineageJson: JSON.stringify({
+          source: 'enterpriseglue_proxy',
+          ...(gitCommitSha ? { commitSha: gitCommitSha } : {}),
+          ...(gitDeploymentId ? { gitDeploymentId } : {}),
+        }),
         createdAt: now,
         updatedAt: now,
       } as any)
@@ -641,6 +747,8 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
       if (artifactRows.length > 0) {
         await artifactRepo.insert(artifactRows as any)
       }
+      void runtimeResourceInventoryService.reconcileEngine(actualEngineId, opts.tenantId ? String(opts.tenantId) : null)
+        .catch((error) => logger.warn('Failed to reconcile runtime inventory after deployment', { engineId: actualEngineId, error }))
     } catch {
       // Best-effort persistence; do not fail the deployment if history recording fails
     }
@@ -650,21 +758,143 @@ r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, va
   } catch (e: any) {
     res.status(e?.status || 500).json({ message: e?.message || 'Deployment failed' })
   }
+}
+
+r.post('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, validateBody(deployResourcesSchema), inferDeployAuthIds, requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'manual',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+}), requireDeploymentIntegration('enterpriseglue_proxy'), asyncHandler(createEngineDeployment))
+
+r.post(
+  '/engines-api/external/engines/:engineId/deployments',
+  apiLimiter,
+  validateBody(deployResourcesSchema),
+  inferDeployAuthIds,
+  requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
+  requireDeploymentIntegration('enterpriseglue_proxy'),
+  asyncHandler(createEngineDeployment)
+)
+
+r.post(
+  '/engines-api/external/engines/:engineId/deployment-receipts',
+  apiLimiter,
+  validateBody(DeploymentReceiptCreateSchema),
+  requireApiDeploymentEligibility({ engineIdFrom: 'params', projectIdFrom: 'body' }),
+  requireDeploymentIntegration('direct_engine'),
+  requirePipelineReceiptsEnabled,
+  asyncHandler(async (req: Request, res: Response) => {
+    const principal = req.apiClient
+      ? { source: 'api_client' as const, id: req.apiClient.id }
+      : req.serviceAccount
+        ? { source: 'service_account' as const, id: req.serviceAccount.id }
+        : null;
+    if (!principal) throw Errors.unauthorized('Deployment receipt principal required');
+
+    const result = await deploymentReceiptService.record({
+      ...req.body,
+      tenantId: req.tenant?.tenantId || null,
+      engineId: String(req.params.engineId),
+      source: principal.source,
+      sourcePrincipalId: principal.id,
+    });
+    await auditLog(req, {
+      action: 'engine.deployment-receipts.create',
+      resourceType: 'engine',
+      resourceId: String(req.params.engineId),
+      details: {
+        receiptId: result.receiptId,
+        idempotent: result.idempotent,
+        projectId: req.body.projectId,
+        engineDeploymentId: req.body.engineDeploymentId,
+        source: principal.source,
+        sourcePrincipalId: principal.id,
+      },
+    });
+    res.status(result.idempotent ? 200 : 201).json(result);
+  })
+)
+
+r.get('/engines-api/engines/:engineId/deployment-receipts', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const rawLimit = Number(req.query.limit || 100);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 100;
+  res.json(await deploymentReceiptService.listForEngine(String(req.params.engineId), req.tenant?.tenantId || null, limit));
+}))
+
+r.get('/engines-api/engines/:engineId/deployment-history', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const rawLimit = Number(req.query.limit || 100)
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 100
+  const dataSource = await getDataSource()
+  const rows = await dataSource.getRepository(EngineDeployment).find({
+    where: { engineId: String(req.params.engineId) },
+    order: { deployedAt: 'DESC', id: 'DESC' },
+    take: limit,
+  })
+  const artifacts = rows.length ? await dataSource.getRepository(EngineDeploymentArtifact).find({
+    where: { engineDeploymentId: In(rows.map((row) => row.id)) },
+  }) : []
+  const artifactsByDeployment = new Map<string, EngineDeploymentArtifact[]>()
+  for (const artifact of artifacts) {
+    const grouped = artifactsByDeployment.get(artifact.engineDeploymentId) || []
+    grouped.push(artifact)
+    artifactsByDeployment.set(artifact.engineDeploymentId, grouped)
+  }
+  const response = rows.map((row) => ({
+    id: row.id, engineId: row.engineId, engineDeploymentId: row.camundaDeploymentId, deploymentName: row.camundaDeploymentName,
+    deploymentTime: row.camundaDeploymentTime, projectId: row.projectId, ingestionSource: row.ingestionSource,
+    lineageQuality: row.lineageQuality, reportingPrincipalId: row.reportingPrincipalId, deployedAt: persistedEpoch(row.deployedAt, 'deployedAt'),
+    reconciledAt: persistedEpoch(row.reconciledAt, 'reconciledAt', true), resourceCount: row.resourceCount, status: row.status,
+    ...deploymentLineageDiagnostics(row, artifactsByDeployment.get(row.id) || []),
+  }))
+  res.json(DeploymentHistoryViewSchema.array().parse(response))
+}))
+
+r.get('/engines-api/engines/:engineId/deployments/:deploymentId/lineage', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
+  const dataSource = await getDataSource()
+  const deployment = await dataSource.getRepository(EngineDeployment).findOne({
+    where: { engineId: String(req.params.engineId), camundaDeploymentId: String(req.params.deploymentId) },
+  })
+  if (!deployment) return res.status(404).json({ message: 'Deployment lineage not found' })
+
+  const artifacts = await dataSource.getRepository(EngineDeploymentArtifact).find({
+    where: { engineDeploymentId: deployment.id },
+    order: { artifactKind: 'ASC', artifactKey: 'ASC', id: 'ASC' },
+  })
+  const response = {
+    id: deployment.id,
+    engineId: deployment.engineId,
+    engineDeploymentId: deployment.camundaDeploymentId,
+    projectId: deployment.projectId,
+    ingestionSource: deployment.ingestionSource,
+    lineageQuality: deployment.lineageQuality,
+    reconciledAt: persistedEpoch(deployment.reconciledAt, 'reconciledAt', true),
+    status: deployment.status,
+    ...deploymentLineageDiagnostics(deployment, artifacts),
+    reconciliationStatus: deployment.reconciledAt ? 'reconciled' : 'pending',
+    artifacts: artifacts.map((artifact) => ({
+      artifactKind: artifact.artifactKind,
+      runtimeResourceId: artifact.artifactId || null,
+      runtimeResourceKey: artifact.artifactKey || null,
+      runtimeResourceVersion: artifact.artifactVersion,
+      runtimeTenantId: artifact.tenantId || null,
+      projectId: artifact.projectId || null,
+      fileId: artifact.fileId || null,
+    })),
+  }
+  res.json(DeploymentLineageViewSchema.parse(response))
 }))
 
 // Passthroughs to engine for listing/reading/deleting deployments
-r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-const userId = req.user!.userId
+r.get('/engines-api/engines/:engineId/deployments', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)
 
-if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_VIEW_ROLES))) {
-  throw Errors.engineNotFound();
-}
 try {
   const engine = await getEngineById(engineId)
-  const url = new URL(String(engine.baseUrl || '').replace(/\/$/, '') + '/deployment')
-  for (const [k,v] of Object.entries(req.query)) url.searchParams.set(k, String(v))
-  const r2 = await fetch(url.toString(), { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
+  const query = new URLSearchParams()
+  for (const [k,v] of Object.entries(req.query)) query.set(k, String(v))
+  const path = `/deployment${query.size > 0 ? `?${query.toString()}` : ''}`
+  const { response: r2 } = await fetchBpmnEngineEndpoint(engine, { engineId, method: 'GET', path })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
 } catch (e: any) {
@@ -672,17 +902,13 @@ try {
 }
 }))
 
-r.get('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-const userId = req.user!.userId
+r.get('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)
 
-if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_VIEW_ROLES))) {
-  throw Errors.engineNotFound();
-}
 try {
   const engine = await getEngineById(engineId)
-  const url = String(engine.baseUrl || '').replace(/\/$/, '') + `/deployment/${encodeURIComponent(String(req.params.id))}`
-  const r2 = await fetch(url, { headers: { 'Content-Type': 'application/json', ...authHeaders(engine) } })
+  const path = `/deployment/${encodeURIComponent(String(req.params.id))}`
+  const { response: r2 } = await fetchBpmnEngineEndpoint(engine, { engineId, method: 'GET', path })
   const text = await r2.text()
   sendUpstream(res, r2.status, text)
 } catch (e: any) {
@@ -690,18 +916,14 @@ try {
 }
 }))
 
-r.delete('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
-const userId = req.user!.userId
+r.delete('/engines-api/engines/:engineId/deployments/:id', apiLimiter, requireAuth, requireAction('engine.deployments.delete', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
 const engineId = String(req.params.engineId)
 
-if (!engineId || !(await engineService.hasEngineAccess(userId, engineId, ENGINE_MANAGE_ROLES))) {
-  throw Errors.engineNotFound();
-}
 try {
   const engine = await getEngineById(engineId)
   const cascade = req.query.cascade === 'true'
-  const url = String(engine.baseUrl || '').replace(/\/$/, '') + `/deployment/${encodeURIComponent(String(req.params.id))}` + (cascade ? '?cascade=true' : '')
-  const r2 = await fetch(url, { method: 'DELETE', headers: { ...authHeaders(engine) } })
+  const path = `/deployment/${encodeURIComponent(String(req.params.id))}${cascade ? '?cascade=true' : ''}`
+  const { response: r2 } = await fetchBpmnEngineEndpoint(engine, { engineId, method: 'DELETE', path, retry: 'never' })
   if (r2.status === 204) return res.status(204).end()
   const text = await r2.text()
   sendUpstream(res, r2.status, text)

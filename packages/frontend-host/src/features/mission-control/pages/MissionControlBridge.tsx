@@ -1,11 +1,33 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Tile, Button } from '@carbon/react'
 import { FlowData, BatchJob, DecisionTree, GameConsole } from '@carbon/icons-react'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
+import { useAuth } from '../../../shared/hooks/useAuth'
+import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
+import {
+  hasMissionControlSectionAccess,
+  MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS,
+  MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS,
+  MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS,
+} from '../../../shared/auth/permissions'
+import { evaluateActionSnapshot } from '../../../shared/auth/guards'
+
+function hasAnyEngineAction(permissions: any, actionId: string): boolean {
+  const engines = Array.isArray(permissions?.engines) ? permissions.engines : []
+  return engines.some((engine: any) => evaluateActionSnapshot(
+    permissions,
+    actionId,
+    { type: 'engine', id: engine?.resourceId }
+  ).allowed)
+}
+
+function hasRequiredEngineActions(permissions: any, actionIds: string[]): boolean {
+  return actionIds.length > 0 && actionIds.every((actionId) => hasAnyEngineAction(permissions, actionId))
+}
 
 export default function MissionControlHome() {
-  const navigate = useNavigate()
+  const { tenantNavigate } = useTenantNavigate()
+  const { user, permissions } = useAuth()
 
   const sections = [
     {
@@ -14,6 +36,8 @@ export default function MissionControlHome() {
       icon: FlowData,
       path: '/mission-control/processes',
       color: 'var(--color-success)',
+      permissions: MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS,
+      actionIds: ['engine.instances.read'],
     },
     {
       title: 'Batches',
@@ -21,6 +45,8 @@ export default function MissionControlHome() {
       icon: BatchJob,
       path: '/mission-control/batches',
       color: 'var(--color-info)',
+      permissions: MISSION_CONTROL_BATCHES_ENGINE_PERMISSIONS,
+      actionIds: ['engine.instances.read'],
     },
     {
       title: 'Decisions',
@@ -28,8 +54,10 @@ export default function MissionControlHome() {
       icon: DecisionTree,
       path: '/mission-control/decisions',
       color: 'var(--color-warning)',
+      permissions: MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS,
+      actionIds: ['engine.instances.read'],
     },
-  ]
+  ].filter((section) => hasMissionControlSectionAccess(permissions, user, section.permissions) || hasRequiredEngineActions(permissions, section.actionIds))
 
   return (
     <PageLayout style={{ 
@@ -65,7 +93,7 @@ export default function MissionControlHome() {
                 backgroundColor: 'var(--color-bg-secondary)',
                 boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
               }}
-              onClick={() => navigate(section.path)}
+              onClick={() => tenantNavigate(section.path)}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = section.color
                 e.currentTarget.style.transform = 'translateY(-2px)'
@@ -110,7 +138,7 @@ export default function MissionControlHome() {
                     kind="ghost"
                     onClick={(e) => {
                       e.stopPropagation()
-                      navigate(section.path)
+                      tenantNavigate(section.path)
                     }}
                   >
                     Open {section.title} →

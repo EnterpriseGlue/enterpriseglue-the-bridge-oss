@@ -5,31 +5,30 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitProvider.js';
+import {
+  GitProviderDetailSchema,
+  GitProviderRepositorySchema,
+  GitProviderSummarySchema,
+} from '@enterpriseglue/shared/schemas/git/repository.js';
 import { GitRepository } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitRepository.js';
 import { GitCredential } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitCredential.js';
 import { remoteGitService } from '@enterpriseglue/shared/services/git/RemoteGitService.js';
 import { credentialService } from '@enterpriseglue/shared/services/git/CredentialService.js';
 import { encrypt as encryptSecret, isEncrypted as isEncryptedValue } from '@enterpriseglue/shared/services/encryption.js';
-import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import {
+  GitProviderAdminSummarySchema,
+  GitProviderAdminUpdateResponseSchema,
+  UpdateGitProviderRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 
 const router = Router();
 
 // Validation schemas
 const providerIdSchema = z.object({
   id: z.string().min(1),
-});
-
-const updateProviderSchema = z.object({
-  isActive: z.boolean().optional(),
-  customBaseUrl: z.string().url().nullable().optional(),
-  customApiUrl: z.string().url().nullable().optional(),
-  oauthClientId: z.string().nullable().optional(),
-  oauthClientSecret: z.string().nullable().optional(),
-  oauthScopes: z.string().nullable().optional(),
-  displayOrder: z.number().int().optional(),
 });
 
 /**
@@ -57,7 +56,7 @@ router.get('/git-api/providers', apiLimiter, requireAuth, asyncHandler(async (re
     supportsPAT: p.supportsPAT,
   }));
 
-  res.json(providersWithEffectiveUrls);
+  res.json(GitProviderSummarySchema.array().parse(providersWithEffectiveUrls));
 }));
 
 /**
@@ -75,22 +74,28 @@ router.get('/git-api/providers/:id', apiLimiter, requireAuth, validateParams(pro
     throw Errors.providerNotFound();
   }
 
-  res.json({
-    ...provider,
+  res.json(GitProviderDetailSchema.parse({
+    id: provider.id,
+    name: provider.name,
+    type: provider.type,
+    baseUrl: provider.customBaseUrl || provider.baseUrl,
+    apiUrl: provider.customApiUrl || provider.apiUrl,
+    supportsOAuth: provider.supportsOAuth,
+    supportsPAT: provider.supportsPAT,
     effectiveBaseUrl: provider.customBaseUrl || provider.baseUrl,
     effectiveApiUrl: provider.customApiUrl || provider.apiUrl,
-  });
+    isActive: provider.isActive,
+  }));
 }));
 
 /**
  * GET /git-api/admin/providers
  * List ALL Git providers (admin only) - including inactive ones
  *
- * NOTE: We must run requireAuth before requirePlatformAdmin so that
- * req.user is populated from the JWT, exactly like the platform admin API
- * router does with `router.use(requireAuth, requirePlatformAdmin);`.
+ * NOTE: We must run requireAuth before requireAction so req.user is
+ * populated from the JWT before evaluating platform Git provider permissions.
  */
-router.get('/git-api/admin/providers', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.GIT_PROVIDER_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/admin/providers', apiLimiter, requireAuth, requireAction('platform.git.providers.manage', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const dataSource = await getDataSource();
   const providerRepo = dataSource.getRepository(GitProvider);
   const gitRepoRepo = dataSource.getRepository(GitRepository);
@@ -135,16 +140,16 @@ router.get('/git-api/admin/providers', apiLimiter, requireAuth, requirePermissio
     };
   });
 
-  res.json(providersWithUsage);
+  res.json(GitProviderAdminSummarySchema.array().parse(providersWithUsage));
 }));
 
 /**
  * PUT /git-api/admin/providers/:id
  * Update Git provider configuration (admin only)
  *
- * Same middleware order as GET: requireAuth first, then requirePlatformAdmin.
+ * Same middleware order as GET: requireAuth first, then requireAction.
  */
-router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.GIT_PROVIDER_MANAGE }), validateParams(providerIdSchema), validateBody(updateProviderSchema), asyncHandler(async (req: Request, res: Response) => {
+router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requireAction('platform.git.providers.manage', { resourceResolver: 'platform.self' }), validateParams(providerIdSchema), validateBody(UpdateGitProviderRequestSchema), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const {
     isActive,
@@ -201,7 +206,7 @@ router.put('/git-api/admin/providers/:id', apiLimiter, requireAuth, requirePermi
   // Return updated provider
   const updated = await providerRepo.findOneBy({ id });
 
-  res.json(updated);
+  res.json(GitProviderAdminUpdateResponseSchema.parse(updated));
 }));
 
 /**
@@ -235,7 +240,7 @@ router.get('/git-api/providers/:id/repos', apiLimiter, requireAuth, validatePara
       isPrivate: r.private,
     }));
     
-    res.json(repoList);
+    res.json(GitProviderRepositorySchema.array().parse(repoList));
   } catch (error: any) {
     logger.error('Failed to list repos from provider:', error);
     

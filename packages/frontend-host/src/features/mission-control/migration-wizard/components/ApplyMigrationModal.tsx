@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Modal, Button, Tag, Checkbox, Toggletip, ToggletipButton, ToggletipContent } from '@carbon/react'
+import { Modal, Button, Tag, Checkbox, Toggletip, ToggletipButton, ToggletipContent, InlineNotification, TextArea } from '@carbon/react'
 import { Information } from '@carbon/icons-react'
 import { ExecutionOptionsPanel } from '../../../shared/components/ExecutionOptionsPanel'
 
@@ -21,10 +21,12 @@ interface ApplyMigrationModalProps {
   eventInstructionCount: number
   payload: any
   onClose: () => void
-  onExecuteBatch: () => void
-  onExecuteDirect: () => void
+  onExecuteBatch: (auditReason: string) => void
+  onExecuteDirect: (auditReason: string) => void
   batchPending: boolean
   directPending: boolean
+  batchDeniedReason?: string | null
+  directDeniedReason?: string | null
 }
 
 export function ApplyMigrationModal({
@@ -49,9 +51,16 @@ export function ApplyMigrationModal({
   onExecuteDirect,
   batchPending,
   directPending,
+  batchDeniedReason,
+  directDeniedReason,
 }: ApplyMigrationModalProps) {
   const [showPayload, setShowPayload] = useState(false)
+  const [auditReason, setAuditReason] = useState('')
   const busy = batchPending || directPending
+  const batchUnavailableReason = batchDeniedReason || null
+  const directUnavailableReason = directDeniedReason || null
+  const auditReasonValue = auditReason.trim()
+  const auditReasonMissing = auditReasonValue.length === 0
 
   if (!open) return null
 
@@ -61,13 +70,25 @@ export function ApplyMigrationModal({
       modalHeading="Review & Execute Migration"
       primaryButtonText={batchPending ? 'Creating batch...' : 'Create migration batch'}
       secondaryButtonText="Cancel"
-      primaryButtonDisabled={busy}
+      primaryButtonDisabled={busy || !!batchUnavailableReason || auditReasonMissing}
       onRequestClose={onClose}
-      onRequestSubmit={onExecuteBatch}
+      onRequestSubmit={() => {
+        if (batchUnavailableReason || auditReasonMissing) return
+        onExecuteBatch(auditReasonValue)
+      }}
       size="md"
       hasScrollingContent
     >
       <div style={{ display: 'grid', gap: 'var(--spacing-4)', fontSize: 'var(--text-13)' }}>
+        {(batchUnavailableReason || directUnavailableReason) && (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="Execution mode unavailable"
+            subtitle={[batchUnavailableReason, directUnavailableReason].filter(Boolean).join(' ')}
+          />
+        )}
+
         <div>
           <div style={{ fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>Summary</div>
           <div style={{ display: 'grid', gap: 'var(--spacing-1)', fontSize: 'var(--text-12)' }}>
@@ -130,12 +151,34 @@ export function ApplyMigrationModal({
           </div>
         </div>
 
+        <TextArea
+          id="migration-audit-reason"
+          labelText="Audit reason"
+          placeholder="e.g., Migrating stalled instances after target process hotfix deployment."
+          value={auditReason}
+          rows={3}
+          disabled={busy}
+          onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setAuditReason(event.target.value)}
+        />
+        {auditReasonMissing ? (
+          <InlineNotification
+            lowContrast
+            kind="warning"
+            title="Reason required"
+            subtitle="An audit reason is required before migration can be executed."
+          />
+        ) : null}
+
         <div style={{ display: 'flex', gap: 'var(--spacing-2)', alignItems: 'center' }}>
           <Button
             size="sm"
             kind="secondary"
-            disabled={busy}
-            onClick={onExecuteDirect}
+            disabled={busy || !!directUnavailableReason || auditReasonMissing}
+            title={directUnavailableReason || (auditReasonMissing ? 'Audit reason is required' : undefined)}
+            onClick={() => {
+              if (directUnavailableReason || auditReasonMissing) return
+              onExecuteDirect(auditReasonValue)
+            }}
           >
             {directPending ? 'Executing...' : 'Run directly (no batch)'}
           </Button>
@@ -166,7 +209,7 @@ export function ApplyMigrationModal({
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
             }}>
-              {JSON.stringify(payload, null, 2)}
+              {JSON.stringify({ ...payload, auditReason: auditReasonValue || undefined }, null, 2)}
             </pre>
           )}
         </div>

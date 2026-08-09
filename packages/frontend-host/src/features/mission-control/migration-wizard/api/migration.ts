@@ -1,61 +1,58 @@
 import { apiClient } from '../../../../shared/api/client'
+import type {
+  MigrationAsyncExecuteResponse,
+  MigrationDirectExecuteResponse,
+  MigrationExecuteRequest,
+  MigrationGenerateRequest,
+  MigrationInstruction,
+  MigrationPlan,
+  MigrationPlanValidationRequest,
+  MigrationValidationResult,
+} from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 
 // Types
-export type MigrationPlan = {
-  sourceProcessDefinitionId: string
-  targetProcessDefinitionId: string
-  instructions: MigrationInstruction[]
-}
+export type { MigrationInstruction, MigrationPlan }
 
-export type MigrationInstruction = {
-  sourceActivityIds: string[]
-  targetActivityIds: string[]
-  updateEventTrigger?: boolean
-}
+export type MigrationValidationReport = MigrationValidationResult
 
-export type MigrationValidationReport = {
-  instructionReports: InstructionReport[]
-}
-
-export type InstructionReport = {
-  instruction: MigrationInstruction
-  failures: string[]
-}
-
-export type MigrationExecution = {
+export type MigrationExecution = Omit<MigrationExecuteRequest, 'plan'> & {
   migrationPlan: MigrationPlan
-  processInstanceIds?: string[]
-  processInstanceQuery?: Record<string, unknown>
-  skipCustomListeners?: boolean
-  skipIoMappings?: boolean
 }
 
 // API Functions
 export async function generateMigrationPlan(
   sourceDefinitionId: string,
-  targetDefinitionId: string
+  targetDefinitionId: string,
+  engineId?: string
 ): Promise<MigrationPlan> {
-  return apiClient.post<MigrationPlan>('/mission-control-api/migration/generate', {
+  const request: MigrationGenerateRequest = {
+    ...(engineId ? { engineId } : {}),
     sourceProcessDefinitionId: sourceDefinitionId,
     targetProcessDefinitionId: targetDefinitionId,
-  }, { credentials: 'include' })
+  }
+  return apiClient.post<MigrationPlan>('/mission-control-api/migration/generate', request, { credentials: 'include' })
 }
 
 export async function validateMigrationPlan(
   plan: MigrationPlan,
-  processInstanceIds?: string[]
-): Promise<MigrationValidationReport> {
-  return apiClient.post<MigrationValidationReport>('/mission-control-api/migration/validate', {
-    migrationPlan: plan,
+  processInstanceIds?: string[],
+  engineId?: string
+): Promise<MigrationValidationResult> {
+  const request: MigrationPlanValidationRequest = {
+    ...(engineId ? { engineId } : {}),
+    plan,
     processInstanceIds,
-  }, { credentials: 'include' })
+  }
+  return apiClient.post<MigrationValidationResult>('/mission-control-api/migration/plan/validate', request, { credentials: 'include' })
 }
 
-export async function executeMigration(execution: MigrationExecution): Promise<void> {
-  await apiClient.post<void>('/mission-control-api/migration/execute', execution, { credentials: 'include' })
+export async function executeMigration(execution: MigrationExecution): Promise<MigrationDirectExecuteResponse> {
+  const { migrationPlan, ...rest } = execution
+  return apiClient.post<MigrationDirectExecuteResponse>('/mission-control-api/migration/execute-direct', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }
 
-export async function executeMigrationAsync(execution: MigrationExecution): Promise<{ id: string }> {
-  return apiClient.post<{ id: string }>('/mission-control-api/migration/executeAsync', execution, { credentials: 'include' })
+export async function executeMigrationAsync(execution: MigrationExecution): Promise<MigrationAsyncExecuteResponse> {
+  const { migrationPlan, ...rest } = execution
+  return apiClient.post<MigrationAsyncExecuteResponse>('/mission-control-api/migration/execute-async', { ...rest, plan: migrationPlan }, { credentials: 'include' })
 }

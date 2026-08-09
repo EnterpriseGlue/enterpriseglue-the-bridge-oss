@@ -1,7 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import type { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import type { PlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
 
 /**
  * JWT utility functions
@@ -9,22 +8,63 @@ import type { PlatformRole } from '@enterpriseglue/shared/contracts/auth.js';
  */
 
 export interface JwtPayload {
-  userId: string;
-  email: string;
-  platformRole: PlatformRole;
+  /**
+   * Legacy identity fields accepted only while pre-principal session tokens
+   * remain in circulation. New tokens carry `principalType`/`principalId`.
+   */
+  userId?: string;
+  email?: string;
+  /** Legacy claim accepted on older tokens but never emitted or authorized. */
+  platformRole?: string;
+  /** Explicit canonical principal fields. Omitted only by pre-refactor tokens. */
+  principalType?: 'user';
+  principalId?: string;
+  authSessionVersion?: number;
+  /** Marks a break-glass session that must retain live platform-administrator membership. */
+  recovery?: 'platform_administrator';
   type: 'access' | 'refresh' | 'onboarding';
   invitationId?: string;
   tenantSlug?: string;
 }
 
+/** A validated browser-session principal, including a compatibility user id for request consumers. */
+export type UserJwtPayload = JwtPayload & {
+  userId: string;
+  principalType: 'user';
+  principalId: string;
+};
+
+/** Request identity after middleware has refreshed user profile data from persistence. */
+export type AuthenticatedUserJwtPayload = UserJwtPayload & { email: string };
+
+/**
+ * Accept pre-principal user tokens during the migration, but make the
+ * canonical principal the sole identity input for all newly issued tokens.
+ */
+export function normalizeUserJwtPayload(payload: JwtPayload): UserJwtPayload {
+  const principalType = payload.principalType ?? 'user';
+  const principalId = payload.principalId ?? payload.userId;
+  if (
+    principalType !== 'user' ||
+    typeof principalId !== 'string' ||
+    principalId.trim().length === 0 ||
+    (payload.userId !== undefined && payload.userId !== principalId)
+  ) {
+    throw new Error('Invalid user principal');
+  }
+
+  return { ...payload, userId: principalId, principalType, principalId };
+}
+
 /**
  * Generate an access token (short-lived)
  */
-export function generateAccessToken(user: User | any): string {
+export function generateAccessToken(user: User | any, options: { administratorRecovery?: boolean } = {}): string {
   const payload: JwtPayload = {
-    userId: user.id,
-    email: user.email,
-    platformRole: user.platformRole || 'user',
+    principalType: 'user',
+    principalId: user.id,
+    authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
+    ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     type: 'access',
   };
 
@@ -36,11 +76,12 @@ export function generateAccessToken(user: User | any): string {
 /**
  * Generate a refresh token (long-lived)
  */
-export function generateRefreshToken(user: User | any): string {
+export function generateRefreshToken(user: User | any, options: { administratorRecovery?: boolean } = {}): string {
   const payload: JwtPayload = {
-    userId: user.id,
-    email: user.email,
-    platformRole: user.platformRole || 'user',
+    principalType: 'user',
+    principalId: user.id,
+    authSessionVersion: Number.isInteger(user.authSessionVersion) ? user.authSessionVersion : 0,
+    ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     type: 'refresh',
   };
 
@@ -49,11 +90,11 @@ export function generateRefreshToken(user: User | any): string {
   });
 }
 
-export function generateOnboardingToken(payload: { userId: string; email: string; platformRole?: PlatformRole; invitationId: string; tenantSlug: string }): string {
+export function generateOnboardingToken(payload: { userId: string; invitationId: string; tenantSlug: string; authSessionVersion?: number }): string {
   const tokenPayload: JwtPayload = {
-    userId: payload.userId,
-    email: payload.email,
-    platformRole: payload.platformRole || 'user',
+    principalType: 'user',
+    principalId: payload.userId,
+    authSessionVersion: Number.isInteger(payload.authSessionVersion) ? payload.authSessionVersion : 0,
     type: 'onboarding',
     invitationId: payload.invitationId,
     tenantSlug: payload.tenantSlug,

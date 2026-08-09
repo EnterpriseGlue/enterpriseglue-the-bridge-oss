@@ -19,7 +19,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  release-notes-preflight:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/release-notes-preflight-reusable.yml
+    with:
+      base_ref: ${{ github.base_ref || 'main' }}
+      pull_number: ${{ github.event.pull_request.number || 0 }}
+      publish_preview: true
+
   detect:
+    needs: release-notes-preflight
     permissions:
       contents: read
     uses: ./.github/workflows/ci-detect-reusable.yml
@@ -50,6 +61,12 @@ jobs:
 
       - name: Run OSS boundary guard
         run: pnpm run guard:oss-ee-boundary
+
+      - name: Validate configuration deployment contract
+        run: pnpm run guard:config-deployment-contract
+
+      - name: Validate versioned Codex workflow plugin
+        run: pnpm run test:codex-plugin
 
   published-package-version-discipline:
     runs-on: ubuntu-latest
@@ -175,6 +192,7 @@ jobs:
           ENV_EXAMPLES_DIR="infra/docker/env/examples"
           cp "$ENV_EXAMPLES_DIR/docker.postgres.env.example" .env.docker
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" config >/dev/null
+          EG_CONFIG_BUNDLE_HOST_PATH=./backend/.env.example EG_CONFIG_SECRETS_HOST_PATH=./backend EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.config-bundle.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mysql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mysql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mysql.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.mssql.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.mssql.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.mssql.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/docker.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/docker.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" config >/dev/null
@@ -368,9 +386,17 @@ jobs:
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: pnpm run test:unit
 
+      - name: Enforce fine-grained authorization coverage contracts
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        run: pnpm run test:authz:structure
+
       - name: Run integration tests
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: pnpm run test:integration
+
+      - name: Run authorization mutation guard
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        run: pnpm run test:authz:mutation
 
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
@@ -386,8 +412,7 @@ jobs:
 
       - name: Start Camunda mock server
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
-        run: |
-          npx --yes @stoplight/prism-cli mock local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json -p 9080 &
+        run: node test/e2e/mock-camunda/server.mjs &
 
       - name: Start backend
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -401,13 +426,15 @@ jobs:
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
         run: |
           for i in {1..45}; do
-            if curl -sf http://localhost:8787/health >/dev/null; then
+            if curl -sf http://localhost:8787/health >/dev/null \
+              && curl -sf http://localhost:9080/health >/dev/null; then
               break
             fi
             sleep 2
           done
           curl -sf http://localhost:8787/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
+          curl -sf http://localhost:9080/health >/dev/null
 
       - name: Run smoke e2e
         if: matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -423,6 +450,7 @@ jobs:
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_API_BASE_URL=http://localhost:8787 \
             -e CAMUNDA_BASE_URL \
+            -e DATABASE_TYPE \
             -e POSTGRES_HOST \
             -e POSTGRES_PORT \
             -e POSTGRES_USER \
@@ -432,10 +460,75 @@ jobs:
             -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
             -e ADMIN_EMAIL \
             -e ADMIN_PASSWORD \
+            -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
             bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @smoke"
+
+      - name: Run identity lifecycle browser e2e
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        run: |
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI="${CI:-true}" \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_SEED_USER=false \
+            -e IDENTITY_TEST_EVIDENCE_PATH=test/results/identity-lifecycle-evidence.json \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e ENCRYPTION_KEY \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @identity-lifecycle"
+
+      - name: Upload sanitized identity lifecycle evidence
+        if: always() && matrix.database == 'postgres' && github.event_name != 'merge_group'
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: identity-lifecycle-evidence-${{ github.run_id }}
+          path: test/results/identity-lifecycle-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Run Access Control layout browser e2e
+        if: matrix.database == 'postgres' && github.event_name != 'merge_group'
+        run: |
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI="${CI:-true}" \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_SEED_USER=false \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e ENCRYPTION_KEY \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @access-control-layout"
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && github.event_name != 'merge_group'
@@ -781,7 +874,7 @@ jobs:
 
           is_target_job() {
             case "$1" in
-              "detect / detect"|boundary-guards|published-package-version-discipline|plugin-api-compat-current|plugin-api-compat-next|plugin-api-package|compose-render|build-ci-images|smoke-postgres-image-deploy|smoke-postgres-image-deploy-exposed|security-pr-scan)
+              release-notes-preflight*|"detect / detect"|boundary-guards|published-package-version-discipline|plugin-api-compat-current|plugin-api-compat-next|plugin-api-package|compose-render|build-ci-images|smoke-postgres-image-deploy|smoke-postgres-image-deploy-exposed|security-pr-scan)
                 return 0
                 ;;
               test\ \(*)

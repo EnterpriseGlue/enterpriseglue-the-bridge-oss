@@ -44,8 +44,8 @@ describe('migration API', () => {
     };
     (apiClient.post as any).mockResolvedValue({ instructionReports: [] });
     const result = await validateMigrationPlan(plan, ['i1']);
-    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/validate', {
-      migrationPlan: plan,
+    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/plan/validate', {
+      plan,
       processInstanceIds: ['i1'],
     }, { credentials: 'include' });
     expect(result.instructionReports).toBeDefined();
@@ -59,8 +59,8 @@ describe('migration API', () => {
     };
     (apiClient.post as any).mockResolvedValue({ instructionReports: [] });
     await validateMigrationPlan(plan);
-    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/validate', {
-      migrationPlan: plan,
+    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/plan/validate', {
+      plan,
       processInstanceIds: undefined,
     }, { credentials: 'include' });
   });
@@ -73,10 +73,15 @@ describe('migration API', () => {
         instructions: [],
       },
       processInstanceIds: ['i1'],
+      auditReason: 'test migration',
     };
     (apiClient.post as any).mockResolvedValue(undefined);
     await executeMigration(execution);
-    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/execute', execution, { credentials: 'include' });
+    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/execute-direct', {
+      plan: execution.migrationPlan,
+      processInstanceIds: ['i1'],
+      auditReason: 'test migration',
+    }, { credentials: 'include' });
   });
 
   it('executes migration with optional flags', async () => {
@@ -89,10 +94,17 @@ describe('migration API', () => {
       processInstanceQuery: { businessKey: 'order-1' },
       skipCustomListeners: true,
       skipIoMappings: true,
+      auditReason: 'test migration',
     };
     (apiClient.post as any).mockResolvedValue(undefined);
     await executeMigration(execution);
-    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/execute', execution, { credentials: 'include' });
+    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/execute-direct', {
+      plan: execution.migrationPlan,
+      processInstanceQuery: { businessKey: 'order-1' },
+      skipCustomListeners: true,
+      skipIoMappings: true,
+      auditReason: 'test migration',
+    }, { credentials: 'include' });
   });
 
   it('executes migration async', async () => {
@@ -103,10 +115,15 @@ describe('migration API', () => {
         instructions: [],
       },
       processInstanceIds: ['i1'],
+      auditReason: 'test migration',
     };
     (apiClient.post as any).mockResolvedValue({ id: 'batch-1' });
     const result = await executeMigrationAsync(execution);
-    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/executeAsync', execution, { credentials: 'include' });
+    expect(apiClient.post).toHaveBeenCalledWith('/mission-control-api/migration/execute-async', {
+      plan: execution.migrationPlan,
+      processInstanceIds: ['i1'],
+      auditReason: 'test migration',
+    }, { credentials: 'include' });
     expect(result.id).toBe('batch-1');
   });
 
@@ -118,6 +135,7 @@ describe('migration API', () => {
         instructions: [],
       },
       processInstanceQuery: { active: true },
+      auditReason: 'test migration',
     };
     (apiClient.post as any).mockResolvedValue({ id: 'batch-2' });
     const result = await executeMigrationAsync(execution);

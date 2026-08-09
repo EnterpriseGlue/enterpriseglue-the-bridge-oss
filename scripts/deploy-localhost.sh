@@ -160,28 +160,25 @@ check_env() {
   if [[ ${#MISSING_VARS[@]} -gt 0 ]]; then
     error "Missing required environment variables: ${MISSING_VARS[*]}"
   fi
+
+  if [[ "${EG_CONFIG_BOOTSTRAP_MODE:-disabled}" != "disabled" ]]; then
+    [[ "${EG_CONFIG_BOOTSTRAP_MODE}" == "validate" || "${EG_CONFIG_BOOTSTRAP_MODE}" == "apply" ]] || \
+      error "EG_CONFIG_BOOTSTRAP_MODE must be disabled, validate, or apply"
+    [[ -n "${EG_CONFIG_BUNDLE_PATH:-}" ]] || \
+      error "EG_CONFIG_BUNDLE_PATH is required when configuration bootstrap is enabled"
+    [[ "$EG_CONFIG_BUNDLE_PATH" = /* ]] || \
+      error "EG_CONFIG_BUNDLE_PATH must be absolute for a host-based deployment"
+    [[ -f "$EG_CONFIG_BUNDLE_PATH" ]] || \
+      error "EG_CONFIG_BUNDLE_PATH does not exist or is not a file: $EG_CONFIG_BUNDLE_PATH"
+    log "✅ Authorization configuration bootstrap input is readable (${EG_CONFIG_BOOTSTRAP_MODE})"
+  fi
   
   # Check production JWT secret
   if [[ "$NODE_ENV" == "production" ]] && [[ "$JWT_SECRET" == *"change"* ]]; then
     error "JWT_SECRET must be changed for production! Generate: openssl rand -base64 32"
   fi
   
-  # Warn about optional features
-  if [[ -z "${MICROSOFT_CLIENT_ID:-}" ]]; then
-    warn "Microsoft Entra ID not configured - SSO will not be available"
-  else
-    log "✅ Microsoft Entra ID configured"
-    # Validate Entra ID config is complete
-    if [[ -z "${MICROSOFT_CLIENT_SECRET:-}" ]] || [[ -z "${MICROSOFT_TENANT_ID:-}" ]]; then
-      error "Incomplete Microsoft Entra ID configuration. Need CLIENT_ID, CLIENT_SECRET, and TENANT_ID"
-    fi
-    
-    # Check production redirect URI
-    if [[ "$NODE_ENV" == "production" ]] && [[ "${MICROSOFT_REDIRECT_URI:-}" == *"localhost"* ]]; then
-      error "MICROSOFT_REDIRECT_URI must use production domain (not localhost)"
-    fi
-  fi
-  
+
   log "✅ Environment configuration valid"
 }
 
@@ -393,7 +390,6 @@ build_frontend() {
     log "Frontend dependencies already installed (offline mode)"
   fi
 
-  build_shared
   build_frontend_host
 
   log "Building frontend (vite build)"
@@ -402,7 +398,10 @@ build_frontend() {
 
 start_backend() {
   log "Starting backend on :$BACKEND_PORT"
-  (cd "$BACKEND_DIR" && nohup pnpm run start > server.log 2>&1 &)
+  # check_env has already sourced the preferred .env.selfhost file. Do not run the
+  # backend's dotenv wrapper here: it reloads backend/.env and can override that
+  # worktree-local configuration.
+  (cd "$BACKEND_DIR" && nohup pnpm run start:compiled > server.log 2>&1 &)
 }
 
 start_frontend() {
@@ -455,12 +454,8 @@ print_summary() {
   log "  Password:  (from .env ADMIN_PASSWORD)"
   log ""
   
-  if [[ -n "${MICROSOFT_CLIENT_ID:-}" ]]; then
-    log "✅ Microsoft Entra ID: Enabled"
-  else
-    log "⚠️  Microsoft Entra ID: Not configured"
-  fi
-  
+  log "ℹ️  External identity providers: configured in Platform Settings"
+
   if [[ -n "${EMAIL_PROVIDER:-}" && -n "${EMAIL_API_KEY:-}" && -n "${EMAIL_FROM_NAME:-}" && -n "${EMAIL_FROM_EMAIL:-}" ]]; then
     log "ℹ️  Email bootstrap: seeded from EMAIL_* env vars on startup"
   else
@@ -502,6 +497,7 @@ main() {
 
   # Build applications
   log "Building apps"
+  build_shared
   build_backend
   build_frontend
   

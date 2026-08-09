@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Cleanup"
+  short_description: "Safely clean EnterpriseGlue worktrees"
+  default_prompt: "Use $enterpriseglue-cleanup to help with this EnterpriseGlue task."

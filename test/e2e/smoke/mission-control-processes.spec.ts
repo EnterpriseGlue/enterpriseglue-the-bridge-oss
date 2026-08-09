@@ -11,7 +11,7 @@ async function login(page: Page) {
 
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -64,6 +64,6 @@ test.describe('Smoke: Mission Control processes', () => {
     }
     await expectMissionControlState(page, requireMock && fixture?.listProcessDefinitionName
       ? new RegExp(`Processes|${fixture.listProcessDefinitionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i')
-      : /To view a Diagram|Process Instances|Processes/i);
+      : /To view a diagram|Process Instances|Processes/i);
   });
 });

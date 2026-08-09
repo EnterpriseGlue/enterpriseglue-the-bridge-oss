@@ -5,29 +5,31 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];
@@ -35,7 +37,7 @@ const entities = [
 /**
  * Microsoft SQL Server Database Adapter
  * Implements database-specific operations for SQL Server
- * 
+ *
  * Driver: mssql (pnpm add mssql)
  */
 export class SqlServerAdapter implements DatabaseAdapter {
@@ -45,7 +47,7 @@ export class SqlServerAdapter implements DatabaseAdapter {
   constructor() {
     this.schema = config.mssqlSchema || 'dbo';
     this.logging = config.nodeEnv === 'development';
-    
+
     this.checkDriverAvailability();
     this.normalizeColumnsForSqlServer();
   }
@@ -82,6 +84,24 @@ export class SqlServerAdapter implements DatabaseAdapter {
       }
     }
 
+    for (const index of metadata.indices) {
+      if (!index.unique || !Array.isArray(index.columns)) continue;
+      const nullableColumnNames = index.columns
+        .filter((propertyName): propertyName is string => typeof propertyName === 'string')
+        .map((propertyName) => metadata.columns.find((column) =>
+          column.target === index.target && column.propertyName === propertyName))
+        .filter((column) => column?.options.nullable === true)
+        .map((column) => String(column?.options.name || column?.propertyName));
+      if (nullableColumnNames.length > 0) {
+        // SQL Server otherwise permits only one NULL in a unique index.
+        // Filter nullable natural keys so their semantics match the other
+        // supported adapters: uniqueness applies only to present values.
+        index.where = nullableColumnNames
+          .map((columnName) => `[${columnName.split(']').join(']]')}] IS NOT NULL`)
+          .join(' AND ');
+      }
+    }
+
     for (const column of metadata.columns) {
       const targetName = this.getTargetName(column.target);
       const key = `${targetName}:${column.propertyName}`;
@@ -93,18 +113,27 @@ export class SqlServerAdapter implements DatabaseAdapter {
 
       if (column.options.type !== 'text') continue;
 
-      const needsNvarchar =
+      if ((targetName === 'CamundaNativeGrantImportRun' || targetName === 'EngineBackstopSyncRun')
+        && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
+        column.options.type = 'nvarchar';
+        column.options.length = 'MAX';
+        continue;
+      }
+
+      const needsKeyLength =
         column.options.default != null
         || Boolean(column.options.primary)
         || Boolean(column.options.unique)
         || indexedColumns.has(key)
         || uniqueConstraintColumns.has(key);
 
-      if (!needsNvarchar) continue;
-
+      // SQL Server's legacy TEXT type cannot participate in equality
+      // comparisons. TypeORM's portable upsert uses comparisons for changed
+      // values, including descriptive fields, so every shared text column
+      // must use NVARCHAR.
       column.options.type = 'nvarchar';
       if (column.options.length == null) {
-        column.options.length = 191;
+        column.options.length = needsKeyLength ? 191 : 4000;
       }
     }
   }
@@ -173,12 +202,12 @@ export class SqlServerAdapter implements DatabaseAdapter {
       'sequences',    // SQL Server 2012+ supports sequences
       'uuid',         // SQL Server has UNIQUEIDENTIFIER
     ];
-    
+
     // Features NOT supported or different in SQL Server:
     // - 'ilike': SQL Server uses COLLATE for case-insensitive, or LIKE with proper collation
     // - 'onConflict': SQL Server uses MERGE instead
     // - 'jsonb': SQL Server has JSON functions but no JSONB type
-    
+
     return supportedFeatures.includes(feature);
   }
 

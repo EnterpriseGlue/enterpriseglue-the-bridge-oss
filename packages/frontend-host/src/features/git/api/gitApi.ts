@@ -19,8 +19,14 @@ import type {
   LockResponse,
   LockHolder,
 } from '../types/git';
+import type {
+  CloneFromGitRequest,
+  CloneFromGitResponse,
+  RepositoryInfoResponse,
+} from '@enterpriseglue/shared/schemas/git/index.js';
 import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
+import type { GitProviderRepository } from '@enterpriseglue/shared/schemas/git/repository.js';
 
 // Use relative path - proxied to backend in dev, same origin in production
 const API_BASE = '/git-api';
@@ -94,41 +100,19 @@ class GitApi {
   }
 
   // List repos from provider (for "connect to existing" flow)
-  async listProviderRepos(providerId: string): Promise<{
-    name: string;
-    fullName: string;
-    url: string;
-    isPrivate: boolean;
-  }[]> {
+  async listProviderRepos(providerId: string): Promise<GitProviderRepository[]> {
     return this.fetch(`/providers/${providerId}/repos`);
   }
 
   // New clone flow
-  async getRepoInfo(providerId: string, repoUrl: string): Promise<{
-    name: string;
-    fullName: string;
-    defaultBranch: string;
-    branches: { name: string; isDefault: boolean }[];
-  }> {
+  async getRepoInfo(providerId: string, repoUrl: string): Promise<RepositoryInfoResponse> {
     return this.fetch('/repo-info', {
       method: 'POST',
       body: JSON.stringify({ providerId, repoUrl }),
     });
   }
 
-  async cloneFromGit(data: {
-    providerId: string;
-    repoUrl: string;
-    branch?: string;
-    projectName?: string;
-    conflictStrategy?: 'preferRemote' | 'preferLocal';
-  }): Promise<{
-    projectId: string;
-    projectName: string;
-    filesImported: number;
-    foldersCreated: number;
-    repositoryId: string;
-  }> {
+  async cloneFromGit(data: CloneFromGitRequest): Promise<CloneFromGitResponse> {
     return this.fetch('/clone', {
       method: 'POST',
       body: JSON.stringify(data),

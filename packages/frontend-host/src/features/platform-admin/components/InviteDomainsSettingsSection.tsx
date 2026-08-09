@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, TextInput, Toggle, Tile } from '@carbon/react'
+import { Button, InlineNotification, TextInput, Toggle, Tile } from '@carbon/react'
 import { Close } from '@carbon/icons-react'
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid'
 
@@ -11,6 +11,8 @@ interface InviteDomainsSettingsSectionProps {
   addInviteDomain: () => void
   removeInviteDomain: (domain: string) => void
   onToggleInviteAllowAll: (checked: boolean) => void
+  canManageSettings?: boolean
+  settingsUnavailableReason?: string | null
 }
 
 export function InviteDomainsSettingsSection({
@@ -21,7 +23,11 @@ export function InviteDomainsSettingsSection({
   addInviteDomain,
   removeInviteDomain,
   onToggleInviteAllowAll,
+  canManageSettings = true,
+  settingsUnavailableReason,
 }: InviteDomainsSettingsSectionProps) {
+  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
+
   return (
     <PlatformGrid style={{ paddingInline: 0 }}>
       <PlatformRow>
@@ -31,6 +37,16 @@ export function InviteDomainsSettingsSection({
             <p style={{ margin: '0 0 var(--spacing-4) 0', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
               Control which email domains can be invited from Project Members.
             </p>
+            {!canManageSettings && (
+              <InlineNotification
+                kind="warning"
+                title="Invite domains are read-only"
+                subtitle={disabledReason}
+                hideCloseButton
+                lowContrast
+                style={{ marginBottom: 'var(--spacing-4)' }}
+              />
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
               <Toggle
@@ -39,7 +55,10 @@ export function InviteDomainsSettingsSection({
                 labelA="No"
                 labelB="Yes"
                 toggled={!!inviteAllowAll}
-                onToggle={onToggleInviteAllowAll}
+                onToggle={(checked) => {
+                  if (canManageSettings) onToggleInviteAllowAll(checked)
+                }}
+                disabled={!canManageSettings}
               />
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 'var(--spacing-3)', alignItems: 'end', maxWidth: 520 }}>
@@ -48,11 +67,17 @@ export function InviteDomainsSettingsSection({
                   labelText="Allowed domains"
                   placeholder="e.g. enterpriseglue.ai"
                   value={inviteDomainInput}
-                  disabled={!!inviteAllowAll}
+                  disabled={!!inviteAllowAll || !canManageSettings}
                   onChange={(e) => setInviteDomainInput((e.target as HTMLInputElement).value)}
-                  helperText={inviteAllowAll ? 'All domains are allowed' : 'Add domains like enterpriseglue.ai or gmail.com'}
+                  helperText={!canManageSettings ? disabledReason : inviteAllowAll ? 'All domains are allowed' : 'Add domains like enterpriseglue.ai or gmail.com'}
                 />
-                <Button kind="tertiary" size="md" disabled={!!inviteAllowAll || !inviteDomainInput.trim()} onClick={addInviteDomain}>
+                <Button
+                  kind="tertiary"
+                  size="md"
+                  disabled={!!inviteAllowAll || !inviteDomainInput.trim() || !canManageSettings}
+                  title={!canManageSettings ? disabledReason : undefined}
+                  onClick={addInviteDomain}
+                >
                   Add
                 </Button>
               </div>
@@ -75,7 +100,16 @@ export function InviteDomainsSettingsSection({
                         }}
                       >
                         <span style={{ fontSize: '14px' }}>{d}</span>
-                        <Button kind="ghost" size="sm" hasIconOnly renderIcon={Close} iconDescription="Remove domain" onClick={() => removeInviteDomain(d)} />
+                        <Button
+                          kind="ghost"
+                          size="sm"
+                          hasIconOnly
+                          renderIcon={Close}
+                          iconDescription="Remove domain"
+                          disabled={!canManageSettings}
+                          title={!canManageSettings ? disabledReason : undefined}
+                          onClick={() => removeInviteDomain(d)}
+                        />
                       </span>
                     ))
                   )}

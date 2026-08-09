@@ -1,8 +1,11 @@
 /**
  * Database Connection Pool
  * 
- * Provides database-agnostic connection pool abstraction.
- * Supports PostgreSQL, Oracle, MySQL, SQL Server, and Spanner.
+ * Legacy raw-SQL connection pool abstraction.
+ *
+ * New code and enterprise plugins must use the portable TypeORM context. This
+ * compatibility API remains available only for PostgreSQL and Oracle because
+ * raw SQL and parameter syntax cannot be portable across all five adapters.
  */
 
 import pg from 'pg';
@@ -168,96 +171,6 @@ class OracleConnectionPool implements ConnectionPool {
   }
 }
 
-/**
- * MySQL Connection Pool Implementation (placeholder)
- */
-class MySQLConnectionPool implements ConnectionPool {
-  private pool: any = null;
-
-  constructor() {
-    console.log('✅ MySQL connection pool placeholder created');
-  }
-
-  async query<T = any>(sql: string, params?: any[] | Record<string, any>): Promise<{ rows: T[]; rowCount: number }> {
-    if (!this.pool) {
-      throw new Error('MySQL connection pool not initialized. Please install mysql2 package.');
-    }
-    const [rows, fields] = await this.pool.execute(sql, params);
-    return { rows: rows as T[], rowCount: Array.isArray(rows) ? rows.length : 0 };
-  }
-
-  async close(): Promise<void> {
-    if (this.pool) {
-      await this.pool.end();
-      console.log('✅ MySQL connection pool closed');
-    }
-  }
-
-  getNativePool(): any {
-    return this.pool;
-  }
-}
-
-/**
- * SQL Server Connection Pool Implementation (placeholder)
- */
-class SqlServerConnectionPool implements ConnectionPool {
-  private pool: any = null;
-
-  constructor() {
-    console.log('✅ SQL Server connection pool placeholder created');
-  }
-
-  async query<T = any>(sql: string, params?: any[] | Record<string, any>): Promise<{ rows: T[]; rowCount: number }> {
-    if (!this.pool) {
-      throw new Error('SQL Server connection pool not initialized. Please install mssql package.');
-    }
-    const result = await this.pool.request().query(sql);
-    return { rows: result.recordset as T[], rowCount: result.rowsAffected?.[0] || 0 };
-  }
-
-  async close(): Promise<void> {
-    if (this.pool) {
-      await this.pool.close();
-      console.log('✅ SQL Server connection pool closed');
-    }
-  }
-
-  getNativePool(): any {
-    return this.pool;
-  }
-}
-
-/**
- * Spanner Connection Pool Implementation (placeholder)
- */
-class SpannerConnectionPool implements ConnectionPool {
-  private database: any = null;
-
-  constructor() {
-    console.log('✅ Spanner connection pool placeholder created');
-  }
-
-  async query<T = any>(sql: string, params?: any[] | Record<string, any>): Promise<{ rows: T[]; rowCount: number }> {
-    if (!this.database) {
-      throw new Error('Spanner connection not initialized. Please install @google-cloud/spanner package.');
-    }
-    const [rows] = await this.database.run({ sql, params });
-    return { rows: rows as T[], rowCount: rows.length };
-  }
-
-  async close(): Promise<void> {
-    if (this.database) {
-      await this.database.close();
-      console.log('✅ Spanner connection closed');
-    }
-  }
-
-  getNativePool(): any {
-    return this.database;
-  }
-}
-
 // Singleton pool instance
 let poolInstance: ConnectionPool | null = null;
 
@@ -295,3 +208,25 @@ export async function closeConnectionPool(): Promise<void> {
   }
 }
 
+/**
+ * Preserve the published enterprise-plugin context without constructing a raw
+ * driver during ordinary OSS startup. PostgreSQL/Oracle plugins keep their
+ * existing behavior; unsupported raw-SQL adapters fail only if a plugin
+ * actually calls the legacy pool instead of the portable TypeORM APIs.
+ */
+export function createLazyConnectionPool(
+  resolvePool: () => ConnectionPool = getConnectionPool,
+  closePool: () => Promise<void> = closeConnectionPool,
+): ConnectionPool {
+  return {
+    query<T = any>(sql: string, params?: any[] | Record<string, any>) {
+      return resolvePool().query<T>(sql, params);
+    },
+    close() {
+      return closePool();
+    },
+    getNativePool() {
+      return resolvePool().getNativePool();
+    },
+  };
+}

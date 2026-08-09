@@ -18,6 +18,14 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
   }),
 }));
 
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    hasPlatformPermission: vi.fn(() => true),
+    hasProjectPermission: vi.fn(() => false),
+    hasEnginePermission: vi.fn(() => false),
+  }),
+}));
+
 function renderWithProviders() {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false } },

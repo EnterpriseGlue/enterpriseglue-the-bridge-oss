@@ -2,25 +2,7 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Dropdown } from '@carbon/react'
 import { useEngineSelectorStore } from '../stores/engineSelectorStore'
-import { apiClient } from '../shared/api/client'
-
-type Engine = {
-  id: string
-  name: string
-  baseUrl: string
-}
-
-type EngineWithAccess = Engine & {
-  isOwner?: boolean
-  isDelegate?: boolean
-  myRole?: string
-}
-
-const MISSION_CONTROL_ROLES = new Set(['owner', 'delegate', 'operator'])
-
-async function fetchAccessibleEngines(): Promise<EngineWithAccess[]> {
-  return apiClient.get<EngineWithAccess[]>('/engines-api/engines', undefined, { credentials: 'include' }).catch(() => [])
-}
+import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 
 interface EngineSelectorProps {
   style?: React.CSSProperties
@@ -33,37 +15,35 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
 
   const enginesQuery = useQuery({
     queryKey: ['engines-selector'],
-    queryFn: fetchAccessibleEngines,
+    queryFn: () => getAccessibleEngines().catch(() => []),
     staleTime: 60000,
   })
 
   const engines = React.useMemo(() => {
-    const data = enginesQuery.data || []
-    return data.filter((engine) => {
-      const role = String(engine.myRole || '')
-      return MISSION_CONTROL_ROLES.has(role)
-    })
+    // The route is guarded by engine.visibleCollection. Do not re-filter by
+    // legacy display roles here: custom and runtime-derived grants may not
+    // have a synthetic owner/delegate/operator value.
+    return [...(enginesQuery.data || [])].sort((a, b) =>
+      (a.name ?? a.baseUrl ?? '').localeCompare(b.name ?? b.baseUrl ?? '')
+    )
   }, [enginesQuery.data])
 
   // Auto-select engine: single engine or first alphabetically
   React.useEffect(() => {
-    if (engines.length > 0 && !selectedEngineId) {
-      if (engines.length === 1) {
-        setSelectedEngineId(engines[0].id)
-      } else {
-        // Select first engine alphabetically by name
-        const sorted = [...engines].sort((a, b) => 
-          (a.name || a.baseUrl).localeCompare(b.name || b.baseUrl)
-        )
-        setSelectedEngineId(sorted[0].id)
-      }
+    if (engines.length > 0 && (!selectedEngineId || !engines.some((engine) => engine.id === selectedEngineId))) {
+      setSelectedEngineId(engines[0].id)
     }
   }, [engines, selectedEngineId, setSelectedEngineId])
 
   // Build items list (no "All Engines" option)
   const items = React.useMemo(() => {
     if (engines.length === 0) return []
-    return engines.map(e => ({ id: e.id, label: e.name || e.baseUrl }))
+    return engines.map(e => ({
+      id: e.id,
+      label: e.name || e.baseUrl,
+      technicalId: e.id,
+      baseUrl: e.baseUrl,
+    }))
   }, [engines])
 
   // Find current selection
@@ -80,11 +60,20 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine' }: EngineS
   return (
     <Dropdown
       id="engine-selector"
+      aria-label={label || 'Engine'}
       titleText=""
       label={label}
       size={size}
       items={items}
       itemToString={(item: any) => item?.label || ''}
+      itemToElement={(item: any) => (
+        <div style={{ display: 'grid', gap: '0.125rem', minWidth: 0 }}>
+          <span>{item?.label || ''}</span>
+          <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', overflowWrap: 'anywhere' }}>
+            {item?.technicalId}
+          </span>
+        </div>
+      )}
       selectedItem={currentItem}
       onChange={({ selectedItem }: any) => {
         if (selectedItem?.id) {

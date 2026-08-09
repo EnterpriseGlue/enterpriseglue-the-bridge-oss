@@ -3,10 +3,8 @@ import * as authModule from '../../../../packages/backend-host/src/modules/auth/
 
 describe('auth module index', () => {
   it('exports auth routes', () => {
-    expect(authModule).toHaveProperty('googleRoute');
-    expect(authModule).toHaveProperty('googleStartRoute');
-    expect(authModule).toHaveProperty('samlRoute');
-    expect(authModule).toHaveProperty('samlStartRoute');
-    expect(authModule).toHaveProperty('microsoftStartRoute');
+    expect(authModule).toHaveProperty('identityOidcRoute');
+    expect(authModule).toHaveProperty('ssoConfigRoute');
+    expect(authModule).toHaveProperty('onboardingRoute');
   });
 });

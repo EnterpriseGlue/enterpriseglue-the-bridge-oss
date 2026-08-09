@@ -21,6 +21,7 @@ import {
   Tab,
   TabPanels,
   TabPanel,
+  InlineNotification,
 } from '@carbon/react';
 import { Email, Edit, View, Reset } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
@@ -56,7 +57,17 @@ const tableHeaders = [
   { key: 'actions', header: '' },
 ];
 
-export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}) {
+interface EmailTemplatesProps {
+  embedded?: boolean;
+  canManageSettings?: boolean;
+  settingsUnavailableReason?: string | null;
+}
+
+export default function EmailTemplates({
+  embedded,
+  canManageSettings = true,
+  settingsUnavailableReason,
+}: EmailTemplatesProps = {}) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
@@ -71,6 +82,7 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
     textTemplate: '',
     isActive: true,
   });
+  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage';
 
   const platformNameQuery = useQuery({
     queryKey: ['email-platform-name'],
@@ -79,7 +91,9 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
 
   const updatePlatformNameMutation = useMutation({
     mutationFn: (value: string) =>
-      apiClient.put('/api/admin/email-platform-name', { emailPlatformName: value }),
+      canManageSettings
+        ? apiClient.put('/api/admin/email-platform-name', { emailPlatformName: value })
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-platform-name'] });
       queryClient.invalidateQueries({ queryKey: ['email-templates'] });
@@ -104,7 +118,9 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiClient.patch(`/api/admin/email-templates/${id}`, data),
+      canManageSettings
+        ? apiClient.patch(`/api/admin/email-templates/${id}`, data)
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-templates'] });
       setEditingTemplate(null);
@@ -117,7 +133,10 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
   });
 
   const resetMutation = useMutation({
-    mutationFn: (id: string) => apiClient.post(`/api/admin/email-templates/${id}/reset`),
+    mutationFn: (id: string) =>
+      canManageSettings
+        ? apiClient.post(`/api/admin/email-templates/${id}/reset`)
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-templates'] });
       notify({ kind: 'success', title: 'Template reset' });
@@ -175,17 +194,29 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
           flexWrap: 'wrap',
         }}
       >
+        {!canManageSettings && (
+          <InlineNotification
+            kind="warning"
+            title="Email templates are read-only"
+            subtitle={disabledReason}
+            hideCloseButton
+            lowContrast
+            style={{ flexBasis: '100%' }}
+          />
+        )}
         <TextInput
           id="email-platform-name"
           labelText="Email Platform Name"
           value={emailPlatformName}
           onChange={(e) => setEmailPlatformName(e.target.value)}
+          disabled={!canManageSettings}
           style={{ minWidth: 320 }}
         />
         <Button
           kind="primary"
           size="md"
           onClick={() => {
+            if (!canManageSettings) return;
             const v = emailPlatformName.trim();
             if (!v) {
               notify({ kind: 'error', title: 'Email platform name cannot be empty' });
@@ -193,7 +224,8 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
             }
             updatePlatformNameMutation.mutate(v);
           }}
-          disabled={platformNameQuery.isLoading || updatePlatformNameMutation.isPending}
+          disabled={!canManageSettings || platformNameQuery.isLoading || updatePlatformNameMutation.isPending}
+          title={!canManageSettings ? disabledReason : undefined}
         >
           {updatePlatformNameMutation.isPending ? 'Saving...' : 'Save'}
         </Button>
@@ -259,6 +291,8 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
                                     hasIconOnly
                                     renderIcon={Edit}
                                     iconDescription="Edit"
+                                    disabled={!canManageSettings}
+                                    title={!canManageSettings ? disabledReason : undefined}
                                     onClick={() => openEditModal(template)}
                                   />
                                   <Button
@@ -267,7 +301,10 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
                                     hasIconOnly
                                     renderIcon={Reset}
                                     iconDescription="Reset to Default"
+                                    disabled={!canManageSettings}
+                                    title={!canManageSettings ? disabledReason : undefined}
                                     onClick={() => {
+                                      if (!canManageSettings) return;
                                       if (confirm('Reset this template to its default content?')) {
                                         resetMutation.mutate(template.id);
                                       }
@@ -297,18 +334,23 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
         primaryButtonText="Save"
         secondaryButtonText="Cancel"
         onRequestSubmit={() => {
-          if (editingTemplate) {
+          if (canManageSettings && editingTemplate) {
             updateMutation.mutate({ id: editingTemplate.id, data: formData });
           }
         }}
+        primaryButtonDisabled={!canManageSettings || updateMutation.isPending}
         size="lg"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
+          {!canManageSettings && (
+            <InlineNotification kind="warning" title="Email templates are read-only" subtitle={disabledReason} hideCloseButton lowContrast />
+          )}
           <TextInput
             id="template-name"
             labelText="Template Name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            disabled={!canManageSettings}
           />
           <TextInput
             id="template-subject"
@@ -316,6 +358,7 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
             value={formData.subject}
             onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
             helperText="Use {{variableName}} for dynamic values"
+            disabled={!canManageSettings}
           />
           {editingTemplate && (
             <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
@@ -328,6 +371,7 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
             value={formData.htmlTemplate}
             onChange={(e) => setFormData({ ...formData, htmlTemplate: e.target.value })}
             rows={10}
+            disabled={!canManageSettings}
           />
           <TextArea
             id="template-text"
@@ -335,12 +379,14 @@ export default function EmailTemplates({ embedded }: { embedded?: boolean } = {}
             value={formData.textTemplate}
             onChange={(e) => setFormData({ ...formData, textTemplate: e.target.value })}
             rows={5}
+            disabled={!canManageSettings}
           />
           <Toggle
             id="template-active"
             labelText="Active"
             toggled={formData.isActive}
             onToggle={(checked) => setFormData({ ...formData, isActive: checked })}
+            disabled={!canManageSettings}
           />
         </div>
       </Modal>

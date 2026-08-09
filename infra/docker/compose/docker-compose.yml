@@ -34,11 +34,16 @@ services:
         condition: service_healthy
     working_dir: /repo/backend
     command: >-
-      sh -c "set -e; cd /repo; LOCK_HASH=$$(node -e \"const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('pnpm-lock.yaml');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));\"); STORED_HASH=$$(cat node_modules/.deps-hash 2>/dev/null || true); if [ \"$$LOCK_HASH\" != \"$$STORED_HASH\" ]; then echo \"Deps changed; running pnpm install...\"; CI=true pnpm install --filter webmodeler-backend... --frozen-lockfile; echo \"$$LOCK_HASH\" > node_modules/.deps-hash; fi; cd /repo/backend; DB_DRIVER=pg; case \"$${DATABASE_TYPE:-postgres}\" in postgres) DB_DRIVER=pg ;; mysql) DB_DRIVER=mysql2 ;; mssql) DB_DRIVER=mssql ;; oracle) DB_DRIVER=oracledb ;; spanner) DB_DRIVER=@google-cloud/spanner ;; esac; node -e \"require.resolve(process.argv[1]);\" \"$$DB_DRIVER\" >/dev/null 2>&1 || pnpm add -w \"$$DB_DRIVER\"; pnpm_config_verify_deps_before_run=false pnpm run build:skip-generate && pnpm_config_verify_deps_before_run=false pnpm run start:compiled"
+      sh -c "set -e; cd /repo; LOCK_HASH=$$(node -e \"const fs=require('fs');const crypto=require('crypto');const a=fs.readFileSync('package.json');const b=fs.readFileSync('pnpm-lock.yaml');process.stdout.write(crypto.createHash('sha256').update(a).update(b).digest('hex'));\"); STORED_HASH=$$(cat node_modules/.deps-hash 2>/dev/null || true); if [ \"$$LOCK_HASH\" != \"$$STORED_HASH\" ]; then echo \"Deps changed; running pnpm install...\"; CI=true pnpm install --filter webmodeler-backend... --frozen-lockfile; echo \"$$LOCK_HASH\" > node_modules/.deps-hash; fi; pnpm --filter shared run build; cd /repo/backend; DB_DRIVER=pg; case \"$${DATABASE_TYPE:-postgres}\" in postgres) DB_DRIVER=pg ;; mysql) DB_DRIVER=mysql2 ;; mssql) DB_DRIVER=mssql ;; oracle) DB_DRIVER=oracledb ;; spanner) DB_DRIVER=@google-cloud/spanner ;; esac; node -e \"require.resolve(process.argv[1]);\" \"$$DB_DRIVER\" >/dev/null 2>&1 || pnpm add -w \"$$DB_DRIVER\"; pnpm_config_verify_deps_before_run=false pnpm run build:skip-generate && pnpm_config_verify_deps_before_run=false pnpm run start:compiled"
     volumes:
       - .:/repo
       - workspace_node_modules:/repo/node_modules
       - git_repos:/repo/backend/data/repos
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const p=process.env.API_PORT||'8787';require('http').get('http://127.0.0.1:'+p+'/ready',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1));\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     networks:
       - enterpriseglue-network
 
@@ -54,7 +59,7 @@ services:
       API_UPSTREAM: ${API_UPSTREAM:-backend:${API_PORT:-8787}}
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "${FRONTEND_HOST_PORT:-5173}:8080"
     networks:

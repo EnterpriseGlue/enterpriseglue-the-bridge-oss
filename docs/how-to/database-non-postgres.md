@@ -2,7 +2,7 @@
 
 Summary: Configure EnterpriseGlue with Oracle, SQL Server, Spanner, or MySQL.
 
-Audience: Developers and architects.
+Audience: Operators, administrators, developers, and architects.
 
 ## Recommended: One-click Docker workflow
 
@@ -73,11 +73,19 @@ The deploy script now runs the same DB preflight checks before build/start.
 - Driver: `mysql2`.
 
 ## Verify
+
 - Backend logs print the active database type on startup.
 - Confirm schema settings are valid for your selected database type.
 - Hit health endpoint after startup:
   - `http://localhost:8787/health` (host runs)
   - or proxied via frontend origin in Docker if backend is internal-only.
+
+Before releasing an engine-tenancy change, run the
+[five-database qualification](../development/engine-tenancy-database-qualification.md).
+It creates disposable localhost-only PostgreSQL, MySQL, SQL Server, Oracle,
+and Spanner containers and verifies the same migrations, upgrade baselines,
+mapping transaction, retry, schema, rollback, and cleanup behavior. It does
+not require or connect to a production database.
 
 ## Reference
 - `backend/.env.example`

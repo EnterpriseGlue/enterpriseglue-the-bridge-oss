@@ -2,6 +2,25 @@ import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../../packages/backend-host/src/app.js';
 
+const getConfigBootstrapStatus = vi.hoisted(() => vi.fn<() => {
+  mode: string;
+  status: string;
+  hash: string | null;
+  message: string | null;
+  reconciliation: string;
+  secretPreflight: string;
+  issueCode: string | null;
+}>(() => ({
+  mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null,
+})));
+const getConfigBootstrapMetrics = vi.hoisted(() => vi.fn(() => 'enterpriseglue_config_bootstrap_ready 1\n'));
+const getEngineTenancyMetrics = vi.hoisted(() => vi.fn(async () => 'enterpriseglue_engine_tenancy_metrics_collection_success 1\n'));
+const getLoginExperienceMetrics = vi.hoisted(() => vi.fn(() => 'enterpriseglue_login_experience_total{method="oidc",event="selected"} 1\n'));
+
+vi.mock('../../packages/backend-host/src/services/configBundleBootstrap.js', () => ({ getConfigBootstrapStatus, getConfigBootstrapMetrics }));
+vi.mock('../../packages/backend-host/src/services/engineTenancyMetrics.js', () => ({ getEngineTenancyMetrics }));
+vi.mock('../../packages/backend-host/src/services/loginExperienceMetrics.js', () => ({ getLoginExperienceMetrics }));
+
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({
     getRepository: vi.fn(),
@@ -32,6 +51,50 @@ describe('app', () => {
     const response = await request(app).get('/health');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ status: 'ok' });
+    expect(response.body).toEqual({
+      status: 'ok',
+      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null },
+    });
+  });
+
+  it('responds to readiness endpoint when configuration bootstrap is healthy', async () => {
+    const app = createApp({ registerRoutes: false, includeDocs: false, includeRateLimiting: false });
+    const response = await request(app).get('/ready');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: 'ready',
+      configBootstrap: { mode: 'disabled', status: 'disabled', hash: null, message: null, reconciliation: 'not_run', secretPreflight: 'not_required', issueCode: null },
+    });
+  });
+
+  it('keeps readiness closed when required identity reconciliation did not complete', async () => {
+    getConfigBootstrapStatus.mockReturnValueOnce({
+      mode: 'apply', status: 'failed', hash: 'bundle-hash', message: 'Configuration bundle identity reconciliation failed', reconciliation: 'pending', secretPreflight: 'passed', issueCode: 'identity_reconciliation_failed',
+    });
+    const app = createApp({ registerRoutes: false, includeDocs: false, includeRateLimiting: false });
+    const response = await request(app).get('/ready');
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({
+      status: 'not_ready',
+      configBootstrap: {
+        mode: 'apply', status: 'failed', hash: 'bundle-hash', message: 'Configuration bundle identity reconciliation failed', reconciliation: 'pending', secretPreflight: 'passed', issueCode: 'identity_reconciliation_failed',
+      },
+    });
+  });
+
+  it('exposes bounded Prometheus bootstrap and aggregate tenancy metrics without identifiers', async () => {
+    const app = createApp({ registerRoutes: false, includeDocs: false, includeRateLimiting: false });
+    const response = await request(app).get('/metrics');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.text).toBe([
+      'enterpriseglue_config_bootstrap_ready 1',
+      'enterpriseglue_engine_tenancy_metrics_collection_success 1',
+      'enterpriseglue_login_experience_total{method="oidc",event="selected"} 1',
+      '',
+    ].join('\n'));
   });
 });

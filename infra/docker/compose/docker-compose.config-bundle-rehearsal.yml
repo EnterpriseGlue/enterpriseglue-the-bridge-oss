@@ -1,0 +1,11 @@
+# Disposable local validation overlay for the configuration-bundle startup path.
+# It is intentionally separate from docker-compose.config-bundle.yml so normal
+# deployments continue to take their bootstrap mode from the deployment env file.
+services:
+  backend:
+    environment:
+      EG_CONFIG_BOOTSTRAP_MODE: ${LOCAL_CONFIG_BOOTSTRAP_MODE:-validate}
+      EG_CONFIG_FAIL_CLOSED: "true"
+      EG_CONFIG_EXPECTED_TENANT_SCOPE: ${LOCAL_CONFIG_BOOTSTRAP_EXPECTED_TENANT_SCOPE:-platform}
+      EG_CONFIG_EXPECTED_SHA256: ${LOCAL_CONFIG_BOOTSTRAP_EXPECTED_SHA256:-}
+      EG_CONFIG_REQUIRE_SECRET_PREFLIGHT: ${LOCAL_CONFIG_BOOTSTRAP_REQUIRE_SECRET_PREFLIGHT:-false}

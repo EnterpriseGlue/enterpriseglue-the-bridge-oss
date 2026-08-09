@@ -6,27 +6,53 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
 import { Errors } from './errorHandler.js';
-import { projectMemberService } from '../services/platform-admin/ProjectMemberService.js';
-import { AuthorizationService } from '../services/authorization.js';
-import { engineService } from '../services/platform-admin/index.js';
+import { permissionService, type Permission } from '../services/platform-admin/permissions.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 
+type PermissionFallback = Permission | Permission[];
+
+async function hasProjectPermissionFallback(params: {
+  userId: string;
+  tenantId?: string | null;
+  projectId: string;
+  permission?: PermissionFallback;
+}): Promise<boolean> {
+  const permissions = Array.isArray(params.permission)
+    ? params.permission
+    : (params.permission ? [params.permission] : []);
+  if (permissions.length === 0) return false;
+
+  for (const permission of permissions) {
+    if (await permissionService.hasPermission(permission, {
+      userId: params.userId,
+      tenantId: params.tenantId || null,
+      resourceType: 'project',
+      resourceId: params.projectId,
+    })) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
- * Middleware to require specific project roles
+ * Middleware to require explicit project permissions.
  * Extracts projectId from params, body, or query
- * 
- * @param roles - Array of roles that are allowed
+ *
+ * @param roles - Deprecated; retained for source compatibility and ignored.
  * @param options - Configuration options
  */
 export function requireProjectRole(
-  roles: ProjectRole[],
+  _roles: ProjectRole[],
   options: {
     projectIdFrom?: 'params' | 'body' | 'query';
     projectIdKey?: string;
     errorStatus?: number;
     errorMessage?: string;
+    permission?: PermissionFallback;
   } = {}
 ) {
   const {
@@ -34,6 +60,7 @@ export function requireProjectRole(
     projectIdKey = 'projectId',
     errorStatus = 404,
     errorMessage = 'Project not found',
+    permission,
   } = options;
 
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -58,8 +85,13 @@ export function requireProjectRole(
         throw Errors.validation(`${projectIdKey} is required`);
       }
 
-      const hasRole = await projectMemberService.hasRole(projectId, userId, roles);
-      if (!hasRole) {
+      const hasScopedPermission = await hasProjectPermissionFallback({
+        userId,
+        tenantId: req.tenant?.tenantId || null,
+        projectId,
+        permission,
+      });
+      if (!hasScopedPermission) {
         throw Errors.forbidden(errorMessage);
       }
 
@@ -77,11 +109,13 @@ export function requireProjectAccess(
   options: {
     projectIdFrom?: 'params' | 'body' | 'query';
     projectIdKey?: string;
+    permission?: PermissionFallback;
   } = {}
 ) {
   const {
     projectIdFrom = 'params',
     projectIdKey = 'projectId',
+    permission,
   } = options;
 
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -106,8 +140,13 @@ export function requireProjectAccess(
         throw Errors.validation(`${projectIdKey} is required`);
       }
 
-      const hasAccess = await projectMemberService.hasAccess(projectId, userId);
-      if (!hasAccess) {
+      const hasScopedPermission = await hasProjectPermissionFallback({
+        userId,
+        tenantId: req.tenant?.tenantId || null,
+        projectId,
+        permission,
+      });
+      if (!hasScopedPermission) {
         throw Errors.projectNotFound();
       }
 
@@ -120,15 +159,16 @@ export function requireProjectAccess(
 
 /**
  * Middleware to require file access (view)
- * Uses AuthorizationService.verifyFileAccess
+ * Uses the file's project to evaluate the provided project permission.
  */
 export function requireFileAccess(
   options: {
     fileIdFrom?: 'params' | 'query';
     fileIdKey?: string;
+    permission?: PermissionFallback;
   } = {}
 ) {
-  const { fileIdFrom = 'params', fileIdKey = 'fileId' } = options;
+  const { fileIdFrom = 'params', fileIdKey = 'fileId', permission } = options;
 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -151,10 +191,25 @@ export function requireFileAccess(
         throw Errors.validation(`${fileIdKey} must be a valid UUID`);
       }
 
-      const hasAccess = await AuthorizationService.verifyFileAccess(sanitizedFileId, userId);
-      if (!hasAccess) {
+      const dataSource = await getDataSource();
+      const file = await dataSource.getRepository(File).findOne({
+        where: { id: sanitizedFileId },
+        select: ['projectId'],
+      });
+      if (!file) {
         throw Errors.fileNotFound();
       }
+      const projectId = String(file.projectId);
+      const hasScopedPermission = await hasProjectPermissionFallback({
+        userId,
+        tenantId: req.tenant?.tenantId || null,
+        projectId,
+        permission,
+      });
+      if (!hasScopedPermission) {
+        throw Errors.fileNotFound();
+      }
+      (req as any).fileProjectId = projectId;
 
       next();
     } catch (error) {
@@ -164,16 +219,17 @@ export function requireFileAccess(
 }
 
 /**
- * Middleware to require file edit access
- * Looks up the file's project and checks role
+ * Middleware to require explicit file edit permission.
+ * Looks up the file's project and checks the provided permission.
  */
 export function requireFileEditAccess(
-  roles: ProjectRole[],
+  _roles: ProjectRole[],
   options: {
     fileIdKey?: string;
+    permission?: PermissionFallback;
   } = {}
 ) {
-  const { fileIdKey = 'fileId' } = options;
+  const { fileIdKey = 'fileId', permission } = options;
 
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -199,8 +255,13 @@ export function requireFileEditAccess(
       }
 
       const projectId = String(file.projectId);
-      const hasRole = await projectMemberService.hasRole(projectId, userId, roles);
-      if (!hasRole) {
+      const hasScopedPermission = await hasProjectPermissionFallback({
+        userId,
+        tenantId: req.tenant?.tenantId || null,
+        projectId,
+        permission,
+      });
+      if (!hasScopedPermission) {
         throw Errors.fileNotFound();
       }
 
@@ -215,16 +276,17 @@ export function requireFileEditAccess(
 }
 
 /**
- * Middleware to require specific engine roles
+ * Middleware to require explicit engine permissions.
  * Extracts engineId from params, body, or query
  */
 export function requireEngineRole(
-  roles: EngineRole[],
+  _roles: EngineRole[],
   options: {
     engineIdFrom?: 'params' | 'body' | 'query';
     engineIdKey?: string;
     errorStatus?: number;
     errorMessage?: string;
+    permission?: PermissionFallback;
   } = {}
 ) {
   const {
@@ -232,6 +294,7 @@ export function requireEngineRole(
     engineIdKey = 'engineId',
     errorStatus = 404,
     errorMessage = 'Engine not found',
+    permission,
   } = options;
 
   return async (req: Request, res: Response, next: NextFunction) => {
@@ -256,8 +319,22 @@ export function requireEngineRole(
         throw Errors.validation(`${engineIdKey} is required`);
       }
 
-      const hasRole = await engineService.hasEngineAccess(userId, engineId, roles);
-      if (!hasRole) {
+      const permissions = Array.isArray(permission)
+        ? permission
+        : (permission ? [permission] : []);
+      let hasPermission = false;
+      for (const candidate of permissions) {
+        if (await permissionService.hasPermission(candidate, {
+          userId,
+          tenantId: req.tenant?.tenantId || null,
+          resourceType: 'engine',
+          resourceId: engineId,
+        })) {
+          hasPermission = true;
+          break;
+        }
+      }
+      if (!hasPermission) {
         throw Errors.forbidden(errorMessage);
       }
 
@@ -267,4 +344,3 @@ export function requireEngineRole(
     }
   };
 }
-

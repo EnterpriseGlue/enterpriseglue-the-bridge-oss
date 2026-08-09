@@ -1,0 +1,43 @@
+services:
+  backend:
+    environment:
+      NODE_EXTRA_CA_CERTS: /etc/enterpriseglue/local-oidc-ca.crt
+      # The TLS rehearsal reaches the SPA through this proxy, so redirects,
+      # CORS, and secure cookies must use the same public origin.
+      FRONTEND_URL: https://localhost:${KEYCLOAK_HTTPS_FRONTEND_PORT:-5443}
+    volumes:
+      - ${KEYCLOAK_TLS_DIR:-./.local/docker/keycloak-tls}/ca.crt:/etc/enterpriseglue/local-oidc-ca.crt:ro
+    ports:
+      - "${KEYCLOAK_HOST_PORT:-8180}:${KEYCLOAK_INTERNAL_PORT:-8180}"
+
+  keycloak:
+    command:
+      - start-dev
+      - --import-realm
+      - --http-enabled=false
+      - --https-port=${KEYCLOAK_INTERNAL_PORT:-8180}
+      - --https-certificate-file=/opt/keycloak/conf/local-tls/server.crt
+      - --https-certificate-key-file=/opt/keycloak/conf/local-tls/server.key
+    environment:
+      KC_HOSTNAME: https://localhost:${KEYCLOAK_HOST_PORT:-8180}
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ': > /dev/tcp/127.0.0.1/9000'"]
+    volumes:
+      - ${KEYCLOAK_TLS_DIR:-./.local/docker/keycloak-tls}:/opt/keycloak/conf/local-tls:ro
+    network_mode: service:backend
+    networks: !reset []
+    ports: !reset []
+
+  frontend-tls:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_started
+    volumes:
+      - ./infra/docker/keycloak/local-tls-frontend.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${KEYCLOAK_TLS_DIR:-./.local/docker/keycloak-tls}:/etc/nginx/local-tls:ro
+    ports:
+      - "${KEYCLOAK_HTTPS_FRONTEND_PORT:-5443}:443"
+    networks:
+      - enterpriseglue-network

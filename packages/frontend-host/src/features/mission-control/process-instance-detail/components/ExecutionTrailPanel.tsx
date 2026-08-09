@@ -1,11 +1,13 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { InlineNotification, Modal, OverflowMenu, OverflowMenuItem, Toggle } from '@carbon/react'
+import { InlineNotification, Modal, Toggle } from '@carbon/react'
 import { ChevronDown, ChevronRight } from '@carbon/icons-react'
 import type { ExecutionTrailGroup, ExecutionTrailInstance } from './activityDetailUtils'
 import { formatCompactDurationMs, formatDurationMs } from './activityDetailUtils'
 import { getProcessInstanceExecutionDetails } from '../api/processInstances'
 import type { ExecutionDetails, HistoricDecisionInstanceLite, HistoricTaskInstanceLite, HistoricVariableInstanceLite, UserOperationLogEntryLite } from './types'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../../shared/auth/guards'
 
 export interface ExecutionTrailPanelProps {
   instanceId: string
@@ -31,6 +33,9 @@ export interface ExecutionTrailPanelProps {
   resolveBpmnLoopMarkerVisual: (id: string) => { iconClass: string; label: string } | null
   buildHistoryContext: (g: any) => any | null
   onNavigateToProcessInstance?: (instanceId: string) => void
+  executionDetailsReadDecision?: UiAuthzDecision
+  historyTasksReadDecision?: UiAuthzDecision
+  historyUserOperationsReadDecision?: UiAuthzDecision
 }
 
 function findExecutionById(groups: ExecutionTrailGroup[], activityInstanceId: string | null): ExecutionTrailInstance | null {
@@ -117,6 +122,9 @@ export function ExecutionTrailPanel({
   resolveBpmnLoopMarkerVisual,
   buildHistoryContext,
   onNavigateToProcessInstance,
+  executionDetailsReadDecision,
+  historyTasksReadDecision,
+  historyUserOperationsReadDecision,
 }: ExecutionTrailPanelProps) {
   const [hoveredRowKey, setHoveredRowKey] = React.useState<string | null>(null)
   const [openGroupKeys, setOpenGroupKeys] = React.useState<Record<string, boolean>>({})
@@ -124,6 +132,12 @@ export function ExecutionTrailPanel({
   const [detailsExecution, setDetailsExecution] = React.useState<ExecutionTrailInstance | null>(null)
   const lastHistoryContextKeyRef = React.useRef<string>('')
   const tokenPassToggleId = React.useId()
+  const historyTasksDeniedReason = historyTasksReadDecision && !historyTasksReadDecision.allowed
+    ? historyTasksReadDecision.reason || 'Action unavailable'
+    : null
+  const historyUserOperationsDeniedReason = historyUserOperationsReadDecision && !historyUserOperationsReadDecision.allowed
+    ? historyUserOperationsReadDecision.reason || 'Action unavailable'
+    : null
 
   const executionDetailsQ = useQuery<ExecutionDetails>({
     queryKey: [
@@ -140,7 +154,7 @@ export function ExecutionTrailPanel({
       executionId: detailsExecution?.executionId || null,
       taskId: detailsExecution?.taskId || null,
     }, engineId),
-    enabled: !!detailsExecution && !!instanceId,
+    enabled: (executionDetailsReadDecision?.allowed ?? true) && !!detailsExecution && !!instanceId,
     staleTime: 30000,
   })
 
@@ -203,9 +217,10 @@ export function ExecutionTrailPanel({
   }, [onActivityClick, setSelectedActivityId, setSelectedActivityInstanceId])
 
   const openExecutionDetails = React.useCallback((instance: ExecutionTrailInstance) => {
+    if (executionDetailsReadDecision && !executionDetailsReadDecision.allowed) return
     selectExecution(instance)
     setDetailsExecution(instance)
-  }, [selectExecution])
+  }, [executionDetailsReadDecision, selectExecution])
 
   const setHoverActivity = React.useCallback((activityId: string | null, rowKey: string | null) => {
     setHoveredRowKey(rowKey)
@@ -330,19 +345,23 @@ export function ExecutionTrailPanel({
 
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 {!isModMode ? (
-                  <OverflowMenu size="sm" flipped ariaLabel={`Actions for ${instance.activityName}`} iconDescription="" wrapperClasses="eg-no-tooltip">
-                    <OverflowMenuItem itemText="Details" onClick={() => openExecutionDetails(instance)} />
-                    <OverflowMenuItem itemText="Copy activity instance ID" onClick={() => copyText(instance.activityInstanceId)} />
-                    {instance.executionId ? <OverflowMenuItem itemText="Copy execution ID" onClick={() => copyText(instance.executionId)} /> : null}
+                  <GuardedOverflowMenu size="sm" flipped ariaLabel={`Actions for ${instance.activityName}`} iconDescription="" wrapperClasses="eg-no-tooltip">
+                    <GuardedOverflowMenuItem
+                      itemText="Details"
+                      decision={executionDetailsReadDecision}
+                      onClick={() => openExecutionDetails(instance)}
+                    />
+                    <GuardedOverflowMenuItem itemText="Copy activity instance ID" onClick={() => copyText(instance.activityInstanceId)} />
+                    {instance.executionId ? <GuardedOverflowMenuItem itemText="Copy execution ID" onClick={() => copyText(instance.executionId)} /> : null}
                     {instance.calledProcessInstanceId ? (
-                      <OverflowMenuItem
+                      <GuardedOverflowMenuItem
                         itemText="Open called process instance"
                         onClick={() => {
                           if (onNavigateToProcessInstance) onNavigateToProcessInstance(instance.calledProcessInstanceId as string)
                         }}
                       />
                     ) : null}
-                  </OverflowMenu>
+                  </GuardedOverflowMenu>
                 ) : null}
               </div>
             </div>
@@ -537,19 +556,23 @@ export function ExecutionTrailPanel({
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     {!isModMode ? (
-                      <OverflowMenu size="sm" flipped ariaLabel={`Actions for ${instance.activityName}`} iconDescription="" wrapperClasses="eg-no-tooltip">
-                        <OverflowMenuItem itemText="Details" onClick={() => openExecutionDetails(instance)} />
-                        <OverflowMenuItem itemText="Copy activity instance ID" onClick={() => copyText(instance.activityInstanceId)} />
-                        {instance.executionId ? <OverflowMenuItem itemText="Copy execution ID" onClick={() => copyText(instance.executionId)} /> : null}
+                      <GuardedOverflowMenu size="sm" flipped ariaLabel={`Actions for ${instance.activityName}`} iconDescription="" wrapperClasses="eg-no-tooltip">
+                        <GuardedOverflowMenuItem
+                          itemText="Details"
+                          decision={executionDetailsReadDecision}
+                          onClick={() => openExecutionDetails(instance)}
+                        />
+                        <GuardedOverflowMenuItem itemText="Copy activity instance ID" onClick={() => copyText(instance.activityInstanceId)} />
+                        {instance.executionId ? <GuardedOverflowMenuItem itemText="Copy execution ID" onClick={() => copyText(instance.executionId)} /> : null}
                         {instance.calledProcessInstanceId ? (
-                          <OverflowMenuItem
+                          <GuardedOverflowMenuItem
                             itemText="Open called process instance"
                             onClick={() => {
                               if (onNavigateToProcessInstance) onNavigateToProcessInstance(instance.calledProcessInstanceId as string)
                             }}
                           />
                         ) : null}
-                      </OverflowMenu>
+                      </GuardedOverflowMenu>
                     ) : null}
                   </div>
                 </div>
@@ -658,9 +681,9 @@ export function ExecutionTrailPanel({
               <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--spacing-4)' }}>
                   <ExecutionDetailItem label="Variable snapshots">{executionDetailsQ.data.variables.length}</ExecutionDetailItem>
-                  <ExecutionDetailItem label="Historic tasks">{executionDetailsQ.data.tasks.length}</ExecutionDetailItem>
+                  <ExecutionDetailItem label="Historic tasks">{historyTasksDeniedReason ? 'Hidden' : executionDetailsQ.data.tasks.length}</ExecutionDetailItem>
                   <ExecutionDetailItem label="Decision evaluations">{executionDetailsQ.data.decisions.length}</ExecutionDetailItem>
-                  <ExecutionDetailItem label="User operations">{executionDetailsQ.data.userOperations.length}</ExecutionDetailItem>
+                  <ExecutionDetailItem label="User operations">{historyUserOperationsDeniedReason ? 'Redacted' : executionDetailsQ.data.userOperations.length}</ExecutionDetailItem>
                 </div>
 
                 <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
@@ -690,7 +713,15 @@ export function ExecutionTrailPanel({
 
                   <div>
                     <div style={{ fontSize: 'var(--text-13)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>Historic tasks</div>
-                    {executionDetailsQ.data.tasks.length > 0 ? (
+                    {historyTasksDeniedReason ? (
+                      <InlineNotification
+                        lowContrast
+                        kind="warning"
+                        title="Historic tasks unavailable"
+                        subtitle={historyTasksDeniedReason}
+                        hideCloseButton
+                      />
+                    ) : executionDetailsQ.data.tasks.length > 0 ? (
                       <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
                         {executionDetailsQ.data.tasks.slice(0, 6).map((task: HistoricTaskInstanceLite) => (
                           <div key={task.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', border: '1px solid var(--cds-border-subtle)', borderRadius: 'var(--border-radius-md)' }}>
@@ -737,7 +768,15 @@ export function ExecutionTrailPanel({
 
                   <div>
                     <div style={{ fontSize: 'var(--text-13)', fontWeight: 'var(--font-weight-semibold)', marginBottom: 'var(--spacing-2)' }}>User operations</div>
-                    {executionDetailsQ.data.userOperations.length > 0 ? (
+                    {historyUserOperationsDeniedReason ? (
+                      <InlineNotification
+                        lowContrast
+                        kind="warning"
+                        title="User operations redacted"
+                        subtitle={historyUserOperationsDeniedReason}
+                        hideCloseButton
+                      />
+                    ) : executionDetailsQ.data.userOperations.length > 0 ? (
                       <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
                         {executionDetailsQ.data.userOperations.slice(0, 8).map((operation: UserOperationLogEntryLite) => (
                           <div key={operation.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 'var(--spacing-3)', padding: 'var(--spacing-3)', border: '1px solid var(--cds-border-subtle)', borderRadius: 'var(--border-radius-md)' }}>

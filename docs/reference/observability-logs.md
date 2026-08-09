@@ -8,6 +8,25 @@ Audience: Developers and architects.
 - Dev backend health endpoint: `http://localhost:8787/health` (default)
 - Production (same-origin via Nginx): `http://localhost:8080/health` (default frontend host/port)
 
+## Engine Tenancy Metrics
+
+`/metrics` exposes bounded engine topology/resolution gauges, active
+runtime-resource resolution gauges, a persistence collection-success gauge,
+and process-local default-provisioning fallback counters. These series contain
+no object identifiers. Use
+[Diagnose Engine Tenant Resolution](../how-to/diagnose-engine-tenant-resolution.md)
+for alert thresholds and authenticated investigation.
+
+## Login Experience Metrics
+
+The same `/metrics` response includes bounded
+`enterpriseglue_login_experience_*` counters and elapsed-time aggregates for
+local, recovery, OIDC, SAML, and LDAP authentication. Labels contain only the
+method and event enums. They never contain provider keys, tenants, users,
+emails, domains, IP addresses, request IDs, or session IDs. See
+[Authentication and SSO](../how-to/auth-sso.md#privacy-safe-login-experience-metrics)
+for the exact series and intended use.
+
 ## Docker Logs
 ```bash
 docker compose --project-directory . -f infra/docker/compose/docker-compose.yml logs -f backend

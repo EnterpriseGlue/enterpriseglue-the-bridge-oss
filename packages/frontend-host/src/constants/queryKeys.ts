@@ -77,7 +77,6 @@ export const queryKeys = {
 
   // Authorization
   authz: {
-    ssoMappings: () => ['platform-admin', 'authz', 'sso-mappings'] as const,
     policies: () => ['platform-admin', 'authz', 'policies'] as const,
     auditLog: (params?: Record<string, any>) => ['platform-admin', 'authz', 'audit', params] as const,
   },

@@ -33,6 +33,9 @@ coverage/
 # Test results (Playwright)
 /test/results/
 /test/e2e/mock-camunda/.generated/
+# Disposable local and CI diagnostics are retained outside Git and may contain
+# request identifiers, browser traces, videos, or generated screenshots.
+/.artifacts/
 
 # Env & secrets
 .env

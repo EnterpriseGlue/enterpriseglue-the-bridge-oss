@@ -6,6 +6,7 @@
 
 import { apiClient } from '../shared/api/client';
 import { parseApiError, getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
+import { CurrentUserPermissionsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type {
   LoginRequest,
   LoginResponse,
@@ -18,6 +19,7 @@ import type {
   ChangePasswordRequest,
   CreateUserRequest,
   CreateUserResponse,
+  CurrentUserPermissions,
   UpdateUserRequest,
   User,
 } from '../shared/types/auth';
@@ -86,6 +88,15 @@ class AuthService {
     return apiClient.get<User>(`${API_BASE_URL}/auth/me`, undefined, {
       credentials: 'include', // Send HTTP-only cookies for Microsoft auth
     });
+  }
+
+  /**
+   * Get current user's effective RBAC permissions.
+   */
+  async getMyPermissions(): Promise<CurrentUserPermissions> {
+    return CurrentUserPermissionsSchema.parse(await apiClient.get<unknown>('/api/authz/me/permissions', undefined, {
+      credentials: 'include',
+    }));
   }
 
   /**

@@ -12,7 +12,7 @@ async function login(page: Page) {
 
   await page.goto('/login');
   await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
 }
@@ -65,7 +65,7 @@ async function expectMissionControlProcessesState(page: Page) {
   await expect
     .poll(async () => {
       const bodyText = (await page.locator('body').innerText()).replace(/\s+/g, ' ');
-      return /Processes|To view a Diagram|Process Instances|Access Denied|No Active Engine|Failed to load/i.test(bodyText);
+      return /Processes|To view a diagram|Process Instances|Access Denied|No Active Engine|Failed to load/i.test(bodyText);
     })
     .toBe(true);
 }

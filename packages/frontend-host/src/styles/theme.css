@@ -168,6 +168,7 @@
   --z-dropdown: 100;
   --z-sticky: 200;
   --z-fixed: 300;
+  --z-overlay: 400;
   --z-modal-backdrop: 900;
   --z-modal: 1000;
   --z-overlay-toggle: 1002;
@@ -377,4 +378,13 @@ body::-webkit-scrollbar,
 .cds--overflow-menu-options__option--danger .cds--overflow-menu-options__btn:hover {
   background-color: #da1e28 !important;
   color: #ffffff !important;
+}
+
+.eg-identity-provider-menu {
+  inline-size: min(18rem, calc(100vw - 2rem)) !important;
+  max-inline-size: calc(100vw - 2rem) !important;
+}
+
+.eg-identity-provider-menu .cds--overflow-menu-options__btn {
+  max-inline-size: none;
 }

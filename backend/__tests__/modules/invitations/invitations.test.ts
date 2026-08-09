@@ -8,14 +8,20 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
-import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
+
+const authState = vi.hoisted(() => ({
+  user: { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' } as any,
+}));
+const authSessionService = vi.hoisted(() => ({ issue: vi.fn() }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -26,7 +32,7 @@ vi.mock('@enterpriseglue/shared/middleware/auth.js', async () => {
   return {
     ...actual,
     requireAuth: (req: any, _res: any, next: any) => {
-      req.user = { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' };
+      req.user = authState.user;
       next();
     },
     requireOnboarding: (req: any, _res: any, next: any) => {
@@ -79,11 +85,27 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () =>
   },
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  PlatformPermissions: {
+    USER_MANAGE: 'platform:user:manage',
+    USERS_CREATE: 'platform:users:create',
+  },
+  ProjectPermissions: {
+    MEMBERS_MANAGE: 'project:members:manage',
+  },
+  EnginePermissions: {
+    MEMBERS_MANAGE: 'engine:members:manage',
+  },
+  permissionService: {
+    hasPermission: vi.fn(),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
   generateOnboardingToken: vi.fn().mockReturnValue('onboarding-token'),
-  generateAccessToken: vi.fn().mockReturnValue('access-token'),
-  generateRefreshToken: vi.fn().mockReturnValue('refresh-token'),
 }));
+
+vi.mock('@enterpriseglue/shared/services/AuthSessionService.js', () => ({ authSessionService }));
 
 vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
   validatePassword: vi.fn().mockReturnValue({ valid: true, errors: [] }),
@@ -91,6 +113,10 @@ vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
 
 vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   buildUserCapabilities: vi.fn().mockResolvedValue({ canManageUsers: false }),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
 }));
 
 vi.mock('@enterpriseglue/shared/services/audit.js', () => ({
@@ -120,10 +146,6 @@ describe('invitation and onboarding routes', () => {
   let engineRepo: {
     findOne: ReturnType<typeof vi.fn>;
   };
-  let refreshTokenRepo: {
-    insert: ReturnType<typeof vi.fn>;
-  };
-
   beforeEach(() => {
     app = express();
     app.disable('x-powered-by');
@@ -132,6 +154,12 @@ describe('invitation and onboarding routes', () => {
     app.use(onboardingRouter);
     app.use(errorHandler);
     vi.clearAllMocks();
+    authSessionService.issue.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresIn: 900,
+    });
+    authState.user = { userId: 'admin-1', email: 'admin@example.com', platformRole: 'admin' };
 
     userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
@@ -139,21 +167,17 @@ describe('invitation and onboarding routes', () => {
         andWhere: vi.fn().mockReturnThis(),
         getOne: vi.fn().mockResolvedValue(null),
       }),
-      findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', email: 'invitee@example.com', platformRole: 'user' }),
+      findOneBy: vi.fn().mockResolvedValue({ id: 'user-1', email: 'invitee@example.com', platformRole: 'user', authSessionVersion: 4 }),
       findOneByOrFail: vi.fn().mockResolvedValue({ id: 'user-1', email: 'invitee@example.com', platformRole: 'user', isEmailVerified: true, mustResetPassword: false }),
       update: vi.fn().mockResolvedValue(undefined),
     };
 
     projectRepo = {
-      findOne: vi.fn().mockResolvedValue({ name: 'Project One' }),
+      findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-default', name: 'Project One' }),
     };
 
     engineRepo = {
-      findOne: vi.fn().mockResolvedValue({ name: 'Engine One' }),
-    };
-
-    refreshTokenRepo = {
-      insert: vi.fn().mockResolvedValue(undefined),
+      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared', name: 'Engine One' }),
     };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
@@ -161,13 +185,12 @@ describe('invitation and onboarding routes', () => {
         if (entity === User) return userRepo;
         if (entity === Project) return projectRepo;
         if (entity === Engine) return engineRepo;
-        if (entity === RefreshToken) return refreshTokenRepo;
         throw new Error('Unexpected repository');
       },
     });
 
     (projectMemberService.getMembership as unknown as Mock).mockResolvedValue({ role: 'owner', roles: ['owner'] });
-    (engineService.hasEngineAccess as unknown as Mock).mockResolvedValue(true);
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(true);
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue(null);
     (userService.createPendingUser as unknown as Mock).mockResolvedValue({ id: 'user-1', email: 'invitee@example.com' });
     (invitationService.createInvitation as unknown as Mock).mockResolvedValue({
@@ -250,6 +273,111 @@ describe('invitation and onboarding routes', () => {
     }));
   });
 
+  it('creates a tenant invitation through scoped platform users-create permission', async () => {
+    authState.user = { userId: 'user-manager-1', email: 'manager@example.com', platformRole: 'user' };
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'platform:users:create'
+    );
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'tenant',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('platform:users:create', expect.objectContaining({
+      userId: 'user-manager-1',
+    }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      resourceType: 'tenant',
+      createdByUserId: 'user-manager-1',
+    }));
+  });
+
+  it('creates a project invitation through scoped project member-management permission', async () => {
+    (projectMemberService.getMembership as unknown as Mock).mockResolvedValue({ role: 'viewer', roles: ['viewer'] });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'project:members:manage'
+    );
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'project',
+        resourceId: 'project-1',
+        role: 'viewer',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:members:manage', expect.objectContaining({
+      userId: 'admin-1',
+      resourceType: 'project',
+      resourceId: 'project-1',
+    }));
+    expect(projectMemberService.getMembership).not.toHaveBeenCalled();
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      resourceType: 'project',
+      resourceId: 'project-1',
+    }));
+  });
+
+  it('denies project invitations through action middleware before creating pending users', async () => {
+    authState.user = { userId: 'project-viewer-1', email: 'viewer@example.com', platformRole: 'user' };
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'project',
+        resourceId: 'project-1',
+        role: 'viewer',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(403);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:members:manage', expect.objectContaining({
+      userId: 'project-viewer-1',
+      resourceType: 'project',
+      resourceId: 'project-1',
+    }));
+    expect(projectMemberService.getMembership).not.toHaveBeenCalled();
+    expect(userService.createPendingUser).not.toHaveBeenCalled();
+    expect(invitationService.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('creates an engine invitation through scoped engine member-management permission', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission === 'engine:members:manage'
+    );
+
+    const response = await request(app)
+      .post('/api/t/default/invitations')
+      .send({
+        email: 'invitee@example.com',
+        resourceType: 'engine',
+        resourceId: 'engine-1',
+        role: 'operator',
+        deliveryMethod: 'manual',
+      });
+
+    expect(response.status).toBe(201);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:members:manage', expect.objectContaining({
+      userId: 'admin-1',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+    }));
+  });
+
   it('creates an email invitation without revealing OTP details in the response', async () => {
     (invitationService.createInvitation as unknown as Mock).mockResolvedValueOnce({
       invitationId: 'inv-2',
@@ -289,6 +417,9 @@ describe('invitation and onboarding routes', () => {
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('onboardingToken=onboarding-token')]),
     );
+    expect(generateOnboardingToken).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', invitationId: 'inv-1', authSessionVersion: 4,
+    }));
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'auth.invitation.otp_verified',
       resourceType: 'invitation',
@@ -322,6 +453,9 @@ describe('invitation and onboarding routes', () => {
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([expect.stringContaining('onboardingToken=onboarding-token')]),
     );
+    expect(generateOnboardingToken).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1', invitationId: 'inv-1', authSessionVersion: 4,
+    }));
     expect(invitationService.redeemEmailInvitation).toHaveBeenCalledWith('token-1');
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({
       action: 'auth.invitation.email_redeemed',
@@ -342,6 +476,10 @@ describe('invitation and onboarding routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.user.email).toBe('invitee@example.com');
+    expect(response.body.user.session).toEqual({
+      principal: { type: 'user', id: 'user-1' },
+      tenant: { id: null },
+    });
     expect(response.headers['set-cookie']).toEqual(
       expect.arrayContaining([
         expect.stringContaining('onboardingToken=;'),
@@ -353,7 +491,10 @@ describe('invitation and onboarding routes', () => {
       firstName: 'Invitee',
       lastName: 'Example',
     });
-    expect(refreshTokenRepo.insert).toHaveBeenCalled();
-    expect(buildUserCapabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1' }));
+    expect(authSessionService.issue).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', email: 'invitee@example.com' }),
+      expect.objectContaining({ userAgent: null, ipAddress: expect.any(String) }),
+    );
+    expect(buildUserCapabilities).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-1', tenantId: null }));
   });
 });

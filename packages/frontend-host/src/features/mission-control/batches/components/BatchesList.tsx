@@ -1,6 +1,6 @@
 import React from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { DataTable, DataTableSkeleton, Table, TableHead, TableRow, TableHeader, TableBody, TableCell, InlineNotification, TableContainer, OverflowMenu, OverflowMenuItem } from '@carbon/react'
+import { DataTable, DataTableSkeleton, Table, TableHead, TableRow, TableHeader, TableBody, TableCell, InlineNotification, TableContainer } from '@carbon/react'
 import { useParams } from 'react-router-dom'
 import { useTenantNavigate } from '../../../../shared/hooks/useTenantNavigate'
 import { Package } from '@carbon/icons-react'
@@ -8,35 +8,50 @@ import { apiClient } from '../../../../shared/api/client'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../../shared/components/PageLayout'
 import BatchDetailModal from './BatchDetailModal'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
+import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
+import { GuardedOverflowMenu, GuardedOverflowMenuItem, useActionDecision } from '../../../../shared/auth/guards'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type { Batch, BatchRuntimeActionDecisions } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
 
-type Batch = {
-  id: string
-  camundaBatchId?: string
-  type: string
-  totalJobs?: number | null
-  jobsCreated?: number | null
-  progress: number
-  status: string
-  createdAt: number
-  suspended?: boolean
+type RuntimeActionDecision = BatchRuntimeActionDecisions['suspension']
+
+function rowDecision(actionId: string, decision?: RuntimeActionDecision): UiAuthzDecision {
+  const allowed = decision?.allowed === true
+  return {
+    actionId,
+    resourceType: 'engine_runtime_resource',
+    allowed,
+    state: allowed ? 'allowed' : 'disabled',
+    reason: allowed ? 'Allowed for this runtime resource' : decision?.reason || 'Action decision unavailable for this runtime resource',
+  }
 }
+
+type BatchListItem = Batch & { runtimeActionDecisions?: BatchRuntimeActionDecisions }
 
 export default function BatchesList() {
   const { tenantNavigate } = useTenantNavigate()
   const { batchId } = useParams()
   const selectedEngineId = useSelectedEngine()
-  const listQ = useQuery({ 
-    queryKey: ['batches', 'list', selectedEngineId], 
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId],
+  )
+  const batchesReadDecision = useActionDecision('engine.runtime.batches.read', selectedEngineResource)
+  const listQ = useQuery({
+    queryKey: ['batches', 'list', selectedEngineId],
     queryFn: () => {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
+      params.set('includeActionDecisions', 'true')
       const query = params.toString()
       const suffix = query ? `?${query}` : ''
-      return apiClient.get<Batch[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
-    }, 
+      return apiClient.get<BatchListItem[]>(`/mission-control-api/batches${suffix}`, undefined, { credentials: 'include' })
+    },
     refetchInterval: 5000,
-    enabled: !!selectedEngineId,
+    // The collection route applies the bounded runtime-resource filter. The
+    // client snapshot intentionally does not contain its resource lineage.
+    enabled: !!selectedEngineId && batchesReadDecision.allowed,
   })
 
   const suspendMutation = useMutation({
@@ -110,9 +125,22 @@ export default function BatchesList() {
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
   }
+  if (selectedEngineId && !batchesReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-5)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Batches unavailable"
+          subtitle={batchesReadDecision.reason}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    )
+  }
 
   return (
-    <PageLayout style={{ 
+    <PageLayout style={{
       display: 'flex',
       flexDirection: 'column',
       gap: 'var(--spacing-5)',
@@ -159,7 +187,7 @@ export default function BatchesList() {
                   {dataRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={headers.length}>
-                        <InlineNotification lowContrast kind="info" title="No batches" />
+                        <RuntimeCollectionEmptyState kind="batches" />
                       </TableCell>
                     </TableRow>
                   )}
@@ -169,6 +197,9 @@ export default function BatchesList() {
                         const headerKey = (headers.find(h => h.key === c.info.header)?.key) || ''
                         if (headerKey === 'ops') {
                           const raw = (listQ.data || []).find((b) => b.id === r.id)
+                          const toggleSuspensionDecision = rowDecision('engine.runtime.batches.suspension.update', raw?.runtimeActionDecisions?.suspension)
+                          const cancelDecision = rowDecision('engine.runtime.batches.cancel', raw?.runtimeActionDecisions?.cancel)
+                          const deleteRecordDecision = rowDecision('engine.runtime.batches.record.delete', raw?.runtimeActionDecisions?.recordDelete)
                           const st = String(raw?.status || '').toUpperCase()
                           const isSuspended = st === 'SUSPENDED' || raw?.suspended === true
                           const canCancel = st === 'RUNNING' || st === 'PENDING'
@@ -181,31 +212,50 @@ export default function BatchesList() {
                           const toggleLabel = toggleBusy
                             ? (isSuspended ? 'Resuming...' : 'Pausing...')
                             : (isSuspended ? 'Resume' : 'Pause')
+                          const toggleStateReason = !canToggleSuspended
+                            ? 'Batch cannot be paused or resumed in its current state'
+                            : toggleBusy
+                              ? 'Pause/resume is already in progress'
+                              : null
+                          const cancelStateReason = !canCancel
+                            ? 'Batch cannot be canceled in its current state'
+                            : toggleBusy
+                              ? 'Pause/resume is already in progress'
+                              : null
                           return (
                             <TableCell key={c.id} onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
                               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                <OverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
-                                  <OverflowMenuItem itemText="Open" onClick={() => tenantNavigate(`/mission-control/batches/${r.id}`)} />
-                                  <OverflowMenuItem
+                                <GuardedOverflowMenu size="sm" flipped wrapperClasses="eg-no-tooltip" iconDescription="Options">
+                                  <GuardedOverflowMenuItem
+                                    itemText="Open"
+                                    decision={rowDecision('engine.runtime.batches.read', { allowed: true })}
+                                    onClick={() => tenantNavigate(`/mission-control/batches/${r.id}`)}
+                                  />
+                                  <GuardedOverflowMenuItem
                                     itemText={toggleLabel}
+                                    decision={toggleSuspensionDecision}
                                     disabled={!canToggleSuspended || toggleBusy}
+                                    unavailableReason={toggleStateReason}
                                     onClick={() => suspendMutation.mutate({ id: r.id, suspended: !isSuspended })}
                                   />
-                                  <OverflowMenuItem
+                                  <GuardedOverflowMenuItem
                                     itemText="Cancel"
+                                    decision={cancelDecision}
                                     disabled={!canCancel || toggleBusy}
+                                    unavailableReason={cancelStateReason}
                                     isDelete
                                     hasDivider
                                     onClick={() => cancelBatch(r.id)}
                                   />
                                   {canDelete && (
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText="Delete"
+                                      decision={deleteRecordDecision}
                                       isDelete
                                       onClick={() => deleteBatch(r.id)}
                                     />
                                   )}
-                                </OverflowMenu>
+                                </GuardedOverflowMenu>
                               </div>
                             </TableCell>
                           )

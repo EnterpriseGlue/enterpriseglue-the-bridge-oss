@@ -1,0 +1,228 @@
+name: Access Governance Deployment Evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/access-governance-deployment-evidence.yml"
+      - "package.json"
+      - "scripts/run-deployment-evidence-matrix.mjs"
+      - "scripts/record-deployment-external-evidence.mjs"
+      - "scripts/deployment-evidence-matrix.test.mjs"
+      - "test/authz/deployment-evidence-matrix.json"
+      - "test/authz/deployment-evidence-matrix.schema.json"
+      - "packages/**"
+      - "backend/**"
+      - "frontend/**"
+      - "infra/**"
+      - "docs/**"
+  schedule:
+    - cron: "35 2 * * 1"
+  workflow_dispatch:
+    inputs:
+      record_openshift_evidence:
+        description: Record the protected environment's pre-collected, sanitized real-OpenShift receipt after all local lanes pass
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: access-governance-deployment-evidence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-notes-preflight:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/release-notes-preflight-reusable.yml
+    with:
+      base_ref: ${{ github.base_ref || 'main' }}
+      pull_number: ${{ github.event.pull_request.number || 0 }}
+
+  contract:
+    name: Pull-request deployment evidence contracts
+    runs-on: ubuntu-latest
+    needs: release-notes-preflight
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Run fast deployment evidence gate
+        run: pnpm run test:deployment-evidence:pr
+
+      - name: Publish sanitized contract evidence
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: access-governance-contract-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+          if-no-files-found: error
+          retention-days: 30
+
+  identity-emulators:
+    name: Disposable identity protocol emulators
+    if: github.event_name != 'pull_request'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Restore same-run contract receipts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: access-governance-contract-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+
+      - name: Run disposable identity protocol evidence
+        run: pnpm run test:deployment-evidence:emulators
+
+      - name: Publish sanitized emulator evidence
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: access-governance-emulator-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+          if-no-files-found: error
+          retention-days: 30
+
+  operaton-containers:
+    name: Docker and real Operaton container evidence
+    if: github.event_name != 'pull_request'
+    needs: identity-emulators
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Restore same-run contract and emulator receipts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: access-governance-emulator-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+
+      - name: Run Docker and Operaton evidence
+        run: pnpm run test:deployment-evidence:containers
+
+      - name: Publish sanitized all-local evidence
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: access-governance-local-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+          if-no-files-found: error
+          retention-days: 30
+
+  openshift-external-gate:
+    name: Protected real-OpenShift evidence gate
+    if: github.event_name == 'workflow_dispatch' && inputs.record_openshift_evidence
+    needs: operaton-containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: access-governance-openshift-evidence
+    env:
+      SANITIZED_OPENSHIFT_EVIDENCE: ${{ vars.SANITIZED_OPENSHIFT_EVIDENCE }}
+      DEPLOYMENT_EVIDENCE_EXTERNAL_GATE: openshift
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Restore same-run local receipts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: access-governance-local-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+
+      - name: Materialize bounded external input
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SANITIZED_OPENSHIFT_EVIDENCE"
+          mkdir -p .artifacts/access-governance-evidence
+          node -e "require('node:fs').writeFileSync(process.argv[1], process.env.SANITIZED_OPENSHIFT_EVIDENCE, { mode: 0o600 })" \
+            .artifacts/access-governance-evidence/openshift.json
+
+      - name: Record protected OpenShift evidence
+        run: |
+          pnpm run test:deployment-evidence:record-openshift -- \
+            --input .artifacts/access-governance-evidence/openshift.json
+          pnpm run test:deployment-evidence:index
+
+      - name: Require complete release evidence
+        run: |
+          node -e "const index=require('./test/results/access-governance-deployment/index.json'); if (!index.releaseCommitQualified || index.releaseStatus !== 'release-qualified') process.exit(1)"
+
+      - name: Publish sanitized release evidence
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: access-governance-release-evidence-${{ github.run_id }}
+          path: test/results/access-governance-deployment
+          if-no-files-found: error
+          retention-days: 90

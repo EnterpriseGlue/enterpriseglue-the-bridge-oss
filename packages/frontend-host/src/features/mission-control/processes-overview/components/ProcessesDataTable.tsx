@@ -17,18 +17,9 @@ import { CompactDataTable } from "../../../../shared/components/ui/compact-data-
 import { STATE_COLORS } from "../../../shared/components/viewer/viewerConstants"
 import { CopyableLink } from '../../shared/components/CopyableLink'
 import { formatDurationMs } from '../../process-instance-detail/components/activityDetailUtils'
+import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
-type ProcInst = {
-  id: string
-  processDefinitionKey?: string
-  businessKey?: string
-  superProcessInstanceId?: string | null
-  rootProcessInstanceId?: string | null
-  startTime?: string | null
-  endTime?: string | null
-  state?: string
-  hasIncident?: boolean
-}
+type ProcInst = ProcessInstance
 
 interface ProcessesDataTableProps {
   data: ProcInst[]
@@ -178,7 +169,8 @@ export function ProcessesDataTable({
       accessorKey: "id",
       header: "Instance ID",
       cell: ({ row }) => {
-        const fullKey = row.original.id
+        const fullKey = row.original.id ? String(row.original.id) : ''
+        if (!fullKey) return "--"
         const truncatedKey =
           fullKey.length > 19
             ? `${fullKey.substring(0, 8)}...${fullKey.substring(fullKey.length - 6)}`
@@ -297,6 +289,15 @@ export function ProcessesDataTable({
         const isRetrying = !!retryingMap[inst.id]
         const anySelected = Object.values(selectedMap).some(Boolean)
         const rowDisabled = anySelected || isRetrying
+        const retryRowReason = inst.runtimeActionDecisions?.retry?.allowed
+          ? null
+          : inst.runtimeActionDecisions?.retry?.reason || 'Action unavailable'
+        const suspensionRowReason = inst.runtimeActionDecisions?.suspension?.allowed
+          ? null
+          : inst.runtimeActionDecisions?.suspension?.reason || 'Action unavailable'
+        const terminateRowReason = inst.runtimeActionDecisions?.terminate?.allowed
+          ? null
+          : inst.runtimeActionDecisions?.terminate?.reason || 'Action unavailable'
 
         return (
           <div
@@ -317,6 +318,8 @@ export function ProcessesDataTable({
                   hasIconOnly
                   size="sm"
                   kind="ghost"
+                  disabled={!!retryRowReason}
+                  title={retryRowReason || undefined}
                   renderIcon={Renew}
                   iconDescription="Retry"
                   onClick={() => onRetry(inst.id)}
@@ -332,6 +335,8 @@ export function ProcessesDataTable({
                     hasIconOnly
                     size="sm"
                     kind="ghost"
+                    disabled={!!suspensionRowReason}
+                    title={suspensionRowReason || undefined}
                     renderIcon={Play}
                     iconDescription="Activate"
                     onClick={() => onActivate(inst.id)}
@@ -342,6 +347,8 @@ export function ProcessesDataTable({
                     hasIconOnly
                     size="sm"
                     kind="ghost"
+                    disabled={!!suspensionRowReason}
+                    title={suspensionRowReason || undefined}
                     renderIcon={Pause}
                     iconDescription="Suspend"
                     onClick={() => onSuspend(inst.id)}
@@ -356,6 +363,8 @@ export function ProcessesDataTable({
                   hasIconOnly
                   size="sm"
                   kind="danger--ghost"
+                  disabled={!!terminateRowReason}
+                  title={terminateRowReason || undefined}
                   renderIcon={TrashCan}
                   iconDescription="Cancel"
                   onClick={() => onTerminate(inst.id)}

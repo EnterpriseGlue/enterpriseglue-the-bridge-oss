@@ -1,50 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { canDeployProject } from '@src/features/starbase/utils/deployEligibility'
+import { hasConnectedEngine } from '@src/features/starbase/utils/deployEligibility'
 
 describe('deployEligibility', () => {
+  const engine = {
+    engineId: 'engine-1',
+    engineName: 'Dev Engine',
+    baseUrl: 'https://engine.example.test',
+    environment: null,
+    health: null,
+    grantedAt: 1,
+  }
+
   const connectedEngineAccess = {
-    accessedEngines: [{ engineId: 'engine-1', engineName: 'Dev Engine' }],
+    accessedEngines: [engine],
     pendingRequests: [],
     availableEngines: [],
   }
 
-  it('returns true when a default deploy role has a connected engine', () => {
-    expect(
-      canDeployProject(
-        { role: 'owner', roles: ['owner'] },
-        connectedEngineAccess,
-        ['owner', 'delegate', 'operator', 'deployer']
-      )
-    ).toBe(true)
-  })
-
-  it('returns true for an editor with explicit deploy permission and a connected engine', () => {
-    expect(
-      canDeployProject(
-        { role: 'editor', roles: ['editor'], deployAllowed: true },
-        connectedEngineAccess,
-        ['owner', 'delegate', 'operator', 'deployer']
-      )
-    ).toBe(true)
+  it('returns true when the server exposes a deployment-eligible engine', () => {
+    expect(hasConnectedEngine(connectedEngineAccess)).toBe(true)
   })
 
   it('returns false when there is no connected engine', () => {
-    expect(
-      canDeployProject(
-        { role: 'owner', roles: ['owner'] },
-        { accessedEngines: [], pendingRequests: [], availableEngines: [] },
-        ['owner', 'delegate', 'operator', 'deployer']
-      )
-    ).toBe(false)
+    expect(hasConnectedEngine({ accessedEngines: [], pendingRequests: [], availableEngines: [] })).toBe(false)
   })
 
-  it('returns false when the role is not deploy-eligible', () => {
-    expect(
-      canDeployProject(
-        { role: 'viewer', roles: ['viewer'] },
-        connectedEngineAccess,
-        ['owner', 'delegate', 'operator', 'deployer']
-      )
-    ).toBe(false)
+  it('excludes synthetic environment entries and denied deployment targets', () => {
+    expect(hasConnectedEngine({
+      accessedEngines: [
+        { ...engine, engineId: '__env__', engineName: 'Environment' },
+        { ...engine, manualDeployAllowed: false, ciDeployAllowed: false },
+      ],
+      pendingRequests: [],
+      availableEngines: [],
+    })).toBe(false)
   })
 })

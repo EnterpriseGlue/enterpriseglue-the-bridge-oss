@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VariablesSchema } from './process.js';
 
 // Task schemas (API-only, no DB persistence)
 export const TaskSchema = z.object({
@@ -23,7 +24,7 @@ export const TaskSchema = z.object({
   suspended: z.boolean().optional(),
   formKey: z.string().optional().nullable(),
   tenantId: z.string().optional().nullable(),
-});
+}).passthrough();
 
 export const TaskFormSchema = z.object({
   key: z.string().optional().nullable(),
@@ -35,8 +36,16 @@ export const TaskFormSchema = z.object({
     defaultValue: z.any().optional().nullable(),
     validationConstraints: z.array(z.any()).optional(),
     properties: z.record(z.string(), z.any()).optional(),
-  })).optional(),
-});
+  }).passthrough()).optional(),
+}).passthrough();
+
+// Camunda returns the post-completion variables only when requested. The
+// empty object remains a valid response for ordinary completion calls.
+export const TaskCompleteResponseSchema = VariablesSchema;
+
+export const TaskCountResponseSchema = z.object({
+  count: z.number().int().nonnegative(),
+}).strict();
 
 // Request schemas
 export const TaskQueryParams = z.object({
@@ -67,8 +76,8 @@ export const TaskQueryParams = z.object({
   taskDefinitionKeyIn: z.array(z.string()).optional(),
   sortBy: z.enum(['instanceId', 'dueDate', 'executionId', 'assignee', 'created', 'description', 'id', 'name', 'priority']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const ClaimTaskRequest = z.object({
@@ -98,6 +107,8 @@ export const TaskVariablesRequest = z.object({
 // Types
 export type Task = z.infer<typeof TaskSchema>;
 export type TaskForm = z.infer<typeof TaskFormSchema>;
+export type TaskCompleteResponse = z.infer<typeof TaskCompleteResponseSchema>;
+export type TaskCountResponse = z.infer<typeof TaskCountResponseSchema>;
 export type TaskQueryParams = z.infer<typeof TaskQueryParams>;
 export type ClaimTaskRequest = z.infer<typeof ClaimTaskRequest>;
 export type SetAssigneeRequest = z.infer<typeof SetAssigneeRequest>;

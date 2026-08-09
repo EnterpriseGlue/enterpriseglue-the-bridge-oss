@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue New Change"
+  short_description: "Start an isolated EnterpriseGlue change"
+  default_prompt: "Use $enterpriseglue-new-change to help with this EnterpriseGlue task."

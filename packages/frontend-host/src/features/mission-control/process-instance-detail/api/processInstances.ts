@@ -1,10 +1,16 @@
 import { apiClient } from '../../../../shared/api/client'
 export { fetchProcessDefinitionXml } from '../../shared/api/definitions'
 import type {
-  ProcessDefinition,
-  Variable,
-  VariableHistoryEntry,
   ActivityInstance,
+  ProcessInstanceVariablesModifyRequest,
+  ProcessInstanceRetryRequest,
+  Variables,
+  ProcessInstanceDetail as SharedProcessInstanceDetail,
+  RuntimeActivityInstanceTree,
+} from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { HistoricVariableInstance, VariableHistoryEntry } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type {
+  ProcessDefinition,
   ExecutionDetails,
   Incident,
   Job,
@@ -12,17 +18,7 @@ import type {
 } from '../components/types'
 
 // Types
-export type ProcessInstanceDetail = {
-  id: string
-  businessKey?: string
-  processDefinitionId: string
-  processDefinitionKey: string
-  processDefinitionName?: string
-  startTime: string
-  endTime?: string
-  state: string
-  suspended: boolean
-}
+export type ProcessInstanceDetail = SharedProcessInstanceDetail
 
 const withEngineId = (path: string, engineId?: string) => {
   if (!engineId) return path
@@ -32,11 +28,19 @@ const withEngineId = (path: string, engineId?: string) => {
 
 // API Functions
 export async function getProcessInstance(instanceId: string, engineId?: string): Promise<ProcessInstanceDetail> {
-  return apiClient.get<ProcessInstanceDetail>(withEngineId(`/mission-control-api/process-instances/${instanceId}`, engineId), undefined, { credentials: 'include' })
+  return apiClient.get<ProcessInstanceDetail>(withEngineId(`/mission-control-api/process-instances/${instanceId}?includeActionDecisions=true`, engineId), undefined, { credentials: 'include' })
 }
 
-export async function getProcessInstanceVariables(instanceId: string, engineId?: string): Promise<Record<string, Variable>> {
-  return apiClient.get<Record<string, Variable>>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variables`, engineId), undefined, { credentials: 'include' })
+export async function getProcessInstanceVariables(instanceId: string, engineId?: string): Promise<Variables> {
+  return apiClient.get<Variables>(withEngineId(`/mission-control-api/process-instances/${instanceId}/variables`, engineId), undefined, { credentials: 'include' })
+}
+
+export async function modifyProcessInstanceVariables(instanceId: string, body: ProcessInstanceVariablesModifyRequest): Promise<void> {
+  await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+}
+
+export async function retryProcessInstance(instanceId: string, body: ProcessInstanceRetryRequest): Promise<void> {
+  await apiClient.post<void>(`/mission-control-api/process-instances/${instanceId}/retry`, body, { credentials: 'include' })
 }
 
 export async function getProcessInstanceVariableHistory(instanceId: string, variableInstanceId: string, engineId?: string): Promise<VariableHistoryEntry[]> {
@@ -45,6 +49,10 @@ export async function getProcessInstanceVariableHistory(instanceId: string, vari
 
 export async function getProcessInstanceActivityHistory(instanceId: string, engineId?: string): Promise<ActivityInstance[]> {
   return apiClient.get<ActivityInstance[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/history/activity-instances`, engineId), undefined, { credentials: 'include' })
+}
+
+export async function getProcessInstanceActivityTree(instanceId: string, engineId?: string): Promise<RuntimeActivityInstanceTree> {
+  return apiClient.get<RuntimeActivityInstanceTree>(withEngineId(`/mission-control-api/process-instances/${instanceId}/activity-instances`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function getProcessInstanceExecutionDetails(
@@ -77,16 +85,12 @@ export async function getProcessInstanceExternalTasks(instanceId: string, engine
 }
 
 // Historical data
-export async function getHistoricalProcessInstance(instanceId: string, engineId?: string): Promise<unknown> {
-  return apiClient.get<unknown>(withEngineId(`/mission-control-api/history/process-instances/${instanceId}`, engineId), undefined, { credentials: 'include' })
+export async function getHistoricalProcessInstance(instanceId: string, engineId?: string): Promise<ProcessInstanceDetail> {
+  return apiClient.get<ProcessInstanceDetail>(withEngineId(`/mission-control-api/history/process-instances/${instanceId}`, engineId), undefined, { credentials: 'include' })
 }
 
-export async function getHistoricalVariableInstances(instanceId: string, engineId?: string): Promise<Variable[]> {
-  return apiClient.get<Variable[]>(withEngineId(`/mission-control-api/history/variable-instances?processInstanceId=${encodeURIComponent(instanceId)}`, engineId), undefined, { credentials: 'include' })
-}
-
-export async function getCalledProcessInstances(instanceId: string, engineId?: string): Promise<unknown[]> {
-  return apiClient.get<unknown[]>(withEngineId(`/mission-control-api/process-instances/${instanceId}/called-process-instances`, engineId), undefined, { credentials: 'include' })
+export async function getHistoricalVariableInstances(instanceId: string, engineId?: string): Promise<HistoricVariableInstance[]> {
+  return apiClient.get<HistoricVariableInstance[]>(withEngineId(`/mission-control-api/history/variable-instances?processInstanceId=${encodeURIComponent(instanceId)}`, engineId), undefined, { credentials: 'include' })
 }
 
 export async function listProcessDefinitions(engineId?: string): Promise<ProcessDefinition[]> {

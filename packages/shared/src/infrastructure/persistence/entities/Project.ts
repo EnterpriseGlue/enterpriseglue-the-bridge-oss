@@ -10,8 +10,8 @@ export class Project extends AppBaseEntity {
   @Column({ name: 'owner_id', type: 'text' })
   ownerId!: string;
 
-  @Column({ name: 'tenant_id', type: 'text', nullable: true })
-  tenantId!: string | null;
+  @Column({ name: 'tenant_id', type: 'text' })
+  tenantId!: string;
 
   @Column({ name: 'created_at', type: 'bigint' })
   createdAt!: number;

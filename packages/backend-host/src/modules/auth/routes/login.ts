@@ -1,21 +1,23 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
-import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { addCaseInsensitiveEquals, getDatabaseType } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js';
 import { verifyPassword } from '@enterpriseglue/shared/utils/password.js';
-import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/shared/utils/jwt.js';
-import bcrypt from 'bcryptjs';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { authLimiter , apiLimiter} from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
-import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
+import { claimActivePlatformAdministratorMembership, getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
+import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
+import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
+import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
 
 const router = Router();
 
@@ -24,35 +26,32 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-async function isSsoRequiredForLogin(dataSource: Awaited<ReturnType<typeof getDataSource>>): Promise<boolean> {
-  const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-  const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
-  return enabledCount > 0;
-}
+// A real bcrypt hash keeps credential verification work comparable when the
+// supplied account is missing or is not backed by a local password.
+const DUMMY_RECOVERY_PASSWORD_HASH = '$2b$10$FulX.IcV.dB1ngCEwjZdZ.528DLnKVfgdxe67s/ca43vzSUj3KSZ6';
+const RECOVERY_CREDENTIAL_ERROR = 'Invalid email or password';
 
 /**
- * POST /api/auth/login
- * Authenticate user and return tokens
- * Rate limited: 5 attempts per 15 minutes
+ * Authenticate a local credential. Ordinary login obeys the configured login
+ * policy; administrator recovery is a deliberately separate route and checks
+ * canonical administrator membership only after verifying a password.
  */
-router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
+async function authenticateLocal(req: Request, res: Response, recovery: boolean): Promise<void> {
   const { email, password } = req.body;
   const dataSource = await getDataSource();
 
-  const ssoRequired = await isSsoRequiredForLogin(dataSource);
-  if (ssoRequired) {
+  if (!recovery && !await loginMethodService.ordinaryLocalPasswordEnabled(req.tenant?.tenantId || null)) {
     await logAudit({
       tenantId: req.tenant?.tenantId,
       action: AuditActions.LOGIN_FAILED,
       ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
       userAgent: req.headers['user-agent'],
-      details: { email, reason: 'local_login_disabled_by_sso_policy' },
+      details: { email, reason: 'local_login_disabled_by_policy' },
     });
-    throw Errors.forbidden('Local login is disabled. Please use your SSO provider.');
+    throw Errors.forbidden('Local login is disabled. Please use your organization sign-in.');
   }
 
   const userRepo = dataSource.getRepository(User);
-  const refreshTokenRepo = dataSource.getRepository(RefreshToken);
 
   // Find user by email (case-insensitive)
   const activeValue = getDatabaseType() === 'oracle' ? 1 : true;
@@ -60,6 +59,46 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     .where('u.isActive = :isActive', { isActive: activeValue });
   qb = addCaseInsensitiveEquals(qb, 'u', 'email', 'email', email);
   const user = await qb.getOne();
+
+  let preloadedPlatformAdministratorUserIds: Set<string> | null = null;
+  let recoveryPasswordValid: boolean | null = null;
+  if (recovery) {
+    const localPasswordHash = user?.authProvider === 'local' && user.passwordHash
+      ? user.passwordHash
+      : DUMMY_RECOVERY_PASSWORD_HASH;
+    recoveryPasswordValid = await verifyPassword(password, localPasswordHash);
+    if (!user || user.authProvider !== 'local' || !user.passwordHash) {
+      const reason = !user
+        ? 'recovery_user_not_found'
+        : 'recovery_local_credential_unavailable';
+      await logAudit({
+        tenantId: req.tenant?.tenantId,
+        userId: user?.id,
+        action: AuditActions.LOGIN_FAILED,
+        ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+        userAgent: req.headers['user-agent'],
+        details: { email, reason },
+      });
+      throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+    }
+  }
+
+  if (!recovery && (!user || user.authProvider !== 'local' || !user.passwordHash)) {
+    await verifyPassword(password, DUMMY_RECOVERY_PASSWORD_HASH);
+    await logAudit({
+      tenantId: req.tenant?.tenantId,
+      userId: user?.id,
+      action: AuditActions.LOGIN_FAILED,
+      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      details: {
+        email,
+        reason: !user ? 'user_not_found' : 'local_login_not_allowed_for_auth_provider',
+        ...(user ? { authProvider: user.authProvider } : {}),
+      },
+    });
+    throw Errors.unauthorized('Invalid email or password');
+  }
 
   if (!user) {
     // Log failed login attempt
@@ -96,14 +135,20 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       userAgent: req.headers['user-agent'],
       details: { email, reason: 'account_locked' },
     });
-    return res.status(423).json({ 
+    if (recovery) {
+      throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+    }
+    res.status(423).json({
       error: 'Account is temporarily locked due to failed login attempts',
       lockedUntil: unlockTime
     });
+    return;
   }
 
   // Verify password
-  const isValidPassword = await verifyPassword(password, user.passwordHash);
+  const isValidPassword = recovery
+    ? recoveryPasswordValid === true
+    : await verifyPassword(password, user.passwordHash);
 
   if (!isValidPassword) {
     // Increment failed login attempts
@@ -128,26 +173,62 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
       action: lockedUntil ? AuditActions.ACCOUNT_LOCKED : AuditActions.LOGIN_FAILED,
       ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
       userAgent: req.headers['user-agent'],
-      details: { email, reason: 'invalid_password', failedAttempts },
+      details: { email, reason: recovery ? 'recovery_invalid_password' : 'invalid_password', failedAttempts },
     });
 
     if (lockedUntil) {
-      return res.status(423).json({ 
+      if (recovery) {
+        throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+      }
+      res.status(423).json({
         error: 'Account locked due to too many failed attempts. Try again in 15 minutes.',
         lockedUntil: new Date(lockedUntil).toISOString()
       });
+      return;
     }
 
     throw Errors.unauthorized('Invalid email or password');
   }
 
-  // Password is correct - reset failed attempts and update last login
-  await userRepo.update({ id: user.id }, {
-    failedLoginAttempts: 0,
-    lockedUntil: null,
-    lastLoginAt: Date.now(),
-    updatedAt: Date.now()
+  // Password is correct: update login state and ensure the canonical baseline
+  // assignment at the same command boundary.
+  let session = null as Awaited<ReturnType<typeof authSessionService.issue>> | null;
+  const recoveryMembershipClaimed = await dataSource.transaction(async (manager) => {
+    if (recovery && !await claimActivePlatformAdministratorMembership(user.id, manager)) {
+      return false;
+    }
+    await manager.getRepository(User).update({ id: user.id }, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      lastLoginAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, user.id);
+    if (recovery) {
+      session = await authSessionService.issue(user, {
+        userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        ipAddress: req.ip,
+        administratorRecovery: true,
+        store: manager,
+      });
+    }
+    return true;
   });
+
+  if (!recoveryMembershipClaimed) {
+    await logAudit({
+      tenantId: req.tenant?.tenantId,
+      userId: user.id,
+      action: AuditActions.LOGIN_FAILED,
+      ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
+      userAgent: req.headers['user-agent'],
+      details: { email, reason: 'recovery_administrator_membership_unavailable' },
+    });
+    throw Errors.unauthorized(RECOVERY_CREDENTIAL_ERROR);
+  }
+  if (recovery) {
+    preloadedPlatformAdministratorUserIds = new Set([user.id]);
+  }
 
   // Log successful login
   await logAudit({
@@ -156,28 +237,12 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
     action: AuditActions.LOGIN_SUCCESS,
     ipAddress: req.headers['x-forwarded-for'] as string || req.socket.remoteAddress,
     userAgent: req.headers['user-agent'],
-    details: { email },
+    details: { email, ...(recovery ? { recovery: 'platform_administrator' } : {}) },
   });
 
-  // Generate tokens
-  const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
-
-  // Store refresh token (hashed)
-  const refreshTokenId = generateId();
-  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
-
-  await refreshTokenRepo.insert({
-    id: refreshTokenId,
-    userId: user.id,
-    tokenHash: refreshTokenHash,
-    expiresAt,
-    createdAt: Date.now(),
-    deviceInfo: JSON.stringify({
-      userAgent: req.headers['user-agent'],
-      ip: req.ip,
-    })
+  session ||= await authSessionService.issue(user, {
+    userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+    ipAddress: req.ip,
   });
 
   // Check email verification status
@@ -189,19 +254,20 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,
-    platformRole: user.platformRole,
+    tenantId: req.tenant?.tenantId || null,
   });
+  const platformAdministratorUserIds = preloadedPlatformAdministratorUserIds || await getActivePlatformAdministratorUserIds([user.id], dataSource);
   
   // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)
-  res.cookie('accessToken', accessToken, {
+  res.cookie('accessToken', session.accessToken, {
     httpOnly: true,
     secure: shouldUseSecureCookies(),
     sameSite: 'lax',
-    maxAge: config.jwtAccessTokenExpires * 1000,
+    maxAge: session.expiresIn * 1000,
     path: '/',
   });
 
-  res.cookie('refreshToken', refreshToken, {
+  res.cookie('refreshToken', session.refreshToken, {
     httpOnly: true,
     secure: shouldUseSecureCookies(),
     sameSite: 'lax',
@@ -210,20 +276,54 @@ router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema
   });
 
   // Return user info (tokens are in cookies, not in body)
-  res.json({
+  res.json(AuthenticatedSessionLoginResponseSchema.parse({
     user: {
       id: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      platformRole: user.platformRole || 'user',
+      platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
       mustResetPassword: Boolean(user.mustResetPassword),
       capabilities,
       isEmailVerified,
+      session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
     },
     expiresIn: config.jwtAccessTokenExpires,
     emailVerificationRequired: !isEmailVerified, // Flag for frontend
-  });
+  }));
+}
+
+async function authenticateMeasuredLocal(req: Request, res: Response, recovery: boolean): Promise<void> {
+  const method: LoginExperienceMethod = recovery ? 'recovery' : 'local';
+  const startedAt = Date.now();
+  recordLoginExperienceMetric({ method, event: 'selected' });
+  try {
+    await authenticateLocal(req, res, recovery);
+    recordLoginExperienceMetric({
+      method,
+      event: res.statusCode >= 400 ? 'failed' : 'succeeded',
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (error) {
+    recordLoginExperienceMetric({ method, event: 'failed', durationMs: Date.now() - startedAt });
+    throw error;
+  }
+}
+
+/**
+ * POST /api/auth/login
+ * Authenticate an ordinary local user when the login policy permits it.
+ */
+router.post('/api/auth/login', apiLimiter, authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
+  await authenticateMeasuredLocal(req, res, false);
+}));
+
+/**
+ * POST /api/auth/recovery/login
+ * Dedicated break-glass route for active canonical platform administrators.
+ */
+router.post('/api/auth/recovery/login', apiLimiter, authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
+  await authenticateMeasuredLocal(req, res, true);
 }));
 
 export default router;

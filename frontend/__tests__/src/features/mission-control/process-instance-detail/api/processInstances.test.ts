@@ -4,12 +4,12 @@ import {
   getProcessInstanceVariables,
   getProcessInstanceVariableHistory,
   getProcessInstanceActivityHistory,
+  getProcessInstanceActivityTree,
   getProcessInstanceIncidents,
   getProcessInstanceJobs,
   getProcessInstanceExternalTasks,
   getHistoricalProcessInstance,
   getHistoricalVariableInstances,
-  getCalledProcessInstances,
   listProcessDefinitions,
   type ProcessInstanceDetail,
 } from '@src/features/mission-control/process-instance-detail/api/processInstances';
@@ -47,7 +47,7 @@ describe('processInstances API', () => {
       const result = await getProcessInstance('pi1');
 
       expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/process-instances/pi1',
+        '/mission-control-api/process-instances/pi1?includeActionDecisions=true',
         undefined,
         { credentials: 'include' }
       );
@@ -140,6 +140,27 @@ describe('processInstances API', () => {
         { credentials: 'include' }
       );
       expect(result).toEqual(mockHistory);
+    });
+  });
+
+  describe('getProcessInstanceActivityTree', () => {
+    it('gets runtime activity tree and appends engineId to the query string', async () => {
+      const mockTree = {
+        id: 'root',
+        childActivityInstances: [
+          { id: 'act-1', activityId: 'reviewTask', activityName: 'Review order' },
+        ],
+      };
+      vi.mocked(apiClient.get).mockResolvedValue(mockTree);
+
+      const result = await getProcessInstanceActivityTree('pi1', 'engine-1');
+
+      expect(apiClient.get).toHaveBeenCalledWith(
+        '/mission-control-api/process-instances/pi1/activity-instances?engineId=engine-1',
+        undefined,
+        { credentials: 'include' }
+      );
+      expect(result).toEqual(mockTree);
     });
   });
 
@@ -257,28 +278,6 @@ describe('processInstances API', () => {
         { credentials: 'include' }
       );
       expect(result).toEqual(mockVariables);
-    });
-  });
-
-  describe('getCalledProcessInstances', () => {
-    it('gets called process instances', async () => {
-      const mockCalled = [
-        {
-          id: 'pi2',
-          processDefinitionKey: 'subProcess',
-          callActivityId: 'callActivity1',
-        },
-      ];
-      vi.mocked(apiClient.get).mockResolvedValue(mockCalled);
-
-      const result = await getCalledProcessInstances('pi1');
-
-      expect(apiClient.get).toHaveBeenCalledWith(
-        '/mission-control-api/process-instances/pi1/called-process-instances',
-        undefined,
-        { credentials: 'include' }
-      );
-      expect(result).toEqual(mockCalled);
     });
   });
 

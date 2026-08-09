@@ -1,12 +1,10 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js'
 import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js'
-import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js'
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js'
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js'
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js'
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js'
 
-export type DeployedEditTargetMappingSource = 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' | 'file-key-match'
+export type DeployedEditTargetMappingSource = 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp'
 
 export interface DeployedEditTargetResolution {
   canShowEditButton: true
@@ -19,17 +17,17 @@ export interface DeployedEditTargetResolution {
   fileVersionNumber: number | null
   mappingSource: DeployedEditTargetMappingSource
   artifactCreatedAt: number
+  lineageQuality: 'complete' | 'reported'
 }
 
 export interface ResolveDeployedEditTargetParams {
   userId: string
+  tenantId?: string | null
   engineId: string
   artifactKind: 'process' | 'decision'
   artifactKey: string
   artifactVersion: number
   artifactId?: string | null
-  fileType: 'bpmn' | 'dmn'
-  fileKeyField: 'bpmnProcessId' | 'dmnDecisionId'
 }
 
 function toStringValue(value: unknown): string {
@@ -64,6 +62,23 @@ async function findLatestFileVersion(fileCommitVersionRepo: any, fileId: string)
     .getRawOne() as Promise<{ versionNumber?: number; commitId?: string } | null>
 }
 
+function hasProjectPermission(userId: string, tenantId: string | null | undefined, projectId: string, permission: Permission) {
+  return permissionService.hasPermission(permission, {
+    userId,
+    tenantId: tenantId || null,
+    resourceType: 'project',
+    resourceId: projectId,
+  })
+}
+
+async function canViewProjectFile(userId: string, tenantId: string | null | undefined, projectId: string) {
+  return hasProjectPermission(userId, tenantId, projectId, ProjectPermissions.FILES_VIEW)
+}
+
+async function canEditProjectFile(userId: string, tenantId: string | null | undefined, projectId: string) {
+  return hasProjectPermission(userId, tenantId, projectId, ProjectPermissions.FILES_EDIT)
+}
+
 export async function resolveDeployedEditTarget(params: ResolveDeployedEditTargetParams): Promise<DeployedEditTargetResolution | null> {
   const dataSource = await getDataSource()
   const artifactRepo = dataSource.getRepository(EngineDeploymentArtifact)
@@ -96,21 +111,26 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
     const fileId = toStringValue(row.fileId)
     if (!projectId || !fileId) continue
 
-    const canRead = await projectMemberService.hasAccess(projectId, params.userId)
+    const canRead = await canViewProjectFile(params.userId, params.tenantId, projectId)
     if (!canRead) continue
 
-    const canEdit = await projectMemberService.hasRole(projectId, params.userId, EDIT_ROLES)
+    const canEdit = await canEditProjectFile(params.userId, params.tenantId, projectId)
     const commitId = toNullableString(row.fileGitCommitId)
     const engineDeploymentId = toStringValue(row.engineDeploymentId)
     const deploymentRow = engineDeploymentId
-      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt'] })
+      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt', 'lineageQuality'] })
       : null
-    const deployedAt = toFiniteNumber(deploymentRow?.deployedAt)
+    const lineageQuality = deploymentRow?.lineageQuality || 'complete'
+    if (!deploymentRow || !['complete', 'reported'].includes(lineageQuality)) continue
+    // Preserve the established route contract: an absent or zero deployment
+    // timestamp falls back to the artifact timestamp and is labeled as a
+    // database timestamp mapping.
+    const deployedAt = deploymentRow?.deployedAt ? toFiniteNumber(deploymentRow.deployedAt) : null
     const artifactCreatedAt = toFiniteNumber(row.createdAt) ?? 0
     const deploymentTimestamp = deployedAt ?? artifactCreatedAt
 
     let fileVersionNumber: number | null = null
-    let mappingSource: Exclude<DeployedEditTargetMappingSource, 'file-key-match'> = 'db-latest'
+    let mappingSource: DeployedEditTargetMappingSource = 'db-latest'
 
     if (commitId) {
       const byCommit = await fileCommitVersionRepo.findOne({
@@ -133,6 +153,8 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
       }
     }
 
+    if (lineageQuality === 'reported' && fileVersionNumber === null) continue
+
     if (fileVersionNumber === null) {
       const byLatest = await findLatestFileVersion(fileCommitVersionRepo, fileId)
       const latestVersion = toFiniteNumber(byLatest?.versionNumber)
@@ -152,38 +174,7 @@ export async function resolveDeployedEditTarget(params: ResolveDeployedEditTarge
       fileVersionNumber,
       mappingSource,
       artifactCreatedAt,
-    }
-  }
-
-  const fileRepo = dataSource.getRepository(File)
-  const files = await fileRepo.find({
-    where: { type: params.fileType, [params.fileKeyField]: params.artifactKey } as any,
-    select: ['id', 'projectId', 'name'],
-  })
-
-  for (const file of files) {
-    const projectId = toStringValue(file.projectId)
-    if (!projectId) continue
-
-    const canRead = await projectMemberService.hasAccess(projectId, params.userId)
-    if (!canRead) continue
-
-    const canEdit = await projectMemberService.hasRole(projectId, params.userId, EDIT_ROLES)
-    const latestVersion = await findLatestFileVersion(fileCommitVersionRepo, file.id)
-    const fileVersionNumber = toFiniteNumber(latestVersion?.versionNumber)
-    const commitId = toNullableString(latestVersion?.commitId)
-
-    return {
-      canShowEditButton: true,
-      canEdit,
-      engineId: params.engineId,
-      projectId,
-      fileId: file.id,
-      engineDeploymentId: '',
-      commitId,
-      fileVersionNumber,
-      mappingSource: 'file-key-match',
-      artifactCreatedAt: 0,
+      lineageQuality: lineageQuality as 'complete' | 'reported',
     }
   }
 

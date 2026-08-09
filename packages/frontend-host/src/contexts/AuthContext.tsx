@@ -2,8 +2,18 @@ import React, { createContext, useState, useEffect, useCallback, ReactNode } fro
 import { authService } from '../services/auth';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
-import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest } from '../shared/types/auth';
+import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
 import { USER_KEY } from '../constants/storageKeys';
+import { permissionSnapshotMatchesSession } from './authSessionPermissions';
+import {
+  hasAnyEnginePermission as snapshotHasAnyEnginePermission,
+  hasAnyPlatformPermission as snapshotHasAnyPlatformPermission,
+  hasAnyProjectPermission as snapshotHasAnyProjectPermission,
+  hasAnyScopedEnginePermission as snapshotHasAnyScopedEnginePermission,
+  hasEnginePermission as snapshotHasEnginePermission,
+  hasPlatformPermission as snapshotHasPlatformPermission,
+  hasProjectPermission as snapshotHasProjectPermission,
+} from '../shared/auth/permissions';
 
 /**
  * Authentication Context
@@ -12,6 +22,7 @@ import { USER_KEY } from '../constants/storageKeys';
 
 export interface AuthContextValue {
   user: User | null;
+  permissions: CurrentUserPermissions | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginRequest) => Promise<LoginResponse>;
@@ -20,6 +31,14 @@ export interface AuthContextValue {
   changePassword: (request: ChangePasswordRequest) => Promise<void>;
   refreshUser: () => Promise<void>;
   setAuthenticatedUser: (user: User | null) => void;
+  refreshPermissions: () => Promise<CurrentUserPermissions | null>;
+  hasPlatformPermission: (permission: string) => boolean;
+  hasAnyPlatformPermission: (permissions: string[]) => boolean;
+  hasProjectPermission: (projectId: string | null | undefined, permission: string) => boolean;
+  hasAnyProjectPermission: (projectId: string | null | undefined, permissions: string[]) => boolean;
+  hasAnyEnginePermission: (permissions: string[]) => boolean;
+  hasEnginePermission: (engineId: string | null | undefined, permission: string) => boolean;
+  hasAnyScopedEnginePermission: (engineId: string | null | undefined, permissions: string[]) => boolean;
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -39,10 +58,14 @@ const readStoredUser = (raw: string | null): User | null => {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
+  const [permissions, setPermissions] = useState<CurrentUserPermissions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const persistUser = useCallback((nextUser: User | null) => {
     setUser(nextUser);
+    setPermissions((currentPermissions) =>
+      permissionSnapshotMatchesSession(nextUser, currentPermissions) ? currentPermissions : null,
+    );
     try {
       if (nextUser) {
         localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
@@ -53,10 +76,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, []);
 
+  const refreshPermissions = useCallback(async (): Promise<CurrentUserPermissions | null> => {
+    try {
+      const nextPermissions = await authService.getMyPermissions();
+      setPermissions(nextPermissions);
+      return nextPermissions;
+    } catch {
+      setPermissions(null);
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== USER_KEY) return;
       setUser(readStoredUser(event.newValue));
+      setPermissions(null);
     };
 
     window.addEventListener('storage', handleStorage);
@@ -77,6 +112,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           return;
         }
         persistUser(user);
+        await refreshPermissions();
       } catch (error) {
         // No valid session (401) or network error - try refresh
         try {
@@ -87,6 +123,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             return;
           }
           persistUser(user);
+          await refreshPermissions();
         } catch {
           // No valid session, user needs to login
           clearAuth();
@@ -111,9 +148,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearAuth();
       return;
     }
-    setUser(nextUser);
-    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
-  }, [clearAuth]);
+    persistUser(nextUser);
+    void refreshPermissions();
+  }, [clearAuth, persistUser, refreshPermissions]);
 
   /**
    * Login with email and password
@@ -130,9 +167,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Store user info locally (tokens are in httpOnly cookies set by the server)
     persistUser(response.user);
+    await refreshPermissions();
 
     return response;
-  }, [clearAuth, persistUser]);
+  }, [clearAuth, persistUser, refreshPermissions]);
 
   /**
    * Logout and clear session
@@ -183,6 +221,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return;
       }
       persistUser(user);
+      await refreshPermissions();
     } catch (error) {
       console.error('Failed to refresh user:', error);
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
@@ -190,7 +229,30 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       throw error;
     }
-  }, [clearAuth, persistUser]);
+  }, [clearAuth, persistUser, refreshPermissions]);
+
+  const activePermissions = permissionSnapshotMatchesSession(user, permissions) ? permissions : null;
+
+  const hasPlatformPermission = useCallback((permission: string) =>
+    snapshotHasPlatformPermission(activePermissions, permission), [activePermissions]);
+
+  const hasAnyPlatformPermission = useCallback((permissionList: string[]) =>
+    snapshotHasAnyPlatformPermission(activePermissions, permissionList), [activePermissions]);
+
+  const hasProjectPermission = useCallback((projectId: string | null | undefined, permission: string) =>
+    snapshotHasProjectPermission(activePermissions, projectId, permission), [activePermissions]);
+
+  const hasAnyProjectPermission = useCallback((projectId: string | null | undefined, permissionList: string[]) =>
+    snapshotHasAnyProjectPermission(activePermissions, projectId, permissionList), [activePermissions]);
+
+  const hasAnyEnginePermission = useCallback((permissionList: string[]) =>
+    snapshotHasAnyEnginePermission(activePermissions, permissionList), [activePermissions]);
+
+  const hasEnginePermission = useCallback((engineId: string | null | undefined, permission: string) =>
+    snapshotHasEnginePermission(activePermissions, engineId, permission), [activePermissions]);
+
+  const hasAnyScopedEnginePermission = useCallback((engineId: string | null | undefined, permissionList: string[]) =>
+    snapshotHasAnyScopedEnginePermission(activePermissions, engineId, permissionList), [activePermissions]);
 
   /**
    * Proactive token refresh - check every minute and refresh if needed
@@ -231,6 +293,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const value: AuthContextValue = {
     user,
+    permissions: activePermissions,
     isAuthenticated: !!user,
     isLoading,
     login,
@@ -239,6 +302,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     changePassword,
     refreshUser,
     setAuthenticatedUser,
+    refreshPermissions,
+    hasPlatformPermission,
+    hasAnyPlatformPermission,
+    hasProjectPermission,
+    hasAnyProjectPermission,
+    hasAnyEnginePermission,
+    hasEnginePermission,
+    hasAnyScopedEnginePermission,
   };
 
   // Show loading state while initializing

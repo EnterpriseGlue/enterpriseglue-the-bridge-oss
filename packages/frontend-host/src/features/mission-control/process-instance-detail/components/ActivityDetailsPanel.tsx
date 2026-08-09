@@ -1,5 +1,5 @@
 import React from 'react'
-import { Button, Tile, Tabs, TabList, Tab, TabPanels, TabPanel } from '@carbon/react'
+import { Button, InlineNotification, Tile, Tabs, TabList, Tab, TabPanels, TabPanel } from '@carbon/react'
 import {
   LocalVariablesTable,
   GlobalVariablesTable,
@@ -9,6 +9,7 @@ import {
   DecisionOutputsTable,
 } from './TableComponents'
 import type { HistoricDecisionInstanceLite, DecisionIo, VariableHistoryTarget } from './types'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 export interface ActivityDetailsPanelProps {
   rightTab: 'variables' | 'io'
@@ -26,6 +27,13 @@ export interface ActivityDetailsPanelProps {
   showAlert: (message: string, kind?: 'info' | 'warning' | 'error', title?: string) => void
   onAddVariable?: () => void
   onBulkUploadVariables?: () => void
+  variablesReadDecision?: UiAuthzDecision
+  historicVariablesReadDecision?: UiAuthzDecision
+  variableHistoryReadDecision?: UiAuthzDecision
+  variablesUpdateDecision?: UiAuthzDecision
+  historyDecisionsReadDecision?: UiAuthzDecision
+  decisionInputsReadDecision?: UiAuthzDecision
+  decisionOutputsReadDecision?: UiAuthzDecision
   selectedDecisionInstance: HistoricDecisionInstanceLite | null
   decisionInputs: DecisionIo[]
   decisionOutputs: DecisionIo[]
@@ -52,6 +60,13 @@ export function ActivityDetailsPanel({
   showAlert,
   onAddVariable,
   onBulkUploadVariables,
+  variablesReadDecision,
+  historicVariablesReadDecision,
+  variableHistoryReadDecision,
+  variablesUpdateDecision,
+  historyDecisionsReadDecision,
+  decisionInputsReadDecision,
+  decisionOutputsReadDecision,
   selectedDecisionInstance,
   decisionInputs,
   decisionOutputs,
@@ -61,6 +76,28 @@ export function ActivityDetailsPanel({
   formatMappingValue,
   isModMode,
 }: ActivityDetailsPanelProps) {
+  const variablesUpdateDeniedReason = variablesUpdateDecision && !variablesUpdateDecision.allowed
+    ? variablesUpdateDecision.reason || 'Action unavailable'
+    : null
+  const variablesReadDeniedReason = variablesReadDecision && !variablesReadDecision.allowed
+    ? variablesReadDecision.reason || 'Action unavailable'
+    : null
+  const historicVariablesReadDeniedReason = historicVariablesReadDecision && !historicVariablesReadDecision.allowed
+    ? historicVariablesReadDecision.reason || 'Action unavailable'
+    : null
+  const variableHistoryDeniedReason = variableHistoryReadDecision && !variableHistoryReadDecision.allowed
+    ? variableHistoryReadDecision.reason || 'Action unavailable'
+    : null
+  const decisionHistoryDeniedReason = historyDecisionsReadDecision && !historyDecisionsReadDecision.allowed
+    ? historyDecisionsReadDecision.reason || 'Action unavailable'
+    : null
+  const decisionInputsDeniedReason = decisionInputsReadDecision && !decisionInputsReadDecision.allowed
+    ? decisionInputsReadDecision.reason || 'Action unavailable'
+    : null
+  const decisionOutputsDeniedReason = decisionOutputsReadDecision && !decisionOutputsReadDecision.allowed
+    ? decisionOutputsReadDecision.reason || 'Action unavailable'
+    : null
+
   return (
     <section key="right-panel" style={{ background: 'var(--color-bg-primary)', padding: 'var(--spacing-2)', display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, height: '100%' }}>
       <Tabs
@@ -80,6 +117,16 @@ export function ActivityDetailsPanel({
                   Select a flow node to see local variables or decision inputs.
                 </div>
               )}
+              {(variablesReadDeniedReason || historicVariablesReadDeniedReason) ? (
+                <InlineNotification
+                  lowContrast
+                  kind="warning"
+                  title="Variable values redacted"
+                  subtitle={variablesReadDeniedReason || historicVariablesReadDeniedReason || 'Variable values are unavailable.'}
+                  hideCloseButton
+                  style={{ marginBottom: 'var(--spacing-3)' }}
+                />
+              ) : null}
 
               <div style={{ overflow: 'auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)', paddingRight: 'var(--spacing-1)' }}>
                 {selectedActivityId && !shouldShowDecisionPanel && (
@@ -95,11 +142,21 @@ export function ActivityDetailsPanel({
                       </div>
                       {(selectedNodeVariables && selectedNodeVariables.length > 0) ? (
                         <div style={{ overflow: 'auto', flex: 1 }}>
-                          <LocalVariablesTable data={selectedNodeVariables || []} status={status} openVariableHistory={openVariableHistory} />
+                          <LocalVariablesTable
+                            data={selectedNodeVariables || []}
+                            status={status}
+                            openVariableHistory={openVariableHistory}
+                            redactValues={!!historicVariablesReadDeniedReason}
+                            valueUnavailableReason={historicVariablesReadDeniedReason}
+                            canViewVariableHistory={!variableHistoryDeniedReason}
+                            variableHistoryUnavailableReason={variableHistoryDeniedReason}
+                          />
                         </div>
                       ) : (
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-                          {selectedActivityInstanceId
+                          {historicVariablesReadDeniedReason
+                            ? 'Local variable values are unavailable.'
+                            : selectedActivityInstanceId
                             ? 'The selected execution has no local variables.'
                             : 'The selected node has no local variables.'}
                         </div>
@@ -113,16 +170,32 @@ export function ActivityDetailsPanel({
                       </div>
                       {varsQ.data && Object.keys(varsQ.data).length > 0 ? (
                         <div style={{ overflow: 'auto', flex: 1 }}>
-                          <GlobalVariablesTable data={varsQ.data} status={status} openVariableEditor={openVariableEditor} openVariableHistory={openVariableHistory} historyTargetsByName={globalVariableHistoryTargetsByName} />
+                          <GlobalVariablesTable
+                            data={varsQ.data}
+                            status={status}
+                            openVariableEditor={openVariableEditor}
+                            openVariableHistory={openVariableHistory}
+                            historyTargetsByName={globalVariableHistoryTargetsByName}
+                            canEditVariables={!variablesUpdateDeniedReason}
+                            variableEditUnavailableReason={variablesUpdateDeniedReason}
+                            redactValues={!!variablesReadDeniedReason}
+                            valueUnavailableReason={variablesReadDeniedReason}
+                            canViewVariableHistory={!variableHistoryDeniedReason}
+                            variableHistoryUnavailableReason={variableHistoryDeniedReason}
+                          />
                         </div>
                       ) : (
-                        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No global variables are present.</div>
+                        <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+                          {variablesReadDeniedReason ? 'Global variable values are unavailable.' : 'No global variables are present.'}
+                        </div>
                       )}
                       {(status === 'ACTIVE' || status === 'SUSPENDED') && (
                         <div style={{ paddingTop: 'var(--spacing-2)', display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
                           <Button
                             size="sm"
                             kind="ghost"
+                            disabled={!!variablesUpdateDeniedReason}
+                            title={variablesUpdateDeniedReason || undefined}
                             onClick={() => (onAddVariable ? onAddVariable() : showAlert('This feature is coming soon.', 'info'))}
                           >
                             Add variable +
@@ -130,6 +203,8 @@ export function ActivityDetailsPanel({
                           <Button
                             size="sm"
                             kind="ghost"
+                            disabled={!!variablesUpdateDeniedReason}
+                            title={variablesUpdateDeniedReason || undefined}
                             onClick={() => (onBulkUploadVariables ? onBulkUploadVariables() : showAlert('This feature is coming soon.', 'info'))}
                           >
                             Bulk upload variables
@@ -153,6 +228,14 @@ export function ActivityDetailsPanel({
                         <div style={{ overflow: 'auto', flex: 1 }}>
                           <DecisionInputsTable data={decisionInputs} />
                         </div>
+                      ) : decisionInputsDeniedReason ? (
+                        <InlineNotification
+                          lowContrast
+                          kind="warning"
+                          title="Decision inputs redacted"
+                          subtitle={decisionInputsDeniedReason}
+                          hideCloseButton
+                        />
                       ) : (
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No decision inputs.</div>
                       )}
@@ -169,11 +252,28 @@ export function ActivityDetailsPanel({
                         <div style={{ overflow: 'auto', flex: 1 }}>
                           <DecisionOutputsTable data={decisionOutputs} />
                         </div>
+                      ) : decisionOutputsDeniedReason ? (
+                        <InlineNotification
+                          lowContrast
+                          kind="warning"
+                          title="Decision outputs redacted"
+                          subtitle={decisionOutputsDeniedReason}
+                          hideCloseButton
+                        />
                       ) : (
                         <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No decision outputs.</div>
                       )}
                     </Tile>
                   </div>
+                )}
+                {selectedActivityId && !shouldShowDecisionPanel && decisionHistoryDeniedReason && (
+                  <InlineNotification
+                    lowContrast
+                    kind="warning"
+                    title="Decision history unavailable"
+                    subtitle={decisionHistoryDeniedReason}
+                    hideCloseButton
+                  />
                 )}
 
                 {!selectedActivityId && (
@@ -184,16 +284,32 @@ export function ActivityDetailsPanel({
                     </div>
                     {varsQ.data && Object.keys(varsQ.data).length > 0 ? (
                       <div style={{ overflow: 'auto', flex: 1 }}>
-                        <GlobalVariablesTable data={varsQ.data} status={status} openVariableEditor={openVariableEditor} openVariableHistory={openVariableHistory} historyTargetsByName={globalVariableHistoryTargetsByName} />
+                        <GlobalVariablesTable
+                          data={varsQ.data}
+                          status={status}
+                          openVariableEditor={openVariableEditor}
+                          openVariableHistory={openVariableHistory}
+                          historyTargetsByName={globalVariableHistoryTargetsByName}
+                          canEditVariables={!variablesUpdateDeniedReason}
+                          variableEditUnavailableReason={variablesUpdateDeniedReason}
+                          redactValues={!!variablesReadDeniedReason}
+                          valueUnavailableReason={variablesReadDeniedReason}
+                          canViewVariableHistory={!variableHistoryDeniedReason}
+                          variableHistoryUnavailableReason={variableHistoryDeniedReason}
+                        />
                       </div>
                     ) : (
-                      <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>No global variables are present.</div>
+                      <div style={{ fontSize: 'var(--text-12)', color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+                        {variablesReadDeniedReason ? 'Global variable values are unavailable.' : 'No global variables are present.'}
+                      </div>
                     )}
                     {(status === 'ACTIVE' || status === 'SUSPENDED') && (
                       <div style={{ paddingTop: 'var(--spacing-2)', display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
                         <Button
                           size="sm"
                           kind="ghost"
+                          disabled={!!variablesUpdateDeniedReason}
+                          title={variablesUpdateDeniedReason || undefined}
                           onClick={() => (onAddVariable ? onAddVariable() : showAlert('This feature is coming soon.', 'info'))}
                         >
                           Add variable +
@@ -201,6 +317,8 @@ export function ActivityDetailsPanel({
                         <Button
                           size="sm"
                           kind="ghost"
+                          disabled={!!variablesUpdateDeniedReason}
+                          title={variablesUpdateDeniedReason || undefined}
                           onClick={() => (onBulkUploadVariables ? onBulkUploadVariables() : showAlert('This feature is coming soon.', 'info'))}
                         >
                           Bulk upload variables

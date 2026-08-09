@@ -23,9 +23,17 @@ interface PiiRedactionSettingsSectionProps {
   settings: PlatformSettings | undefined
   saving: boolean
   onSave: (updates: Partial<PlatformSettings>) => Promise<void>
+  canManageSettings?: boolean
+  settingsUnavailableReason?: string | null
 }
 
-export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRedactionSettingsSectionProps) {
+export function PiiRedactionSettingsSection({
+  settings,
+  saving,
+  onSave,
+  canManageSettings = true,
+  settingsUnavailableReason,
+}: PiiRedactionSettingsSectionProps) {
   const [piiRegexEnabled, setPiiRegexEnabled] = useState(false)
   const [piiExternalProviderEnabled, setPiiExternalProviderEnabled] = useState(false)
   const [piiExternalProviderType, setPiiExternalProviderType] = useState<Provider | ''>('')
@@ -43,6 +51,8 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
 
   const showProviderProjectId = piiExternalProviderType === 'gcp_dlp'
   const showProviderRegion = piiExternalProviderType === 'gcp_dlp' || piiExternalProviderType === 'aws_comprehend' || piiExternalProviderType === 'azure_pii'
+  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
+  const controlsDisabled = saving || !canManageSettings
 
   useEffect(() => {
     if (!settings) return
@@ -71,6 +81,11 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
   const handleSave = async () => {
     setSaveError(null)
     setSaveSuccess(false)
+
+    if (!canManageSettings) {
+      setSaveError(disabledReason)
+      return
+    }
 
     if (piiExternalProviderEnabled && !piiExternalProviderType) {
       setSaveError('Select an external provider type before saving.')
@@ -134,6 +149,15 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
               {saveSuccess && (
                 <InlineNotification kind="success" title="Saved" subtitle="PII redaction settings updated." onCloseButtonClick={() => setSaveSuccess(false)} />
               )}
+              {!canManageSettings && (
+                <InlineNotification
+                  kind="warning"
+                  title="PII redaction settings are read-only"
+                  subtitle={disabledReason}
+                  hideCloseButton
+                  lowContrast
+                />
+              )}
 
               <Toggle
                 id="pii-regex-enabled"
@@ -142,7 +166,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                 labelB="On"
                 toggled={piiRegexEnabled}
                 onToggle={(checked) => setPiiRegexEnabled(checked)}
-                disabled={saving}
+                disabled={controlsDisabled}
               />
 
               <Toggle
@@ -152,7 +176,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                 labelB="On"
                 toggled={piiExternalProviderEnabled}
                 onToggle={(checked) => setPiiExternalProviderEnabled(checked)}
-                disabled={saving}
+                disabled={controlsDisabled}
               />
 
               <Select
@@ -160,7 +184,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                 labelText="Provider"
                 value={piiExternalProviderType}
                 onChange={(e) => setPiiExternalProviderType((e.target.value || '') as Provider | '')}
-                disabled={saving || !piiExternalProviderEnabled}
+                disabled={controlsDisabled || !piiExternalProviderEnabled}
               >
                 <SelectItem value="" text="Select provider" />
                 <SelectItem value="presidio" text="Presidio" />
@@ -175,7 +199,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                 value={piiExternalProviderEndpoint}
                 onChange={(e) => setPiiExternalProviderEndpoint(e.target.value)}
                 placeholder="https://..."
-                disabled={saving || !piiExternalProviderEnabled}
+                disabled={controlsDisabled || !piiExternalProviderEnabled}
               />
 
               <TextInput
@@ -184,7 +208,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                 value={piiExternalProviderAuthHeader}
                 onChange={(e) => setPiiExternalProviderAuthHeader(e.target.value)}
                 placeholder="Authorization"
-                disabled={saving || !piiExternalProviderEnabled}
+                disabled={controlsDisabled || !piiExternalProviderEnabled}
               />
 
               <TextInput
@@ -197,7 +221,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                   if (e.target.value.trim()) setClearExternalToken(false)
                 }}
                 placeholder="••••••••"
-                disabled={saving || !piiExternalProviderEnabled}
+                disabled={controlsDisabled || !piiExternalProviderEnabled}
               />
 
               <Checkbox
@@ -208,7 +232,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                   setClearExternalToken(checked)
                   if (checked) setPiiExternalProviderAuthToken('')
                 }}
-                disabled={saving || !piiExternalProviderEnabled}
+                disabled={controlsDisabled || !piiExternalProviderEnabled}
               />
 
               {showProviderProjectId && (
@@ -218,7 +242,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                   value={piiExternalProviderProjectId}
                   onChange={(e) => setPiiExternalProviderProjectId(e.target.value)}
                   placeholder="gcp-project-id"
-                  disabled={saving || !piiExternalProviderEnabled}
+                  disabled={controlsDisabled || !piiExternalProviderEnabled}
                 />
               )}
 
@@ -229,7 +253,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                   value={piiExternalProviderRegion}
                   onChange={(e) => setPiiExternalProviderRegion(e.target.value)}
                   placeholder="us-central1"
-                  disabled={saving || !piiExternalProviderEnabled}
+                  disabled={controlsDisabled || !piiExternalProviderEnabled}
                 />
               )}
 
@@ -240,7 +264,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                 onChange={(e) => setPiiRedactionStyle(e.target.value)}
                 placeholder="<TYPE>"
                 helperText="Use <TYPE> placeholder to inject the detected entity type."
-                disabled={saving}
+                disabled={controlsDisabled}
               />
 
               <div>
@@ -253,7 +277,7 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                       labelText={scope}
                       checked={selectedScopes.includes(scope)}
                       onChange={(_, { checked }) => toggleScope(scope, checked)}
-                      disabled={saving}
+                      disabled={controlsDisabled}
                     />
                   ))}
                 </div>
@@ -270,11 +294,11 @@ export function PiiRedactionSettingsSection({ settings, saving, onSave }: PiiRed
                   const value = Number.isFinite(fromData) ? fromData : fromInput
                   if (Number.isFinite(value)) setPiiMaxPayloadSizeBytes(value)
                 }}
-                disabled={saving}
+                disabled={controlsDisabled}
               />
 
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button kind="primary" onClick={handleSave} disabled={saving}>
+                <Button kind="primary" onClick={handleSave} disabled={controlsDisabled} title={!canManageSettings ? disabledReason : undefined}>
                   {saving ? 'Saving...' : 'Save PII Settings'}
                 </Button>
               </div>

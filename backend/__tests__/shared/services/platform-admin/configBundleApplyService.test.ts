@@ -1,0 +1,1651 @@
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineBackstopGroupMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineBackstopGroupMapping.js';
+import { EngineTenantMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineTenantMapping.js';
+import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
+import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
+import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import { configBundleApplyService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js';
+import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
+import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
+
+const { materializeRuntimeResourceSet, materializeForEngine, materializeEngineSetsForEngine, createEngineSet, updateEngineSet, writeBackstopMapping } = vi.hoisted(() => ({
+  materializeRuntimeResourceSet: vi.fn().mockResolvedValue({ matched: 0, created: 0, updated: 0, removed: 0 }),
+  materializeForEngine: vi.fn().mockResolvedValue([]),
+  materializeEngineSetsForEngine: vi.fn().mockResolvedValue([]),
+  createEngineSet: vi.fn(async (input: any, manager: any) => {
+    const id = `engine-set-created-${createEngineSet.mock.calls.length}`;
+    await manager.getRepository(EngineSet).insert({
+      id, tenantId: input.tenantId || null, key: input.key, engineSetKeyIdentity: `${input.tenantId || 'platform'}:${input.key.trim()}`,
+      name: input.name, description: input.description || null, selectorJson: JSON.stringify(input.selector), selectorFingerprint: '',
+      source: input.source || 'manual', sourceRef: input.sourceRef || null, ownershipMode: input.ownershipMode || 'manual',
+      sourceHash: input.sourceHash || null, lastAppliedAt: input.lastAppliedAt || null, driftStatus: input.driftStatus || null,
+      isArchived: false, createdById: input.createdById || null, lastMaterializedAt: null, materializationStatus: 'pending', materializationError: null,
+      createdAt: input.lastAppliedAt || 0, updatedAt: input.lastAppliedAt || 0,
+    });
+    return { id };
+  }),
+  updateEngineSet: vi.fn(async (id: string, input: any, manager: any) => {
+    await manager.getRepository(EngineSet).update({ id }, {
+      name: input.name,
+      description: input.description,
+      selectorJson: JSON.stringify(input.selector),
+      isArchived: input.isArchived,
+      ownershipMode: input.ownershipMode,
+      sourceHash: input.sourceHash,
+      lastAppliedAt: input.lastAppliedAt,
+      driftStatus: input.driftStatus,
+      materializationStatus: input.isArchived ? 'archived' : 'pending',
+    });
+  }),
+  writeBackstopMapping: vi.fn().mockResolvedValue({ mappings: [{ id: 'backstop-mapping-1' }] }),
+}));
+const replayMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, created: 0, removed: 0, failed: 0, truncated: false }));
+const previewMemberships = vi.hoisted(() => vi.fn().mockResolvedValue({ scanned: 0, additions: 0, removals: 0, unchanged: 0, failed: 0, truncated: false }));
+const enqueueReplayTask = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const enqueueRuntimeReconciliationTask = vi.hoisted(() => vi.fn().mockResolvedValue({ id: 'runtime-task-1' }));
+const reconcileEngineTenantMappings = vi.hoisted(() => vi.fn().mockResolvedValue({
+  mode: 'shared',
+  tenantId: null,
+  mappingStrategy: 'engine_tenant_id',
+  mappingVersion: 1,
+  resolutionStatus: 'ready',
+  lastReconciledAt: 1,
+  mappedResourceCount: 0,
+  unmappedResourceCount: 0,
+  conflictingResourceCount: 0,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
+  runtimeResourceInventoryService: { materialize: materializeRuntimeResourceSet, materializeForEngine },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineSetService.js', () => ({
+  engineSetService: { materializeEngineSet: vi.fn().mockResolvedValue({}), materializeEngineSetsForEngine, createEngineSet, updateEngineSet },
+  engineSetKeyIdentity: (tenantId: string | null, key: string) => `${tenantId || 'platform'}:${key.trim()}`,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js', () => ({
+  ssoNormalizedIdentityService: { replayMemberships, previewMemberships },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleIdentityReplayTaskService.js', () => ({
+  configBundleIdentityReplayTaskService: { enqueue: enqueueReplayTask },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleRuntimeReconciliationTaskService.js', () => ({
+  configBundleRuntimeReconciliationTaskService: { enqueue: enqueueRuntimeReconciliationTask },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js', () => ({
+  engineTenantMappingService: { reconcileInStore: reconcileEngineTenantMappings },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopGroupMappingService.js', () => ({
+  engineBackstopGroupMappingService: { write: writeBackstopMapping },
+}));
+
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
+
+const bundle = {
+  apiVersion: 'enterpriseglue.ai/v1alpha1',
+  kind: 'EnterpriseGlueConfigBundle',
+  metadata: { key: 'acme.authz', owner: 'platform' },
+  tenantKey: 'acme',
+  mode: 'authoritative',
+  imports: ['./roles.json', './groups.json'],
+};
+const files = {
+  './roles.json': {
+    roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'] }],
+  },
+  './groups.json': {
+    groups: [{ key: 'group.deployers', name: 'Deployers' }],
+  },
+};
+
+function setupDataSource() {
+  const configRunRows: any[] = [];
+  const configRunRepo = {
+    findOne: vi.fn().mockImplementation(({ where }: any) => Promise.resolve(configRunRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null)),
+    insert: vi.fn().mockImplementation((row) => {
+      configRunRows.push({ ...row });
+      return Promise.resolve({});
+    }),
+    update: vi.fn().mockImplementation((where, updates) => {
+      const row = configRunRows.find((candidate) => candidate.id === where.id);
+      if (row) Object.assign(row, updates);
+      return Promise.resolve({});
+    }),
+  };
+  const roleInsert = vi.fn().mockResolvedValue(undefined);
+  const groupInsert = vi.fn().mockResolvedValue(undefined);
+  const permissionInsert = vi.fn().mockResolvedValue(undefined);
+  const auditInsert = vi.fn().mockResolvedValue(undefined);
+  const roleRepo = { find: vi.fn().mockResolvedValue([]), insert: roleInsert, update: vi.fn() };
+  const groupRepo: any = { find: vi.fn().mockResolvedValue([]), findOneBy: vi.fn().mockResolvedValue(null), insert: groupInsert, update: vi.fn() };
+  groupRepo.findOne = vi.fn(async ({ where }: any) => (await groupRepo.find()).find((group: any) => group.key === where.key && (where.isArchived === undefined || group.isArchived === where.isArchived)) || null);
+  const catalogPermissionRepo = { find: vi.fn().mockResolvedValue([]) };
+  const permissionRepo = { find: vi.fn().mockResolvedValue([]), insert: permissionInsert, delete: vi.fn() };
+  const engineInsert = vi.fn().mockResolvedValue(undefined);
+  const engineRepo = {
+    find: vi.fn().mockResolvedValue([]),
+    findOne: vi.fn().mockResolvedValue({
+      id: 'engine-1',
+      tenantId: 'tenant-a',
+      tenancyMode: 'dedicated',
+    }),
+    insert: engineInsert,
+    update: vi.fn(),
+  };
+  const engineTenantMappingRows: any[] = [];
+  const engineTenantMappingRepo = {
+    find: vi.fn(async ({ where }: any = {}) => engineTenantMappingRows.filter((row) =>
+      !where || Object.entries(where).every(([key, value]) => row[key] === value)
+    )),
+    findOne: vi.fn(async ({ where }: any) => engineTenantMappingRows.find((row) =>
+      Object.entries(where).every(([key, value]) => row[key] === value)
+    ) || null),
+    insert: vi.fn(async (row: any) => { engineTenantMappingRows.push({ ...row }); }),
+    update: vi.fn(async (where: any, values: any) => {
+      const row = engineTenantMappingRows.find((candidate) =>
+        Object.entries(where).every(([key, value]) => candidate[key] === value)
+      );
+      if (row) Object.assign(row, values);
+    }),
+  };
+  const engineBackstopMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  const engineSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  const runtimeResourceSetRepo = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  const runtimeResourceSetMaterializationRepo = { find: vi.fn().mockResolvedValue([]) };
+  const runtimeResourceRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+  const assignmentRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn(), delete: vi.fn() };
+  const assignmentOverrideRepo = { delete: vi.fn() };
+  const projectRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null) };
+  const targetRepo: any = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  targetRepo.findOneBy = vi.fn(async ({ id }: { id: string }) => {
+    const direct = await targetRepo.findOne({ where: { id } });
+    return direct || (await targetRepo.find()).find((target: { id: string }) => target.id === id) || null;
+  });
+  const providerRepo: any = { find: vi.fn().mockResolvedValue([]), insert: vi.fn(), update: vi.fn() };
+  providerRepo.findOne = vi.fn(async ({ where }: any) => (await providerRepo.find()).find((provider: any) => provider.key === where.key) || null);
+  const identityMappingRepo = { find: vi.fn().mockResolvedValue([]), findOne: vi.fn().mockResolvedValue(null), insert: vi.fn(), update: vi.fn() };
+  const groupMembershipRepo = { find: vi.fn().mockResolvedValue([]), delete: vi.fn().mockResolvedValue(undefined) };
+  const auditRepo = { insert: auditInsert };
+  const platformSettingsRepo = {
+    findOneBy: vi.fn().mockResolvedValue(null),
+    insert: vi.fn().mockResolvedValue(undefined),
+    update: vi.fn().mockResolvedValue(undefined),
+  };
+  const repositories = (entity: unknown) => {
+    if (entity === RbacRole) return roleRepo;
+    if (entity === RbacPermission) return catalogPermissionRepo;
+    if (entity === AuthzGroup) return groupRepo;
+    if (entity === Engine) return engineRepo;
+    if (entity === EngineBackstopGroupMapping) return engineBackstopMappingRepo;
+    if (entity === EngineTenantMapping) return engineTenantMappingRepo;
+    if (entity === EngineSet) return engineSetRepo;
+    if (entity === RuntimeResourceSet) return runtimeResourceSetRepo;
+    if (entity === RuntimeResourceSetMaterialization) return runtimeResourceSetMaterializationRepo;
+    if (entity === RuntimeResource) return runtimeResourceRepo;
+    if (entity === RbacRoleAssignment) return assignmentRepo;
+    if (entity === ConfigRoleAssignmentOverride) return assignmentOverrideRepo;
+    if (entity === Project) return projectRepo;
+    if (entity === ProjectEngineTarget) return targetRepo;
+    if (entity === IdentityProvider) return providerRepo;
+    if (entity === IdentityEntitlementMapping) return identityMappingRepo;
+    if (entity === AuthzGroupMembership) return groupMembershipRepo;
+    if (entity === RbacRolePermission) return permissionRepo;
+    if (entity === AuditLog) return auditRepo;
+    if (entity === ConfigBundleApplyRun) return configRunRepo;
+    if (entity === PlatformSettings) return platformSettingsRepo;
+    throw new Error('Unexpected repository');
+  };
+  const dataSource = {
+    getRepository: repositories,
+    transaction: vi.fn(async (callback: any) => callback({ getRepository: repositories })),
+  };
+  (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+  return { roleInsert, groupInsert, engineInsert, permissionInsert, auditInsert, configRunRepo, roleRepo, groupRepo, permissionRepo, engineRepo, engineBackstopMappingRepo, engineTenantMappingRepo, engineTenantMappingRows, engineSetRepo, runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, groupMembershipRepo, assignmentRepo, assignmentOverrideRepo, platformSettingsRepo, dataSource };
+}
+
+describe('configBundleApplyService', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('applies a hash-bound role and group bundle through one transaction with audit records', async () => {
+    const {
+      roleInsert,
+      groupInsert,
+      permissionInsert,
+      auditInsert,
+      configRunRepo,
+      platformSettingsRepo,
+    } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+
+    const result = await configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+      ciProvenance: { repository: 'EnterpriseGlue/enterpriseglue-the-bridge-oss', revision: 'a'.repeat(40), workflowRunId: '123456', workflow: 'Configuration Bundle' },
+    });
+
+    expect(result).toMatchObject({
+      canonicalHash: preview.canonicalHash,
+      created: 2,
+      updated: 0,
+      archived: 0,
+      reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 0 },
+    });
+    expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'custom.engine.deployer',
+      roleKeyIdentity: 'tenant-a:custom.engine.deployer',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      sourceHash: expect.any(String),
+      driftStatus: 'in_sync',
+    }));
+    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'group.deployers',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      sourceHash: expect.any(String),
+      driftStatus: 'in_sync',
+    }));
+    expect(permissionInsert).toHaveBeenCalledWith([expect.objectContaining({ permissionId: 'engine:deploy' })]);
+    expect(auditInsert).toHaveBeenCalledTimes(3);
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.apply',
+      resourceType: 'config_bundle_apply_run',
+      details: expect.stringContaining('"redaction":"Config payload and secret values omitted"'),
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.apply',
+      details: expect.stringContaining('"repository":"EnterpriseGlue/enterpriseglue-the-bridge-oss"'),
+    }));
+    expect(auditInsert).not.toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.stringContaining('CENTRAL_PASSWORD'),
+    }));
+    expect(configRunRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      bundleApiVersion: 'enterpriseglue.ai/v1alpha1',
+    }));
+    expect(result.contract).toMatchObject({
+      inputApiVersion: 'enterpriseglue.ai/v1alpha1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: expect.arrayContaining([
+        expect.objectContaining({ code: 'CONFIG_BUNDLE_V1ALPHA1_DEPRECATED' }),
+      ]),
+    });
+    expect(platformSettingsRepo.insert).not.toHaveBeenCalled();
+    expect(platformSettingsRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('applies explicitly declared governance modes and claims config ownership atomically', async () => {
+    const { platformSettingsRepo } = setupDataSource();
+    const governedBundle = {
+      ...bundle,
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      governance: {
+        engineMembershipAuthority: 'sso_managed',
+        projectMembershipAuthority: 'manual',
+        engineRegistrationPolicy: 'hybrid',
+        projectEngineTargetPolicy: 'manual_allowed',
+        runtimeAuthorizationAuthority: 'enterpriseglue_authoritative',
+        governanceSettingsOwnership: 'config_locked',
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: governedBundle, files });
+
+    const result = await configBundleApplyService.apply({
+      bundle: governedBundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.created).toBe(3);
+    expect(result.contract).toEqual({
+      inputApiVersion: 'enterpriseglue.ai/v1beta1',
+      normalizedApiVersion: 'enterpriseglue.ai/v1beta1',
+      warnings: [],
+    });
+    expect(platformSettingsRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineAccessAuthority: 'sso_managed',
+      projectAccessAuthority: 'manual',
+      engineOnboardingMode: 'hybrid',
+      accessGovernanceSourceRef: 'config_bundle:acme.authz',
+      accessGovernanceOwnershipMode: 'config_locked',
+      accessGovernanceDriftStatus: 'in_sync',
+    }));
+  });
+
+  it('applies login policy independently from governance ownership', async () => {
+    const { platformSettingsRepo, auditInsert } = setupDataSource();
+    const loginBundle = {
+      ...bundle,
+      apiVersion: 'enterpriseglue.ai/v1beta1',
+      login: {
+        localPassword: 'disabled',
+        providerSelection: 'progressive',
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: loginBundle, files });
+
+    const result = await configBundleApplyService.apply({
+      bundle: loginBundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.created).toBe(3);
+    expect(platformSettingsRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      localPasswordLoginMode: 'disabled',
+      ssoProviderSelectionMode: 'progressive',
+      accessGovernanceSourceRef: null,
+      accessGovernanceOwnershipMode: 'manual',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'authz.config_bundle.login_policy.create',
+      resourceType: 'platform_settings',
+    }));
+  });
+
+  it('persists every current headless engine and OIDC provider option through the same config apply', async () => {
+    const { engineInsert, providerRepo } = setupDataSource();
+    const advancedBundle = { ...bundle, imports: ['./engines.json', './identity-providers.json'] };
+    const advancedFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.payments-prod', name: 'Payments production', type: 'operaton',
+          baseUrl: 'https://payments.example.test/engine-rest', externalId: 'payments-prod-01', labels: { environment: 'production', domain: 'payments' },
+          auth: { type: 'oauth2-client-credentials', username: 'enterpriseglue', passwordRef: 'env://PAYMENTS_ENGINE_CLIENT_SECRET', tokenUrl: 'https://identity.example.test/oauth/token', scopes: 'engine.read engine.deploy', audience: 'payments-engine' },
+          connectionMode: 'direct', runtimeAccessScope: 'resource_aware', tenancy: { mode: 'dedicated', tenantRef: { type: 'request_context' } },
+          deploymentIntegration: 'direct_engine', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900,
+          pipelineReceiptEnabled: false, version: '1.2.3', environmentTagId: '00000000-0000-4000-8000-000000000001', ownershipMode: 'config_warn',
+        }],
+      },
+      './identity-providers.json': {
+        identityProviders: [{
+          key: 'identity.corporate-oidc', type: 'oidc', enabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory',
+          displayName: 'Microsoft Entra ID', organization: 'Example Corporation', displayOrder: 10, preferred: true, loginDomains: ['example.com'],
+          allowVerifiedEmailLinking: true, authorizationAttributeKeys: ['department'],
+          sync: { triggers: ['login', 'manual'], requiredForLogin: true, incompleteEntitlements: 'fail_closed', connectorCapability: 'claim_only', scheduled: false },
+          oidc: { issuerUrl: 'https://login.example.test/tenant/v2.0', clientId: 'enterpriseglue-web', clientSecretRef: 'env://CORPORATE_OIDC_CLIENT_SECRET', callbackUrl: 'http://localhost:5173/api/auth/identity/callback', scopes: ['openid', 'groups'], groupClaim: 'groups', expectedAudience: 'enterpriseglue-web' },
+          ownershipMode: 'config_warn',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: advancedBundle, files: advancedFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: advancedBundle, files: advancedFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', identityReconciliationMode: 'none',
+    });
+
+    expect(result).toMatchObject({ created: 2, updated: 0, archived: 0 });
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      externalId: 'payments-prod-01', labelsJson: JSON.stringify({ environment: 'production', domain: 'payments' }),
+      authType: 'oauth2-client-credentials', username: 'enterpriseglue', passwordEnc: 'ref:env://PAYMENTS_ENGINE_CLIENT_SECRET',
+      oauthTokenUrl: 'https://identity.example.test/oauth/token', oauthScopes: 'engine.read engine.deploy', oauthAudience: 'payments-engine',
+      connectionMode: 'direct', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine', metadataDiscoveryEnabled: false,
+      deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900, pipelineReceiptEnabled: false, version: '1.2.3',
+      environmentTagId: '00000000-0000-4000-8000-000000000001', ownershipMode: 'config_warn',
+    }));
+    expect(providerRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'identity.corporate-oidc', protocol: 'oidc', isEnabled: true, authenticationMode: 'direct', directoryTenantId: 'corporate-directory', ownershipMode: 'config_warn',
+      displayName: 'Microsoft Entra ID', organization: 'Example Corporation', displayOrder: 10, isPreferred: true, loginDomainsJson: '["example.com"]',
+      configurationJson: expect.stringContaining('"expectedAudience":"enterpriseglue-web"'),
+      syncJson: expect.stringContaining('"connectorCapability":"claim_only"'),
+    }));
+  });
+
+  it('persists config-warning ownership for roles and groups', async () => {
+    const { roleInsert, groupInsert } = setupDataSource();
+    const warningFiles = {
+      './roles.json': {
+        roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'], ownershipMode: 'config_warn' }],
+      },
+      './groups.json': {
+        groups: [{ key: 'group.deployers', name: 'Deployers', ownershipMode: 'config_warn' }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle, files: warningFiles });
+
+    await configBundleApplyService.apply({
+      bundle,
+      files: warningFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(roleInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync' }));
+    expect(groupInsert).toHaveBeenCalledWith(expect.objectContaining({ ownershipMode: 'config_warn', driftStatus: 'in_sync', groupKeyIdentity: 'tenant-a:group.deployers' }));
+  });
+
+  it('atomically creates a config-owned tenant mapping and schedules shared-engine reconciliation', async () => {
+    const {
+      engineRepo,
+      engineTenantMappingRepo,
+      engineTenantMappingRows,
+    } = setupDataSource();
+    const sharedEngine = {
+      id: 'engine-1',
+      tenantId: null,
+      name: 'Central',
+      baseUrl: 'https://central.example.test/engine-rest',
+      type: 'operaton',
+      externalId: null,
+      labelsJson: '{}',
+      authType: 'basic',
+      username: 'eg',
+      passwordEnc: 'ref:CENTRAL_PASSWORD',
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      version: null,
+      environmentTagId: null,
+      runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'incomplete',
+      deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true,
+      connectionMode: 'direct',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      lifecycleStatus: 'active',
+    };
+    engineRepo.find.mockResolvedValue([sharedEngine]);
+    engineRepo.findOne.mockImplementation(async ({ where }: any) =>
+      where.id === sharedEngine.id ? sharedEngine : null);
+    const mappingBundle = {
+      ...bundle,
+      imports: ['./engines.json', './engine-tenant-mappings.json'],
+    };
+    const mappingFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.test/engine-rest',
+          auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+      './engine-tenant-mappings.json': {
+        engineTenantMappings: [{
+          key: 'engine-tenant-mapping.central-acme',
+          engineRef: { engineKey: 'engine.central' },
+          externalTenantId: 'acme',
+          tenantRef: { type: 'request_context' },
+          strategy: 'engine_tenant_id',
+          ownershipMode: 'config_warn',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({
+      bundle: mappingBundle,
+      files: mappingFiles,
+    });
+
+    const result = await configBundleApplyService.apply({
+      bundle: mappingBundle,
+      files: mappingFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 1,
+      updated: 0,
+      archived: 0,
+      reconciliation: {
+        engineCount: 1,
+        runtimeReconciliation: {
+          status: 'queued',
+          taskId: 'runtime-task-1',
+          engineCount: 1,
+        },
+      },
+    });
+    expect(engineTenantMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-1',
+      externalTenantId: 'acme',
+      enterpriseTenantId: 'tenant-a',
+      tenantReferenceJson: '{"type":"request_context"}',
+      strategy: 'engine_tenant_id',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-acme',
+      ownershipMode: 'config_warn',
+      sourceHash: expect.any(String),
+      lastAppliedAt: expect.any(Number),
+      isActive: true,
+    }));
+    expect(engineTenantMappingRows).toHaveLength(1);
+    expect(reconcileEngineTenantMappings).toHaveBeenCalledWith(
+      'engine-1',
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+    );
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      engineIds: ['engine-1'],
+    }));
+  });
+
+  it('authoritatively disables only omitted mappings owned by this bundle', async () => {
+    const {
+      engineRepo,
+      engineTenantMappingRows,
+    } = setupDataSource();
+    const sharedEngine = {
+      id: 'engine-1',
+      tenantId: null,
+      name: 'Central',
+      baseUrl: 'https://central.example.test/engine-rest',
+      type: 'operaton',
+      externalId: null,
+      labelsJson: '{}',
+      runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 1,
+      tenantResolutionStatus: 'ready',
+      deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true,
+      connectionMode: 'direct',
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      lifecycleStatus: 'active',
+    };
+    engineRepo.find.mockResolvedValue([sharedEngine]);
+    engineRepo.findOne.mockImplementation(async ({ where }: any) =>
+      where.id === sharedEngine.id ? sharedEngine : null);
+    engineTenantMappingRows.push({
+      id: 'config-mapping',
+      engineId: 'engine-1',
+      externalTenantId: 'acme',
+      enterpriseTenantId: 'tenant-a',
+      strategy: 'engine_tenant_id',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz:engine_tenant_mapping:engine-tenant-mapping.central-acme',
+      ownershipMode: 'config_locked',
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    }, {
+      id: 'external-mapping',
+      engineId: 'engine-1',
+      externalTenantId: 'external',
+      enterpriseTenantId: 'tenant-a',
+      strategy: 'engine_tenant_id',
+      source: 'external',
+      sourceRef: 'external:acme',
+      ownershipMode: 'external_managed',
+      isActive: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const mappingBundle = {
+      ...bundle,
+      imports: ['./engines.json', './engine-tenant-mappings.json'],
+    };
+    const mappingFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.test/engine-rest',
+          auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+      './engine-tenant-mappings.json': { engineTenantMappings: [] },
+    };
+    const preview = configBundlePreviewService.preview({
+      bundle: mappingBundle,
+      files: mappingFiles,
+    });
+
+    const result = await configBundleApplyService.apply({
+      bundle: mappingBundle,
+      files: mappingFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: [
+        'config.authoritative_archive:engine_tenant_mapping:engine-tenant-mapping.central-acme',
+      ],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({ archived: 1 });
+    expect(engineTenantMappingRows.find((row) => row.id === 'config-mapping')).toMatchObject({
+      isActive: false,
+    });
+    expect(engineTenantMappingRows.find((row) => row.id === 'external-mapping')).toMatchObject({
+      isActive: true,
+    });
+    expect(reconcileEngineTenantMappings).toHaveBeenCalledWith(
+      'engine-1',
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+    );
+  });
+
+  it('restores drifted config-warning roles and groups to the previewed state', async () => {
+    const { roleRepo, groupRepo, permissionRepo } = setupDataSource();
+    roleRepo.find.mockResolvedValue([{
+      id: 'role-deployer', tenantId: 'tenant-a', key: 'custom.engine.deployer', name: 'Locally edited role', description: null,
+      scope: 'engine', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', driftStatus: 'drifted', isArchived: false,
+    }]);
+    groupRepo.find.mockResolvedValue([{
+      id: 'group-deployers', tenantId: 'tenant-a', key: 'group.deployers', name: 'Locally edited group', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', driftStatus: 'drifted', isArchived: false,
+    }]);
+    permissionRepo.find.mockResolvedValue([{ roleId: 'role-deployer', permissionId: 'engine:deploy' }]);
+    const warningFiles = {
+      './roles.json': {
+        roles: [{ key: 'custom.engine.deployer', name: 'Deployer', scope: 'engine', permissions: ['engine:deploy'], ownershipMode: 'config_warn' }],
+      },
+      './groups.json': {
+        groups: [{ key: 'group.deployers', name: 'Deployers', ownershipMode: 'config_warn' }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle, files: warningFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle,
+      files: warningFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.updated).toBe(2);
+    expect(roleRepo.update).toHaveBeenCalledWith({ id: 'role-deployer' }, expect.objectContaining({
+      name: 'Deployer', ownershipMode: 'config_warn', driftStatus: 'in_sync', sourceHash: expect.any(String), lastAppliedAt: expect.any(Number),
+    }));
+    expect(groupRepo.update).toHaveBeenCalledWith({ id: 'group-deployers' }, expect.objectContaining({
+      name: 'Deployers', ownershipMode: 'config_warn', driftStatus: 'in_sync', sourceHash: expect.any(String), lastAppliedAt: expect.any(Number),
+    }));
+  });
+
+  it('leaves an untransferred manual target unapplied and preserves the row', async () => {
+    const { engineRepo, projectRepo, targetRepo, dataSource } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000002';
+    const engine = { id: 'engine-manual', tenantId: 'tenant-a', configKey: 'engine.manual', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Managed engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active' };
+    const manualTarget = { id: 'target-manual', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'manual', sourceRef: null, status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    targetRepo.find.mockResolvedValue([manualTarget]);
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.manual', name: 'Managed engine', type: 'operaton', baseUrl: 'https://engine.example.test/rest', auth: { type: 'basic', username: 'eg', passwordRef: 'ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.manual' }, allowCiDeploy: true }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+
+    await expect(configBundleApplyService.apply({
+      bundle: targetBundle,
+      files: targetFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('project_engine_target') });
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(targetRepo.insert).not.toHaveBeenCalled();
+    expect(targetRepo.update).not.toHaveBeenCalled();
+  });
+
+  it('transfers a previewed manual target into config ownership and records its previous source', async () => {
+    const { engineRepo, projectRepo, targetRepo, auditInsert } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000003';
+    const engine = { id: 'engine-manual', tenantId: 'tenant-a', configKey: 'engine.manual', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Managed engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active' };
+    const target = { id: 'target-manual', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'manual', sourceRef: null, status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    projectRepo.findOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-a' });
+    targetRepo.find.mockResolvedValue([target]);
+    targetRepo.findOne.mockResolvedValue(target);
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.manual', name: 'Managed engine', type: 'operaton', baseUrl: 'https://engine.example.test/rest', auth: { type: 'basic', username: 'eg', passwordRef: 'ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': {
+        projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.manual' }, allowCiDeploy: true, transferOwnership: { reason: 'Move deployment eligibility into reviewed configuration.' } }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+
+    await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+
+    expect(targetRepo.update).toHaveBeenCalledTimes(1);
+    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-manual' }, expect.objectContaining({
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked',
+      status: 'active',
+      allowManualDeploy: false,
+      allowCiDeploy: true,
+      allowApiDeploy: false,
+      allowImport: false,
+      driftStatus: 'in_sync',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.transfer_ownership', details: expect.stringContaining('"previousSource":"manual"') }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ details: expect.stringContaining('"transferReason":"Move deployment eligibility into reviewed configuration."') }));
+  });
+
+  it('updates every target deployment mode and ownership field atomically', async () => {
+    const { engineRepo, projectRepo, targetRepo, auditInsert } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000004';
+    const engine = { id: 'engine-config', tenantId: 'tenant-a', configKey: 'engine.config', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', name: 'Managed engine', baseUrl: 'https://engine.example.test/rest', type: 'operaton', externalId: null, labelsJson: '{}', runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false, connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active' };
+    const existingTarget = { id: 'target-config', tenantId: 'tenant-a', projectId, engineId: engine.id, source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', status: 'active', allowManualDeploy: true, allowCiDeploy: false, allowApiDeploy: false, allowImport: true };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    projectRepo.findOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-a' });
+    targetRepo.find.mockResolvedValue([existingTarget]);
+    targetRepo.findOne.mockResolvedValue(existingTarget);
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.config', name: 'Managed engine', type: 'operaton', baseUrl: 'https://engine.example.test/rest', auth: { type: 'basic', username: 'eg', passwordRef: 'ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: projectId }, engineRef: { engineKey: 'engine.config' }, status: 'disabled', allowManualDeploy: false, allowCiDeploy: true, allowApiDeploy: true, allowImport: false, ownershipMode: 'config_warn' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+
+    await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+
+    expect(targetRepo.update).toHaveBeenCalledTimes(1);
+    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-config' }, expect.objectContaining({
+      status: 'disabled',
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn',
+      allowManualDeploy: false,
+      allowCiDeploy: true,
+      allowApiDeploy: true,
+      allowImport: false,
+      driftStatus: 'in_sync',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.update', resourceId: 'target-config' }));
+  });
+
+  it('authoritatively archives only bundle-owned targets and preserves manual rows', async () => {
+    const { targetRepo, auditInsert } = setupDataSource();
+    const projectId = '00000000-0000-4000-8000-000000000005';
+    const configTarget = { id: 'target-config-stale', tenantId: 'tenant-a', projectId, engineId: 'engine-config', source: 'config', sourceRef: 'config_bundle:acme.authz', status: 'active' };
+    const manualTarget = { id: 'target-manual-preserved', tenantId: 'tenant-a', projectId, engineId: 'engine-manual', source: 'manual', sourceRef: null, status: 'active' };
+    targetRepo.find.mockImplementation((options?: { where?: unknown }) => Promise.resolve(options?.where ? [configTarget] : [configTarget, manualTarget]));
+    const targetBundle = { ...bundle, imports: ['./project-engine-targets.json'] };
+    const targetFiles = { './project-engine-targets.json': { projectEngineTargets: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+    const acknowledgement = `config.authoritative_archive:project_engine_target:${projectId}:engine-config`;
+
+    const result = await configBundleApplyService.apply({
+      bundle: targetBundle,
+      files: targetFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: [acknowledgement],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.archived).toBe(1);
+    expect(targetRepo.update).toHaveBeenCalledTimes(1);
+    expect(targetRepo.update).toHaveBeenCalledWith({ id: 'target-config-stale' }, expect.objectContaining({ status: 'archived', driftStatus: 'in_sync' }));
+    expect(targetRepo.update).not.toHaveBeenCalledWith({ id: 'target-manual-preserved' }, expect.anything());
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.project_engine_target.archive', resourceId: 'target-config-stale' }));
+  });
+
+  it('restores a config-warning assignment by clearing its matching local override', async () => {
+    const { roleRepo, groupRepo, assignmentRepo, assignmentOverrideRepo } = setupDataSource();
+    roleRepo.find.mockResolvedValue([{
+      id: 'role-operators', tenantId: 'tenant-a', key: 'custom.platform.operators', name: 'Operators', description: null,
+      scope: 'platform', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false,
+    }]);
+    groupRepo.find.mockResolvedValue([{
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn', isArchived: false,
+    }]);
+    const assignmentBundle = { ...bundle, imports: ['./roles.json', './groups.json', './assignments.json'] };
+    const assignmentFiles = {
+      './roles.json': {
+        roles: [{ key: 'custom.platform.operators', name: 'Operators', scope: 'platform', permissions: ['platform:users:view'], ownershipMode: 'config_warn' }],
+      },
+      './groups.json': {
+        groups: [{ key: 'group.operators', name: 'Operators', ownershipMode: 'config_warn' }],
+      },
+      './assignments.json': {
+        assignments: [{ principal: { type: 'group', key: 'group.operators' }, roleKey: 'custom.platform.operators', scope: { type: 'platform' }, ownershipMode: 'config_warn' }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: assignmentBundle, files: assignmentFiles });
+
+    await configBundleApplyService.apply({
+      bundle: assignmentBundle,
+      files: assignmentFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      principalId: 'group-operators',
+      roleId: 'role-operators',
+      source: 'config',
+      ownershipMode: 'config_warn',
+    }));
+    const insertedAssignment = assignmentRepo.insert.mock.calls[0][0];
+    expect(insertedAssignment).not.toHaveProperty('userId');
+    expect(insertedAssignment).not.toHaveProperty('resourceType');
+    expect(insertedAssignment).not.toHaveProperty('resourceId');
+    expect(insertedAssignment).not.toHaveProperty('sourceMappingId');
+    expect(assignmentOverrideRepo.delete).toHaveBeenCalledWith({
+      assignmentKey: expect.any(String),
+      sourceRef: 'config_bundle:acme.authz',
+    });
+  });
+
+  it('requires acknowledgement before an authoritative apply archives a config-owned object', async () => {
+    const { groupRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{
+      id: 'group-stale', tenantId: 'tenant-a', key: 'group.stale', name: 'Stale', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false,
+    }]);
+    const preview = configBundlePreviewService.preview({ bundle, files });
+
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining('config.authoritative_archive:group:group.stale') });
+  });
+
+  it('authoritatively archives source-owned groups while preserving manual groups', async () => {
+    const { groupRepo, auditInsert } = setupDataSource();
+    groupRepo.find.mockResolvedValue([
+      {
+        id: 'group-stale', tenantId: 'tenant-a', key: 'group.stale', name: 'Stale', description: null,
+        source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_locked', driftStatus: 'in_sync', isArchived: false,
+      },
+      {
+        id: 'group-manual', tenantId: 'tenant-a', key: 'group.manual', name: 'Manual', description: null,
+        source: 'manual', sourceRef: null, ownershipMode: 'manual', driftStatus: null, isArchived: false,
+      },
+    ]);
+    const cleanupBundle = { ...bundle, imports: ['./groups.json'] };
+    const cleanupFiles = { './groups.json': { groups: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: cleanupBundle, files: cleanupFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: cleanupBundle,
+      files: cleanupFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: ['config.authoritative_archive:group:group.stale'],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.archived).toBe(1);
+    expect(groupRepo.update).toHaveBeenCalledTimes(1);
+    expect(groupRepo.update).toHaveBeenCalledWith({ id: 'group-stale' }, expect.objectContaining({ isArchived: true, driftStatus: 'in_sync' }));
+    expect(groupRepo.update).not.toHaveBeenCalledWith({ id: 'group-manual' }, expect.anything());
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({ action: 'authz.config_bundle.group.archive', resourceId: 'group-stale' }));
+  });
+
+  it('rejects invalid and preview-only bundles before opening a transaction', async () => {
+    const { dataSource } = setupDataSource();
+    const previewOnlyBundle = { ...bundle, mode: 'preview_only' };
+    const preview = configBundlePreviewService.preview({ bundle: previewOnlyBundle, files });
+
+    await expect(configBundleApplyService.apply({
+      bundle: previewOnlyBundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining('preview_only') });
+
+    await expect(configBundleApplyService.apply({
+      bundle: { ...bundle, kind: 'UnsupportedBundleKind' },
+      files,
+      expectedPreviewHash: 'invalid',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 422, message: 'Configuration bundle is invalid' });
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale or arbitrary preview hashes before opening a transaction', async () => {
+    const { dataSource } = setupDataSource();
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: 'stale-preview',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects a credentialless sidecar apply when platform policy is disabled', async () => {
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.private-sidecar', name: 'Private sidecar', type: 'ion',
+          baseUrl: 'https://sidecar.example.com/engine-rest',
+          connectionMode: 'customer_sidecar', auth: { type: 'none' },
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview(
+      { bundle: engineBundle, files: engineFiles },
+      { credentiallessCustomerSidecarsEnabled: true },
+    );
+
+    await expect(configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    }, { credentiallessCustomerSidecarsEnabled: false })).rejects.toMatchObject({
+      statusCode: 422,
+      message: 'Configuration bundle is invalid',
+    });
+  });
+
+  it('rejects an apply when a checked secret reference is no longer available', async () => {
+    const { dataSource } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'bearer', tokenRef: 'PAYMENTS_ENGINE_TOKEN' } }],
+      },
+    };
+    vi.stubEnv('PAYMENTS_ENGINE_TOKEN', 'available-only-for-preflight');
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
+    const secretPreflight = configBundleSecretPreflightService.check({ bundle: engineBundle, files: engineFiles });
+    vi.unstubAllEnvs();
+
+    await expect(configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      expectedSecretPreflightHash: secretPreflight.availabilityHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining('Secret reference availability changed') });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects an apply when the expected tenant scope differs from the authenticated tenant', async () => {
+    const { dataSource } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      expectedTenantScope: 'tenant-b',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toMatchObject({ statusCode: 409 });
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+  });
+
+  it('replays a completed idempotent apply and rejects the key for different bundle input', async () => {
+    const { roleInsert, configRunRepo } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+    const input = {
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      idempotencyKey: 'config-apply-2026-07-13',
+      expectedTenantScope: 'tenant-a',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    };
+
+    const first = await configBundleApplyService.apply(input);
+    const replay = await configBundleApplyService.apply(input);
+
+    expect(first.applyRunId).toEqual(expect.any(String));
+    expect(replay).toMatchObject({ idempotent: true, applyRunId: first.applyRunId, canonicalHash: preview.canonicalHash });
+    expect(replay.reconciliation).toEqual(first.reconciliation);
+    expect(roleInsert).toHaveBeenCalledTimes(1);
+    expect(configRunRepo.insert).toHaveBeenCalledTimes(1);
+
+    await expect(configBundleApplyService.apply({
+      ...input,
+      bundle: { ...bundle, metadata: { ...bundle.metadata, key: 'acme.other' } },
+    })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  it('applies a config-managed engine with opaque secret references and runtime defaults', async () => {
+    const { engineInsert, auditInsert } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.com/engine-rest',
+          labels: { environment: 'prod', country: 'TR' }, auth: { type: 'basic', username: 'eg-client', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' }, metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900, pipelineReceiptEnabled: false,
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle, files: engineFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 1,
+      updated: 0,
+      archived: 0,
+      reconciliation: { status: 'completed', engineSetCount: 0, runtimeResourceSetCount: 0, engineCount: 1 },
+    });
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      configKey: 'engine.prod-payments', configKeyIdentity: 'tenant-a:engine.prod-payments', registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz', passwordEnc: 'ref:PAYMENTS_ENGINE_PASSWORD', runtimeAccessScope: 'engine_wide',
+      deploymentIntegration: 'enterpriseglue_proxy', metadataDiscoveryEnabled: false, deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900, pipelineReceiptEnabled: false, connectionMode: 'direct',
+      tenantId: 'tenant-a', tenancyMode: 'dedicated', tenantMappingStrategy: null,
+      tenantMappingVersion: 0, tenantResolutionStatus: 'ready',
+    }));
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', engineSetIds: [], runtimeResourceSetIds: [], engineIds: [expect.any(String)],
+    }));
+    const applyAudit = auditInsert.mock.calls.map((args) => args[0] as { details: string; action: string }).find((entry) => entry.action === 'authz.config_bundle.apply');
+    expect(applyAudit).toBeDefined();
+    expect(applyAudit!.details).toContain('"before":{"state":"absent"}');
+    expect(applyAudit!.details).toContain('"secretReferenceSummary":{"count":1,"available":0,"unavailable":1}');
+    expect(applyAudit!.details).not.toContain('PAYMENTS_ENGINE_PASSWORD');
+    expect(applyAudit!.details).not.toContain('passwordRef');
+  });
+
+  it('stores only an operator-safe error when config apply execution fails', async () => {
+    const { dataSource, configRunRepo } = setupDataSource();
+    const preview = configBundlePreviewService.preview({ bundle, files });
+    dataSource.transaction.mockRejectedValueOnce(new Error(
+      'env://PAYMENTS_ENGINE_TOKEN Bearer secret-value https://private.internal/config',
+    ));
+
+    await expect(configBundleApplyService.apply({
+      bundle,
+      files,
+      expectedPreviewHash: preview.canonicalHash!,
+      idempotencyKey: 'failed-apply-safe-diagnostics',
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    })).rejects.toThrow('PAYMENTS_ENGINE_TOKEN');
+
+    expect(configRunRepo.update).toHaveBeenCalledWith(
+      { id: expect.any(String) },
+      expect.objectContaining({
+        status: 'failed',
+        errorMessage: 'Configuration bundle apply failed; inspect protected server logs',
+      }),
+    );
+    expect(JSON.stringify(configRunRepo.update.mock.calls)).not.toContain('PAYMENTS_ENGINE_TOKEN');
+    expect(JSON.stringify(configRunRepo.update.mock.calls)).not.toContain('secret-value');
+    expect(JSON.stringify(configRunRepo.update.mock.calls)).not.toContain('private.internal');
+  });
+
+  it('applies a config-managed shared engine in fail-closed mapping state', async () => {
+    const { engineInsert } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.com/engine-rest',
+          auth: { type: 'basic', username: 'eg-client', passwordRef: 'CENTRAL_ENGINE_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result.created).toBe(1);
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      configKey: 'engine.central',
+      configKeyIdentity: 'tenant-a:engine.central',
+      tenantId: null,
+      tenancyMode: 'shared',
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'incomplete',
+      runtimeAccessScope: 'resource_aware',
+    }));
+  });
+
+  it('creates a shared engine and its source-owned mappings in one transaction', async () => {
+    const {
+      engineRepo,
+      engineInsert,
+      engineTenantMappingRepo,
+    } = setupDataSource();
+    const engineRows: any[] = [];
+    engineInsert.mockImplementation(async (row: any) => {
+      engineRows.push({ ...row });
+    });
+    engineRepo.find.mockImplementation(async () => [...engineRows]);
+    engineRepo.findOne.mockImplementation(async ({ where }: any) =>
+      engineRows.find((row) => row.id === where.id) || null);
+    const engineBundle = {
+      ...bundle,
+      imports: ['./engines.json', './engine-tenant-mappings.json'],
+    };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: 'engine.central',
+          name: 'Central',
+          type: 'operaton',
+          baseUrl: 'https://central.example.com/engine-rest',
+          auth: { type: 'basic', username: 'eg-client', passwordRef: 'CENTRAL_ENGINE_PASSWORD' },
+          runtimeAccessScope: 'resource_aware',
+          tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        }],
+      },
+      './engine-tenant-mappings.json': {
+        engineTenantMappings: [{
+          key: 'engine-tenant-mapping.central-acme',
+          engineRef: { engineKey: 'engine.central' },
+          externalTenantId: 'acme',
+          tenantRef: { type: 'request_context' },
+          strategy: 'engine_tenant_id',
+        }],
+      },
+    };
+    const preview = configBundlePreviewService.preview({
+      bundle: engineBundle,
+      files: engineFiles,
+    });
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 2,
+      reconciliation: {
+        engineCount: 1,
+        runtimeReconciliation: { engineCount: 1, status: 'queued' },
+      },
+    });
+    expect(engineTenantMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: engineRows[0].id,
+      enterpriseTenantId: 'tenant-a',
+      tenantReferenceJson: '{"type":"request_context"}',
+    }));
+    expect(reconcileEngineTenantMappings).toHaveBeenCalledWith(
+      engineRows[0].id,
+      expect.objectContaining({ getRepository: expect.any(Function) }),
+    );
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      engineIds: [engineRows[0].id],
+    }));
+  });
+
+  it.each([
+    {
+      name: 'credentialless customer sidecar', type: 'ion', connectionMode: 'customer_sidecar', auth: { type: 'none' },
+      expected: { authType: 'none', username: null, passwordEnc: null, oauthTokenUrl: null, oauthScopes: null, oauthAudience: null },
+    },
+    {
+      name: 'basic authentication', type: 'operaton', connectionMode: 'direct', auth: { type: 'basic', username: 'engine-user', passwordRef: 'ENGINE_BASIC_PASSWORD' },
+      expected: { authType: 'basic', username: 'engine-user', passwordEnc: 'ref:ENGINE_BASIC_PASSWORD', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null },
+    },
+    {
+      name: 'bearer authentication', type: 'camunda7', connectionMode: 'direct', auth: { type: 'bearer', tokenRef: 'ENGINE_BEARER_TOKEN' },
+      expected: { authType: 'bearer', username: null, passwordEnc: 'ref:ENGINE_BEARER_TOKEN', oauthTokenUrl: null, oauthScopes: null, oauthAudience: null },
+    },
+    {
+      name: 'OAuth2 client credentials', type: 'ion', connectionMode: 'direct',
+      auth: { type: 'oauth2-client-credentials', username: 'engine-client', passwordRef: 'ENGINE_OAUTH_SECRET', tokenUrl: 'https://identity.example.test/oauth/token', scopes: 'engine.read engine.write', audience: 'engine-api' },
+      expected: { authType: 'oauth2-client-credentials', username: 'engine-client', passwordEnc: 'ref:ENGINE_OAUTH_SECRET', oauthTokenUrl: 'https://identity.example.test/oauth/token', oauthScopes: 'engine.read engine.write', oauthAudience: 'engine-api' },
+    },
+  ] as const)('imports $name and operational labels into the engine model', async ({ type, connectionMode, auth, expected }) => {
+    const { engineInsert } = setupDataSource();
+    const engineBundle = { ...bundle, imports: ['./engines.json'] };
+    const engineFiles = {
+      './engines.json': {
+        engines: [{
+          key: `engine.${auth.type}`,
+          name: `Imported ${auth.type}`,
+          type,
+          baseUrl: `https://${auth.type}.example.test/engine-rest`,
+          connectionMode,
+          labels: { environment: 'prod', region: 'eu', businessUnit: 'payments', customer_segment: 'enterprise' },
+          auth,
+        }],
+      },
+    };
+    const policy = { credentiallessCustomerSidecarsEnabled: true };
+    const preview = configBundlePreviewService.preview({ bundle: engineBundle, files: engineFiles }, policy);
+
+    const result = await configBundleApplyService.apply({
+      bundle: engineBundle,
+      files: engineFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    }, policy);
+
+    expect(result.created).toBe(1);
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      ...expected,
+      type,
+      connectionMode,
+      labelsJson: JSON.stringify({ environment: 'prod', region: 'eu', businessUnit: 'payments', customer_segment: 'enterprise' }),
+      registrationSource: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    }));
+  });
+
+  it('creates a config-owned project-engine target for an existing config engine', async () => {
+    const { engineRepo, projectRepo, targetRepo } = setupDataSource();
+    const engine = {
+      id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.prod-payments', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz',
+      name: 'Payments', baseUrl: 'https://payments.example.com/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}',
+      runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy', connectionMode: 'direct', ownershipMode: 'config_locked', lifecycleStatus: 'active',
+    };
+    engineRepo.find.mockResolvedValue([engine]);
+    projectRepo.find.mockResolvedValue([{ id: '00000000-0000-4000-8000-000000000001', tenantId: 'tenant-a' }]);
+    projectRepo.findOne.mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' });
+    const targetBundle = { ...bundle, imports: ['./engines.json', './project-engine-targets.json'] };
+    const targetFiles = {
+      './engines.json': { engines: [{ key: 'engine.prod-payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.com/engine-rest', auth: { type: 'basic', username: 'eg-client', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' } }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ projectRef: { id: '00000000-0000-4000-8000-000000000001' }, engineRef: { engineKey: 'engine.prod-payments' }, allowCiDeploy: true }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: targetBundle, files: targetFiles });
+    await configBundleApplyService.apply({ bundle: targetBundle, files: targetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(targetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project-1', engineId: 'engine-1', source: 'config', sourceRef: 'config_bundle:acme.authz', allowCiDeploy: true }));
+  });
+
+  it('applies a provider-neutral identity mapping to an existing configured provider and group', async () => {
+    const { groupRepo, providerRepo, identityMappingRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', configKey: 'mapping.operators', configKeyIdentity: 'tenant-a:mapping.operators', targetGroupId: 'group-1', sourceRef: 'config_bundle:acme.authz' }));
+    expect(replayMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-a', providerIds: ['provider-1'] });
+    expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'apply', status: 'completed', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
+  });
+
+  it('previews stored identity snapshot replay without running it', async () => {
+    const { groupRepo, providerRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
+    previewMemberships.mockResolvedValueOnce({ scanned: 3, additions: 2, removals: 1, unchanged: 0, failed: 0, truncated: false });
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', identityReconciliationMode: 'preview' });
+
+    expect(previewMemberships).toHaveBeenCalledWith({ tenantId: 'tenant-a', providerId: 'provider-1' });
+    expect(replayMemberships).not.toHaveBeenCalled();
+    expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'preview', status: 'previewed', providerCount: 1, scanned: 3, created: 2, removed: 1, failed: 0 });
+  });
+
+  it('persists a continuation task when an apply replay page is truncated', async () => {
+    const { groupRepo, providerRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
+    replayMemberships.mockResolvedValueOnce({ scanned: 500, created: 4, removed: 1, failed: 0, truncated: true, nextCursor: 'next-page' });
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+
+    expect(result.reconciliation.identitySnapshot.status).toBe('truncated');
+    expect(enqueueReplayTask).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', applyRunId: result.applyRunId, providerId: 'provider-1', cursor: 'next-page',
+      initial: { scanned: 500, created: 4, removed: 1, failed: 0, truncated: true, nextCursor: 'next-page' },
+    }));
+  });
+
+  it('can skip stored identity reconciliation after applying mapping changes', async () => {
+    const { groupRepo, providerRepo } = setupDataSource();
+    groupRepo.find.mockResolvedValue([{ id: 'group-1', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null, source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false }]);
+    providerRepo.find.mockResolvedValue([{ id: 'provider-1', tenantId: 'tenant-a', key: 'identity.oidc.main' }]);
+    const mappingBundle = { ...bundle, imports: ['./groups.json', './identity-mappings.json'] };
+    const mappingFiles = {
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operators', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'ops' }, targetGroupKey: 'group.operators' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    const result = await configBundleApplyService.apply({ bundle: mappingBundle, files: mappingFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', identityReconciliationMode: 'none' });
+
+    expect(previewMemberships).not.toHaveBeenCalled();
+    expect(replayMemberships).not.toHaveBeenCalled();
+    expect(result.reconciliation.identitySnapshot).toEqual({ mode: 'none', status: 'skipped', providerCount: 1, scanned: 0, created: 0, removed: 0, failed: 0 });
+  });
+
+  it('cleans only the source-owned memberships when an authoritative bundle disables an identity mapping', async () => {
+    const { identityMappingRepo, groupMembershipRepo } = setupDataSource();
+    identityMappingRepo.find.mockResolvedValue([{
+      id: 'mapping-1', tenantId: 'tenant-a', providerId: 'provider-1', configKey: 'mapping.removed', sourceRef: 'config_bundle:acme.authz', isActive: true,
+    }]);
+    const mappingBundle = { ...bundle, imports: ['./identity-mappings.json'] };
+    const mappingFiles = { './identity-mappings.json': { identityMappings: [] } };
+    const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+
+    await configBundleApplyService.apply({
+      bundle: mappingBundle,
+      files: mappingFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      acknowledgements: ['config.authoritative_archive:identity_mapping:mapping.removed'],
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(groupMembershipRepo.delete).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'tenant-a', source: 'identity_provider' }));
+    expect(groupMembershipRepo.delete.mock.calls[0][0].sourceRef.value).toEqual([
+      'identity_provider:provider-1:mapping:mapping-1', 'identity_mapping:mapping-1',
+    ]);
+    expect(identityMappingRepo.update).toHaveBeenCalledWith({ id: 'mapping-1' }, expect.objectContaining({ isActive: false }));
+  });
+
+  it('applies config-owned provider-neutral identity definitions before their mappings', async () => {
+    const { providerRepo } = setupDataSource();
+    const providerBundle = { ...bundle, imports: ['./identity-providers.json'] };
+    const providerFiles = {
+      './identity-providers.json': { identityProviders: [{
+        key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+        sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'secret/entra', callbackUrl: 'http://localhost:5173/api/auth/identity/callback', scopes: ['openid', 'profile'] },
+      }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: providerBundle, files: providerFiles });
+    await configBundleApplyService.apply({ bundle: providerBundle, files: providerFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(providerRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'identity.oidc.main', protocol: 'oidc', sourceRef: 'config_bundle:acme.authz' }));
+  });
+
+  it('applies a config-owned Runtime Resource Set against a configured engine', async () => {
+    const { engineRepo, runtimeResourceSetRepo } = setupDataSource();
+    engineRepo.find.mockResolvedValue([{ id: 'engine-1', tenantId: 'tenant-a', configKey: 'engine.central', registrationSource: 'config', sourceRef: 'config_bundle:acme.authz' }]);
+    const runtimeBundle = { ...bundle, imports: ['./engines.json', './runtime-resource-sets.json'] };
+    const runtimeFiles = {
+      './engines.json': { engines: [{ key: 'engine.central', name: 'Central', type: 'operaton', baseUrl: 'https://central.example.com/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CENTRAL_PASSWORD' } }] },
+      './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.central' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' }, ownershipMode: 'config_warn' }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles });
+    await configBundleApplyService.apply({ bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1' });
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ key: 'runtime.payments', runtimeResourceSetKeyIdentity: 'tenant-a:runtime.payments', engineId: 'engine-1', resourceKind: 'process_definition', source: 'config', sourceRef: 'config_bundle:acme.authz', ownershipMode: 'config_warn' }));
+    expect(enqueueRuntimeReconciliationTask).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', runtimeResourceSetIds: [expect.any(String)],
+    }));
+  });
+
+  it('applies a migration Runtime Resource Set to an existing UI-registered engine without changing the engine', async () => {
+    const { engineRepo, engineInsert, runtimeResourceSetRepo } = setupDataSource();
+    engineRepo.find.mockResolvedValue([{
+      id: 'engine-ui-1', tenantId: 'tenant-a', tenancyMode: 'dedicated', lifecycleStatus: 'active',
+      configKey: null, registrationSource: 'user', sourceRef: null,
+    }]);
+    const runtimeBundle = { ...bundle, imports: ['./runtime-resource-sets.json'] };
+    const runtimeFiles = {
+      './runtime-resource-sets.json': { runtimeResourceSets: [{
+        key: 'runtime.imported-payments', name: 'Imported payments',
+        engineRef: { engineKey: 'external.camunda-native-1234' },
+        resourceKind: 'process_definition', selector: { mode: 'keys', keys: ['payments-order'] },
+      }] },
+    };
+    const policy = {
+      credentiallessCustomerSidecarsEnabled: false,
+      externalEngineReferences: [{ key: 'external.camunda-native-1234', engineId: 'engine-ui-1' }],
+    };
+    const preview = configBundlePreviewService.preview({ bundle: runtimeBundle, files: runtimeFiles }, policy);
+
+    const result = await configBundleApplyService.apply({
+      bundle: runtimeBundle, files: runtimeFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1',
+    }, policy);
+
+    expect(result.created).toBe(1);
+    expect(engineInsert).not.toHaveBeenCalled();
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'runtime.imported-payments', engineId: 'engine-ui-1', source: 'config', sourceRef: 'config_bundle:acme.authz',
+    }));
+  });
+
+  it('applies every supported resource family with staged references in one bundle', async () => {
+    const {
+      roleInsert, groupInsert, engineInsert, roleRepo, groupRepo, engineRepo, engineSetRepo,
+      runtimeResourceSetRepo, projectRepo, targetRepo, providerRepo, identityMappingRepo, assignmentRepo,
+    } = setupDataSource();
+    const roleRows: any[] = [];
+    const groupRows: any[] = [];
+    const engineRows: any[] = [];
+    const engineSetRows: any[] = [];
+    const runtimeResourceSetRows: any[] = [];
+    const providerRows: any[] = [];
+    const projectId = '00000000-0000-4000-8000-000000000001';
+
+    roleRepo.find.mockImplementation(() => Promise.resolve(roleRows));
+    roleInsert.mockImplementation((row) => { roleRows.push(row); return Promise.resolve(undefined); });
+    groupRepo.find.mockImplementation(() => Promise.resolve(groupRows));
+    groupInsert.mockImplementation((row) => { groupRows.push(row); return Promise.resolve(undefined); });
+    engineRepo.find.mockImplementation(() => Promise.resolve(engineRows));
+    engineInsert.mockImplementation((row) => { engineRows.push(row); return Promise.resolve(undefined); });
+    engineSetRepo.find.mockImplementation(() => Promise.resolve(engineSetRows));
+    engineSetRepo.insert.mockImplementation((row: any) => { engineSetRows.push(row); return Promise.resolve(undefined); });
+    runtimeResourceSetRepo.find.mockImplementation(() => Promise.resolve(runtimeResourceSetRows));
+    runtimeResourceSetRepo.insert.mockImplementation((row: any) => { runtimeResourceSetRows.push(row); return Promise.resolve(undefined); });
+    providerRepo.find.mockImplementation(() => Promise.resolve(providerRows));
+    providerRepo.insert.mockImplementation((row: any) => { providerRows.push(row); return Promise.resolve(undefined); });
+    projectRepo.find.mockResolvedValue([{ id: projectId, tenantId: 'tenant-a' }]);
+    projectRepo.findOne.mockResolvedValue({ id: projectId, tenantId: 'tenant-a' });
+
+    const allBundle = {
+      ...bundle,
+      imports: [
+        './roles.json', './groups.json', './engines.json', './engine-sets.json', './runtime-resource-sets.json',
+        './assignments.json', './identity-providers.json', './identity-mappings.json', './project-engine-targets.json',
+      ],
+    };
+    const allFiles = {
+      './roles.json': { roles: [
+        { key: 'custom.engine.viewer', name: 'Engine viewer', scope: 'engine', permissions: ['engine:instance:view'] },
+        { key: 'custom.tenant.runtime-operator', name: 'Tenant runtime operator', scope: 'tenant', permissions: ['engine:instance:view', 'engine:process:start'] },
+      ] },
+      './groups.json': { groups: [{ key: 'group.operations', name: 'Operations' }] },
+      './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'PAYMENTS_PASSWORD' } }] },
+      './engine-sets.json': { engineSets: [{ key: 'engines.payments', name: 'Payments engines', selector: { mode: 'engine_ids', engineKeys: ['engine.payments'] } }] },
+      './runtime-resource-sets.json': { runtimeResourceSets: [{ key: 'runtime.payments', name: 'Payments processes', engineRef: { engineKey: 'engine.payments' }, resourceKind: 'process_definition', selector: { mode: 'prefix', prefix: 'payments-' } }] },
+      './assignments.json': { assignments: [
+        { key: 'assignment.tenant', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.tenant.runtime-operator', scope: { type: 'tenant' } },
+        { key: 'assignment.engine', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine', engineKey: 'engine.payments' } },
+        { key: 'assignment.engine-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_set', engineSetKey: 'engines.payments' } },
+        { key: 'assignment.runtime-set', principal: { type: 'group', key: 'group.operations' }, roleKey: 'custom.engine.viewer', scope: { type: 'engine_runtime_resource_set', runtimeResourceSetKey: 'runtime.payments' } },
+      ] },
+      './identity-providers.json': { identityProviders: [{
+        key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+        sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+        oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', callbackUrl: 'http://localhost:5173/api/auth/identity/callback', scopes: ['openid'] },
+      }] },
+      './identity-mappings.json': { identityMappings: [{ key: 'mapping.operations', providerKey: 'identity.oidc.main', source: { type: 'group', externalId: 'operations' }, targetGroupKey: 'group.operations' }] },
+      './project-engine-targets.json': { projectEngineTargets: [{ key: 'target.payments', projectRef: { id: projectId }, engineRef: { engineKey: 'engine.payments' }, allowManualDeploy: true }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: allBundle, files: allFiles });
+
+    const result = await configBundleApplyService.apply({
+      bundle: allBundle,
+      files: allFiles,
+      expectedPreviewHash: preview.canonicalHash!,
+      tenantId: 'tenant-a',
+      actorId: 'admin-1',
+    });
+
+    expect(result).toMatchObject({
+      created: 13,
+      updated: 0,
+      archived: 0,
+      reconciliation: {
+        runtimeReconciliation: { status: 'queued', engineSetCount: 1, runtimeResourceSetCount: 1, engineCount: 1 },
+        identitySnapshot: { mode: 'apply', status: 'completed', providerCount: 1 },
+      },
+    });
+    expect(engineInsert).toHaveBeenCalledWith(expect.objectContaining({
+      authType: 'basic', username: 'eg', passwordEnc: 'ref:PAYMENTS_PASSWORD',
+    }));
+    expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'engines.payments', selectorJson: expect.stringContaining(engineRows[0].id),
+    }));
+    expect(runtimeResourceSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({ engineId: engineRows[0].id }));
+    expect(assignmentRepo.insert).toHaveBeenCalledTimes(4);
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      roleId: roleRows[1].id,
+      scopeType: 'tenant',
+      scopeId: 'tenant-a',
+    }));
+    expect(assignmentRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      principalId: groupRows[0].id,
+      roleId: roleRows[0].id,
+      source: 'config',
+      sourceRef: 'config_bundle:acme.authz',
+    }));
+    expect(identityMappingRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      providerId: providerRows[0].id,
+      targetGroupId: groupRows[0].id,
+      configKey: 'mapping.operations',
+    }));
+    expect(targetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      projectId,
+      engineId: engineRows[0].id,
+      allowManualDeploy: true,
+      source: 'config',
+    }));
+  });
+
+  it('applies a canonical key identity to a config-owned Engine Set', async () => {
+    const { engineSetRepo } = setupDataSource();
+    const engineSetBundle = { ...bundle, imports: ['./engine-sets.json'] };
+    const engineSetFiles = {
+      './engine-sets.json': { engineSets: [{ key: 'engines.prod', name: 'Production engines', selector: { mode: 'all' } }] },
+    };
+    const preview = configBundlePreviewService.preview({ bundle: engineSetBundle, files: engineSetFiles });
+
+    await configBundleApplyService.apply({ bundle: engineSetBundle, files: engineSetFiles, expectedPreviewHash: preview.canonicalHash!, tenantId: 'tenant-a', actorId: 'admin-1', acknowledgements: ['config.engine_set_broad:engines.prod'] });
+
+    expect(engineSetRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      key: 'engines.prod', engineSetKeyIdentity: 'tenant-a:engines.prod', source: 'config',
+    }));
+  });
+
+  it('resolves a backstop group reference only during apply and does not put its native value in audit output', async () => {
+    const { engineRepo, groupRepo, auditInsert } = setupDataSource();
+    const engine = {
+      id: 'engine-operaton-sidecar', tenantId: 'tenant-a', configKey: 'engine.operaton-sidecar', configKeyIdentity: 'tenant-a:engine.operaton-sidecar',
+      registrationSource: 'config', sourceRef: 'config_bundle:acme.authz', lifecycleStatus: 'active', name: 'Operaton sidecar',
+      baseUrl: 'https://operaton-sidecar.example.test/engine-rest', type: 'operaton', externalId: null, labelsJson: '{}',
+      authType: 'basic', username: 'eg', passwordEnc: 'ref:OPERATON_SIDECAR_PASSWORD', oauthTokenUrl: null, oauthScopes: null,
+      oauthAudience: null, runtimeAccessScope: 'engine_wide', deploymentIntegration: 'enterpriseglue_proxy',
+      metadataDiscoveryEnabled: true, deploymentDiscoveryEnabled: true, reconciliationIntervalSeconds: 300,
+      pipelineReceiptEnabled: true, connectionMode: 'customer_sidecar', ownershipMode: 'config_locked', tenancyMode: 'dedicated',
+    };
+    const group = {
+      id: 'group-operators', tenantId: 'tenant-a', key: 'group.operators', name: 'Operators', description: null,
+      source: 'config', sourceRef: 'config_bundle:acme.authz', isArchived: false, ownershipMode: 'config_locked',
+    };
+    engineRepo.find.mockResolvedValue([engine]);
+    engineRepo.findOne.mockResolvedValue(engine);
+    groupRepo.find.mockResolvedValue([group]);
+    groupRepo.findOne.mockImplementation(async ({ where }: any) => where.id === group.id || where.key === group.key ? group : null);
+    const mappingBundle = { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] };
+    const mappingFiles = {
+      './engines.json': { engines: [{ key: 'engine.operaton-sidecar', name: 'Operaton sidecar', type: 'operaton', baseUrl: 'https://operaton-sidecar.example.test/engine-rest', connectionMode: 'customer_sidecar', auth: { type: 'basic', username: 'eg', passwordRef: 'OPERATON_SIDECAR_PASSWORD' } }] },
+      './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+      './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.operaton-sidecar-operators', engineRef: { engineKey: 'engine.operaton-sidecar' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'OPERATON_SIDECAR_OPERATORS_GROUP' }] },
+    };
+    const previousSecret = process.env.OPERATON_SIDECAR_OPERATORS_GROUP;
+    process.env.OPERATON_SIDECAR_OPERATORS_GROUP = 'operaton-sidecar-operators-not-for-audit';
+    try {
+      const preview = configBundlePreviewService.preview({ bundle: mappingBundle, files: mappingFiles });
+      const result = await configBundleApplyService.apply({
+        bundle: mappingBundle,
+        files: mappingFiles,
+        expectedPreviewHash: preview.canonicalHash!,
+        tenantId: 'tenant-a',
+        actorId: 'admin-1',
+      });
+      expect(result).toMatchObject({ created: 1, updated: 0, archived: 0 });
+      expect(writeBackstopMapping).toHaveBeenCalledWith(expect.objectContaining({
+        engineId: 'engine-operaton-sidecar', source: 'config', nativeGroupSecretRef: 'OPERATON_SIDECAR_OPERATORS_GROUP',
+        request: { mappings: [{ authzGroupId: 'group-operators', nativeGroupId: 'operaton-sidecar-operators-not-for-audit', isActive: true }] },
+      }), expect.anything());
+      expect(JSON.stringify(auditInsert.mock.calls)).not.toContain('operaton-sidecar-operators-not-for-audit');
+    } finally {
+      if (previousSecret === undefined) delete process.env.OPERATON_SIDECAR_OPERATORS_GROUP;
+      else process.env.OPERATON_SIDECAR_OPERATORS_GROUP = previousSecret;
+    }
+  });
+});

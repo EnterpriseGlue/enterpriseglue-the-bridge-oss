@@ -1,49 +1,16 @@
-type DeployMembership = {
-  role: string
-  roles?: string[]
-  deployAllowed?: boolean | null
-}
+import type {
+  ProjectEngineAccessedEngine,
+  ProjectEngineAccessResponse,
+} from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js'
 
-type ConnectedEngine = {
-  engineId: string
-  engineName: string
-  baseUrl?: string
-  environment?: { name: string; color: string }
-  health?: { status: string; latencyMs?: number }
-  manualDeployAllowed?: boolean
-}
-
-export type ProjectEngineAccessData = {
-  accessedEngines: ConnectedEngine[]
-  pendingRequests: Array<{ requestId: string; engineId: string; engineName: string; requestedAt: number }>
-  availableEngines: Array<{ id: string; name: string }>
-}
-
-export function canDeployByProjectRole(
-  membership: DeployMembership | null | undefined,
-  _defaultDeployRoles?: string[]
-): boolean {
-  if (!membership) return false
-
-  const effectiveRole = String(membership.role || '')
-  const hasDeployRole = ['owner', 'delegate', 'developer'].includes(effectiveRole)
-
-  if (!hasDeployRole && membership.role === 'editor' && membership.deployAllowed) {
-    return true
-  }
-
-  return hasDeployRole
-}
+export type ConnectedEngine = ProjectEngineAccessedEngine
+export type ProjectEngineAccessData = ProjectEngineAccessResponse
 
 export function hasConnectedEngine(engineAccess: ProjectEngineAccessData | null | undefined): boolean {
   const connectedEngines = Array.isArray(engineAccess?.accessedEngines) ? engineAccess.accessedEngines : []
-  return connectedEngines.some((engine) => engine.engineId && engine.engineId !== '__env__')
-}
-
-export function canDeployProject(
-  membership: DeployMembership | null | undefined,
-  engineAccess: ProjectEngineAccessData | null | undefined,
-  defaultDeployRoles?: string[]
-): boolean {
-  return canDeployByProjectRole(membership, defaultDeployRoles) && hasConnectedEngine(engineAccess)
+  return connectedEngines.some((engine) => (
+    Boolean(engine.engineId) &&
+    engine.engineId !== '__env__' &&
+    (engine.manualDeployAllowed !== false || engine.ciDeployAllowed === true)
+  ))
 }

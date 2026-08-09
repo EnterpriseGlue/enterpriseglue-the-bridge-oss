@@ -26,21 +26,51 @@ export const FolderSchema = FolderSchemaRaw.transform((f) => ({
 export const FolderSummarySchema = FolderSchemaRaw.pick({ id: true, name: true, parentFolderId: true })
 
 export const CreateFolderRequest = z.object({
-  name: z.string().min(1),
-  parentFolderId: z.string().nullable().optional()
+  name: z.string().min(1).max(255),
+  parentFolderId: z.string().uuid().nullable().optional()
 })
 
 export const UpdateFolderRequest = z.object({
-  name: z.string().min(1).optional(),
-  parentFolderId: z.string().nullable().optional()
+  name: z.string().min(1).max(255).optional(),
+  parentFolderId: z.string().uuid().nullable().optional()
 })
+
+export const CreateFolderResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  parentFolderId: z.string().uuid().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+})
+
+export const UpdateFolderResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  parentFolderId: z.string().uuid().nullable(),
+  updatedAt: z.number(),
+})
+
+export const ProjectContentsFolderSchema = FolderSummarySchema.extend({
+  createdBy: z.string().nullable().optional(),
+  updatedBy: z.string().nullable().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const ProjectContentsFileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(['bpmn', 'dmn', 'form']),
+  createdBy: z.string().nullable().optional(),
+  updatedBy: z.string().nullable().optional(),
+  updatedAt: z.number(),
+  createdAt: z.number(),
+});
 
 export const ProjectContentsSchema = z.object({
   breadcrumb: z.array(FolderSchema).default([]),
-  folders: z.array(FolderSummarySchema),
-  files: z.array(
-    z.object({ id: z.string(), name: z.string(), type: z.enum(['bpmn','dmn','form']), updatedAt: z.number(), createdAt: z.number() })
-  )
+  folders: z.array(ProjectContentsFolderSchema),
+  files: z.array(ProjectContentsFileSchema),
 })
 
 export const FolderDeletePreviewSchema = z.object({
@@ -52,3 +82,9 @@ export const FolderDeletePreviewSchema = z.object({
 
 export type Folder = z.infer<typeof FolderSchema>
 export type CreateFolder = z.infer<typeof CreateFolderRequest>
+export type CreateFolderResponse = z.infer<typeof CreateFolderResponseSchema>
+export type FolderDeletePreview = z.infer<typeof FolderDeletePreviewSchema>
+export type FolderSummary = z.infer<typeof FolderSummarySchema>
+export type ProjectContents = z.infer<typeof ProjectContentsSchema>
+export type UpdateFolder = z.infer<typeof UpdateFolderRequest>
+export type UpdateFolderResponse = z.infer<typeof UpdateFolderResponseSchema>

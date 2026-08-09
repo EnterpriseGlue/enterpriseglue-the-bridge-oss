@@ -12,6 +12,10 @@ interface UseProcessesModalDataProps {
   detailsModalOpen: boolean
   retryModalInstanceId: string | null
   engineId?: string
+  variablesEnabled?: boolean
+  activityHistoryEnabled?: boolean
+  jobsEnabled?: boolean
+  externalTasksEnabled?: boolean
 }
 
 export function useProcessesModalData({
@@ -19,33 +23,37 @@ export function useProcessesModalData({
   detailsModalOpen,
   retryModalInstanceId,
   engineId,
+  variablesEnabled = true,
+  activityHistoryEnabled = true,
+  jobsEnabled = true,
+  externalTasksEnabled = true,
 }: UseProcessesModalDataProps) {
   // Fetch variables for instance details modal
   const varsQ = useQuery({
     queryKey: ['mission-control', 'vars', detailsModalInstanceId],
     queryFn: () => fetchInstanceVariables(detailsModalInstanceId!, engineId),
-    enabled: !!detailsModalInstanceId && detailsModalOpen,
+    enabled: variablesEnabled && !!detailsModalInstanceId && detailsModalOpen,
   })
 
   // Fetch activity history for instance details modal
   const histQ = useQuery({
     queryKey: ['mission-control', 'hist', detailsModalInstanceId],
     queryFn: () => listInstanceActivityHistory(detailsModalInstanceId!, engineId),
-    enabled: !!detailsModalInstanceId && detailsModalOpen,
+    enabled: activityHistoryEnabled && !!detailsModalInstanceId && detailsModalOpen,
   })
 
   // Fetch failed jobs for retry modal
   const retryJobsQ = useQuery({
     queryKey: ['mission-control', 'jobs', retryModalInstanceId],
     queryFn: () => listInstanceJobs(retryModalInstanceId!, engineId),
-    enabled: !!retryModalInstanceId,
+    enabled: jobsEnabled && !!retryModalInstanceId,
   })
 
   // Fetch failed external tasks for retry modal
   const retryExtTasksQ = useQuery({
     queryKey: ['mission-control', 'external-tasks', retryModalInstanceId],
     queryFn: () => listInstanceExternalTasks(retryModalInstanceId!, engineId),
-    enabled: !!retryModalInstanceId,
+    enabled: externalTasksEnabled && !!retryModalInstanceId,
   })
 
   // Combine jobs and external tasks for retry modal

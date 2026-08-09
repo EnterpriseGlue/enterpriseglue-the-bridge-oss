@@ -34,5 +34,16 @@ describe('bpmn-engine-capabilities', () => {
       'engine.job.mutate',
       'engine.batch.admin',
     ]));
+    expect(capabilities.queryCapabilities).toEqual({
+      processDefinitionKey: true,
+      decisionDefinitionKey: true,
+      tenantFilters: true,
+      instanceLineage: true,
+      history: true,
+      jobs: true,
+      incidents: true,
+      batches: false,
+      counts: true,
+    });
   });
 });

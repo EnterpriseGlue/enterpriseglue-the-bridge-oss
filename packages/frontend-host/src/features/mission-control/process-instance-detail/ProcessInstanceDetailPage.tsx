@@ -2,7 +2,7 @@ import React from 'react'
 import { useParams, useLocation } from 'react-router-dom'
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { sanitizePathParam } from '../../../shared/utils/sanitize'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import styles from './styles/InstanceDetail.module.css'
 import { Modal, Select, BreadcrumbItem, SelectItem, TextInput, TextArea, InlineNotification, Button } from '@carbon/react'
 import { Launch } from '@carbon/icons-react'
@@ -26,13 +26,18 @@ import { useElementLinkPillOverlay } from './components/hooks/useElementLinkPill
 import { useProcessesFilterStore } from '../shared/stores/processesFilterStore'
 import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
 import { apiClient } from '../../../shared/api/client'
-import { getProcessInstanceVariableHistory } from './api/processInstances'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
+import { getProcessInstanceVariableHistory, modifyProcessInstanceVariables } from './api/processInstances'
 import type { DecisionIo, HistoricDecisionInstanceLite, VariableHistoryTarget } from './components/types'
 import { ProcessInstanceDiagramPane } from './components/ProcessInstanceDiagramPane'
 import { ProcessInstanceBottomPane } from './components/ProcessInstanceBottomPane'
 import { ProcessInstanceModals } from './components/ProcessInstanceModals'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
 import { ApplyModificationsModal } from './components/modals/ApplyModificationsModal'
+import { useActionDecision } from '../../../shared/auth/guards'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 import {
   SPLIT_PANE_STORAGE_KEY,
   SPLIT_PANE_VERTICAL_STORAGE_KEY,
@@ -42,36 +47,45 @@ import {
 
 const INSTANCE_COUNTS_STORAGE_KEY = 'mission-control-show-instance-counts'
 
-type ProcessEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  processKey: string
-  processVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
+function withRuntimeActionDecision(
+  fallback: UiAuthzDecision,
+  decision: { allowed: boolean; reason?: string } | undefined,
+): UiAuthzDecision {
+  if (!decision) {
+    return {
+      ...fallback,
+      allowed: false,
+      state: 'disabled',
+      reason: 'Action decision unavailable for this runtime resource',
+    }
+  }
+  return {
+    ...fallback,
+    allowed: decision.allowed,
+    state: decision.allowed ? 'allowed' : 'disabled',
+    reason: decision.allowed ? 'Allowed for this runtime resource' : decision.reason || 'Action unavailable for this runtime resource',
+  }
 }
 
 export default function ProcessInstanceDetailPage() {
   const { instanceId } = useParams<{ instanceId: string }>()
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
   const selectedEngineId = useSelectedEngine()
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
 
   // Get filter state from Zustand store (persisted)
   const { selectedProcess, selectedVersion } = useProcessesFilterStore()
-  
+
   // Build process label with version for breadcrumb
-  const processLabel = selectedProcess 
+  const processLabel = selectedProcess
     ? `${selectedProcess.label}${selectedVersion !== null ? ` (v${selectedVersion})` : ''}`
     : null
-  
+
   // Early return if no instanceId
   if (!instanceId) {
     return (
@@ -81,7 +95,22 @@ export default function ProcessInstanceDetailPage() {
       </div>
     )
   }
-  
+
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId]
+  )
+  const snapshotSuspensionDecision = useActionDecision('engine.runtime.process-instances.suspension.update', selectedEngineResource)
+  const snapshotRetryDecision = useActionDecision('engine.runtime.process-instances.retry', selectedEngineResource)
+  const snapshotModifyDecision = useActionDecision('engine.runtime.process-instances.modify', selectedEngineResource)
+  const snapshotTerminateDecision = useActionDecision('engine.runtime.process-instances.delete', selectedEngineResource)
+  const snapshotVariablesUpdateDecision = useActionDecision('engine.runtime.process-instances.variables.update', selectedEngineResource)
+  const notifyDeniedAction = React.useCallback((decision: UiAuthzDecision) => {
+    if (decision.allowed) return false
+    showAlert(decision.reason || 'Action unavailable', 'warning', 'Action unavailable')
+    return true
+  }, [showAlert])
+
   // Split pane state with localStorage persistence
   const { size: splitSize, handleChange: handleSplitChange } = useSplitPaneState({
     storageKey: SPLIT_PANE_STORAGE_KEY,
@@ -94,9 +123,25 @@ export default function ProcessInstanceDetailPage() {
   })
 
   // ========== HOOK INTEGRATIONS ==========
-  
+
   // 1. Data Fetching Hook
-  const instanceData = useInstanceData(instanceId!)
+  const instanceData = useInstanceData(instanceId!, {
+    // The browser snapshot intentionally omits runtime-resource grants. The
+    // history read below is the bootstrap for the live-instance read, so let
+    // the authoritative route decide instead of suppressing a valid scoped
+    // request client-side.
+    historyProcessInstanceEnabled: true,
+    // These reads are independently authorized by the backend against the
+    // resolved runtime resource. Do not turn an intentionally incomplete
+    // engine-level browser snapshot into a client-side denial.
+    variablesEnabled: true,
+    historicVariablesEnabled: true,
+    activityTreeEnabled: true,
+    activityHistoryEnabled: true,
+    incidentsEnabled: true,
+    jobsEnabled: true,
+    externalTasksEnabled: true,
+  })
   const {
     histQ,
     runtimeQ,
@@ -105,6 +150,7 @@ export default function ProcessInstanceDetailPage() {
     varsQ,
     histVarsQ,
     actQ,
+    activityTreeQ,
     incidentsQ,
     retryJobsQ,
     retryExtTasksQ,
@@ -112,6 +158,7 @@ export default function ProcessInstanceDetailPage() {
     defKey,
     defName,
     sortedActs,
+    runtimeActivityInstances,
     allRetryItems,
     jobById,
     incidentActivityIds,
@@ -121,15 +168,57 @@ export default function ProcessInstanceDetailPage() {
     parentId,
     status,
   } = instanceData
+  const runtimeActionDecisions = runtimeQ.data?.runtimeActionDecisions
+  const suspensionDecision = withRuntimeActionDecision(snapshotSuspensionDecision, runtimeActionDecisions?.suspension)
+  const retryDecision = withRuntimeActionDecision(snapshotRetryDecision, runtimeActionDecisions?.retry)
+  const terminateDecision = withRuntimeActionDecision(snapshotTerminateDecision, runtimeActionDecisions?.terminate)
+  const modifyDecision = withRuntimeActionDecision(snapshotModifyDecision, runtimeActionDecisions?.modify)
+  const variablesUpdateDecision = withRuntimeActionDecision(snapshotVariablesUpdateDecision, runtimeActionDecisions?.variablesUpdate)
+
+  // A successful variable write is authoritative even when an engine adapter
+  // has a short read-after-write delay. Keep the confirmed change in the live
+  // query after its refresh, so the operator does not see an apparently lost
+  // update while the next normal fetch converges with the engine.
+  const mergeKnownVariables = React.useCallback((modifications: Record<string, { value: any; type: string } | null>) => {
+    queryClient.setQueryData<Record<string, { value: any; type: string }>>(
+      ['mission-control', 'vars', instanceId, selectedEngineId],
+      (current = {}) => {
+        const next = { ...current }
+        for (const [name, variable] of Object.entries(modifications)) {
+          if (variable === null) delete next[name]
+          else next[name] = variable
+        }
+        return next
+      },
+    )
+  }, [instanceId, queryClient, selectedEngineId])
 
   const showModifyAction = status === 'ACTIVE'
+  const activityOverlayData = React.useMemo(() => {
+    if (runtimeActivityInstances.length === 0) return actQ.data || []
+    const liveKeys = new Set(runtimeActivityInstances.map((activity) => activity.activityInstanceId || activity.id))
+    const historicRows = (actQ.data || []).filter((activity) => {
+      if (activity.endTime) return true
+      return !liveKeys.has(activity.activityInstanceId || activity.id)
+    })
+    return [...historicRows, ...runtimeActivityInstances]
+  }, [actQ.data, runtimeActivityInstances])
+  const activityOverlayQ = React.useMemo(
+    () => ({
+      ...actQ,
+      data: activityOverlayData,
+      isLoading: actQ.isLoading || activityTreeQ.isLoading,
+      isError: actQ.isError || activityTreeQ.isError,
+    }),
+    [actQ, activityOverlayData, activityTreeQ.isError, activityTreeQ.isLoading]
+  )
 
   // Compute set of activity IDs with currently active (running) instances
   // Also include activity IDs from open incidents (e.g. async-before failures
   // where the activity instance may not yet exist in history)
   const activeActivityIds = React.useMemo(() => {
     const ids = new Set<string>()
-    for (const a of actQ.data || []) {
+    for (const a of activityOverlayData) {
       if (a.activityId && !a.endTime && !(a as any).canceled) {
         ids.add(a.activityId)
       }
@@ -140,18 +229,18 @@ export default function ProcessInstanceDetailPage() {
       }
     }
     return ids
-  }, [actQ.data, incidentsQ.data])
+  }, [activityOverlayData, incidentsQ.data])
 
   // Build a lookup from activityId → activityName using activity history data
   const activityNameMap = React.useMemo(() => {
     const map = new Map<string, string>()
-    for (const a of actQ.data || []) {
+    for (const a of activityOverlayData) {
       if (a.activityId && a.activityName && !map.has(a.activityId)) {
         map.set(a.activityId, a.activityName)
       }
     }
     return map
-  }, [actQ.data])
+  }, [activityOverlayData])
 
   // 2. Diagram Overlays Hook
   // Check if process instance is suspended (from runtime data)
@@ -170,10 +259,15 @@ export default function ProcessInstanceDetailPage() {
       window.localStorage.setItem(INSTANCE_COUNTS_STORAGE_KEY, showTokenPassCounts ? '1' : '0')
     } catch {}
   }, [showTokenPassCounts])
-  const { viewerApi, setViewerApi, bpmnRef, applyOverlays } = useDiagramOverlays(actQ, incidentsQ, { isSuspended, showTokenPassCounts })
+  const { viewerApi, setViewerApi, bpmnRef, applyOverlays } = useDiagramOverlays(activityOverlayQ, incidentsQ, { isSuspended, showTokenPassCounts })
 
   // 3. Variable Editor Hook
-  const variableEditor = useVariableEditor({ instanceId: instanceId!, varsQ, engineId: selectedEngineId })
+  const variableEditor = useVariableEditor({
+    instanceId: instanceId!,
+    varsQ,
+    engineId: selectedEngineId,
+    onVariableSaved: (name, variable) => mergeKnownVariables({ [name]: variable }),
+  })
   const {
     editingVarKey,
     editingVarType,
@@ -188,6 +282,14 @@ export default function ProcessInstanceDetailPage() {
     submitVariableEdit,
   } = variableEditor
   const [variableHistoryTarget, setVariableHistoryTarget] = React.useState<VariableHistoryTarget | null>(null)
+  const openAuthorizedVariableEditor = React.useCallback((name: string, value: any) => {
+    if (notifyDeniedAction(variablesUpdateDecision)) return
+    openVariableEditor(name, value)
+  }, [notifyDeniedAction, openVariableEditor, variablesUpdateDecision])
+  const submitAuthorizedVariableEdit = React.useCallback(() => {
+    if (notifyDeniedAction(variablesUpdateDecision)) return
+    submitVariableEdit()
+  }, [notifyDeniedAction, submitVariableEdit, variablesUpdateDecision])
   const openVariableHistory = React.useCallback((target: VariableHistoryTarget) => {
     setVariableHistoryTarget(target)
   }, [])
@@ -210,6 +312,7 @@ export default function ProcessInstanceDetailPage() {
     incidentsQ,
     actQ,
     engineId: selectedEngineId,
+    retryDecision,
   })
   const {
     retryModalOpen,
@@ -384,16 +487,19 @@ export default function ProcessInstanceDetailPage() {
     setAddVariableError(null)
     try {
       const parsed = parseTypedValue(addVariableValue, addVariableType)
-      const body = { modifications: { [key]: { value: parsed, type: addVariableType } }, engineId: selectedEngineId }
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+      await modifyProcessInstanceVariables(instanceId, {
+        modifications: { [key]: { value: parsed, type: addVariableType } },
+        engineId: selectedEngineId || undefined,
+      })
       await varsQ.refetch()
+      mergeKnownVariables({ [key]: { value: parsed, type: addVariableType } })
       setAddVariableOpen(false)
     } catch (e: any) {
       setAddVariableError(getUiErrorMessage(e, 'Failed to add variable'))
     } finally {
       setAddVariableBusy(false)
     }
-  }, [instanceId, addVariableName, addVariableType, addVariableValue, parseTypedValue, varsQ])
+  }, [instanceId, addVariableName, addVariableType, addVariableValue, mergeKnownVariables, parseTypedValue, selectedEngineId, varsQ])
 
   const submitBulkUpload = React.useCallback(async () => {
     if (!instanceId) return
@@ -430,16 +536,19 @@ export default function ProcessInstanceDetailPage() {
         throw new Error('No variables found to upload')
       }
 
-      const body = { modifications, engineId: selectedEngineId }
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+      await modifyProcessInstanceVariables(instanceId, {
+        modifications,
+        engineId: selectedEngineId || undefined,
+      })
       await varsQ.refetch()
+      mergeKnownVariables(modifications)
       setBulkUploadOpen(false)
     } catch (e: any) {
       setBulkUploadError(getUiErrorMessage(e, 'Failed to upload variables'))
     } finally {
       setBulkUploadBusy(false)
     }
-  }, [instanceId, bulkUploadValue, varsQ])
+  }, [instanceId, bulkUploadValue, mergeKnownVariables, selectedEngineId, varsQ])
 
   // Incident filtering (keeping local for now - could be extracted later)
   const flowNodeOptions = React.useMemo(() => {
@@ -493,6 +602,7 @@ export default function ProcessInstanceDetailPage() {
         activityInstanceId: entry.activityInstanceId || null,
         currentType: entry.type || null,
         currentValue: entry.value,
+        valueRedacted: entry.valueRedacted === true,
       }
     }
 
@@ -505,6 +615,7 @@ export default function ProcessInstanceDetailPage() {
         activityInstanceId: null,
         currentType: (meta as any)?.type ?? null,
         currentValue: (meta as any)?.value,
+        valueRedacted: (meta as any)?.valueRedacted === true,
       }
     }
 
@@ -666,13 +777,13 @@ export default function ProcessInstanceDetailPage() {
   const showIncidentBanner = incidentCount > 0
 
   const processVersion = React.useMemo(() => {
-    const fromHistory = Number((histQ.data as any)?.processDefinitionVersion)
+    const fromHistory = Number(histQ.data?.processDefinitionVersion)
     if (Number.isFinite(fromHistory) && fromHistory > 0) return Math.trunc(fromHistory)
 
     const fromRuntime = Number((runtimeQ.data as any)?.processDefinitionVersion)
     if (Number.isFinite(fromRuntime) && fromRuntime > 0) return Math.trunc(fromRuntime)
 
-    const defIdSource = String(defId || (histQ.data as any)?.processDefinitionId || '')
+    const defIdSource = String(defId || histQ.data?.processDefinitionId || '')
     const parsedFromId = Number(defIdSource.split(':')[1])
     if (Number.isFinite(parsedFromId) && parsedFromId > 0) return Math.trunc(parsedFromId)
 
@@ -687,6 +798,8 @@ export default function ProcessInstanceDetailPage() {
       version: processVersion,
       processDefinitionId: defId,
     }),
+    // The endpoint resolves the process definition and is authoritative for
+    // runtime-resource access; the UI snapshot does not contain that lineage.
     enabled: !!selectedEngineId && !!defKey && processVersion !== null,
     retry: false,
     staleTime: 15_000,
@@ -699,8 +812,27 @@ export default function ProcessInstanceDetailPage() {
     processEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(() => {
+  const handleEditInStarbase = React.useCallback(async () => {
     if (!processEditTarget?.fileId || processVersion === null || !defKey) return
+    setBridgeError(null)
+    setBridgeDecision(null)
+    try {
+      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
+        engineId: String(selectedEngineId || processEditTarget.engineId || ''),
+        projectId: processEditTarget.projectId,
+        fileId: processEditTarget.fileId,
+        definitionId: defId || undefined,
+        definitionKey: defKey,
+        kind: 'process',
+      })
+      if (!bridgeDecision.allowed) {
+        setBridgeDecision(bridgeDecision)
+        return
+      }
+    } catch (error) {
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
+      return
+    }
 
     const params = new URLSearchParams({
       source: 'mission-control',
@@ -719,7 +851,7 @@ export default function ProcessInstanceDetailPage() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(processEditTarget.fileId))}?${params.toString()}`)
-  }, [processEditTarget, processVersion, defKey, selectedEngineId, tenantNavigate])
+  }, [processEditTarget, processVersion, defKey, defId, selectedEngineId, tenantNavigate])
 
   // Handle navigation to linked resources
   const handleElementNavigate = React.useCallback((linkInfo: ElementLinkInfo) => {
@@ -753,13 +885,13 @@ export default function ProcessInstanceDetailPage() {
         tenantNavigate(`/mission-control/processes?${params.toString()}`)
         break
         }
-        
+
       case 'decision':
         {
         // Navigate to the specific decision instance that was executed (similar to CallActivity)
         const decisionInstances = (selectedDecisionInstanceQ.data ? [selectedDecisionInstanceQ.data] : []) as any[]
         const decisionId = decisionInstances[0]?.id as string | undefined
-        
+
         // If we have the executed decision instance id, navigate directly to it
         if (decisionId) {
           const params = new URLSearchParams()
@@ -768,7 +900,7 @@ export default function ProcessInstanceDetailPage() {
           tenantNavigate(`/mission-control/decisions/instances/${encodeURIComponent(decisionId)}?${params.toString()}`)
           break
         }
-        
+
         // Fallback: Navigate to the decisions page with decision key filter
         {
           const formKey = linkInfo.targetKey
@@ -793,7 +925,7 @@ export default function ProcessInstanceDetailPage() {
         // TODO: Add external tasks page with topic filter when available
         window.open(`/mission-control/batches?topic=${encodeURIComponent(linkInfo.targetKey)}`, '_blank')
         break
-        
+
       case 'script':
         // For scripts, we could show a modal or navigate to a script viewer
         // For now, log to console and show alert (scripts are inline, not navigable)
@@ -834,7 +966,7 @@ export default function ProcessInstanceDetailPage() {
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="instance-detail">
     <div className={styles.container}>
-      
+
       {/* Breadcrumb Bar - shared component */}
       <BreadcrumbBar
         rightActions={showEditButton ? (
@@ -888,6 +1020,7 @@ export default function ProcessInstanceDetailPage() {
           {instanceId}
         </BreadcrumbItem>
       </BreadcrumbBar>
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
@@ -922,13 +1055,32 @@ export default function ProcessInstanceDetailPage() {
           fmt={fmt}
           onNavigate={tenantNavigate}
           onCopy={(value) => navigator.clipboard.writeText(value)}
-          onSuspend={() => callAction('PUT', `/mission-control-api/process-instances/${instanceId}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => runtimeQ.refetch())}
-          onResume={() => callAction('PUT', `/mission-control-api/process-instances/${instanceId}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => runtimeQ.refetch())}
-          onModify={() => openModificationIntro()}
-          onTerminate={() => setTerminateConfirmOpen(true)}
+          onSuspend={() => {
+            if (notifyDeniedAction(suspensionDecision)) return
+            void callAction('PUT', `/mission-control-api/process-instances/${instanceId}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => runtimeQ.refetch())
+          }}
+          onResume={() => {
+            if (notifyDeniedAction(suspensionDecision)) return
+            void callAction('PUT', `/mission-control-api/process-instances/${instanceId}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => runtimeQ.refetch())
+          }}
+          onModify={() => {
+            if (notifyDeniedAction(modifyDecision)) return
+            openModificationIntro()
+          }}
+          onTerminate={() => {
+            if (notifyDeniedAction(terminateDecision)) return
+            setTerminateConfirmOpen(true)
+          }}
+          suspensionDecision={suspensionDecision}
+          modifyDecision={modifyDecision}
+          terminateDecision={terminateDecision}
           showIncidentBanner={showIncidentBanner}
           incidentCount={incidentCount}
-          onRetry={() => setRetryModalOpen(true)}
+          onRetry={() => {
+            if (notifyDeniedAction(retryDecision)) return
+            setRetryModalOpen(true)
+          }}
+          retryDecision={retryDecision}
           onViewIncident={() => {
             const first = (incidentsQ.data || [])[0] || null
             if (first) setIncidentDetails(first)
@@ -970,11 +1122,16 @@ export default function ProcessInstanceDetailPage() {
             globalVariableHistoryTargetsByName,
             shouldShowDecisionPanel,
             status,
-            openVariableEditor,
+            openVariableEditor: openAuthorizedVariableEditor,
             openVariableHistory,
             showAlert,
-            onAddVariable: openAddVariableModal,
-            onBulkUploadVariables: openBulkUploadModal,
+            onAddVariable: () => {
+              if (!notifyDeniedAction(variablesUpdateDecision)) openAddVariableModal()
+            },
+            onBulkUploadVariables: () => {
+              if (!notifyDeniedAction(variablesUpdateDecision)) openBulkUploadModal()
+            },
+            variablesUpdateDecision,
             selectedDecisionInstance,
             decisionInputs: decisionInputsQ.data || [],
             decisionOutputs: decisionOutputsQ.data || [],
@@ -1026,7 +1183,7 @@ export default function ProcessInstanceDetailPage() {
         setEditingVarValue={setEditingVarValue}
         setEditVarError={setEditVarError}
         closeVariableEditor={closeVariableEditor}
-        submitVariableEdit={submitVariableEdit}
+        submitVariableEdit={submitAuthorizedVariableEdit}
         variableHistoryTarget={variableHistoryTarget}
         variableHistoryEntries={variableHistoryQ.data || []}
         variableHistoryLoading={variableHistoryQ.isLoading}
@@ -1043,7 +1200,9 @@ export default function ProcessInstanceDetailPage() {
         setAddVariableValue={setAddVariableValue}
         setAddVariableError={setAddVariableError}
         setAddVariableOpen={setAddVariableOpen}
-        submitAddVariable={submitAddVariable}
+        submitAddVariable={() => {
+          if (!notifyDeniedAction(variablesUpdateDecision)) void submitAddVariable()
+        }}
         bulkUploadOpen={bulkUploadOpen}
         bulkUploadValue={bulkUploadValue}
         bulkUploadBusy={bulkUploadBusy}
@@ -1051,7 +1210,9 @@ export default function ProcessInstanceDetailPage() {
         setBulkUploadValue={setBulkUploadValue}
         setBulkUploadError={setBulkUploadError}
         setBulkUploadOpen={setBulkUploadOpen}
-        submitBulkUpload={submitBulkUpload}
+        submitBulkUpload={() => {
+          if (!notifyDeniedAction(variablesUpdateDecision)) void submitBulkUpload()
+        }}
         showModIntro={showModIntro}
         suppressIntroNext={suppressIntroNext}
         setSuppressIntroNext={setSuppressIntroNext}
@@ -1063,10 +1224,11 @@ export default function ProcessInstanceDetailPage() {
         terminateConfirmOpen={terminateConfirmOpen}
         instanceId={instanceId}
         setTerminateConfirmOpen={setTerminateConfirmOpen}
-        onTerminate={async (id) => {
+        onTerminate={async (id, reason) => {
+          if (notifyDeniedAction(terminateDecision)) return
           await callAction(
             'DELETE',
-            `/mission-control-api/process-instances/${id}?deleteReason=${encodeURIComponent('Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true${selectedEngineId ? `&engineId=${encodeURIComponent(selectedEngineId)}` : ''}`
+            `/mission-control-api/process-instances/${id}?deleteReason=${encodeURIComponent(reason || 'Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true${selectedEngineId ? `&engineId=${encodeURIComponent(selectedEngineId)}` : ''}`
           )
         }}
         retryModalOpen={retryModalOpen}
@@ -1076,12 +1238,15 @@ export default function ProcessInstanceDetailPage() {
         retrySelectionMap={retrySelectionMap}
         retryDueMode={retryDueMode}
         retryDueInput={retryDueInput}
+        retryDecision={retryDecision}
         setRetryModalOpen={setRetryModalOpen}
         setRetrySelectionMap={setRetrySelectionMap}
         setRetryDueMode={setRetryDueMode}
         setRetryDueInput={setRetryDueInput}
         setRetryActivityFilter={setRetryActivityFilter}
-        submitRetrySelection={submitRetrySelection}
+        submitRetrySelection={() => {
+          if (!notifyDeniedAction(retryDecision)) submitRetrySelection()
+        }}
         alertState={alertState}
         closeAlert={closeAlert}
       />
@@ -1102,6 +1267,7 @@ export default function ProcessInstanceDetailPage() {
         }}
         onClose={() => setApplyModalOpen(false)}
         onApply={async (options) => {
+          if (notifyDeniedAction(modifyDecision)) return
           try {
             await applyModifications(options)
             setApplyModalOpen(false)

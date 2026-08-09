@@ -1,19 +1,19 @@
 import type { Request, Response, NextFunction } from 'express';
 import { Errors } from './errorHandler.js';
-import { engineService } from '../services/platform-admin/index.js';
-import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
+import { permissionService, type EnginePermission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 type EngineIdFrom = 'params' | 'body' | 'query' | 'any';
 
 type EngineAuthOptions = {
   engineIdFrom?: EngineIdFrom;
   engineIdKey?: string;
+  permission?: EnginePermission | EnginePermission[];
 };
 
-type EngineRequest = Request & { engineId?: string; engineRole?: EngineRole | null };
+type EngineRequest = Request & { engineId?: string };
 
 function extractEngineId(req: Request, { engineIdFrom = 'any', engineIdKey = 'engineId' }: EngineAuthOptions = {}): string | null {
   const params = req.params as Record<string, string | undefined>;
@@ -51,17 +51,33 @@ function stripEngineId(req: Request, engineIdKey: string) {
   }
 }
 
-function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOptions = {}) {
+async function hasEnginePermission(req: Request, engineId: string, permission?: EnginePermission | EnginePermission[]): Promise<boolean> {
+  if (!permission) return false;
+  const permissions = Array.isArray(permission) ? permission : [permission];
+  for (const candidate of permissions) {
+    if (await permissionService.hasPermission(candidate, {
+      userId: req.user!.userId,
+      tenantId: req.tenant?.tenantId || null,
+      resourceType: 'engine',
+      resourceId: engineId,
+    })) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function requireEnginePermission(options: EngineAuthOptions = {}) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!req.user) throw Errors.unauthorized('Authentication required');
 
       const existingEngineId = (req as EngineRequest).engineId;
-      const existingEngineRole = (req as EngineRequest).engineRole;
-      if (typeof existingEngineId === 'string' && existingEngineId && existingEngineRole !== undefined) {
+      if (typeof existingEngineId === 'string' && existingEngineId) {
         // Engine access already resolved by an earlier middleware in the chain.
         // This is important because the earlier middleware may have stripped engineId from req.query/req.body.
-        if (existingEngineRole && !allowedRoles.includes(existingEngineRole)) {
+        const hasScopedPermission = await hasEnginePermission(req, existingEngineId, options.permission);
+        if (!hasScopedPermission) {
           throw Errors.forbidden('Access denied');
         }
         return next();
@@ -90,13 +106,12 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
         throw Errors.forbidden('Engine not accessible in this tenant');
       }
 
-      const role = await engineService.getEngineRole(req.user.userId, engineId);
-      if (!role || !allowedRoles.includes(role as EngineRole)) {
+      const hasScopedPermission = await hasEnginePermission(req, engineId, options.permission);
+      if (!hasScopedPermission) {
         throw Errors.forbidden('Access denied');
       }
 
       (req as EngineRequest).engineId = engineId;
-      (req as EngineRequest).engineRole = role as EngineRole;
       updateBpmnEngineRequestContext({ engineId });
 
       next();
@@ -110,11 +125,11 @@ function requireEngineRole(allowedRoles: EngineRole[], options: EngineAuthOption
 }
 
 export function requireEngineAccess(options?: EngineAuthOptions) {
-  return requireEngineRole(['owner', 'delegate', 'operator'], options);
+  return requireEnginePermission(options);
 }
 
 export function requireEngineDeployer(options?: EngineAuthOptions) {
-  return requireEngineRole(['owner', 'delegate', 'operator'], options);
+  return requireEnginePermission(options);
 }
 
 export function requireEngineReadOrWrite(options?: EngineAuthOptions) {
@@ -136,5 +151,5 @@ export function requireEngineReadOrWrite(options?: EngineAuthOptions) {
 }
 
 export function requireEngineManager(options?: EngineAuthOptions) {
-  return requireEngineRole(['owner', 'delegate'], options);
+  return requireEnginePermission(options);
 }

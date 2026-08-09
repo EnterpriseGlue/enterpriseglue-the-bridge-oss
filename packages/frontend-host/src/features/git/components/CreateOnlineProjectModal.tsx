@@ -1,7 +1,7 @@
 /**
  * Create Online Project Modal
  * Creates a new project with a remote Git repository
- * 
+ *
  * Flow:
  * 1. User selects provider and auth method (OAuth or PAT)
  * 2. User connects to provider (OAuth popup or enters PAT)
@@ -19,7 +19,7 @@ import {
   InlineLoading,
   Toggle,
 } from '@carbon/react';
-import { useOnlineProjectWizard } from '../hooks/useOnlineProjectWizard';
+import { formatImportPreviewSummary, useOnlineProjectWizard } from '../hooks/useOnlineProjectWizard';
 import { CreateOnlineProjectExistingConnectionPanel } from './CreateOnlineProjectExistingConnectionPanel';
 import { CreateOnlineProjectAuthSection } from './CreateOnlineProjectAuthSection';
 import { CreateOnlineProjectRepoModeFields } from './CreateOnlineProjectRepoModeFields';
@@ -48,7 +48,12 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
     setSelectedImportEngineId,
     importableEngines,
     importableEnginesQuery,
+    importPreviewQuery,
+    importPreviewErrorMessage,
+    importPreviewDeniedReason,
     canImportFromEngine,
+    gitInspectDeniedReason,
+    gitCreateDeniedReason,
     connectToGit,
     setConnectToGit,
     repoMode,
@@ -140,7 +145,7 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
             ? 'Connect this project to Git or keep it local.'
             : 'Create a new project, optionally connecting it to a Git repository.')}
       </p>
-      
+
       <div style={{ display: 'grid', gap: 'var(--spacing-5)' }}>
         {isEditConnectedProject && (
           <CreateOnlineProjectExistingConnectionPanel
@@ -186,27 +191,63 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
             </div>
 
             {importFromEngine && canImportFromEngine && (
-              <Select
-                id="import-engine"
-                labelText="Source Engine *"
-                value={selectedImportEngineId}
-                onChange={(e) => {
-                  setSelectedImportEngineId(e.target.value)
-                  setFieldErrors(prev => ({ ...prev, importEngineId: '' }))
-                }}
-                disabled={isLoading || importableEnginesQuery.isLoading}
-                invalid={!!fieldErrors.importEngineId}
-                invalidText={fieldErrors.importEngineId}
-              >
-                <SelectItem value="" text={importableEnginesQuery.isLoading ? 'Loading engines...' : 'Select engine...'} />
-                {importableEngines.map((engine) => (
-                  <SelectItem
-                    key={engine.id}
-                    value={engine.id}
-                    text={`${engine.name} (${engine.role})`}
+              <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+                <Select
+                  id="import-engine"
+                  labelText="Source Engine *"
+                  value={selectedImportEngineId}
+                  onChange={(e) => {
+                    setSelectedImportEngineId(e.target.value)
+                    setFieldErrors(prev => ({ ...prev, importEngineId: '' }))
+                  }}
+                  disabled={isLoading || importableEnginesQuery.isLoading}
+                  invalid={!!fieldErrors.importEngineId}
+                  invalidText={fieldErrors.importEngineId}
+                >
+                  <SelectItem value="" text={importableEnginesQuery.isLoading ? 'Loading engines...' : 'Select engine...'} />
+                  {importableEngines.map((engine) => (
+                    <SelectItem
+                      key={engine.id}
+                      value={engine.id}
+                      text={engine.name}
+                    />
+                  ))}
+                </Select>
+
+                {selectedImportEngineId && importPreviewQuery.isLoading && (
+                  <InlineLoading description="Checking import source" />
+                )}
+
+                {selectedImportEngineId && importPreviewDeniedReason && (
+                  <InlineNotification
+                    kind="warning"
+                    title="Import preview unavailable"
+                    subtitle={importPreviewDeniedReason}
+                    lowContrast
+                    hideCloseButton
                   />
-                ))}
-              </Select>
+                )}
+
+                {selectedImportEngineId && importPreviewQuery.isError && (
+                  <InlineNotification
+                    kind="error"
+                    title="Import preview unavailable"
+                    subtitle={importPreviewErrorMessage || 'Selected engine is not available for import'}
+                    lowContrast
+                    hideCloseButton
+                  />
+                )}
+
+                {selectedImportEngineId && importPreviewQuery.data && !importPreviewQuery.isLoading && !importPreviewQuery.isError && (
+                  <InlineNotification
+                    kind={importPreviewQuery.data.files.length > 0 ? 'success' : 'info'}
+                    title="Import preview ready"
+                    subtitle={formatImportPreviewSummary(importPreviewQuery.data)}
+                    lowContrast
+                    hideCloseButton
+                  />
+                )}
+              </div>
             )}
 
             {importFromEngine && canImportFromEngine && !importableEnginesQuery.isLoading && importableEngines.length === 0 && (
@@ -251,6 +292,16 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
         {/* Git section */}
         {connectToGit && (
           <>
+            {!isExistingProject && gitCreateDeniedReason && (
+              <InlineNotification
+                kind="warning"
+                title="Git project creation unavailable"
+                subtitle={gitCreateDeniedReason}
+                lowContrast
+                hideCloseButton
+              />
+            )}
+
             {/* Provider Selection */}
             <Select
               id="provider"
@@ -313,9 +364,10 @@ export default function CreateOnlineProjectModal({ open, onClose, existingProjec
                 isPrivate={isPrivate}
                 setIsPrivate={setIsPrivate}
                 isLoading={isLoading}
-                loadingRepos={loadingRepos}
-                generateRemoteUrl={generateRemoteUrl}
-                repoFetchError={repoFetchError}
+              loadingRepos={loadingRepos}
+              generateRemoteUrl={generateRemoteUrl}
+              repoInspectDeniedReason={gitInspectDeniedReason}
+              repoFetchError={repoFetchError}
                 existingRepos={existingRepos}
                 selectedExistingRepoUrl={selectedExistingRepoUrl}
                 setSelectedExistingRepoUrl={setSelectedExistingRepoUrl}

@@ -123,6 +123,8 @@ export const createEngineBodySchema = z.object({
   name: z.string().min(1).max(255),
   baseUrl: engineBaseUrlSchema,
   type: engineTypeSchema.default('ion'),
+  externalId: z.string().min(1).max(255).nullable().optional(),
+  labels: z.record(z.string().min(1).max(128), z.string().max(512)).optional(),
   authType: z.enum(['none', 'basic', 'bearer', 'oauth2-client-credentials']).default('none'),
   username: z.string().nullable().optional(),
   passwordEnc: z.string().nullable().optional(),

@@ -87,7 +87,7 @@ describe('ProcessesOverviewPage diagram placeholder', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/To view a Diagram/i)).toBeInTheDocument();
+      expect(screen.getByText('To view a diagram, select a process in the Filters panel.')).toBeInTheDocument();
     });
   });
 });

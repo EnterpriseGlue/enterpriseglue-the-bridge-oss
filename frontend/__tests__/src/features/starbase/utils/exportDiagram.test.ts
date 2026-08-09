@@ -30,7 +30,6 @@ const SAMPLE_SVG = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 describe('exportDiagram.captureDiagramSvg', () => {
   it('throws when the modeler has no saveSVG method', async () => {
     await expect(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       captureDiagramSvg({} as any),
     ).rejects.toThrow(/only available for BPMN diagrams and DMN DRDs/i);
   });
@@ -87,7 +86,6 @@ describe('exportDiagram.svgToPdfBlob', () => {
 describe('exportDiagram.canExportDiagram', () => {
   it('returns false for null / bare modelers', () => {
     expect(canExportDiagram(null)).toBe(false);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(canExportDiagram({} as any)).toBe(false);
   });
 

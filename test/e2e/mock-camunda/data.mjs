@@ -51,6 +51,35 @@ const processDefinitions = [
   },
 ]
 
+/**
+ * Synthetic Camunda 7 Authorization REST fixture catalogue. It deliberately
+ * covers every supported conversion and importer disposition without containing
+ * customer identities: exact process/decision group candidates, broad grants,
+ * direct users, global and revoke rows, unsupported resources, unsupported
+ * permissions, missing principals/resources, and absent runtime resources. The
+ * mock exposes this data through GET /authorization only.
+ */
+const nativeAuthorizations = [
+  { id: 'synthetic-grant-process-read', type: 1, permissions: ['READ'], groupId: 'synthetic-operations', resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-grant-decision-read', type: 1, permissions: ['READ'], groupId: 'synthetic-risk', resourceType: 10, resourceId: 'invoice-risk' },
+  { id: 'synthetic-grant-process-broad', type: 1, permissions: ['READ'], groupId: 'synthetic-auditors', resourceType: 6, resourceId: '*' },
+  { id: 'synthetic-grant-decision-broad', type: 1, permissions: ['READ'], groupId: 'synthetic-decision-auditors', resourceType: 10, resourceId: '*' },
+  { id: 'synthetic-user-grant', type: 1, permissions: ['READ'], userId: 'synthetic-user-001', resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-global-grant', type: 0, permissions: ['READ'], resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-group-revoke', type: 2, permissions: ['READ'], groupId: 'synthetic-denied', resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-task-grant', type: 1, permissions: ['READ'], groupId: 'synthetic-task-team', resourceType: 7, resourceId: '*' },
+  { id: 'synthetic-process-create', type: 1, permissions: ['CREATE'], groupId: 'synthetic-creators', resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-missing-group', type: 1, permissions: ['READ'], resourceType: 6, resourceId: 'invoice-process' },
+  { id: 'synthetic-missing-resource-id', type: 1, permissions: ['READ'], groupId: 'synthetic-unscoped', resourceType: 6 },
+  { id: 'synthetic-missing-runtime-resource', type: 1, permissions: ['READ'], groupId: 'synthetic-missing-resource', resourceType: 6, resourceId: 'not-in-runtime-inventory' },
+]
+
+function filterNativeAuthorizations(searchParams) {
+  const firstResult = Math.max(Number(searchParams.get('firstResult') || 0), 0)
+  const maxResults = Math.max(Number(searchParams.get('maxResults') || nativeAuthorizations.length), 0)
+  return nativeAuthorizations.slice(firstResult, firstResult + maxResults)
+}
+
 const byId = (items) => new Map(items.map((item) => [item.id, item]))
 const processDefinitionsById = byId(processDefinitions)
 
@@ -1267,6 +1296,7 @@ export {
   parallelInstanceId,
   loopInstanceId,
   processDefinitions,
+  nativeAuthorizations,
   processDefinitionsById,
   runtimeInstances,
   runtimeInstancesById,
@@ -1287,6 +1317,7 @@ export {
   decisionInputs,
   decisionOutputs,
   filterProcessDefinitions,
+  filterNativeAuthorizations,
   filterRuntimeInstances,
   filterHistoricProcessInstances,
   filterHistoricActivityInstances,

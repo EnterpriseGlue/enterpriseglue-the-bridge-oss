@@ -1,12 +1,13 @@
-import { In, IsNull, QueryRunner, TableColumn, TableIndex } from 'typeorm';
+import { In, IsNull, QueryRunner, Table, TableColumn, TableIndex } from 'typeorm';
+import type { DataSource } from 'typeorm';
 import { getDataSource, adapter } from './data-source.js';
 import { EnvironmentTag } from '../infrastructure/persistence/entities/EnvironmentTag.js';
 import { PlatformSettings } from '../infrastructure/persistence/entities/PlatformSettings.js';
 import { User } from '../infrastructure/persistence/entities/User.js';
 // Tenant entities removed - multi-tenancy is EE-only
 import { EmailTemplate } from '../infrastructure/persistence/entities/EmailTemplate.js';
-import { SsoClaimsMapping } from '../infrastructure/persistence/entities/SsoClaimsMapping.js';
-import { SsoProvider } from '../infrastructure/persistence/entities/SsoProvider.js';
+import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
+import { permissionService } from '../services/platform-admin/permissions.js';
 import { RefreshToken } from '../infrastructure/persistence/entities/RefreshToken.js';
 import { GitProvider } from '../infrastructure/persistence/entities/GitProvider.js';
 import { GitCredential } from '../infrastructure/persistence/entities/GitCredential.js';
@@ -14,6 +15,8 @@ import { File } from '../infrastructure/persistence/entities/File.js';
 import { WorkingFile } from '../infrastructure/persistence/entities/WorkingFile.js';
 import { FileSnapshot } from '../infrastructure/persistence/entities/FileSnapshot.js';
 import { Invitation } from '../infrastructure/persistence/entities/Invitation.js';
+import { AuthzMigrationState } from '../infrastructure/persistence/entities/AuthzMigrationState.js';
+import { generateId } from '../utils/id.js';
 
 /**
  * Ensure schema exists using TypeORM QueryRunner APIs (no raw SQL)
@@ -58,6 +61,38 @@ function normalizeNullableText(value: string | null | undefined): string | null 
 
   const normalized = String(value);
   return normalized.length > 0 ? normalized : null;
+}
+
+export const LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY = 'legacy-local-role-assignment-projection-v1';
+
+/**
+ * Projects retained local collaboration rows into canonical assignments once.
+ *
+ * This runs after migrations and RBAC foundation seeding because migration
+ * query runners intentionally do not register the application entity metadata
+ * required by the permission service. The marker and assignments share one
+ * transaction so a failed projection is retried on the next startup.
+ */
+export async function projectLegacyLocalRoleAssignmentsOnce(
+  dataSource: DataSource,
+  now: number = Date.now()
+) {
+  return dataSource.transaction(async (manager) => {
+    const projectionStateRepo = manager.getRepository(AuthzMigrationState);
+    const completed = await projectionStateRepo.findOneBy({ key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY });
+    if (completed) {
+      return null;
+    }
+
+    const result = await permissionService.syncLegacyRoleAssignments({ now }, manager);
+    await projectionStateRepo.upsert({
+      id: generateId(),
+      key: LEGACY_LOCAL_ROLE_ASSIGNMENT_PROJECTION_KEY,
+      completedAt: now,
+      details: JSON.stringify(result),
+    }, { conflictPaths: ['key'], skipUpdateIfNoValuesChanged: true });
+    return result;
+  });
 }
 
 function buildVersioningIdentityKey(projectId: string, folderId: string | null | undefined, name: string, type: string): string {
@@ -346,6 +381,54 @@ async function ensureCriticalVersioningSchemaIntegrity(queryRunner: QueryRunner)
   }
 }
 
+async function recordFreshMigrationBaseline(
+  dataSource: DataSource,
+  queryRunner: QueryRunner,
+  dbType: ReturnType<typeof adapter.getDatabaseType>,
+): Promise<void> {
+  if (dbType !== 'spanner') {
+    await dataSource.runMigrations({ fake: true });
+    return;
+  }
+
+  // TypeORM's Spanner migration table declares an auto-generated numeric ID,
+  // but Spanner has no auto-increment columns. Record the baseline through the
+  // native mutation API with explicit deterministic IDs.
+  const migrationsTableName = dataSource.options.migrationsTableName || 'migrations';
+  if (!(await queryRunner.hasTable(migrationsTableName))) {
+    await queryRunner.createTable(new Table({
+      name: migrationsTableName,
+      columns: [
+        { name: 'id', type: 'int64', isPrimary: true },
+        { name: 'timestamp', type: 'int64' },
+        { name: 'name', type: 'string', length: 'max' },
+      ],
+    }));
+  }
+
+  const migrations = dataSource.migrations
+    .map((migration) => {
+      const name = migration.name || migration.constructor.name;
+      const timestamp = Number(name.slice(-13));
+      if (!Number.isSafeInteger(timestamp)) {
+        throw new Error(`Spanner migration "${name}" does not end with a safe 13-digit timestamp`);
+      }
+      return { name, timestamp };
+    })
+    .sort((left, right) => left.timestamp - right.timestamp)
+    .map((migration, index) => ({
+      id: index + 1,
+      timestamp: migration.timestamp,
+      name: migration.name,
+    }));
+
+  const spannerDatabase = (dataSource.driver as any).instanceDatabase;
+  if (!spannerDatabase) {
+    throw new Error('Spanner database handle is unavailable while recording the migration baseline');
+  }
+  await spannerDatabase.table(migrationsTableName).insert(migrations);
+}
+
 /**
  * Run database migrations using TypeORM
  * Database-agnostic implementation supporting PostgreSQL, Oracle, MySQL, SQL Server, Spanner
@@ -373,6 +456,7 @@ export async function runMigrations() {
   try {
     // Initialize TypeORM DataSource (runs pending migrations if any)
     const dataSource = await getDataSource();
+    let initializedFreshSchema = false;
 
     const queryRunner = dataSource.createQueryRunner();
     try {
@@ -387,12 +471,10 @@ export async function runMigrations() {
 
       const coreBootstrapEntities = [
         User,
-        SsoProvider,
         RefreshToken,
         EnvironmentTag,
         PlatformSettings,
         EmailTemplate,
-        SsoClaimsMapping,
         GitProvider,
         GitCredential,
         Invitation,
@@ -407,11 +489,40 @@ export async function runMigrations() {
         }
       }
 
+      let hadCanonicalTableBeforeBootstrap =
+        missingTables.length < coreBootstrapEntities.length;
+      if (
+        !hadCanonicalTableBeforeBootstrap
+        && dataSource.entityMetadatas?.length
+      ) {
+        const coreTablePaths = new Set(
+          coreBootstrapEntities.map((entity) => dataSource.getMetadata(entity).tablePath),
+        );
+        for (const metadata of dataSource.entityMetadatas) {
+          if (
+            !coreTablePaths.has(metadata.tablePath)
+            && await queryRunner.hasTable(metadata.tablePath)
+          ) {
+            hadCanonicalTableBeforeBootstrap = true;
+            break;
+          }
+        }
+      }
+
       if (missingTables.length > 0) {
         console.log(
           `  ℹ️  Database bootstrap required (missing ${missingTables.length} core table(s): ${missingTables.join(', ')}). Running TypeORM synchronize().`
         );
         await dataSource.synchronize();
+        if (!hadCanonicalTableBeforeBootstrap) {
+          // A fully empty database was created directly from the current
+          // entity model. Historical migrations are already represented in
+          // that schema and must be recorded without replaying legacy-only
+          // transformations against it.
+          await recordFreshMigrationBaseline(dataSource, queryRunner, dbType);
+          initializedFreshSchema = true;
+          console.log('  ✅ Fresh current schema recorded at the latest migration baseline');
+        }
       }
 
     } finally {
@@ -419,10 +530,12 @@ export async function runMigrations() {
     }
 
     // Run pending migrations
-    const pendingMigrations = await dataSource.showMigrations();
-    if (pendingMigrations) {
-      console.log('  Running pending migrations...');
-      await dataSource.runMigrations();
+    if (!initializedFreshSchema) {
+      const pendingMigrations = await dataSource.showMigrations();
+      if (pendingMigrations) {
+        console.log('  Running pending migrations...');
+        await dataSource.runMigrations();
+      }
     }
 
     const integrityRunner = dataSource.createQueryRunner();
@@ -537,18 +650,39 @@ export async function seedInitialData() {
     console.log('  Note: email_templates:', error.message);
   }
   
-  // Seed default SSO claims mappings
   try {
-    const ssoMappingRepo = dataSource.getRepository(SsoClaimsMapping);
-    await ssoMappingRepo.upsert([
-      { id: 'default-admin-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Platform Admins', targetRole: 'admin', priority: 100, isActive: true, createdAt: now, updatedAt: now },
-      { id: 'default-developer-group', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: 'Developers', targetRole: 'user', priority: 50, isActive: true, createdAt: now, updatedAt: now },
-      { id: 'default-all-users', providerId: null, claimType: 'group', claimKey: 'groups', claimValue: '*', targetRole: 'user', priority: 0, isActive: true, createdAt: now, updatedAt: now },
-    ], { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true });
-    console.log('  ✅ sso_claims_mappings seeded');
+    await permissionService.seedRbacFoundation(dataSource, now);
+    console.log('  ✅ RBAC permission catalog and system roles seeded');
   } catch (error: any) {
-    console.log('  Note: sso_claims_mappings:', error.message);
+    console.log('  Note: RBAC foundation:', error.message);
   }
+
+  try {
+    const result = await authzGroupService.seedDefaultPlatformGroups(dataSource, now);
+    console.log(`  ✅ default platform groups seeded (${result.groups} groups, ${result.assignments} role assignments)`);
+  } catch (error: any) {
+    console.log('  Note: default platform groups:', error.message);
+  }
+
+  try {
+    const result = await authzGroupService.backfillAuthenticatedUserMemberships(dataSource, now);
+    console.log(`  ✅ authenticated-user memberships reconciled (${result.created} created across ${result.scanned} active users)`);
+  } catch (error: any) {
+    console.log('  Note: authenticated-user membership backfill:', error.message);
+  }
+
+  try {
+    const result = await authzGroupService.backfillLegacyPlatformAdministratorMemberships(dataSource, now);
+    console.log(`  ✅ legacy platform-admin memberships reconciled (${result.created} created across ${result.scanned} active admins)`);
+  } catch (error: any) {
+    console.log('  Note: legacy platform-admin membership backfill:', error.message);
+  }
+
+  const projectionResult = await projectLegacyLocalRoleAssignmentsOnce(dataSource, now);
+  if (projectionResult) {
+    console.log(`  ✅ legacy local role assignments projected once (${projectionResult.upserted} upserted, ${projectionResult.removed} removed)`);
+  }
+
   
   console.log('✅ Initial data seeding complete');
 }

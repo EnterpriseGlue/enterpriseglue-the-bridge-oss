@@ -37,6 +37,49 @@ permissions:
   contents: read
 
 jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    if: inputs.run_tests
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@enterpriseglue'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.ci_token }}
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Run workspace typecheck
+        run: pnpm run typecheck
+
+      - name: Lint workspace and architecture boundaries
+        run: pnpm run lint
+
+      - name: Verify CI change-detection contracts
+        run: pnpm run test:ci-change-detection
+
+      - name: Verify workspace runtime contract
+        run: pnpm run test:workspace-runtime-contract
+
+      - name: Verify packed backend-host runtime dependencies
+        run: pnpm run guard:published-package-runtime
+
   compose-render:
     runs-on: ubuntu-latest
     if: inputs.run_tests
@@ -269,6 +312,10 @@ jobs:
         if: matrix.database == 'postgres'
         run: pnpm run test:integration
 
+      - name: Run authorization mutation guard
+        if: matrix.database == 'postgres'
+        run: pnpm run test:authz:mutation
+
       - name: Run Oracle backend smoke
         if: matrix.database == 'oracle'
         run: |
@@ -283,13 +330,7 @@ jobs:
 
       - name: Start Camunda mock server
         if: matrix.database == 'postgres' && inputs.run_e2e
-        run: |
-          MOCK_SPEC="local-docs/ING/api-specs/Mission-Control-Camunda-API.postman_collection.json"
-          if [ -f "$MOCK_SPEC" ]; then
-            npx --yes @stoplight/prism-cli mock "$MOCK_SPEC" -p 9080 &
-          else
-            echo "Camunda mock spec not found — skipping (EE repo)"
-          fi
+        run: node test/e2e/mock-camunda/server.mjs &
 
       - name: Start backend
         if: matrix.database == 'postgres' && inputs.run_e2e
@@ -303,12 +344,14 @@ jobs:
         if: matrix.database == 'postgres' && inputs.run_e2e
         run: |
           for i in {1..45}; do
-            if curl -sf http://localhost:8787/health >/dev/null; then
+            if curl -sf http://localhost:8787/health >/dev/null \
+              && curl -sf http://localhost:9080/health >/dev/null; then
               break
             fi
             sleep 2
           done
           curl -sf http://localhost:8787/health >/dev/null
+          curl -sf http://localhost:9080/health >/dev/null
           curl -sf http://localhost:5173/login >/dev/null
 
       - name: Run smoke e2e
@@ -325,6 +368,7 @@ jobs:
             -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
             -e E2E_API_BASE_URL=http://localhost:8787 \
             -e CAMUNDA_BASE_URL \
+            -e DATABASE_TYPE \
             -e POSTGRES_HOST \
             -e POSTGRES_PORT \
             -e POSTGRES_USER \
@@ -334,10 +378,75 @@ jobs:
             -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
             -e ADMIN_EMAIL \
             -e ADMIN_PASSWORD \
+            -e ENCRYPTION_KEY \
             -v "$PWD:/work" \
             -w /work \
             "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
             bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @smoke"
+
+      - name: Run identity lifecycle browser e2e
+        if: matrix.database == 'postgres' && inputs.run_e2e
+        run: |
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI="${CI:-true}" \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_SEED_USER=false \
+            -e IDENTITY_TEST_EVIDENCE_PATH=test/results/identity-lifecycle-evidence.json \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e ENCRYPTION_KEY \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @identity-lifecycle"
+
+      - name: Upload sanitized identity lifecycle evidence
+        if: always() && matrix.database == 'postgres' && inputs.run_e2e
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: identity-lifecycle-evidence-${{ github.run_id }}
+          path: test/results/identity-lifecycle-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Run Access Control layout browser e2e
+        if: matrix.database == 'postgres' && inputs.run_e2e
+        run: |
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI="${CI:-true}" \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_SEED_USER=false \
+            -e DATABASE_TYPE \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -e ENCRYPTION_KEY \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc "npx playwright test --config test/e2e/playwright.config.ts --grep @access-control-layout"
 
       - name: Cleanup test data
         if: always() && matrix.database == 'postgres' && inputs.run_e2e

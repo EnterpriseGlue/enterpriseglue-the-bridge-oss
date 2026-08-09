@@ -9,6 +9,50 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
+const SCRYPT_SALT_LENGTH = 32;
+
+function decodeCanonicalBase64(value: string, label: string, expectedLength?: number): Buffer {
+  if (!value || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    throw new Error(`Invalid encrypted ${label}`);
+  }
+  const decoded = Buffer.from(value, 'base64');
+  if (decoded.toString('base64') !== value || (expectedLength !== undefined && decoded.length !== expectedLength)) {
+    throw new Error(`Invalid encrypted ${label}`);
+  }
+  return decoded;
+}
+
+function parseEncryptedValue(value: string): {
+  version: 'v2' | 'legacy';
+  salt?: Buffer;
+  iv: Buffer;
+  authTag: Buffer;
+  ciphertext: string;
+} {
+  const parts = value.split(':');
+  if (parts.length === 5 && parts[0] === 'v2') {
+    const ciphertext = parts[4];
+    decodeCanonicalBase64(ciphertext, 'ciphertext');
+    return {
+      version: 'v2',
+      salt: decodeCanonicalBase64(parts[1], 'salt', SCRYPT_SALT_LENGTH),
+      iv: decodeCanonicalBase64(parts[2], 'initialization vector', IV_LENGTH),
+      authTag: decodeCanonicalBase64(parts[3], 'authentication tag', AUTH_TAG_LENGTH),
+      ciphertext,
+    };
+  }
+  if (parts.length === 3) {
+    const ciphertext = parts[2];
+    decodeCanonicalBase64(ciphertext, 'ciphertext');
+    return {
+      version: 'legacy',
+      iv: decodeCanonicalBase64(parts[0], 'initialization vector', IV_LENGTH),
+      authTag: decodeCanonicalBase64(parts[1], 'authentication tag', AUTH_TAG_LENGTH),
+      ciphertext,
+    };
+  }
+  throw new Error('Invalid encrypted data format');
+}
 
 function parseScryptSaltFromEnv(varName: string): Buffer {
   const raw = process.env[varName];
@@ -66,40 +110,26 @@ export function encrypt(plaintext: string): string {
  * Expects base64 encoded string: iv:authTag:ciphertext
  */
 export function decrypt(encryptedData: string): string {
-  const parts = encryptedData.split(':');
+  const parsed = parseEncryptedValue(encryptedData);
 
   // v2 format
-  if (parts.length === 5 && parts[0] === 'v2') {
-    const salt = Buffer.from(parts[1], 'base64');
-    const iv = Buffer.from(parts[2], 'base64');
-    const authTag = Buffer.from(parts[3], 'base64');
-    const ciphertext = parts[4];
+  if (parsed.version === 'v2') {
+    const key = deriveKeyV2(parsed.salt!);
 
-    const key = deriveKeyV2(salt);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, parsed.iv);
+    decipher.setAuthTag(parsed.authTag);
 
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(ciphertext, 'base64', 'utf8');
+    let decrypted = decipher.update(parsed.ciphertext, 'base64', 'utf8');
     decrypted += decipher.final('utf8');
 
     return decrypted;
   }
 
-  // legacy format: iv:authTag:ciphertext
-  if (parts.length !== 3) {
-    throw new Error('Invalid encrypted data format');
-  }
-
   const key = deriveKeyLegacy();
-  const iv = Buffer.from(parts[0], 'base64');
-  const authTag = Buffer.from(parts[1], 'base64');
-  const ciphertext = parts[2];
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, parsed.iv);
+  decipher.setAuthTag(parsed.authTag);
   
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-  
-  let decrypted = decipher.update(ciphertext, 'base64', 'utf8');
+  let decrypted = decipher.update(parsed.ciphertext, 'base64', 'utf8');
   decrypted += decipher.final('utf8');
   
   return decrypted;
@@ -109,19 +139,8 @@ export function decrypt(encryptedData: string): string {
  * Check if a string is encrypted (has our format)
  */
 export function isEncrypted(value: string): boolean {
-  const parts = value.split(':');
-  if (parts.length !== 3 && !(parts.length === 5 && parts[0] === 'v2')) return false;
-  
   try {
-    // Check if parts are valid base64 (best effort)
-    if (parts.length === 5 && parts[0] === 'v2') {
-      Buffer.from(parts[1], 'base64');
-      Buffer.from(parts[2], 'base64');
-      Buffer.from(parts[3], 'base64');
-      return true;
-    }
-    Buffer.from(parts[0], 'base64');
-    Buffer.from(parts[1], 'base64');
+    parseEncryptedValue(value);
     return true;
   } catch {
     return false;
@@ -129,18 +148,14 @@ export function isEncrypted(value: string): boolean {
 }
 
 /**
- * Safely decrypt - returns original value if not encrypted or decryption fails
+ * Decrypts recognized ciphertext and returns plaintext values unchanged.
+ * Authentication or structure failures for versioned ciphertext fail closed.
  */
 export function safeDecrypt(value: string): string {
-  if (!isEncrypted(value)) {
+  if (!value.startsWith('v2:') && !isEncrypted(value)) {
     return value;
   }
-  
-  try {
-    return decrypt(value);
-  } catch {
-    return value;
-  }
+  return decrypt(value);
 }
 
 /**
@@ -148,4 +163,18 @@ export function safeDecrypt(value: string): string {
  */
 export function hash(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * Deterministic, domain-separated blind index for low-entropy identifiers that
+ * must be comparable without exposing a dictionary-verifiable plain hash.
+ */
+export function blindIndex(domain: string, value: string): string {
+  const normalizedDomain = domain.trim();
+  if (!normalizedDomain) throw new Error('Blind-index domain is required');
+  return crypto.createHmac('sha256', getEncryptionKey())
+    .update(normalizedDomain, 'utf8')
+    .update('\u0000', 'utf8')
+    .update(value, 'utf8')
+    .digest('hex');
 }

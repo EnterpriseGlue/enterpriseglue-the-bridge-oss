@@ -3,15 +3,14 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireFileAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Version } from '@enterpriseglue/shared/infrastructure/persistence/entities/Version.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
-import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { ProjectPermissions, permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { unixTimestamp, unixTimestampMs } from '@enterpriseglue/shared/utils/id.js';
 
 const fileIdParamSchema = z.object({ fileId: z.string().uuid() });
@@ -22,10 +21,38 @@ const createVersionBodySchema = z.object({
 
 const r = Router();
 
+function projectPermissionContext(req: Request, projectId: string) {
+  return {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    resourceType: 'project' as const,
+    resourceId: projectId,
+  };
+}
+
+async function canReadFileVersion(req: Request, fileId: string): Promise<boolean> {
+  const dataSource = await getDataSource();
+  const file = await dataSource.getRepository(File).findOne({
+    where: { id: fileId },
+    select: ['projectId'],
+  });
+  if (!file) return false;
+
+  const project = await dataSource.getRepository(Project).findOne({
+    where: { id: String(file.projectId) },
+    select: ['id', 'tenantId'],
+  });
+  if (!project) return false;
+  const tenantId = req.tenant?.tenantId || null;
+  if (tenantId && project.tenantId && project.tenantId !== tenantId) return false;
+
+  return permissionService.hasPermission(ProjectPermissions.FILES_VIEW, projectPermissionContext(req, String(file.projectId)));
+}
+
 /**
  * List versions for a file (seed an initial version if none)
  */
-r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateParams(fileIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateParams(fileIdParamSchema), requireAction('project.versions.read', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const dataSource = await getDataSource();
   const versionRepo = dataSource.getRepository(Version);
@@ -69,7 +96,7 @@ r.get('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateP
   })));
 }));
 
-r.post('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(createVersionBodySchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(createVersionBodySchema), requireAction('project.versions.create', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const dataSource = await getDataSource();
@@ -81,11 +108,6 @@ r.post('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validate
   });
 
   if (!file) {
-    throw Errors.notFound('File');
-  }
-
-  const canEditFile = await projectMemberService.hasRole(String(file.projectId), userId, EDIT_ROLES);
-  if (!canEditFile) {
     throw Errors.notFound('File');
   }
 
@@ -110,7 +132,7 @@ r.post('/starbase-api/files/:fileId/versions', apiLimiter, requireAuth, validate
   });
 }));
 
-r.get('/starbase-api/files/:fileId/versions/:versionId', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/files/:fileId/versions/:versionId', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireAction('project.versions.read', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const versionId = String(req.params.versionId);
   const dataSource = await getDataSource();
@@ -135,7 +157,7 @@ r.get('/starbase-api/files/:fileId/versions/:versionId', apiLimiter, requireAuth
   });
 }));
 
-r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, requireAuth, validateParams(versionIdParamSchema), requireAction('project.versions.restore', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const versionId = String(req.params.versionId);
   const userId = req.user!.userId;
@@ -160,11 +182,6 @@ r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, re
 
   if (!version) {
     throw Errors.notFound('Version');
-  }
-
-  const canEditFile = await projectMemberService.hasRole(String(file.projectId), userId, EDIT_ROLES);
-  if (!canEditFile) {
-    throw Errors.notFound('File');
   }
 
   const updatedAt = unixTimestamp();
@@ -198,10 +215,9 @@ r.post('/starbase-api/files/:fileId/versions/:versionId/restore', apiLimiter, re
 /**
  * Very simple compare endpoint placeholder
  */
-r.get('/starbase-api/versions/:versionId/compare/:otherVersionId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/versions/:versionId/compare/:otherVersionId', apiLimiter, requireAuth, requireAction('project.versions.read', { resourceResolver: 'project.byVersionId', resourceIdFrom: 'params', resourceIdKey: 'versionId' }), asyncHandler(async (req: Request, res: Response) => {
   const versionId = String(req.params.versionId);
   const otherVersionId = String(req.params.otherVersionId);
-  const userId = req.user!.userId;
   const dataSource = await getDataSource();
   const versionRepo = dataSource.getRepository(Version);
   
@@ -221,10 +237,7 @@ r.get('/starbase-api/versions/:versionId/compare/:otherVersionId', apiLimiter, r
   
   if (!a || !b) throw Errors.notFound('Version');
 
-  if (!(await AuthorizationService.verifyFileAccess(String(a.v_fileId || a.fileId), userId))) {
-    throw Errors.notFound('Version');
-  }
-  if (!(await AuthorizationService.verifyFileAccess(String(b.v_fileId || b.fileId), userId))) {
+  if (!(await canReadFileVersion(req, String(b.v_fileId || b.fileId)))) {
     throw Errors.notFound('Version');
   }
   

@@ -1,6 +1,8 @@
 import React from 'react'
 import { Modal, InlineNotification, Select, SelectItem, TextInput, Button } from '@carbon/react'
+import { WhyUnavailableLink } from '../../../../shared/auth/guards'
 import type { BulkSyncResult, SyncDirection } from '../projectOverviewTypes'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface ProjectOverviewBulkSyncModalProps {
   open: boolean
@@ -13,6 +15,8 @@ interface ProjectOverviewBulkSyncModalProps {
   setBulkDirection: (value: SyncDirection) => void
   bulkSyncIds: string[]
   canBulkSync: boolean
+  bulkSyncUnavailableReason?: string | null
+  bulkSyncDiagnosticDecision?: UiAuthzDecision | null
   credentialsCheckLoading: boolean
   sharingEnabled: boolean
   pushEnabled: boolean
@@ -34,6 +38,8 @@ export function ProjectOverviewBulkSyncModal({
   setBulkDirection,
   bulkSyncIds,
   canBulkSync,
+  bulkSyncUnavailableReason,
+  bulkSyncDiagnosticDecision,
   credentialsCheckLoading,
   sharingEnabled,
   pushEnabled,
@@ -54,7 +60,8 @@ export function ProjectOverviewBulkSyncModal({
         bulkMessage.trim().length === 0 ||
         bulkSyncIds.length === 0 ||
         credentialsCheckLoading ||
-        !canBulkSync
+        !canBulkSync ||
+        Boolean(bulkSyncUnavailableReason)
       }
       onRequestClose={onClose}
       onRequestSubmit={onSubmit}
@@ -89,6 +96,24 @@ export function ProjectOverviewBulkSyncModal({
           onCloseButtonClick={onClearError}
           style={{ marginBottom: 'var(--spacing-5)' }}
         />
+      )}
+
+      {bulkSyncUnavailableReason && (
+        <>
+          <InlineNotification
+            kind="warning"
+            title="Sync unavailable"
+            subtitle={bulkSyncUnavailableReason}
+            style={{ marginBottom: bulkSyncDiagnosticDecision ? 'var(--spacing-2)' : 'var(--spacing-5)' }}
+            lowContrast
+            hideCloseButton
+          />
+          {bulkSyncDiagnosticDecision ? (
+            <div style={{ marginBottom: 'var(--spacing-5)' }}>
+              <WhyUnavailableLink decision={bulkSyncDiagnosticDecision} />
+            </div>
+          ) : null}
+        </>
       )}
 
       {bulkResult && bulkResult.failed.length > 0 && (

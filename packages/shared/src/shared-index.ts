@@ -22,6 +22,7 @@ import 'reflect-metadata';
 
 // New Clean Architecture layers (actively being populated)
 export * from './domain/index.js';
+export * from './authz/index.js';
 
 // Application layer (minimal during migration)
 export type * from './application/index.js';

@@ -9,8 +9,8 @@ export class EngineDeploymentArtifact extends AppBaseEntity {
   @Column({ name: 'engine_deployment_id', type: 'text' })
   engineDeploymentId!: string;
 
-  @Column({ name: 'project_id', type: 'text' })
-  projectId!: string;
+  @Column({ name: 'project_id', type: 'text', nullable: true })
+  projectId!: string | null;
 
   @Column({ name: 'engine_id', type: 'text' })
   engineId!: string;

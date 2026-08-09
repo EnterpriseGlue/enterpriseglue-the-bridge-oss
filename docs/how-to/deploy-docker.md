@@ -4,6 +4,8 @@ Summary: Deploy EnterpriseGlue using the Docker Compose stack defined in the rep
 
 Audience: Developers and architects.
 
+All Compose deployment paths can optionally mount an authorization configuration bundle. Bootstrap remains disabled unless a bundle host path and `EG_CONFIG_BOOTSTRAP_MODE=validate` or `apply` are configured. The complete validation, readiness, secret, and rollback contract is documented in [Deploy Authorization Configuration](./deploy-authorization-config.md).
+
 ## Services (Dev)
 The default compose file `infra/docker/compose/docker-compose.yml` defines:
 - **db**: PostgreSQL 18 container
@@ -88,9 +90,21 @@ Key defaults:
 pnpm run dev
 ```
 
+To validate or apply a bundle during startup, set `EG_CONFIG_BOOTSTRAP_MODE` in the selected backend environment file and opt into the read-only overlay:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run dev
+```
+
 ## Start (Production)
 ```bash
 pnpm run prod
+```
+
+The same opt-in works for source-built production:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod
 ```
 
 ## Start (Production from images)
@@ -98,6 +112,37 @@ pnpm run prod
 pnpm run prod:images:postgres
 # or
 pnpm run prod:images:oracle
+```
+
+Published backend images use the same mount contract:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" pnpm run prod:images:postgres
+```
+
+Paths containing spaces are supported when the environment assignment is quoted. The bundle is mounted read-only at `/etc/enterpriseglue/config/bundle.json`; optional file-backed secrets use a separate read-only directory selected with `EG_CONFIG_SECRETS_HOST_PATH`. The production backend image runs as UID/GID `65532`, owns the empty projection directories, and never copies a customer bundle into an image layer. Repository-local `.local/` and root `config/` directories are excluded from the Docker build context as an additional safeguard.
+
+Before starting containers, validate the assembled source-build Compose plan without
+mutating Docker state:
+
+```bash
+EG_CONFIG_BUNDLE_HOST_PATH="./config/reviewed bundle.json" \
+./scripts/deploy-compose.sh source config
+```
+
+After startup, check `/ready` rather than relying on container liveness alone. An
+`apply` bootstrap stays unready until its bounded identity replay completes. The
+response and backend log contain only the bundle hash, enum-backed state, and a
+generic issue code. `/metrics` exposes the same state without the hash. The final
+state is also stored on the configuration apply-run receipt and is visible in
+**Platform Settings → Configuration Bundles**.
+
+For standalone self-host Compose, download `docker-compose.config-bundle.yml` beside `docker-compose.selfhost.yml`, configure the disabled-by-default `EG_CONFIG_*` values in `.env`, and include both files:
+
+```bash
+curl -O https://raw.githubusercontent.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/main/infra/docker/compose/docker-compose.config-bundle.yml
+EG_CONFIG_BUNDLE_HOST_PATH="./config/enterpriseglue.json" \
+docker compose -f docker-compose.selfhost.yml -f docker-compose.config-bundle.yml up -d
 ```
 
 ## Stop
@@ -125,6 +170,11 @@ pnpm run prod:images:oracle:down
 2. Set `IMAGE_TAG` to the previous known-good tag.
 3. Re-run the same start command (`pnpm run prod:images:postgres` or `pnpm run prod:images:oracle`).
 
+For a configuration rollback, restore the previous reviewed bundle, update
+`EG_CONFIG_EXPECTED_SHA256`, and rerun the same Compose command. Do not disable
+`EG_CONFIG_FAIL_CLOSED` to force an invalid bundle online. Authoritative removals
+still require the bundle's explicit archive acknowledgements.
+
 ## Volumes
 Docker creates persistent volumes for:
 - `postgres_data` (database)
@@ -141,6 +191,9 @@ Docker creates persistent volumes for:
 - **Wrong env file selected**: ensure `--env-file` and `EG_BACKEND_ENV_FILE` point to the same `.local/docker/env/images.*.env` file.
 - **Image pull errors**: verify registry access and image names (`BACKEND_IMAGE`, `FRONTEND_IMAGE`) and tag (`IMAGE_TAG`).
 - **Backend not reachable in image mode**: use frontend-proxied health (`http://localhost:8080/health`) when `EXPOSE_BACKEND=false`.
+- **Backend is healthy but not ready**: inspect `http://localhost:8080/ready`, the
+  `enterpriseglue_config_bootstrap_info` metric, and the matching apply-run
+  receipt. Resolve the reported issue code before restarting.
 
 ## Compose file layout
 - `infra/docker/compose/docker-compose.yml` (dev base)
@@ -148,4 +201,5 @@ Docker creates persistent volumes for:
 - `infra/docker/compose/docker-compose.prod.yml` (production base)
 - `infra/docker/compose/docker-compose.images.yml` (published image overlay)
 - `infra/docker/compose/docker-compose.backend-expose.yml` (optional backend host publish)
+- `infra/docker/compose/docker-compose.identity-protocol-rehearsal.yml` (test-only production-image override for the disposable identity-protocol rehearsal)
 - `infra/docker/compose/docker-compose.ci.yml` (CI-specific overrides)

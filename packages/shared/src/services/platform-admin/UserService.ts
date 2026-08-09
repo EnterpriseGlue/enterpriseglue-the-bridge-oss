@@ -14,6 +14,9 @@ import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence
 import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { ExternalIdentity } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalIdentity.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
@@ -21,6 +24,8 @@ import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/
 import { hashPassword, generatePassword } from '@enterpriseglue/shared/utils/password.js';
 import { randomBytes } from 'crypto';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
+import { authzGroupService } from './AuthzGroupService.js';
+import { getActivePlatformAdministratorUserIds } from './PlatformAdministratorMembershipService.js';
 import { IsNull } from 'typeorm';
 
 export interface CreateUserInput {
@@ -86,14 +91,18 @@ function resolveAdminUserStatus(user: User, pendingInvitationUserIds: Set<string
   return 'active';
 }
 
-function toUserDTO(user: User, options: { includeAdmin?: boolean; pendingInvitationUserIds?: Set<string> } = {}): UserDTO {
+function toUserDTO(
+  user: User,
+  options: { includeAdmin?: boolean; pendingInvitationUserIds?: Set<string>; platformAdministratorUserIds?: Set<string> } = {}
+): UserDTO {
   const pendingInvitationUserIds = options.pendingInvitationUserIds || new Set<string>();
   const dto: UserDTO = {
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    platformRole: normalizeRoleValue(user.platformRole),
+    // Kept for API compatibility; effective access is group-derived.
+    platformRole: options.platformAdministratorUserIds?.has(user.id) ? 'admin' : 'user',
     authProvider: user.authProvider || 'local',
     isActive: Boolean(user.isActive),
     isEmailVerified: Boolean(user.isEmailVerified),
@@ -131,7 +140,11 @@ export class UserService {
     });
     const pendingInvitationUserIds = new Set(pendingInvitations.map((invitation) => String(invitation.userId)));
     const result = await userRepo.find({ order: { createdAt: 'DESC' } });
-    return result.map((u) => toUserDTO(u, { includeAdmin: true, pendingInvitationUserIds }));
+    const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds(
+      result.map((user) => user.id),
+      dataSource,
+    );
+    return result.map((u) => toUserDTO(u, { includeAdmin: true, pendingInvitationUserIds, platformAdministratorUserIds }));
   }
 
   /**
@@ -151,9 +164,11 @@ export class UserService {
         completedAt: IsNull(),
       },
     });
+    const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([id], dataSource);
     return toUserDTO(user, {
       includeAdmin: true,
       pendingInvitationUserIds: pendingInvitationCount > 0 ? new Set([id]) : new Set<string>(),
+      platformAdministratorUserIds,
     });
   }
 
@@ -173,38 +188,42 @@ export class UserService {
     const now = Date.now();
 
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
+    const result = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      let existingQb = userRepo.createQueryBuilder('u');
+      existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', email);
+      const existing = await existingQb.getOne();
+      if (existing) throw Errors.conflict('User with this email already exists');
 
-    // Check if user already exists (case-insensitive)
-    let existingQb = userRepo.createQueryBuilder('u');
-    existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', email);
-    const existing = await existingQb.getOne();
-    if (existing) {
-      throw Errors.conflict('User with this email already exists');
-    }
-
-    await userRepo.insert({
-      id: userId,
-      email,
-      passwordHash,
-      firstName: firstName || null,
-      lastName: lastName || null,
-      platformRole: normalizedPlatformRole,
-      isActive: true,
-      mustResetPassword: true,
-      failedLoginAttempts: 0,
-      createdAt: now,
-      updatedAt: now,
-      createdByUserId,
-      isEmailVerified: false,
-      emailVerificationToken: verificationToken,
-      emailVerificationTokenExpiry: tokenExpiry,
+      await userRepo.insert({
+        id: userId,
+        email,
+        passwordHash,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        // The database keeps its non-privileged compatibility default while
+        // the canonical group membership below remains the access source.
+        isActive: true,
+        mustResetPassword: true,
+        failedLoginAttempts: 0,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId,
+        isEmailVerified: false,
+        emailVerificationToken: verificationToken,
+        emailVerificationTokenExpiry: tokenExpiry,
+      });
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+      if (normalizedPlatformRole === 'admin') {
+        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
+      }
+      const user = await userRepo.findOneBy({ id: userId });
+      const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([userId], manager);
+      return { user, platformAdministratorUserIds };
     });
 
-    const user = await userRepo.findOneBy({ id: userId });
-
     return {
-      user: toUserDTO(user!),
+      user: toUserDTO(result.user!, { platformAdministratorUserIds: result.platformAdministratorUserIds }),
       temporaryPassword,
       verificationToken,
     };
@@ -218,38 +237,41 @@ export class UserService {
     const now = Date.now();
 
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
+    const result = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      let existingQb = userRepo.createQueryBuilder('u');
+      existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', normalizedEmail);
+      const existing = await existingQb.getOne();
+      if (existing) throw Errors.conflict('User with this email already exists');
 
-    let existingQb = userRepo.createQueryBuilder('u');
-    existingQb = addCaseInsensitiveEquals(existingQb, 'u', 'email', 'email', normalizedEmail);
-    const existing = await existingQb.getOne();
-    if (existing) {
-      throw Errors.conflict('User with this email already exists');
-    }
-
-    await userRepo.insert({
-      id: userId,
-      email: normalizedEmail,
-      authProvider: 'local',
-      passwordHash: null,
-      firstName: firstName || null,
-      lastName: lastName || null,
-      platformRole: normalizedPlatformRole,
-      isActive: true,
-      mustResetPassword: false,
-      failedLoginAttempts: 0,
-      lockedUntil: null,
-      createdAt: now,
-      updatedAt: now,
-      createdByUserId,
-      isEmailVerified: false,
-      emailVerificationToken: null,
-      emailVerificationTokenExpiry: null,
-      lastLoginAt: null,
+      await userRepo.insert({
+        id: userId,
+        email: normalizedEmail,
+        authProvider: 'local',
+        passwordHash: null,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        isActive: true,
+        mustResetPassword: false,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        createdAt: now,
+        updatedAt: now,
+        createdByUserId,
+        isEmailVerified: false,
+        emailVerificationToken: null,
+        emailVerificationTokenExpiry: null,
+        lastLoginAt: null,
+      });
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
+      if (normalizedPlatformRole === 'admin') {
+        await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, userId);
+      }
+      const user = await userRepo.findOneBy({ id: userId });
+      const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([userId], manager);
+      return { user, platformAdministratorUserIds };
     });
-
-    const user = await userRepo.findOneBy({ id: userId });
-    return toUserDTO(user!);
+    return toUserDTO(result.user!, { platformAdministratorUserIds: result.platformAdministratorUserIds });
   }
 
   /**
@@ -257,21 +279,44 @@ export class UserService {
    */
   async updateUser(id: string, input: UpdateUserInput): Promise<UserDTO> {
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
+    const result = await dataSource.transaction(async (manager) => {
+      const userRepo = manager.getRepository(User);
+      const existing = await userRepo.findOneBy({ id });
+      if (!existing) throw Errors.notFound('User', id);
 
-    const existing = await userRepo.findOneBy({ id });
-    if (!existing) throw Errors.notFound('User', id);
+      const updateData: any = { updatedAt: Date.now() };
+      if (input.firstName !== undefined) updateData.firstName = input.firstName;
+      if (input.lastName !== undefined) updateData.lastName = input.lastName;
+      if (input.isActive !== undefined) updateData.isActive = input.isActive;
 
-    const updateData: any = { updatedAt: Date.now() };
-    if (input.firstName !== undefined) updateData.firstName = input.firstName;
-    if (input.lastName !== undefined) updateData.lastName = input.lastName;
-    if (input.platformRole !== undefined) updateData.platformRole = normalizeRoleValue(input.platformRole);
-    if (input.isActive !== undefined) updateData.isActive = input.isActive;
-
-    await userRepo.update({ id }, updateData);
-
-    const user = await userRepo.findOneBy({ id });
-    return toUserDTO(user!);
+      await userRepo.update({ id }, updateData);
+      const nextIsActive = updateData.isActive ?? existing.isActive;
+      if (nextIsActive) {
+        await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, id);
+      } else if (existing.isActive || input.isActive === false) {
+        await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, id);
+        await manager.getRepository(RefreshToken).update({ userId: id }, { revokedAt: updateData.updatedAt });
+      }
+      if (input.platformRole !== undefined) {
+        if (normalizeRoleValue(input.platformRole) === 'admin') {
+          await authzGroupService.ensureManualPlatformAdministratorMembershipWithManager(manager, id);
+        } else {
+          const removal = await authzGroupService.removeManualPlatformAdministratorMembershipWithManager(manager, id);
+          if (removal.removed) {
+            // A break-glass session is deliberately indistinguishable from a
+            // normal local session after issue. Invalidate every existing
+            // access/refresh session when its manual administrator membership
+            // is removed so recovery access cannot outlive the recovery grant.
+            await userRepo.update({ id }, { authSessionVersion: Number(existing.authSessionVersion || 0) + 1 });
+            await manager.getRepository(RefreshToken).update({ userId: id }, { revokedAt: updateData.updatedAt });
+          }
+        }
+      }
+      const updatedUser = await userRepo.findOneBy({ id });
+      const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([id], manager);
+      return { user: updatedUser, platformAdministratorUserIds };
+    });
+    return toUserDTO(result.user!, { platformAdministratorUserIds: result.platformAdministratorUserIds });
   }
 
   /**
@@ -290,6 +335,7 @@ export class UserService {
         isActive: false,
         updatedAt: now,
       });
+      await authzGroupService.removeAuthenticatedUserMembershipWithManager(manager, id);
       await manager.getRepository(RefreshToken).update({ userId: id }, { revokedAt: now });
     });
   }
@@ -341,6 +387,13 @@ export class UserService {
       await manager.getRepository(ProjectMemberRole).delete({ userId: id });
       await manager.getRepository(ProjectMember).delete({ userId: id });
       await manager.getRepository(EngineMember).delete({ userId: id });
+      // Principal-scoped assignments and group memberships have no database
+      // foreign key to User. Revoke canonical rows before deleting the account
+      // so a later id reuse cannot inherit access or leave a dangling
+      // external-account link.
+      await manager.getRepository(RbacRoleAssignment).delete({ principalType: 'user', principalId: id });
+      await manager.getRepository(AuthzGroupMembership).delete({ userId: id });
+      await manager.getRepository(ExternalIdentity).delete({ userId: id });
       await manager.getRepository(User).delete({ id });
     });
   }

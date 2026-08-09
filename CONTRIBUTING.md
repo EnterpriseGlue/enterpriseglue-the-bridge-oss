@@ -150,6 +150,17 @@ Optional API smoke checks (requires a running backend and valid credentials):
 - Describe the problem and solution.
 - Include steps to validate (what you ran locally).
 - UI changes should include screenshots.
+- Add a structured `.release-notes/*.json` fragment for release-impacting
+  changes and run the release-note validation and preview commands.
+- Use `release-note:none` only for internal changes, with a concrete
+  `Release-note exemption:` reason in the PR body.
+
+See [Release-note and versioning process](docs/development/release-notes-process.md)
+for the schema, path-aware requirements, Release Please integration, and
+post-release checks.
+
+Codex contributors can install and validate the version-controlled
+[EnterpriseGlue development workflow plugin](docs/development/codex-workflow-plugin.md).
 
 ## Security
 

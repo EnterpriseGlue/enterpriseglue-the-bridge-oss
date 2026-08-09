@@ -4,11 +4,14 @@ import { InvitationService } from '@enterpriseglue/shared/services/invitations.j
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation } from '@enterpriseglue/shared/db/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
 import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
 import { sendInvitationEmail } from '@enterpriseglue/shared/services/email/index.js';
+
+const accessAuthorityDecisionMock = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const ordinaryLocalPasswordEnabled = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -34,6 +37,14 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/EngineService.js', () =>
   engineService: {
     addEngineMember: vi.fn(),
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.js', () => ({
+  getAccessAuthorityDecision: accessAuthorityDecisionMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({
+  loginMethodService: { ordinaryLocalPasswordEnabled },
 }));
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({
@@ -66,9 +77,6 @@ describe('InvitationService', () => {
     findOneByOrFail: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
-  let ssoProviderRepo: {
-    count: ReturnType<typeof vi.fn>;
-  };
   let managerUserRepo: {
     update: ReturnType<typeof vi.fn>;
   };
@@ -79,6 +87,8 @@ describe('InvitationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    accessAuthorityDecisionMock.mockResolvedValue(null);
+    ordinaryLocalPasswordEnabled.mockResolvedValue(true);
     vi.spyOn(Date, 'now').mockReturnValue(now);
 
     const defaultExecute = vi.fn().mockResolvedValue({ affected: 1 });
@@ -104,10 +114,6 @@ describe('InvitationService', () => {
       update: vi.fn().mockResolvedValue(undefined),
     };
 
-    ssoProviderRepo = {
-      count: vi.fn().mockResolvedValue(0),
-    };
-
     managerUserRepo = {
       update: vi.fn().mockResolvedValue(undefined),
     };
@@ -122,12 +128,13 @@ describe('InvitationService', () => {
         execute: vi.fn().mockResolvedValue({ affected: 1 }),
       }),
     };
+    const membershipRepo = { find: vi.fn().mockResolvedValue([]) };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === Invitation) return invitationRepo;
         if (entity === User) return userRepo;
-        if (entity === SsoProvider) return ssoProviderRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
         throw new Error('Unexpected repository');
       },
       transaction: async (callback: (manager: { getRepository: (entity: unknown) => unknown }) => Promise<void>) => callback({
@@ -171,6 +178,7 @@ describe('InvitationService', () => {
       status: 'pending',
       expiresAt: now + 24 * 60 * 60 * 1000,
     }));
+    expect(invitationRepo.insert.mock.calls[0]?.[0]).not.toHaveProperty('platformRole');
     expect(sendInvitationEmail).not.toHaveBeenCalled();
     expect(result).toEqual(expect.objectContaining({
       invitationId: 'inv-1',
@@ -219,7 +227,9 @@ describe('InvitationService', () => {
       resourceRole: 'viewer',
       resourceRolesJson: JSON.stringify(['viewer']),
       deliveryMethod: 'email',
-      expiresAt: now - 1,
+      // PostgreSQL exposes bigint columns as strings even though the entity
+      // property is typed as a number.
+      expiresAt: String(now - 1),
       status: 'pending',
       revokedAt: null,
       completedAt: null,
@@ -229,6 +239,7 @@ describe('InvitationService', () => {
     await expect(service.getInvitationInfo('invite-token')).resolves.toEqual(expect.objectContaining({
       email: 'invitee@example.com',
       deliveryMethod: 'email',
+      expiresAt: now - 1,
       status: 'expired',
     }));
   });
@@ -423,6 +434,9 @@ describe('InvitationService', () => {
       }),
     );
     expect(projectMemberService.addMember).toHaveBeenCalledWith('project-1', 'user-1', ['delegate', 'viewer'], 'admin-1');
+    expect((projectMemberService.addMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      managerInvitationRepo.update.mock.invocationCallOrder[0],
+    );
     expect(engineService.addEngineMember).not.toHaveBeenCalled();
     expect(managerInvitationRepo.update).toHaveBeenCalledWith(
       { id: 'inv-1' },
@@ -434,5 +448,88 @@ describe('InvitationService', () => {
     expect(result.tenantSlug).toBe('default');
     expect(result.user.mustResetPassword).toBe(false);
     expect(result.user.isEmailVerified).toBe(true);
+  });
+
+  it('creates the engine assignment before completing engine invitation onboarding', async () => {
+    invitationRepo.findOneBy.mockResolvedValue({
+      id: 'inv-1',
+      userId: 'user-1',
+      email: 'invitee@example.com',
+      tenantSlug: 'default',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+      resourceRole: 'deployer',
+      resourceRolesJson: null,
+      createdByUserId: 'admin-1',
+      status: 'otp_verified',
+      otpVerifiedAt: now - 1000,
+      revokedAt: null,
+      completedAt: null,
+    });
+    userRepo.findOneBy.mockResolvedValue({
+      id: 'user-1',
+      email: 'invitee@example.com',
+      firstName: null,
+      lastName: null,
+      platformRole: 'user',
+      isActive: true,
+      isEmailVerified: false,
+      mustResetPassword: true,
+      createdAt: now - 10_000,
+      lastLoginAt: null,
+      createdByUserId: 'admin-1',
+    });
+    userRepo.findOneByOrFail.mockResolvedValue({
+      id: 'user-1',
+      email: 'invitee@example.com',
+      firstName: null,
+      lastName: null,
+      platformRole: 'user',
+      isActive: true,
+      isEmailVerified: true,
+      mustResetPassword: false,
+      createdAt: now - 10_000,
+      lastLoginAt: null,
+    });
+    (hashPassword as unknown as Mock).mockResolvedValue('new-password-hash');
+
+    await service.completeInvitation('inv-1', 'StrongPass!123');
+
+    expect(engineService.addEngineMember).toHaveBeenCalledWith('engine-1', 'user-1', 'deployer', 'admin-1');
+    expect((engineService.addEngineMember as Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      managerInvitationRepo.update.mock.invocationCallOrder[0],
+    );
+    expect(projectMemberService.addMember).not.toHaveBeenCalled();
+  });
+
+  it('does not activate a pending resource invitation after access becomes SSO-managed', async () => {
+    invitationRepo.findOneBy.mockResolvedValue({
+      id: 'inv-1',
+      userId: 'user-1',
+      email: 'invitee@example.com',
+      tenantSlug: 'default',
+      resourceType: 'engine',
+      resourceId: 'engine-1',
+      resourceRole: 'operator',
+      resourceRolesJson: null,
+      status: 'otp_verified',
+      otpVerifiedAt: now - 1000,
+      revokedAt: null,
+      completedAt: null,
+    });
+    accessAuthorityDecisionMock.mockResolvedValue({
+      domain: 'engine',
+      mode: 'sso_managed',
+      manualMutationsAllowed: false,
+      reason: 'Engine access is SSO-managed; manual access changes are disabled',
+    });
+
+    await expect(service.completeInvitation('inv-1', 'StrongPass!123'))
+      .rejects.toMatchObject({ statusCode: 403 });
+
+    expect(hashPassword).not.toHaveBeenCalled();
+    expect(engineService.addEngineMember).not.toHaveBeenCalled();
+    expect(managerUserRepo.update).not.toHaveBeenCalled();
+    expect(managerInvitationRepo.update).not.toHaveBeenCalled();
   });
 });

@@ -1,14 +1,15 @@
 import React from 'react'
 import { Modal } from '@carbon/react'
+import type { ActivityInstance, Variables } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 interface InstanceDetailsModalProps {
   open: boolean
   instanceId: string | null
   onClose: () => void
   histQLoading: boolean
-  histQData: any[] | undefined
+  histQData: ActivityInstance[] | undefined
   varsQLoading: boolean
-  varsQData: Record<string, { value: any; type: string }> | undefined
+  varsQData: Variables | undefined
 }
 
 export function InstanceDetailsModal({
@@ -34,7 +35,7 @@ export function InstanceDetailsModal({
           {histQData && histQData.length === 0 ? <p>No activity history.</p> : null}
           {histQData && histQData.length > 0 && (
             <ul>
-              {histQData.map((a: any) => (
+              {histQData.map((a) => (
                 <li key={a.id}>{a.activityName || a.activityId} — {a.endTime ? 'done' : 'active'}</li>
               ))}
             </ul>
@@ -50,7 +51,7 @@ export function InstanceDetailsModal({
                 <tr><th>Name</th><th>Value</th><th>Type</th></tr>
               </thead>
               <tbody>
-                {Object.entries(varsQData).map(([k, v]: any) => (
+                {Object.entries(varsQData).map(([k, v]) => (
                   <tr key={k}><td>{k}</td><td>{String(v.value)}</td><td>{v.type}</td></tr>
                 ))}
               </tbody>

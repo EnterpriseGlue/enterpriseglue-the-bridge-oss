@@ -2,7 +2,6 @@ import { createHash, randomBytes } from 'crypto';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Invitation, type InvitationDeliveryMethod, type InvitationResourceType } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/SsoProvider.js';
 import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { generatePassword, hashPassword, verifyPassword } from '@enterpriseglue/shared/utils/password.js';
@@ -10,8 +9,11 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { sendInvitationEmail } from './email/index.js';
 import { projectMemberService } from './platform-admin/ProjectMemberService.js';
 import { engineService } from './platform-admin/EngineService.js';
-import type { PlatformRole, User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
+import { getAccessAuthorityDecision } from './platform-admin/AccessAuthorityService.js';
+import type { User as UserContract } from '@enterpriseglue/shared/contracts/auth.js';
+import { getActivePlatformAdministratorUserIds } from './platform-admin/PlatformAdministratorMembershipService.js';
 import type { Repository } from 'typeorm';
+import { loginMethodService } from './platform-admin/LoginMethodService.js';
 
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 const OTP_LOCK_WINDOW_MS = 15 * 60 * 1000;
@@ -26,7 +28,6 @@ export interface CreateInvitationInput {
   resourceType: InvitationResourceType;
   resourceId?: string;
   resourceName?: string;
-  platformRole?: PlatformRole;
   resourceRole?: string;
   resourceRoles?: string[];
   createdByUserId: string;
@@ -151,7 +152,9 @@ function toInvitationInfo(invitation: Invitation, now: number): InvitationInfo {
     resourceRole: invitation.resourceRole,
     resourceRoles: parseRoles(invitation.resourceRolesJson),
     deliveryMethod: invitation.deliveryMethod,
-    expiresAt: invitation.expiresAt,
+    // PostgreSQL returns bigint columns as strings. Normalize at the service
+    // boundary so every adapter exposes the numeric public API contract.
+    expiresAt: Number(invitation.expiresAt),
     status: toInvitationDisplayStatus(invitation, now),
   };
 }
@@ -163,9 +166,9 @@ async function getInvitationByTokenValue(token: string): Promise<Invitation | nu
   return invitationRepo.findOneBy({ inviteTokenHash });
 }
 
-function assertLocalLoginAllowed(enabledProviderCount: number): void {
-  if (enabledProviderCount > 0) {
-    throw Errors.forbidden('Local login is disabled while SSO is enabled. One-time password invites are unavailable.');
+function assertLocalLoginAllowed(localLoginDisabled: boolean): void {
+  if (localLoginDisabled) {
+    throw Errors.forbidden('Local login is disabled by platform sign-in policy. One-time password invites are unavailable.');
   }
 }
 
@@ -181,21 +184,17 @@ export class InvitationService {
   }
 
   async isLocalLoginDisabled(): Promise<boolean> {
-    const dataSource = await getDataSource();
-    const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-    const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
-    return enabledCount > 0;
+    return !await loginMethodService.ordinaryLocalPasswordEnabled(null);
   }
 
   async createInvitation(input: CreateInvitationInput): Promise<CreateInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-    const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
+    const localLoginDisabled = !await loginMethodService.ordinaryLocalPasswordEnabled(input.tenantId || null);
     const deliveryMethod = input.deliveryMethod === 'email' ? 'email' : 'manual';
 
-    if (enabledCount > 0 && deliveryMethod !== 'email') {
-      assertLocalLoginAllowed(enabledCount);
+    if (localLoginDisabled && deliveryMethod !== 'email') {
+      assertLocalLoginAllowed(localLoginDisabled);
     }
 
     const tenantSlug = normalizeTenantSlug(input.tenantSlug);
@@ -220,7 +219,8 @@ export class InvitationService {
       resourceType: input.resourceType,
       resourceId: input.resourceId || null,
       resourceName: input.resourceName || null,
-      platformRole: input.platformRole || null,
+      // The retained nullable column is migration compatibility only. New
+      // invitations grant platform access through canonical group membership.
       resourceRole: input.resourceRole || null,
       resourceRolesJson: serializeRoles(input.resourceRoles),
       inviteTokenHash,
@@ -282,9 +282,7 @@ export class InvitationService {
   async verifyOneTimePassword(token: string, oneTimePassword: string): Promise<VerifiedInvitationResult> {
     const dataSource = await getDataSource();
     const invitationRepo = dataSource.getRepository(Invitation);
-    const ssoProviderRepo = dataSource.getRepository(SsoProvider);
-    const enabledCount = await ssoProviderRepo.count({ where: { enabled: true } });
-    assertLocalLoginAllowed(enabledCount);
+    assertLocalLoginAllowed(!await loginMethodService.ordinaryLocalPasswordEnabled(null));
 
     const invitation = await getInvitationByTokenValue(token);
     const now = Date.now();
@@ -414,6 +412,15 @@ export class InvitationService {
       throw Errors.validation('One-time password verification is required before setting a password');
     }
 
+    if (invitation.resourceType === 'project' || invitation.resourceType === 'engine') {
+      const authority = await getAccessAuthorityDecision(invitation.resourceType);
+      if (authority && !authority.manualMutationsAllowed) {
+        throw Errors.forbidden(
+          authority.reason || `Manual ${invitation.resourceType} access changes are disabled`,
+        );
+      }
+    }
+
     const user = await userRepo.findOneBy({ id: invitation.userId });
 
     if (!user) {
@@ -470,6 +477,7 @@ export class InvitationService {
     });
 
     const updatedUser = await userRepo.findOneByOrFail({ id: user.id });
+    const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([updatedUser.id], dataSource);
 
     return {
       user: {
@@ -477,7 +485,7 @@ export class InvitationService {
         email: updatedUser.email,
         firstName: updatedUser.firstName || undefined,
         lastName: updatedUser.lastName || undefined,
-        platformRole: updatedUser.platformRole as PlatformRole,
+        platformRole: platformAdministratorUserIds.has(updatedUser.id) ? 'admin' : 'user',
         isActive: Boolean(updatedUser.isActive),
         isEmailVerified: Boolean(updatedUser.isEmailVerified),
         mustResetPassword: Boolean(updatedUser.mustResetPassword),

@@ -3,6 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ComposedModal, ModalHeader, ModalBody, ModalFooter, Button, InlineNotification, InlineLoading, ProgressBar } from '@carbon/react'
 import { apiClient } from '../../../../shared/api/client'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
+import type { BatchDetail, BatchRuntimeActionDecisions } from '@enterpriseglue/shared/schemas/mission-control/batch.js'
+
+type RuntimeActionDecision = BatchRuntimeActionDecisions['suspension']
+
+function deniedReason(decision?: RuntimeActionDecision): string | null {
+  if (decision?.allowed) return null
+  return decision?.reason || 'Action decision unavailable for this runtime resource'
+}
 
 interface Props {
   open: boolean
@@ -19,7 +27,8 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
     queryFn: () => {
       const params = new URLSearchParams()
       if (selectedEngineId) params.set('engineId', selectedEngineId)
-      return apiClient.get<any>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
+      params.set('includeActionDecisions', 'true')
+      return apiClient.get<BatchDetail>(`/mission-control-api/batches/${batchId}?${params}`, undefined, { credentials: 'include' })
     },
     enabled: open && !!batchId && !!selectedEngineId,
     refetchInterval: open ? 5000 : false,
@@ -27,9 +36,9 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   const status = String(q.data?.batch?.status || '').toUpperCase()
   const progress = Number(q.data?.batch?.progress || 0)
-  const batch = q.data?.batch || {}
-  const engine = q.data?.engine || {}
-  const stats = q.data?.statistics || {}
+  const batch = q.data?.batch
+  const engine = q.data?.engine
+  const stats = q.data?.statistics
 
   const totalJobs = (engine?.totalJobs ?? batch?.totalJobs) as number | undefined
   const jobsCreated = (engine?.jobsCreated ?? batch?.jobsCreated) as number | undefined
@@ -40,6 +49,8 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
   const seedDef = (engine?.seedJobDefinitionId ?? batch?.seedJobDefinitionId) as string | undefined
   const monitorDef = (engine?.monitorJobDefinitionId ?? batch?.monitorJobDefinitionId) as string | undefined
   const batchDef = (engine?.batchJobDefinitionId ?? batch?.batchJobDefinitionId) as string | undefined
+  const toggleSuspensionDeniedReason = deniedReason(q.data?.runtimeActionDecisions?.suspension)
+  const cancelDeniedReason = deniedReason(q.data?.runtimeActionDecisions?.cancel)
 
   const derivedCompleted = typeof totalJobs === 'number'
     ? Math.max(0, totalJobs - (failedJobs || 0) - (remainingJobs || 0))
@@ -70,6 +81,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   async function cancelBatch() {
     if (!batchId) return
+    if (cancelDeniedReason) return
     const params = new URLSearchParams()
     if (selectedEngineId) params.set('engineId', selectedEngineId)
     await apiClient.delete(`/mission-control-api/batches/${batchId}?${params}`, { credentials: 'include' })
@@ -80,6 +92,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
 
   async function toggleSuspended() {
     if (!batchId) return
+    if (toggleSuspensionDeniedReason) return
     suspendMutation.mutate({ id: batchId, suspended: !isSuspended })
   }
 
@@ -185,7 +198,8 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
             kind="secondary"
             size="sm"
             onClick={toggleSuspended}
-            disabled={q.isLoading || q.isFetching || suspendMutation.isPending}
+            disabled={q.isLoading || q.isFetching || suspendMutation.isPending || !!toggleSuspensionDeniedReason}
+            title={toggleSuspensionDeniedReason || undefined}
           >
             {suspendMutation.isPending
               ? <InlineLoading description={isSuspended ? 'Resuming...' : 'Pausing...'} />
@@ -193,7 +207,7 @@ export default function BatchDetailModal({ open, batchId, onClose }: Props) {
           </Button>
         )}
         {canCancel && (
-          <Button kind="danger" size="sm" onClick={cancelBatch} disabled={q.isLoading || q.isFetching}>
+          <Button kind="danger" size="sm" onClick={cancelBatch} disabled={q.isLoading || q.isFetching || !!cancelDeniedReason} title={cancelDeniedReason || undefined}>
             Cancel batch
           </Button>
         )}

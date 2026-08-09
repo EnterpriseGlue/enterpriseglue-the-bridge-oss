@@ -12,6 +12,9 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { runWithBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
 import { registerRoutes } from './routes/index.js';
 import type { NotificationTenantResolver } from '@enterpriseglue/enterprise-plugin-api/backend';
+import { getConfigBootstrapMetrics, getConfigBootstrapStatus } from './services/configBundleBootstrap.js';
+import { getEngineTenancyMetrics } from './services/engineTenancyMetrics.js';
+import { getLoginExperienceMetrics } from './services/loginExperienceMetrics.js';
 
 interface CreateAppOptions {
   registerBaseRoutes?: boolean;
@@ -196,7 +199,24 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
   }
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok' });
+    const configBootstrap = getConfigBootstrapStatus();
+    res.json({ status: configBootstrap.status === 'failed' ? 'degraded' : 'ok', configBootstrap });
+  });
+
+  app.get('/ready', (_req, res) => {
+    const configBootstrap = getConfigBootstrapStatus();
+    const ready = configBootstrap.status !== 'failed';
+    res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'not_ready', configBootstrap });
+  });
+
+  app.get('/metrics', async (_req, res) => {
+    const metrics = [
+      getConfigBootstrapMetrics().trimEnd(),
+      (await getEngineTenancyMetrics()).trimEnd(),
+      getLoginExperienceMetrics().trimEnd(),
+      '',
+    ].join('\n');
+    res.type('text/plain; version=0.0.4').send(metrics);
   });
 
   // Register all application routes

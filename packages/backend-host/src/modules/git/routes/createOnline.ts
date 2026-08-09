@@ -5,9 +5,9 @@
 
 import { Router, Request, Response } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { z } from 'zod';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -26,44 +26,18 @@ import {
   assertUserCanImportFromEngine,
   prepareLatestEngineImport,
 } from '@enterpriseglue/shared/services/starbase/engine-import-service.js';
+import { writeProjectMemberRoleAssignments } from '@enterpriseglue/shared/services/platform-admin/project-member-role-assignments.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
+import {
+  CreateOnlineProjectRequestSchema,
+  CreateOnlineProjectResponseSchema,
+  CheckRepositoryExistsRequestSchema,
+  CheckRepositoryExistsResponseSchema,
+  type CheckRepositoryExistsRequest,
+  type CreateOnlineProjectRequest,
+} from '@enterpriseglue/shared/schemas/git/online-project.js';
 
 const router = Router();
-
-interface CreateOnlineRequest {
-  projectName: string;
-  providerId: string;
-  repositoryName: string;
-  namespace?: string;
-  isPrivate?: boolean;
-  description?: string;
-  // Auth - either token or use saved credentials
-  token?: string;
-  importFromEngine?: {
-    enabled?: boolean;
-    engineId?: string;
-  };
-}
-
-const createOnlineSchema = z.object({
-  projectName: z.unknown(),
-  providerId: z.unknown(),
-  repositoryName: z.unknown(),
-  namespace: z.unknown().optional(),
-  isPrivate: z.boolean().optional(),
-  description: z.string().optional(),
-  token: z.string().optional(),
-  importFromEngine: z.object({
-    enabled: z.boolean().optional(),
-    engineId: z.string().optional(),
-  }).optional(),
-});
-
-const checkRepoExistsSchema = z.object({
-  providerId: z.unknown(),
-  repositoryName: z.unknown(),
-  namespace: z.unknown().optional(),
-  token: z.unknown().optional(),
-});
 
 /**
  * POST /git-api/create-online
@@ -77,7 +51,7 @@ const checkRepoExistsSchema = z.object({
  * 5. Initialize VCS
  * 6. Link repository to project
  */
-router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(createOnlineSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(CreateOnlineProjectRequestSchema), requireAction('project.create.git.create', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
   const {
     projectName,
@@ -88,7 +62,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     description,
     token,
     importFromEngine,
-  } = req.body as CreateOnlineRequest;
+  } = req.body as CreateOnlineProjectRequest;
 
   if (typeof projectName !== 'string') {
     throw Errors.validation('Project name is required');
@@ -142,7 +116,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
 
   let preparedImport: Awaited<ReturnType<typeof prepareLatestEngineImport>> | null = null;
   if (importEngineId) {
-    await assertUserCanImportFromEngine(userId, importEngineId);
+    await assertUserCanImportFromEngine(userId, importEngineId, req.tenant?.tenantId || null);
     preparedImport = await prepareLatestEngineImport(importEngineId);
   }
 
@@ -183,10 +157,12 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     const projectId = generateId();
     const now = Date.now();
     
+    const effectiveTenantId = req.tenant?.tenantId || OSS_DEFAULT_TENANT_ID;
     await projectRepo.insert({
       id: projectId,
       name: projectNameTrim,
       ownerId: userId,
+      tenantId: effectiveTenantId,
       createdAt: Math.floor(now / 1000),
       updatedAt: Math.floor(now / 1000),
     });
@@ -217,11 +193,21 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
       .orIgnore()
       .execute();
 
+    await writeProjectMemberRoleAssignments(dataSource, {
+      projectId,
+      tenantId: effectiveTenantId,
+      userId,
+      roles: ['owner'],
+      createdById: null,
+      createdAt: now,
+    });
+
     if (preparedImport) {
       await applyPreparedEngineImportToProject({
         manager: dataSource.manager,
         projectId,
         userId,
+        tenantId: effectiveTenantId,
         importData: preparedImport,
       });
     }
@@ -262,7 +248,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
     logger.info('Repository linked to project', { projectId, repoId, remoteUrl: remoteRepo.cloneUrl });
 
     // Return success
-    res.status(201).json({
+    res.status(201).json(CreateOnlineProjectResponseSchema.parse({
       project: {
         id: projectId,
         name: projectNameTrim,
@@ -275,7 +261,7 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
         cloneUrl: remoteRepo.cloneUrl,
         private: remoteRepo.private,
       },
-    });
+    }));
 
   } catch (error: unknown) {
     if (error instanceof AppError) throw error;
@@ -299,9 +285,9 @@ router.post('/git-api/create-online', apiLimiter, requireAuth, validateBody(crea
  * POST /git-api/check-repo-exists
  * Check if a repository name already exists
  */
-router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(checkRepoExistsSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(CheckRepositoryExistsRequestSchema), requireAction('project.create.git.inspect', { resourceResolver: 'platform.self' }), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user!.userId;
-  const { providerId, repositoryName, namespace, token } = req.body;
+  const { providerId, repositoryName, namespace, token } = req.body as CheckRepositoryExistsRequest;
 
   if (typeof providerId !== 'string' || typeof repositoryName !== 'string') {
     throw Errors.validation('providerId and repositoryName are required');
@@ -328,14 +314,14 @@ router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(
     const fullRepoName = namespaceStr ? `${namespaceStr}/${repositoryNameTrim}` : repositoryNameTrim;
     const existingRepo = await client.getRepository(fullRepoName);
     
-    res.json({ 
+    res.json(CheckRepositoryExistsResponseSchema.parse({
       exists: !!existingRepo,
       repository: existingRepo ? {
         name: existingRepo.name,
         fullName: existingRepo.fullName,
         url: existingRepo.htmlUrl,
       } : null
-    });
+    }));
   } catch (error: unknown) {
     const status = typeof error === 'object' && error !== null && 'status' in error
       ? (error as { status?: number }).status
@@ -343,7 +329,7 @@ router.post('/git-api/check-repo-exists', apiLimiter, requireAuth, validateBody(
 
     // If we get a 404, the repo doesn't exist
     if (status === 404) {
-      return res.json({ exists: false, repository: null });
+      return res.json(CheckRepositoryExistsResponseSchema.parse({ exists: false, repository: null }));
     }
     throw error;
   }

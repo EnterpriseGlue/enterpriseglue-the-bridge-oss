@@ -11,6 +11,15 @@ vi.mock('@src/services/auth', () => ({
     login: vi.fn(),
     logout: vi.fn(),
     getMe: vi.fn().mockRejectedValue(new Error('Not authenticated')),
+    getMyPermissions: vi.fn().mockResolvedValue({
+      userId: 'user-1',
+      tenantId: null,
+      platform: [],
+      projects: [],
+      engines: [],
+      authorizationVersion: 'test-authz-v1',
+      generatedAt: 123,
+    }),
     refreshToken: vi.fn(),
     resetPassword: vi.fn(),
     changePassword: vi.fn(),
@@ -40,6 +49,32 @@ describe('AuthProvider', () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
+  });
+
+  it('loads current user permissions and exposes permission helpers', async () => {
+    const { authService } = await import('@src/services/auth');
+    (authService.getMe as any).mockResolvedValue({ id: 'user-1', email: 'test@example.com' });
+    (authService.getMyPermissions as any).mockResolvedValue({
+      userId: 'user-1',
+      tenantId: null,
+      platform: ['platform:user:manage'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:create'] }],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      authorizationVersion: 'test-authz-v1',
+      generatedAt: 123,
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.hasPlatformPermission('platform:user:manage')).toBe(true);
+    expect(result.current.hasProjectPermission('project-1', 'project:files:create')).toBe(true);
+    expect(result.current.hasAnyEnginePermission(['engine:instance:view'])).toBe(true);
+    expect(result.current.hasEnginePermission('engine-1', 'engine:instance:view')).toBe(true);
+    expect(result.current.hasAnyScopedEnginePermission('engine-1', ['engine:edit', 'engine:instance:view'])).toBe(true);
   });
 
   it('logs out and clears storage', async () => {

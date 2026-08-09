@@ -9,6 +9,8 @@ describe('git types', () => {
       type: 'github',
       baseUrl: 'https://github.com',
       apiUrl: 'https://api.github.com',
+      supportsOAuth: true,
+      supportsPAT: true,
     };
 
     expect(provider.type).toBe('github');

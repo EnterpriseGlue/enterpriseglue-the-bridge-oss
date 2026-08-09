@@ -26,7 +26,8 @@ interface ProjectOverviewModalsProps {
     isError: boolean
     data?: EngineAccessData
   }
-  canManageMembers: boolean
+  canRequestEngineAccess: boolean
+  requestEngineAccessUnavailableReason?: string | null
   myMembershipLoading: boolean
   selectedEngineForRequest: string | null
   setSelectedEngineForRequest: (id: string | null) => void
@@ -54,7 +55,8 @@ export function ProjectOverviewModals({
   engineAccessOpen,
   onCloseEngineAccess,
   engineAccessQ,
-  canManageMembers,
+  canRequestEngineAccess,
+  requestEngineAccessUnavailableReason,
   myMembershipLoading,
   selectedEngineForRequest,
   setSelectedEngineForRequest,
@@ -115,7 +117,8 @@ export function ProjectOverviewModals({
         open={engineAccessOpen}
         onClose={onCloseEngineAccess}
         engineAccessQ={engineAccessQ}
-        canManageMembers={canManageMembers}
+        canRequestEngineAccess={canRequestEngineAccess}
+        requestEngineAccessUnavailableReason={requestEngineAccessUnavailableReason}
         myMembershipLoading={myMembershipLoading}
         selectedEngineForRequest={selectedEngineForRequest}
         setSelectedEngineForRequest={setSelectedEngineForRequest}

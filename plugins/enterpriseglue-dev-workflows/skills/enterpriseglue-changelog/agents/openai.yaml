@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Changelog"
+  short_description: "Preview pending EnterpriseGlue release notes"
+  default_prompt: "Use $enterpriseglue-changelog to help with this EnterpriseGlue task."

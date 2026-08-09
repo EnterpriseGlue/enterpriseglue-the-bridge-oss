@@ -1,0 +1,70 @@
+import { describe, expect, it } from 'vitest';
+import {
+  type ConfigBundleDiffChange,
+  filterConfigBundleChanges,
+  formatConfigBundleObjectType,
+  getConfigBundleEffectiveAccessHref,
+  getConfigBundleChangeRisk,
+  groupConfigBundleChanges,
+  groupConfigBundleChangesByObjectType,
+} from '@src/features/platform-admin/components/configBundleDiff';
+
+const changes: ConfigBundleDiffChange[] = [
+  { objectType: 'role', key: 'role.deployers', operation: 'create', reason: 'New config role' },
+  { objectType: 'engine', key: 'engine.shared', operation: 'update', reason: 'Changed labels' },
+  { objectType: 'group', key: 'group.legacy', operation: 'archive', reason: 'Removed from bundle' },
+  { objectType: 'project_engine_target', key: 'payments-prod', operation: 'conflict', reason: 'Manual target already exists' },
+];
+
+describe('ConfigurationBundleSettingsTab diff helpers', () => {
+  it('classifies conflicts and archives as changes requiring attention', () => {
+    expect(getConfigBundleChangeRisk(changes[0])).toBe('informational');
+    expect(getConfigBundleChangeRisk(changes[1])).toBe('review');
+    expect(getConfigBundleChangeRisk(changes[2])).toBe('requires_attention');
+    expect(getConfigBundleChangeRisk(changes[3])).toBe('requires_attention');
+  });
+
+  it('filters changes by search, object type, operation, and review priority', () => {
+    expect(filterConfigBundleChanges(changes, { query: 'manual' })).toEqual([changes[3]]);
+    expect(filterConfigBundleChanges(changes, { objectType: 'engine', operation: 'update' })).toEqual([changes[1]]);
+    expect(filterConfigBundleChanges(changes, { risk: 'requires_attention' })).toEqual([changes[2], changes[3]]);
+  });
+
+  it('groups filtered changes in attention-first review order', () => {
+    expect(groupConfigBundleChanges(changes).map((group) => [group.risk, group.changes.length])).toEqual([
+      ['requires_attention', 2],
+      ['review', 1],
+      ['informational', 1],
+    ]);
+  });
+
+  it('subgroups each review priority by object family', () => {
+    expect(groupConfigBundleChangesByObjectType(changes).map((group) => [group.objectType, group.changes.length])).toEqual([
+      ['engine', 1],
+      ['group', 1],
+      ['project_engine_target', 1],
+      ['role', 1],
+    ]);
+  });
+
+  it('uses operator-facing labels for authorization object types', () => {
+    expect(formatConfigBundleObjectType('assignment')).toBe('Scoped role assignment');
+    expect(formatConfigBundleObjectType('project_engine_target')).toBe('Project-engine target');
+    expect(formatConfigBundleObjectType('identity_mapping')).toBe('Identity mapping');
+  });
+
+  it('links persisted authorization resources to Effective Access and omits create-only rows', () => {
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'engine', key: 'engine.shared', operation: 'update', reason: 'Changed labels', currentId: 'engine-1',
+    })).toBe('/admin/access-control?tab=effective-access&resourceType=engine&resourceId=engine-1');
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'runtime_resource_set', key: 'runtime.payments', operation: 'archive', reason: 'Removed', currentId: 'set-1',
+    })).toBe('/admin/access-control?tab=effective-access&resourceType=engine_runtime_resource_set&resourceId=set-1');
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'engine', key: 'engine.new', operation: 'create', reason: 'New engine',
+    })).toBeNull();
+    expect(getConfigBundleEffectiveAccessHref({
+      objectType: 'role', key: 'role.ops', operation: 'update', reason: 'Changed permissions', currentId: 'role-1',
+    })).toBeNull();
+  });
+});

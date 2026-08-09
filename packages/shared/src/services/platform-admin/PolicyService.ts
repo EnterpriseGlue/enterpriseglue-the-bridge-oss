@@ -12,10 +12,12 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
 import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
 import { AuthzAuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzAuditLog.js';
 import { IsNull } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { permissionService, Permission, PermissionContext } from './permissions.js';
 
 // ============================================================================
@@ -56,6 +58,7 @@ export interface PolicyCondition {
 
 export interface PolicyDefinition {
   id: string;
+  tenantId: string | null;
   name: string;
   description?: string;
   effect: PolicyEffect;
@@ -82,7 +85,15 @@ export interface EvaluationResult {
   policyName?: string;
 }
 
+export interface PolicyGateResult {
+  decision: 'allow' | 'deny';
+  reason: string;
+  policyId?: string;
+  policyName?: string;
+}
+
 export interface CreatePolicyInput {
+  tenantId?: string | null;
   name: string;
   description?: string;
   effect: PolicyEffect;
@@ -93,11 +104,54 @@ export interface CreatePolicyInput {
   createdById: string;
 }
 
+export interface UpdatePolicyInput extends Partial<CreatePolicyInput & { isActive?: boolean }> {
+  updatedById?: string | null;
+}
+
 // ============================================================================
 // Policy Service
 // ============================================================================
 
 class PolicyServiceClass {
+  private normalizeTenantId(tenantId?: string | null): string | null {
+    const normalized = tenantId?.trim();
+    return normalized || null;
+  }
+
+  private async logPolicyMutation(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    entry: {
+      tenantId?: string | null;
+      userId?: string | null;
+      action: string;
+      resourceId: string;
+      details?: Record<string, unknown>;
+    }
+  ): Promise<void> {
+    try {
+      await dataSource.getRepository(AuditLog).insert({
+        id: generateId(),
+        tenantId: this.normalizeTenantId(entry.tenantId),
+        userId: entry.userId || null,
+        action: entry.action,
+        resourceType: 'authz_policy',
+        resourceId: entry.resourceId,
+        ipAddress: null,
+        userAgent: null,
+        details: entry.details ? JSON.stringify(entry.details) : null,
+        createdAt: Date.now(),
+      });
+    } catch (error) {
+      logger.error('Failed to write authorization policy audit log:', error);
+    }
+  }
+
+  private addTenantScopeFilter(qb: { andWhere: (...args: any[]) => any }, alias: string, tenantId?: string | null): void {
+    const normalizedTenantId = this.normalizeTenantId(tenantId);
+    if (!normalizedTenantId) return;
+    qb.andWhere(`(${alias}.tenantId = :tenantId OR ${alias}.tenantId IS NULL)`, { tenantId: normalizedTenantId });
+  }
+
   /**
    * Evaluate all applicable policies for an authorization request.
    * 
@@ -114,7 +168,7 @@ class PolicyServiceClass {
     const hasBasePermission = await permissionService.hasPermission(action, context);
 
     // Get applicable policies, ordered by priority (highest first)
-    const policies = await this.getApplicablePolicies(action, resourceType);
+    const policies = await this.getApplicablePolicies(action, resourceType, context.tenantId);
 
     // Evaluate policies in priority order
     // Deny policies at same priority level take precedence over allow
@@ -159,6 +213,54 @@ class PolicyServiceClass {
   }
 
   /**
+   * Evaluate policies as a contextual gate.
+   *
+   * Unlike evaluate(), this method never grants permission. It only answers
+   * whether an explicit matching deny policy blocks an already-authorized action.
+   */
+  async evaluateGate(
+    action: Permission,
+    context: EvaluationContext
+  ): Promise<PolicyGateResult> {
+    const timestamp = context.timestamp || Date.now();
+    const policies = await this.getApplicablePolicies(action, context.resourceType, context.tenantId);
+    let matchedAllow: PolicyDefinition | null = null;
+
+    for (const policy of policies) {
+      if (!this.evaluateConditions(policy.conditions, context, timestamp)) {
+        continue;
+      }
+
+      if (policy.effect === 'deny') {
+        return {
+          decision: 'deny',
+          reason: `policy:${policy.name}`,
+          policyId: policy.id,
+          policyName: policy.name,
+        };
+      }
+
+      if (policy.effect === 'allow' && !matchedAllow) {
+        matchedAllow = policy;
+      }
+    }
+
+    if (matchedAllow) {
+      return {
+        decision: 'allow',
+        reason: `policy:${matchedAllow.name}`,
+        policyId: matchedAllow.id,
+        policyName: matchedAllow.name,
+      };
+    }
+
+    return {
+      decision: 'allow',
+      reason: 'no-policy-deny',
+    };
+  }
+
+  /**
    * Evaluate and log the decision (for audit trail)
    */
   async evaluateAndLog(
@@ -178,7 +280,8 @@ class PolicyServiceClass {
    */
   private async getApplicablePolicies(
     action: Permission,
-    resourceType?: string
+    resourceType?: string,
+    tenantId?: string | null
   ): Promise<PolicyDefinition[]> {
     const dataSource = await getDataSource();
     const policyRepo = dataSource.getRepository(AuthzPolicy);
@@ -192,11 +295,13 @@ class PolicyServiceClass {
         resourceType ? { resourceType } : {}
       )
       .orderBy('p.priority', 'DESC');
+    this.addTenantScopeFilter(qb, 'p', tenantId);
 
     const policies = await qb.getMany();
 
     return policies.map((p) => ({
       id: p.id,
+      tenantId: p.tenantId,
       name: p.name,
       description: p.description || undefined,
       effect: p.effect as PolicyEffect,
@@ -381,16 +486,8 @@ class PolicyServiceClass {
     action: Permission,
     context: PermissionContext
   ): Promise<string> {
-    const { platformRole, projectRole, engineRole } = context;
-
-    // Check which role grants the permission
-    if (platformRole === 'admin') return 'role:platform:admin';
-    if (permissionService.roleHasPermission(action, { platformRole })) return `role:platform:${platformRole}`;
-    if (permissionService.roleHasPermission(action, { projectRole })) return `role:project:${projectRole}`;
-    if (permissionService.roleHasPermission(action, { engineRole })) return `role:engine:${engineRole}`;
-
-    // Must be an explicit grant
-    return 'grant:explicit';
+    const result = await permissionService.evaluatePermission(action, context);
+    return result.reason;
   }
 
   /**
@@ -407,6 +504,7 @@ class PolicyServiceClass {
 
     await auditRepo.insert({
       id: generateId(),
+      tenantId: this.normalizeTenantId(context.tenantId),
       userId: context.userId,
       action,
       resourceType: context.resourceType || null,
@@ -415,9 +513,7 @@ class PolicyServiceClass {
       reason: result.reason,
       policyId: result.policyId || null,
       context: JSON.stringify({
-        platformRole: context.platformRole,
-        projectRole: context.projectRole,
-        engineRole: context.engineRole,
+        tenantId: this.normalizeTenantId(context.tenantId),
         userAttributes: context.userAttributes,
         resourceAttributes: context.resourceAttributes,
       }),
@@ -439,6 +535,7 @@ class PolicyServiceClass {
 
     await policyRepo.insert({
       id,
+      tenantId: this.normalizeTenantId(input.tenantId),
       name: input.name,
       description: input.description || null,
       effect: input.effect,
@@ -451,14 +548,26 @@ class PolicyServiceClass {
       updatedAt: now,
       createdById: input.createdById,
     });
+    await this.logPolicyMutation(dataSource, {
+      tenantId: input.tenantId,
+      userId: input.createdById,
+      action: 'authz.policy.create',
+      resourceId: id,
+      details: {
+        policyId: id,
+        tenantId: this.normalizeTenantId(input.tenantId),
+        name: input.name,
+        effect: input.effect,
+        priority: input.priority ?? 0,
+        resourceType: input.resourceType || null,
+        action: input.action || null,
+      },
+    });
 
     return { id };
   }
 
-  async updatePolicy(
-    id: string,
-    updates: Partial<CreatePolicyInput & { isActive?: boolean }>
-  ): Promise<void> {
+  async updatePolicy(id: string, updates: UpdatePolicyInput): Promise<void> {
     const dataSource = await getDataSource();
     const policyRepo = dataSource.getRepository(AuthzPolicy);
     const now = Date.now();
@@ -472,23 +581,61 @@ class PolicyServiceClass {
     if (updates.action !== undefined) updateData.action = updates.action || null;
     if (updates.conditions !== undefined) updateData.conditions = JSON.stringify(updates.conditions);
     if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+    if (updates.tenantId !== undefined) updateData.tenantId = this.normalizeTenantId(updates.tenantId);
 
     await policyRepo.update({ id }, updateData);
+    await this.logPolicyMutation(dataSource, {
+      tenantId: updates.tenantId,
+      userId: updates.updatedById || null,
+      action: 'authz.policy.update',
+      resourceId: id,
+      details: {
+        policyId: id,
+        tenantId: updates.tenantId !== undefined ? this.normalizeTenantId(updates.tenantId) : undefined,
+        updatedFields: Object.keys(updateData).filter((field) => field !== 'updatedAt'),
+        name: updates.name,
+        effect: updates.effect,
+        priority: updates.priority,
+        resourceType: updates.resourceType,
+        action: updates.action,
+        isActive: updates.isActive,
+      },
+    });
   }
 
-  async deletePolicy(id: string): Promise<void> {
+  async deletePolicy(id: string, deletedById?: string | null): Promise<void> {
     const dataSource = await getDataSource();
     const policyRepo = dataSource.getRepository(AuthzPolicy);
+    const policy = await policyRepo.findOne({ where: { id } });
     await policyRepo.delete({ id });
+    await this.logPolicyMutation(dataSource, {
+      tenantId: policy?.tenantId,
+      userId: deletedById || null,
+      action: 'authz.policy.delete',
+      resourceId: id,
+      details: {
+        policyId: id,
+        tenantId: policy?.tenantId,
+        name: policy?.name,
+        effect: policy?.effect,
+        resourceType: policy?.resourceType,
+        action: policy?.action,
+      },
+    });
   }
 
-  async getAllPolicies(): Promise<PolicyDefinition[]> {
+  async getAllPolicies(tenantId?: string | null): Promise<PolicyDefinition[]> {
     const dataSource = await getDataSource();
     const policyRepo = dataSource.getRepository(AuthzPolicy);
-    const policies = await policyRepo.find({ order: { priority: 'DESC' } });
+    const normalizedTenantId = this.normalizeTenantId(tenantId);
+    const policies = await policyRepo.find({
+      where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : undefined,
+      order: { priority: 'DESC' },
+    });
 
     return policies.map((p) => ({
       id: p.id,
+      tenantId: p.tenantId,
       name: p.name,
       description: p.description || undefined,
       effect: p.effect as PolicyEffect,
@@ -509,6 +656,7 @@ class PolicyServiceClass {
 
     return {
       id: p.id,
+      tenantId: p.tenantId,
       name: p.name,
       description: p.description || undefined,
       effect: p.effect as PolicyEffect,
@@ -525,6 +673,7 @@ class PolicyServiceClass {
   // ============================================================================
 
   async getAuditLog(options: {
+    tenantId?: string | null;
     userId?: string;
     resourceType?: string;
     resourceId?: string;
@@ -537,6 +686,7 @@ class PolicyServiceClass {
 
     const qb = auditRepo.createQueryBuilder('a');
 
+    this.addTenantScopeFilter(qb, 'a', options.tenantId);
     if (options.userId) qb.andWhere('a.userId = :userId', { userId: options.userId });
     if (options.resourceType) qb.andWhere('a.resourceType = :resourceType', { resourceType: options.resourceType });
     if (options.resourceId) qb.andWhere('a.resourceId = :resourceId', { resourceId: options.resourceId });

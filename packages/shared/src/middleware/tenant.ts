@@ -9,6 +9,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { Errors } from './errorHandler.js';
 import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
+import {
+  OSS_DEFAULT_TENANT_ID,
+  OSS_DEFAULT_TENANT_SLUG,
+  isOssDefaultTenantId,
+} from '@enterpriseglue/shared/authz/tenant-scope.js';
 
 export type TenantRole = 'tenant_admin' | 'member';
 
@@ -18,8 +23,8 @@ export interface TenantContext {
 }
 
 // Default tenant for OSS single-tenant mode
-export const DEFAULT_TENANT_ID = 'default-tenant-id';
-export const DEFAULT_TENANT_SLUG = 'default';
+export const DEFAULT_TENANT_ID = OSS_DEFAULT_TENANT_ID;
+export const DEFAULT_TENANT_SLUG = OSS_DEFAULT_TENANT_SLUG;
 
 declare global {
   namespace Express {
@@ -56,6 +61,14 @@ function extractTenantSlug(req: Request): string | null {
  */
 export function resolveTenantContext(_options?: { required?: boolean }) {
   return async (req: Request, _res: Response, next: NextFunction) => {
+    if (req.tenant?.tenantId && !isOssDefaultTenantId(req.tenant.tenantId)) {
+      updateBpmnEngineRequestContext({
+        tenantId: req.tenant.tenantId,
+        tenantSlug: req.tenant.tenantSlug,
+      });
+      return next();
+    }
+
     // Extract slug from URL (for logging/debugging) but use default tenant
     const slug = extractTenantSlug(req) || DEFAULT_TENANT_SLUG;
     

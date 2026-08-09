@@ -22,22 +22,15 @@ import { apiClient } from '../../../shared/api/client';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import { useToast } from '../../../shared/notifications/ToastProvider';
 import { useDeployment } from '../hooks/useDeployment';
+import { projectsApi } from '../../../api/starbase/projects';
+import { createEngineDeployment } from '../../mission-control/engines/api/engines';
+import { EnginePermission, ProjectPermission } from '../../../shared/auth/permissions';
+import { WhyUnavailableLink } from '../../../shared/auth/guards';
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js';
 import type { DeployRequest } from '../types/git';
+import type { ConnectedEngine } from '../../starbase/utils/deployEligibility';
 
-interface ConnectedEngine {
-  engineId: string;
-  engineName: string;
-  baseUrl?: string;
-  environment?: { name: string; color: string } | null;
-  health?: { status: string; latencyMs?: number } | null;
-  manualDeployAllowed?: boolean;
-}
-
-interface EngineAccessData {
-  accessedEngines: ConnectedEngine[];
-  pendingRequests: any[];
-  availableEngines: any[];
-}
+type DeploymentMode = 'manual' | 'ci';
 
 interface DeployDialogProps {
   projectId: string;
@@ -50,6 +43,61 @@ interface DeployDialogProps {
 interface ProjectGitConnection {
   connected?: boolean;
   hasToken?: boolean;
+}
+
+function getFailedDeployCheckIds(engine: ConnectedEngine, mode: DeploymentMode): Set<string> {
+  const eligibility = mode === 'ci'
+    ? engine.deploymentEligibility?.ci
+    : engine.deploymentEligibility?.manual;
+  return new Set((eligibility?.checks || [])
+    .filter((check) => check.allowed === false)
+    .map((check) => check.id));
+}
+
+function buildDeployDiagnosticDecision(
+  projectId: string,
+  engine: ConnectedEngine | null | undefined,
+  mode: DeploymentMode,
+  reason: string | null | undefined
+): UiAuthzDecision | null {
+  if (!reason) return null;
+  const failedCheckIds = engine ? getFailedDeployCheckIds(engine, mode) : new Set<string>();
+  const targetId = engine?.deploymentTarget?.id;
+  if (targetId && failedCheckIds.has('project_engine_target.active')) {
+    return {
+      actionId: 'project-engine-target.deploy.use',
+      allowed: false,
+      diagnostics: {
+        explainUrl: '/admin/access-control?tab=effective-access',
+        remediation: ['Review project-engine target deployment mode and active status.'],
+      },
+      permissionId: ProjectPermission.DEPLOY,
+      reason,
+      resourceId: String(targetId),
+      resourceType: 'project_engine_target',
+      state: 'hidden',
+    };
+  }
+
+  const isProjectPermissionReason = /project deploy permission/i.test(reason)
+    || failedCheckIds.has('project.permission.deploy');
+  const engineId = engine?.engineId;
+  const useEngineDecision = Boolean(engineId && !isProjectPermissionReason);
+  return {
+    actionId: useEngineDecision ? 'engine.deploy.create' : 'project.deploy.create',
+    allowed: false,
+    diagnostics: {
+      explainUrl: '/admin/access-control?tab=effective-access',
+      remediation: [useEngineDecision
+        ? 'Review engine deployment permission and deployment target eligibility.'
+        : 'Review project deployment permission and deployment target eligibility.'],
+    },
+    permissionId: useEngineDecision ? EnginePermission.DEPLOY : ProjectPermission.DEPLOY,
+    reason,
+    resourceId: useEngineDecision ? String(engineId) : projectId,
+    resourceType: useEngineDecision ? 'engine' : 'project',
+    state: 'disabled',
+  };
 }
 
 export default function DeployDialog({ projectId, fileIds, open, onClose, onDeploySuccess }: DeployDialogProps) {
@@ -81,18 +129,15 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
 
   const engineDeployment = useMutation({
     mutationFn: async (params: { engineId: string; deploymentName: string; vcsCommitId?: string }) => {
-      return apiClient.post(
-        `/engines-api/engines/${encodeURIComponent(params.engineId)}/deployments`,
-        {
-          resources: isFileScopedDeploy ? { fileIds: scopedFileIds } : { projectId },
-          options: {
-            deploymentName: params.deploymentName,
-            enableDuplicateFiltering: true,
-            deployChangedOnly: true,
-            vcsCommitId: params.vcsCommitId,
-          },
-        }
-      );
+      return createEngineDeployment(params.engineId, {
+        resources: isFileScopedDeploy ? { fileIds: scopedFileIds } : { projectId },
+        options: {
+          deploymentName: params.deploymentName,
+          enableDuplicateFiltering: true,
+          deployChangedOnly: true,
+          vcsCommitId: params.vcsCommitId,
+        },
+      });
     },
   });
 
@@ -115,9 +160,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   // Fetch connected engines for this project
   const enginesQuery = useQuery({
     queryKey: ['project', 'engine-access', projectId],
-    queryFn: () => apiClient.get<EngineAccessData>(
-      `/starbase-api/projects/${projectId}/engine-access`
-    ),
+    queryFn: () => projectsApi.getEngineAccess(projectId),
     staleTime: 30000,
     enabled: open && !!projectId,
   });
@@ -125,14 +168,27 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
   const connectedEngines = enginesQuery.data?.accessedEngines || [];
   // Filter out legacy __env__ entries with no real engine
   const deployableEngines = connectedEngines.filter(e => e.engineId !== '__env__');
-  const manualDeployEngines = deployableEngines.filter(e => e.manualDeployAllowed !== false);
+  const eligibleDeployEngines = deployableEngines.filter(e => (
+    canGitDeploy ? e.ciDeployAllowed !== false : e.manualDeployAllowed !== false
+  ));
+  const getDeniedReasons = (engine: ConnectedEngine) => (
+    canGitDeploy ? engine.ciDeployDeniedReasons : engine.manualDeployDeniedReasons
+  );
+  const firstDeniedEngine = deployableEngines.find((engine) => {
+    const deployAllowed = canGitDeploy ? engine.ciDeployAllowed : engine.manualDeployAllowed;
+    const reasons = getDeniedReasons(engine);
+    return deployAllowed === false && Array.isArray(reasons) && reasons.length > 0;
+  });
+  const firstDeployMode: DeploymentMode = canGitDeploy ? 'ci' : 'manual';
+  const firstDeployDeniedReason = firstDeniedEngine ? getDeniedReasons(firstDeniedEngine)?.[0] : undefined;
+  const firstDeployDeniedDecision = buildDeployDiagnosticDecision(projectId, firstDeniedEngine, firstDeployMode, firstDeployDeniedReason);
 
   // Auto-select if only one deployable engine
   useEffect(() => {
-    if (manualDeployEngines.length === 1 && !selectedEngineId) {
-      setSelectedEngineId(manualDeployEngines[0].engineId);
+    if (eligibleDeployEngines.length === 1 && !selectedEngineId) {
+      setSelectedEngineId(eligibleDeployEngines[0].engineId);
     }
-  }, [manualDeployEngines, selectedEngineId]);
+  }, [eligibleDeployEngines, selectedEngineId]);
 
   // Auto-generate tag name
   useEffect(() => {
@@ -165,6 +221,7 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
 
       if (canGitDeploy) {
         const deployParams: Omit<DeployRequest, 'projectId'> = {
+          engineId: selectedEngineId,
           message: trimmedVersionTitle,
           createTag,
           environment: selectedEngine?.environment?.name,
@@ -244,18 +301,25 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
     );
   }
 
-  // All engines are CI/CD only
-  if (manualDeployEngines.length === 0) {
+  // Connected engines exist, but none are eligible for this deployment mode.
+  if (eligibleDeployEngines.length === 0) {
     return (
       <Modal open={open} onRequestClose={onClose} modalHeading="Deploy" secondaryButtonText="Close" size="sm" passiveModal>
         <InlineNotification
           kind="warning"
-          title="Manual deployment not available"
-          subtitle="All connected engines are in CI/CD-only environments. Use your CI/CD pipeline to deploy."
+          title={canGitDeploy ? 'Git deployment not available' : 'Manual deployment not available'}
+          subtitle={firstDeployDeniedReason || (canGitDeploy
+            ? 'No connected engine is currently eligible for Git deployment.'
+            : 'No connected engine is currently eligible for manual deployment.')}
           lowContrast
           hideCloseButton
           style={{ margin: 'var(--spacing-3) 0' }}
         />
+        {firstDeployDeniedDecision ? (
+          <div style={{ fontSize: 12 }}>
+            <WhyUnavailableLink decision={firstDeployDeniedDecision} />
+          </div>
+        ) : null}
       </Modal>
     );
   }
@@ -326,24 +390,30 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
         >
           <SelectItem value="" text="Select engine..." />
           {deployableEngines.map((engine) => {
-            const canManualDeploy = engine.manualDeployAllowed !== false;
+            const canDeployToEngine = canGitDeploy ? engine.ciDeployAllowed !== false : engine.manualDeployAllowed !== false;
             const envLabel = engine.environment?.name || '';
+            const deniedReasons = getDeniedReasons(engine);
+            const unavailableLabel = engine.deploymentIntegration === 'direct_engine'
+              ? 'Pipeline-managed'
+              : deniedReasons?.[0]?.includes('Manual deployment is disabled')
+              ? 'CI/CD only'
+              : 'Unavailable';
             const label = envLabel
-              ? `${engine.engineName} — ${envLabel}${!canManualDeploy ? ' (CI/CD only)' : ''}`
-              : `${engine.engineName}${!canManualDeploy ? ' (CI/CD only)' : ''}`;
+              ? `${engine.engineName} — ${envLabel}${!canDeployToEngine ? ` (${unavailableLabel})` : ''}`
+              : `${engine.engineName}${!canDeployToEngine ? ` (${unavailableLabel})` : ''}`;
             return (
               <SelectItem
                 key={engine.engineId}
                 value={engine.engineId}
                 text={label}
-                disabled={!canManualDeploy}
+                disabled={!canDeployToEngine}
               />
             );
           })}
         </Select>
         {selectedEngine?.environment && (
           <div style={{ marginTop: 'var(--spacing-2)', display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-            <Tag size="sm" style={{ backgroundColor: selectedEngine.environment.color, color: '#fff' }}>
+            <Tag size="sm" style={{ backgroundColor: selectedEngine.environment.color ?? 'var(--cds-border-strong-01)', color: '#fff' }}>
               {selectedEngine.environment.name}
             </Tag>
             {selectedEngine.health?.status === 'connected' && (
@@ -354,6 +424,14 @@ export default function DeployDialog({ projectId, fileIds, open, onClose, onDepl
             )}
           </div>
         )}
+        {firstDeniedEngine && firstDeployDeniedDecision ? (
+          <div style={{ marginTop: 'var(--spacing-2)', fontSize: 12, color: 'var(--cds-text-secondary)' }}>
+            {firstDeniedEngine?.engineName ? `${firstDeniedEngine.engineName}: ` : null}
+            {firstDeployDeniedReason}
+            {' '}
+            <WhyUnavailableLink decision={firstDeployDeniedDecision} />
+          </div>
+        ) : null}
       </div>
 
       {canGitDeploy && (

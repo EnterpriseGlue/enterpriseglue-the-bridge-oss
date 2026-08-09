@@ -3,7 +3,16 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { platformAdminApi, type PlatformSettings, type EnvironmentTag, type ProjectGovernanceItem, type EngineGovernanceItem, type GitProvider } from '../../../api/platform-admin';
+import {
+  platformAdminApi,
+  type PlatformSettings,
+  type UpdatePlatformSettings,
+  type EnvironmentTag,
+  type ProjectGovernanceItem,
+  type EngineGovernanceItem,
+} from '../../../api/platform-admin';
+import type { CreateEnvironmentTag, UpdateEnvironmentTag } from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
+import type { UpdateGitProviderRequest } from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
 // Query keys
 export const adminQueryKeys = {
   settings: ['platform-admin', 'admin', 'settings'] as const,
@@ -16,10 +25,11 @@ export const adminQueryKeys = {
 };
 
 // Platform Settings hooks
-export function usePlatformSettings() {
+export function usePlatformSettings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.settings,
     queryFn: () => platformAdminApi.getSettings(),
+    enabled: options?.enabled,
   });
 }
 
@@ -27,19 +37,19 @@ export function useUpdatePlatformSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: Partial<PlatformSettings>) => platformAdminApi.updateSettings(data),
+    mutationFn: (data: UpdatePlatformSettings) => platformAdminApi.updateSettings(data),
     // Optimistic update - immediately reflect the change
     onMutate: async (newData) => {
       await queryClient.cancelQueries({ queryKey: adminQueryKeys.settings });
       const previousSettings = queryClient.getQueryData<PlatformSettings>(adminQueryKeys.settings);
-      
+
       if (previousSettings) {
         queryClient.setQueryData<PlatformSettings>(adminQueryKeys.settings, {
           ...previousSettings,
           ...newData,
         });
       }
-      
+
       return { previousSettings };
     },
     // Rollback on error
@@ -55,10 +65,11 @@ export function useUpdatePlatformSettings() {
 }
 
 // Environment Tags hooks
-export function useEnvironmentTags() {
+export function useEnvironmentTags(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.environments,
     queryFn: () => platformAdminApi.getEnvironments(),
+    enabled: options?.enabled,
   });
 }
 
@@ -66,7 +77,7 @@ export function useCreateEnvironmentTag() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { name: string; color?: string; manualDeployAllowed?: boolean }) =>
+    mutationFn: (data: CreateEnvironmentTag) =>
       platformAdminApi.createEnvironment(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.environments });
@@ -78,7 +89,7 @@ export function useUpdateEnvironmentTag() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string } & Partial<EnvironmentTag>) =>
+    mutationFn: ({ id, ...data }: { id: string } & UpdateEnvironmentTag) =>
       platformAdminApi.updateEnvironment(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.environments });
@@ -109,10 +120,11 @@ export function useReorderEnvironmentTags() {
 }
 
 // Users hooks
-export function useAdminUsers(params?: { limit?: number; offset?: number }) {
+export function useAdminUsers(params?: { limit?: number; offset?: number }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.users(params),
     queryFn: () => platformAdminApi.getUsers(params),
+    enabled: options?.enabled,
   });
 }
 
@@ -151,10 +163,11 @@ export function useAssignEngineOwner() {
 }
 
 // Governance - Projects
-export function useProjectsGovernance(search?: string) {
+export function useProjectsGovernance(search?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.projectsGovernance(search),
     queryFn: () => platformAdminApi.getProjectsForGovernance(search ? { search } : undefined),
+    enabled: options?.enabled,
   });
 }
 
@@ -172,10 +185,11 @@ export function useAssignProjectDelegate() {
 }
 
 // Governance - Engines
-export function useEnginesGovernance(search?: string) {
+export function useEnginesGovernance(search?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.enginesGovernance(search),
     queryFn: () => platformAdminApi.getEnginesForGovernance(search ? { search } : undefined),
+    enabled: options?.enabled,
   });
 }
 
@@ -193,10 +207,11 @@ export function useAssignEngineDelegate() {
 }
 
 // Git Providers hooks
-export function useAdminGitProviders() {
+export function useAdminGitProviders(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: adminQueryKeys.gitProviders,
     queryFn: () => platformAdminApi.getGitProviders(),
+    enabled: options?.enabled,
   });
 }
 
@@ -204,7 +219,7 @@ export function useUpdateGitProvider() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<GitProvider> }) =>
+    mutationFn: ({ id, updates }: { id: string; updates: UpdateGitProviderRequest }) =>
       platformAdminApi.updateGitProvider(id, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminQueryKeys.gitProviders });

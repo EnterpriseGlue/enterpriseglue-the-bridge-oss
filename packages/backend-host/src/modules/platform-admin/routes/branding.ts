@@ -14,6 +14,10 @@ import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 // TenantSettings removed - multi-tenancy is EE-only
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
 import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import {
+  PlatformBrandingSchema,
+  UpdatePlatformBrandingRequestSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 
 const router = Router();
 
@@ -27,21 +31,6 @@ router.use((req, _res, next) => {
 });
 
 const tenantIdParamsSchema = z.object({ tenantId: z.string().min(1) });
-
-const updatePlatformBrandingSchema = z.object({
-  logoUrl: z.string().nullable().optional(),
-  loginLogoUrl: z.string().nullable().optional(),
-  loginTitleVerticalOffset: z.number().min(-50).max(50).optional(),
-  loginTitleColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
-  logoTitle: z.string().nullable().optional(),
-  logoScale: z.number().min(50).max(200).optional(),
-  titleFontUrl: z.string().nullable().optional(),
-  titleFontWeight: z.string().optional(),
-  titleFontSize: z.number().min(10).max(32).optional(),
-  titleVerticalOffset: z.number().min(-20).max(20).optional(),
-  menuAccentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().optional(),
-  faviconUrl: z.string().nullable().optional(),
-});
 
 const updateTenantBrandingSchema = z.object({
   logoUrl: z.string().nullable().optional(),
@@ -68,7 +57,7 @@ router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.
     const row = await platformSettingsRepo.findOne({ where: { id: 'default' } });
 
     if (!row) {
-      return res.json({
+      return res.json(PlatformBrandingSchema.parse({
         logoUrl: null,
         loginLogoUrl: null,
         loginTitleVerticalOffset: 0,
@@ -81,10 +70,10 @@ router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.
         titleVerticalOffset: 0,
         menuAccentColor: null,
         faviconUrl: null,
-      });
+      }));
     }
 
-    res.json({
+    res.json(PlatformBrandingSchema.parse({
       logoUrl: row.logoUrl || null,
       loginLogoUrl: row.loginLogoUrl || null,
       loginTitleVerticalOffset: row.loginTitleVerticalOffset ?? 0,
@@ -97,7 +86,7 @@ router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.
       titleVerticalOffset: row.titleVerticalOffset ?? 0,
       menuAccentColor: row.menuAccentColor || null,
       faviconUrl: row.faviconUrl || null,
-    });
+    }));
   } catch (error) {
     logger.error('Get platform branding error:', error);
     throw Errors.internal('Failed to get platform branding');
@@ -112,7 +101,7 @@ router.get('/', apiLimiter, requirePermission({ permission: PlatformPermissions.
 router.put(
   '/',
   requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }),
-  validateBody(updatePlatformBrandingSchema),
+  validateBody(UpdatePlatformBrandingRequestSchema),
   asyncHandler(async (req, res) => {
     try {
       const dataSource = await getDataSource();
@@ -159,7 +148,7 @@ router.put(
  * Reset platform branding to defaults
  * ✨ Migrated to TypeORM
  */
-router.delete('/', apiLimiter, asyncHandler(async (req, res) => {
+router.delete('/', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req, res) => {
   try {
     const dataSource = await getDataSource();
     const platformSettingsRepo = dataSource.getRepository(PlatformSettings);

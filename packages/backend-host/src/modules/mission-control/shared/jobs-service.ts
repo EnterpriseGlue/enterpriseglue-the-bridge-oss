@@ -12,6 +12,7 @@ import {
   setJobDefinitionRetries,
   setJobDefinitionSuspensionState,
 } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+export { filterRuntimeItemsByProcessDefinitionKeys } from './runtime-resource-filter.js'
 
 export async function listJobs(engineId: string, params: any) {
   return getJobs<any[]>(engineId, params)

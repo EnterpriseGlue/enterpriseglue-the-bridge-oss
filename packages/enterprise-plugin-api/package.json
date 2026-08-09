@@ -1,10 +1,13 @@
 {
   "name": "@enterpriseglue/enterprise-plugin-api",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Plugin API contract types for EnterpriseGlue OSS/EE boundary",
   "license": "Apache-2.0",
   "private": false,
   "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "types": "./src/index.d.ts",
   "exports": {
     ".": {

@@ -14,15 +14,15 @@ import {
   TableToolbar,
   TableToolbarContent,
   Tag,
-  OverflowMenu,
-  OverflowMenuItem,
   TextInput,
   Select,
   SelectItem,
   Toggle,
+  InlineNotification,
 } from '@carbon/react';
 import { Add, Email, Checkmark } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../shared/components/PageLayout';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../shared/auth/guards';
 import FormModal from '../../components/FormModal';
 import ConfirmModal from '../../shared/components/ConfirmModal';
 import { useModal } from '../../shared/hooks/useModal';
@@ -63,7 +63,17 @@ const tableHeaders = [
   { key: 'actions', header: '' },
 ];
 
-export default function EmailConfigurations({ embedded }: { embedded?: boolean } = {}) {
+interface EmailConfigurationsProps {
+  embedded?: boolean;
+  canManageSettings?: boolean;
+  settingsUnavailableReason?: string | null;
+}
+
+export default function EmailConfigurations({
+  embedded,
+  canManageSettings = true,
+  settingsUnavailableReason,
+}: EmailConfigurationsProps = {}) {
   const queryClient = useQueryClient();
   const { notify } = useToast();
   const createModal = useModal();
@@ -100,6 +110,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
   });
   const [testEmail, setTestEmail] = useState('');
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage';
 
   const configsQuery = useQuery({
     queryKey: ['email-configs'],
@@ -108,7 +119,9 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
 
   const createMutation = useMutation({
     mutationFn: (data: typeof formData) =>
-      apiClient.post('/api/admin/email-configs', data),
+      canManageSettings
+        ? apiClient.post('/api/admin/email-configs', data)
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-configs'] });
       createModal.closeModal();
@@ -123,7 +136,9 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<typeof formData> }) =>
-      apiClient.patch(`/api/admin/email-configs/${id}`, data),
+      canManageSettings
+        ? apiClient.patch(`/api/admin/email-configs/${id}`, data)
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-configs'] });
       editModal.closeModal();
@@ -137,7 +152,10 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/api/admin/email-configs/${id}`),
+    mutationFn: (id: string) =>
+      canManageSettings
+        ? apiClient.delete(`/api/admin/email-configs/${id}`)
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-configs'] });
       deleteModal.closeModal();
@@ -150,7 +168,10 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
   });
 
   const setDefaultMutation = useMutation({
-    mutationFn: (id: string) => apiClient.post(`/api/admin/email-configs/${id}/set-default`),
+    mutationFn: (id: string) =>
+      canManageSettings
+        ? apiClient.post(`/api/admin/email-configs/${id}/set-default`)
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-configs'] });
       notify({ kind: 'success', title: 'Default configuration updated' });
@@ -163,7 +184,9 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
 
   const testMutation = useMutation({
     mutationFn: ({ id, toEmail }: { id: string; toEmail: string }) =>
-      apiClient.post<{ success: boolean; message: string }>(`/api/admin/email-configs/${id}/test`, { toEmail }),
+      canManageSettings
+        ? apiClient.post<{ success: boolean; message: string }>(`/api/admin/email-configs/${id}/test`, { toEmail })
+        : Promise.reject(new Error(disabledReason)),
     onSuccess: () => {
       setTestResult({ success: true, message: 'Test email sent successfully!' });
     },
@@ -234,12 +257,25 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
         <DataTable rows={tableRows} headers={tableHeaders}>
           {({ rows, headers, getTableProps, getHeaderProps, getRowProps }) => (
             <TableContainer>
+              {!canManageSettings && (
+                <InlineNotification
+                  kind="warning"
+                  title="Email settings are read-only"
+                  subtitle={disabledReason}
+                  hideCloseButton
+                  lowContrast
+                  style={{ marginBottom: 'var(--spacing-4)' }}
+                />
+              )}
               <TableToolbar>
                 <TableToolbarContent>
                   <Button
                     kind="primary"
                     renderIcon={Add}
+                    disabled={!canManageSettings}
+                    title={!canManageSettings ? disabledReason : undefined}
                     onClick={() => {
+                      if (!canManageSettings) return;
                       resetForm();
                       createModal.openModal();
                     }}
@@ -287,23 +323,25 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                             const cfg = cell.value as EmailConfig;
                             return (
                               <TableCell key={cell.id}>
-                                <OverflowMenu size="sm" flipped>
-                                  <OverflowMenuItem itemText="Edit" onClick={() => openEditModal(cfg)} />
-                                  <OverflowMenuItem itemText="Test Send" onClick={() => openTestModal(cfg)} />
+                                <GuardedOverflowMenu size="sm" flipped>
+                                  <GuardedOverflowMenuItem itemText="Edit" unavailableReason={!canManageSettings ? disabledReason : null} onClick={() => openEditModal(cfg)} />
+                                  <GuardedOverflowMenuItem itemText="Test Send" unavailableReason={!canManageSettings ? disabledReason : null} onClick={() => openTestModal(cfg)} />
                                   {!cfg.isDefault && (
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText="Set as Default"
+                                      unavailableReason={!canManageSettings ? disabledReason : null}
                                       onClick={() => setDefaultMutation.mutate(cfg.id)}
                                     />
                                   )}
                                   {!cfg.isDefault && (
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText="Delete"
                                       isDelete
+                                      unavailableReason={!canManageSettings ? disabledReason : null}
                                       onClick={() => deleteModal.openModal(cfg)}
                                     />
                                   )}
-                                </OverflowMenu>
+                                </GuardedOverflowMenu>
                               </TableCell>
                             );
                           }
@@ -323,7 +361,10 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                     kind="tertiary"
                     size="sm"
                     style={{ marginTop: 'var(--spacing-3)' }}
+                    disabled={!canManageSettings}
+                    title={!canManageSettings ? disabledReason : undefined}
                     onClick={() => {
+                      if (!canManageSettings) return;
                       resetForm();
                       createModal.openModal();
                     }}
@@ -345,21 +386,26 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
         title="Add Email Configuration"
         submitText="Create"
         busy={createMutation.isPending}
-        submitDisabled={!formData.name || !formData.apiKey || !formData.fromName || !formData.fromEmail}
+        submitDisabled={!canManageSettings || !formData.name || !formData.apiKey || !formData.fromName || !formData.fromEmail}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
+          {!canManageSettings && (
+            <InlineNotification kind="warning" title="Email settings are read-only" subtitle={disabledReason} hideCloseButton lowContrast />
+          )}
           <TextInput
             id="name"
             labelText="Configuration Name"
             placeholder="e.g., Production Resend"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            disabled={!canManageSettings}
           />
           <Select
             id="provider"
             labelText="Provider"
             value={formData.provider}
             onChange={(e) => setFormData({ ...formData, provider: e.target.value as any })}
+            disabled={!canManageSettings}
           >
             <SelectItem value="resend" text="Resend" />
             <SelectItem value="sendgrid" text="SendGrid" />
@@ -375,6 +421,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="e.g., smtp.gmail.com"
                 value={formData.smtpHost}
                 onChange={(e) => setFormData({ ...formData, smtpHost: e.target.value })}
+                disabled={!canManageSettings}
               />
               <TextInput
                 id="smtpPort"
@@ -383,6 +430,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="587"
                 value={formData.smtpPort}
                 onChange={(e) => setFormData({ ...formData, smtpPort: e.target.value ? parseInt(e.target.value) : '' })}
+                disabled={!canManageSettings}
               />
               <TextInput
                 id="smtpUser"
@@ -390,6 +438,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="e.g., user@example.com"
                 value={formData.smtpUser}
                 onChange={(e) => setFormData({ ...formData, smtpUser: e.target.value })}
+                disabled={!canManageSettings}
               />
               <TextInput
                 id="apiKey"
@@ -398,12 +447,14 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="Enter your SMTP password"
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                disabled={!canManageSettings}
               />
               <Toggle
                 id="smtpSecure"
                 labelText="Use TLS/SSL"
                 toggled={formData.smtpSecure}
                 onToggle={(checked) => setFormData({ ...formData, smtpSecure: checked })}
+                disabled={!canManageSettings}
               />
             </>
           ) : (
@@ -414,6 +465,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
               placeholder="Enter your API key"
               value={formData.apiKey}
               onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+              disabled={!canManageSettings}
             />
           )}
           <TextInput
@@ -422,6 +474,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             placeholder="e.g., EnterpriseGlue"
             value={formData.fromName}
             onChange={(e) => setFormData({ ...formData, fromName: e.target.value })}
+            disabled={!canManageSettings}
           />
           <TextInput
             id="fromEmail"
@@ -430,6 +483,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             placeholder="e.g., noreply@example.com"
             value={formData.fromEmail}
             onChange={(e) => setFormData({ ...formData, fromEmail: e.target.value })}
+            disabled={!canManageSettings}
           />
           <TextInput
             id="replyTo"
@@ -438,18 +492,21 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             placeholder="e.g., support@example.com"
             value={formData.replyTo}
             onChange={(e) => setFormData({ ...formData, replyTo: e.target.value })}
+            disabled={!canManageSettings}
           />
           <Toggle
             id="enabled"
             labelText="Enabled"
             toggled={formData.enabled}
             onToggle={(checked) => setFormData({ ...formData, enabled: checked })}
+            disabled={!canManageSettings}
           />
           <Toggle
             id="isDefault"
             labelText="Set as Default"
             toggled={formData.isDefault}
             onToggle={(checked) => setFormData({ ...formData, isDefault: checked })}
+            disabled={!canManageSettings}
           />
         </div>
       </FormModal>
@@ -467,20 +524,25 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
         title="Edit Email Configuration"
         submitText="Save"
         busy={updateMutation.isPending}
-        submitDisabled={!formData.name || !formData.fromName || !formData.fromEmail}
+        submitDisabled={!canManageSettings || !formData.name || !formData.fromName || !formData.fromEmail}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
+          {!canManageSettings && (
+            <InlineNotification kind="warning" title="Email settings are read-only" subtitle={disabledReason} hideCloseButton lowContrast />
+          )}
           <TextInput
             id="edit-name"
             labelText="Configuration Name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            disabled={!canManageSettings}
           />
           <Select
             id="edit-provider"
             labelText="Provider"
             value={formData.provider}
             onChange={(e) => setFormData({ ...formData, provider: e.target.value as any })}
+            disabled={!canManageSettings}
           >
             <SelectItem value="resend" text="Resend" />
             <SelectItem value="sendgrid" text="SendGrid" />
@@ -496,6 +558,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="e.g., smtp.gmail.com"
                 value={formData.smtpHost}
                 onChange={(e) => setFormData({ ...formData, smtpHost: e.target.value })}
+                disabled={!canManageSettings}
               />
               <TextInput
                 id="edit-smtpPort"
@@ -504,6 +567,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="587"
                 value={formData.smtpPort}
                 onChange={(e) => setFormData({ ...formData, smtpPort: e.target.value ? parseInt(e.target.value) : '' })}
+                disabled={!canManageSettings}
               />
               <TextInput
                 id="edit-smtpUser"
@@ -511,6 +575,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="e.g., user@example.com"
                 value={formData.smtpUser}
                 onChange={(e) => setFormData({ ...formData, smtpUser: e.target.value })}
+                disabled={!canManageSettings}
               />
               <TextInput
                 id="edit-apiKey"
@@ -519,12 +584,14 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
                 placeholder="Enter new password to update"
                 value={formData.apiKey}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                disabled={!canManageSettings}
               />
               <Toggle
                 id="edit-smtpSecure"
                 labelText="Use TLS/SSL"
                 toggled={formData.smtpSecure}
                 onToggle={(checked) => setFormData({ ...formData, smtpSecure: checked })}
+                disabled={!canManageSettings}
               />
             </>
           ) : (
@@ -535,6 +602,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
               placeholder="Enter new API key to update"
               value={formData.apiKey}
               onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+              disabled={!canManageSettings}
             />
           )}
           <TextInput
@@ -542,6 +610,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             labelText="From Name"
             value={formData.fromName}
             onChange={(e) => setFormData({ ...formData, fromName: e.target.value })}
+            disabled={!canManageSettings}
           />
           <TextInput
             id="edit-fromEmail"
@@ -549,6 +618,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             type="email"
             value={formData.fromEmail}
             onChange={(e) => setFormData({ ...formData, fromEmail: e.target.value })}
+            disabled={!canManageSettings}
           />
           <TextInput
             id="edit-replyTo"
@@ -556,12 +626,14 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             type="email"
             value={formData.replyTo}
             onChange={(e) => setFormData({ ...formData, replyTo: e.target.value })}
+            disabled={!canManageSettings}
           />
           <Toggle
             id="edit-enabled"
             labelText="Enabled"
             toggled={formData.enabled}
             onToggle={(checked) => setFormData({ ...formData, enabled: checked })}
+            disabled={!canManageSettings}
           />
         </div>
       </FormModal>
@@ -576,6 +648,8 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
         confirmText="Delete"
         danger
         busy={deleteMutation.isPending}
+        confirmDisabled={!canManageSettings}
+        disabledReason={!canManageSettings ? disabledReason : null}
       />
 
       {/* Test Send Modal */}
@@ -586,9 +660,12 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
         title="Send Test Email"
         submitText="Send Test"
         busy={testMutation.isPending}
-        submitDisabled={!testEmail}
+        submitDisabled={!canManageSettings || !testEmail}
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
+          {!canManageSettings && (
+            <InlineNotification kind="warning" title="Email settings are read-only" subtitle={disabledReason} hideCloseButton lowContrast />
+          )}
           {testResult && (
             <div style={{ color: testResult.success ? 'var(--cds-support-success)' : 'var(--cds-support-error)', fontSize: 14 }}>
               {testResult.message}
@@ -602,6 +679,7 @@ export default function EmailConfigurations({ embedded }: { embedded?: boolean }
             placeholder="your@email.com"
             value={testEmail}
             onChange={(e) => setTestEmail(e.target.value)}
+            disabled={!canManageSettings}
           />
         </div>
       </FormModal>

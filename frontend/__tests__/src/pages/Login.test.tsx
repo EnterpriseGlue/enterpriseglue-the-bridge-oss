@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@src/shared/notifications/ToastProvider';
 import Login from '@src/pages/Login';
 import { apiClient } from '@src/shared/api/client';
+import { redirectTo } from '@src/utils/redirect';
 
 const loginMock = vi.fn().mockResolvedValue(undefined);
 const navigateMock = vi.fn();
@@ -16,7 +17,7 @@ const authState = {
 };
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
-  useAuth: () => ({ login: loginMock, ...authState }),
+  useAuth: () => ({ login: loginMock, setAuthenticatedUser: vi.fn(), refreshPermissions: vi.fn(), ...authState }),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -44,6 +45,8 @@ vi.mock('@src/shared/api/client', () => ({
   },
 }));
 
+vi.mock('@src/utils/redirect', () => ({ redirectTo: vi.fn() }));
+
 describe('Login', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,8 +54,8 @@ describe('Login', () => {
     authState.isAuthenticated = false;
     authState.isLoading = false;
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
-      if (url === '/api/auth/branding') return Promise.resolve({ ssoAutoRedirectSingleProvider: false });
+      if (url === '/api/auth/login-methods') return Promise.resolve({ localPassword: { enabled: true }, providerSelection: 'chooser', autoRedirectProviderId: null, providers: [], configurationStatus: 'ready' });
+      if (url === '/api/auth/branding') return Promise.resolve({});
       return Promise.resolve({});
     });
   });
@@ -74,11 +77,16 @@ describe('Login', () => {
       </QueryClientProvider>
     );
 
-    const submit = screen.getByRole('button', { name: /sign in/i });
+    const submit = await screen.findByRole('button', { name: /sign in/i });
     expect(submit.hasAttribute('disabled')).toBe(true);
 
-    await user.type(screen.getByLabelText(/email/i), 'user@example.com');
-    await user.type(screen.getByLabelText(/password/i), 'Password123!');
+    const emailInput = await screen.findByLabelText(/email/i);
+    const passwordInput = screen.getByLabelText(/^password$/i);
+    expect(emailInput).toHaveAttribute('autocomplete', 'username');
+    expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
+    expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
+    await user.type(emailInput, 'user@example.com');
+    await user.type(passwordInput, 'Password123!');
 
     expect(submit.hasAttribute('disabled')).toBe(false);
 
@@ -92,8 +100,8 @@ describe('Login', () => {
 
   it('uses the branded header title text for the browser page title', async () => {
     (apiClient.get as any).mockImplementation((url: string) => {
-      if (url === '/api/sso/providers/enabled') return Promise.resolve([]);
-      if (url === '/api/auth/branding') return Promise.resolve({ logoTitle: 'OneJOP', ssoAutoRedirectSingleProvider: false });
+      if (url === '/api/auth/login-methods') return Promise.resolve({ localPassword: { enabled: true }, providerSelection: 'chooser', autoRedirectProviderId: null, providers: [], configurationStatus: 'ready' });
+      if (url === '/api/auth/branding') return Promise.resolve({ logoTitle: 'OneJOP' });
       return Promise.resolve({});
     });
 
@@ -133,7 +141,38 @@ describe('Login', () => {
     );
 
     await waitFor(() => {
-      expect(navigateMock).toHaveBeenCalledWith('/', { replace: true });
+      expect(navigateMock).toHaveBeenCalledWith('/t/default/', { replace: true });
     });
+  });
+
+  it('uses the provider-id LDAP login endpoint after selecting a directory provider', async () => {
+    const user = userEvent.setup();
+    (apiClient.get as any).mockImplementation((url: string) => {
+      if (url.endsWith('/auth/login-methods')) return Promise.resolve({
+        localPassword: { enabled: false },
+        providerSelection: 'chooser',
+        autoRedirectProviderId: null,
+        providers: [{ id: 'ldap-1', key: 'corp-directory', displayName: 'Corporate directory', organization: null, protocol: 'ldap', loginMethod: 'password', preferred: true, loginDomains: [] }],
+        configurationStatus: 'ready',
+      });
+      if (url === '/api/auth/branding') return Promise.resolve({});
+      return Promise.resolve({});
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><ToastProvider><MemoryRouter initialEntries={['/t/default/login']}><Login /></MemoryRouter></ToastProvider></QueryClientProvider>);
+
+    await user.click(await screen.findByRole('button', { name: /Continue with Corporate directory/i }));
+    const usernameInput = screen.getByLabelText('Username');
+    const passwordInput = screen.getByLabelText('Password');
+    await waitFor(() => expect(usernameInput).toHaveFocus());
+    expect(usernameInput).toHaveAttribute('autocomplete', 'username');
+    expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
+    await user.type(usernameInput, 'person@example.test');
+    await user.type(passwordInput, 'directory-password');
+    await user.click(screen.getByRole('button', { name: /^Sign in$/i }));
+
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/t/default/auth/providers/ldap-1/login', { username: 'person@example.test', password: 'directory-password' }));
+    expect(redirectTo).toHaveBeenCalledWith('/t/default/');
   });
 });

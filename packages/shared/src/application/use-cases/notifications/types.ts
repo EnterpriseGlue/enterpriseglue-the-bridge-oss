@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { JwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+import type { UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 
 export interface TenantContext {
   tenantId: string | null;
@@ -9,7 +9,7 @@ export interface TenantContext {
 export interface TenantResolver {
   resolve(context: { 
     req?: Request; 
-    user?: JwtPayload; 
+    user?: UserJwtPayload;
     query?: Record<string, string>;
   }): TenantContext;
 }

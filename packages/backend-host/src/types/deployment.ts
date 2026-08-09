@@ -11,8 +11,14 @@ import type { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastruc
 export interface EngineConnectionInfo {
   id: string;
   baseUrl: string;
+  connectionMode?: 'direct' | 'customer_sidecar';
+  deploymentIntegration?: 'enterpriseglue_proxy' | 'direct_engine';
+  authType?: string | null;
   username?: string | null;
   passwordEnc?: string | null;
+  oauthTokenUrl?: string | null;
+  oauthScopes?: string | null;
+  oauthAudience?: string | null;
 }
 
 // File resource from request body

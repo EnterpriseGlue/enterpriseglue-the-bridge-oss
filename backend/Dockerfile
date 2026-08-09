@@ -9,7 +9,7 @@ RUN npm install -g npm@11.19.0 pnpm@11.19.0 brace-expansion@5.0.9 \
     && cp -R /usr/local/lib/node_modules/brace-expansion /usr/local/lib/node_modules/npm/node_modules/brace-expansion \
     && rm -rf /usr/local/lib/node_modules/brace-expansion
 
-# Copy workspace manifests for pnpm install
+# Copy every manifest that affects pnpm's frozen-lockfile resolution.
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY --chown=node:node backend/package.json backend/
 COPY --chown=node:node packages/shared/package.json packages/shared/
@@ -20,7 +20,9 @@ COPY --chown=node:node frontend/package.json frontend/
 
 RUN apk upgrade --no-cache \
     && CI=true pnpm install --filter webmodeler-backend... --frozen-lockfile \
-    && chown -R node:node /repo/node_modules
+    && chown -R node:node /repo/node_modules \
+    && mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
+    && chown -R node:node /etc/enterpriseglue /var/run/secrets/enterpriseglue
 
 COPY --chown=node:node backend backend
 

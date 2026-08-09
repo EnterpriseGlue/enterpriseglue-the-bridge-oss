@@ -4,28 +4,49 @@ import { GitService } from '@enterpriseglue/shared/services/git/GitService.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireProjectRole } from '@enterpriseglue/shared/middleware/projectAuth.js';
-import { DeployRequestSchema, RollbackRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
+import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { DeploymentResponseSchema, DeploymentSelectSchema, DeployRequestSchema, RollbackRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { GitDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/GitDeployment.js';
 import { EnvironmentTag } from '@enterpriseglue/shared/infrastructure/persistence/entities/EnvironmentTag.js';
-import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
-import { DEPLOY_ROLES, EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 
 const router = Router();
 const gitService = new GitService();
+
+async function hasProjectPermission(req: Request, projectId: string, permission: Permission): Promise<boolean> {
+  return permissionService.hasPermission(permission, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    resourceType: 'project',
+    resourceId: projectId,
+  });
+}
+
+async function canViewProjectDeployments(req: Request, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
+}
 
 /**
  * POST /git-api/deploy
  * Deploy a project (commit + push + tag)
  */
-router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployRequestSchema), requireProjectRole(DEPLOY_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployRequestSchema), requireAction('project.deploy.create', { resourceIdFrom: 'body' }), requireCompositeAction('project.deploy.create', {
+  kind: 'deployment',
+  mode: 'ci',
+  projectIdFrom: 'body',
+  engineIdFrom: 'body',
+  optionalWhenMissingEngineId: true,
+  legacyAutoGrant: false,
+  attachDeployContext: false,
+  hideUnauthorizedEngine: false,
+}), asyncHandler(async (req: Request, res: Response) => {
   const validated = req.body;
   const userId = req.user!.userId;
+  const engineId = typeof validated.engineId === 'string' ? validated.engineId.trim() : '';
 
-  // Check manualDeployAllowed if an environment is specified
-  if (validated.environment) {
+  if (!engineId && validated.environment) {
+    // Legacy callers without an engine target still use the environment's manual policy.
     const dataSource = await getDataSource();
     const envTagRepo = dataSource.getRepository(EnvironmentTag);
     // Try to find by ID first, then by name (case-insensitive)
@@ -53,7 +74,7 @@ router.post('/git-api/deploy', apiLimiter, requireAuth, validateBody(DeployReque
       tagName: validated.tagName,
     });
 
-    res.status(201).json(result);
+    res.status(201).json(DeploymentResponseSchema.parse(result));
   } catch (e: any) {
     const msg = String(e?.message || '')
 
@@ -138,7 +159,7 @@ async function listDeployments(projectId: string, limit: number) {
  * GET /git-api/deployments
  * List deployments for a project (query param style)
  */
-router.get('/git-api/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   const limit = parseInt(req.query.limit as string) || 50;
 
@@ -146,35 +167,37 @@ router.get('/git-api/deployments', apiLimiter, requireAuth, asyncHandler(async (
     throw Errors.validation('projectId query parameter is required');
   }
 
-  const canRead = await projectMemberService.hasAccess(projectId, req.user!.userId);
-  if (!canRead) {
+  if (!(await canViewProjectDeployments(req, projectId))) {
     throw Errors.projectNotFound();
   }
 
-  res.json(await listDeployments(projectId, limit));
+  res.json((await listDeployments(projectId, limit)).map((deployment) => DeploymentSelectSchema.parse(deployment)));
 }));
 
 /**
  * GET /git-api/projects/:projectId/deployments
  * List deployments for a project (REST style)
  */
-router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/projects/:projectId/deployments', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const limit = parseInt(req.query.limit as string) || 50;
 
-  const canRead = await projectMemberService.hasAccess(projectId, req.user!.userId);
-  if (!canRead) {
+  if (!(await canViewProjectDeployments(req, projectId))) {
     throw Errors.projectNotFound();
   }
 
-  res.json(await listDeployments(projectId, limit));
+  res.json((await listDeployments(projectId, limit)).map((deployment) => DeploymentSelectSchema.parse(deployment)));
 }));
 
 /**
  * GET /git-api/deployments/:id
  * Get deployment details
  */
-router.get('/git-api/deployments/:id', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/deployments/:id', apiLimiter, requireAuth, requireAction('project.deployments.read', {
+  resourceResolver: 'project.byGitDeploymentId',
+  resourceIdFrom: 'params',
+  resourceIdKey: 'id',
+}), asyncHandler(async (req: Request, res: Response) => {
   const id = String(req.params.id);
 
   const dataSource = await getDataSource();
@@ -185,19 +208,18 @@ router.get('/git-api/deployments/:id', apiLimiter, requireAuth, asyncHandler(asy
     throw Errors.notFound('Deployment');
   }
 
-  const canRead = await projectMemberService.hasAccess(String(deployment.projectId), req.user!.userId);
-  if (!canRead) {
+  if (!(await canViewProjectDeployments(req, String(deployment.projectId)))) {
     throw Errors.notFound('Deployment');
   }
 
-  res.json(deployment);
+  res.json(DeploymentSelectSchema.parse(deployment));
 }));
 
 /**
  * POST /git-api/rollback
  * Rollback project to a specific commit
  */
-router.post('/git-api/rollback', apiLimiter, requireAuth, validateBody(RollbackRequestSchema), requireProjectRole(EDIT_ROLES, { projectIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/rollback', apiLimiter, requireAuth, validateBody(RollbackRequestSchema), requireAction('project.git.rollback', { resourceIdFrom: 'body' }), asyncHandler(async (req: Request, res: Response) => {
   const validated = req.body;
   const userId = req.user!.userId;
 
@@ -213,7 +235,7 @@ router.post('/git-api/rollback', apiLimiter, requireAuth, validateBody(RollbackR
  * GET /git-api/commits
  * Get commit history for a project
  */
-router.get('/git-api/commits', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/commits', apiLimiter, requireAuth, requireAction('project.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
   const limit = parseInt(req.query.limit as string) || 100;
 
@@ -221,8 +243,7 @@ router.get('/git-api/commits', apiLimiter, requireAuth, asyncHandler(async (req:
     throw Errors.validation('projectId query parameter is required');
   }
 
-  const canRead = await projectMemberService.hasAccess(projectId, req.user!.userId);
-  if (!canRead) {
+  if (!(await canViewProjectDeployments(req, projectId))) {
     throw Errors.projectNotFound();
   }
 

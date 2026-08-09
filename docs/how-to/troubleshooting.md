@@ -4,6 +4,8 @@ Summary: Common issues and fixes for EnterpriseGlue setup.
 
 Audience: Developers and architects.
 
+For the complete bundle deployment workflow, see [Deploy Authorization Configuration](./deploy-authorization-config.md).
+
 ## Backend fails to start (missing env)
 - Ensure `.local/docker/env/docker.env` (Docker) or `backend/.env` (host) exists.
 - Legacy fallback: root `.env.docker` is still accepted.
@@ -29,6 +31,60 @@ Audience: Developers and architects.
 ## Migrations fail
 - Verify database credentials and schema permissions.
 - Check backend logs for migration errors.
+
+## Configuration bootstrap keeps `/ready` closed
+
+Read `/ready`, check `enterpriseglue_config_bootstrap_info` on `/metrics`, and
+open the matching apply-run receipt in **Platform Settings → Configuration
+Bundles**. These surfaces intentionally show the same safe issue code:
+
+| Issue code | Operator action |
+| --- | --- |
+| `bundle_path_missing` | Configure the absolute in-container bundle path and its read-only mount. |
+| `bundle_read_failed` | Check file existence, size limit, archive shape, and non-root readability. |
+| `hash_mismatch` | Recompute the reviewed payload SHA-256; do not update the pin until the content is reviewed. |
+| `validation_failed` | Run bundle preview and correct schema or cross-file reference errors. |
+| `secret_preflight_failed` | Restore the referenced environment variable or approved file without putting its value in the bundle. |
+| `tenant_scope_missing` | Set the exact expected platform or tenant scope for apply. |
+| `apply_failed` | Inspect the sanitized preview/apply diagnostics and apply-run receipt. |
+| `identity_reconciliation_failed` | Inspect the receipt's reconciliation tasks and correct the provider or stored-snapshot failure before retrying. |
+
+Backend logs intentionally omit raw exceptions and secret/configuration
+identifiers. Use preview diagnostics and receipt task state for detail; do not
+disable `EG_CONFIG_FAIL_CLOSED` merely to make the pod ready.
+
+## Configuration appears applied but access is stale
+
+- Confirm the apply-run receipt reports bootstrap reconciliation `completed`.
+- Confirm `/ready` reports `applied` rather than `failed`.
+- For SSO-derived access, verify the entitlement mapping targets the intended
+  internal group and that the canonical role assignment is attached to that
+  group at the correct scope.
+- For config-owned objects, review drift status before reapplying an
+  authoritative bundle; destructive removals require explicit archive
+  acknowledgements.
+
+## Shared engine resources remain hidden
+
+Read the aggregate tenancy series on `/metrics` first:
+
+- `enterpriseglue_engine_tenancy_metrics_collection_success 0` means the
+  backend could not collect persistence gauges; restore database connectivity
+  before trusting the remaining engine/resource gauge values.
+- Non-zero runtime-resource `unmapped`, `conflict`, or `stale` counts mean
+  those resources are intentionally quarantined. Open the engine's **Tenancy
+  and tenant mappings** panel, correct the mapping, and reconcile inventory.
+- A non-zero engine `incomplete`, `conflict`, `migration_required`, or
+  `unknown` count means at least one topology needs diagnostics or the guarded
+  transition workflow.
+- A rising `enterpriseglue_engine_tenancy_default_fallback_total` means a
+  provisioning caller reached the local default tenant because request context
+  was absent. Correct the caller; do not use this fallback as a centralized
+  shared-engine mapping.
+
+Metrics contain only aggregate bounded labels. Use authenticated diagnostics,
+Effective Access, and audit history to find the affected object. Never weaken
+shared-engine fail-closed behavior to make a quarantined resource visible.
 
 ## Tests fail with "relation does not exist" errors
 - First-time test setup requires database schema sync:

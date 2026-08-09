@@ -43,9 +43,10 @@ export const FileInsertSchema = z.object({
 
 // Request schemas
 export const CreateFileRequest = z.object({
-  name: z.string().optional(),
+  name: z.string().min(1).max(255),
   type: z.enum(['bpmn', 'dmn']).optional(),
-  folderId: z.string().nullable().optional(),
+  folderId: z.string().uuid().nullable().optional(),
+  xml: z.string().optional(),
 });
 
 export const UpdateFileXmlRequest = z.object({
@@ -53,10 +54,53 @@ export const UpdateFileXmlRequest = z.object({
   prevUpdatedAt: z.number().optional(),
 });
 
-export const RenameFileRequest = z.object({
-  name: z.string().min(1),
+export const UpdateFileMetadataRequest = z.object({
+  name: z.string().min(1).max(255).optional(),
+  folderId: z.string().uuid().nullable().optional(),
+}).refine((value) => value.name !== undefined || value.folderId !== undefined, {
+  message: 'At least one file metadata field is required',
 });
+
+export const CreateFileResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  type: z.enum(['bpmn', 'dmn']),
+  bpmnProcessId: z.string().nullable(),
+  dmnDecisionId: z.string().nullable(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export const UpdateFileMetadataResponseSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  folderId: z.string().uuid().nullable(),
+  updatedAt: z.number(),
+});
+
+export const RestoreFileFromCommitRequestSchema = z.object({
+  commitId: z.string().min(1).optional(),
+  fileVersionNumber: z.number().int().positive().optional(),
+}).refine((value) => Boolean(value.commitId) || typeof value.fileVersionNumber === 'number', {
+  message: 'commitId or fileVersionNumber is required',
+});
+
+export const RestoreFileFromCommitResponseSchema = z.object({
+  restored: z.literal(true),
+  fileId: z.string().uuid(),
+  commitId: z.string(),
+  fileVersionNumber: z.number().int().nullable(),
+  updatedAt: z.number(),
+}).strict();
+
+/** @deprecated Use UpdateFileMetadataRequest. */
+export const RenameFileRequest = UpdateFileMetadataRequest;
 
 // Types
 export type File = z.infer<typeof FileSchema>;
 export type CreateFile = z.infer<typeof CreateFileRequest>;
+export type CreateFileResponse = z.infer<typeof CreateFileResponseSchema>;
+export type UpdateFileMetadata = z.infer<typeof UpdateFileMetadataRequest>;
+export type UpdateFileMetadataResponse = z.infer<typeof UpdateFileMetadataResponseSchema>;
+export type RestoreFileFromCommitRequest = z.infer<typeof RestoreFileFromCommitRequestSchema>;
+export type RestoreFileFromCommitResponse = z.infer<typeof RestoreFileFromCommitResponseSchema>;

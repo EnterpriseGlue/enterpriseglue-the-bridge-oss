@@ -2,12 +2,25 @@ import 'reflect-metadata';
 import { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { ensureSchemaExists, initializeDatabase } from '@enterpriseglue/shared/db/run-migrations.js';
-import { bootstrapAdmin, bootstrapDefaultEmailConfig, backfillKnownUserProfiles, backfillMissingPlatformRoles } from '@enterpriseglue/shared/db/bootstrap.js';
+import { bootstrapAdmin, bootstrapDefaultEmailConfig } from '@enterpriseglue/shared/db/bootstrap.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requirePlatformAdmin } from '@enterpriseglue/shared/middleware/platformAuth.js';
+import { requireAction, requireCompositeAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { startBatchPollerIfActive } from './poller/batchPoller.js';
-import { getConnectionPool, ConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
-import { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
+import { startSsoDiagnosticsPollerIfEnabled } from './poller/ssoDiagnosticsPoller.js';
+import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryPoller.js';
+import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configBundleIdentityReplayPoller.js';
+import { startConfigBundleRuntimeReconciliationPollerIfEnabled } from './poller/configBundleRuntimeReconciliationPoller.js';
+import { startCamundaNativeGrantSnapshotRetentionPoller } from './poller/camundaNativeGrantSnapshotRetentionPoller.js';
+import { getConfigBootstrapStatus, runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
+import { createLazyConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
+import type { EnterpriseBackendContext } from '@enterpriseglue/enterprise-plugin-api/backend';
+import { createEnterpriseDatabaseContext } from './services/enterpriseDatabaseContext.js';
+import {
+  buildEnterpriseBackendRouteOpenApiAuthzMetadata,
+  loadEnterpriseBackendPlugin,
+  requireDeclaredEnterpriseBackendRouteAction,
+} from './enterprise/loadEnterpriseBackendPlugin.js';
 
 export { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 export { loadEnterpriseBackendPlugin } from './enterprise/loadEnterpriseBackendPlugin.js';
@@ -18,25 +31,45 @@ export async function startServer() {
   // Expose middleware to enterprise plugin via app.locals
   app.locals.requireAuth = requireAuth;
   app.locals.requirePlatformAdmin = requirePlatformAdmin;
+  app.locals.requireAction = requireAction;
+  app.locals.requireCompositeAction = requireCompositeAction;
 
   const enterprisePlugin = await loadEnterpriseBackendPlugin();
-  const enterpriseContext = {
-    connectionPool: getConnectionPool(),
+  const enterpriseContext: EnterpriseBackendContext = {
+    database: createEnterpriseDatabaseContext({ databaseType: config.databaseType }),
+    connectionPool: createLazyConnectionPool(),
     config,
-  } as any;
+    authz: {
+      requireAction: (actionId: string, options?: Record<string, unknown>) =>
+        requireAction(actionId, options as never),
+      requireCompositeAction: (actionId: string, options?: Record<string, unknown>) =>
+        requireCompositeAction(actionId, options as never),
+      requireDeclaredAction: requireDeclaredEnterpriseBackendRouteAction,
+      buildOpenApiAuthzMetadata: buildEnterpriseBackendRouteOpenApiAuthzMetadata,
+    },
+  };
   const notificationTenantResolver = await enterprisePlugin.getNotificationTenantResolver?.(enterpriseContext);
+  const engineTenantReferenceResolver = await enterprisePlugin.getEngineTenantReferenceResolver?.(enterpriseContext);
+  app.locals.engineTenantReferenceResolver = engineTenantReferenceResolver;
   app.locals.enterprisePluginLoaded = Boolean(
-    enterprisePlugin && (enterprisePlugin.registerRoutes || enterprisePlugin.migrateEnterpriseDatabase || enterprisePlugin.getNotificationTenantResolver)
+    enterprisePlugin && (
+      enterprisePlugin.registerRoutes
+      || enterprisePlugin.migrateEnterpriseDatabase
+      || enterprisePlugin.getNotificationTenantResolver
+      || enterprisePlugin.getEngineTenantReferenceResolver
+    )
   );
   console.log(
     `[Enterprise] Backend plugin status: loaded=${app.locals.enterprisePluginLoaded}, ` +
       `registerRoutes=${Boolean(enterprisePlugin.registerRoutes)}, ` +
       `migrateEnterpriseDatabase=${Boolean(enterprisePlugin.migrateEnterpriseDatabase)}, ` +
-      `getNotificationTenantResolver=${Boolean(enterprisePlugin.getNotificationTenantResolver)}`
+      `getNotificationTenantResolver=${Boolean(enterprisePlugin.getNotificationTenantResolver)}, ` +
+      `getEngineTenantReferenceResolver=${Boolean(enterprisePlugin.getEngineTenantReferenceResolver)}`
   );
 
   try {
-    // Pass database-agnostic connection pool to enterprise plugin
+    // Pass the portable TypeORM context plus the deprecated lazy raw-pool
+    // compatibility path to the enterprise plugin.
     await enterprisePlugin.registerRoutes?.(app as any, enterpriseContext);
   } catch (error) {
     console.error('Failed to register enterprise routes:', error);
@@ -53,7 +86,7 @@ export async function startServer() {
   if (enterprisePlugin.migrateEnterpriseDatabase) {
     try {
       const schema = config.enterpriseSchema;
-      
+
       // Create enterprise schema if configured (and not 'public')
       if (schema && schema !== 'public') {
         await ensureSchemaExists(schema);
@@ -72,9 +105,13 @@ export async function startServer() {
   // Bootstrap admin account on first run
   await bootstrapAdmin({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
   await bootstrapDefaultEmailConfig();
-  await backfillMissingPlatformRoles();
 
-  await backfillKnownUserProfiles({ allowPlatformAdmin: !app.locals.enterprisePluginLoaded });
+  try {
+    await runConfigBundleBootstrap({ tenantReferenceResolver: engineTenantReferenceResolver });
+  } catch {
+    console.error('Configuration bundle bootstrap failed:', getConfigBootstrapStatus());
+    if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');
+  }
 
   // Seed Git providers on first run
   try {
@@ -93,27 +130,18 @@ export async function startServer() {
   }
 
   app.listen(config.port, () => {
-    // eslint-disable-next-line no-console
     console.log(`Voyager API listening on http://localhost:${config.port}`);
     console.log(`API docs: http://localhost:${config.port}/api/docs`);
-    
-    // Debug: Check Microsoft Entra ID configuration
-    if (config.microsoftClientId && config.microsoftClientSecret && config.microsoftTenantId) {
-      console.log('✅ Microsoft Entra ID: Configured');
-      console.log(`   Client ID: ${config.microsoftClientId.substring(0, 8)}...`);
-      console.log(`   Tenant ID: ${config.microsoftTenantId.substring(0, 8)}...`);
-    } else {
-      console.log('⚠️  Microsoft Entra ID: Not configured');
-      console.log('   Missing:', [
-        !config.microsoftClientId && 'CLIENT_ID',
-        !config.microsoftClientSecret && 'CLIENT_SECRET',
-        !config.microsoftTenantId && 'TENANT_ID'
-      ].filter(Boolean).join(', '));
-    }
+
   });
 
   // Start background pollers
   void startBatchPollerIfActive();
+  void startSsoDiagnosticsPollerIfEnabled();
+  void startRuntimeInventoryPollerIfEnabled();
+  void startConfigBundleIdentityReplayPollerIfEnabled();
+  void startConfigBundleRuntimeReconciliationPollerIfEnabled();
+  void startCamundaNativeGrantSnapshotRetentionPoller();
 
   // Graceful shutdown
   process.on('SIGINT', () => process.exit(0));

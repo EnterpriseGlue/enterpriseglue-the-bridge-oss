@@ -10,8 +10,17 @@ import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence
 import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { In } from 'typeorm';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { SYSTEM_ROLE_IDS } from './permissions.js';
+import {
+  removeLegacyProjectMemberRoleAssignments,
+} from './legacy-project-role-assignments.js';
+import {
+  removeProjectMemberRoleAssignments,
+  writeProjectMemberRoleAssignments,
+} from './project-member-role-assignments.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -45,18 +54,6 @@ export interface ProjectMemberWithUser {
     firstName: string | null;
     lastName: string | null;
   } | null;
-}
-
-export interface UserProject {
-  project: {
-    id: string;
-    name: string;
-    ownerId: string;
-    createdAt: number;
-  };
-  role: ProjectRole;
-  roles: ProjectRole[];
-  joinedAt: number;
 }
 
 export class ProjectMemberService {
@@ -118,7 +115,6 @@ export class ProjectMemberService {
     const dataSource = await getDataSource();
     const memberRepo = dataSource.getRepository(ProjectMember);
     const roleRepo = dataSource.getRepository(ProjectMemberRole);
-    const projectRepo = dataSource.getRepository(Project);
 
     const membership = await memberRepo.findOne({ where: { projectId, userId } });
 
@@ -136,23 +132,7 @@ export class ProjectMemberService {
       };
     }
 
-    // Fallback: implicit owner access
-    const ownerResult = await projectRepo.findOne({
-      where: { id: projectId, ownerId: userId },
-      select: ['id']
-    });
-    if (!ownerResult) return null;
-    return {
-      id: '',
-      projectId,
-      userId,
-      role: 'owner' as ProjectRole,
-      roles: ['owner'] as ProjectRole[],
-      invitedById: null,
-      joinedAt: 0,
-      createdAt: 0,
-      updatedAt: 0,
-    };
+    return null;
   }
 
   /**
@@ -226,6 +206,14 @@ export class ProjectMemberService {
         .execute();
     }
 
+    await this.writeProjectMemberAssignments(dataSource, {
+      projectId,
+      userId,
+      roles,
+      createdById: invitedById,
+      createdAt: now,
+    });
+
     return { id, projectId, userId, role: effectiveRole, roles };
   }
 
@@ -248,6 +236,10 @@ export class ProjectMemberService {
     await memberRepo.update({ projectId, userId }, { role: effectiveRole, updatedAt: now });
 
     await roleRepo.delete({ projectId, userId });
+    await removeProjectMemberRoleAssignments(dataSource, projectId, userId);
+    // Old compatibility projections must not retain access after a current
+    // membership command changes the role set.
+    await removeLegacyProjectMemberRoleAssignments(dataSource, projectId, userId);
 
     for (const r of roles) {
       await roleRepo.createQueryBuilder()
@@ -256,6 +248,14 @@ export class ProjectMemberService {
         .orIgnore()
         .execute();
     }
+
+    await this.writeProjectMemberAssignments(dataSource, {
+      projectId,
+      userId,
+      roles,
+      createdById: null,
+      createdAt: now,
+    });
   }
 
   /**
@@ -268,74 +268,29 @@ export class ProjectMemberService {
 
     await roleRepo.delete({ projectId, userId });
     await memberRepo.delete({ projectId, userId });
+    await removeProjectMemberRoleAssignments(dataSource, projectId, userId);
+    await removeLegacyProjectMemberRoleAssignments(dataSource, projectId, userId);
   }
 
   /**
-   * Get all projects a user is a member of
-   */
-  async getUserProjects(userId: string): Promise<UserProject[]> {
-    const dataSource = await getDataSource();
-    const memberRepo = dataSource.getRepository(ProjectMember);
-    const roleRepo = dataSource.getRepository(ProjectMemberRole);
-
-    const result = await memberRepo.createQueryBuilder('pm')
-      .innerJoinAndSelect(Project, 'p', 'p.id = pm.projectId')
-      .where('pm.userId = :userId', { userId })
-      .select([
-        'p.id AS "projectId"',
-        'p.name AS "projectName"',
-        'p.ownerId AS "ownerId"',
-        'p.createdAt AS "projectCreatedAt"',
-        'pm.role AS role',
-        'pm.joinedAt AS "joinedAt"'
-      ])
-      .getRawMany();
-
-    const projectIds = result.map((r: any) => String(r.projectId));
-    const rolesRows = projectIds.length
-      ? await roleRepo.find({ where: { userId, projectId: In(projectIds) } })
-      : [];
-    const rolesByProject = new Map<string, ProjectRole[]>();
-    for (const rr of rolesRows) {
-      const pid = String(rr.projectId);
-      const role = rr.role as ProjectRole;
-      const arr = rolesByProject.get(pid) || [];
-      arr.push(role);
-      rolesByProject.set(pid, arr);
-    }
-
-    return result.map((r: any) => ({
-      project: {
-        id: r.projectId,
-        name: r.projectName,
-        ownerId: r.ownerId,
-        createdAt: r.projectCreatedAt,
-      },
-      role: computeEffectiveRole(
-        normalizeRoles(rolesByProject.get(String(r.projectId)) || [r.role as ProjectRole])
-      ),
-      roles: normalizeRoles(rolesByProject.get(String(r.projectId)) || [r.role as ProjectRole]),
-      joinedAt: r.joinedAt,
-    }));
-  }
-
-  /**
-   * Get project owners (for notifications, etc.)
+   * Get canonical project owners for governance workflows. The persisted
+   * project owner is accountable metadata only, used as a recovery fallback
+   * for rows that predate the one-time canonical projection.
    */
   async getProjectOwners(projectId: string): Promise<string[]> {
     const dataSource = await getDataSource();
-    const memberRepo = dataSource.getRepository(ProjectMember);
-    const roleRepo = dataSource.getRepository(ProjectMemberRole);
     const projectRepo = dataSource.getRepository(Project);
-
-    const roleOwners = await roleRepo.find({ where: { projectId, role: 'owner' }, select: ['userId'] });
-    if (roleOwners.length > 0) {
-      return Array.from(new Set(roleOwners.map((r) => String(r.userId))));
-    }
-
-    const legacyOwners = await memberRepo.find({ where: { projectId, role: 'owner' }, select: ['userId'] });
-    if (legacyOwners.length > 0) {
-      return Array.from(new Set(legacyOwners.map((r) => String(r.userId))));
+    const owners = await dataSource.getRepository(RbacRoleAssignment).find({
+      where: {
+        principalType: 'user',
+        roleId: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+        scopeType: 'project',
+        scopeId: projectId,
+      },
+      select: ['principalId'],
+    });
+    if (owners.length > 0) {
+      return Array.from(new Set(owners.map((assignment) => String(assignment.principalId)).filter(Boolean)));
     }
 
     const project = await projectRepo.findOne({ where: { id: projectId }, select: ['ownerId'] });
@@ -358,6 +313,24 @@ export class ProjectMemberService {
 
     // Update project owner_id
     await projectRepo.update({ id: projectId }, { ownerId: toUserId });
+  }
+
+  private async writeProjectMemberAssignments(
+    dataSource: Awaited<ReturnType<typeof getDataSource>>,
+    input: { projectId: string; userId: string; roles: ProjectRole[]; createdById: string | null; createdAt: number },
+  ): Promise<void> {
+    const project = await dataSource.getRepository(Project).findOne({
+      where: { id: input.projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project) {
+      throw new Error('Project not found');
+    }
+
+    await writeProjectMemberRoleAssignments(dataSource, {
+      ...input,
+      tenantId: project.tenantId ?? null,
+    });
   }
 
   /**

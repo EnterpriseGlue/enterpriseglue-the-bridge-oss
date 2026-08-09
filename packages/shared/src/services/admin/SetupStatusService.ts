@@ -1,6 +1,8 @@
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+
+const PLATFORM_ADMINISTRATORS_GROUP_ID = 'system.group.platform_administrators';
 
 export interface SetupStatus {
   isConfigured: boolean;
@@ -15,14 +17,19 @@ export interface SetupStatus {
 class SetupStatusServiceImpl {
   async getSetupStatus(): Promise<SetupStatus> {
     const dataSource = await getDataSource();
-    const userRepo = dataSource.getRepository(User);
     const emailConfigRepo = dataSource.getRepository(EmailSendConfig);
 
     // OSS single-tenant mode: tenant is always considered present
     const hasDefaultTenant = true;
 
-    // Check if at least one admin user exists
-    const hasAdminUser = await userRepo.count({ where: { platformRole: 'admin' } }) > 0;
+    // Setup is complete only when an active canonical administrator grant exists.
+    const hasAdminUser = await dataSource.getRepository(AuthzGroupMembership)
+      .createQueryBuilder('membership')
+      .where('membership.groupId = :groupId', {
+        groupId: PLATFORM_ADMINISTRATORS_GROUP_ID,
+      })
+      .andWhere('(membership.expiresAt IS NULL OR membership.expiresAt > :now)', { now: Date.now() })
+      .getExists();
 
     // Check if email config exists (optional but recommended)
     const hasEmailConfig = await emailConfigRepo.count() > 0;

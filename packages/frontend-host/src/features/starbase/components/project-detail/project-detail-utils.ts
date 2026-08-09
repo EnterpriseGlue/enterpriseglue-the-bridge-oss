@@ -1,5 +1,14 @@
 import { Folder, DecisionTree, TableSplit } from '@carbon/icons-react'
 import React from 'react'
+import type {
+  ProjectMemberAccessView as SharedProjectMemberAccessView,
+  ProjectMembersResponse as SharedProjectMembersResponse,
+  ProjectPendingInvite as SharedProjectPendingInvite,
+  ProjectPendingInviteStatus as SharedProjectPendingInviteStatus,
+  ProjectRole as SharedProjectRole,
+} from '@enterpriseglue/shared/schemas/platform-admin/project-member.js'
+import type { UserSearchResult } from '@enterpriseglue/shared/schemas/platform-admin/admin.js'
+import type { FolderSummary as SharedFolderSummary } from '@enterpriseglue/shared/schemas/starbase/folder.js'
 export type FileItem = { 
   id: string
   name: string
@@ -11,22 +20,9 @@ export type FileItem = {
 
 export type Project = { id: string; name: string; filesCount?: number; foldersCount?: number }
 
-export type UserSearchItem = {
-  id: string
-  email: string
-  firstName?: string | null
-  lastName?: string | null
-}
+export type UserSearchItem = UserSearchResult
 
-export type FolderSummary = { 
-  id: string
-  name: string
-  parentFolderId: string | null
-  createdBy?: string | null
-  updatedBy?: string | null
-  createdAt?: number
-  updatedAt?: number 
-}
+export type FolderSummary = SharedFolderSummary
 
 export type ProjectContents = { 
   breadcrumb: FolderSummary[]
@@ -42,40 +38,11 @@ export type ProjectContents = {
   }[] 
 }
 
-export type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer'
-
-export type ProjectMember = {
-  id: string
-  projectId: string
-  userId: string
-  role: ProjectRole
-  roles?: ProjectRole[]
-  deployAllowed?: boolean | null
-  joinedAt: number
-  invitedById?: string | null
-  user?: { id: string; email: string; firstName?: string | null; lastName?: string | null } | null
-}
-
-export type ProjectPendingInviteStatus = 'pending' | 'expired' | 'onboarding'
-
-export type ProjectPendingInvite = {
-  invitationId: string
-  userId: string
-  email: string
-  firstName?: string | null
-  lastName?: string | null
-  role: ProjectRole
-  roles?: ProjectRole[]
-  status: ProjectPendingInviteStatus
-  deliveryMethod: 'email' | 'manual'
-  expiresAt: number
-  createdAt: number
-}
-
-export type ProjectMembersResponse = {
-  members: ProjectMember[]
-  pendingInvites: ProjectPendingInvite[]
-}
+export type ProjectRole = SharedProjectRole
+export type ProjectMember = SharedProjectMemberAccessView
+export type ProjectPendingInviteStatus = SharedProjectPendingInviteStatus
+export type ProjectPendingInvite = SharedProjectPendingInvite
+export type ProjectMembersResponse = SharedProjectMembersResponse
 
 export const COLLABORATORS_PANEL_WIDTH = 420
 

@@ -7,6 +7,17 @@ metadata:
     app.kubernetes.io/part-of: enterpriseglue
 spec:
   replicas: 1
+  # Match the deployment command's rollout timeout. A failed fail-closed
+  # bootstrap is surfaced promptly while the prior ready ReplicaSet remains
+  # available under the zero-unavailable rolling-update strategy below.
+  progressDeadlineSeconds: 300
+  # Keep the currently ready ReplicaSet serving while a new image, bundle hash,
+  # or secret-resource-version rollout is waiting on the fail-closed /ready gate.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: enterpriseglue-backend
@@ -45,7 +56,7 @@ spec:
               mountPath: /app/data/repos
           readinessProbe:
             httpGet:
-              path: /health
+              path: /ready
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10

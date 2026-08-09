@@ -10,8 +10,13 @@ import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js
 import { AuditLog } from '@enterpriseglue/shared/db/entities/AuditLog.js';
 import { File } from '@enterpriseglue/shared/db/entities/File.js';
 import { Folder } from '@enterpriseglue/shared/db/entities/Folder.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/db/entities/RbacRoleAssignment.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/db/entities/AuthzGroupMembership.js';
 import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
+import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { OSS_DEFAULT_TENANT_ID } from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { Brackets } from 'typeorm';
 
 type SeedUser = {
@@ -43,39 +48,59 @@ type SeedEngine = {
 
 type SeedEngineType = 'ion' | 'operaton' | 'camunda7';
 
-export async function seedUser(prefix: string): Promise<SeedUser> {
+type SeedUserOptions = {
+  platformRole?: 'admin' | 'user';
+};
+
+const authorizationFoundationDataSources = new WeakSet<object>();
+
+async function ensureAuthorizationFoundation(dataSource: Awaited<ReturnType<typeof getDataSource>>): Promise<void> {
+  if (authorizationFoundationDataSources.has(dataSource)) return;
+  await permissionService.seedRbacFoundation(dataSource);
+  await authzGroupService.seedDefaultPlatformGroups(dataSource);
+  authorizationFoundationDataSources.add(dataSource);
+}
+
+export async function seedUser(prefix: string, options: SeedUserOptions = {}): Promise<SeedUser> {
   const dataSource = await getDataSource();
-  const userRepo = dataSource.getRepository(User);
+  await ensureAuthorizationFoundation(dataSource);
   const id = generateId();
   const email = `${prefix}@example.com`;
   const now = Date.now();
+  const platformRole = options.platformRole || 'user';
 
-  await userRepo.insert({
-    id,
-    email,
-    authProvider: 'local',
-    passwordHash: null,
-    platformRole: 'user',
-    isActive: true,
-    mustResetPassword: false,
-    failedLoginAttempts: 0,
-    lockedUntil: null,
-    isEmailVerified: true,
-    emailVerificationToken: null,
-    emailVerificationTokenExpiry: null,
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: null,
-    createdByUserId: null,
+  await dataSource.transaction(async (manager) => {
+    await manager.getRepository(User).insert({
+      id,
+      email,
+      authProvider: 'local',
+      passwordHash: null,
+      platformRole,
+      isActive: true,
+      mustResetPassword: false,
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      isEmailVerified: true,
+      emailVerificationToken: null,
+      emailVerificationTokenExpiry: null,
+      createdAt: now,
+      updatedAt: now,
+      lastLoginAt: null,
+      createdByUserId: null,
+    });
+    await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, id);
+    if (platformRole === 'admin') {
+      await authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, id);
+    }
   });
 
-  const token = generateAccessToken({ id, email, platformRole: 'user' });
+  const token = generateAccessToken({ id, email, platformRole });
 
   return { id, email, token };
 }
 
-export async function seedAdditionalUser(prefix: string, suffix: string): Promise<SeedUser> {
-  return seedUser(`${prefix}-${suffix}`);
+export async function seedAdditionalUser(prefix: string, suffix: string, options: SeedUserOptions = {}): Promise<SeedUser> {
+  return seedUser(`${prefix}-${suffix}`, options);
 }
 
 export async function seedProject(userId: string, name: string): Promise<SeedProject> {
@@ -91,7 +116,7 @@ export async function seedProject(userId: string, name: string): Promise<SeedPro
     id,
     name,
     ownerId: userId,
-    tenantId: null,
+    tenantId: OSS_DEFAULT_TENANT_ID,
     createdAt: now,
     updatedAt: now,
   });
@@ -113,6 +138,7 @@ export async function seedProject(userId: string, name: string): Promise<SeedPro
     role: 'owner',
     createdAt: membershipNow,
   });
+  await permissionService.syncLegacyRoleAssignments({ projectIds: [id], engineIds: [] }, dataSource);
 
   return { id, name };
 }
@@ -141,10 +167,16 @@ export async function seedEngine(
     delegateId: null,
     environmentTagId: null,
     environmentLocked: false,
-    tenantId: null,
+    // A newly provisioned OSS engine belongs to the canonical default tenant.
+    // Legacy unassigned engines are covered explicitly by tenancy-migration
+    // tests; regular integration fixtures should model a usable engine.
+    tenantId: OSS_DEFAULT_TENANT_ID,
+    tenancyMode: 'dedicated',
+    tenantResolutionStatus: 'ready',
     createdAt: now,
     updatedAt: now,
   });
+  await permissionService.syncLegacyRoleAssignments({ projectIds: [], engineIds: [id] }, dataSource);
 
   return { id, baseUrl };
 }
@@ -213,6 +245,8 @@ export async function cleanupSeededData(
   const auditLogRepo = dataSource.getRepository(AuditLog);
   const fileRepo = dataSource.getRepository(File);
   const folderRepo = dataSource.getRepository(Folder);
+  const roleAssignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+  const groupMembershipRepo = dataSource.getRepository(AuthzGroupMembership);
 
   if (userIds.length > 0) {
     await refreshTokenRepo.delete({ userId: userIds as any });
@@ -239,12 +273,15 @@ export async function cleanupSeededData(
   }
 
   if (projectIds.length > 0) {
+    await roleAssignmentRepo.delete({ scopeType: 'project', scopeId: projectIds as any });
     await memberRoleRepo.delete({ projectId: projectIds as any });
     await memberRepo.delete({ projectId: projectIds as any });
     await projectRepo.delete({ id: projectIds as any });
   }
 
   if (userIds.length > 0) {
+    await roleAssignmentRepo.delete({ principalType: 'user', principalId: userIds as any });
+    await groupMembershipRepo.delete({ userId: userIds as any });
     await userRepo.delete({ id: userIds as any });
   }
 
@@ -276,6 +313,7 @@ export async function cleanupEngines(engineIds: string[]) {
   const dataSource = await getDataSource();
   const engineRepo = dataSource.getRepository(Engine);
   if (engineIds.length > 0) {
+    await dataSource.getRepository(RbacRoleAssignment).delete({ scopeType: 'engine', scopeId: engineIds as any });
     await engineRepo.delete({ id: engineIds as any });
   }
 }
@@ -297,6 +335,8 @@ export async function cleanupStaleTestData() {
   const projectMemberRepo = dataSource.getRepository(ProjectMember);
   const fileRepo = dataSource.getRepository(File);
   const folderRepo = dataSource.getRepository(Folder);
+  const roleAssignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+  const groupMembershipRepo = dataSource.getRepository(AuthzGroupMembership);
 
   const userEmailPatterns = ['e2e-%@example.com', 'test_%@example.com'];
   const projectNamePatterns = ['test_%', 'e2e-%', 'Smoke %'];
@@ -344,6 +384,7 @@ export async function cleanupStaleTestData() {
   const staleProjectIds = staleProjects.map((p) => p.id);
 
   if (staleEngineIds.length > 0) {
+    await roleAssignmentRepo.delete({ scopeType: 'engine', scopeId: staleEngineIds as any });
     await engineMemberRepo.createQueryBuilder().delete().where('engineId IN (:...staleEngineIds)', { staleEngineIds }).execute();
     await engineHealthRepo.createQueryBuilder().delete().where('engineId IN (:...staleEngineIds)', { staleEngineIds }).execute();
     await engineRepo.createQueryBuilder().delete().where('id IN (:...staleEngineIds)', { staleEngineIds }).execute();
@@ -372,6 +413,7 @@ export async function cleanupStaleTestData() {
     .execute();
 
   if (staleProjectIds.length > 0) {
+    await roleAssignmentRepo.delete({ scopeType: 'project', scopeId: staleProjectIds as any });
     await projectMemberRoleRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
     await projectMemberRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
     await fileRepo.createQueryBuilder().delete().where('projectId IN (:...staleProjectIds)', { staleProjectIds }).execute();
@@ -380,6 +422,8 @@ export async function cleanupStaleTestData() {
   }
 
   if (staleUserIds.length > 0) {
+    await roleAssignmentRepo.delete({ principalType: 'user', principalId: staleUserIds as any });
+    await groupMembershipRepo.delete({ userId: staleUserIds as any });
     await userRepo.createQueryBuilder().delete().where('id IN (:...staleUserIds)', { staleUserIds }).execute();
   }
 }

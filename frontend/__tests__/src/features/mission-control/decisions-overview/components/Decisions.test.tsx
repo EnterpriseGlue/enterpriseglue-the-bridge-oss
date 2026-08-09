@@ -4,6 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Decisions from '@src/features/mission-control/decisions-overview/components/Decisions';
 import { apiClient } from '@src/shared/api/client';
+import { AuthContext, type AuthContextValue } from '@src/contexts/AuthContext';
 import {
   fetchDecisionDefinitionDmnXml,
   listDecisionDefinitions,
@@ -15,6 +16,7 @@ const setSelectedVersion = vi.fn();
 const setSelectedStates = vi.fn();
 const reset = vi.fn();
 const setSelectedEngineId = vi.fn();
+let authPermissions: any;
 
 const decisionDefinitions = [
   {
@@ -132,9 +134,30 @@ function renderDecisions() {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <Decisions />
-    </QueryClientProvider>
+    <AuthContext.Provider value={{
+      user: null,
+      permissions: authPermissions,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      resetPassword: vi.fn(),
+      changePassword: vi.fn(),
+      refreshUser: vi.fn(),
+      setAuthenticatedUser: vi.fn(),
+      refreshPermissions: vi.fn(),
+      hasPlatformPermission: vi.fn(),
+      hasAnyPlatformPermission: vi.fn(),
+      hasProjectPermission: vi.fn(),
+      hasAnyProjectPermission: vi.fn(),
+      hasAnyEnginePermission: vi.fn(),
+      hasEnginePermission: vi.fn(),
+      hasAnyScopedEnginePermission: vi.fn(),
+    } satisfies AuthContextValue}>
+      <QueryClientProvider client={queryClient}>
+        <Decisions />
+      </QueryClientProvider>
+    </AuthContext.Provider>
   );
 }
 
@@ -150,6 +173,13 @@ describe('Decisions component', () => {
     filterStoreState.selectedDefinition = null;
     filterStoreState.selectedVersion = null;
     filterStoreState.selectedStates = [];
+    authPermissions = {
+      userId: 'user-1',
+      platform: [],
+      projects: [],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      generatedAt: 1,
+    };
     vi.mocked(listDecisionDefinitions).mockResolvedValue([...decisionDefinitions] as any);
     vi.mocked(listDecisionHistory).mockResolvedValue([]);
     vi.mocked(fetchDecisionDefinitionDmnXml).mockResolvedValue('<definitions />');
@@ -164,12 +194,31 @@ describe('Decisions component', () => {
     } as any);
   });
 
-  it('renders empty decision selection prompt', () => {
+  it('renders empty decision selection prompt and scoped visibility explanation', async () => {
     vi.mocked(listDecisionDefinitions).mockResolvedValue([]);
 
     renderDecisions();
 
     expect(screen.getByText('To view a Decision Table, select a Decision in the Filters panel')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('No visible decision definitions')).toBeInTheDocument();
+    });
+  });
+
+  it('does not fetch decision definitions when the selected engine read action is denied', () => {
+    authPermissions = {
+      userId: 'user-1',
+      platform: [],
+      projects: [],
+      engines: [],
+      generatedAt: 1,
+    };
+
+    renderDecisions();
+
+    expect(screen.getByText('Decision definitions unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Missing permission engine:instance:view')).toBeInTheDocument();
+    expect(listDecisionDefinitions).not.toHaveBeenCalled();
   });
 
   it('queries history by decision requirements key for all versions', async () => {

@@ -147,6 +147,15 @@ export function errorHandler(
   res: Response,
   next: NextFunction
 ) {
+  const httpError = err as Error & { status?: number; statusCode?: number; type?: string; limit?: number };
+  if (httpError.status === 413 || httpError.statusCode === 413 || httpError.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Request payload exceeds the allowed size',
+      code: 'PAYLOAD_TOO_LARGE',
+      ...(typeof httpError.limit === 'number' ? { maxBytes: httpError.limit } : {}),
+    });
+  }
+
   // Handle AppError instances
   if (err instanceof AppError) {
     return res.status(err.statusCode).json(err.toJSON());

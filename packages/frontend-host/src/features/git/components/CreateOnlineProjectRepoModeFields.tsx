@@ -29,6 +29,7 @@ interface RepoModeFieldsProps {
   isLoading: boolean
   loadingRepos: boolean
   generateRemoteUrl: () => string
+  repoInspectDeniedReason?: string | null
   repoFetchError: string | null
   existingRepos: { fullName: string; url: string }[]
   selectedExistingRepoUrl: string
@@ -58,6 +59,7 @@ export function CreateOnlineProjectRepoModeFields({
   isLoading,
   loadingRepos,
   generateRemoteUrl,
+  repoInspectDeniedReason,
   repoFetchError,
   existingRepos,
   selectedExistingRepoUrl,
@@ -171,7 +173,15 @@ export function CreateOnlineProjectRepoModeFields({
 
       {repoMode === 'existing' && (
         <>
-          {repoFetchError ? (
+          {repoInspectDeniedReason ? (
+            <InlineNotification
+              kind="error"
+              title="Repository inspection unavailable"
+              subtitle={repoInspectDeniedReason}
+              lowContrast
+              hideCloseButton
+            />
+          ) : repoFetchError ? (
             <>
               <InlineNotification
                 kind="warning"

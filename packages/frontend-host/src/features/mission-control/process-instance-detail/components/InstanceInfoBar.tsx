@@ -4,6 +4,7 @@ import { Pause, Play, TrashCan, Copy, Renew } from '@carbon/icons-react'
 import styles from '../styles/InstanceDetail.module.css'
 import { WrenchIcon } from './Icons'
 import { formatDurationMs } from './activityDetailUtils'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 type HistoryContext = {
   kind?: 'group' | 'execution'
@@ -33,7 +34,16 @@ interface InstanceInfoBarProps {
   onModify: () => void
   onTerminate: () => void
   onRetry?: () => void
+  suspensionDecision?: UiAuthzDecision
+  retryDecision?: UiAuthzDecision
+  modifyDecision?: UiAuthzDecision
+  terminateDecision?: UiAuthzDecision
   incidentCount?: number
+}
+
+function getDeniedReason(decision?: UiAuthzDecision | null): string | null {
+  if (!decision || decision.allowed) return null
+  return decision.reason || 'Action unavailable'
 }
 
 export function InstanceInfoBar({
@@ -54,12 +64,21 @@ export function InstanceInfoBar({
   onModify,
   onTerminate,
   onRetry,
+  suspensionDecision,
+  retryDecision,
+  modifyDecision,
+  terminateDecision,
   incidentCount = 0,
 }: InstanceInfoBarProps) {
   const latestVersion = (defs || [])
     .filter((d) => d.key === defKey)
     .map((d) => d.version)
     .sort((a, b) => b - a)[0]
+  const isTerminalStatus = status === 'COMPLETED' || status === 'CANCELED' || status === 'EXTERNALLY_TERMINATED' || status === 'INTERNALLY_TERMINATED'
+  const suspensionDeniedReason = getDeniedReason(suspensionDecision)
+  const retryDeniedReason = getDeniedReason(retryDecision)
+  const modifyDeniedReason = getDeniedReason(modifyDecision)
+  const terminateDeniedReason = getDeniedReason(terminateDecision)
 
   return (
     <div className={styles.infoBar}>
@@ -194,11 +213,13 @@ export function InstanceInfoBar({
             </>
           )}
           <div className={styles.infoBarTextWithFlex} style={{ justifyContent: 'flex-end' }}>
-            {onRetry && incidentCount > 0 && status !== 'COMPLETED' && status !== 'EXTERNALLY_TERMINATED' && status !== 'INTERNALLY_TERMINATED' && (
+            {onRetry && incidentCount > 0 && !isTerminalStatus && (
               <Button
                 hasIconOnly
                 size="sm"
                 kind="ghost"
+                disabled={!!retryDeniedReason}
+                title={retryDeniedReason || undefined}
                 renderIcon={(props) => <Renew {...props} className={styles.iconButtonWhite} />}
                 iconDescription="Retry failed jobs & tasks"
                 onClick={onRetry}
@@ -209,6 +230,8 @@ export function InstanceInfoBar({
                 hasIconOnly
                 size="sm"
                 kind="ghost"
+                disabled={!!suspensionDeniedReason}
+                title={suspensionDeniedReason || undefined}
                 renderIcon={(props) => <Pause {...props} className={styles.iconButtonWhite} />}
                 iconDescription="Suspend process instance"
                 onClick={onSuspend}
@@ -219,26 +242,32 @@ export function InstanceInfoBar({
                 hasIconOnly
                 size="sm"
                 kind="ghost"
+                disabled={!!suspensionDeniedReason}
+                title={suspensionDeniedReason || undefined}
                 renderIcon={(props) => <Play {...props} className={styles.iconButtonWhite} />}
                 iconDescription="Resume process instance"
                 onClick={onResume}
               />
             )}
-            {showModifyAction && status !== 'COMPLETED' && status !== 'EXTERNALLY_TERMINATED' && status !== 'INTERNALLY_TERMINATED' && (
+            {showModifyAction && !isTerminalStatus && (
               <Button
                 hasIconOnly
                 size="sm"
                 kind="ghost"
+                disabled={!!modifyDeniedReason}
+                title={modifyDeniedReason || undefined}
                 renderIcon={(props) => <WrenchIcon {...props} className={styles.iconButtonWhite} />}
                 iconDescription="Modify / fix this process instance"
                 onClick={onModify}
               />
             )}
-            {status !== 'COMPLETED' && status !== 'EXTERNALLY_TERMINATED' && status !== 'INTERNALLY_TERMINATED' && (
+            {!isTerminalStatus && (
               <Button
                 hasIconOnly
                 size="sm"
                 kind="danger--ghost"
+                disabled={!!terminateDeniedReason}
+                title={terminateDeniedReason || undefined}
                 renderIcon={(props) => <TrashCan {...props} className={styles.iconButtonWhite} />}
                 iconDescription="Cancel process instance"
                 onClick={onTerminate}

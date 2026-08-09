@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
 import { platformSettingsService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
@@ -65,6 +65,7 @@ router.put(
       res.json({ success: true });
     } catch (error) {
       logger.error('Update platform settings error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to update platform settings');
     }
   })

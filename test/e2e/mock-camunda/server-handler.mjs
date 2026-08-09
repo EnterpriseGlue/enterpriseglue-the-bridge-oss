@@ -1,5 +1,6 @@
 import {
   processDefinitionsById,
+  deployments,
   runtimeInstancesById,
   historicProcessInstancesById,
   processInstanceVariables,
@@ -14,6 +15,7 @@ import {
   decisionInputs,
   decisionOutputs,
   filterProcessDefinitions,
+  filterNativeAuthorizations,
   filterRuntimeInstances,
   filterHistoricProcessInstances,
   filterHistoricActivityInstances,
@@ -88,10 +90,52 @@ function getDecisionOutputsById(id) {
   return decisionOutputs.get(id) || []
 }
 
+const partitionedRuntimePathPrefix = '/e2e-shared-engine-rest'
+const standardRuntimePathPrefix = '/engine-rest'
+
+function withPartitionedRuntimeTenant(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    return item
+  }
+  const identity = String(
+    item.key
+      || item.definitionKey
+      || item.processDefinitionKey
+      || item.decisionDefinitionKey
+      || item.id
+      || '',
+  )
+  return {
+    ...item,
+    tenantId: /(sequential|rework|risk)/i.test(identity)
+      ? 'e2e-runtime-green'
+      : 'e2e-runtime-blue',
+  }
+}
+
+function withPartitionedRuntimeTenants(value) {
+  return Array.isArray(value)
+    ? value.map(withPartitionedRuntimeTenant)
+    : withPartitionedRuntimeTenant(value)
+}
+
 export function createMockCamundaHandler() {
+  const requestLedger = new Map()
+
+  function recordRequest(method, pathname) {
+    const key = `${method} ${pathname}`
+    requestLedger.set(key, (requestLedger.get(key) || 0) + 1)
+  }
+
   return async function mockCamundaHandler(req, res) {
     try {
-      const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      const requestedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
+      const partitionRuntimeTenants = requestedUrl.pathname === partitionedRuntimePathPrefix
+        || requestedUrl.pathname.startsWith(`${partitionedRuntimePathPrefix}/`)
+      if (partitionRuntimeTenants) {
+        requestedUrl.pathname = `${standardRuntimePathPrefix}${requestedUrl.pathname.slice(partitionedRuntimePathPrefix.length)}`
+      }
+      const url = requestedUrl
       const { pathname, searchParams } = url
       const routePath = decodeURIComponent(pathname)
 
@@ -100,8 +144,53 @@ export function createMockCamundaHandler() {
         return
       }
 
+      if (req.method === 'POST' && pathname === '/__e2e/requests/reset') {
+        requestLedger.clear()
+        sendNoContent(res)
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/__e2e/requests') {
+        sendJson(res, 200, {
+          total: Array.from(requestLedger.values()).reduce((sum, count) => sum + count, 0),
+          requests: Array.from(requestLedger.entries())
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([request, count]) => ({ request, count })),
+        })
+        return
+      }
+
+      recordRequest(req.method || 'GET', pathname)
+
+      // Operaton exposes the Camunda 7-compatible `/version` endpoint. The
+      // local acceptance stack uses this response for connection health and
+      // adapter-version evidence.
+      if (req.method === 'GET' && pathname === '/engine-rest/version') {
+        sendJson(res, 200, { version: '2.1.0', productName: 'Operaton' })
+        return
+      }
+
       if (req.method === 'GET' && pathname === '/engine-rest/process-definition') {
-        sendJson(res, 200, filterProcessDefinitions(searchParams))
+        const definitions = filterProcessDefinitions(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(definitions) : definitions,
+        )
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/engine-rest/deployment') {
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(deployments) : deployments,
+        )
+        return
+      }
+
+      if (req.method === 'GET' && pathname === '/engine-rest/authorization') {
+        sendJson(res, 200, filterNativeAuthorizations(searchParams))
         return
       }
 
@@ -129,7 +218,7 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown process definition: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 
@@ -141,7 +230,12 @@ export function createMockCamundaHandler() {
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/process-instance') {
-        sendJson(res, 200, filterRuntimeInstances(searchParams))
+        const instances = filterRuntimeInstances(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(instances) : instances,
+        )
         return
       }
 
@@ -162,6 +256,36 @@ export function createMockCamundaHandler() {
         return
       }
 
+      // Preserve Camunda's `modifications` request contract for the browser
+      // evidence lane. The state lives only in this disposable mock process,
+      // allowing an editor test to prove a permitted write reaches the engine
+      // and is returned on the next read without touching a real engine.
+      if (req.method === 'POST' && routePath.startsWith('/engine-rest/process-instance/') && routePath.endsWith('/variables')) {
+        const id = routePath.slice('/engine-rest/process-instance/'.length, -'/variables'.length)
+        if (!runtimeInstancesById.has(id) && !historicProcessInstancesById.has(id)) {
+          sendJson(res, 404, { message: `Unknown process instance: ${id}` })
+          return
+        }
+        const body = await parseBody(req)
+        const modifications = body?.modifications
+        if (!modifications || typeof modifications !== 'object' || Array.isArray(modifications)) {
+          sendJson(res, 400, { message: 'Variable modifications are required' })
+          return
+        }
+        const nextVariables = new Map(Object.entries(processInstanceVariables.get(id) || {}))
+        for (const [name, variable] of Object.entries(modifications)) {
+          if (!name) continue
+          if (variable === null) {
+            nextVariables.delete(name)
+          } else {
+            nextVariables.set(name, variable)
+          }
+        }
+        processInstanceVariables.set(id, Object.fromEntries(nextVariables))
+        sendNoContent(res)
+        return
+      }
+
       if (req.method === 'GET' && routePath.startsWith('/engine-rest/process-instance/')) {
         const id = routePath.slice('/engine-rest/process-instance/'.length)
         const item = runtimeInstancesById.get(id)
@@ -169,12 +293,17 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown process instance: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/history/process-instance') {
-        sendJson(res, 200, filterHistoricProcessInstances(searchParams))
+        const instances = filterHistoricProcessInstances(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(instances) : instances,
+        )
         return
       }
 
@@ -185,7 +314,7 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown historic process instance: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 
@@ -225,13 +354,64 @@ export function createMockCamundaHandler() {
         return
       }
 
+      if (req.method === 'GET' && pathname === '/engine-rest/task') {
+        const runtimeTasks = [
+          {
+            id: 'task-review-primary',
+            name: 'Review Invoice',
+            assignee: 'demo.reviewer',
+            created: '2026-03-09T10:00:02.000Z',
+            executionId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            processInstanceId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            processDefinitionId: 'invoice-process:3:mock-process-definition',
+            processDefinitionKey: 'invoice-process',
+            taskDefinitionKey: 'Activity_Review',
+            suspended: false,
+            tenantId: null,
+          },
+          {
+            id: 'task-sequential-review',
+            name: 'Review Line Item',
+            assignee: 'sequential.approver.3',
+            created: '2026-03-09T11:04:04.000Z',
+            executionId: 'Execution_seq_review_3',
+            processInstanceId: '11111111-2222-4333-8444-555555555555',
+            processDefinitionId: 'invoice-sequential-review:1:mock-process-definition',
+            processDefinitionKey: 'invoice-sequential-review',
+            taskDefinitionKey: 'Activity_SequentialReview',
+            suspended: false,
+            tenantId: null,
+          },
+        ]
+        const processDefinitionKey = searchParams.get('processDefinitionKey')
+        const filtered = processDefinitionKey
+          ? runtimeTasks.filter((task) => task.processDefinitionKey === processDefinitionKey)
+          : runtimeTasks
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(filtered) : filtered,
+        )
+        return
+      }
+
       if (req.method === 'GET' && pathname === '/engine-rest/incident') {
-        sendJson(res, 200, filterIncidents(searchParams))
+        const incidents = filterIncidents(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(incidents) : incidents,
+        )
         return
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/job') {
-        sendJson(res, 200, filterJobs(searchParams))
+        const jobs = filterJobs(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(jobs) : jobs,
+        )
         return
       }
 
@@ -241,7 +421,12 @@ export function createMockCamundaHandler() {
       }
 
       if (req.method === 'GET' && pathname === '/engine-rest/decision-definition') {
-        sendJson(res, 200, filterDecisionDefinitions(searchParams))
+        const definitions = filterDecisionDefinitions(searchParams)
+        sendJson(
+          res,
+          200,
+          partitionRuntimeTenants ? withPartitionedRuntimeTenants(definitions) : definitions,
+        )
         return
       }
 
@@ -263,7 +448,7 @@ export function createMockCamundaHandler() {
           sendJson(res, 404, { message: `Unknown decision definition: ${id}` })
           return
         }
-        sendJson(res, 200, item)
+        sendJson(res, 200, partitionRuntimeTenants ? withPartitionedRuntimeTenant(item) : item)
         return
       }
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Release"
+  short_description: "Publish and verify an EnterpriseGlue release"
+  default_prompt: "Use $enterpriseglue-release to help with this EnterpriseGlue task."

@@ -24,45 +24,23 @@ import { Copy, Launch } from '@carbon/icons-react'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { BreadcrumbBar } from '../../../shared/components/BreadcrumbBar'
 import { apiClient } from '../../../../shared/api/client'
+import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
+import { useActionDecision } from '../../../../shared/auth/guards'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import styles from '../../process-instance-detail/styles/InstanceDetail.module.css'
 import { SplitPane, Pane } from 'react-split-pane'
 import { LoadingState } from '../../../shared/components/LoadingState'
+import { fetchDecisionDefinitionDmnXml } from '../../shared/api/definitions'
+import type { HistoricDecisionIo, HistoricDecisionInstance as SharedHistoricDecisionInstance } from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
-type DecisionEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  decisionKey: string
-  decisionVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
-}
+type HistoricDecisionInstance = SharedHistoricDecisionInstance
 
-type HistoricDecisionInstance = {
-  id: string
-  decisionDefinitionId?: string | null
-  decisionDefinitionKey?: string | null
-  decisionDefinitionName?: string | null
-  rootDecisionInstanceId?: string | null
-  evaluationTime?: string | null
-  processInstanceId?: string | null
-}
-
-type DecisionIo = {
-  id?: string
-  clauseId?: string | null
-  clauseName?: string | null
-  type?: string | null
-  value?: any
-  ruleId?: string | null
-}
+type DecisionIo = HistoricDecisionIo
 
 function fmt(ts?: string | null) {
   if (!ts) return '--'
@@ -75,10 +53,16 @@ export default function DecisionHistoryDetail() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const selectedEngineId = useSelectedEngine()
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId],
+  )
+  const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const searchParams = new URLSearchParams(location.search)
   const fromInstanceId = searchParams.get('fromInstance') || (location?.state?.fromInstanceId as string | undefined)
   const processLabel = searchParams.get('processLabel') || null
-
   const histQ = useQuery({
     queryKey: ['mission-control', 'decision-hist', id, selectedEngineId],
     queryFn: async () => {
@@ -92,7 +76,7 @@ export default function DecisionHistoryDetail() {
       )
       return data[0] || null
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const decision = histQ.data as HistoricDecisionInstance | null
@@ -115,7 +99,7 @@ export default function DecisionHistoryDetail() {
       )
       return data
     },
-    enabled: !!rootDecisionInstanceId && !!selectedEngineId,
+    enabled: !!rootDecisionInstanceId && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const versionLabel = React.useMemo(() => {
@@ -128,19 +112,10 @@ export default function DecisionHistoryDetail() {
 
   const xmlQ = useQuery({
     queryKey: ['mission-control', 'decision-xml', decision?.decisionDefinitionId, selectedEngineId],
-    queryFn: async () => {
-      if (!decision?.decisionDefinitionId) return ''
-      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
-      const data = await apiClient.get<{ dmnXml: string }>(
-        `/mission-control-api/decision-definitions/${encodeURIComponent(
-          decision.decisionDefinitionId,
-        )}/xml${params}`,
-        undefined,
-        { credentials: 'include' },
-      )
-      return data.dmnXml
-    },
-    enabled: !!decision?.decisionDefinitionId && !!selectedEngineId,
+    queryFn: () => decision?.decisionDefinitionId
+      ? fetchDecisionDefinitionDmnXml(decision.decisionDefinitionId, selectedEngineId)
+      : Promise.resolve(''),
+    enabled: !!decision?.decisionDefinitionId && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const inputsQ = useQuery({
@@ -154,7 +129,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const outputsQ = useQuery<DecisionIo[]>({
@@ -168,7 +143,7 @@ export default function DecisionHistoryDetail() {
         { credentials: 'include' },
       )
     },
-    enabled: !!id && !!selectedEngineId,
+    enabled: !!id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const title = decision?.decisionDefinitionName || decision?.decisionDefinitionKey || 'Decision'
@@ -238,7 +213,7 @@ export default function DecisionHistoryDetail() {
       version: decisionVersion,
       decisionDefinitionId: decision?.decisionDefinitionId,
     }),
-    enabled: !!selectedEngineId && !!decisionKey && decisionVersion !== null,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed && !!decisionKey && decisionVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -251,8 +226,29 @@ export default function DecisionHistoryDetail() {
     decisionEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(() => {
+  const handleEditInStarbase = React.useCallback(async () => {
     if (!decisionEditTarget?.fileId || decisionVersion === null || !decisionKey) return
+    setBridgeError(null)
+    setBridgeDecision(null)
+    try {
+      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
+        engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
+        projectId: decisionEditTarget.projectId,
+        fileId: decisionEditTarget.fileId,
+        definitionId: decision?.decisionDefinitionId || undefined,
+        definitionKey: decisionKey,
+        decisionDefinitionId: decision?.decisionDefinitionId || undefined,
+        decisionDefinitionKey: decisionKey,
+        kind: 'decision',
+      })
+      if (!bridgeDecision.allowed) {
+        setBridgeDecision(bridgeDecision)
+        return
+      }
+    } catch (error) {
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
+      return
+    }
 
     const params = new URLSearchParams({
       source: 'mission-control',
@@ -271,10 +267,24 @@ export default function DecisionHistoryDetail() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-  }, [decisionEditTarget, decisionVersion, decisionKey, selectedEngineId, tenantNavigate])
+  }, [decisionEditTarget, decisionVersion, decisionKey, decision?.decisionDefinitionId, selectedEngineId, tenantNavigate])
 
   // Check if initial data is loading
   const isInitialLoading = histQ.isLoading || xmlQ.isLoading
+
+  if (selectedEngineId && !decisionsReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-5)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Decision history unavailable"
+          subtitle={decisionsReadDecision.reason}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    )
+  }
 
   return (
     <PageLoader isLoading={isInitialLoading} skeletonType="instance-detail">
@@ -351,6 +361,7 @@ export default function DecisionHistoryDetail() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
       
       {/* SplitPane wrapper to fill remaining height */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

@@ -1,0 +1,3682 @@
+{
+  "schemaVersion": 2,
+  "coverageStandard": "100-percent-functional-requirement-coverage",
+  "supportedDatabases": [
+    "postgres",
+    "mysql",
+    "mssql",
+    "oracle",
+    "spanner"
+  ],
+  "supportedBrowsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ],
+  "requiredMutationFaultClasses": [
+    "removed-tenant-filter",
+    "inverted-ownership-check",
+    "accepted-null-tenant-context",
+    "skipped-mapping-version-check",
+    "upstream-call-after-denial"
+  ],
+  "publicOperations": [
+    {
+      "method": "GET",
+      "path": "/engines-api/engines",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-AUTHZ-009"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/engines-api/engines",
+      "requirementIds": [
+        "TEN-DEDICATED-001",
+        "TEN-SHARED-001",
+        "TEN-API-005"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/engines-api/external/engines",
+      "requirementIds": [
+        "TEN-SHARED-002",
+        "TEN-API-004",
+        "TEN-API-005"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/engines-api/external/engines/{externalId}/tenant-mappings",
+      "requirementIds": [
+        "TEN-API-007",
+        "TEN-API-008"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/engines-api/external/engines/decommission",
+      "requirementIds": [
+        "TEN-API-012"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/engines-api/engines/{id}",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-AUTHZ-009"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/engines-api/engines/{id}",
+      "requirementIds": [
+        "TEN-API-003",
+        "TEN-API-005"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/engines-api/engines/{id}",
+      "requirementIds": [
+        "TEN-API-014"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/engines-api/engines/tenancy/classification-report",
+      "requirementIds": [
+        "TEN-MIGRATION-001",
+        "TEN-API-010"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/engines-api/engines/{id}/tenancy/diagnostics",
+      "requirementIds": [
+        "TEN-API-008"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/engines-api/engines/{id}/tenancy/preview",
+      "requirementIds": [
+        "TEN-MIGRATION-002",
+        "TEN-API-010"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/engines-api/engines/{id}/tenancy/apply",
+      "requirementIds": [
+        "TEN-MIGRATION-003",
+        "TEN-API-011"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/engines-api/engines/{id}/tenant-mappings",
+      "requirementIds": [
+        "TEN-API-006",
+        "TEN-API-008"
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/engines-api/engines/{id}/tenant-mappings",
+      "requirementIds": [
+        "TEN-API-006",
+        "TEN-API-008"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/engines-api/engines/{id}/runtime-resources",
+      "requirementIds": [
+        "TEN-RUNTIME-002",
+        "TEN-API-008"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/engines-api/engines/{id}/runtime-resources/reconcile",
+      "requirementIds": [
+        "TEN-RUNTIME-002",
+        "TEN-API-008"
+      ]
+    }
+  ],
+  "stableErrors": [
+    {
+      "code": "ENGINE_TENANCY_UNRESOLVED",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-RUNTIME-003"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANCY_CONFLICT",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-API-006"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANCY_TRANSITION_REQUIRED",
+      "requirementIds": [
+        "TEN-API-003",
+        "TEN-API-005"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANCY_PREVIEW_STALE",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-MIGRATION-003",
+        "TEN-API-010"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANCY_PREVIEW_EXPIRED",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-MIGRATION-003",
+        "TEN-API-010"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-MIGRATION-003",
+        "TEN-API-010"
+      ]
+    },
+    {
+      "code": "ENGINE_SHARED_REQUIRES_RESOURCE_AWARE",
+      "requirementIds": [
+        "TEN-SHARED-001",
+        "TEN-API-005"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANT_MAPPING_NOT_FOUND",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-API-006",
+        "TEN-API-008"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANT_MAPPING_VERSION_CONFLICT",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-API-006",
+        "TEN-API-008"
+      ]
+    },
+    {
+      "code": "ENGINE_TENANT_REFERENCE_FORBIDDEN",
+      "requirementIds": [
+        "TEN-RESOLVE-002",
+        "TEN-API-005"
+      ]
+    },
+    {
+      "code": "RUNTIME_RESOURCE_TENANT_UNRESOLVED",
+      "requirementIds": [
+        "TEN-API-005",
+        "TEN-RUNTIME-002",
+        "TEN-RUNTIME-003"
+      ]
+    }
+  ],
+  "supportedTransitions": [
+    {
+      "kind": "dedicated_to_shared",
+      "requirementIds": [
+        "TEN-MIGRATION-002",
+        "TEN-MIGRATION-003"
+      ]
+    },
+    {
+      "kind": "shared_to_dedicated",
+      "requirementIds": [
+        "TEN-MIGRATION-002",
+        "TEN-MIGRATION-003"
+      ]
+    },
+    {
+      "kind": "shared_strategy_change",
+      "requirementIds": [
+        "TEN-MIGRATION-002",
+        "TEN-MIGRATION-003"
+      ]
+    },
+    {
+      "kind": "dedicated_tenant_move",
+      "requirementIds": [
+        "TEN-MIGRATION-002",
+        "TEN-MIGRATION-003"
+      ]
+    }
+  ],
+  "waivers": [],
+  "requirements": [
+    {
+      "id": "TEN-MODEL-001",
+      "requirement": "Engine topology and tenant resolution state are persisted independently from runtime access scope.",
+      "source": "Engine Tenancy Data Model / Engine Record",
+      "dimensions": [
+        "dedicated",
+        "shared",
+        "migration"
+      ],
+      "expected": "explicit persistence metadata",
+      "testFile": "backend/__tests__/shared/db/canonicalAuthzSchemaInvariants.test.ts",
+      "testName": "persists explicit engine topology and fail-closed runtime tenant resolution metadata",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "migration"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Engine Record",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MODEL-001"
+    },
+    {
+      "id": "TEN-MODEL-002",
+      "requirement": "Shared-engine mapping and source identities are portable and unique.",
+      "source": "Engine Tenancy Data Model / Shared-Engine Tenant Mapping",
+      "dimensions": [
+        "engine_tenant_id",
+        "deployment_target",
+        "explicit"
+      ],
+      "expected": "unique mapping and source identities",
+      "testFile": "backend/__tests__/shared/db/canonicalAuthzSchemaInvariants.test.ts",
+      "testName": "persists explicit engine topology and fail-closed runtime tenant resolution metadata",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "deployment-target"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Shared-Engine Tenant Mapping",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MODEL-002"
+    },
+    {
+      "id": "TEN-MODEL-003",
+      "requirement": "Runtime inventory persists mapping version and sanitized fail-closed resolution state.",
+      "source": "Engine Tenancy Data Model / Runtime-Resource Resolution",
+      "dimensions": [
+        "resolved",
+        "unmapped",
+        "conflict",
+        "stale"
+      ],
+      "expected": "resolution evidence is persisted",
+      "testFile": "backend/__tests__/shared/db/canonicalAuthzSchemaInvariants.test.ts",
+      "testName": "persists explicit engine topology and fail-closed runtime tenant resolution metadata",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "runtime-resource"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny",
+          "quarantine",
+          "conflict"
+        ]
+      },
+      "documentationExample": "Runtime-Resource Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MODEL-003"
+    },
+    {
+      "id": "TEN-MODEL-004",
+      "requirement": "The mapping entity is registered in every supported database adapter.",
+      "source": "Engine Tenancy Data Model / Database Portability",
+      "dimensions": [
+        "postgres",
+        "mysql",
+        "mssql",
+        "oracle",
+        "spanner"
+      ],
+      "expected": "all adapter registries contain EngineTenantMapping",
+      "testFile": "backend/__tests__/shared/db/adapterEntityRegistry.test.ts",
+      "testName": "registers every canonical authorization, identity, config, and runtime entity in every adapter",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Database Portability",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MODEL-004"
+    },
+    {
+      "id": "TEN-API-001",
+      "requirement": "Dedicated and shared topology use one strict canonical schema family registered in OpenAPI.",
+      "source": "Engine Tenancy Data Model / Canonical Contracts",
+      "dimensions": [
+        "dedicated",
+        "shared",
+        "manual",
+        "external",
+        "config"
+      ],
+      "expected": "strict canonical schemas",
+      "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+      "testName": "defines one strict dedicated/shared tenancy contract before provisioning exposes it",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "external-api",
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Canonical Contracts",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-001"
+    },
+    {
+      "id": "TEN-API-002",
+      "requirement": "External mapping batches are bounded, atomic, version-aware, dry-runnable, and sanitized.",
+      "source": "Engine Tenancy Data Model / Canonical Contracts",
+      "dimensions": [
+        "external",
+        "dry_run",
+        "atomic",
+        "optimistic_concurrency"
+      ],
+      "expected": "bounded request and sanitized response",
+      "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+      "testName": "bounds atomic external mapping batches and publishes sanitized results",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "external-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Canonical Contracts",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-002"
+    },
+    {
+      "id": "TEN-RUNTIME-001",
+      "requirement": "Dedicated resource observations persist explicit resolved state and sanitized lineage.",
+      "source": "Engine Tenancy Data Model / Current Provisioning Behavior",
+      "dimensions": [
+        "dedicated",
+        "resolved",
+        "unmapped"
+      ],
+      "expected": "resolved with tenant; unmapped without tenant",
+      "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+      "testName": "persists only sanitized runtime metadata and normalizes no runtime tenant to an empty key",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "quarantine"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-001"
+    },
+    {
+      "id": "TEN-DOCS-001",
+      "requirement": "Every implemented engine-tenancy requirement has linked executable evidence and Markdown documentation.",
+      "source": "Engine Tenancy Data Model / Functional Coverage",
+      "dimensions": [
+        "developer_docs",
+        "user_docs",
+        "test_evidence"
+      ],
+      "expected": "manifest links resolve and requirement ids are documented",
+      "testFile": "scripts/engine-tenancy-functional-coverage.test.mjs",
+      "testName": "validates every version-2 engine tenancy functional coverage entry",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:foundation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Functional Coverage",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-001"
+    },
+    {
+      "id": "TEN-RESOLVE-001",
+      "requirement": "Internal manual-create omission resolves dedicated tenancy to the request tenant or canonical OSS default; external registration requires explicit tenancy.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "manual",
+        "request_context",
+        "default"
+      ],
+      "expected": "ready dedicated tenancy with a non-null canonical tenant",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyProvisioningService.test.ts",
+      "testName": "defaults omitted tenancy to a ready dedicated engine in the request or OSS default tenant",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "request-context",
+          "default-tenant"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "external-api"
+        ],
+        "outcomes": [
+          "allow"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RESOLVE-001"
+    },
+    {
+      "id": "TEN-RESOLVE-002",
+      "requirement": "Explicit tenant references require local proof or an authorized enterprise resolver decision.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "id",
+        "key",
+        "user",
+        "api_client",
+        "enterprise_extension"
+      ],
+      "expected": "authorized resolution or stable 403",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "requires authorized resolution for explicit tenant references",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user",
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RESOLVE-002"
+    },
+    {
+      "id": "TEN-DEDICATED-001",
+      "requirement": "Compatibility provisioning persists a dedicated engine in a resolved tenant instead of leaving ambiguous null ownership.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "manual",
+        "external",
+        "dedicated",
+        "compatibility"
+      ],
+      "expected": "tenant-default and ready resolution in OSS",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "defaults distributed engines to engine-wide access without runtime inventory reconciliation",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "external-api"
+        ],
+        "outcomes": [
+          "allow",
+          "compatibility"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DEDICATED-001"
+    },
+    {
+      "id": "TEN-SHARED-001",
+      "requirement": "Shared engines require resource-aware authorization and begin in fail-closed incomplete mapping state.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "shared",
+        "resource_aware",
+        "manual",
+        "fail_closed"
+      ],
+      "expected": "stable rejection or incomplete shared persistence",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "creates explicit shared engines only with resource-aware access and fail-closed mapping state",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-SHARED-001"
+    },
+    {
+      "id": "TEN-SHARED-002",
+      "requirement": "External registration accepts explicit shared topology without exposing a tenancy compatibility diagnostic.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "shared",
+        "resource_aware",
+        "external",
+        "external-contract"
+      ],
+      "expected": "incomplete shared persistence without compatibility diagnostics",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "externally provisions explicit shared engines without the compatibility warning",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "external-api"
+        ],
+        "outcomes": [
+          "compatibility"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-SHARED-002"
+    },
+    {
+      "id": "TEN-API-003",
+      "requirement": "Ordinary manual and external upserts cannot silently change engine topology, mapping strategy, or dedicated tenant.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "manual",
+        "external",
+        "update",
+        "transition"
+      ],
+      "expected": "ENGINE_TENANCY_TRANSITION_REQUIRED",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "rejects silent topology changes during normal engine updates",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "external-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-003"
+    },
+    {
+      "id": "TEN-API-004",
+      "requirement": "External registration rejects omitted tenancy before it reads or writes engine state.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "external",
+        "input-validation",
+        "fail-closed"
+      ],
+      "expected": "HTTP 400 before persistence",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "rejects an external registration that omits tenancy before it reads or writes engine state",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "external-api"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-004"
+    },
+    {
+      "id": "TEN-API-005",
+      "requirement": "Manual, update, and external OpenAPI contracts expose canonical tenancy input and stable sanitized errors.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "schema",
+        "openapi",
+        "manual",
+        "external",
+        "errors"
+      ],
+      "expected": "request and error contract parity",
+      "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+      "testName": "publishes stable sanitized tenancy errors",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "external-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Provisioning and Resolution",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-005"
+    },
+    {
+      "id": "TEN-API-006",
+      "requirement": "Tenant mapping batches are atomic, source-owned, dry-runnable, and optimistic-version guarded.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "manual",
+        "atomic",
+        "dry_run",
+        "version",
+        "source_ownership"
+      ],
+      "expected": "one mapping version and all-or-nothing resolution",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenantMappingService.test.ts",
+      "testName": "atomically creates a mapping, resolves inventory, advances version, and records readiness",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Mapping Administration and Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-006"
+    },
+    {
+      "id": "TEN-API-007",
+      "requirement": "External integrators manage mappings by stable external engine identity and external-system authorization.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "external",
+        "api_client",
+        "external_id",
+        "audit"
+      ],
+      "expected": "guarded external mapping upsert",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "atomically provisions tenant mappings through the external engine identity",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "external-api"
+        ],
+        "outcomes": [
+          "audit"
+        ]
+      },
+      "documentationExample": "Mapping Administration and Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-007"
+    },
+    {
+      "id": "TEN-API-008",
+      "requirement": "Mapping list, apply, diagnostics, and external operations are published in OpenAPI with stable errors.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "openapi",
+        "list",
+        "apply",
+        "diagnostics",
+        "external"
+      ],
+      "expected": "public contract parity",
+      "testFile": "backend/__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts",
+      "testName": "publishes canonical engine tenancy, mapping, diagnostics, and batch contracts",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user",
+          "api-client"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "external-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Mapping Administration and Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-008"
+    },
+    {
+      "id": "TEN-RUNTIME-002",
+      "requirement": "Shared runtime observations resolve through the current mapping and persist mapping lineage/version.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "runtime_inventory",
+        "resolved",
+        "unmapped",
+        "conflict"
+      ],
+      "expected": "current mapping evidence or quarantine",
+      "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+      "testName": "resolves shared runtime observations through the current mapping version",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "quarantine",
+          "conflict"
+        ]
+      },
+      "documentationExample": "Mapping Administration and Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-002"
+    },
+    {
+      "id": "TEN-AUTHZ-001",
+      "requirement": "Runtime Resource Sets never materialize unresolved or cross-tenant shared resources.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "authorization",
+        "runtime_resource_set",
+        "fail_closed",
+        "cross_tenant"
+      ],
+      "expected": "only resolved same-tenant resources materialize",
+      "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+      "testName": "never materializes unresolved or cross-tenant runtime resources",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "cross-tenant"
+        ],
+        "resourceTypes": [
+          "runtime-resource-set"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny",
+          "quarantine"
+        ]
+      },
+      "documentationExample": "Mapping Administration and Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-001"
+    },
+    {
+      "id": "TEN-CONFIG-001",
+      "requirement": "Configuration bundles preview, apply, diff, and export explicit dedicated/shared topology.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "config",
+        "preview",
+        "apply",
+        "diff",
+        "export"
+      ],
+      "expected": "canonical topology parity and transition conflict",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundleApplyService.test.ts",
+      "testName": "applies a config-managed shared engine in fail-closed mapping state",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "conflict"
+        ]
+      },
+      "documentationExample": "Mapping Administration and Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-001"
+    },
+    {
+      "id": "TEN-CONFIG-004",
+      "requirement": "Configuration bundles accept a separate portable shared-engine tenant-mapping file and validate engine references and strategies.",
+      "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+      "dimensions": [
+        "config",
+        "schema",
+        "preview",
+        "tenant_key",
+        "shared"
+      ],
+      "expected": "portable mapping compiles or fails with an object-scoped diagnostic",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundlePreviewService.test.ts",
+      "testName": "accepts portable config-owned mappings for a shared engine",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "explicit-reference"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Configuration-Owned Mapping Lifecycle",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-004"
+    },
+    {
+      "id": "TEN-CONFIG-005",
+      "requirement": "A configuration bundle never takes over a manual, API, or external mapping identity.",
+      "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+      "dimensions": [
+        "config",
+        "source_ownership",
+        "conflict"
+      ],
+      "expected": "foreign mapping identity is preserved and reported as a conflict",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundleDiffService.test.ts",
+      "testName": "refuses to take over a manual shared-engine tenant identity",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "conflict"
+        ]
+      },
+      "documentationExample": "Configuration-Owned Mapping Lifecycle",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-005"
+    },
+    {
+      "id": "TEN-CONFIG-006",
+      "requirement": "Configuration mapping writes, resource re-resolution, version advancement, audit, and follow-up reconciliation scheduling are atomic.",
+      "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+      "dimensions": [
+        "config",
+        "apply",
+        "atomic",
+        "mapping_version",
+        "reconciliation"
+      ],
+      "expected": "one transaction and queued engine reconciliation",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundleApplyService.test.ts",
+      "testName": "atomically creates a config-owned tenant mapping and schedules shared-engine reconciliation",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "audit"
+        ]
+      },
+      "documentationExample": "Configuration-Owned Mapping Lifecycle",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-006"
+    },
+    {
+      "id": "TEN-CONFIG-007",
+      "requirement": "Configuration export round-trips source-owned engine mappings with stable mapping and engine references.",
+      "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+      "dimensions": [
+        "config",
+        "export",
+        "round_trip",
+        "stable_reference"
+      ],
+      "expected": "exported mapping previews and diffs as a no-op",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundleExportService.test.ts",
+      "testName": "exports all apply-supported config families with stable references",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Configuration-Owned Mapping Lifecycle",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-007"
+    },
+    {
+      "id": "TEN-CONFIG-008",
+      "requirement": "Manual changes to config-warning mappings preserve config ownership so the next bundle diff can detect and restore drift; config-locked mappings remain protected.",
+      "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+      "dimensions": [
+        "config_warn",
+        "config_locked",
+        "manual_override",
+        "drift"
+      ],
+      "expected": "warn override retained as config-owned drift; locked override denied",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenantMappingService.test.ts",
+      "testName": "allows a manual config-warning override while preserving config ownership",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Configuration-Owned Mapping Lifecycle",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-008"
+    },
+    {
+      "id": "TEN-CONFIG-009",
+      "requirement": "Authoritative configuration omission disables only mappings owned by that bundle and preserves external mappings on the same engine.",
+      "source": "Engine Tenancy Data Model / Configuration-Owned Mapping Lifecycle",
+      "dimensions": [
+        "config",
+        "authoritative",
+        "lifecycle",
+        "source_ownership",
+        "audit"
+      ],
+      "expected": "source-owned mapping disabled; external mapping remains active",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundleApplyService.test.ts",
+      "testName": "authoritatively disables only omitted mappings owned by this bundle",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:mappings",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "audit"
+        ]
+      },
+      "documentationExample": "Configuration-Owned Mapping Lifecycle",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-009"
+    },
+    {
+      "id": "TEN-AUTHZ-002",
+      "requirement": "Tenant roles accept every classified project permission and only the explicit runtime-safe engine subset.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "tenant_role",
+        "custom_role",
+        "project",
+        "engine",
+        "allow",
+        "deny"
+      ],
+      "expected": "complete tenant-safe classifier with prohibited platform and secret actions",
+      "testFile": "backend/__tests__/shared/authz/tenantRolePolicy.test.ts",
+      "testName": "classifies the complete project catalog and only runtime-safe engine actions as tenant-safe",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "project",
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-002"
+    },
+    {
+      "id": "TEN-AUTHZ-003",
+      "requirement": "A tenant assignment inherits to every tenant-safe project action only for resources in the active tenant.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "tenant_assignment",
+        "project",
+        "same_tenant",
+        "sibling_tenant",
+        "inheritance"
+      ],
+      "expected": "same-tenant allow and sibling-tenant deny",
+      "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+      "testName": "inherits every tenant-safe project permission only to a project in the active tenant",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "same-tenant",
+          "sibling-tenant"
+        ],
+        "resourceTypes": [
+          "project"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-003"
+    },
+    {
+      "id": "TEN-AUTHZ-004",
+      "requirement": "Tenant assignments inherit to dedicated engines and exactly resolved shared resources without broad shared-engine or Engine Set grants.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "dedicated",
+        "shared",
+        "runtime_resource",
+        "engine_set",
+        "mapping_lineage"
+      ],
+      "expected": "dedicated or mapped-resource allow with broad shared scope excluded",
+      "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+      "testName": "inherits a tenant role to a resolved shared runtime resource without accepting broad shared-engine scopes",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine-set",
+          "runtime-resource"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-004"
+    },
+    {
+      "id": "TEN-AUTHZ-005",
+      "requirement": "Unresolved shared runtime inventory is denied before role-assignment evaluation.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "shared",
+        "unmapped",
+        "conflict",
+        "stale",
+        "fail_closed"
+      ],
+      "expected": "deny before assignment evaluation",
+      "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+      "testName": "denies unresolved shared runtime inventory before assignment evaluation",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny",
+          "quarantine",
+          "conflict"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-005"
+    },
+    {
+      "id": "TEN-API-009",
+      "requirement": "Tenant assignments are bound to the authenticated tenant and cannot name a sibling tenant in the request body.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "http",
+        "assignment",
+        "authenticated_tenant",
+        "tampered_input"
+      ],
+      "expected": "caller tenant id is ignored and the authenticated tenant is persisted",
+      "testFile": "backend/__tests__/modules/platform-admin/routes/authz.test.ts",
+      "testName": "binds tenant role assignments to the authenticated tenant instead of a caller-supplied tenant id",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "request-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-009"
+    },
+    {
+      "id": "TEN-CONFIG-002",
+      "requirement": "Configuration bundles preview, diff, apply, and export tenant roles and current-tenant assignments.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "config",
+        "tenant_role",
+        "assignment",
+        "preview",
+        "diff",
+        "apply",
+        "export"
+      ],
+      "expected": "portable tenant scope round trip without raw tenant references",
+      "testFile": "backend/__tests__/shared/services/platform-admin/configBundleExportService.test.ts",
+      "testName": "exports tenant roles and assignments against the bundle tenant without a raw tenant reference",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-002"
+    },
+    {
+      "id": "TEN-UI-001",
+      "requirement": "The Access Control assignment form exposes the authenticated tenant for users, groups, API clients, and service accounts.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "ui",
+        "user",
+        "group",
+        "api_client",
+        "service_account"
+      ],
+      "expected": "current tenant is selectable without a caller-entered tenant id",
+      "testFile": "frontend/__tests__/src/features/platform-admin/pages/AccessControl.roles-permissions.test.tsx",
+      "testName": "treats the authenticated tenant as a first-class assignment scope for every principal",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user",
+          "group-derived-user",
+          "api-client",
+          "service-account"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-001"
+    },
+    {
+      "id": "TEN-UI-002",
+      "requirement": "Manual engine creation exposes canonical dedicated/current-tenant and shared/mapping-strategy controls, forces resource-aware shared access, and never accepts a raw tenant ID.",
+      "source": "Engine Tenancy Data Model / Provisioning and Resolution",
+      "dimensions": [
+        "ui",
+        "manual",
+        "dedicated",
+        "shared",
+        "request_context",
+        "resource_aware"
+      ],
+      "expected": "canonical create payload with no raw tenant-id field",
+      "testFile": "frontend/__tests__/src/features/mission-control/engines/pages/EnginesPage.test.tsx",
+      "testName": "creates dedicated and shared engines with canonical tenancy contracts",
+      "documentation": "docs/how-to/configure-engine-tenancy.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide",
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "request-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "ui"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Manage Topology and Mappings in the UI",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-002"
+    },
+    {
+      "id": "TEN-UI-003",
+      "requirement": "Engine details show sanitized diagnostics and require every acknowledgement before applying the exact topology preview hash and expiry.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "ui",
+        "diagnostics",
+        "preview",
+        "acknowledgement",
+        "apply"
+      ],
+      "expected": "unacknowledged apply disabled; exact reviewed preview applied",
+      "testFile": "frontend/__tests__/src/features/mission-control/engines/components/EngineTenancyPanel.test.tsx",
+      "testName": "shows diagnostics, previews and acknowledges topology changes, and applies the exact preview",
+      "documentation": "docs/how-to/configure-engine-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Manage Topology and Mappings in the UI",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-003"
+    },
+    {
+      "id": "TEN-UI-004",
+      "requirement": "Shared-engine mapping UI previews and applies one version-guarded atomic mapping change using current/default/stable-key or retained existing tenant lineage.",
+      "source": "Engine Tenancy Data Model / Mapping Administration and Runtime Enforcement",
+      "dimensions": [
+        "ui",
+        "mapping",
+        "dry_run",
+        "atomic",
+        "version",
+        "tenant_reference"
+      ],
+      "expected": "reviewed mapping dry run followed by version-guarded apply",
+      "testFile": "frontend/__tests__/src/features/mission-control/engines/components/EngineTenancyPanel.test.tsx",
+      "testName": "previews and applies one version-guarded atomic mapping change",
+      "documentation": "docs/how-to/configure-engine-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "explicit-reference"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Manage Topology and Mappings in the UI",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-004"
+    },
+    {
+      "id": "TEN-AUDIT-001",
+      "requirement": "Effective Access sources explain the resolved runtime tenant, mapping id and version, diagnostic code, and topology.",
+      "source": "Engine Tenancy Data Model / Tenant Role Boundary and Inheritance",
+      "dimensions": [
+        "effective_access",
+        "mapping_lineage",
+        "shared",
+        "sanitized"
+      ],
+      "expected": "sanitized tenant resolution lineage is returned",
+      "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+      "testName": "inherits a tenant role to a resolved shared runtime resource without accepting broad shared-engine scopes",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Tenant Role Boundary and Inheritance",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUDIT-001"
+    },
+    {
+      "id": "TEN-AUTHZ-006",
+      "requirement": "A broad engine permission never bypasses resolved same-tenant resource filtering on a shared engine.",
+      "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "collection",
+        "broad_grant",
+        "resolved",
+        "same_tenant"
+      ],
+      "expected": "only visible resolved resource keys and runtime tenant scopes reach the handler",
+      "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+      "testName": "does not let a broad engine grant bypass shared-engine resource filtering",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "same-tenant"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow"
+        ]
+      },
+      "documentationExample": "Mission Control Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-006"
+    },
+    {
+      "id": "TEN-AUTHZ-007",
+      "requirement": "A shared engine appears in the Mission Control selector only when the principal can see at least one resolved mapped runtime resource.",
+      "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "selector",
+        "discovery",
+        "quarantine"
+      ],
+      "expected": "empty or quarantined shared engines remain hidden",
+      "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+      "testName": "hides a shared engine selector until at least one resolved runtime resource is visible",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "quarantine"
+        ]
+      },
+      "documentationExample": "Mission Control Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-007"
+    },
+    {
+      "id": "TEN-RUNTIME-003",
+      "requirement": "Missing or unresolved shared definition inventory is denied before Mission Control calls the engine.",
+      "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "detail",
+        "unmapped",
+        "conflict",
+        "no_transport"
+      ],
+      "expected": "403 with zero engine transport calls",
+      "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+      "testName": "denies an uninventoried shared definition before any engine transport despite a broad grant",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny",
+          "quarantine",
+          "conflict"
+        ]
+      },
+      "documentationExample": "Mission Control Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-003"
+    },
+    {
+      "id": "TEN-RUNTIME-004",
+      "requirement": "Exact key-based shared runtime operations use one authorized engine runtime tenant and never let the engine select an ambiguous tenant.",
+      "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "exact_key",
+        "engine_runtime_tenant",
+        "process",
+        "decision"
+      ],
+      "expected": "tenant-specific path or fail-closed ambiguity rejection",
+      "testFile": "backend/__tests__/modules/mission-control/processes/service.test.ts",
+      "testName": "uses the tenant-specific start endpoint for a mapped shared runtime tenant",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Mission Control Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-004"
+    },
+    {
+      "id": "TEN-RUNTIME-005",
+      "requirement": "Returned runtime rows cannot fall back from a mismatched tenant to the no-tenant partition without resolved definition lineage.",
+      "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "collection",
+        "runtime_tenant",
+        "no_tenant",
+        "lineage"
+      ],
+      "expected": "mismatched or unresolvable rows are filtered out",
+      "testFile": "backend/__tests__/modules/mission-control/shared/runtime-resource-filter.test.ts",
+      "testName": "uses item or resolved-definition tenant lineage for scoped process rows",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "missing-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Mission Control Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-005"
+    },
+    {
+      "id": "TEN-RUNTIME-006",
+      "requirement": "Shared batch and migration mutations are denied before transport when no authorized resolved mapping is available.",
+      "source": "Engine Tenancy Data Model / Mission Control Runtime Enforcement",
+      "dimensions": [
+        "shared",
+        "batch",
+        "migration",
+        "mutation",
+        "no_transport"
+      ],
+      "expected": "403 with zero engine transport calls",
+      "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+      "testName": "denies shared batch and migration mutations before transport when mapping access is unavailable",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "migration"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Mission Control Runtime Enforcement",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-006"
+    },
+    {
+      "id": "TEN-MIGRATION-001",
+      "requirement": "Existing engines are classified conservatively and resource-aware access alone never infers shared topology or default-tenant ownership.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "classified",
+        "ready_for_apply",
+        "requires_review",
+        "conflict"
+      ],
+      "expected": "observe-only report with no ambiguous inference",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+      "testName": "builds a complete operator classification report without changing data",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "conflict"
+        ]
+      },
+      "documentationExample": "1. Generate the Classification Report",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-001"
+    },
+    {
+      "id": "TEN-MIGRATION-002",
+      "requirement": "The planner covers dedicated-to-shared, shared-to-dedicated, shared-strategy, and dedicated-tenant transitions while rejecting equivalent topology.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "dedicated_to_shared",
+        "shared_to_dedicated",
+        "shared_strategy_change",
+        "dedicated_tenant_move",
+        "no_change"
+      ],
+      "expected": "complete valid and invalid transition matrix",
+      "testFile": "backend/__tests__/shared/engine-tenancy/transitionPolicy.test.ts",
+      "testName": "classifies every supported transition and rejects equivalent topology",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide",
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "2. Preview the Intended Transition",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-002"
+    },
+    {
+      "id": "TEN-MIGRATION-003",
+      "requirement": "Apply rejects expired or stale previews and any missing acknowledgement returned by preview.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "expiration",
+        "fingerprint",
+        "stale",
+        "acknowledgement"
+      ],
+      "expected": "stable fail-closed transition errors",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+      "testName": "rejects missing engines, equivalent topology, expired, stale, and unacknowledged apply requests",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "3. Apply the Exact Preview",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-003"
+    },
+    {
+      "id": "TEN-MIGRATION-004",
+      "requirement": "Topology apply atomically changes engine state, resets runtime resolution, deactivates obsolete mappings, and invalidates topology-dependent materializations.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "transaction",
+        "quarantine",
+        "mapping_deactivation",
+        "materialization_invalidation"
+      ],
+      "expected": "one atomic fail-closed topology mutation",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+      "testName": "atomically applies a dedicated-to-shared transition and invalidates materializations",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny",
+          "quarantine"
+        ]
+      },
+      "documentationExample": "4. Reconcile and Validate",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-004"
+    },
+    {
+      "id": "TEN-MIGRATION-005",
+      "requirement": "A concurrent engine update aborts transition apply before dependent mapping, resource, or materialization writes.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "optimistic_concurrency",
+        "rollback",
+        "stale"
+      ],
+      "expected": "ENGINE_TENANCY_PREVIEW_STALE with no dependent writes",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+      "testName": "rolls back when the engine changes during optimistic apply",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "4. Reconcile and Validate",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-005"
+    },
+    {
+      "id": "TEN-MIGRATION-006",
+      "requirement": "Shared topology transitions rematerialize the engine into every eligible platform and tenant Engine Set, with membership lineage stored in the Engine Set scope.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "engine_set",
+        "shared",
+        "platform",
+        "tenant",
+        "transition"
+      ],
+      "expected": "all-tenant shared Engine Set membership with stable set-owned tenant lineage",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineSetService.test.ts",
+      "testName": "rematerializes shared engines across platform and every tenant Engine Set in each set scope",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "tenant",
+          "engine-set"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "4. Reconcile and Validate",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-006"
+    },
+    {
+      "id": "TEN-MIGRATION-007",
+      "requirement": "Dedicated topology transitions rematerialize the engine only into platform and persisted owning-tenant Engine Sets, regardless of a conflicting caller tenant context.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "engine_set",
+        "dedicated",
+        "platform",
+        "owning_tenant",
+        "sibling_tenant",
+        "transition"
+      ],
+      "expected": "dedicated Engine Set membership is bounded by persisted engine ownership",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineSetService.test.ts",
+      "testName": "rematerializes dedicated engines only in their persisted tenant and platform Engine Sets",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "sibling-tenant"
+        ],
+        "resourceTypes": [
+          "engine-set"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "conflict"
+        ]
+      },
+      "documentationExample": "4. Reconcile and Validate",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-007"
+    },
+    {
+      "id": "TEN-API-010",
+      "requirement": "Classification and topology preview/apply schemas and operations are published in OpenAPI and the authorization action registry.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "schema",
+        "openapi",
+        "action_registry",
+        "route_inventory"
+      ],
+      "expected": "canonical public contract parity",
+      "testFile": "backend/__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts",
+      "testName": "publishes canonical engine tenancy, mapping, diagnostics, and batch contracts",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Evidence to Retain",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-010"
+    },
+    {
+      "id": "TEN-API-011",
+      "requirement": "Manual topology transition rejects external-owned and configuration-locked engine topology.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "manual",
+        "external_owned",
+        "config_locked",
+        "ownership"
+      ],
+      "expected": "manual source-owner bypass is denied",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "keeps source-owned topology out of the manual transition workflow",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Evidence to Retain",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-011"
+    },
+    {
+      "id": "TEN-AUDIT-002",
+      "requirement": "Topology preview and apply emit sanitized audit records with transition kind, fingerprint, acknowledgements, and aggregate effects.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "preview",
+        "apply",
+        "audit",
+        "sanitized"
+      ],
+      "expected": "both transition audit actions are persisted",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "previews and atomically applies an acknowledged topology transition",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "audit"
+        ]
+      },
+      "documentationExample": "Evidence to Retain",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUDIT-002"
+    },
+    {
+      "id": "TEN-CONFIG-003",
+      "requirement": "A config-warn engine can be transitioned manually only by recording manual topology drift for the next bundle preview.",
+      "source": "Engine Tenancy Data Model / Classification and Topology Transitions",
+      "dimensions": [
+        "config_warn",
+        "manual_transition",
+        "drift"
+      ],
+      "expected": "driftStatus becomes manual_override",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineTenancyTransitionService.test.ts",
+      "testName": "marks an allowed config-warn transition as manual topology drift",
+      "documentation": "docs/how-to/migrate-existing-engines-to-explicit-tenancy.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "3. Apply the Exact Preview",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-CONFIG-003"
+    },
+    {
+      "id": "TEN-OPS-001",
+      "requirement": "Operators can monitor unresolved or conflicting tenancy state and actual local default-tenant fallback use through bounded identifier-free metrics that remain scrapeable during persistence failure.",
+      "source": "Engine Tenancy Data Model / Operational Metrics",
+      "dimensions": [
+        "dedicated",
+        "shared",
+        "unmapped",
+        "conflict",
+        "stale",
+        "fallback",
+        "collection_failure",
+        "privacy"
+      ],
+      "expected": "stable aggregate Prometheus series with no resource identifiers and exact critical-module source coverage",
+      "testFile": "backend/__tests__/services/engineTenancyMetrics.test.ts",
+      "testName": "exports bounded aggregate topology, resolution, and fallback metrics without resource identifiers",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:operations",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "conflicting-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "quarantine",
+          "conflict"
+        ]
+      },
+      "documentationExample": "Operational Metrics",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-OPS-001"
+    },
+    {
+      "id": "TEN-DOCS-002",
+      "requirement": "Every published engine-tenancy curl journey is linked, uses placeholder credentials, resolves to a canonical OpenAPI operation, and parses request bodies with the runtime Zod schema.",
+      "source": "Engine Tenancy Plan / Documentation validation",
+      "dimensions": [
+        "manual_api",
+        "external_api",
+        "diagnostics",
+        "transition",
+        "mapping",
+        "reconcile",
+        "decommission"
+      ],
+      "expected": "zero undocumented or schema-divergent engine-tenancy curl contracts",
+      "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+      "testName": "validates every published curl example against OpenAPI and its runtime request schema",
+      "documentation": "docs/how-to/diagnose-engine-tenant-resolution.md",
+      "ciJob": "test:engine-tenancy:documentation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api",
+          "external-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Escalation and Rollback",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-002"
+    },
+    {
+      "id": "TEN-DOCS-003",
+      "requirement": "Default-tenant fallback and shared-engine fail-closed decisions, user guides, developer references, and troubleshooting pages are linked from the documentation index with valid local anchors.",
+      "source": "Engine Tenancy Plan / Markdown Documentation Deliverables",
+      "dimensions": [
+        "architecture_decision",
+        "developer",
+        "user",
+        "administrator",
+        "operator",
+        "navigation"
+      ],
+      "expected": "all feature documentation links and index entries resolve",
+      "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+      "testName": "keeps feature documentation links, anchors, and index navigation valid",
+      "documentation": "docs/architecture/decisions/0001-default-tenant-provisioning-fallback.md",
+      "ciJob": "test:engine-tenancy:documentation",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Decision",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-003"
+    },
+    {
+      "id": "TEN-API-012",
+      "requirement": "External engine decommission uses one strict canonical request schema in runtime validation, OpenAPI, and published integration examples.",
+      "source": "Engine Tenancy and Provisioning API / Decommission",
+      "dimensions": [
+        "external_api",
+        "decommission",
+        "schema",
+        "openapi",
+        "documentation"
+      ],
+      "expected": "strict external decommission contract parity",
+      "testFile": "backend/__tests__/shared/schemas/mission-control/engineRegistrationOpenApi.test.ts",
+      "testName": "publishes one strict external decommission contract across runtime and OpenAPI",
+      "documentation": "docs/how-to/provision-engines-externally.md",
+      "ciJob": "test:engine-tenancy:documentation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "external-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Decommission",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-012"
+    },
+    {
+      "id": "TEN-DOCS-004",
+      "requirement": "Upgrade, release, compatibility-window, external-integrator migration, removal, and rollback documentation is published and linked before compatibility behavior can be removed.",
+      "source": "Engine Tenancy Plan / Documentation and adoption",
+      "dimensions": [
+        "upgrade",
+        "release_note",
+        "compatibility",
+        "deprecation",
+        "external_integrator",
+        "rollback"
+      ],
+      "expected": "all adoption documents and navigation links resolve",
+      "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+      "testName": "keeps feature documentation links, anchors, and index navigation valid",
+      "documentation": "docs/reference/engine-tenancy-compatibility-and-deprecation.md",
+      "ciJob": "test:engine-tenancy:documentation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "compatibility"
+        ]
+      },
+      "documentationExample": "Removal Pull Request Requirements",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-004"
+    },
+    {
+      "id": "TEN-DOCS-005",
+      "requirement": "Configuration bundle CLI help documents explicit engine topology and mapping files plus shared-engine fail-closed behavior without credentials.",
+      "source": "Engine Tenancy Plan / Documentation and adoption",
+      "dimensions": [
+        "cli",
+        "configuration",
+        "dedicated",
+        "shared",
+        "secrets"
+      ],
+      "expected": "credential-free successful help output with current tenancy guidance",
+      "testFile": "scripts/config-bundle-help.test.mjs",
+      "testName": "config bundle CLI help documents explicit engine tenancy files and safety rules",
+      "documentation": "docs/how-to/configure-engine-tenancy.md",
+      "ciJob": "test:engine-tenancy:documentation",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "configuration-bundle"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Provision through Configuration",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-005"
+    },
+    {
+      "id": "TEN-MIGRATION-008",
+      "requirement": "A representative running installation can classify every engine without broad mutation, apply its owned safe default-tenant fixture through guarded preview and acknowledgement, preserve unrelated rows, and finish with no review or conflict rows.",
+      "source": "Engine Tenancy Plan / Enforcement and cleanup",
+      "dimensions": [
+        "browser",
+        "local_stack",
+        "classification",
+        "preview",
+        "apply",
+        "least_privilege",
+        "preserve_existing",
+        "cleanup"
+      ],
+      "expected": "exactly the disposable quarantined engine is classified and migrated without changing unrelated engines or creating an engine-scoped assignment",
+      "testFile": "test/e2e/engine-tenancy-local-enforcement.spec.ts",
+      "testName": "proves classification, dedicated defaults, shared fail-closed mapping, and readiness metrics",
+      "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+      "ciJob": "test:engine-tenancy:enforcement",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide",
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "quarantine",
+          "conflict"
+        ]
+      },
+      "documentationExample": "Result",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-MIGRATION-008"
+    },
+    {
+      "id": "TEN-AUTHZ-008",
+      "requirement": "A null-owned dedicated engine is never treated as the active or default tenant; only migration_required quarantine may use platform engine-registration permission for preview/apply, without granting engine or runtime visibility.",
+      "source": "Engine Tenancy Plan / Enforcement and cleanup",
+      "dimensions": [
+        "dedicated",
+        "null_owner",
+        "deny",
+        "migration_required",
+        "platform_permission",
+        "runtime"
+      ],
+      "expected": "ordinary tenant access denies while the bounded platform migration path succeeds",
+      "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+      "testName": "uses a platform registry permission only for a quarantined unowned-engine migration",
+      "documentation": "docs/reference/engine-tenancy-compatibility-and-deprecation.md",
+      "ciJob": "test:engine-tenancy:runtime",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "missing-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny",
+          "quarantine"
+        ]
+      },
+      "documentationExample": "Null-Owner Authorization Boundary",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-008"
+    },
+    {
+      "id": "TEN-AUTHZ-009",
+      "requirement": "Tenant engine discovery contains same-tenant dedicated engines plus shared engines, while platform discovery contains explicitly owned engines across tenants plus shared engines; neither includes a null-owned dedicated engine.",
+      "source": "Engine Tenancy Plan / Authorization integration",
+      "dimensions": [
+        "engine_discovery",
+        "tenant",
+        "platform",
+        "dedicated",
+        "shared",
+        "null_owner"
+      ],
+      "expected": "discovery queries include only topology-valid dedicated and shared branches",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineService.test.ts",
+      "testName": "uses topology-aware engine discovery for tenant and platform assignments",
+      "documentation": "docs/reference/engine-tenancy-data-model.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "missing-context"
+        ],
+        "resourceTypes": [
+          "tenant"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Database Portability",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-009"
+    },
+    {
+      "id": "TEN-AUTHZ-010",
+      "requirement": "Tenant and platform Engine Set selectors exclude null-owned dedicated engines while retaining valid same-tenant, cross-tenant platform, and shared candidates.",
+      "source": "Engine Tenancy Plan / Authorization integration",
+      "dimensions": [
+        "engine_set",
+        "selector",
+        "tenant",
+        "platform",
+        "null_owner",
+        "deny"
+      ],
+      "expected": "Engine Set candidate queries require explicit dedicated ownership or shared topology",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineSetService.test.ts",
+      "testName": "excludes null-owned dedicated engines from tenant and platform Engine Set selectors",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:engine-tenancy:transitions",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "missing-context"
+        ],
+        "resourceTypes": [
+          "tenant",
+          "engine-set"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Local HTTP and Browser Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-010"
+    },
+    {
+      "id": "TEN-AUTHZ-011",
+      "requirement": "Project engine-access discovery filters accessed, pending, and available engines through the same topology-aware tenant boundary.",
+      "source": "Engine Tenancy Plan / Authorization integration",
+      "dimensions": [
+        "project",
+        "engine_discovery",
+        "accessed",
+        "pending",
+        "available",
+        "tenant"
+      ],
+      "expected": "project access responses cannot reveal or offer a quarantined null-owned dedicated engine",
+      "testFile": "backend/__tests__/modules/starbase/routes/projects.test.ts",
+      "testName": "uses topology-aware engine queries for project access discovery",
+      "documentation": "docs/how-to/configure-engine-tenancy.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "tenant",
+          "project"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "quarantine"
+        ]
+      },
+      "documentationExample": "Configure a Dedicated Engine",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-011"
+    },
+    {
+      "id": "TEN-AUTHZ-012",
+      "requirement": "Legacy project-access or target rows cannot resurrect a null-owned dedicated engine; topology is validated before existing rows, assignment creation, or permission evaluation.",
+      "source": "Engine Tenancy Plan / Authorization integration",
+      "dimensions": [
+        "project_engine_target",
+        "legacy_access",
+        "null_owner",
+        "deny",
+        "no_side_effect"
+      ],
+      "expected": "request and target creation deny before legacy rows or permissions can grant access",
+      "testFile": "backend/__tests__/shared/services/platform-admin/engineAccessService.test.ts",
+      "testName": "rejects a null-owned dedicated migration engine before honoring legacy access rows",
+      "documentation": "docs/reference/engine-tenancy-compatibility-and-deprecation.md",
+      "ciJob": "test:engine-tenancy:authorization",
+      "coverage": {
+        "topologies": [
+          "dedicated"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "missing-context"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Null-Owner Authorization Boundary",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-012"
+    },
+    {
+      "id": "TEN-RUNTIME-007",
+      "requirement": "A live shared engine exposes no runtime inventory while unmapped, becomes ready only after a versioned mapping and reconciliation, and reports zero unresolved resources.",
+      "source": "Engine Tenancy Plan / Enforcement and cleanup",
+      "dimensions": [
+        "browser",
+        "shared",
+        "unmapped",
+        "deny",
+        "mapping",
+        "reconcile",
+        "metrics"
+      ],
+      "expected": "unmapped inventory is hidden and mapped same-tenant inventory becomes visible",
+      "testFile": "test/e2e/engine-tenancy-local-enforcement.spec.ts",
+      "testName": "proves classification, dedicated defaults, shared fail-closed mapping, and readiness metrics",
+      "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+      "ciJob": "test:engine-tenancy:enforcement",
+      "coverage": {
+        "topologies": [
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "resource_aware"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "allow",
+          "deny",
+          "quarantine"
+        ]
+      },
+      "documentationExample": "Result",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-RUNTIME-007"
+    },
+    {
+      "id": "TEN-API-013",
+      "requirement": "Runtime inventory responses normalize persisted PostgreSQL bigint timestamp strings into the numeric public API contract.",
+      "source": "Engine Tenancy Plan / Runtime integration",
+      "dimensions": [
+        "postgresql",
+        "runtime_inventory",
+        "timestamp",
+        "response_schema"
+      ],
+      "expected": "persisted timestamp strings parse and serialize as numbers",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "lists only tenant-visible sanitized runtime inventory for an authorized engine viewer",
+      "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Defects Found and Fixed",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-013"
+    },
+    {
+      "id": "TEN-API-014",
+      "requirement": "Deleting a manually managed engine also deletes every dependent tenancy inventory, mapping, materialization, and scoped assignment row.",
+      "source": "Engine Tenancy Plan / Lifecycle and cleanup",
+      "dimensions": [
+        "manual",
+        "delete",
+        "runtime_inventory",
+        "mapping",
+        "materialization",
+        "assignment"
+      ],
+      "expected": "engine deletion leaves no authorization or tenancy inventory orphan",
+      "testFile": "backend/__tests__/modules/mission-control/engines/routes.test.ts",
+      "testName": "prunes every scoped canonical assignment when a manual engine is deleted",
+      "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+      "ciJob": "test:engine-tenancy:provisioning",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "manual-api"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Defects Found and Fixed",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-API-014"
+    },
+    {
+      "id": "TEN-DOCS-006",
+      "requirement": "The complete functional and live enforcement evidence is published as a reproducible developer and operator test report.",
+      "source": "Engine Tenancy Plan / Documentation and adoption",
+      "dimensions": [
+        "developer",
+        "operator",
+        "test_report",
+        "traceability",
+        "evidence"
+      ],
+      "expected": "the documentation contract validates the linked test report and navigation",
+      "testFile": "backend/__tests__/shared/schemas/engineTenancyDocumentationContracts.test.ts",
+      "testName": "keeps feature documentation links, anchors, and index navigation valid",
+      "documentation": "docs/development/engine-tenancy-functional-test-report.md",
+      "ciJob": "test:engine-tenancy:documentation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Acceptance and Compatibility Follow-up",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-006"
+    },
+    {
+      "id": "TEN-AUTHZ-013",
+      "requirement": "The targeted security mutation set kills tenant-filter removal, ownership inversion, accepted null tenant context, skipped mapping-version checks, and upstream calls after denial.",
+      "source": "Engine Tenancy Plan / Complete Functional Coverage Standard",
+      "dimensions": [
+        "mutation",
+        "tenant",
+        "ownership",
+        "mapping_version",
+        "no_transport"
+      ],
+      "expected": "all required security fault classes are killed",
+      "testFile": "scripts/run-authz-mutation-tests.mjs",
+      "testName": "targeted authorization mutants killed",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:mutation",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "tenant"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "deny"
+        ]
+      },
+      "documentationExample": "Required Release-Candidate Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-013"
+    },
+    {
+      "id": "TEN-AUTHZ-014",
+      "requirement": "Database-backed custom-role and randomized authorization matrices use resolved tenancy inventory for direct users and group-derived users.",
+      "source": "Engine Tenancy Plan / Exhaustive Authorization Matrix",
+      "dimensions": [
+        "custom_role",
+        "user",
+        "group",
+        "engine",
+        "engine_set",
+        "runtime_resource",
+        "runtime_resource_set",
+        "resolved"
+      ],
+      "expected": "same-scope allow, sibling deny, expiry and revocation without fixture bypass",
+      "testFile": "backend/test/integration/custom-role-scope-matrix.test.ts",
+      "testName": "resolves every custom-role scope for users and groups without widening to sibling resources",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:pr",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user",
+          "group-derived-user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine",
+          "engine-set",
+          "runtime-resource",
+          "runtime-resource-set"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Required Release-Candidate Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-014"
+    },
+    {
+      "id": "TEN-UI-005",
+      "requirement": "Active, refreshed, direct-URL, history-restored, and multi-tab browser sessions observe assignment and group revocation immediately in Chromium, Firefox, and WebKit.",
+      "source": "Engine Tenancy Plan / Browser Coverage",
+      "dimensions": [
+        "browser",
+        "user",
+        "group",
+        "revocation",
+        "direct_url",
+        "multi_tab",
+        "session_refresh",
+        "back_forward_cache",
+        "chromium",
+        "firefox",
+        "webkit"
+      ],
+      "expected": "new authorization version contains no stale engine grant in every browser lane",
+      "testFile": "test/e2e/smoke/fine-grained-access-local.spec.ts",
+      "testName": "revokes active, refreshed, direct-URL, and multi-tab sessions without stale access",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "authz-pr.yml:authorization",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user",
+          "group-derived-user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "engine"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "allow"
+        ]
+      },
+      "documentationExample": "Required Release-Candidate Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-005"
+    },
+    {
+      "id": "TEN-UI-006",
+      "requirement": "Access Control announces load failures, retains WCAG AA contrast and 200% page reflow, and remains usable with reduced motion in Chromium, Firefox, and WebKit.",
+      "source": "Engine Tenancy Plan / Browser Coverage",
+      "dimensions": [
+        "browser",
+        "accessibility",
+        "error_announcement",
+        "contrast",
+        "zoom_200_reflow",
+        "reduced_motion",
+        "chromium",
+        "firefox",
+        "webkit"
+      ],
+      "expected": "all four accessibility workflows pass independently in every browser",
+      "testFile": "test/e2e/access-control-accessibility.spec.ts",
+      "testName": "Access Control accessibility release checks",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:accessibility:cross-browser",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "user"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "not-applicable"
+        ],
+        "provisioningChannels": [
+          "ui"
+        ],
+        "outcomes": [
+          "observe"
+        ]
+      },
+      "documentationExample": "Local HTTP and Browser Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-UI-006"
+    },
+    {
+      "id": "TEN-AUTHZ-015",
+      "requirement": "API clients and service accounts receive the same tenant-bounded custom-role decisions, expiry, credential rotation, and revocation behavior.",
+      "source": "Engine Tenancy Plan / Exhaustive Authorization Matrix",
+      "dimensions": [
+        "custom_role",
+        "api_client",
+        "service_account",
+        "project",
+        "same_tenant",
+        "sibling_tenant",
+        "expiration",
+        "revocation"
+      ],
+      "expected": "same-tenant allow and sibling, expired, or revoked deny for both machine-principal types",
+      "testFile": "backend/test/integration/machine-principal-authz.test.ts",
+      "testName": "gives API clients and service accounts the same bounded project decision through a custom role",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:pr",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "api-client",
+          "service-account"
+        ],
+        "tenantRelationships": [
+          "same-tenant",
+          "sibling-tenant"
+        ],
+        "resourceTypes": [
+          "project"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny"
+        ]
+      },
+      "documentationExample": "Required Release-Candidate Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-AUTHZ-015"
+    },
+    {
+      "id": "TEN-AUTHZ-016",
+      "requirement": "A machine-readable constraint-derived authorization state space classifies every canonical principal, resource, permission, role, action, scope, topology, runtime mode, source, lifecycle, tenant relationship, and resource state; executes every compressed behavior cell and invalidity witness; and proves every equivalence expansion with zero gaps.",
+      "source": "Engine Tenancy Plan / Exhaustive authorization state-space",
+      "dimensions": [
+        "authorization_state_space",
+        "canonical_registry",
+        "applicability_rule",
+        "execution_family",
+        "independent_expectation_model",
+        "equivalence_expansion",
+        "fail_closed"
+      ],
+      "expected": "100% canonical classification, applicable-cell execution, invalidity witnesses, and proved equivalence expansion with zero missing, skipped, quarantined, unknown, or unexpected cells",
+      "testFile": "backend/__tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
+      "testName": "classifies every compressed behavior cell through an independent model and named execution family",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:authz:state-space-foundation",
+      "coverage": {
+        "topologies": [
+          "dedicated",
+          "shared"
+        ],
+        "runtimeAccessModes": [
+          "engine_wide",
+          "resource_aware"
+        ],
+        "principals": [
+          "user",
+          "group-derived-user",
+          "api-client",
+          "service-account"
+        ],
+        "tenantRelationships": [
+          "same-tenant",
+          "sibling-tenant",
+          "cross-tenant",
+          "missing-context",
+          "conflicting-context",
+          "deleted-tenant"
+        ],
+        "resourceTypes": [
+          "tenant",
+          "project",
+          "engine",
+          "engine-set",
+          "runtime-resource",
+          "runtime-resource-set",
+          "deployment-target"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "allow",
+          "deny",
+          "audit"
+        ]
+      },
+      "documentationExample": "Required Authorization State-Space",
+      "evidenceArtifact": "test/results/engine-tenancy-release/authorization-matrix.json#TEN-AUTHZ-016"
+    },
+    {
+      "id": "TEN-DOCS-007",
+      "requirement": "Validated functional coverage emits a sanitized retained evidence artifact with commit, schema, toolchain, target, waiver, and exact requirement traceability metadata.",
+      "source": "Engine Tenancy Plan / Coverage Reporting",
+      "dimensions": [
+        "documentation",
+        "evidence",
+        "traceability",
+        "secrets"
+      ],
+      "expected": "zero-uncovered manifest evidence without application credentials",
+      "testFile": "scripts/engine-tenancy-evidence.test.mjs",
+      "testName": "writes sanitized commit, schema, target, waiver, and requirement traceability evidence",
+      "documentation": "docs/development/testing-engine-tenancy-and-access-control.md",
+      "ciJob": "test:engine-tenancy:manifest",
+      "coverage": {
+        "topologies": [
+          "not-applicable"
+        ],
+        "runtimeAccessModes": [
+          "not-applicable"
+        ],
+        "principals": [
+          "not-applicable"
+        ],
+        "tenantRelationships": [
+          "not-applicable"
+        ],
+        "resourceTypes": [
+          "not-applicable"
+        ],
+        "provisioningChannels": [
+          "not-applicable"
+        ],
+        "outcomes": [
+          "audit"
+        ]
+      },
+      "documentationExample": "Required Release-Candidate Evidence",
+      "evidenceArtifact": "test/results/engine-tenancy-release/requirement-evidence.json#TEN-DOCS-007"
+    }
+  ],
+  "invalidTransitionCases": [
+    {
+      "kind": "no_change",
+      "requirementIds": [
+        "TEN-MIGRATION-002"
+      ]
+    }
+  ]
+}

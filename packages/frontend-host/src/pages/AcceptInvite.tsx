@@ -12,26 +12,22 @@ import { apiClient } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
 import { useAuth } from '../shared/hooks/useAuth';
-import type { User } from '../shared/types/auth';
+import type { LoginResponse } from '../shared/types/auth';
+import type {
+  CompleteOnboardingRequest,
+  InvitationInfo,
+  InvitationOnboardingResponse,
+  VerifyInvitationOtpRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
+import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import logoPng from '../assets/logo.png';
-
-interface PublicBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoTitle: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  faviconUrl: string | null;
-}
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
-function normalizeBranding(raw: any): PublicBranding {
-  const r = raw && typeof raw === 'object' ? raw : {};
+function normalizeBranding(raw: unknown): PublicPlatformBranding {
+  const r: Record<string, unknown> = raw && typeof raw === 'object'
+    ? raw as Record<string, unknown>
+    : {};
   return {
     logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
     loginLogoUrl: typeof r.loginLogoUrl === 'string' ? r.loginLogoUrl : null,
@@ -42,11 +38,13 @@ function normalizeBranding(raw: any): PublicBranding {
     titleFontUrl: typeof r.titleFontUrl === 'string' ? r.titleFontUrl : null,
     titleFontWeight: typeof r.titleFontWeight === 'string' ? r.titleFontWeight : '600',
     titleFontSize: typeof r.titleFontSize === 'number' ? r.titleFontSize : 14,
+    titleVerticalOffset: typeof r.titleVerticalOffset === 'number' ? r.titleVerticalOffset : 0,
+    menuAccentColor: typeof r.menuAccentColor === 'string' ? r.menuAccentColor : null,
     faviconUrl: typeof r.faviconUrl === 'string' ? r.faviconUrl : null,
   };
 }
 
-function readCachedBranding(): PublicBranding | null {
+function readCachedBranding(): PublicPlatformBranding | null {
   try {
     const raw = window.localStorage.getItem(BRANDING_CACHE_KEY);
     if (!raw) return null;
@@ -104,22 +102,6 @@ function makeLogoObjectUrl(raw: unknown): string | null {
   return URL.createObjectURL(new Blob([parsed.bytes], { type: parsed.mime }));
 }
 
-interface InviteInfo {
-  email: string;
-  tenantSlug: string;
-  resourceType: 'platform_user' | 'tenant' | 'project' | 'engine';
-  resourceName: string | null;
-  resourceRole: string | null;
-  resourceRoles: string[];
-  deliveryMethod: 'email' | 'manual';
-  expiresAt: number;
-  status: 'pending' | 'expired' | 'onboarding';
-}
-
-interface CompleteOnboardingResponse {
-  user: User;
-}
-
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
@@ -132,7 +114,7 @@ export default function AcceptInvite() {
   const [redeeming, setRedeeming] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [completing, setCompleting] = useState(false);
-  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<InvitationInfo | null>(null);
   const [completed, setCompleted] = useState(false);
   const [stage, setStage] = useState<'redeem' | 'verify' | 'set-password'>('verify');
   const [firstName, setFirstName] = useState('');
@@ -140,7 +122,7 @@ export default function AcceptInvite() {
   const [oneTimePassword, setOneTimePassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [branding, setBranding] = useState<PublicBranding | null>(initialBranding);
+  const [branding, setBranding] = useState<PublicPlatformBranding | null>(initialBranding);
   const [brandingFetchDone, setBrandingFetchDone] = useState(false);
   const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => {
     const raw = initialBranding?.loginLogoUrl || initialBranding?.logoUrl;
@@ -187,7 +169,7 @@ export default function AcceptInvite() {
     apiClient.get<unknown>('/api/auth/branding', undefined, { credentials: 'include' })
       .then((data) => {
         if (cancelled || !data || typeof data !== 'object') return;
-        const normalized = normalizeBranding(data as any);
+        const normalized = normalizeBranding(data);
         try {
           window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(normalized));
         } catch {
@@ -232,7 +214,7 @@ export default function AcceptInvite() {
   const loadInviteInfo = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.get<InviteInfo>(`/api/invitations/${token}`);
+      const data = await apiClient.get<InvitationInfo>(`/api/invitations/${token}`);
       setInviteInfo(data);
       if (data.status === 'onboarding') {
         setStage('set-password');
@@ -254,7 +236,7 @@ export default function AcceptInvite() {
 
     try {
       setRedeeming(true);
-      await apiClient.post(`/api/invitations/${token}/redeem`, {});
+      await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/redeem`, {});
       setStage('set-password');
       if (onboardingStageKey) {
         window.sessionStorage.setItem(onboardingStageKey, 'set-password');
@@ -273,7 +255,8 @@ export default function AcceptInvite() {
     try {
       setVerifying(true);
 
-      await apiClient.post(`/api/invitations/${token}/verify-otp`, { oneTimePassword });
+      const request: VerifyInvitationOtpRequest = { oneTimePassword };
+      await apiClient.post<InvitationOnboardingResponse>(`/api/invitations/${token}/verify-otp`, request);
       setStage('set-password');
       if (onboardingStageKey) {
         window.sessionStorage.setItem(onboardingStageKey, 'set-password');
@@ -299,11 +282,12 @@ export default function AcceptInvite() {
 
     try {
       setCompleting(true);
-      const response = await apiClient.post<CompleteOnboardingResponse>('/api/auth/complete-onboarding', {
+      const request: CompleteOnboardingRequest = {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         newPassword: password,
-      });
+      };
+      const response = await apiClient.post<LoginResponse>('/api/auth/complete-onboarding', request);
       setAuthenticatedUser(response.user);
       setCompleted(true);
       if (onboardingStageKey) {

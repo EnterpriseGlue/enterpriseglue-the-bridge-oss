@@ -1,11 +1,14 @@
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
-import { fetch } from 'undici'
+import { existsSync } from 'node:fs'
+import { fetch, Response } from 'undici'
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js'
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js'
-import { Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
-import { safeDecrypt } from './encryption.js'
+import { AppError, Errors } from '@enterpriseglue/shared/interfaces/middleware/errorHandler.js'
+import { secretResolver } from './platform-admin/SecretResolver.js'
+import { blindIndex } from './encryption.js'
 import { getBpmnEngineRequestContext } from './bpmn-engine-request-context.js'
+import { logAudit } from './audit.js'
 import type {
   Batch,
   BatchStatistics,
@@ -64,12 +67,228 @@ type EngineAuthType = 'none' | 'basic' | 'bearer' | 'oauth2-client-credentials'
 type EngineCfg = {
   id: string;
   baseUrl: string;
+  connectionMode: 'direct' | 'customer_sidecar';
   authType: EngineAuthType;
   username?: string | null;
-  password?: string | null;
+  passwordEnc?: string | null;
   oauthTokenUrl?: string | null;
   oauthScopes?: string | null;
   oauthAudience?: string | null;
+}
+
+export type EngineCredentialInput = {
+  authType?: string | null;
+  username?: string | null;
+  passwordEnc?: string | null;
+};
+
+export type EngineConnectionInput = EngineCredentialInput & {
+  id?: string | null;
+  baseUrl: string;
+  connectionMode?: string | null;
+  oauthTokenUrl?: string | null;
+  oauthScopes?: string | null;
+  oauthAudience?: string | null;
+};
+
+export type EngineTransportDiagnostics = {
+  connectionMode: 'direct' | 'customer_sidecar';
+  upstreamHop: 'enterpriseglue_to_engine' | 'enterpriseglue_to_sidecar';
+  endpointAuthentication: EngineAuthType;
+  downstreamAuthentication: 'not_applicable' | 'customer_managed';
+  attempts?: number;
+  timeoutMs?: number;
+};
+
+export type ResolvedBpmnEngineConnection = {
+  url: string;
+  headers: Record<string, string>;
+  diagnostics: EngineTransportDiagnostics;
+};
+
+export type BpmnEngineRequestOptions = {
+  engineId?: string;
+  method?: string;
+  path?: string;
+  contentType?: string | null;
+  timeoutMs?: number;
+  retry?: 'safe_read' | 'never';
+};
+
+export type BpmnEngineFetchResult = {
+  response: Awaited<ReturnType<typeof fetch>>;
+  diagnostics: EngineTransportDiagnostics;
+};
+
+const DEFAULT_ENGINE_REQUEST_TIMEOUT_MS = 10_000
+const MAX_ENGINE_REQUEST_TIMEOUT_MS = 60_000
+export const MAX_ENGINE_RESPONSE_BYTES = 5 * 1024 * 1024
+const TRANSIENT_ENGINE_STATUSES = new Set([429, 502, 503, 504])
+
+/**
+ * Production engine connections are an SSRF-sensitive outbound boundary. The
+ * allowlist intentionally contains host names only: ports and paths remain
+ * engine-specific, while an exact host or `*.suffix` entry gives operations a
+ * small, reviewable network policy. Development and test installations retain
+ * their existing local-engine ergonomics unless enforcement is opted in.
+ */
+function isEngineEndpointPolicyEnforced(): boolean {
+  if (process.env.NODE_ENV === 'production') return true
+  if (process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY === 'true') return true
+  if (process.env.EG_ENFORCE_ENGINE_ENDPOINT_POLICY === 'false') return false
+  return false
+}
+
+function isInsecureEngineHttpAllowed(): boolean {
+  return process.env.EG_ALLOW_INSECURE_ENGINE_HTTP === 'true'
+}
+
+function engineEndpointAllowedHosts(): string[] {
+  return (process.env.EG_ENGINE_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase().replace(/\.$/, ''))
+    .filter(Boolean)
+}
+
+function isAllowedEngineEndpointHost(host: string, allowedHosts: string[]): boolean {
+  const normalizedHost = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  return allowedHosts.some((pattern) => {
+    if (pattern.startsWith('*.')) {
+      const suffix = pattern.slice(2)
+      const labels = suffix.split('.')
+      // Keep wildcards below a narrow organizational suffix. This rejects
+      // public or multi-tenant boundaries such as *.com, *.co.uk,
+      // *.github.io, *.appspot.com, and *.cloudfront.net.
+      const narrowSuffix = labels.length >= 3
+        && labels.every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))
+      return narrowSuffix && normalizedHost.endsWith(`.${suffix}`)
+    }
+    if (pattern.includes('*')) return false
+    return normalizedHost === pattern
+  })
+}
+
+function parseIpv4(host: string): number[] | null {
+  const parts = host.split('.')
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return null
+  const values = parts.map(Number)
+  return values.some((value) => value < 0 || value > 255) ? null : values
+}
+
+function isPrivateIpv4Literal(host: string): boolean {
+  const octets = parseIpv4(host)
+  if (!octets) return false
+  const [first, second] = octets
+  return first === 0 || first === 10 || first === 127
+    || (first === 100 && second >= 64 && second <= 127)
+    || (first === 169 && second === 254)
+    || (first === 172 && second >= 16 && second <= 31)
+    || (first === 192 && second === 168)
+    || (first === 198 && (second === 18 || second === 19))
+    || first >= 224
+}
+
+function ipv4MappedIpv6Octets(host: string): number[] | null {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '')
+  if (!normalized.startsWith('::ffff:')) return null
+  const tail = normalized.slice('::ffff:'.length)
+  const dotted = parseIpv4(tail)
+  if (dotted) return dotted
+  const groups = tail.split(':')
+  if (groups.length !== 2 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) return null
+  const high = Number.parseInt(groups[0], 16)
+  const low = Number.parseInt(groups[1], 16)
+  return [high >> 8, high & 0xff, low >> 8, low & 0xff]
+}
+
+function isPrivateEngineHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  const mapped = ipv4MappedIpv6Octets(normalized)
+  return normalized === 'localhost' || normalized === 'host.docker.internal' || normalized.endsWith('.local')
+    || (!normalized.includes('.') && !normalized.includes(':'))
+    || isPrivateIpv4Literal(normalized)
+    || normalized === '::' || normalized === '::1' || normalized.startsWith('fe80:')
+    || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('ff')
+    || (mapped !== null && isPrivateIpv4Literal(mapped.join('.')))
+}
+
+function isEngineMetadataHost(host: string): boolean {
+  const normalized = host.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+  const mapped = ipv4MappedIpv6Octets(normalized)
+  return normalized === 'metadata' || normalized === 'metadata.google.internal'
+    || normalized === '169.254.169.254' || normalized === 'fd00:ec2::254'
+    || mapped?.join('.') === '169.254.169.254'
+}
+
+async function boundEngineResponseBody(
+  response: Awaited<ReturnType<typeof fetch>>,
+  input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
+): Promise<Awaited<ReturnType<typeof fetch>>> {
+  const declaredResponseBytes = Number(response.headers?.get?.('content-length'))
+  if (Number.isSafeInteger(declaredResponseBytes) && declaredResponseBytes > MAX_ENGINE_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new BpmnEngineResponseTooLargeError({
+      ...input,
+      maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
+    })
+  }
+  const body = response.body
+  if (!body) return response
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let receivedBytes = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      receivedBytes += value.byteLength
+      if (receivedBytes > MAX_ENGINE_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined)
+        throw new BpmnEngineResponseTooLargeError({
+          ...input,
+          maxResponseBytes: MAX_ENGINE_RESPONSE_BYTES,
+        })
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return new Response(Buffer.concat(chunks), {
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+  })
+}
+
+function boundedTimeoutMs(value?: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_ENGINE_REQUEST_TIMEOUT_MS
+  return Math.max(100, Math.min(MAX_ENGINE_REQUEST_TIMEOUT_MS, Math.trunc(value!)))
+}
+
+export function describeBpmnEngineTransport(input: EngineCredentialInput & { connectionMode?: string | null }): EngineTransportDiagnostics {
+  const connectionMode = input.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
+  const endpointAuthentication = (input.authType || (input.username ? 'basic' : 'none')) as EngineAuthType
+  return {
+    connectionMode,
+    upstreamHop: connectionMode === 'customer_sidecar' ? 'enterpriseglue_to_sidecar' : 'enterpriseglue_to_engine',
+    endpointAuthentication,
+    downstreamAuthentication: connectionMode === 'customer_sidecar' ? 'customer_managed' : 'not_applicable',
+  }
+}
+
+/** Shared credential projection for all EnterpriseGlue-to-endpoint calls. */
+export function buildEngineCredentialHeaders(input: EngineCredentialInput): Record<string, string> {
+  const authType = (input.authType || (input.username ? 'basic' : 'none')) as EngineAuthType;
+  const password = secretResolver.resolveStored(input.passwordEnc);
+  if (authType === 'basic' && input.username) {
+    const token = Buffer.from(`${input.username}:${password || ''}`).toString('base64');
+    return { Authorization: `Basic ${token}` };
+  }
+  if (authType === 'bearer' && password) {
+    return { Authorization: `Bearer ${password}` };
+  }
+  return {};
 }
 
 type OAuthTokenCacheEntry = {
@@ -78,6 +297,76 @@ type OAuthTokenCacheEntry = {
 }
 
 const oauthTokenCache = new Map<string, OAuthTokenCacheEntry>()
+
+function isLoopbackEngineHost(raw: string): boolean {
+  try {
+    const host = new URL(raw).hostname
+    return host === 'localhost' || host === '::1' || host === '[::1]' || /^127\./.test(host)
+  } catch {
+    return false
+  }
+}
+
+function isDockerRuntime(): boolean {
+  if (process.env.EG_RUNTIME_MODE === 'docker') return true
+  if (process.env.EG_RUNTIME_MODE === 'host') return false
+  return existsSync('/.dockerenv')
+}
+
+function shouldRewriteDockerLoopbackEngineUrls(): boolean {
+  if (process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS === 'true') return true
+  if (process.env.EG_REWRITE_DOCKER_LOOPBACK_ENGINE_URLS === 'false') return false
+  if (process.env.NODE_ENV === 'test') return false
+  return isDockerRuntime()
+}
+
+export function validateBpmnEngineEndpointUrl(rawUrl: string, label = 'Engine endpoint URL'): URL {
+  let parsed: URL
+  try {
+    parsed = new URL(rawUrl)
+  } catch {
+    throw Errors.validation(`${label} is invalid`)
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw Errors.validation(`${label} must use HTTP or HTTPS`)
+  }
+  if (parsed.username || parsed.password) {
+    throw Errors.validation(`${label} must not include embedded credentials`)
+  }
+  if (isEngineEndpointPolicyEnforced()) {
+    if (parsed.protocol !== 'https:' && !isInsecureEngineHttpAllowed()) {
+      throw Errors.validation(`${label} must use HTTPS when endpoint policy is enforced`)
+    }
+    const allowedHosts = engineEndpointAllowedHosts()
+    if (isEngineMetadataHost(parsed.hostname)) {
+      throw Errors.validation(`${label} host is not permitted by endpoint policy`)
+    }
+    const privateHost = isPrivateEngineHost(parsed.hostname)
+    if (privateHost && process.env.EG_ENGINE_ALLOW_PRIVATE_HOSTS !== 'true') {
+      throw Errors.validation(`${label} host is private; set EG_ENGINE_ALLOW_PRIVATE_HOSTS=true and add the exact reviewed host to the allowlist`)
+    }
+    const normalizedHost = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
+    if (privateHost && !allowedHosts.some((entry) => !entry.startsWith('*.') && entry === normalizedHost)) {
+      throw Errors.validation(`${label} private host must have an exact endpoint-policy allowlist entry`)
+    }
+    if (!privateHost && !isAllowedEngineEndpointHost(parsed.hostname, allowedHosts)) {
+      throw Errors.validation(`${label} host is not permitted by endpoint policy`)
+    }
+  }
+  return parsed
+}
+
+export function resolveBpmnEngineRequestUrl(baseUrl: string, path = ''): string {
+  if (/^[a-z][a-z\d+.-]*:/i.test(path) || path.startsWith('//')) {
+    throw Errors.validation('Engine request path must be relative to the configured endpoint')
+  }
+  const rawUrl = baseUrl.replace(/\/$/, '') + path
+  const parsed = validateBpmnEngineEndpointUrl(rawUrl, 'Engine endpoint URL')
+  if (!shouldRewriteDockerLoopbackEngineUrls() || !isLoopbackEngineHost(rawUrl)) return rawUrl
+
+  parsed.hostname = 'host.docker.internal'
+  return validateBpmnEngineEndpointUrl(parsed.toString(), 'Engine endpoint URL').toString()
+}
 
 async function getEngine(engineId: string): Promise<EngineCfg> {
   if (!engineId) throw Errors.validation('engineId is required')
@@ -95,14 +384,13 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
     oauthAudience?: string | null;
   }
   const authType = (engineRow.authType || (engineRow.username ? 'basic' : 'none')) as EngineAuthType
-  const encryptedPassword = engineRow.passwordEnc || null
-  const password = encryptedPassword ? safeDecrypt(encryptedPassword) : null
   return {
     id: engineId,
     baseUrl: String(row.baseUrl),
+    connectionMode: row.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct',
     authType,
     username: engineRow.username || null,
-    password,
+    passwordEnc: engineRow.passwordEnc || null,
     oauthTokenUrl: engineRow.oauthTokenUrl || null,
     oauthScopes: engineRow.oauthScopes || null,
     oauthAudience: engineRow.oauthAudience || null,
@@ -112,6 +400,7 @@ async function getEngine(engineId: string): Promise<EngineCfg> {
 function inferOperationClass(method: string, path: string): string {
   const normalizedMethod = method.toUpperCase()
   const normalizedPath = path.startsWith('http') ? new URL(path).pathname : path
+  if (/\/authorization(?:\/|$)/.test(normalizedPath)) return 'engine.native_authorization.backstop'
   if (normalizedMethod === 'GET') return 'engine.read'
   if (normalizedPath.includes('/deployment')) return 'engine.deploy'
   if (normalizedPath.includes('/task/')) return 'engine.task.mutate'
@@ -121,17 +410,55 @@ function inferOperationClass(method: string, path: string): string {
   return 'engine.admin'
 }
 
+/**
+ * EnterpriseGlue authorization has already succeeded when this error is
+ * produced. Keep the upstream response distinct from a local authorization
+ * denial and avoid exposing engine URLs or response bodies to callers.
+ */
+export class BpmnEngineOperationError extends AppError {
+  constructor(input: { method: string; path: string; status: number; connectionMode?: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_OPERATION_REJECTED',
+      'The engine rejected the requested operation',
+      502,
+      {
+        engineStatus: input.status,
+        operationClass: inferOperationClass(input.method, input.path),
+        ...(input.connectionMode === 'customer_sidecar' ? { connectionMode: input.connectionMode } : {}),
+      },
+    )
+  }
+}
+
+/** A bounded upstream response could be read but was not valid for its declared format. */
+export class BpmnEngineMalformedResponseError extends AppError {
+  constructor(input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_MALFORMED_RESPONSE',
+      'The engine returned a malformed response',
+      502,
+      {
+        operationClass: inferOperationClass(input.method, input.path),
+        connectionMode: input.connectionMode,
+      },
+    )
+  }
+}
+
 async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<string> {
   if (!cfg.oauthTokenUrl) throw Errors.validation('OAuth2 token URL is required for engine client credentials auth')
   if (!cfg.username) throw Errors.validation('OAuth2 client id is required for engine client credentials auth')
-  if (!cfg.password) throw Errors.validation('OAuth2 client secret is required for engine client credentials auth')
+  const password = secretResolver.resolveStored(cfg.passwordEnc)
+  if (!password) throw Errors.validation('OAuth2 client secret is required for engine client credentials auth')
 
   const cacheKey = [
     cfg.id,
+    cfg.baseUrl,
     cfg.oauthTokenUrl,
     cfg.username,
     cfg.oauthScopes || '',
     cfg.oauthAudience || '',
+    blindIndex('engine-oauth-client-secret-v1', password),
   ].join('\n')
   const cached = oauthTokenCache.get(cacheKey)
   const now = Date.now()
@@ -140,38 +467,76 @@ async function resolveOAuthClientCredentialsToken(cfg: EngineCfg): Promise<strin
   const body = new URLSearchParams()
   body.set('grant_type', 'client_credentials')
   body.set('client_id', cfg.username)
-  body.set('client_secret', cfg.password)
+  body.set('client_secret', password)
   if (cfg.oauthScopes) body.set('scope', cfg.oauthScopes)
   if (cfg.oauthAudience) body.set('audience', cfg.oauthAudience)
+  const tokenUrl = validateBpmnEngineEndpointUrl(cfg.oauthTokenUrl, 'OAuth2 token URL').toString()
 
-  const response = await fetch(cfg.oauthTokenUrl, {
+  let response: Awaited<ReturnType<typeof fetch>>
+  try {
+    response = await fetch(tokenUrl, {
+      method: 'POST',
+      redirect: 'error',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(DEFAULT_ENGINE_REQUEST_TIMEOUT_MS),
+    })
+  } catch {
+    throw Errors.authFailed('Engine OAuth2 token request failed')
+  }
+  const boundedResponse = await boundEngineResponseBody(response, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
+    path: '/oauth2/token',
+    connectionMode: cfg.connectionMode,
   })
-  if (!response.ok) {
-    const text = await response.text().catch(() => '')
-    throw Errors.authFailed(`Engine OAuth2 token request failed: ${response.status} ${response.statusText} ${text}`)
+  if (!boundedResponse.ok) {
+    await boundedResponse.body?.cancel().catch(() => undefined)
+    throw Errors.authFailed(`Engine OAuth2 token request failed with status ${boundedResponse.status}`)
   }
 
-  const payload = await response.json() as { access_token?: string; expires_in?: number }
-  if (!payload.access_token) throw Errors.authFailed('Engine OAuth2 token response did not include an access token')
+  const payload = await boundedResponse.json() as { access_token?: unknown; expires_in?: unknown }
+  if (
+    typeof payload.access_token !== 'string'
+    || payload.access_token.length === 0
+    || payload.access_token.length > 16 * 1024
+    || /[\r\n]/.test(payload.access_token)
+  ) {
+    throw Errors.authFailed('Engine OAuth2 token response did not include a valid access token')
+  }
 
-  const expiresInMs = Math.max(60, Number(payload.expires_in || 300)) * 1000
+  const expiresInSeconds = typeof payload.expires_in === 'number'
+    && Number.isFinite(payload.expires_in)
+    && payload.expires_in > 0
+    ? Math.min(Math.max(Math.floor(payload.expires_in), 60), 3600)
+    : 300
+  const expiresInMs = expiresInSeconds * 1000
   oauthTokenCache.set(cacheKey, { token: payload.access_token, expiresAt: now + expiresInMs })
   return payload.access_token
 }
 
-async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: string; path: string }): Promise<Record<string, string>> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (cfg.authType === 'basic' && cfg.username) {
-    const token = Buffer.from(`${cfg.username}:${cfg.password ?? ''}`).toString('base64')
-    h['Authorization'] = `Basic ${token}`
-  } else if (cfg.authType === 'bearer' && cfg.password) {
-    // Bearer token auth - token stored in password field
-    h['Authorization'] = `Bearer ${cfg.password}`
-  } else if (cfg.authType === 'oauth2-client-credentials') {
-    h['Authorization'] = `Bearer ${await resolveOAuthClientCredentialsToken(cfg)}`
+export async function resolveBpmnEngineConnection(
+  input: EngineConnectionInput,
+  request: BpmnEngineRequestOptions = {},
+): Promise<ResolvedBpmnEngineConnection> {
+  const engineId = request.engineId || input.id || 'unknown'
+  const method = request.method || 'GET'
+  const path = request.path || ''
+  const diagnostics = describeBpmnEngineTransport(input)
+  const { connectionMode, endpointAuthentication: authType } = diagnostics
+  const h: Record<string, string> = { ...buildEngineCredentialHeaders(input) }
+  if (request.contentType !== null) h['Content-Type'] = request.contentType || 'application/json'
+  if (authType === 'oauth2-client-credentials') {
+    h['Authorization'] = `Bearer ${await resolveOAuthClientCredentialsToken({
+      id: String(input.id || engineId),
+      baseUrl: input.baseUrl,
+      connectionMode,
+      authType,
+      username: input.username,
+      passwordEnc: input.passwordEnc,
+      oauthTokenUrl: input.oauthTokenUrl,
+      oauthScopes: input.oauthScopes,
+      oauthAudience: input.oauthAudience,
+    })}`
   }
 
   const requestContext = getBpmnEngineRequestContext()
@@ -179,15 +544,174 @@ async function buildHeaders(cfg: EngineCfg, meta: { engineId: string; method: st
   if (requestContext?.userId) h['X-EnterpriseGlue-User-Id'] = requestContext.userId
   if (requestContext?.tenantId) h['X-EnterpriseGlue-Tenant-Id'] = requestContext.tenantId
   if (requestContext?.tenantSlug) h['X-EnterpriseGlue-Tenant-Slug'] = requestContext.tenantSlug
-  h['X-EnterpriseGlue-Engine-Id'] = requestContext?.engineId || meta.engineId
-  h['X-EnterpriseGlue-Operation-Class'] = inferOperationClass(meta.method, meta.path)
+  h['X-EnterpriseGlue-Engine-Id'] = requestContext?.engineId || engineId
+  h['X-EnterpriseGlue-Operation-Class'] = inferOperationClass(method, path)
 
-  return h
+  return {
+    url: resolveBpmnEngineRequestUrl(input.baseUrl, path),
+    headers: h,
+    diagnostics,
+  }
 }
 
-export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
-  const cfg = await getEngine(engineId)
-  const url = new URL(path.startsWith('http') ? path : cfg.baseUrl.replace(/\/$/, '') + path)
+/**
+ * Executes all persisted-engine HTTP calls through one bounded transport.
+ * Only safe reads retry, and thrown errors never contain endpoint URLs,
+ * credentials, or upstream response bodies.
+ */
+export async function fetchBpmnEngineEndpoint(
+  input: EngineConnectionInput,
+  request: BpmnEngineRequestOptions = {},
+  init: Parameters<typeof fetch>[1] = {},
+): Promise<BpmnEngineFetchResult> {
+  const method = String(request.method || init?.method || 'GET').toUpperCase()
+  const retry = request.retry || (method === 'GET' ? 'safe_read' : 'never')
+  const maxAttempts = retry === 'safe_read' && method === 'GET' ? 2 : 1
+  const timeoutMs = boundedTimeoutMs(request.timeoutMs)
+  const connection = await resolveBpmnEngineConnection(input, { ...request, method })
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let response: Awaited<ReturnType<typeof fetch>>
+    try {
+      const timeoutSignal = AbortSignal.timeout(timeoutMs)
+      const callerSignal = init?.signal
+      const signal = callerSignal ? AbortSignal.any([callerSignal, timeoutSignal]) : timeoutSignal
+      response = await fetch(connection.url, {
+        ...init,
+        method,
+        redirect: 'error',
+        headers: { ...connection.headers, ...(init?.headers || {}) },
+        signal,
+      })
+    } catch {
+      if (attempt < maxAttempts) continue
+      throw new BpmnEngineTransportError({
+        method,
+        path: request.path || '',
+        attempts: attempt,
+        timeoutMs,
+        connectionMode: connection.diagnostics.connectionMode,
+      })
+    }
+
+    if (attempt < maxAttempts && TRANSIENT_ENGINE_STATUSES.has(response.status)) {
+      await response.body?.cancel().catch(() => undefined)
+      continue
+    }
+    return {
+      response: await boundEngineResponseBody(response, {
+        method,
+        path: request.path || '',
+        connectionMode: connection.diagnostics.connectionMode,
+      }),
+      diagnostics: { ...connection.diagnostics, attempts: attempt, timeoutMs },
+    }
+  }
+
+  throw new BpmnEngineTransportError({
+    method,
+    path: request.path || '',
+    attempts: maxAttempts,
+    timeoutMs,
+    connectionMode: connection.diagnostics.connectionMode,
+  })
+}
+
+export class BpmnEngineTransportError extends AppError {
+  constructor(input: { method: string; path: string; attempts: number; timeoutMs: number; connectionMode: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_TRANSPORT_UNAVAILABLE',
+      'The engine endpoint is unavailable',
+      502,
+      {
+        operationClass: inferOperationClass(input.method, input.path),
+        attempts: input.attempts,
+        timeoutMs: input.timeoutMs,
+        connectionMode: input.connectionMode,
+      },
+    )
+  }
+}
+
+export class BpmnEngineResponseTooLargeError extends AppError {
+  constructor(input: { method: string; path: string; maxResponseBytes: number; connectionMode: 'direct' | 'customer_sidecar' }) {
+    super(
+      'ENGINE_RESPONSE_TOO_LARGE',
+      'The engine response exceeded the allowed size',
+      502,
+      {
+        operationClass: inferOperationClass(input.method, input.path),
+        maxResponseBytes: input.maxResponseBytes,
+        connectionMode: input.connectionMode,
+      },
+    )
+  }
+}
+
+type BpmnEngineAuditResult = 'succeeded' | 'operation_rejected' | 'transport_unavailable' | 'malformed_response' | 'response_too_large' | 'failed'
+
+function bpmnEngineAuditResult(error?: unknown): BpmnEngineAuditResult {
+  if (!(error instanceof AppError)) return error ? 'failed' : 'succeeded'
+  switch (error.code) {
+    case 'ENGINE_OPERATION_REJECTED': return 'operation_rejected'
+    case 'ENGINE_TRANSPORT_UNAVAILABLE': return 'transport_unavailable'
+    case 'ENGINE_MALFORMED_RESPONSE': return 'malformed_response'
+    case 'ENGINE_RESPONSE_TOO_LARGE': return 'response_too_large'
+    default: return 'failed'
+  }
+}
+
+/**
+ * Records only stable EnterpriseGlue lineage and sanitized outcome classes.
+ * It deliberately omits endpoint URLs, request payloads, credentials, and all
+ * customer-owned downstream sidecar material.
+ */
+async function auditBpmnEngineOperation(input: {
+  engineId: string;
+  method: string;
+  path: string;
+  connectionMode: 'direct' | 'customer_sidecar';
+  error?: unknown;
+}): Promise<void> {
+  const context = getBpmnEngineRequestContext()
+  if (!context?.userId || !context.actionId) return
+
+  const appError = input.error instanceof AppError ? input.error : null
+  await logAudit({
+    tenantId: context.tenantId,
+    userId: context.userId,
+    action: 'engine.operation',
+    resourceType: 'engine',
+    resourceId: input.engineId,
+    details: {
+      requestId: context.requestId,
+      authorizedActionId: context.actionId,
+      projectId: context.projectId || null,
+      operationClass: inferOperationClass(input.method, input.path),
+      method: input.method,
+      connectionMode: input.connectionMode,
+      result: bpmnEngineAuditResult(input.error),
+      ...(appError?.code ? { errorCode: appError.code } : {}),
+      ...(typeof appError?.details?.engineStatus === 'number' ? { engineStatus: appError.details.engineStatus } : {}),
+    },
+  })
+}
+
+async function decodeBpmnEngineResponse<T>(
+  response: Awaited<ReturnType<typeof fetch>>,
+  input: { method: string; path: string; connectionMode: 'direct' | 'customer_sidecar' },
+): Promise<T> {
+  try {
+    const contentType = response.headers.get('content-type') || ''
+    if (contentType.includes('application/json')) return await response.json() as T
+    return await response.text() as T
+  } catch {
+    throw new BpmnEngineMalformedResponseError(input)
+  }
+}
+
+async function camundaGetUsingConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, path: string, params?: Record<string, any>): Promise<T> {
+  const url = new URL(resolveBpmnEngineRequestUrl(cfg.baseUrl, path))
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       if (v === undefined || v === null || v === '') continue
@@ -195,39 +719,71 @@ export async function camundaGet<T = unknown>(engineId: string, path: string, pa
       else url.searchParams.set(k, String(v))
     }
   }
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers: await buildHeaders(cfg, { engineId, method: 'GET', path }),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Camunda GET ${url} failed: ${res.status} ${res.statusText} ${text}`)
+  const queryIndex = path.indexOf('?')
+  const requestPath = `${queryIndex >= 0 ? path.slice(0, queryIndex) : path}${url.search}`
+  const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
+  try {
+    const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method: 'GET', path: requestPath })
+    if (!res.ok) {
+      await res.text().catch(() => '')
+      throw new BpmnEngineOperationError({ method: 'GET', path, status: res.status, connectionMode: diagnostics.connectionMode })
+    }
+    const decoded = await decodeBpmnEngineResponse<T>(res, { method: 'GET', path, connectionMode: diagnostics.connectionMode })
+    await auditBpmnEngineOperation({ engineId, method: 'GET', path, connectionMode: diagnostics.connectionMode })
+    return decoded
+  } catch (error) {
+    await auditBpmnEngineOperation({ engineId, method: 'GET', path, connectionMode, error })
+    throw error
   }
-  const ct = res.headers.get('content-type') || ''
-  if (ct.includes('application/json')) return (await res.json()) as T
-  return (await res.text()) as unknown as T
+}
+
+/**
+ * Uses an already-authorized persisted connection rather than resolving the
+ * engine a second time. This is essential for durable operations that have
+ * just loaded the engine through their own data-source boundary.
+ */
+export async function camundaGetWithConnection<T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, params?: Record<string, any>): Promise<T> {
+  return camundaGetUsingConnection<T>(engine.id, engine, path, params)
+}
+
+export async function camundaGet<T = unknown>(engineId: string, path: string, params?: Record<string, any>): Promise<T> {
+  return camundaGetUsingConnection<T>(engineId, await getEngine(engineId), path, params)
+}
+
+async function camundaSendWithConnection<T = unknown>(engineId: string, cfg: EngineConnectionInput, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
+  const connectionMode = cfg.connectionMode === 'customer_sidecar' ? 'customer_sidecar' : 'direct'
+  try {
+    const { response: res, diagnostics } = await fetchBpmnEngineEndpoint(cfg, { engineId, method, path }, {
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    if (!res.ok) {
+      await res.text().catch(() => '')
+      throw new BpmnEngineOperationError({ method, path, status: res.status, connectionMode: diagnostics.connectionMode })
+    }
+    const decoded = await decodeBpmnEngineResponse<T>(res, { method, path, connectionMode: diagnostics.connectionMode })
+    await auditBpmnEngineOperation({ engineId, method, path, connectionMode: diagnostics.connectionMode })
+    return decoded
+  } catch (error) {
+    await auditBpmnEngineOperation({ engineId, method, path, connectionMode, error })
+    throw error
+  }
+}
+
+/** Sends a mutation through the supplied persisted connection and shared hardened transport. */
+export async function camundaSendForConnection<T = unknown>(engine: EngineConnectionInput & { id: string }, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
+  return camundaSendWithConnection<T>(engine.id, engine, method, path, body)
 }
 
 async function camundaSend<T = unknown>(engineId: string, method: 'POST' | 'PUT' | 'DELETE', path: string, body?: any): Promise<T> {
-  const cfg = await getEngine(engineId)
-  const url = path.startsWith('http') ? path : cfg.baseUrl.replace(/\/$/, '') + path
-  const res = await fetch(url, {
-    method,
-    headers: await buildHeaders(cfg, { engineId, method, path }),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Camunda ${method} ${url} failed: ${res.status} ${res.statusText} ${text}`)
-  }
-  const ct = res.headers.get('content-type') || ''
-  if (ct.includes('application/json')) return (await res.json()) as T
-  return (await res.text()) as unknown as T
+  return camundaSendWithConnection<T>(engineId, await getEngine(engineId), method, path, body)
 }
 
 export const camundaPost = <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'POST', path, body)
 export const camundaPut =  <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'PUT', path, body)
 export const camundaDelete =  <T = unknown>(engineId: string, path: string, body?: any) => camundaSend<T>(engineId, 'DELETE', path, body)
+export const camundaPostWithConnection = <T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, body?: any) => camundaSendForConnection<T>(engine, 'POST', path, body)
+export const camundaPutWithConnection = <T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, body?: any) => camundaSendForConnection<T>(engine, 'PUT', path, body)
+export const camundaDeleteWithConnection = <T = unknown>(engine: EngineConnectionInput & { id: string }, path: string, body?: any) => camundaSendForConnection<T>(engine, 'DELETE', path, body)
 
 // -----------------------------
 // Batch: common helpers

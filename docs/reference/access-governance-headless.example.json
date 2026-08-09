@@ -1,0 +1,55 @@
+{
+  "bundle": {
+    "apiVersion": "enterpriseglue.ai/v1beta1",
+    "kind": "EnterpriseGlueConfigBundle",
+    "metadata": {
+      "key": "platform.operaton-estate",
+      "description": "Headless platform governance and Operaton engine inventory",
+      "owner": "platform-engineering"
+    },
+    "tenantKey": "default",
+    "mode": "authoritative",
+    "governance": {
+      "engineMembershipAuthority": "manual",
+      "projectMembershipAuthority": "manual",
+      "engineRegistrationPolicy": "external_only",
+      "projectEngineTargetPolicy": "manual_allowed",
+      "runtimeAuthorizationAuthority": "enterpriseglue_authoritative",
+      "governanceSettingsOwnership": "config_locked"
+    },
+    "imports": [
+      "./engines.json"
+    ]
+  },
+  "files": {
+    "./engines.json": {
+      "engines": [
+        {
+          "key": "engine.operaton-local",
+          "name": "Operaton",
+          "type": "operaton",
+          "baseUrl": "https://operaton.example.invalid/engine-rest",
+          "auth": {
+            "type": "basic",
+            "username": "enterpriseglue",
+            "passwordRef": "env://OPERATON_ENGINE_PASSWORD"
+          },
+          "connectionMode": "direct",
+          "runtimeAccessScope": "engine_wide",
+          "tenancy": {
+            "mode": "dedicated",
+            "tenantRef": {
+              "type": "request_context"
+            }
+          },
+          "deploymentIntegration": "enterpriseglue_proxy",
+          "metadataDiscoveryEnabled": true,
+          "deploymentDiscoveryEnabled": true,
+          "reconciliationIntervalSeconds": 300,
+          "pipelineReceiptEnabled": true,
+          "ownershipMode": "config_locked"
+        }
+      ]
+    }
+  }
+}

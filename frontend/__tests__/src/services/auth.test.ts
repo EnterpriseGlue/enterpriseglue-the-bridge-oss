@@ -47,6 +47,25 @@ describe('authService', () => {
     expect(result.id).toBe('user-1');
   });
 
+  it('gets current user effective permissions', async () => {
+    (apiClient.get as any).mockResolvedValue({
+      userId: 'user-1',
+      tenantId: 'tenant-default',
+      platform: ['platform:authz:check'],
+      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
+      engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view'] }],
+      authorizationVersion: 'authz-v1',
+      generatedAt: 123,
+    });
+
+    const result = await authService.getMyPermissions();
+
+    expect(result.platform).toContain('platform:authz:check');
+    expect(apiClient.get).toHaveBeenCalledWith('/api/authz/me/permissions', undefined, {
+      credentials: 'include',
+    });
+  });
+
   it('lists users', async () => {
     (apiClient.get as any).mockResolvedValue([{ id: 'user-1' }]);
 
@@ -61,7 +80,7 @@ describe('authService', () => {
       email: 'new@example.com',
       firstName: 'New',
       lastName: 'User',
-      platformRole: 'user',
+      role: 'user',
     });
     expect(result.user.id).toBe('user-1');
   });

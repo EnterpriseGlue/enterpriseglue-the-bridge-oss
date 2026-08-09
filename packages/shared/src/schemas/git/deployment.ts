@@ -45,6 +45,7 @@ export const DeploymentInsertSchema = z.object({
 // API-specific schemas
 export const DeployRequestSchema = z.object({
   projectId: z.string().uuid(),
+  engineId: z.string().min(1).optional(),
   message: z.string().min(1).max(500),
   environment: z.string().optional(),
   createTag: z.boolean().optional().default(false),
@@ -57,15 +58,17 @@ export const RollbackRequestSchema = z.object({
 });
 
 export const DeploymentResponseSchema = z.object({
-  deploymentId: z.string().uuid(),
+  deploymentId: z.string(),
   commitSha: z.string(),
   tag: z.string().optional(),
   filesChanged: z.number(),
-});
+  vcsCommitId: z.string().optional(),
+}).strict();
 
 // Types
 export type Deployment = z.infer<typeof DeploymentSelectSchema>;
 export type DeploymentInsert = z.infer<typeof DeploymentInsertSchema>;
-export type DeployRequest = z.infer<typeof DeployRequestSchema>;
-export type RollbackRequest = z.infer<typeof RollbackRequestSchema>;
+/** Request types describe accepted transport input, before schema defaults apply. */
+export type DeployRequest = z.input<typeof DeployRequestSchema>;
+export type RollbackRequest = z.input<typeof RollbackRequestSchema>;
 export type DeploymentResponse = z.infer<typeof DeploymentResponseSchema>;

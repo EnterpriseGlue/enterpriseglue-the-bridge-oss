@@ -4,73 +4,49 @@
  */
 
 import { apiClient } from '../../shared/api/client';
+import type {
+  CreateEnvironmentTag,
+  EnvironmentTag as SharedEnvironmentTag,
+  UpdateEnvironmentTag,
+} from '@enterpriseglue/shared/schemas/platform-admin/environment-tag.js';
+import type {
+  AccessAuthorityMode,
+  EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
+  PlatformSettings,
+  ProjectEngineTargetPolicyMode,
+  UpdatePlatformSettings,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import type {
+  GovernanceEngineSummary,
+  GovernanceProjectSummary,
+  UserListItem,
+  UserSearchResult,
+} from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
+import type {
+  GitProviderAdminSummary,
+  GitProviderAdminUpdateResponse,
+  UpdateGitProviderRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js';
+
+export type {
+  AccessAuthorityMode,
+  EngineOnboardingMode,
+  EngineRuntimeAuthorizationMode,
+  GovernanceEngineSummary,
+  GovernanceProjectSummary,
+  PlatformSettings,
+  ProjectEngineTargetPolicyMode,
+  UpdatePlatformSettings,
+  UserListItem,
+  UserSearchResult,
+};
 
 // Types
-export interface EnvironmentTag {
-  id: string;
-  name: string;
-  color: string;
-  manualDeployAllowed: boolean;
-  sortOrder: number;
-  isDefault: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
+export type EnvironmentTag = SharedEnvironmentTag;
 
-export interface PlatformSettings {
-  defaultEnvironmentTagId: string | null;
-  syncPushEnabled: boolean;
-  syncPullEnabled: boolean;
-  gitProjectTokenSharingEnabled: boolean;
-  defaultDeployRoles: string[];
-  inviteAllowAllDomains: boolean;
-  inviteAllowedDomains: string[];
-  ssoAutoRedirectSingleProvider: boolean;
-  piiRegexEnabled: boolean;
-  piiExternalProviderEnabled: boolean;
-  piiExternalProviderType: 'presidio' | 'gcp_dlp' | 'aws_comprehend' | 'azure_pii' | null;
-  piiExternalProviderEndpoint: string | null;
-  piiExternalProviderAuthHeader: string | null;
-  piiExternalProviderAuthToken: string | null;
-  piiExternalProviderProjectId: string | null;
-  piiExternalProviderRegion: string | null;
-  piiRedactionStyle: string;
-  piiScopes: Array<'processDetails' | 'history' | 'logs' | 'errors' | 'audit'>;
-  piiMaxPayloadSizeBytes: number;
-}
-
-export interface UserListItem {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: string;
-  platformRole?: string;
-  isActive: boolean;
-  createdAt: number;
-  lastLoginAt: number | null;
-}
-
-export interface ProjectGovernanceItem {
-  id: string;
-  name: string;
-  ownerEmail: string | null;
-  ownerName: string | null;
-  delegateEmail: string | null;
-  delegateName: string | null;
-  createdAt: number;
-}
-
-export interface EngineGovernanceItem {
-  id: string;
-  name: string;
-  type: string;
-  ownerEmail: string | null;
-  ownerName: string | null;
-  delegateEmail: string | null;
-  delegateName: string | null;
-  createdAt: number;
-}
+export type ProjectGovernanceItem = GovernanceProjectSummary;
+export type EngineGovernanceItem = GovernanceEngineSummary;
 
 // API
 export const platformAdminApi = {
@@ -78,17 +54,17 @@ export const platformAdminApi = {
   getSettings: () =>
     apiClient.get<PlatformSettings>('/api/admin/settings'),
 
-  updateSettings: (data: Partial<PlatformSettings>) =>
+  updateSettings: (data: UpdatePlatformSettings) =>
     apiClient.put<{ success: boolean }>('/api/admin/settings', data),
 
   // Environment Tags
   getEnvironments: () =>
     apiClient.get<EnvironmentTag[]>('/api/admin/environments'),
 
-  createEnvironment: (data: { name: string; color?: string; manualDeployAllowed?: boolean }) =>
+  createEnvironment: (data: CreateEnvironmentTag) =>
     apiClient.post<EnvironmentTag>('/api/admin/environments', data),
 
-  updateEnvironment: (id: string, data: Partial<{ name: string; color: string; manualDeployAllowed: boolean; isDefault: boolean }>) =>
+  updateEnvironment: (id: string, data: UpdateEnvironmentTag) =>
     apiClient.put<{ success: boolean }>(`/api/admin/environments/${id}`, data),
 
   deleteEnvironment: (id: string) =>
@@ -102,7 +78,7 @@ export const platformAdminApi = {
     apiClient.get<UserListItem[]>('/api/users', params),
 
   searchUsers: (query: string) =>
-    apiClient.get<UserListItem[]>('/api/admin/users/search', { q: query }),
+    apiClient.get<UserSearchResult[]>('/api/admin/users/search', { q: query }),
 
   // Governance - Projects
   getProjectsForGovernance: (params?: { search?: string }) =>
@@ -128,25 +104,9 @@ export const platformAdminApi = {
   getGitProviders: () =>
     apiClient.get<GitProvider[]>('/git-api/admin/providers'),
 
-  updateGitProvider: (id: string, data: Partial<GitProvider>) =>
-    apiClient.put<GitProvider>(`/git-api/admin/providers/${id}`, data),
+  updateGitProvider: (id: string, data: UpdateGitProviderRequest) =>
+    apiClient.put<GitProviderAdminUpdateResponse>(`/git-api/admin/providers/${id}`, data),
 };
 
 // Git Provider type
-export interface GitProvider {
-  id: string;
-  name: string;
-  type: string;
-  baseUrl: string;
-  apiUrl: string;
-  customBaseUrl: string | null;
-  customApiUrl: string | null;
-  isActive: boolean;
-  displayOrder: number;
-  supportsOAuth: boolean;
-  supportsPAT: boolean;
-  projectConnectionsCount?: number;
-  gitConnectionsCount?: number;
-  hasProjectConnections?: boolean;
-  hasGitConnections?: boolean;
-}
+export type GitProvider = GitProviderAdminSummary;

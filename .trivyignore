@@ -11,3 +11,8 @@
 #   # owner: security-team | reason: not reachable in our stack | expires: 2026-06-01
 #   CVE-2026-12345
 
+# owner: security-team | reason: Google Spanner's metrics stack pins OpenTelemetry SDK 1.x; EnterpriseGlue does not configure OpenTelemetry baggage propagation, so the oversized HTTP baggage-header path is unreachable. Remove after the upstream Spanner dependency moves to SDK 2.x. | expires: 2026-11-01
+CVE-2026-54285
+
+# owner: security-team | reason: EnterpriseGlue is a client-side SPA and does not enable React Router RSC mode or server actions, so the RSC action CSRF path is absent. Remove after react-router-dom publishes a compatible React Router 8 release. | expires: 2026-11-01
+GHSA-qwww-vcr4-c8h2

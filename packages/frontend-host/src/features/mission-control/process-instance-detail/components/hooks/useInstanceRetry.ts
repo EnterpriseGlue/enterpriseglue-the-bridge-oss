@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useAlert } from '../../../../../shared/hooks/useAlert'
-import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
+import { retryProcessInstance } from '../../api/processInstances'
+import type { ProcessInstanceRetryRequest } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface UseInstanceRetryProps {
   instanceId: string
@@ -11,9 +13,19 @@ interface UseInstanceRetryProps {
   incidentsQ: any
   actQ: any
   engineId?: string
+  retryDecision?: UiAuthzDecision | null
 }
 
-export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryExtTasksQ, incidentsQ, actQ, engineId }: UseInstanceRetryProps) {
+export function useInstanceRetry({
+  instanceId,
+  allRetryItems,
+  retryJobsQ,
+  retryExtTasksQ,
+  incidentsQ,
+  actQ,
+  engineId,
+  retryDecision,
+}: UseInstanceRetryProps) {
   const { showAlert } = useAlert()
   const [retryModalOpen, setRetryModalOpen] = useState(false)
   const [retryActivityFilter, setRetryActivityFilter] = useState<string | null>(null)
@@ -49,6 +61,10 @@ export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryE
 
   const submitRetrySelection = useCallback(async () => {
     if (!instanceId) return
+    if (retryDecision && !retryDecision.allowed) {
+      showAlert(retryDecision.reason || 'Action unavailable', 'warning')
+      return
+    }
     const selectedJobs = allRetryItems.filter(item => item.itemType === 'job' && retrySelectionMap[item.id]).map(item => item.id)
     const selectedExtTasks = allRetryItems
       .filter(item => item.itemType === 'externalTask' && retrySelectionMap[item.id])
@@ -59,7 +75,7 @@ export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryE
     }
     setRetryBusy(true)
     try {
-      const payload: any = {}
+      const payload: ProcessInstanceRetryRequest = {}
       if (selectedJobs.length > 0) payload.jobIds = selectedJobs
       if (selectedExtTasks.length > 0) payload.externalTaskIds = selectedExtTasks
       if (retryDueMode === 'set' && retryDueInput) {
@@ -67,7 +83,7 @@ export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryE
         if (!isNaN(dt.getTime())) payload.dueDate = dt.toISOString()
       }
       if (engineId) payload.engineId = engineId
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/retry`, payload, { credentials: 'include' })
+      await retryProcessInstance(instanceId, payload)
       await Promise.allSettled([retryJobsQ.refetch(), retryExtTasksQ.refetch(), incidentsQ.refetch(), actQ.refetch()])
       setRetryModalOpen(false)
     } catch (e: any) {
@@ -76,7 +92,7 @@ export function useInstanceRetry({ instanceId, allRetryItems, retryJobsQ, retryE
     } finally {
       setRetryBusy(false)
     }
-  }, [instanceId, allRetryItems, retrySelectionMap, retryDueMode, retryDueInput, retryJobsQ, retryExtTasksQ, incidentsQ, actQ])
+  }, [instanceId, retryDecision, showAlert, allRetryItems, retrySelectionMap, retryDueMode, retryDueInput, engineId, retryJobsQ, retryExtTasksQ, incidentsQ, actQ])
 
   const openRetryModal = useCallback((activityId?: string) => {
     setRetryActivityFilter(activityId || null)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue UI Evidence"
+  short_description: "Capture and review EnterpriseGlue UI evidence"
+  default_prompt: "Use $enterpriseglue-ui-evidence to help with this EnterpriseGlue task."

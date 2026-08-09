@@ -4,11 +4,16 @@ import express from 'express';
 import loginRoute from '../../../../packages/backend-host/src/modules/auth/routes/login.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
-import { SsoProvider } from '@enterpriseglue/shared/db/entities/SsoProvider.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+
+const ordinaryLocalPasswordEnabled = vi.hoisted(() => vi.fn().mockResolvedValue(true));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/LoginMethodService.js', () => ({
+  loginMethodService: { ordinaryLocalPasswordEnabled },
 }));
 
 vi.mock('@enterpriseglue/shared/utils/password.js', () => ({
@@ -78,9 +83,6 @@ describe('auth login module', () => {
   });
 
   it('returns 401 for non-existent user', async () => {
-    const ssoProviderRepo = {
-      count: vi.fn().mockResolvedValue(0),
-    };
     const userRepo = {
       createQueryBuilder: vi.fn(() => ({
         where: vi.fn().mockReturnThis(),
@@ -91,7 +93,6 @@ describe('auth login module', () => {
     (getDataSource as any).mockResolvedValue({
       getRepository: (entity: any) => {
         if (entity === User) return userRepo;
-        if (entity === SsoProvider) return ssoProviderRepo;
         return { insert: vi.fn() };
       },
     });

@@ -3,10 +3,14 @@ import { AppBaseEntity } from './BaseEntity.js';
 
 @Entity({ name: 'permission_grants', schema: 'main' })
 @Unique(['userId', 'permission', 'resourceType', 'resourceId'])
+@Index('idx_permission_grants_tenant', ['tenantId'])
 @Index('idx_permission_grants_user', ['userId'])
 @Index('idx_permission_grants_permission', ['permission'])
 @Index('idx_permission_grants_user_permission', ['userId', 'permission'])
 export class PermissionGrant extends AppBaseEntity {
+  @Column({ name: 'tenant_id', type: 'text', nullable: true })
+  tenantId!: string | null;
+
   @Column({ name: 'user_id', type: 'text' })
   userId!: string;
 

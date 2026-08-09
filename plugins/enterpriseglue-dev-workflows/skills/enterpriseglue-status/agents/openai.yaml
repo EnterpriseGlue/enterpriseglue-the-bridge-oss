@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Status"
+  short_description: "Summarize EnterpriseGlue delivery status"
+  default_prompt: "Use $enterpriseglue-status to help with this EnterpriseGlue task."

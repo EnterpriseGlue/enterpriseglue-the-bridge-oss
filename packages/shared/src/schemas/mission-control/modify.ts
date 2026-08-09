@@ -6,19 +6,19 @@ export const ModificationInstructionSchema = z.discriminatedUnion('type', [
     type: z.literal('startBeforeActivity'),
     activityId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.string(), z.any()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal('startAfterActivity'),
     activityId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.string(), z.any()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal('startTransition'),
     transitionId: z.string(),
     ancestorActivityInstanceId: z.string().optional(),
-    variables: z.record(z.string(), z.any()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
   }),
   z.object({
     type: z.literal('cancel'),
@@ -31,24 +31,29 @@ export const ModificationInstructionSchema = z.discriminatedUnion('type', [
 
 // Sync modification for a single process instance
 export const ProcessInstanceModificationRequest = z.object({
+  engineId: z.string().optional(),
   instructions: z.array(ModificationInstructionSchema).min(1),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
+  annotation: z.string().min(1).max(2000).optional(),
 })
 
 // Async modification for multiple instances by definition
 export const ProcessDefinitionModificationAsyncRequest = z.object({
+  engineId: z.string().optional(),
   instructions: z.array(ModificationInstructionSchema).min(1),
   processInstanceIds: z.array(z.string()).optional(),
-  processInstanceQuery: z.record(z.string(), z.any()).optional(),
+  processInstanceQuery: z.record(z.string(), z.unknown()).optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
+  annotation: z.string().min(1).max(2000).optional(),
 })
 
 // Async restart of completed instances by definition
 export const ProcessDefinitionRestartAsyncRequest = z.object({
+  engineId: z.string().optional(),
   processInstanceIds: z.array(z.string()).optional(),
-  historicProcessInstanceQuery: z.record(z.string(), z.any()).optional(),
+  historicProcessInstanceQuery: z.record(z.string(), z.unknown()).optional(),
   initialVariables: z.boolean().optional(),
   skipCustomListeners: z.boolean().optional(),
   skipIoMappings: z.boolean().optional(),
@@ -57,7 +62,21 @@ export const ProcessDefinitionRestartAsyncRequest = z.object({
   instructions: z.array(ModificationInstructionSchema).optional(),
 })
 
+export const ProcessDefinitionModificationAsyncResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.literal('MODIFY_INSTANCES'),
+}).strict()
+
+export const ProcessDefinitionRestartAsyncResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.literal('RESTART_INSTANCES'),
+}).strict()
+
 export type ModificationInstruction = z.infer<typeof ModificationInstructionSchema>
 export type ProcessInstanceModification = z.infer<typeof ProcessInstanceModificationRequest>
 export type ProcessDefinitionModificationAsync = z.infer<typeof ProcessDefinitionModificationAsyncRequest>
 export type ProcessDefinitionRestartAsync = z.infer<typeof ProcessDefinitionRestartAsyncRequest>
+export type ProcessDefinitionModificationAsyncResponse = z.infer<typeof ProcessDefinitionModificationAsyncResponseSchema>
+export type ProcessDefinitionRestartAsyncResponse = z.infer<typeof ProcessDefinitionRestartAsyncResponseSchema>

@@ -1,5 +1,6 @@
 import React from 'react'
 import { Modal, InlineNotification, Checkbox } from '@carbon/react'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface RetryModalProps {
   open: boolean
@@ -15,6 +16,7 @@ interface RetryModalProps {
   onDueModeChange: (mode: 'keep' | 'set') => void
   onDueInputChange: (value: string) => void
   onSelectionChange: (selectionMap: Record<string, boolean>) => void
+  retryDecision?: UiAuthzDecision | null
 }
 
 /**
@@ -35,11 +37,13 @@ export function RetryModal({
   onDueModeChange,
   onDueInputChange,
   onSelectionChange,
+  retryDecision,
 }: RetryModalProps) {
   if (!open) return null
 
   const allSelected = filteredRetryItems.length > 0 && filteredRetryItems.every(item => retrySelectionMap[item.id])
   const someSelected = filteredRetryItems.some(item => retrySelectionMap[item.id]) && !allSelected
+  const retryDeniedReason = retryDecision && !retryDecision.allowed ? retryDecision.reason || 'Action unavailable' : null
 
   const handleSelectAll = (checked: boolean) => {
     const next: Record<string, boolean> = {}
@@ -59,10 +63,20 @@ export function RetryModal({
       modalHeading="Retry Failed Jobs & Tasks"
       primaryButtonText={retryBusy ? 'Retrying...' : 'Retry'}
       secondaryButtonText="Cancel"
+      primaryButtonDisabled={retryBusy || !!retryDeniedReason}
       onRequestClose={() => !retryBusy && onClose()}
       onRequestSubmit={onSubmit}
     >
       <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+        {retryDeniedReason && (
+          <InlineNotification
+            kind="warning"
+            title="Retry unavailable"
+            subtitle={retryDeniedReason}
+            lowContrast
+            hideCloseButton
+          />
+        )}
         {retryActivityFilter && (
           <InlineNotification
             kind="info"

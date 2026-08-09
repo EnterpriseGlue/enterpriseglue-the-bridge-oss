@@ -8,14 +8,13 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { EmailSendConfig } from '@enterpriseglue/shared/infrastructure/persistence/entities/EmailSendConfig.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt, decrypt } from '@enterpriseglue/shared/utils/crypto.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
-import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 
@@ -54,7 +53,7 @@ const updateConfigSchema = z.object({
  * GET /api/admin/email-configs
  * List all email configurations (super admin only)
  */
-router.get('/api/admin/email-configs', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/admin/email-configs', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const dataSource = await getDataSource();
     const configRepo = dataSource.getRepository(EmailSendConfig);
@@ -74,7 +73,7 @@ router.get('/api/admin/email-configs', apiLimiter, requireAuth, requirePermissio
  * GET /api/admin/email-configs/:id
  * Get a single email configuration (super admin only)
  */
-router.get('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.get('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAction('platform.settings.read'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const dataSource = await getDataSource();
@@ -100,7 +99,7 @@ router.get('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermi
  * POST /api/admin/email-configs
  * Create a new email configuration (super admin only)
  */
-router.post('/api/admin/email-configs', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-configs', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const body = createConfigSchema.parse(req.body);
     const dataSource = await getDataSource();
@@ -171,7 +170,7 @@ router.post('/api/admin/email-configs', apiLimiter, requireAuth, requirePermissi
  * PATCH /api/admin/email-configs/:id
  * Update an email configuration (super admin only)
  */
-router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const body = updateConfigSchema.parse(req.body);
@@ -229,7 +228,7 @@ router.patch('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePer
  * DELETE /api/admin/email-configs/:id
  * Delete an email configuration (super admin only)
  */
-router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const dataSource = await getDataSource();
@@ -270,7 +269,7 @@ router.delete('/api/admin/email-configs/:id', apiLimiter, requireAuth, requirePe
  * POST /api/admin/email-configs/:id/set-default
  * Set an email configuration as the default (super admin only)
  */
-router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const dataSource = await getDataSource();
@@ -300,7 +299,7 @@ router.post('/api/admin/email-configs/:id/set-default', apiLimiter, requireAuth,
  * POST /api/admin/email-configs/:id/test
  * Send a test email using this configuration (super admin only)
  */
-router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), asyncHandler(async (req: Request, res: Response) => {
+router.post('/api/admin/email-configs/:id/test', apiLimiter, requireAuth, requireAction('platform.settings.manage'), asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const { toEmail } = req.body as { toEmail?: string };

@@ -5,6 +5,7 @@ import styles from '../styles/InstanceDetail.module.css'
 import { InstanceInfoBar } from './InstanceInfoBar'
 import { ActivityDetailPanel } from './ActivityDetailPanel'
 import type { VariableHistoryTarget } from './types'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
 
 interface ProcessInstanceBottomPaneProps {
   historyContext: any | null
@@ -23,10 +24,14 @@ interface ProcessInstanceBottomPaneProps {
   onResume: () => void
   onModify: () => void
   onTerminate: () => void
+  suspensionDecision?: UiAuthzDecision
+  modifyDecision?: UiAuthzDecision
+  terminateDecision?: UiAuthzDecision
   showIncidentBanner: boolean
   incidentCount: number
   onViewIncident: () => void
   onRetry?: () => void
+  retryDecision?: UiAuthzDecision
   isModMode: boolean
   moveSourceActivityId: string | null
   selectedActivityId: string | null
@@ -69,6 +74,16 @@ interface ProcessInstanceBottomPaneProps {
     showAlert: (message: string, kind?: 'info' | 'warning' | 'error', title?: string) => void
     onAddVariable?: () => void
     onBulkUploadVariables?: () => void
+    variablesReadDecision?: UiAuthzDecision
+    historicVariablesReadDecision?: UiAuthzDecision
+    variableHistoryReadDecision?: UiAuthzDecision
+    variablesUpdateDecision?: UiAuthzDecision
+    executionDetailsReadDecision?: UiAuthzDecision
+    historyTasksReadDecision?: UiAuthzDecision
+    historyUserOperationsReadDecision?: UiAuthzDecision
+    historyDecisionsReadDecision?: UiAuthzDecision
+    decisionInputsReadDecision?: UiAuthzDecision
+    decisionOutputsReadDecision?: UiAuthzDecision
     selectedDecisionInstance: any
     decisionInputs: any[]
     decisionOutputs: any[]
@@ -110,10 +125,14 @@ export function ProcessInstanceBottomPane({
   onResume,
   onModify,
   onTerminate,
+  suspensionDecision,
+  modifyDecision,
+  terminateDecision,
   showIncidentBanner,
   incidentCount,
   onViewIncident,
   onRetry,
+  retryDecision,
   isModMode,
   moveSourceActivityId,
   selectedActivityId,
@@ -144,6 +163,10 @@ export function ProcessInstanceBottomPane({
         onModify={onModify}
         onTerminate={onTerminate}
         onRetry={onRetry}
+        suspensionDecision={suspensionDecision}
+        modifyDecision={modifyDecision}
+        terminateDecision={terminateDecision}
+        retryDecision={retryDecision}
         incidentCount={incidentCount}
       />
       {showIncidentBanner && (

@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { generateId, unixTimestamp } from '@enterpriseglue/shared/utils/id.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -13,7 +14,6 @@ import { Commit } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { FileSnapshot } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
 import { Brackets, IsNull } from 'typeorm';
-import { AuthorizationService } from '@enterpriseglue/shared/services/authorization.js';
 import { ResourceService } from '@enterpriseglue/shared/services/resources.js';
 import { CascadeDeleteService } from '@enterpriseglue/shared/services/cascade-delete.js';
 import { LockManager } from '@enterpriseglue/shared/services/git/LockManager.js';
@@ -22,9 +22,13 @@ import { emitLockEvent } from '../../git/lockEvents.js';
 import { sanitizeBpmnXml, sanitizeDmnXml } from '@enterpriseglue/shared/services/engines/deployment-utils.js';
 import { extractBpmnCallActivityLinks, extractBpmnProcessId, extractDmnDecisionId, updateStarbaseFileNameInXml } from '@enterpriseglue/shared/utils/starbase-xml.js';
 import { buildStarbaseFileName } from '@enterpriseglue/shared/utils/starbase-filenames.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
 import { fileOperationsLimiter, apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
+import {
+  CreateFileRequest,
+  RestoreFileFromCommitRequestSchema,
+  RestoreFileFromCommitResponseSchema,
+  UpdateFileMetadataRequest,
+} from '@enterpriseglue/shared/schemas/starbase/file.js';
 
 const lockManager = new LockManager();
 
@@ -37,29 +41,16 @@ const uuidLikeSchema = z.string().regex(
 const projectIdParamSchema = z.object({ projectId: uuidLikeSchema });
 const fileIdParamSchema = z.object({ fileId: uuidLikeSchema });
 
-const createFileBodySchema = z.object({
-  type: z.string().default('bpmn'),
-  name: z.string().min(1).max(255),
-  folderId: uuidLikeSchema.nullable().optional(),
-  xml: z.string().optional(),
-});
+const createFileBodySchema = CreateFileRequest;
 
 const updateFileBodySchema = z.object({
   xml: z.string().min(1),
   prevUpdatedAt: z.number().optional(),
 });
 
-const patchFileBodySchema = z.object({
-  name: z.string().min(1).max(255).optional(),
-  folderId: uuidLikeSchema.nullable().optional(),
-});
+const patchFileBodySchema = UpdateFileMetadataRequest;
 
-const restoreFromCommitBodySchema = z.object({
-  commitId: z.string().min(1).optional(),
-  fileVersionNumber: z.number().int().positive().optional(),
-}).refine((v) => !!v.commitId || typeof v.fileVersionNumber === 'number', {
-  message: 'commitId or fileVersionNumber is required',
-});
+const restoreFromCommitBodySchema = RestoreFileFromCommitRequestSchema;
 
 /**
  * Get folder breadcrumb trail
@@ -141,14 +132,9 @@ const EMPTY_DMN = `<?xml version="1.0" encoding="UTF-8"?>
  * List files by project
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, requireAction('project.files.read', { resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
-  const userId = req.user!.userId;
-  
-  if (!(await AuthorizationService.verifyProjectAccess(projectId, userId))) {
-    throw Errors.notFound('Project');
-  }
-  
+
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
   const rows = await fileRepo.find({
@@ -181,18 +167,9 @@ r.get('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, asyncH
  * If an explicit XML payload is provided, this acts as an import endpoint.
  * ✨ Migrated to TypeORM
  */
-r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(projectIdParamSchema), validateBody(createFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(projectIdParamSchema), validateBody(createFileBodySchema), requireAction('project.files.create', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const userId = req.user!.userId;
-  
-  const canEditProject = await projectMemberService.hasRole(
-    projectId,
-    userId,
-    ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
-  )
-  if (!canEditProject) {
-    throw Errors.notFound('Project');
-  }
   
   const { type = 'bpmn', name, folderId, xml: xmlBody } = (req.body || {}) as { type?: string; name?: string; folderId?: string | null; xml?: string };
   const fileType = String(type).toLowerCase() === 'dmn' ? 'dmn' : 'bpmn';
@@ -270,13 +247,8 @@ r.post('/starbase-api/projects/:projectId/files', apiLimiter, requireAuth, fileO
  * Get file by id (metadata + xml)
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
-  const userId = req.user!.userId;
-  
-  if (!(await AuthorizationService.verifyFileAccess(fileId, userId))) {
-    throw Errors.notFound('File');
-  }
   
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
@@ -319,14 +291,9 @@ r.get('/starbase-api/files/:fileId', apiLimiter, requireAuth, asyncHandler(async
   });
 }));
 
-r.get('/starbase-api/projects/:projectId/files/:fileId/callers', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/projects/:projectId/files/:fileId/callers', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = String(req.params.projectId);
   const fileId = String(req.params.fileId);
-  const userId = req.user!.userId;
-
-  if (!(await AuthorizationService.verifyProjectAccess(projectId, userId))) {
-    throw Errors.notFound('Project');
-  }
 
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
@@ -383,19 +350,14 @@ r.get('/starbase-api/projects/:projectId/files/:fileId/callers', apiLimiter, req
  * Download file as XML attachment
  * ✨ Migrated to TypeORM
  */
-r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, requireAction('project.files.read', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
-  const userId = req.user!.userId;
-
-  if (!(await AuthorizationService.verifyFileAccess(fileId, userId))) {
-    throw Errors.notFound('File');
-  }
 
   const dataSource = await getDataSource();
   const fileRepo = dataSource.getRepository(File);
   const row = await fileRepo.findOne({
     where: { id: fileId },
-    select: ['name', 'type', 'xml']
+    select: ['projectId', 'name', 'type', 'xml']
   });
   
   if (!row) throw Errors.notFound('File');
@@ -410,7 +372,7 @@ r.get('/starbase-api/files/:fileId/download', apiLimiter, requireAuth, asyncHand
  * Update file XML (autosave)
  * ✨ Migrated to TypeORM
  */
-r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(updateFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(updateFileBodySchema), requireAction('project.files.update', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   
@@ -430,14 +392,6 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
   
   const ty = String(row.type)
   const xml = ty === 'dmn' ? sanitizeDmnXml(xmlBody2) : (ty === 'bpmn' ? sanitizeBpmnXml(xmlBody2) : xmlBody2)
-  const canEditFile = await projectMemberService.hasRole(
-    String(row.projectId),
-    userId,
-    ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
-  )
-  if (!canEditFile) {
-    throw Errors.notFound('File');
-  }
   const activeLock = await lockManager.getActiveLock(fileId)
   if (activeLock && String(activeLock.userId) !== String(userId)) {
     const lockHolder = await lockManager.getLockHolder(fileId)
@@ -501,7 +455,7 @@ r.put('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimi
 /**
  * Restore a single file from a deployed commit/version snapshot
  */
-r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(restoreFromCommitBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAuth, fileOperationsLimiter, validateParams(fileIdParamSchema), validateBody(restoreFromCommitBodySchema), requireAction('project.files.restore', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   const { commitId: rawCommitId, fileVersionNumber } = req.body as { commitId?: string; fileVersionNumber?: number };
@@ -517,15 +471,6 @@ r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAut
     select: ['id', 'projectId', 'name', 'type', 'folderId']
   });
   if (!fileRow) throw Errors.notFound('File');
-
-  const canEditFile = await projectMemberService.hasRole(
-    String(fileRow.projectId),
-    userId,
-    ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
-  );
-  if (!canEditFile) {
-    throw Errors.notFound('File');
-  }
 
   let commitId = rawCommitId ? String(rawCommitId) : null;
   if (!commitId && typeof fileVersionNumber === 'number') {
@@ -619,20 +564,20 @@ r.post('/starbase-api/files/:fileId/restore-from-commit', apiLimiter, requireAut
     fileRow.folderId
   ).catch(() => {});
 
-  res.json({
+  res.json(RestoreFileFromCommitResponseSchema.parse({
     restored: true,
     fileId,
     commitId,
     fileVersionNumber: resolvedFileVersionNumber,
     updatedAt: now,
-  });
+  }));
 }));
 
 /**
  * Rename file (metadata)
  * ✨ Migrated to TypeORM
  */
-r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(patchFileBodySchema), asyncHandler(async (req: Request, res: Response) => {
+r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(fileIdParamSchema), validateBody(patchFileBodySchema), requireAction('project.files.update', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
   
@@ -653,14 +598,6 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
     select: ['projectId', 'name', 'type', 'folderId', 'xml']
   });
   if (!projectResult) {
-    throw Errors.notFound('File');
-  }
-  const canEditFile = await projectMemberService.hasRole(
-    String(projectResult.projectId),
-    userId,
-    ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
-  )
-  if (!canEditFile) {
     throw Errors.notFound('File');
   }
 
@@ -716,7 +653,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
   res.json({
     id: fileId,
     name: newName ?? projectResult.name,
-    folderId: folderId ?? undefined,
+    folderId: nextFolderId,
     updatedAt: now
   });
 }));
@@ -725,7 +662,7 @@ r.patch('/starbase-api/files/:fileId', apiLimiter, requireAuth, validateParams(f
  * Delete file (and associated versions)
  * ✨ Migrated to TypeORM
  */
-r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, asyncHandler(async (req: Request, res: Response) => {
+r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsLimiter, requireAction('project.files.delete', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const userId = req.user!.userId;
 
@@ -736,14 +673,6 @@ r.delete('/starbase-api/files/:fileId', apiLimiter, requireAuth, fileOperationsL
     select: ['projectId', 'name', 'type', 'folderId']
   });
   if (!projectResult) {
-    throw Errors.notFound('File');
-  }
-  const canEditFile = await projectMemberService.hasRole(
-    String(projectResult.projectId),
-    userId,
-    ['owner', 'delegate', 'developer', 'editor'] as ProjectRole[]
-  )
-  if (!canEditFile) {
     throw Errors.notFound('File');
   }
 

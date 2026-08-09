@@ -28,14 +28,17 @@ export const HistoricTaskInstanceSchema = z.object({
   tenantId: z.string().optional().nullable(),
   removalTime: z.string().optional().nullable(),
   rootProcessInstanceId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const HistoricTaskInstanceListSchema = z.array(HistoricTaskInstanceSchema);
 
 // Historic variable instance schemas
 export const HistoricVariableInstanceSchema = z.object({
   id: z.string(),
   name: z.string(),
-  type: z.string(),
-  value: z.any(),
+  type: z.string().optional().nullable(),
+  value: z.any().optional(),
+  valueRedacted: z.boolean().optional(),
   processDefinitionKey: z.string().optional().nullable(),
   processDefinitionId: z.string().optional().nullable(),
   processInstanceId: z.string().optional().nullable(),
@@ -52,7 +55,9 @@ export const HistoricVariableInstanceSchema = z.object({
   createTime: z.string().optional().nullable(),
   removalTime: z.string().optional().nullable(),
   rootProcessInstanceId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const HistoricVariableInstanceListSchema = z.array(HistoricVariableInstanceSchema);
 
 // Historic decision instance schemas
 export const HistoricDecisionInstanceSchema = z.object({
@@ -76,6 +81,41 @@ export const HistoricDecisionInstanceSchema = z.object({
   decisionRequirementsDefinitionId: z.string().optional().nullable(),
   decisionRequirementsDefinitionKey: z.string().optional().nullable(),
   tenantId: z.string().optional().nullable(),
+}).passthrough();
+
+export const HistoricDecisionInstanceListSchema = z.array(HistoricDecisionInstanceSchema);
+
+// Historic decision inputs and outputs share a display/read model. Keep
+// engine-specific fields intact while making the identifiers and decision IO
+// fields used by Mission Control explicit.
+export const HistoricDecisionIoSchema = z.object({
+  id: z.string(),
+  decisionInstanceId: z.string().optional(),
+  clauseId: z.string().nullable().optional(),
+  clauseName: z.string().nullable().optional(),
+  ruleId: z.string().nullable().optional(),
+  ruleOrder: z.number().nullable().optional(),
+  variableName: z.string().nullable().optional(),
+  type: z.string().nullable().optional(),
+  value: z.any().optional(),
+  valueInfo: z.record(z.string(), z.unknown()).optional(),
+  errorMessage: z.string().nullable().optional(),
+  createTime: z.string().optional(),
+  removalTime: z.string().nullable().optional(),
+  rootProcessInstanceId: z.string().nullable().optional(),
+}).passthrough();
+
+export const HistoricDecisionIoListSchema = z.array(HistoricDecisionIoSchema);
+
+/**
+ * Client-side aggregate for the historic decision detail surface. The engine
+ * exposes the decision row, inputs, and outputs as separately authorized
+ * resources; Mission Control combines those established responses without
+ * inventing a second engine-specific detail model.
+ */
+export const HistoricDecisionInstanceDetailSchema = HistoricDecisionInstanceSchema.extend({
+  inputs: HistoricDecisionIoListSchema,
+  outputs: HistoricDecisionIoListSchema,
 });
 
 // User operation log schemas
@@ -106,7 +146,20 @@ export const UserOperationLogEntrySchema = z.object({
   jobDefinitionId: z.string().optional().nullable(),
   removalTime: z.string().optional().nullable(),
   rootProcessInstanceId: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const UserOperationLogEntryListSchema = z.array(UserOperationLogEntrySchema);
+
+/** Bounded lazy-detail envelope for one runtime activity instance. */
+export const ProcessInstanceExecutionDetailsSchema = z.object({
+  activityInstanceId: z.string(),
+  executionId: z.string().nullable(),
+  taskId: z.string().nullable(),
+  variables: z.array(HistoricVariableInstanceSchema),
+  tasks: z.array(HistoricTaskInstanceSchema),
+  decisions: z.array(HistoricDecisionInstanceSchema),
+  userOperations: z.array(UserOperationLogEntrySchema),
+}).strict();
 
 // Query params
 export const HistoricTaskQueryParams = z.object({
@@ -150,8 +203,8 @@ export const HistoricTaskQueryParams = z.object({
   withoutTenantId: z.boolean().optional(),
   sortBy: z.enum(['taskId', 'activityInstanceId', 'processDefinitionId', 'processInstanceId', 'executionId', 'duration', 'endTime', 'startTime', 'taskName', 'taskDescription', 'assignee', 'owner', 'dueDate', 'followUpDate', 'deleteReason', 'taskDefinitionKey', 'priority', 'tenantId']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const VariableHistoryEntrySchema = z.object({
@@ -159,6 +212,7 @@ export const VariableHistoryEntrySchema = z.object({
   variableInstanceId: z.string(),
   variableName: z.string(),
   value: z.any(),
+  valueRedacted: z.boolean().optional(),
   type: z.string().optional().nullable(),
   time: z.string().optional().nullable(),
   activityInstanceId: z.string().optional().nullable(),
@@ -192,8 +246,8 @@ export const HistoricVariableQueryParams = z.object({
   withoutTenantId: z.boolean().optional(),
   sortBy: z.enum(['instanceId', 'variableName', 'tenantId']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const HistoricDecisionQueryParams = z.object({
@@ -224,8 +278,8 @@ export const HistoricDecisionQueryParams = z.object({
   withoutTenantId: z.boolean().optional(),
   sortBy: z.enum(['evaluationTime', 'tenantId']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.coerce.number().optional(),
-  maxResults: z.coerce.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const UserOperationLogQueryParams = z.object({
@@ -254,16 +308,24 @@ export const UserOperationLogQueryParams = z.object({
   beforeTimestamp: z.string().optional(),
   sortBy: z.enum(['timestamp']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 // Types
 export type HistoricTaskInstance = z.infer<typeof HistoricTaskInstanceSchema>;
+export type HistoricTaskInstanceList = z.infer<typeof HistoricTaskInstanceListSchema>;
 export type HistoricVariableInstance = z.infer<typeof HistoricVariableInstanceSchema>;
+export type HistoricVariableInstanceList = z.infer<typeof HistoricVariableInstanceListSchema>;
 export type VariableHistoryEntry = z.infer<typeof VariableHistoryEntrySchema>;
 export type HistoricDecisionInstance = z.infer<typeof HistoricDecisionInstanceSchema>;
+export type HistoricDecisionInstanceList = z.infer<typeof HistoricDecisionInstanceListSchema>;
+export type HistoricDecisionIo = z.infer<typeof HistoricDecisionIoSchema>;
+export type HistoricDecisionIoList = z.infer<typeof HistoricDecisionIoListSchema>;
+export type HistoricDecisionInstanceDetail = z.infer<typeof HistoricDecisionInstanceDetailSchema>;
 export type UserOperationLogEntry = z.infer<typeof UserOperationLogEntrySchema>;
+export type UserOperationLogEntryList = z.infer<typeof UserOperationLogEntryListSchema>;
+export type ProcessInstanceExecutionDetails = z.infer<typeof ProcessInstanceExecutionDetailsSchema>;
 export type HistoricTaskQueryParams = z.infer<typeof HistoricTaskQueryParams>;
 export type VariableHistoryQueryParams = z.infer<typeof VariableHistoryQueryParams>;
 export type HistoricVariableQueryParams = z.infer<typeof HistoricVariableQueryParams>;

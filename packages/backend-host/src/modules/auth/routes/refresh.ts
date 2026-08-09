@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import bcrypt from 'bcryptjs';
-import { verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { normalizeUserJwtPayload, verifyToken, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -10,6 +10,8 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { IsNull, MoreThan } from 'typeorm';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
+import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 
 const router = Router();
 
@@ -26,7 +28,12 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
 
   // Verify refresh token
-  const payload = verifyToken(refreshToken);
+  let payload: UserJwtPayload;
+  try {
+    payload = normalizeUserJwtPayload(verifyToken(refreshToken));
+  } catch {
+    throw Errors.unauthorized('Invalid user principal');
+  }
 
   if (payload.type !== 'refresh') {
     throw Errors.unauthorized('Invalid token type');
@@ -41,6 +48,13 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
 
   if (!user) {
     throw Errors.validation('User not found or inactive');
+  }
+  if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
+    throw Errors.unauthorized('Session has been revoked');
+  }
+  if (payload.recovery === 'platform_administrator'
+    && !(await getActivePlatformAdministratorUserIds([user.id], dataSource)).has(user.id)) {
+    throw Errors.unauthorized('Session has been revoked');
   }
 
   // Verify refresh token exists and is not revoked
@@ -68,7 +82,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   }
 
   // Generate new access token
-  const accessToken = generateAccessToken(user);
+  const accessToken = generateAccessToken(user, { administratorRecovery: payload.recovery === 'platform_administrator' });
 
   // Set new access token as httpOnly cookie
   res.cookie('accessToken', accessToken, {
@@ -79,9 +93,9 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     path: '/',
   });
 
-  res.json({
+  res.json(RefreshAccessTokenResponseSchema.parse({
     expiresIn: config.jwtAccessTokenExpires,
-  });
+  }));
 }));
 
 export default router;

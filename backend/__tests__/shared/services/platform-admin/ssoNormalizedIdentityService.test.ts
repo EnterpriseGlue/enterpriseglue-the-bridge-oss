@@ -1,0 +1,321 @@
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { AuthzGroupMembership, ExternalIdentity, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, RefreshToken, SsoNormalizedIdentity, User } from '@enterpriseglue/shared/db/entities/index.js';
+import { allowlistedIdentityClaims, ssoNormalizedIdentityService } from '@enterpriseglue/shared/services/platform-admin/SsoNormalizedIdentityService.js';
+
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
+const syncMembershipsInStore = vi.hoisted(() => vi.fn().mockResolvedValue({ created: 0, removed: 0 }));
+const matchesIdentityEntitlement = vi.hoisted(() => vi.fn((mapping: { entitlementType: string; externalId?: string | null; matchOperator: string }, identity: { entitlements: Array<{ type: string; externalId: string }> }) => {
+  const candidates = identity.entitlements.filter((entitlement) => entitlement.type === mapping.entitlementType);
+  if (mapping.matchOperator === 'exists') return candidates.length > 0;
+  return candidates.some((candidate) => mapping.matchOperator === 'exact' ? candidate.externalId === mapping.externalId : candidate.externalId.includes(mapping.externalId || ''));
+}));
+const isHumanIdentityEntitlementType = vi.hoisted(() => (value: string) => ['group', 'role', 'attribute', 'authenticated'].includes(value));
+const identityProviderMembershipSourceRefs = vi.hoisted(() => (providerId: string, mappingId: string) => [
+  `identity_provider:${providerId}:mapping:${mappingId}`,
+  `identity_mapping:${mappingId}`,
+]);
+vi.mock('@enterpriseglue/shared/services/platform-admin/IdentityEntitlementMappingService.js', () => ({
+  identityEntitlementMappingService: { syncMembershipsInStore }, identityProviderMembershipSourceRefs, isHumanIdentityEntitlementType, matchesIdentityEntitlement,
+}));
+
+describe('ssoNormalizedIdentityService', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('normalizes scalar OIDC and SAML entitlement claims for later replay', () => {
+    expect(allowlistedIdentityClaims({ group: 'operators', role: 'deployer', scope: 'openid engine.read' })).toEqual({
+      groups: ['operators'],
+      roles: ['deployer'],
+      scp: ['engine.read', 'openid'],
+    });
+    expect(allowlistedIdentityClaims({ groups: 'saml-operators', roles: 'saml-admin' })).toEqual({
+      groups: ['saml-operators'],
+      roles: ['saml-admin'],
+    });
+  });
+
+  it('inserts a normalized SSO identity snapshot when no provider subject exists', async () => {
+    const getOne = vi.fn().mockResolvedValue(null);
+    const qb = {
+      where: vi.fn(() => qb),
+      andWhere: vi.fn(() => qb),
+      getOne,
+    };
+    const insert = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn().mockResolvedValue(undefined);
+    const repo = {
+      createQueryBuilder: vi.fn().mockReturnValue(qb),
+      insert,
+      update,
+    };
+    const externalRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn().mockResolvedValue(undefined), update: vi.fn().mockResolvedValue(undefined) };
+    const manager = {
+      getRepository: vi.fn((entity: unknown) => {
+        if (entity === SsoNormalizedIdentity) return repo;
+        if (entity === ExternalIdentity) return externalRepo;
+        throw new Error('Unexpected repository');
+      }),
+    };
+    const dataSource = { ...manager, transaction: async (work: (store: typeof manager) => unknown) => work(manager) };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    const result = await ssoNormalizedIdentityService.upsertIdentity({
+      tenantId: 'tenant-a',
+      providerId: 'provider-1',
+      providerType: 'saml',
+      providerSubject: 'subject-1',
+      subjectClaim: 'name_id',
+      providerTenantId: 'idp-tenant',
+      userId: 'user-1',
+      email: 'USER@example.com',
+      displayName: 'User One',
+      firstName: 'User',
+      lastName: 'One',
+      claims: {
+        email: 'user@example.com',
+        groups: ['ops', 'ops', 'deployers'],
+        roles: ['operator'],
+        department: 'engineering',
+        access_token: 'raw-access-token',
+        saml_assertion: '<Assertion>raw-saml-assertion</Assertion>',
+        bindPassword: 'raw-directory-password',
+        signingCertificate: '-----BEGIN CERTIFICATE-----raw-certificate-----END CERTIFICATE-----',
+        privateKey: '-----BEGIN PRIVATE KEY-----raw-private-key-----END PRIVATE KEY-----',
+      },
+      now: 1234,
+    });
+
+    expect(result).toEqual({ id: expect.any(String), created: true, groupMembershipsCreated: 0, groupMembershipsRemoved: 0 });
+    expect(qb.where).toHaveBeenCalledWith('identity.providerId = :providerId', { providerId: 'provider-1' });
+    expect(qb.andWhere).toHaveBeenCalledWith('identity.providerSubject = :providerSubject', { providerSubject: 'subject-1' });
+    expect(qb.andWhere).toHaveBeenCalledWith('identity.tenantId = :tenantId', { tenantId: 'tenant-a' });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a',
+      providerId: 'provider-1',
+      providerType: 'saml',
+      providerSubject: 'subject-1',
+      subjectClaim: 'name_id',
+      providerTenantId: 'idp-tenant',
+      userId: 'user-1',
+      email: 'user@example.com',
+      groupsJson: JSON.stringify(['deployers', 'ops']),
+      rolesJson: JSON.stringify(['operator']),
+      claimsJson: JSON.stringify({ groups: ['deployers', 'ops'], roles: ['operator'] }),
+      providerStatus: 'active',
+      lastSeenAt: 1234,
+      lastProviderCheckAt: null,
+      createdAt: 1234,
+      updatedAt: 1234,
+    }));
+    expect(update).not.toHaveBeenCalled();
+    expect(externalRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', directoryTenantId: 'idp-tenant', providerId: 'provider-1', subjectId: 'subject-1', userId: 'user-1', emailHint: 'user@example.com', identityKey: expect.any(String),
+    }));
+    expect(syncMembershipsInStore).toHaveBeenCalledWith(manager, 'user-1', 'tenant-a', expect.objectContaining({ providerKey: 'provider-1', providerType: 'saml' }));
+    const persistedSnapshot = JSON.stringify(insert.mock.calls[0][0]);
+    expect(persistedSnapshot).not.toContain('raw-access-token');
+    expect(persistedSnapshot).not.toContain('raw-saml-assertion');
+    expect(persistedSnapshot).not.toContain('raw-directory-password');
+    expect(persistedSnapshot).not.toContain('raw-certificate');
+    expect(persistedSnapshot).not.toContain('raw-private-key');
+  });
+
+  it('updates an existing normalized identity snapshot by provider subject', async () => {
+    const getOne = vi.fn().mockResolvedValue({ id: 'identity-1' });
+    const qb = {
+      where: vi.fn(() => qb),
+      andWhere: vi.fn(() => qb),
+      getOne,
+    };
+    const insert = vi.fn().mockResolvedValue(undefined);
+    const update = vi.fn().mockResolvedValue(undefined);
+    const repo = {
+      createQueryBuilder: vi.fn().mockReturnValue(qb),
+      insert,
+      update,
+    };
+    const externalRepo = { findOne: vi.fn().mockResolvedValue({ id: 'external-identity-1', userId: 'user-1' }), insert: vi.fn(), update: vi.fn().mockResolvedValue(undefined) };
+    const manager = {
+      getRepository: vi.fn((entity: unknown) => {
+        if (entity === SsoNormalizedIdentity) return repo;
+        if (entity === ExternalIdentity) return externalRepo;
+        throw new Error('Unexpected repository');
+      }),
+    };
+    const dataSource = { ...manager, transaction: async (work: (store: typeof manager) => unknown) => work(manager) };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    const result = await ssoNormalizedIdentityService.upsertIdentity({
+      providerId: 'microsoft',
+      providerType: 'microsoft',
+      providerSubject: 'oid-1',
+      subjectClaim: 'oid',
+      userId: 'user-1',
+      email: 'user@example.com',
+      claims: {
+        email: 'user@example.com',
+        groups: ['engines'],
+        roles: ['deployer'],
+      },
+      now: 5678,
+    });
+
+    expect(result).toEqual({ id: 'identity-1', created: false, groupMembershipsCreated: 0, groupMembershipsRemoved: 0 });
+    expect(qb.andWhere).toHaveBeenCalledWith('identity.tenantId IS NULL');
+    expect(update).toHaveBeenCalledWith({ id: 'identity-1' }, expect.objectContaining({
+      providerId: 'microsoft',
+      providerType: 'microsoft',
+      providerSubject: 'oid-1',
+      userId: 'user-1',
+      groupsJson: JSON.stringify(['engines']),
+      rolesJson: JSON.stringify(['deployer']),
+      lastSeenAt: 5678,
+      updatedAt: 5678,
+    }));
+    expect(insert).not.toHaveBeenCalled();
+    expect(externalRepo.update).toHaveBeenCalledWith({ id: 'external-identity-1' }, expect.objectContaining({
+      providerId: 'microsoft', subjectId: 'oid-1', userId: 'user-1', lastSeenAt: 5678,
+    }));
+    expect(syncMembershipsInStore).toHaveBeenCalledWith(manager, 'user-1', null, expect.objectContaining({ providerKey: 'microsoft', providerType: 'oidc' }));
+  });
+
+  it('replays stored normalized identities without contacting the external provider', async () => {
+    const getMany = vi.fn().mockResolvedValue([
+      { id: 'identity-1', tenantId: 'tenant-a', providerId: 'provider-1', providerType: 'oidc', providerSubject: 'subject-1', providerTenantId: null, userId: 'user-1', email: 'user@example.com', claimsJson: JSON.stringify({ groups: ['ops'] }), providerStatus: 'active', lastSeenAt: 1234 },
+      { id: 'identity-2', tenantId: 'tenant-a', providerId: 'provider-1', providerType: 'oidc', providerSubject: 'subject-2', providerTenantId: null, userId: 'user-2', email: 'user2@example.com', claimsJson: '{invalid', providerStatus: 'active', lastSeenAt: 1235 },
+    ]);
+    const qb = { where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), addOrderBy: vi.fn(), take: vi.fn(), getMany } as any;
+    qb.where.mockReturnValue(qb); qb.andWhere.mockReturnValue(qb); qb.orderBy.mockReturnValue(qb); qb.addOrderBy.mockReturnValue(qb); qb.take.mockReturnValue(qb);
+    const manager = { getRepository: vi.fn(() => ({ createQueryBuilder: vi.fn(() => qb) })) };
+    const dataSource = { ...manager, transaction: async (work: (store: typeof manager) => unknown) => work(manager) };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+    syncMembershipsInStore
+      .mockResolvedValueOnce({ created: 1, removed: 0 })
+      .mockResolvedValueOnce({ created: 0, removed: 1 });
+
+    const result = await ssoNormalizedIdentityService.replayMemberships({ tenantId: 'tenant-a', providerIds: ['provider-1'], limit: 1 });
+
+    expect(result).toMatchObject({ scanned: 1, created: 1, removed: 0, failed: 0, truncated: true, nextCursor: expect.any(String) });
+    expect(qb.take).toHaveBeenCalledWith(2);
+    expect(syncMembershipsInStore).toHaveBeenCalledWith(manager, 'user-1', 'tenant-a', expect.objectContaining({ providerKey: 'provider-1', entitlements: expect.any(Array) }));
+  });
+
+  it('previews stored snapshot membership changes without persistence or identity details', async () => {
+    const getMany = vi.fn().mockResolvedValue([
+      { id: 'identity-1', tenantId: 'tenant-a', providerId: 'provider-1', providerType: 'oidc', providerSubject: 'subject-1', providerTenantId: null, userId: 'user-1', email: 'user@example.com', claimsJson: JSON.stringify({ groups: ['operators'] }), providerStatus: 'active', lastSeenAt: 1234 },
+    ]);
+    const qb = { where: vi.fn(), andWhere: vi.fn(), orderBy: vi.fn(), addOrderBy: vi.fn(), take: vi.fn(), getMany } as any;
+    qb.where.mockReturnValue(qb); qb.andWhere.mockReturnValue(qb); qb.orderBy.mockReturnValue(qb); qb.addOrderBy.mockReturnValue(qb); qb.take.mockReturnValue(qb);
+    const mappingRepo = { find: vi.fn().mockResolvedValue([
+      { id: 'mapping-add', tenantId: 'tenant-a', providerId: 'provider-1', targetGroupId: 'group-operators', entitlementType: 'group', externalId: 'operators', matchOperator: 'exact', syncMode: 'authoritative', isActive: true },
+      { id: 'mapping-remove', tenantId: 'tenant-a', providerId: 'provider-1', targetGroupId: 'group-admins', entitlementType: 'group', externalId: 'admins', matchOperator: 'exact', syncMode: 'authoritative', isActive: true },
+    ]) };
+    const membershipRepo = { find: vi.fn().mockResolvedValue([
+      { tenantId: 'tenant-a', userId: 'user-1', groupId: 'group-admins', source: 'identity_provider', sourceRef: 'identity_mapping:mapping-remove' },
+    ]) };
+    const dataSource = {
+      getRepository: vi.fn((entity: unknown) => {
+        if (entity === SsoNormalizedIdentity) return { createQueryBuilder: vi.fn(() => qb) };
+        if (entity === IdentityEntitlementMapping) return mappingRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        throw new Error('Unexpected repository');
+      }),
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    const result = await ssoNormalizedIdentityService.previewMemberships({ tenantId: 'tenant-a', providerId: 'provider-1' });
+
+    expect(result).toEqual({
+      scanned: 1, additions: 1, removals: 1, unchanged: 0, failed: 0, truncated: false, nextCursor: null,
+      latestSnapshotAt: 1234, warnings: ['stored_snapshots_only'],
+      mappings: [
+        { mappingId: 'mapping-add', targetGroupId: 'group-operators', additions: 1, removals: 0, unchanged: 0 },
+        { mappingId: 'mapping-remove', targetGroupId: 'group-admins', additions: 0, removals: 1, unchanged: 0 },
+      ],
+    });
+    expect(result).not.toHaveProperty('identities');
+    expect(syncMembershipsInStore).not.toHaveBeenCalled();
+    expect(qb.take).toHaveBeenCalledWith(501);
+  });
+
+  it('deactivates only provider-owned access missing from a complete authoritative directory snapshot', async () => {
+    const normalizedRepo = {
+      find: vi.fn().mockResolvedValue([
+        { id: 'normalized-seen', providerSubject: 'seen-subject', userId: 'user-seen' },
+        { id: 'normalized-missing', providerSubject: 'missing-subject', userId: 'user-missing' },
+      ]),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const mappingRepo = { find: vi.fn().mockResolvedValue([{ id: 'mapping-1', providerId: 'provider-1' }]) };
+    const membershipRepo = { delete: vi.fn().mockResolvedValue({ affected: 2 }) };
+    const externalRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }) };
+    const refreshRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }) };
+    const userRepo = { find: vi.fn().mockResolvedValue([{ id: 'user-missing', authSessionVersion: 4 }]), update: vi.fn().mockResolvedValue({ affected: 1 }) };
+    const providerRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }) };
+    const checkpointRepo = { update: vi.fn().mockResolvedValue({ affected: 1 }) };
+    const manager = { getRepository: vi.fn((entity: unknown) => {
+      if (entity === SsoNormalizedIdentity) return normalizedRepo;
+      if (entity === IdentityEntitlementMapping) return mappingRepo;
+      if (entity === AuthzGroupMembership) return membershipRepo;
+      if (entity === ExternalIdentity) return externalRepo;
+      if (entity === RefreshToken) return refreshRepo;
+      if (entity === User) return userRepo;
+      if (entity === IdentityProvider) return providerRepo;
+      if (entity === IdentityReconciliationCheckpoint) return checkpointRepo;
+      throw new Error('Unexpected repository');
+    }) };
+    const dataSource = { transaction: vi.fn(async (work: (store: typeof manager) => Promise<unknown>) => work(manager)) };
+    (getDataSource as unknown as Mock).mockResolvedValue(dataSource);
+
+    await expect(ssoNormalizedIdentityService.deactivateMissingProviderIdentities({
+      tenantId: 'tenant-a', providerId: 'provider-1', seenProviderSubjects: ['seen-subject'],
+      leaseId: 'lease-1', providerUpdatedAt: 8000, providerProtocol: 'ldap', providerAuthenticationMode: 'direct',
+      providerDirectoryTenantId: null, providerConfigurationJson: '{"url":"ldaps://directory.example.test"}', cursor: null, now: 9000,
+    })).resolves.toEqual({
+      identitiesDeactivated: 1,
+      providerManagedMembershipsRemoved: 2,
+      providerRefreshSessionsRevoked: 1,
+      providerUserSessionsInvalidated: 1,
+    });
+    expect(membershipRepo.delete).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-a', source: 'identity_provider', userId: expect.anything(), sourceRef: expect.anything(),
+    }));
+    expect(normalizedRepo.update).toHaveBeenCalledWith({ id: expect.anything() }, expect.objectContaining({ providerStatus: 'directory_inactive' }));
+    expect(externalRepo.update).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'provider-1', subjectId: expect.anything() }), expect.objectContaining({ status: 'directory_inactive' }));
+    expect(refreshRepo.update).toHaveBeenCalledWith(expect.objectContaining({ userId: expect.anything(), identityProviderId: 'provider-1' }), { revokedAt: 9000 });
+    expect(userRepo.update).toHaveBeenCalledWith({ id: 'user-missing' }, { authSessionVersion: 5 });
+    expect(providerRepo.update).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'provider-1', isEnabled: true, updatedAt: 8000, protocol: 'ldap', authenticationMode: 'direct',
+      configurationJson: '{"url":"ldaps://directory.example.test"}',
+    }), { updatedAt: 8000 });
+    expect(checkpointRepo.update).toHaveBeenLastCalledWith({ providerId: 'provider-1', leaseId: 'lease-1' }, expect.objectContaining({ lastSuccessAt: 9000, leaseId: null }));
+  });
+
+  it.each(['provider', 'lease'] as const)('performs zero absence writes when the %s transaction fence is stale', async (lostFence) => {
+    const normalizedRepo = { find: vi.fn().mockResolvedValue([{ id: 'missing', providerSubject: 'missing', userId: 'user-1' }]), update: vi.fn() };
+    const membershipRepo = { delete: vi.fn() };
+    const providerRepo = { update: vi.fn().mockResolvedValue({ affected: lostFence === 'provider' ? 0 : 1 }) };
+    const checkpointRepo = { update: vi.fn().mockResolvedValue({ affected: lostFence === 'lease' ? 0 : 1 }) };
+    const manager = { getRepository: vi.fn((entity: unknown) => {
+      if (entity === IdentityProvider) return providerRepo;
+      if (entity === IdentityReconciliationCheckpoint) return checkpointRepo;
+      if (entity === SsoNormalizedIdentity) return normalizedRepo;
+      if (entity === AuthzGroupMembership) return membershipRepo;
+      throw new Error('Unexpected repository');
+    }) };
+    (getDataSource as unknown as Mock).mockResolvedValue({ transaction: (work: (store: typeof manager) => Promise<unknown>) => work(manager) });
+
+    await expect(ssoNormalizedIdentityService.deactivateMissingProviderIdentities({
+      tenantId: 'tenant-a', providerId: 'provider-1', seenProviderSubjects: [],
+      leaseId: 'lease-1', providerUpdatedAt: 8000, providerProtocol: 'ldap', providerAuthenticationMode: 'direct',
+      providerDirectoryTenantId: null, providerConfigurationJson: '{"url":"ldaps://directory.example.test"}', cursor: null, now: 9000,
+    })).rejects.toThrow(lostFence === 'provider' ? 'provider changed' : 'lease was lost');
+    expect(normalizedRepo.find).not.toHaveBeenCalled();
+    expect(normalizedRepo.update).not.toHaveBeenCalled();
+    expect(membershipRepo.delete).not.toHaveBeenCalled();
+  });
+});

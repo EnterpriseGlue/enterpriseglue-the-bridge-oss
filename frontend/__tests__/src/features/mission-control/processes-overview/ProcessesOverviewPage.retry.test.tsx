@@ -1,10 +1,10 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ProcessesOverviewPage from '@src/features/mission-control/processes-overview/ProcessesOverviewPage';
+import { AuthContext, type AuthContextValue } from '@src/contexts/AuthContext';
 
 vi.mock('react-split-pane', () => ({
   SplitPane: ({ children }: any) => <div>{children}</div>,
@@ -12,8 +12,48 @@ vi.mock('react-split-pane', () => ({
 }));
 
 vi.mock('@src/components/EngineSelector', () => ({
-  useSelectedEngine: () => null,
+  useSelectedEngine: () => 'engine-1',
 }));
+
+vi.mock('@src/features/mission-control/processes-overview/components/ProcessesDataTable', () => ({
+  ProcessesDataTable: ({ setSelectedMap }: { setSelectedMap: (selection: Record<string, boolean>) => void }) => (
+    <div>
+      <span>Order Process</span>
+      <button type="button" onClick={() => setSelectedMap({ 'inst-retry': true })}>
+        Select retry instance
+      </button>
+    </div>
+  ),
+}));
+
+const authContextValue: AuthContextValue = {
+  user: null,
+  permissions: {
+    userId: 'user-1',
+    tenantId: null,
+    platform: [],
+    projects: [],
+    engines: [{ resourceId: 'engine-1', permissions: ['engine:instance:view', 'engine:instance:retry'], runtimePermissions: [] }],
+    authorizationVersion: 'test-authz-v1',
+    generatedAt: 1,
+  },
+  isAuthenticated: true,
+  isLoading: false,
+  login: vi.fn(),
+  logout: vi.fn(),
+  resetPassword: vi.fn(),
+  changePassword: vi.fn(),
+  refreshUser: vi.fn(),
+  setAuthenticatedUser: vi.fn(),
+  refreshPermissions: vi.fn(),
+  hasPlatformPermission: vi.fn(),
+  hasAnyPlatformPermission: vi.fn(),
+  hasProjectPermission: vi.fn(),
+  hasAnyProjectPermission: vi.fn(),
+  hasAnyEnginePermission: vi.fn(),
+  hasEnginePermission: vi.fn(),
+  hasAnyScopedEnginePermission: vi.fn(),
+};
 
 vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
   const actual = await vi.importActual<typeof import('@src/features/mission-control/processes-overview/hooks')>('@src/features/mission-control/processes-overview/hooks');
@@ -37,6 +77,12 @@ vi.mock('@src/features/mission-control/processes-overview/hooks', async () => {
             state: 'ACTIVE',
             hasIncident: true,
             startTime: new Date().toISOString(),
+            runtimeActionDecisions: {
+              retry: { allowed: true },
+              suspension: { allowed: true },
+              terminate: { allowed: true },
+              migration: { allowed: true },
+            },
           },
         ],
         isLoading: false,
@@ -91,13 +137,13 @@ describe('ProcessesOverviewPage retry', () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const user = userEvent.setup();
-
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/mission-control/processes']}>
-          <ProcessesOverviewPage />
-        </MemoryRouter>
+        <AuthContext.Provider value={authContextValue}>
+          <MemoryRouter initialEntries={['/mission-control/processes']}>
+            <ProcessesOverviewPage />
+          </MemoryRouter>
+        </AuthContext.Provider>
       </QueryClientProvider>
     );
 
@@ -105,9 +151,7 @@ describe('ProcessesOverviewPage retry', () => {
       expect(screen.getByText('Order Process')).toBeInTheDocument();
     });
 
-    const selectAll = document.querySelector('input#select-all') as HTMLInputElement | null;
-    expect(selectAll).toBeTruthy();
-    await user.click(selectAll as HTMLInputElement);
+    fireEvent.click(screen.getByRole('button', { name: /select retry instance/i }));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /retry failed jobs/i })).toBeEnabled();

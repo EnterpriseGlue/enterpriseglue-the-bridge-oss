@@ -348,11 +348,33 @@ function createFallbackSource() {
 const adaptedBundle = loadAdaptedBundle()
 const source = adaptedBundle ? createAdaptedSource(adaptedBundle) : createFallbackSource()
 
+// Camunda's deployment endpoint is needed by metadata reconciliation.  Keep the
+// fixture derived from the definitions instead of maintaining a second,
+// potentially divergent catalogue of deployment IDs.
+const derivedDeployments = Array.from(new Map(
+  [...source.processDefinitions, ...source.decisionDefinitions]
+    .filter((definition) => definition?.deploymentId)
+    .map((definition) => [definition.deploymentId, {
+      id: definition.deploymentId,
+      name: `Synthetic ${definition.deploymentId}`,
+      source: 'enterpriseglue-e2e',
+      deploymentTime: '2026-03-01T00:00:00.000Z',
+      tenantId: definition.tenantId || null,
+    }]),
+).values())
+
 export const primaryInstanceId = source.primaryInstanceId
 export const sequentialInstanceId = source.sequentialInstanceId
 export const parallelInstanceId = source.parallelInstanceId
 export const loopInstanceId = source.loopInstanceId
 export const processDefinitions = source.processDefinitions
+export const deployments = derivedDeployments
+export const nativeAuthorizations = source.nativeAuthorizations || []
+export const filterNativeAuthorizations = source.filterNativeAuthorizations || ((searchParams) => {
+  const firstResult = Math.max(Number(searchParams.get('firstResult') || 0), 0)
+  const maxResults = Math.max(Number(searchParams.get('maxResults') || nativeAuthorizations.length), 0)
+  return nativeAuthorizations.slice(firstResult, firstResult + maxResults)
+})
 export const processDefinitionsById = source.processDefinitionsById
 export const runtimeInstances = source.runtimeInstances
 export const runtimeInstancesById = source.runtimeInstancesById

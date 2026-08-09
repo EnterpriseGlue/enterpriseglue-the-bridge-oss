@@ -20,25 +20,16 @@ import {
   ToggletipContent,
 } from '@carbon/react'
 import { Information } from '@carbon/icons-react'
+import { ProjectPermission } from '../../../../shared/auth/permissions'
+import type {
+  ProjectEngineAccessResponse,
+  ProjectEngineDeploymentEligibilityMode,
+  ProjectEngineDeploymentTargetView,
+} from '@enterpriseglue/shared/schemas/starbase/project-engine-access.js'
 
-interface EngineAccessData {
-  accessedEngines: Array<{
-    engineId: string
-    engineName: string
-    baseUrl?: string
-    environment?: { name: string; color: string }
-    health?: { status: string; latencyMs?: number }
-  }>
-  pendingRequests: Array<{
-    requestId: string
-    engineName: string
-    requestedAt: number
-  }>
-  availableEngines: Array<{
-    id: string
-    name: string
-  }>
-}
+type DeploymentEligibilityMode = ProjectEngineDeploymentEligibilityMode
+type DeploymentTarget = ProjectEngineDeploymentTargetView
+type EngineAccessData = ProjectEngineAccessResponse
 
 interface EngineAccessModalProps {
   open: boolean
@@ -48,7 +39,8 @@ interface EngineAccessModalProps {
     isError: boolean
     data?: EngineAccessData
   }
-  canManageMembers: boolean
+  canRequestEngineAccess: boolean
+  requestEngineAccessUnavailableReason?: string | null
   myMembershipLoading: boolean
   selectedEngineForRequest: string | null
   setSelectedEngineForRequest: (id: string | null) => void
@@ -62,13 +54,19 @@ export function EngineAccessModal({
   open,
   onClose,
   engineAccessQ,
-  canManageMembers,
+  canRequestEngineAccess,
+  requestEngineAccessUnavailableReason,
   myMembershipLoading,
   selectedEngineForRequest,
   setSelectedEngineForRequest,
   requestEngineAccessM,
 }: EngineAccessModalProps) {
   if (!open) return null
+
+  const requestUnavailableReason = !canRequestEngineAccess && !myMembershipLoading
+    ? requestEngineAccessUnavailableReason || `Missing permission ${ProjectPermission.PROJECT_SETTINGS}`
+    : null
+  const requestControlsDisabled = Boolean(requestUnavailableReason) || myMembershipLoading
 
   return (
     <ComposedModal open size="md" onClose={onClose}>
@@ -96,6 +94,8 @@ export function EngineAccessModal({
                     <TableRow>
                       <TableHeader>Engine</TableHeader>
                       <TableHeader>Environment</TableHeader>
+                      <TableHeader>Target</TableHeader>
+                      <TableHeader>Deployment</TableHeader>
                       <TableHeader>Health</TableHeader>
                     </TableRow>
                   </TableHead>
@@ -119,12 +119,21 @@ export function EngineAccessModal({
                         </TableCell>
                         <TableCell>
                           {e.environment ? (
-                            <Tag size="sm" style={{ backgroundColor: e.environment.color, color: '#fff' }}>
+                            <Tag size="sm" style={{ backgroundColor: e.environment.color ?? 'var(--cds-border-strong-01)', color: '#fff' }}>
                               {e.environment.name}
                             </Tag>
                           ) : (
                             <span style={{ color: 'var(--cds-text-secondary)' }}>—</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <DeploymentTargetSummary target={e.deploymentTarget} />
+                        </TableCell>
+                        <TableCell>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-1)' }}>
+                            <DeploymentEligibilityTag label="Manual" mode={e.deploymentEligibility?.manual} fallbackAllowed={e.manualDeployAllowed} fallbackReasons={e.manualDeployDeniedReasons} />
+                            <DeploymentEligibilityTag label="CI" mode={e.deploymentEligibility?.ci} fallbackAllowed={e.ciDeployAllowed} fallbackReasons={e.ciDeployDeniedReasons} />
+                          </div>
                         </TableCell>
                         <TableCell>
                           {e.health ? (
@@ -167,38 +176,51 @@ export function EngineAccessModal({
             {engineAccessQ.data.availableEngines.length > 0 && (
               <div>
                 <h5 style={{ marginBottom: 'var(--spacing-3)', fontSize: 14, fontWeight: 600 }}>Connect to another engine</h5>
-                {(canManageMembers || myMembershipLoading) ? (
-                  <>
-                    <div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'flex-end' }}>
-                      <div style={{ flex: 1 }}>
-                        <Dropdown
-                          id="request-engine-access"
-                          titleText=""
-                          label="Select an engine"
-                          items={engineAccessQ.data.availableEngines}
-                          itemToString={(item: any) => item?.name || ''}
-                          selectedItem={engineAccessQ.data.availableEngines.find((e) => e.id === selectedEngineForRequest) || null}
-                          onChange={({ selectedItem }: any) => setSelectedEngineForRequest(selectedItem?.id || null)}
-                        />
-                      </div>
-                      <Button
-                        kind="primary"
-                        size="md"
-                        disabled={!selectedEngineForRequest || requestEngineAccessM.isPending || myMembershipLoading}
-                        onClick={() => selectedEngineForRequest && requestEngineAccessM.mutate(selectedEngineForRequest)}
-                      >
-                        {requestEngineAccessM.isPending ? 'Requesting...' : 'Request access'}
-                      </Button>
-                    </div>
-                    <p style={{ fontSize: 12, color: 'var(--cds-text-secondary)', marginTop: 'var(--spacing-2)' }}>
-                      The engine owner will need to approve your request. If you own both the project and engine, access is granted automatically.
-                    </p>
-                  </>
-                ) : (
-                  <p style={{ fontSize: 13, color: 'var(--cds-text-secondary)' }}>
-                    Only project owners and delegates can request engine access. Contact a project owner to connect this project to an engine.
-                  </p>
+                {requestUnavailableReason && (
+                  <InlineNotification
+                    lowContrast
+                    hideCloseButton
+                    kind="warning"
+                    title="Request access unavailable"
+                    subtitle={requestUnavailableReason}
+                    style={{ marginBottom: 'var(--spacing-3)' }}
+                  />
                 )}
+                <>
+                  <div style={{ display: 'flex', gap: 'var(--spacing-3)', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <Dropdown
+                        id="request-engine-access"
+                        titleText=""
+                        label="Select an engine"
+                        items={engineAccessQ.data.availableEngines}
+                        itemToString={(item: any) => item?.name || ''}
+                        selectedItem={engineAccessQ.data.availableEngines.find((e) => e.id === selectedEngineForRequest) || null}
+                        disabled={requestControlsDisabled || requestEngineAccessM.isPending}
+                        onChange={({ selectedItem }: any) => {
+                          if (!requestControlsDisabled) {
+                            setSelectedEngineForRequest(selectedItem?.id || null)
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      kind="primary"
+                      size="md"
+                      disabled={!selectedEngineForRequest || requestEngineAccessM.isPending || requestControlsDisabled}
+                      title={requestUnavailableReason ?? undefined}
+                      onClick={() => {
+                        if (requestControlsDisabled || !selectedEngineForRequest) return
+                        requestEngineAccessM.mutate(selectedEngineForRequest)
+                      }}
+                    >
+                      {requestEngineAccessM.isPending ? 'Requesting...' : 'Request access'}
+                    </Button>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--cds-text-secondary)', marginTop: 'var(--spacing-2)' }}>
+                    The engine owner will need to approve your request. If you own both the project and engine, access is granted automatically.
+                  </p>
+                </>
               </div>
             )}
 
@@ -215,4 +237,82 @@ export function EngineAccessModal({
       </ModalFooter>
     </ComposedModal>
   )
+}
+
+function DeploymentTargetSummary({ target }: { target?: DeploymentTarget }) {
+  if (!target) {
+    return <Tag size="sm" type="gray">Legacy access</Tag>
+  }
+
+  const modes = [
+    target.allowManualDeploy ? 'Manual' : null,
+    target.allowCiDeploy ? 'CI' : null,
+    target.allowApiDeploy ? 'API' : null,
+    target.allowImport ? 'Import' : null,
+  ].filter((mode): mode is string => Boolean(mode))
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-1)', maxWidth: 220 }}>
+      <Tag size="sm" type={target.status === 'active' ? 'green' : 'gray'}>{formatLabel(target.status)}</Tag>
+      <Tag size="sm" type="blue">{formatLabel(target.source)}</Tag>
+      {modes.length > 0 ? modes.map((mode) => (
+        <Tag key={mode} size="sm" type="gray">{mode}</Tag>
+      )) : <Tag size="sm" type="red">No modes</Tag>}
+    </div>
+  )
+}
+
+function DeploymentEligibilityTag({
+  label,
+  mode,
+  fallbackAllowed,
+  fallbackReasons,
+}: {
+  label: string
+  mode?: DeploymentEligibilityMode
+  fallbackAllowed?: boolean
+  fallbackReasons?: string[]
+}) {
+  const allowed = mode?.allowed ?? fallbackAllowed
+  const reasons = mode?.reasons ?? fallbackReasons ?? []
+  if (allowed === undefined) {
+    return <Tag size="sm" type="gray">{label} unknown</Tag>
+  }
+
+  if (allowed) {
+    return <Tag size="sm" type="green">{label} allowed</Tag>
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <Tag size="sm" type="red">{label} denied</Tag>
+      {reasons.length > 0 && (
+        <Toggletip align="bottom" autoAlign>
+          <ToggletipButton label={`${label} denial details`}>
+            <Information size={16} style={{ color: 'var(--cds-icon-secondary)' }} />
+          </ToggletipButton>
+          <ToggletipContent>
+            <div style={{ display: 'grid', gap: 'var(--spacing-2)', maxWidth: 320 }}>
+              {reasons.map((reason) => (
+                <p key={reason} style={{ fontSize: 12, margin: 0 }}>{reason}</p>
+              ))}
+              {mode?.checks?.filter((check) => !check.allowed).map((check) => (
+                <p key={check.id} style={{ fontSize: 12, margin: 0 }}>
+                  <strong>{check.id}:</strong> {check.reason}
+                </p>
+              ))}
+            </div>
+          </ToggletipContent>
+        </Toggletip>
+      )}
+    </span>
+  )
+}
+
+function formatLabel(value: string): string {
+  return value
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
 }

@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import cloneRouter from '../../../../../packages/backend-host/src/modules/git/routes/clone.js';
+import {
+  RepositoryInfoRequestSchema,
+  RepositoryInfoResponseSchema,
+} from '@enterpriseglue/shared/schemas/git/repository.js';
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -37,5 +41,15 @@ describe('git clone routes', () => {
 
   it('placeholder test for git clone', () => {
     expect(true).toBe(true);
+  });
+
+  it('uses the repository-inspection transport contract', () => {
+    expect(RepositoryInfoRequestSchema.parse({ providerId: 'provider-1', repoUrl: 'acme/payments' })).toEqual({
+      providerId: 'provider-1', repoUrl: 'acme/payments',
+    });
+    expect(RepositoryInfoResponseSchema.parse({
+      name: 'payments', fullName: 'acme/payments', defaultBranch: 'main',
+      branches: [{ name: 'main', isDefault: true }],
+    }).branches[0].isDefault).toBe(true);
   });
 });

@@ -5,7 +5,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { hashPassword } from '@enterpriseglue/shared/utils/password.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { encrypt } from '@enterpriseglue/shared/utils/crypto.js';
-import { addCaseInsensitiveEquals } from '../infrastructure/persistence/adapters/QueryHelpers.js';
+import { authzGroupService } from '../services/platform-admin/AuthzGroupService.js';
 
 /**
  * Bootstrap admin account on first run
@@ -21,6 +21,27 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
     const userCount = await userRepo.count();
 
     if (userCount > 0) {
+      // Existing installations can retain the configured bootstrap account from
+      // before canonical authorization groups were introduced. Reconcile only
+      // that active local account: it remains the documented break-glass
+      // administrator and must not be locked out when SSO enforcement begins.
+      const existingBootstrapAdmin = await userRepo.findOne({
+        where: {
+          email: config.adminEmail,
+          authProvider: 'local',
+          isActive: true,
+        },
+      });
+      if (existingBootstrapAdmin) {
+        await dataSource.transaction(async (manager) => {
+          await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, existingBootstrapAdmin.id);
+          if (allowPlatformAdmin) {
+            await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, existingBootstrapAdmin.id);
+          }
+        });
+        console.log('✅ Reconciled configured bootstrap administrator memberships');
+        return;
+      }
       console.log('ℹ️  Users already exist, skipping admin bootstrap');
       return;
     }
@@ -39,7 +60,8 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       passwordHash: passwordHash,
       firstName: 'Admin',
       lastName: 'User',
-      platformRole: allowPlatformAdmin ? 'admin' : 'user',
+      // The database default remains non-privileged compatibility metadata;
+      // access comes from the canonical group below.
       isActive: true,
       mustResetPassword: false,
       failedLoginAttempts: 0,
@@ -51,11 +73,17 @@ export async function bootstrapAdmin(options: { allowPlatformAdmin?: boolean } =
       createdByUserId: null,
     });
 
-    await userRepo.save(admin);
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(User).save(admin);
+      await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, adminId);
+      if (allowPlatformAdmin) {
+        await authzGroupService.ensureBootstrapPlatformAdministratorMembershipWithManager(manager, adminId);
+      }
+    });
 
     console.log(`✅ Admin account created: ${config.adminEmail}`);
     console.log(`   Password: [REDACTED - check ADMIN_PASSWORD environment variable]`);
-    console.log(`   Platform Role: ${allowPlatformAdmin ? 'admin' : 'user'}`);
+    console.log(`   Platform access: ${allowPlatformAdmin ? 'administrator' : 'user'}`);
     console.log(`⚠️  IMPORTANT: Change the admin password in production!`);
   } catch (error) {
     console.error('❌ Failed to bootstrap admin account:', error);
@@ -137,53 +165,4 @@ export async function bootstrapDefaultEmailConfig() {
   });
 
   console.log(`✅ Default email configuration seeded from environment (${provider})`);
-}
-
-/**
- * @deprecated No longer needed - platformRole is now the only role field
- */
-export async function backfillMissingPlatformRoles() {
-  // No-op: legacy role field has been removed
-  // This function is kept for backward compatibility but does nothing
-}
-
-export async function backfillKnownUserProfiles(options: { allowPlatformAdmin?: boolean } = {}) {
-  const { allowPlatformAdmin = true } = options;
-  const dataSource = await getDataSource();
-  const userRepo = dataSource.getRepository(User);
-
-  const email = 'hary@enterpriseglue.ai';
-  const firstName = 'Hary';
-  const lastName = 'Selman';
-
-  try {
-    let qb = userRepo.createQueryBuilder('user');
-    qb = addCaseInsensitiveEquals(qb, 'user', 'email', 'email', email);
-    const user = await qb.getOne();
-
-    if (!user) return;
-
-    const currentFirstName = String(user.firstName || '').trim();
-    const currentLastName = String(user.lastName || '').trim();
-
-    const isPlaceholderAdminUser = currentFirstName === 'Admin' && currentLastName === 'User';
-    const shouldSetFirstName = !currentFirstName || isPlaceholderAdminUser;
-    const shouldSetLastName = !currentLastName || isPlaceholderAdminUser;
-    const shouldSetAdmin = allowPlatformAdmin && user.platformRole !== 'admin';
-    if (!shouldSetFirstName && !shouldSetLastName && !shouldSetAdmin) return;
-
-    const now = Date.now();
-    await userRepo.update(user.id, {
-      firstName: shouldSetFirstName ? firstName : user.firstName,
-      lastName: shouldSetLastName ? lastName : user.lastName,
-      platformRole: shouldSetAdmin ? 'admin' : user.platformRole,
-      updatedAt: now,
-    });
-
-    if (shouldSetAdmin) {
-      console.log(`✅ Granted platform admin role to ${email}`);
-    }
-  } catch (error) {
-    console.error('❌ Failed to backfill known user profiles:', error);
-  }
 }

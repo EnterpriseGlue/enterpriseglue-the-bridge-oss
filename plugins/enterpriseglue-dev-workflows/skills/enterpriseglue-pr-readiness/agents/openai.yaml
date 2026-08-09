@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue PR Readiness"
+  short_description: "Audit an EnterpriseGlue PR before review"
+  default_prompt: "Use $enterpriseglue-pr-readiness to help with this EnterpriseGlue task."

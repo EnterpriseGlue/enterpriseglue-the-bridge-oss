@@ -1,0 +1,373 @@
+{
+  "schemaVersion": 2,
+  "coverageStandard": "constraint-derived-authorization-state-space",
+  "releaseEligible": true,
+  "releaseStatus": "complete",
+  "canonicalDimensions": {
+    "principalTypes": [
+      "user",
+      "group",
+      "api_client",
+      "service_account"
+    ],
+    "resourceTypes": [
+      "platform",
+      "tenant",
+      "project",
+      "engine",
+      "engine_set",
+      "engine_runtime_resource",
+      "engine_runtime_resource_set",
+      "project_engine_target",
+      "external_engine_system",
+      "api_client",
+      "sso_mapping",
+      "extension"
+    ],
+    "permissionScopes": [
+      "platform",
+      "external_engine_system",
+      "project",
+      "engine"
+    ],
+    "roleScopes": [
+      "platform",
+      "tenant",
+      "project",
+      "engine",
+      "external_engine_system"
+    ],
+    "actionOperations": [
+      "read",
+      "create",
+      "update",
+      "delete",
+      "execute",
+      "manage",
+      "evaluate",
+      "sync",
+      "reveal"
+    ],
+    "actionRisks": [
+      "low",
+      "medium",
+      "high",
+      "critical"
+    ]
+  },
+  "scenarioDimensions": {
+    "topologies": [
+      "dedicated",
+      "shared"
+    ],
+    "runtimeAccessModes": [
+      "engine_wide",
+      "resource_aware"
+    ],
+    "assignmentScopes": [
+      "platform",
+      "tenant",
+      "project",
+      "engine",
+      "engine_set",
+      "engine_runtime_resource",
+      "engine_runtime_resource_set"
+    ],
+    "permissionSources": [
+      "predefined_role",
+      "custom_role",
+      "direct_assignment",
+      "group_assignment",
+      "inherited_assignment"
+    ],
+    "assignmentStates": [
+      "active",
+      "future",
+      "expired",
+      "revoked",
+      "deleted",
+      "stale_cached"
+    ],
+    "tenantRelationships": [
+      "same_tenant",
+      "sibling_tenant",
+      "unrelated_tenant",
+      "missing_context",
+      "conflicting_context",
+      "deleted_tenant"
+    ],
+    "resourceStates": [
+      "mapped",
+      "unmapped",
+      "multiply_mapped",
+      "stale_mapping",
+      "quarantined",
+      "deleted",
+      "recreated_new_id"
+    ],
+    "observations": [
+      "decision",
+      "filtered_result",
+      "effective_access",
+      "audit",
+      "upstream_transport"
+    ]
+  },
+  "behaviorModel": {
+    "validTopologyRuntimePairs": [
+      {
+        "topology": "dedicated",
+        "runtimeAccessMode": "engine_wide"
+      },
+      {
+        "topology": "dedicated",
+        "runtimeAccessMode": "resource_aware"
+      },
+      {
+        "topology": "shared",
+        "runtimeAccessMode": "resource_aware"
+      }
+    ],
+    "grantBearingAssignmentStates": [
+      "active",
+      "future"
+    ],
+    "allowedTenantRelationships": {
+      "dedicated": [
+        "same_tenant",
+        "missing_context"
+      ],
+      "shared": [
+        "same_tenant"
+      ]
+    },
+    "presentResourceState": "mapped"
+  },
+  "equivalenceRules": [
+    {
+      "id": "AUTHZ-EQUIV-001",
+      "purpose": "Expand each behavior cell across every canonical action after the generated action and route contracts prove that action identity contributes only its registered permission, resource resolver, risk, audit flag, and fail-closed resolver.",
+      "expands": "canonical action identities",
+      "witness": {
+        "testFile": "backend/__tests__/shared/authz/exhaustiveActionCoverageContracts.test.ts",
+        "testName": "covers "
+      }
+    },
+    {
+      "id": "AUTHZ-EQUIV-002",
+      "purpose": "Bundle decision, filtering, Effective Access, audit, and upstream-transport observations into every compressed cell instead of repeating the same authorization input five times.",
+      "expands": "observation dimensions",
+      "witness": {
+        "testFile": "backend/__tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
+        "testName": "classifies every compressed behavior cell"
+      }
+    },
+    {
+      "id": "AUTHZ-EQUIV-003",
+      "purpose": "Expand independent custom-role permission unions after proving that adding a valid independent permission cannot remove an existing grant and adding an unsafe member makes the tenant role invalid.",
+      "expands": "independent custom-role permission unions",
+      "witness": {
+        "testFile": "backend/__tests__/shared/authz/tenantRolePolicy.test.ts",
+        "testName": "proves tenant-safe permission unions are monotonic and cross-policy unions reject unsafe members"
+      }
+    }
+  ],
+  "applicabilityRules": [
+    {
+      "id": "AUTHZ-INVALID-001",
+      "condition": "shared topology with engine_wide runtime access",
+      "classification": "invalid",
+      "expected": "validation or transition rejection",
+      "witness": {
+        "testFile": "backend/__tests__/shared/engine-tenancy/classificationPolicy.test.ts",
+        "testName": "reports every other invalid topology as a conflict"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-002",
+      "condition": "dedicated topology with a shared mapping strategy",
+      "classification": "invalid",
+      "expected": "schema rejection",
+      "witness": {
+        "testFile": "backend/__tests__/shared/schemas/mission-control/engine.test.ts",
+        "testName": "defines one strict dedicated/shared tenancy contract before provisioning exposes it"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-003",
+      "condition": "tenant custom role contains a permission not classified tenant-safe",
+      "classification": "invalid",
+      "expected": "role validation rejection",
+      "witness": {
+        "testFile": "backend/__tests__/shared/authz/tenantRolePolicy.test.ts",
+        "testName": "accepts every classified permission for tenant roles and rejects every unclassified permission"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-004",
+      "condition": "machine principal receives a human role or unsafe custom-role permission",
+      "classification": "invalid",
+      "expected": "assignment rejection",
+      "witness": {
+        "testFile": "backend/__tests__/shared/services/platform-admin/permissions.test.ts",
+        "testName": "rejects API-client assignments to custom roles with unsafe permissions"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-005",
+      "condition": "tenant assignment resolves a sibling-tenant resource",
+      "classification": "invalid",
+      "expected": "deny without inheritance",
+      "witness": {
+        "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+        "testName": "does not inherit a tenant assignment to a sibling-tenant project or a platform permission"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-006",
+      "condition": "shared runtime resource is unmapped or conflicting",
+      "classification": "invalid",
+      "expected": "quarantine and no materialization",
+      "witness": {
+        "testFile": "backend/__tests__/shared/services/platform-admin/runtimeResourceInventoryService.test.ts",
+        "testName": "quarantines unmapped and conflicting shared runtime observations"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-007",
+      "condition": "broad shared-engine grant has no resolved visible resource",
+      "classification": "invalid",
+      "expected": "deny before upstream transport",
+      "witness": {
+        "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+        "testName": "denies shared batch and migration mutations before transport when mapping access is unavailable"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-008",
+      "condition": "runtime-resource grant targets a sibling resource on the same engine",
+      "classification": "invalid",
+      "expected": "deny without scope widening",
+      "witness": {
+        "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+        "testName": "does not let one runtime-resource grant authorize a sibling in the same deployment"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-009",
+      "condition": "mapping update has stale version, invalid strategy, duplicate row, or foreign ownership",
+      "classification": "invalid",
+      "expected": "atomic conflict",
+      "witness": {
+        "testFile": "backend/__tests__/shared/services/platform-admin/engineTenantMappingService.test.ts",
+        "testName": "rejects stale versions, invalid strategies, duplicate batches, and source ownership conflicts"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-010",
+      "condition": "assignment is expired or revoked while an authenticated browser session remains open",
+      "classification": "invalid",
+      "expected": "deny in active, stale, refreshed, direct URL, and history-restored sessions",
+      "witness": {
+        "testFile": "test/e2e/smoke/fine-grained-access-local.spec.ts",
+        "testName": "revokes active, refreshed, direct-URL, and multi-tab sessions without stale access"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-011",
+      "condition": "a non-runtime assignment scope is combined with a runtime mapping-only resource state",
+      "classification": "invalid",
+      "expected": "classify as mutually exclusive instead of silently sampling or treating the state as a denial",
+      "witness": {
+        "testFile": "backend/__tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
+        "testName": "classifies every compressed behavior cell"
+      }
+    },
+    {
+      "id": "AUTHZ-INVALID-012",
+      "condition": "a runtime-resource or Runtime Resource Set assignment is requested on an engine-wide dedicated engine",
+      "classification": "invalid",
+      "expected": "assignment rejection because narrow runtime scopes require resource-aware access",
+      "witness": {
+        "testFile": "backend/__tests__/shared/services/platform-admin/permissions.test.ts",
+        "testName": "rejects runtime-resource assignments when the containing engine is engine-wide"
+      }
+    }
+  ],
+  "executionFamilies": [
+    {
+      "id": "AUTHZ-EXEC-001",
+      "purpose": "every registered action and resolver fails closed structurally",
+      "testFile": "backend/__tests__/shared/authz/exhaustiveActionCoverageContracts.test.ts",
+      "testName": "covers "
+    },
+    {
+      "id": "AUTHZ-EXEC-002",
+      "purpose": "every canonical permission is classified for tenant-role use",
+      "testFile": "backend/__tests__/shared/authz/tenantRolePolicy.test.ts",
+      "testName": "accepts every classified permission for tenant roles and rejects every unclassified permission"
+    },
+    {
+      "id": "AUTHZ-EXEC-003",
+      "purpose": "every tenant-safe project permission inherits only within the tenant",
+      "testFile": "backend/__tests__/shared/services/platform-admin/tenantRoleInheritance.test.ts",
+      "testName": "inherits every tenant-safe project permission only to a project in the active tenant"
+    },
+    {
+      "id": "AUTHZ-EXEC-004",
+      "purpose": "database-backed user and group custom-role scopes stay bounded",
+      "testFile": "backend/test/integration/custom-role-scope-matrix.test.ts",
+      "testName": "resolves every custom-role scope for users and groups without widening to sibling resources"
+    },
+    {
+      "id": "AUTHZ-EXEC-005",
+      "purpose": "database-backed API-client and service-account custom-role parity",
+      "testFile": "backend/test/integration/machine-principal-authz.test.ts",
+      "testName": "gives API clients and service accounts the same bounded project decision through a custom role"
+    },
+    {
+      "id": "AUTHZ-EXEC-006",
+      "purpose": "deterministic PostgreSQL comparison with an independent direct/group scope model",
+      "testFile": "backend/test/integration/authorization-model-randomized.test.ts",
+      "testName": "matches an independent scope model across"
+    },
+    {
+      "id": "AUTHZ-EXEC-007",
+      "purpose": "assignment expiry, deletion, denial, and audit lifecycle",
+      "testFile": "backend/test/integration/custom-role-scope-matrix.test.ts",
+      "testName": "audits assignment expiry, removal, and a denied decision without widening tenant visibility"
+    },
+    {
+      "id": "AUTHZ-EXEC-008",
+      "purpose": "unmapped, conflicting, stale, and quarantined runtime state denies before engine transport",
+      "testFile": "backend/__tests__/shared/middleware/requireAction.test.ts",
+      "testName": "denies shared batch and migration mutations before transport when mapping access is unavailable"
+    },
+    {
+      "id": "AUTHZ-EXEC-009",
+      "purpose": "stale cached browser sessions observe assignment revocation immediately",
+      "testFile": "test/e2e/smoke/fine-grained-access-local.spec.ts",
+      "testName": "revokes active, refreshed, direct-URL, and multi-tab sessions without stale access"
+    },
+    {
+      "id": "AUTHZ-EXEC-010",
+      "purpose": "deleted and recreated engine identities cannot resurrect old assignments or sessions",
+      "testFile": "test/e2e/engine-tenancy-provisioning-journeys.spec.ts",
+      "testName": "proveDecommissionWithoutResurrection"
+    },
+    {
+      "id": "AUTHZ-EXEC-011",
+      "purpose": "symbolically classifies the complete compressed cross-boundary tensor and verifies its independent expectations, execution-family mapping, and expansion arithmetic",
+      "testFile": "backend/__tests__/shared/authz/authorizationStateSpaceContracts.test.ts",
+      "testName": "classifies every compressed behavior cell"
+    }
+  ],
+  "completedReleaseObligations": [
+    "generate a witness for every invalidity class",
+    "generate every applicable behavior cell",
+    "execute every generated cell at its declared layer",
+    "prove equivalence expansion for compressed independent permission combinations",
+    "retain same-clean-commit authorization-matrix.json with all zero-gap counters"
+  ],
+  "remainingReleaseObligations": []
+}

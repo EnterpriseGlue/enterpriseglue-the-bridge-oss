@@ -4,6 +4,7 @@ import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { Engine } from '@enterpriseglue/shared/db/entities/Engine.js';
 import { addCaseInsensitiveLike } from '@enterpriseglue/shared/db/adapters/index.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { engineService } from './EngineService.js';
 
 class GovernanceServiceImpl {
   async searchUsers(query: string, limit = 10) {
@@ -12,7 +13,7 @@ class GovernanceServiceImpl {
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);
     let qb = userRepo.createQueryBuilder('u')
-      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName', 'u.platformRole'])
+      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName'])
       .take(limit)
       .orderBy('u.email', 'ASC');
     qb = addCaseInsensitiveLike(qb, 'u', 'email', 'query', `%${query}%`);
@@ -92,11 +93,7 @@ class GovernanceServiceImpl {
       }
     }
 
-    const now = Date.now();
-    await engineRepo.update({ id: engineId }, {
-      delegateId: userId || null,
-      updatedAt: now,
-    });
+    await engineService.assignDelegate(engineId, userId || null);
 
     return {
       previousDelegateId: previousDelegateId || null,

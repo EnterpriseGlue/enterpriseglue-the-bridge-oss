@@ -12,6 +12,12 @@ if (!('ResizeObserver' in globalThis)) {
   (globalThis as any).ResizeObserver = TestResizeObserver;
 }
 
+// Carbon dropdowns scroll the highlighted list item into view. jsdom does not
+// implement this browser API, so provide the no-op layout equivalent for tests.
+if (!HTMLElement.prototype.scrollIntoView) {
+  HTMLElement.prototype.scrollIntoView = () => {};
+}
+
 // jsdom 28 replaces the global Blob with its own implementation that
 // lacks .stream(), which Response.blob() needs internally.
 if (typeof Blob !== 'undefined' && !Blob.prototype.stream) {

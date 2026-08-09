@@ -4,22 +4,30 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-// Load the first matching env file before reading any environment variables.
-// Prefer self-host config so a single .env.selfhost file can drive the runtime.
-const envFileCandidates = [
-  process.env.EG_ENV_FILE,
-  path.resolve(process.cwd(), '.env.selfhost'),
-  path.resolve(process.cwd(), '..', '.env.selfhost'),
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(process.cwd(), '..', '.env'),
-];
+// Tests are hermetic by default: a developer's .env or .env.selfhost must not
+// change unit behavior or leak infrastructure metadata into CI output. A
+// protocol rehearsal may explicitly opt in with EG_LOAD_ENV_IN_TESTS=true.
+const shouldLoadEnvironmentFile = process.env.NODE_ENV !== 'test'
+  || process.env.EG_LOAD_ENV_IN_TESTS === 'true';
 
-const envFilePath = envFileCandidates.find(candidate => candidate && fs.existsSync(candidate));
+if (shouldLoadEnvironmentFile) {
+  // Load the first matching env file before reading any environment variables.
+  // Prefer self-host config so a single .env.selfhost file can drive the runtime.
+  const envFileCandidates = [
+    process.env.EG_ENV_FILE,
+    path.resolve(process.cwd(), '.env.selfhost'),
+    path.resolve(process.cwd(), '..', '.env.selfhost'),
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '..', '.env'),
+  ];
 
-if (envFilePath) {
-  dotenv.config({ path: envFilePath });
-} else {
-  dotenv.config();
+  const envFilePath = envFileCandidates.find(candidate => candidate && fs.existsSync(candidate));
+
+  if (envFilePath) {
+    dotenv.config({ path: envFilePath });
+  } else {
+    dotenv.config();
+  }
 }
 
 /**
@@ -113,22 +121,22 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   camundaUsername: z.string().optional(),
   camundaPassword: z.string().optional(),
   
-  // Microsoft Entra ID (Azure AD) configuration
-  microsoftClientId: z.string().optional(),
-  microsoftClientSecret: z.string().optional(),
-  microsoftTenantId: z.string().optional(),
-  microsoftRedirectUri: z.string().url().optional(),
-  
-  // Google OAuth configuration
-  googleClientId: z.string().optional(),
-  googleClientSecret: z.string().optional(),
-  googleRedirectUri: z.string().url().optional(),
-  
   // Encryption
   encryptionKey: z.string().length(64).regex(/^[0-9a-fA-F]+$/, 'Must be a 64-character hex string'),
 
   // Proxy
   trustProxy: z.string().default('1'),
+
+  // Optional configuration bundle bootstrap. Disabled unless explicitly enabled.
+  configBundlePath: z.string().min(1).optional(),
+  configBootstrapMode: z.enum(['disabled', 'validate', 'apply']).default('disabled'),
+  configExpectedSha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+  configExpectedTenantScope: z.string().min(1).default('platform'),
+  configFailClosed: z.boolean().default(false),
+  configRequireSecretPreflight: z.boolean().default(false),
+  configMaxBytes: z.number().int().positive().max(10 * 1024 * 1024).default(1024 * 1024),
+  configSecretProvider: z.enum(['env', 'file', 'docker']).default('env'),
+  configSecretFileRoot: z.string().min(1).optional(),
 
   // Environment
   nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
@@ -217,15 +225,19 @@ function loadConfig(): Config {
     camundaBaseUrl: process.env.CAMUNDA_BASE_URL,
     camundaUsername: process.env.CAMUNDA_USERNAME,
     camundaPassword: process.env.CAMUNDA_PASSWORD,
-    microsoftClientId: process.env.MICROSOFT_CLIENT_ID,
-    microsoftClientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-    microsoftTenantId: process.env.MICROSOFT_TENANT_ID,
-    microsoftRedirectUri: process.env.MICROSOFT_REDIRECT_URI,
-    googleClientId: process.env.GOOGLE_CLIENT_ID,
-    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    googleRedirectUri: process.env.GOOGLE_REDIRECT_URI,
     encryptionKey: process.env.ENCRYPTION_KEY,
     trustProxy: process.env.TRUST_PROXY,
+    configBundlePath: envOrUndefined(process.env.EG_CONFIG_BUNDLE_PATH),
+    configBootstrapMode: envOrUndefined(process.env.EG_CONFIG_BOOTSTRAP_MODE),
+    configExpectedSha256: envOrUndefined(process.env.EG_CONFIG_EXPECTED_SHA256),
+    configExpectedTenantScope: envOrUndefined(process.env.EG_CONFIG_EXPECTED_TENANT_SCOPE),
+    configFailClosed: process.env.EG_CONFIG_FAIL_CLOSED === undefined
+      ? inferredNodeEnv === 'production'
+      : process.env.EG_CONFIG_FAIL_CLOSED === 'true',
+    configRequireSecretPreflight: process.env.EG_CONFIG_REQUIRE_SECRET_PREFLIGHT === 'true',
+    configMaxBytes: process.env.EG_CONFIG_MAX_BYTES ? Number(process.env.EG_CONFIG_MAX_BYTES) : undefined,
+    configSecretProvider: envOrUndefined(process.env.EG_CONFIG_SECRET_PROVIDER),
+    configSecretFileRoot: envOrUndefined(process.env.EG_CONFIG_SECRET_FILE_ROOT),
     nodeEnv: inferredNodeEnv,
   };
 
@@ -344,7 +356,8 @@ if (config.enterpriseSchema) {
   }
 }
 
-// Log configuration on startup (excluding sensitive data)
+// Log configuration on runtime startup, but keep tests quiet and hermetic.
+if (config.nodeEnv !== 'test') {
 console.log('✅ Configuration loaded:');
 console.log(`  - Port: ${config.port}`);
 console.log(`  - Database Type: ${config.databaseType}`);
@@ -385,6 +398,7 @@ if (config.nodeEnv === 'development') {
 }
 if (config.camundaBaseUrl) {
   console.log(`  - Camunda URL: ${config.camundaBaseUrl}`);
+}
 }
 
 // Re-export feature flags for convenience

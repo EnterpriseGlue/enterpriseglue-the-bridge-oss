@@ -7,6 +7,7 @@ import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 const prefix = `test_seed_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 let userId = '';
+let adminUserId = '';
 let userToken = '';
 let standardUserToken = '';
 let adminToken = '';
@@ -17,15 +18,19 @@ const app = createApp({
 
 describe('Platform admin role access', () => {
   beforeAll(async () => {
-    const user = await seedUser(prefix);
+    const [user, admin] = await Promise.all([
+      seedUser(prefix),
+      seedUser(`${prefix}-admin`, { platformRole: 'admin' }),
+    ]);
     userId = user.id;
+    adminUserId = admin.id;
     userToken = user.token;
     standardUserToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'user' });
-    adminToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'admin' });
+    adminToken = admin.token;
   });
 
   afterAll(async () => {
-    await cleanupSeededData(prefix, [], [userId]);
+    await cleanupSeededData(prefix, [], [userId, adminUserId]);
   });
 
   it('rejects unauthenticated admin access', async () => {

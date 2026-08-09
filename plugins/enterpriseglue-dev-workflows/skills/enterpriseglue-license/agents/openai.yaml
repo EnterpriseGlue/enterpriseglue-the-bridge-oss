@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue License Review"
+  short_description: "Validate EnterpriseGlue third-party notices"
+  default_prompt: "Use $enterpriseglue-license to help with this EnterpriseGlue task."

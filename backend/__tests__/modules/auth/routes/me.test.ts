@@ -34,6 +34,10 @@ vi.mock('@enterpriseglue/shared/services/capabilities.js', () => ({
   }),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js', () => ({
+  getActivePlatformAdministratorUserIds: vi.fn().mockResolvedValue(new Set()),
+}));
+
 describe('GET /api/auth/me', () => {
   let app: express.Application;
 
@@ -69,6 +73,10 @@ describe('GET /api/auth/me', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.email).toBe('test@example.com');
+    expect(response.body.session).toEqual({
+      principal: { type: 'user', id: 'user-1' },
+      tenant: { id: null },
+    });
   });
 
   it('returns branding settings', async () => {
@@ -91,5 +99,66 @@ describe('GET /api/auth/me', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.logoUrl).toBe('https://example.com/logo.png');
+  });
+
+  it('returns authenticated platform settings with engine onboarding mode', async () => {
+    const mockSettings = {
+      id: 'default',
+      syncPushEnabled: true,
+      syncPullEnabled: false,
+      gitProjectTokenSharingEnabled: false,
+      defaultDeployRoles: JSON.stringify(['owner', 'delegate', 'operator']),
+      engineOnboardingMode: 'external_only',
+      projectEngineTargetMode: 'hybrid',
+      engineAccessAuthority: 'sso_managed',
+      projectAccessAuthority: 'sso_managed',
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+      accessGovernanceOwnershipMode: 'config_locked',
+      credentiallessCustomerSidecarsEnabled: true,
+      ssoAllEnginesAssignmentMappingsEnabled: false,
+      ssoEngineOwnerAssignmentMappingsEnabled: true,
+      ssoEngineDelegateAssignmentMappingsEnabled: false,
+      ssoRegexClaimMappingsEnabled: true,
+      ssoSecretViewMappingsEnabled: true,
+      ssoUnredactedAuditMappingsEnabled: false,
+      ssoPermanentDeleteMappingsEnabled: false,
+    };
+
+    const settingsRepo = { findOneBy: vi.fn().mockResolvedValue(mockSettings) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === PlatformSettings) return settingsRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/api/auth/platform-settings');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      syncPushEnabled: true,
+      defaultDeployRoles: ['owner', 'delegate', 'operator'],
+      engineOnboardingMode: 'external_only',
+      projectEngineTargetMode: 'hybrid',
+      engineAccessAuthority: 'sso_managed',
+      projectAccessAuthority: 'sso_managed',
+      engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+      governanceBehavior: {
+        manualEngineAccessMutationsAllowed: false,
+        manualProjectAccessMutationsAllowed: false,
+        manualEngineRegistrationAllowed: false,
+        manualProjectEngineTargetMutationsAllowed: true,
+        governanceSettingsMutations: 'blocked',
+      },
+      credentiallessCustomerSidecarsEnabled: true,
+      ssoAllEnginesAssignmentMappingsEnabled: false,
+      ssoEngineOwnerAssignmentMappingsEnabled: true,
+      ssoEngineDelegateAssignmentMappingsEnabled: false,
+      ssoRegexClaimMappingsEnabled: true,
+      ssoSecretViewMappingsEnabled: true,
+      ssoUnredactedAuditMappingsEnabled: false,
+      ssoPermanentDeleteMappingsEnabled: false,
+    });
   });
 });

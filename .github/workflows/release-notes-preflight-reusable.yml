@@ -1,0 +1,120 @@
+name: Release Notes Preflight Reusable
+
+on:
+  workflow_call:
+    inputs:
+      base_ref:
+        description: Base branch used to determine release-impacting changes
+        required: false
+        type: string
+        default: main
+      pull_number:
+        description: Pull request number used to fetch current title, body, and labels
+        required: false
+        type: number
+        default: 0
+      publish_preview:
+        description: Upload the generated release-note preview as a workflow artifact
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  preflight:
+    name: Release-note preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout full release history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Fetch current pull-request metadata
+        id: pull_request
+        if: inputs.pull_number > 0
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        with:
+          script: |
+            const pullNumber = Number(process.env.PULL_NUMBER);
+            if (!Number.isInteger(pullNumber) || pullNumber < 1) {
+              core.setFailed(`Invalid pull request number: ${process.env.PULL_NUMBER}`);
+              return;
+            }
+
+            const waitForAutomaticLabel = ['opened', 'reopened', 'ready_for_review']
+              .includes(context.payload.action);
+            let pullRequest;
+
+            for (let attempt = 1; attempt <= 4; attempt += 1) {
+              ({ data: pullRequest } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+              }));
+              const labels = (pullRequest.labels || []).map((label) => label.name);
+              const hasReleaseClassification = labels.some((label) =>
+                label.startsWith('release:') || label === 'release-note:none');
+              if (!waitForAutomaticLabel || hasReleaseClassification || attempt === 4) break;
+              core.info(`Waiting for automatic release classification (attempt ${attempt}/4).`);
+              await new Promise((resolve) => setTimeout(resolve, 5000));
+            }
+
+            const labels = (pullRequest.labels || []).map((label) => label.name);
+            core.setOutput('title', pullRequest.title || '');
+            core.setOutput('body', pullRequest.body || '');
+            core.setOutput('labels', labels.join(','));
+            core.setOutput('exempt', String(labels.includes('release-note:none')));
+
+      - name: Resolve release-note comparison base
+        id: release_base
+        shell: bash
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_HEAD_REF:-}" == release-please--branches--* ]]; then
+            base_ref="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          else
+            test -n "$BASE_REF"
+            base_ref="origin/$BASE_REF"
+          fi
+          git rev-parse --verify "$base_ref^{commit}" >/dev/null
+          echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Run release-note preflight
+        env:
+          RELEASE_NOTE_EXEMPT: ${{ steps.pull_request.outputs.exempt || 'false' }}
+          RELEASE_NOTE_EXEMPT_REASON: ${{ steps.pull_request.outputs.body || '' }}
+          RELEASE_PR_LABELS: ${{ steps.pull_request.outputs.labels || '' }}
+          RELEASE_PR_TITLE: ${{ steps.pull_request.outputs.title || '' }}
+        run: |
+          set -euo pipefail
+          base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          preflight_args=(
+            --base-ref "${{ steps.release_base.outputs.base_ref }}"
+            --release-base "$base_tag"
+            --output .artifacts/release-notes-preview.md
+          )
+          if [[ "${{ inputs.pull_number }}" == "0" ]]; then
+            preflight_args+=(--skip-recommend)
+          fi
+          node scripts/run-release-notes-preflight.mjs "${preflight_args[@]}"
+
+      - name: Upload release-note preview
+        if: always() && inputs.publish_preview && hashFiles('.artifacts/release-notes-preview.md') != ''
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: release-notes-preview-${{ github.run_id }}
+          path: .artifacts/release-notes-preview.md
+          if-no-files-found: error
+          retention-days: 30

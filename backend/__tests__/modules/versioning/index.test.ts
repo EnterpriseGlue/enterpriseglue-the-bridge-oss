@@ -4,9 +4,12 @@ import express from 'express';
 import versioningRouter from '../../../../packages/backend-host/src/modules/versioning/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/db/entities/File.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { FileSnapshot } from '@enterpriseglue/shared/db/entities/FileSnapshot.js';
 import { FileCommitVersion } from '@enterpriseglue/shared/db/entities/FileCommitVersion.js';
 import { vcsService } from '@enterpriseglue/shared/services/versioning/index.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -28,6 +31,17 @@ vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  ProjectPermissions: {
+    FILES_VIEW: 'project:files:view',
+    VERSIONS_CREATE: 'project:versions:create',
+    VERSIONS_RESTORE: 'project:versions:restore',
+  },
+  permissionService: {
+    hasPermission: vi.fn().mockResolvedValue(false),
+  },
+}));
+
 vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
   vcsService: {
     ensureInitialized: vi.fn(),
@@ -43,6 +57,7 @@ vi.mock('@enterpriseglue/shared/services/versioning/index.js', () => ({
     getLastCommitForFile: vi.fn(),
     syncFromMainDb: vi.fn(),
     getSyncStatus: vi.fn(),
+    getUncommittedIds: vi.fn(),
   },
 }));
 
@@ -57,10 +72,25 @@ describe('versioning routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(versioningRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
 
     (vcsService.ensureInitialized as unknown as Mock).mockResolvedValue(true);
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      [
+        'project:files:view',
+        'project:versions:create',
+        'project:versions:restore',
+      ].includes(permission)
+    );
   });
+
+  function projectRepository(overrides: Record<string, unknown> = {}) {
+    return {
+      findOne: vi.fn().mockResolvedValue({ id: projectId, tenantId: 'tenant-default' }),
+      ...overrides,
+    };
+  }
 
   it('scopes file-save commits to the selected file ids for offline-like save flow', async () => {
     const fileFind = vi.fn().mockResolvedValue([
@@ -75,6 +105,7 @@ describe('versioning routes', () => {
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
+        if (entity === Project) return projectRepository();
         if (entity === File) return { find: fileFind };
         return {};
       },
@@ -124,6 +155,58 @@ describe('versioning routes', () => {
     );
   });
 
+  it('includes uncommitted status through the project collection action permission', async () => {
+    const projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return { find: projectFind };
+        return {};
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) => permission === 'project:files:view');
+    (vcsService.getUncommittedIds as unknown as Mock).mockResolvedValue({ fileIds: [fileId], folderIds: [] });
+
+    const response = await request(app)
+      .get('/vcs-api/projects/uncommitted-status')
+      .query({ projectIds: projectId });
+
+    expect(response.status).toBe(200);
+    expect(response.body.statuses[projectId]).toEqual({
+      hasUncommittedChanges: true,
+      dirtyFileCount: 1,
+    });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('project:files:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'project',
+      resourceId: projectId,
+    }));
+    expect(projectFind).toHaveBeenCalledWith({
+      where: { id: expect.any(Object) },
+      select: ['id', 'tenantId'],
+    });
+    expect(vcsService.getUncommittedIds).toHaveBeenCalledWith(projectId);
+  });
+
+  it('filters denied projects from batch uncommitted status before VCS work starts', async () => {
+    const projectFind = vi.fn().mockResolvedValue([{ id: projectId, tenantId: 'tenant-default' }]);
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return { find: projectFind };
+        return {};
+      },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .get('/vcs-api/projects/uncommitted-status')
+      .query({ projectIds: projectId });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ statuses: {} });
+    expect(vcsService.ensureInitialized).not.toHaveBeenCalled();
+    expect(vcsService.getUncommittedIds).not.toHaveBeenCalled();
+  });
+
   it('returns file history using explicit file membership while excluding unrelated file-save commits in connected-like flow', async () => {
     const fileFindOne = vi.fn().mockResolvedValue({
       name: 'Invoice',
@@ -148,6 +231,7 @@ describe('versioning routes', () => {
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
+        if (entity === Project) return projectRepository();
         if (entity === File) {
           return { findOne: fileFindOne };
         }
@@ -265,6 +349,7 @@ describe('versioning routes', () => {
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
+        if (entity === Project) return projectRepository();
         if (entity === File) {
           return { findOne: fileFindOne };
         }
@@ -360,5 +445,24 @@ describe('versioning routes', () => {
       source: 'file-save',
     });
     expect(response.body.commits.find((commit: any) => commit.id === 'commit-other')).toBeUndefined();
+  });
+
+  it('denies committing when project version creation is unavailable', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return projectRepository();
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app)
+      .post(`/vcs-api/projects/${projectId}/commit`)
+      .send({ message: 'Save Invoice', fileIds: [fileId] });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toContain('project.vcs.commit.create');
+    expect(vcsService.getUserBranch).not.toHaveBeenCalled();
   });
 });

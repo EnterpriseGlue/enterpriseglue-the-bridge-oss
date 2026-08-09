@@ -1,16 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../shared/api/client';
+import type { PublicPlatformSettings } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 
-export interface PlatformSyncSettings {
-  syncPushEnabled: boolean;
-  syncPullEnabled: boolean;
-  gitProjectTokenSharingEnabled: boolean;
-  defaultDeployRoles: string[];
-}
+export type PlatformSyncSettings = PublicPlatformSettings;
 
 export function usePlatformSyncSettings() {
   return useQuery({
     queryKey: ['platform', 'sync-settings'],
-    queryFn: () => apiClient.get<PlatformSyncSettings>('/api/auth/platform-settings'),
+    queryFn: () => apiClient.get<PublicPlatformSettings>('/api/auth/platform-settings'),
   });
 }

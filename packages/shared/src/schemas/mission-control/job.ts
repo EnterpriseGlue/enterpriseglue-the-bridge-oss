@@ -16,7 +16,7 @@ export const JobSchema = z.object({
   priority: z.number().optional(),
   tenantId: z.string().optional().nullable(),
   createTime: z.string().optional().nullable(),
-});
+}).passthrough();
 
 export const JobDefinitionSchema = z.object({
   id: z.string(),
@@ -29,9 +29,16 @@ export const JobDefinitionSchema = z.object({
   suspended: z.boolean().optional(),
   tenantId: z.string().optional().nullable(),
   deploymentId: z.string().optional().nullable(),
-});
+}).passthrough();
 
 // Request schemas
+// Job execution has no engine payload beyond selection, but the engine id is
+// still supplied in the body for runtime authorization. Preserve adapter
+// extension fields while documenting and validating that boundary.
+export const ExecuteJobRequest = z.object({
+  engineId: z.string(),
+}).passthrough();
+
 export const JobQueryParams = z.object({
   jobId: z.string().optional(),
   jobIds: z.array(z.string()).optional(),
@@ -102,6 +109,7 @@ export const SetJobDefinitionSuspensionStateRequest = z.object({
 // Types
 export type Job = z.infer<typeof JobSchema>;
 export type JobDefinition = z.infer<typeof JobDefinitionSchema>;
+export type ExecuteJobRequest = z.infer<typeof ExecuteJobRequest>;
 export type JobQueryParams = z.infer<typeof JobQueryParams>;
 export type JobDefinitionQueryParams = z.infer<typeof JobDefinitionQueryParams>;
 export type SetJobRetriesRequest = z.infer<typeof SetJobRetriesRequest>;

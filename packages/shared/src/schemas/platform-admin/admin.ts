@@ -28,6 +28,21 @@ export const UserListItemSchema = z.object({
   lastLoginAt: z.number().nullable().optional(),
 });
 
+export const GovernanceProjectSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  ownerEmail: z.string().nullable(),
+  ownerName: z.string().nullable(),
+  delegateEmail: z.string().nullable(),
+  delegateName: z.string().nullable(),
+  createdAt: z.number(),
+});
+
+export const GovernanceEngineSummarySchema = GovernanceProjectSummarySchema.extend({
+  type: z.string(),
+  lifecycleStatus: z.string().nullable().optional(),
+});
+
 // Success response
 export const SuccessResponseSchema = z.object({
   success: z.literal(true),
@@ -37,3 +52,5 @@ export const SuccessResponseSchema = z.object({
 export type AssignOwner = z.infer<typeof AssignOwnerRequest>;
 export type UserSearchResult = z.infer<typeof UserSearchResultSchema>;
 export type UserListItem = z.infer<typeof UserListItemSchema>;
+export type GovernanceProjectSummary = z.infer<typeof GovernanceProjectSummarySchema>;
+export type GovernanceEngineSummary = z.infer<typeof GovernanceEngineSummarySchema>;

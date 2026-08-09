@@ -56,6 +56,8 @@ vi.mock('@modules/platform-admin/index.js', () => ({
   platformAdminRoute: noopMiddleware,
   authzRoute: noopMiddleware,
   ssoProvidersRoute: noopMiddleware,
+  identityProvidersRoute: noopMiddleware,
+  identityMappingsRoute: noopMiddleware,
 }));
 
 vi.mock('@modules/auth/index.js', () => ({
@@ -74,6 +76,7 @@ vi.mock('@modules/auth/index.js', () => ({
   googleStartRoute: noopMiddleware,
   microsoftStartRoute: noopMiddleware,
   samlStartRoute: noopMiddleware,
+  identityOidcRoute: noopMiddleware,
 }));
 
 vi.mock('@modules/admin/index.js', () => ({

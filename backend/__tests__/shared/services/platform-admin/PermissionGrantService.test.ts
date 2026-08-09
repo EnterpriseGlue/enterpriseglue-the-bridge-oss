@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PermissionGrant } from '@enterpriseglue/shared/db/entities/PermissionGrant.js';
+import { Project } from '@enterpriseglue/shared/db/entities/Project.js';
 import { permissionGrantService } from '@enterpriseglue/shared/services/platform-admin/PermissionGrantService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -27,6 +28,7 @@ describe('PermissionGrantService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === PermissionGrant) return grantRepo;
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
         throw new Error('Unexpected repository');
       },
     });
@@ -36,6 +38,7 @@ describe('PermissionGrantService', () => {
     expect(grantRepo.createQueryBuilder).toHaveBeenCalled();
     expect(insertBuilder.values).toHaveBeenCalledWith(expect.objectContaining({
       id: expect.any(String),
+      tenantId: 'tenant-a',
       userId: 'user-1',
       permission: 'project:deploy',
       resourceType: 'project',
@@ -62,6 +65,7 @@ describe('PermissionGrantService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === PermissionGrant) return grantRepo;
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
         throw new Error('Unexpected repository');
       },
     });
@@ -73,6 +77,7 @@ describe('PermissionGrantService', () => {
     expect(deleteBuilder.andWhere).toHaveBeenCalledWith('permission IN (:...perms)', { perms: ['project:deploy', 'project.deploy'] });
     expect(deleteBuilder.andWhere).toHaveBeenCalledWith('resourceType = :resourceType', { resourceType: 'project' });
     expect(deleteBuilder.andWhere).toHaveBeenCalledWith('resourceId = :resourceId', { resourceId: 'project-1' });
+    expect(deleteBuilder.andWhere).toHaveBeenCalledWith('tenantId = :tenantId', { tenantId: 'tenant-a' });
     expect(execute).toHaveBeenCalled();
   });
 
@@ -97,6 +102,7 @@ describe('PermissionGrantService', () => {
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === PermissionGrant) return grantRepo;
+        if (entity === Project) return { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
         throw new Error('Unexpected repository');
       },
     });
@@ -105,6 +111,7 @@ describe('PermissionGrantService', () => {
 
     expect(grantRepo.createQueryBuilder).toHaveBeenCalledWith('pg');
     expect(selectBuilder.where).toHaveBeenCalledWith('pg.userId IN (:...userIds)', { userIds: ['user-1', '2'] });
+    expect(selectBuilder.andWhere).toHaveBeenCalledWith('pg.tenantId = :tenantId', { tenantId: 'tenant-a' });
     expect(result).toEqual(['user-1', '2']);
   });
 });

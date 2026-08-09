@@ -5,9 +5,9 @@
  * Controlled via environment variables for safe rollout.
  */
 
-import dotenv from 'dotenv';
-
-dotenv.config();
+// Environment files are loaded once by `config/index` at the application
+// boundary. This leaf module reads only the established process environment,
+// keeping tests and library consumers independent of a developer's `.env`.
 
 export interface FeatureFlags {
   // Phase 2: Project Collaboration

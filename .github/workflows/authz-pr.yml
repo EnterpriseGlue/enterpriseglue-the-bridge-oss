@@ -1,0 +1,350 @@
+name: Authorization Browser Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+  schedule:
+    - cron: "15 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: authorization-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-notes-preflight:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/release-notes-preflight-reusable.yml
+    with:
+      base_ref: ${{ github.base_ref || 'main' }}
+      pull_number: ${{ github.event.pull_request.number || 0 }}
+
+  adapter-backstop-changes:
+    name: Detect adapter/backstop relevance
+    runs-on: ubuntu-latest
+    needs: release-notes-preflight
+    outputs:
+      should_run: ${{ steps.detect.outputs.should_run }}
+    steps:
+      - name: Select relevant pull-request changes
+        id: detect
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('should_run', 'true');
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const relevantPatterns = [
+              /^\.github\/workflows\/authz-pr\.yml$/,
+              /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)$/,
+              /^test\/e2e\/(?:operaton-container|camunda7-container|mock-camunda)\//,
+              /^test\/e2e\/(?:operaton|camunda-native-grant)/,
+              /^scripts\/(?:run-(?:operaton|camunda-native)|write-camunda-native)/,
+              /^packages\/shared\/src\/schemas\/(?:mission-control\/engine|platform-admin\/(?:engine-backstop|camunda-native-grants))/,
+              /^packages\/shared\/src\/services\/(?:bpmn-engine-client|platform-admin\/(?:EngineBackstop|ConfigBundle|EngineService))/,
+              /^packages\/shared\/src\/db\/migrations\/.*(?:backstop|native-grant|sidecar)/,
+              /^packages\/shared\/src\/infrastructure\/persistence\/(?:entities|migrations)\/.*(?:Backstop|backstop|native-grant|sidecar)/,
+              /^packages\/frontend-host\/src\/features\/mission-control\/engines\/components\/EngineBackstopPanel/,
+              /^backend\/__tests__\/(?:shared\/(?:db\/engineBackstop|schemas\/customerSidecar|services\/(?:bpmn-engine-client|platform-admin\/EngineBackstop))|modules\/mission-control\/engines\/routes)/,
+            ];
+            const relevant = files.some(({ filename }) =>
+              relevantPatterns.some((pattern) => pattern.test(filename)));
+            core.info(`Adapter/backstop matrix selected: ${relevant}`);
+            core.setOutput('should_run', String(relevant));
+
+  authorization:
+    name: Authorization decisions and ${{ matrix.browser }} smoke
+    runs-on: ubuntu-latest
+    needs: release-notes-preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: ${{ fromJSON(github.event_name == 'pull_request' && '["chromium"]' || '["firefox", "webkit"]') }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: postgres
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: false
+      POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      JWT_SECRET: test-secret-please-change-00000000000000
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      CAMUNDA_BASE_URL: http://localhost:9080/engine-rest
+      FRONTEND_URL: http://localhost:5173
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup pnpm cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      - name: Build shared package, frontend host, and backend
+        run: |
+          pnpm --filter shared run build
+          pnpm --filter frontend-host run build
+          pnpm --filter webmodeler-backend run build:skip-generate
+
+      - name: Create PostgreSQL schema
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+
+      - name: Sync database schema
+        run: pnpm --filter webmodeler-backend run db:schema:sync
+
+      - name: Run focused authorization decisions
+        run: pnpm run test:authz:pr
+
+      - name: Run targeted authorization mutation guard
+        run: pnpm run test:authz:mutation
+
+      - name: Verify engine tenancy functional coverage
+        run: pnpm run test:engine-tenancy:foundation && pnpm run test:engine-tenancy:provisioning && pnpm run test:engine-tenancy:mappings && pnpm run test:engine-tenancy:authorization && pnpm run test:engine-tenancy:runtime && pnpm run test:engine-tenancy:transitions && pnpm run test:engine-tenancy:operations && pnpm run test:engine-tenancy:documentation
+
+      - name: Enforce authorization decision coverage
+        run: pnpm run test:authz:decision-coverage
+
+      - name: Start Camunda mock server
+        run: |
+          mkdir -p .artifacts/authz-pr
+          node test/e2e/mock-camunda/server.mjs > .artifacts/authz-pr/camunda-mock.log 2>&1 &
+
+      - name: Start backend
+        run: pnpm --filter webmodeler-backend run start:compiled > .artifacts/authz-pr/backend.log 2>&1 &
+
+      - name: Start frontend
+        run: pnpm --filter webmodeler-frontend run dev -- --host 0.0.0.0 --port 5173 > .artifacts/authz-pr/frontend.log 2>&1 &
+
+      - name: Wait for services
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..45}; do
+            if curl -sf http://localhost:8787/health >/dev/null \
+              && curl -sf http://localhost:5173/login >/dev/null \
+              && curl -sf http://localhost:5173/src/main.tsx >/dev/null \
+              && curl -sf http://localhost:9080/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:8787/health >/dev/null
+          curl -sf http://localhost:5173/login >/dev/null
+          curl -sf http://localhost:5173/src/main.tsx >/dev/null
+          curl -sf http://localhost:9080/health >/dev/null
+
+      - name: Run ${{ matrix.browser }} fine-grained authorization smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          PW_VERSION="$(node -p "require('@playwright/test/package.json').version")"
+          docker run --rm \
+            --network host \
+            --ipc host \
+            --user "$(id -u):$(id -g)" \
+            -e CI=true \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_BROWSERS=${{ matrix.browser }} \
+            -e PLAYWRIGHT_WORKERS=1 \
+            -e PLAYWRIGHT_BASE_URL=http://localhost:5173 \
+            -e E2E_API_BASE_URL=http://localhost:8787 \
+            -e ENGINE_TENANCY_API_URL=http://localhost:8787 \
+            -e ENGINE_TENANCY_LOCAL_EVIDENCE=true \
+            -e ENGINE_TENANCY_APPLY_READY=true \
+            -e E2E_SEED_USER=true \
+            -e E2E_DIRECT_DB_CLEANUP=true \
+            -e CAMUNDA_BASE_URL \
+            -e POSTGRES_HOST \
+            -e POSTGRES_PORT \
+            -e POSTGRES_USER \
+            -e POSTGRES_PASSWORD \
+            -e POSTGRES_DATABASE \
+            -e POSTGRES_SCHEMA \
+            -e POSTGRES_SSL_REJECT_UNAUTHORIZED \
+            -v "$PWD:/work" \
+            -w /work \
+            "mcr.microsoft.com/playwright:v${PW_VERSION}-jammy" \
+            bash -lc 'mkdir -p /tmp/corepack-bin && corepack enable --install-directory /tmp/corepack-bin pnpm && export PATH="/tmp/corepack-bin:$PATH" && npx playwright test test/e2e/smoke/login.spec.ts test/e2e/smoke/access-control-local.spec.ts test/e2e/smoke/fine-grained-access-local.spec.ts test/e2e/smoke/variable-access-control-local.spec.ts --config test/e2e/playwright.config.ts && pnpm run test:engine-tenancy:enforcement'
+
+      - name: Upload engine tenancy enforcement evidence
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: engine-tenancy-enforcement-${{ matrix.browser }}-${{ github.run_id }}
+          path: test/results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Capture database diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p .artifacts/authz-pr
+          docker ps --format '{{.Names}} {{.Image}} {{.Status}}' > .artifacts/authz-pr/docker-ps.txt
+          database_container="$(docker ps --filter 'ancestor=postgres:17' --format '{{.ID}}' | head -n 1)"
+          if [[ -n "$database_container" ]]; then
+            docker logs --tail=500 "$database_container" > .artifacts/authz-pr/postgres.log 2>&1 || true
+          fi
+
+      - name: Clean up test data
+        if: always()
+        continue-on-error: true
+        run: pnpm --filter webmodeler-backend run db:cleanup-test-data
+
+      - name: Upload authorization failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: authorization-gate-failure-${{ matrix.browser }}-${{ github.run_id }}
+          path: |
+            test/results
+            .artifacts/authz-pr
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload authorization decision coverage
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: authorization-decision-coverage-${{ matrix.browser }}-${{ github.run_id }}
+          path: backend/coverage/authz-decisions
+          if-no-files-found: warn
+          retention-days: 14
+
+  adapter-backstop:
+    name: Camunda and Operaton mirrored-backstop matrix
+    runs-on: ubuntu-latest
+    needs: adapter-backstop-changes
+    if: needs.adapter-backstop-changes.outputs.should_run == 'true'
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      NODE_ENV: test
+      DATABASE_TYPE: postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DATABASE: postgres
+      POSTGRES_SCHEMA: main
+      POSTGRES_SSL: false
+      POSTGRES_SSL_REJECT_UNAUTHORIZED: false
+      JWT_SECRET: test-secret-please-change-00000000000000
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Setup Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.0.8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package and backend
+        run: |
+          pnpm --filter shared run build
+          pnpm --filter webmodeler-backend run build:skip-generate
+
+      - name: Create PostgreSQL schema
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "CREATE SCHEMA IF NOT EXISTS main;"
+
+      - name: Sync database schema
+        run: pnpm --filter webmodeler-backend run db:schema:sync
+
+      - name: Run Camunda and Operaton adapter/backstop matrix
+        run: pnpm run test:authz:adapter-backstop
+
+      - name: Capture Docker diagnostics on failure
+        if: failure()
+        run: |
+          mkdir -p .artifacts/authz-adapter-backstop
+          docker ps --all --format '{{.Names}} {{.Image}} {{.Status}}' > .artifacts/authz-adapter-backstop/docker-ps.txt
+          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' > .artifacts/authz-adapter-backstop/docker-images.txt
+
+      - name: Upload adapter/backstop diagnostics
+        if: failure()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: authz-adapter-backstop-${{ github.run_id }}
+          path: .artifacts/authz-adapter-backstop
+          if-no-files-found: warn
+          retention-days: 14

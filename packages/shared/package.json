@@ -1,6 +1,6 @@
 {
   "name": "@enterpriseglue/shared",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Shared utilities, contracts, and services for EnterpriseGlue",
   "license": "Apache-2.0",
   "repository": {
@@ -10,9 +10,12 @@
   },
   "type": "module",
   "types": "./dist/contracts/index.d.ts",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
-    "build": "tsc && npm run build:copy",
-    "build:copy": "cp -r src/db/adapters/sql dist/db/adapters/ && cp src/contracts/members.d.ts src/contracts/members.js src/contracts/roles.d.ts src/contracts/roles.js dist/contracts/",
+    "build": "pnpm run clean && tsc && pnpm run build:copy",
+    "build:copy": "node scripts/copy-build-assets.mjs",
     "clean": "rm -rf dist"
   },
   "files": [
@@ -43,13 +46,14 @@
     "ip-address": "^10.4.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "ldapts": "^9.0.0",
     "nodemailer": "^9.0.1",
     "octokit": "^5.0.5",
     "oracledb": "^6.0.0",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.12.2",
-    "typeorm": "^0.3.29",
+    "typeorm": "^0.3.31",
     "undici": "^7.29.0",
     "uuid": "^14.0.0",
     "zod": "^4.3.6"

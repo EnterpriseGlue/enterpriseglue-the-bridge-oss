@@ -4,7 +4,7 @@ import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js'
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireFileAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { Comment } from '@enterpriseglue/shared/infrastructure/persistence/entities/Comment.js';
@@ -17,7 +17,7 @@ const r = Router();
 /**
  * List comments for a file (seed a couple if none)
  */
-r.get('/starbase-api/files/:fileId/comments', apiLimiter, requireAuth, validateParams(fileIdParamSchema), requireFileAccess(), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/files/:fileId/comments', apiLimiter, requireAuth, validateParams(fileIdParamSchema), requireAction('project.files.read', { resourceResolver: 'project.byFileId', resourceIdFrom: 'params' }), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
   const dataSource = await getDataSource();
   const commentRepo = dataSource.getRepository(Comment);

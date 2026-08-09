@@ -5,32 +5,37 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];
+
+const ORACLE_EMPTY_RUNTIME_TENANT = '__enterpriseglue_default_tenant__';
+const ORACLE_EMPTY_EXTERNAL_TENANT = '__enterpriseglue_empty__';
 
 /**
  * Oracle Database Adapter
@@ -44,7 +49,7 @@ export class OracleAdapter implements DatabaseAdapter {
     // Oracle schemas are typically uppercase
     this.schema = config.oracleSchema?.toUpperCase() || 'MAIN';
     this.logging = config.nodeEnv === 'development';
-    
+
     // Check if oracledb driver is available
     this.checkDriverAvailability();
 
@@ -117,7 +122,39 @@ export class OracleAdapter implements DatabaseAdapter {
         indexedColumns.has(key) ||
         uniqueConstraintColumns.has(key);
 
+      if (targetName === 'RuntimeResource' && column.propertyName === 'runtimeTenantId') {
+        // Oracle stores an empty string as NULL. Keep the public/runtime model's
+        // canonical empty value while persisting a non-null sentinel so the
+        // cross-database uniqueness contract remains enforceable.
+        column.options.default = ORACLE_EMPTY_RUNTIME_TENANT;
+        column.options.transformer = {
+          to(value: unknown) {
+            return value === '' ? ORACLE_EMPTY_RUNTIME_TENANT : value;
+          },
+          from(value: unknown) {
+            return value === ORACLE_EMPTY_RUNTIME_TENANT || value == null ? '' : value;
+          },
+        };
+      }
+
+      if (targetName === 'EngineTenantMapping' && column.propertyName === 'externalTenantId') {
+        column.options.default = ORACLE_EMPTY_EXTERNAL_TENANT;
+        column.options.transformer = {
+          to(value: unknown) {
+            return value === '' ? ORACLE_EMPTY_EXTERNAL_TENANT : value;
+          },
+          from(value: unknown) {
+            return value === ORACLE_EMPTY_EXTERNAL_TENANT || value == null ? '' : value;
+          },
+        };
+      }
+
       if (column.options.type === 'text') {
+        if ((targetName === 'CamundaNativeGrantImportRun' || targetName === 'EngineBackstopSyncRun')
+          && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName)) {
+          column.options.type = 'clob';
+          continue;
+        }
         column.options.type = 'varchar2';
         if (column.options.length == null) {
           column.options.length = isPrimaryOrIndexedOrUnique ? 191 : 4000;
@@ -242,13 +279,13 @@ export class OracleAdapter implements DatabaseAdapter {
       'returning',    // Oracle supports RETURNING INTO
       'sequences',    // Oracle has excellent sequence support
     ];
-    
+
     // Features NOT supported or different in Oracle:
     // - 'ilike': Oracle doesn't have ILIKE, use UPPER() LIKE UPPER()
     // - 'onConflict': Oracle uses MERGE instead
     // - 'jsonb': Oracle has JSON but not JSONB
     // - 'uuid': Oracle doesn't have native UUID, use RAW(16) or VARCHAR2(36)
-    
+
     return supportedFeatures.includes(feature);
   }
 

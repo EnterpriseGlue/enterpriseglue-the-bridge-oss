@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enterpriseglue.dev/schemas/release-note-fragment-v1.json",
+  "title": "EnterpriseGlue release-note fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "type",
+    "scope",
+    "breaking",
+    "audiences",
+    "summary",
+    "userImpact",
+    "upgrade",
+    "configuration",
+    "api",
+    "database",
+    "security",
+    "documentation",
+    "knownLimitations",
+    "rollback",
+    "validation",
+    "packages"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "type": {
+      "enum": ["feature", "fix", "security", "performance", "deprecation", "breaking", "docs", "internal"]
+    },
+    "scope": { "type": "string", "minLength": 2 },
+    "breaking": { "type": "boolean" },
+    "audiences": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["users", "administrators", "operators", "developers", "security"] }
+    },
+    "summary": { "type": "string", "minLength": 20, "maxLength": 300 },
+    "userImpact": { "$ref": "#/$defs/stringList" },
+    "upgrade": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "instructions"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "instructions": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "configuration": { "$ref": "#/$defs/stringList" },
+    "api": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compatibility", "changes"],
+      "properties": {
+        "compatibility": { "enum": ["none", "additive", "deprecated", "breaking"] },
+        "changes": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["migrations", "rollbackSupported", "notes"],
+      "properties": {
+        "migrations": { "$ref": "#/$defs/stringList" },
+        "rollbackSupported": { "type": "boolean" },
+        "notes": { "$ref": "#/$defs/stringList" }
+      }
+    },
+    "security": { "$ref": "#/$defs/stringList" },
+    "documentation": { "$ref": "#/$defs/nonEmptyStringList" },
+    "knownLimitations": { "$ref": "#/$defs/stringList" },
+    "rollback": { "$ref": "#/$defs/stringList" },
+    "validation": { "$ref": "#/$defs/nonEmptyStringList" },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "previousVersion", "newVersion", "impact"],
+        "properties": {
+          "name": { "type": "string", "minLength": 2 },
+          "previousVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "newVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+          "impact": { "enum": ["patch", "minor", "major"] }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 2 }
+    },
+    "nonEmptyStringList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 2 }
+    }
+  }
+}

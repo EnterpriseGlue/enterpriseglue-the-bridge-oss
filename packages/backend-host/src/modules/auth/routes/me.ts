@@ -8,9 +8,23 @@ import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { PlatformSettings } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettings.js';
+import {
+  derivePlatformGovernanceBehavior,
+  PublicPlatformBrandingSchema,
+  PublicPlatformSettingsSchema,
+} from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
+import {
+  normalizeEngineOnboardingMode,
+  normalizeProjectEngineTargetMode,
+  normalizeAccessAuthorityMode,
+  normalizeEngineRuntimeAuthorizationMode,
+} from '@enterpriseglue/shared/services/platform-admin/PlatformSettingsService.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
+import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
+import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { AuthenticatedSessionUserSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 
 const router = Router();
 
@@ -21,7 +35,7 @@ const router = Router();
 router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res) => {
   const dataSource = await getDataSource();
   const userRepo = dataSource.getRepository(User);
-  
+
   const user = await userRepo.findOneBy({ id: req.user!.userId });
 
   if (!user) {
@@ -30,7 +44,7 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,
-    platformRole: user.platformRole,
+    tenantId: req.tenant?.tenantId || null,
   });
 
   const isAdminVerificationExempt =
@@ -38,20 +52,22 @@ router.get('/api/auth/me', apiLimiter, requireAuth, asyncHandler(async (req, res
     user.email.toLowerCase() === config.adminEmail.toLowerCase() &&
     user.createdByUserId === null;
   const isEmailVerified = Boolean(user.isEmailVerified) || isAdminVerificationExempt;
+  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
 
-  res.json({
+  res.json(AuthenticatedSessionUserSchema.parse({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    platformRole: user.platformRole || 'user',
+    platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
     capabilities,
     isActive: Boolean(user.isActive),
     isEmailVerified,
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
-  });
+    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+  }));
 }));
 
 const updateProfileSchema = z.object({
@@ -71,7 +87,7 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
   const now = Date.now();
 
   // Build update object with only provided fields
-  const updates: any = { updatedAt: now };
+  const updates: Partial<Pick<User, 'updatedAt' | 'firstName' | 'lastName'>> = { updatedAt: now };
   if (firstName !== undefined) updates.firstName = firstName || null;
   if (lastName !== undefined) updates.lastName = lastName || null;
 
@@ -96,22 +112,24 @@ router.patch('/api/auth/me', apiLimiter, requireAuth, validateBody(updateProfile
 
   const capabilities = await buildUserCapabilities({
     userId: user.id,
-    platformRole: user.platformRole,
+    tenantId: req.tenant?.tenantId || null,
   });
+  const platformAdministratorUserIds = await getActivePlatformAdministratorUserIds([user.id], dataSource);
 
-  res.json({
+  res.json(AuthenticatedSessionUserSchema.parse({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    platformRole: user.platformRole || 'user',
+    platformRole: platformAdministratorUserIds.has(user.id) ? 'admin' : 'user',
     capabilities,
     isActive: Boolean(user.isActive),
     isEmailVerified: Boolean(user.isEmailVerified),
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
-  });
+    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+  }));
 }));
 
 /**
@@ -127,12 +145,12 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
     const settings = await settingsRepo.findOneBy({ id: 'default' });
 
     if (!settings) {
-      return res.json({ 
-        logoUrl: null, 
+      return res.json(PublicPlatformBrandingSchema.parse({
+        logoUrl: null,
         loginLogoUrl: null,
         loginTitleVerticalOffset: 0,
         loginTitleColor: null,
-        logoTitle: null, 
+        logoTitle: null,
         logoScale: 100,
         titleFontUrl: null,
         titleFontWeight: '600',
@@ -140,11 +158,10 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
         titleVerticalOffset: 0,
         menuAccentColor: null,
         faviconUrl: null,
-        ssoAutoRedirectSingleProvider: false,
-      });
+      }));
     }
 
-    res.json({
+    res.json(PublicPlatformBrandingSchema.parse({
       logoUrl: settings.logoUrl || null,
       loginLogoUrl: settings.loginLogoUrl || null,
       loginTitleVerticalOffset: settings.loginTitleVerticalOffset ?? 0,
@@ -157,8 +174,7 @@ router.get('/api/auth/branding', apiLimiter, async (_req, res) => {
       titleVerticalOffset: settings.titleVerticalOffset ?? 0,
       menuAccentColor: settings.menuAccentColor || null,
       faviconUrl: settings.faviconUrl || null,
-      ssoAutoRedirectSingleProvider: (settings as any).ssoAutoRedirectSingleProvider ?? false,
-    });
+    }));
   } catch (error) {
     logger.error('Get branding error:', error);
     res.status(500).json({ error: 'Failed to get branding' });
@@ -177,12 +193,33 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
     const settings = await settingsRepo.findOneBy({ id: 'default' });
 
     if (!settings) {
-      return res.json({
+      return res.json(PublicPlatformSettingsSchema.parse({
         syncPushEnabled: true,
         syncPullEnabled: false,
         gitProjectTokenSharingEnabled: false,
         defaultDeployRoles: ['owner', 'delegate', 'operator'],
-      });
+        engineOnboardingMode: 'manual_allowed',
+        projectEngineTargetMode: 'manual_allowed',
+        engineAccessAuthority: 'manual',
+        projectAccessAuthority: 'manual',
+        engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative',
+        governanceBehavior: derivePlatformGovernanceBehavior({
+          engineOnboardingMode: 'manual_allowed',
+          projectEngineTargetMode: 'manual_allowed',
+          engineAccessAuthority: 'manual',
+          projectAccessAuthority: 'manual',
+          accessGovernanceOwnershipMode: 'manual',
+        }),
+        credentiallessCustomerSidecarsEnabled: false,
+        ssoAllEnginesAssignmentMappingsEnabled: true,
+        ssoEngineOwnerAssignmentMappingsEnabled: false,
+        ssoEngineDelegateAssignmentMappingsEnabled: false,
+        ssoRegexClaimMappingsEnabled: false,
+        ssoBroadEntitlementMappingsEnabled: false,
+        ssoSecretViewMappingsEnabled: false,
+        ssoUnredactedAuditMappingsEnabled: false,
+        ssoPermanentDeleteMappingsEnabled: false,
+      }));
     }
 
     const defaultDeployRoles = (() => {
@@ -194,12 +231,41 @@ router.get('/api/auth/platform-settings', apiLimiter, requireAuth, async (_req, 
       }
     })();
 
-    res.json({
+    const engineOnboardingMode = normalizeEngineOnboardingMode(settings.engineOnboardingMode);
+    const projectEngineTargetMode = normalizeProjectEngineTargetMode(settings.projectEngineTargetMode);
+    const engineAccessAuthority = normalizeAccessAuthorityMode(settings.engineAccessAuthority);
+    const projectAccessAuthority = normalizeAccessAuthorityMode(settings.projectAccessAuthority);
+    const accessGovernanceOwnershipMode = ['config_locked', 'config_warn'].includes(String(settings.accessGovernanceOwnershipMode))
+      ? settings.accessGovernanceOwnershipMode as 'config_locked' | 'config_warn'
+      : 'manual';
+
+    res.json(PublicPlatformSettingsSchema.parse({
       syncPushEnabled: settings.syncPushEnabled ?? true,
       syncPullEnabled: settings.syncPullEnabled ?? false,
       gitProjectTokenSharingEnabled: settings.gitProjectTokenSharingEnabled ?? false,
       defaultDeployRoles,
-    });
+      engineOnboardingMode,
+      projectEngineTargetMode,
+      engineAccessAuthority,
+      projectAccessAuthority,
+      engineRuntimeAuthorizationMode: normalizeEngineRuntimeAuthorizationMode(settings.engineRuntimeAuthorizationMode),
+      governanceBehavior: derivePlatformGovernanceBehavior({
+        engineOnboardingMode,
+        projectEngineTargetMode,
+        engineAccessAuthority,
+        projectAccessAuthority,
+        accessGovernanceOwnershipMode,
+      }),
+      credentiallessCustomerSidecarsEnabled: settings.credentiallessCustomerSidecarsEnabled ?? false,
+      ssoAllEnginesAssignmentMappingsEnabled: settings.ssoAllEnginesAssignmentMappingsEnabled ?? true,
+      ssoEngineOwnerAssignmentMappingsEnabled: settings.ssoEngineOwnerAssignmentMappingsEnabled ?? false,
+      ssoEngineDelegateAssignmentMappingsEnabled: settings.ssoEngineDelegateAssignmentMappingsEnabled ?? false,
+      ssoRegexClaimMappingsEnabled: settings.ssoRegexClaimMappingsEnabled ?? false,
+      ssoBroadEntitlementMappingsEnabled: settings.ssoBroadEntitlementMappingsEnabled ?? false,
+      ssoSecretViewMappingsEnabled: settings.ssoSecretViewMappingsEnabled ?? false,
+      ssoUnredactedAuditMappingsEnabled: settings.ssoUnredactedAuditMappingsEnabled ?? false,
+      ssoPermanentDeleteMappingsEnabled: settings.ssoPermanentDeleteMappingsEnabled ?? false,
+    }));
   } catch (error) {
     logger.error('Get platform settings error:', error);
     res.status(500).json({ error: 'Failed to get platform settings' });

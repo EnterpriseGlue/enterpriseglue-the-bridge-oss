@@ -7,7 +7,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@test/mocks/server';
 import { apiClient } from '@src/shared/api/client';
-import ProjectOverview from '@src/features/starbase/pages/ProjectOverview';
+import ProjectOverview, { getBulkPermissionDenial } from '@src/features/starbase/pages/ProjectOverview';
+import type { ProjectMemberAccessView } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
+
+const authMocks = vi.hoisted(() => ({
+  hasPlatformPermission: vi.fn(),
+  hasProjectPermission: vi.fn(),
+}));
+
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    hasPlatformPermission: authMocks.hasPlatformPermission,
+    hasProjectPermission: authMocks.hasProjectPermission,
+    hasEnginePermission: vi.fn(() => false),
+  }),
+}));
 
 vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
   usePlatformSyncSettings: () => ({
@@ -51,6 +65,8 @@ describe('ProjectOverview actions', () => {
 
   beforeEach(() => {
     projectName = 'Alpha Project';
+    authMocks.hasPlatformPermission.mockReturnValue(true);
+    authMocks.hasProjectPermission.mockReturnValue(false);
     server.use(
       http.get('/starbase-api/projects', () => {
         return HttpResponse.json([
@@ -150,29 +166,52 @@ describe('ProjectOverview actions', () => {
     expect(Boolean(screen.getByRole('heading', { name: /create project/i }))).toBe(true);
   });
 
-  it('renames a project via inline edit', { timeout: 15_000 }, async () => {
+  it('disables create project when project creation permission is missing', async () => {
+    authMocks.hasPlatformPermission.mockReturnValue(false);
     renderWithProviders();
 
     await waitFor(() => {
       expect(Boolean(screen.getByText('Alpha Project'))).toBe(true);
     });
 
-    const overflowButton = screen.getByRole('button', { name: /options/i });
-    await userEvent.click(overflowButton);
+    const newButton = screen.getByRole('button', { name: /new project/i });
+    expect(newButton).toBeDisabled();
+    expect(newButton).toHaveAttribute('title', 'Missing permission project:create');
 
-    const renameOption = await screen.findByText('Rename');
-    await userEvent.click(renameOption);
+    await userEvent.click(newButton);
+    expect(screen.queryByRole('heading', { name: /create project/i })).not.toBeInTheDocument();
+  });
 
-    const nameInput = screen.getByDisplayValue('Alpha Project');
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, 'Renamed Project{enter}');
+  it('does not treat legacy membership roles as bulk permission grants', () => {
+    const project = { id: 'project-1', name: 'Alpha Project' } as any;
+    const memberships: Map<string, ProjectMemberAccessView | null | undefined> = new Map([['project-1', {
+      id: 'membership-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      joinedAt: 1,
+      role: 'owner',
+      roles: ['owner'],
+      user: { id: 'user-1', email: 'legacy.owner@example.com', firstName: 'Legacy', lastName: 'Owner' },
+    }]]);
 
-    await waitFor(() => {
-      expect(Boolean(screen.queryByDisplayValue('Renamed Project'))).toBe(false);
-    });
+    expect(getBulkPermissionDenial(
+      [project],
+      'delete',
+      ['project:delete'],
+      memberships
+    )).toMatchObject({ permissionId: 'project:delete' });
+
+    expect(getBulkPermissionDenial(
+      [project],
+      'delete',
+      ['project:delete'],
+      memberships,
+      () => true
+    )).toBeNull();
   });
 
   it('downloads a project from the overflow menu', async () => {
+    authMocks.hasProjectPermission.mockImplementation((_projectId: string, permission: string) => permission === 'project:files:view');
     const getBlobSpy = vi.spyOn(apiClient, 'getBlob').mockResolvedValue(new Blob(['zip']));
     (globalThis.URL as any).createObjectURL = vi.fn(() => 'blob:mock');
     (globalThis.URL as any).revokeObjectURL = vi.fn();
@@ -192,4 +231,5 @@ describe('ProjectOverview actions', () => {
       expect(getBlobSpy).toHaveBeenCalledWith('/starbase-api/projects/project-1/download');
     });
   });
+
 });

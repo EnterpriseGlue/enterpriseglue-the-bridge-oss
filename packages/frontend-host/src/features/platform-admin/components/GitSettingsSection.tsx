@@ -1,15 +1,23 @@
 import React from 'react'
-import { Toggle, Tile } from '@carbon/react'
+import { InlineNotification, Toggle, Tile } from '@carbon/react'
 import { PlatformGrid, PlatformRow, PlatformCol } from './PlatformGrid'
 import GitProvidersSettings from './GitProvidersSettings'
 import type { PlatformSettings } from '../../../api/platform-admin'
+import type {
+  GitProviderAdminSummary,
+  UpdateGitProviderRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/git-provider.js'
 
 interface GitSettingsSectionProps {
   settings: PlatformSettings | undefined
-  gitProviders: any[]
+  gitProviders: GitProviderAdminSummary[]
   gitProvidersLoading: boolean
   onToggle: (key: 'syncPushEnabled' | 'syncPullEnabled' | 'gitProjectTokenSharingEnabled', value: boolean) => void
-  onUpdateGitProvider: (id: string, updates: any) => Promise<void>
+  onUpdateGitProvider: (id: string, updates: UpdateGitProviderRequest) => Promise<void>
+  canManageSettings?: boolean
+  settingsUnavailableReason?: string | null
+  canManageGitProviders?: boolean
+  gitProvidersUnavailableReason?: string | null
 }
 
 export function GitSettingsSection({
@@ -18,7 +26,13 @@ export function GitSettingsSection({
   gitProvidersLoading,
   onToggle,
   onUpdateGitProvider,
+  canManageSettings = true,
+  settingsUnavailableReason,
+  canManageGitProviders = true,
+  gitProvidersUnavailableReason,
 }: GitSettingsSectionProps) {
+  const disabledReason = settingsUnavailableReason || 'Missing permission platform:settings:manage'
+
   return (
     <PlatformGrid style={{ paddingInline: 0, alignItems: 'stretch' }}>
       <PlatformRow>
@@ -35,6 +49,16 @@ export function GitSettingsSection({
             <p style={{ margin: '0 0 var(--spacing-4) 0', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
               Configure how StarBase syncs with Git repositories.
             </p>
+            {!canManageSettings && (
+              <InlineNotification
+                kind="warning"
+                title="Git sync options are read-only"
+                subtitle={disabledReason}
+                hideCloseButton
+                lowContrast
+                style={{ marginBottom: 'var(--spacing-4)' }}
+              />
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-4)' }}>
               <Toggle
@@ -43,7 +67,10 @@ export function GitSettingsSection({
                 labelA="Off"
                 labelB="On"
                 toggled={settings?.syncPushEnabled ?? true}
-                onToggle={(checked) => onToggle('syncPushEnabled', checked)}
+                onToggle={(checked) => {
+                  if (canManageSettings) onToggle('syncPushEnabled', checked)
+                }}
+                disabled={!canManageSettings}
               />
               <Toggle
                 id="sync-pull"
@@ -51,7 +78,10 @@ export function GitSettingsSection({
                 labelA="Off"
                 labelB="On"
                 toggled={settings?.syncPullEnabled ?? false}
-                onToggle={(checked) => onToggle('syncPullEnabled', checked)}
+                onToggle={(checked) => {
+                  if (canManageSettings) onToggle('syncPullEnabled', checked)
+                }}
+                disabled={!canManageSettings}
               />
               {/* Token reuse toggle removed — tokens now stored at project level */}
             </div>
@@ -69,6 +99,8 @@ export function GitSettingsSection({
               providers={gitProviders || []}
               isLoading={gitProvidersLoading}
               onUpdateProvider={onUpdateGitProvider}
+              canManageProviders={canManageGitProviders}
+              unavailableReason={gitProvidersUnavailableReason}
             />
           </Tile>
         </PlatformCol>

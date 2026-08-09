@@ -3,6 +3,20 @@
  * Matches backend API schemas
  */
 
+import type {
+  AcquireLockRequest as SharedAcquireLockRequest,
+  DeployRequest as SharedDeployRequest,
+  DeploymentResponse as SharedDeploymentResponse,
+  LockHeartbeatRequest as SharedLockHeartbeatRequest,
+  LockHolder as SharedLockHolder,
+  LockResponse as SharedLockResponse,
+  RollbackRequest as SharedRollbackRequest,
+  InitRepositoryRequest as SharedInitRepositoryRequest,
+  CloneRepositoryRequest as SharedCloneRepositoryRequest,
+  CloneFromGitRequest as SharedCloneFromGitRequest,
+  GitProviderSummary as SharedGitProviderSummary,
+} from '@enterpriseglue/shared/schemas/git/index.js';
+
 export interface Repository {
   id: string;
   projectId: string;
@@ -18,19 +32,7 @@ export interface Repository {
   updatedAt: number;
 }
 
-export interface GitProvider {
-  id: string;
-  tenantId?: string | null;
-  name: string;
-  type: 'github' | 'gitlab' | 'azure-devops' | 'bitbucket';
-  baseUrl: string;
-  apiUrl: string;
-  supportsOAuth?: boolean;
-  supportsPAT?: boolean;
-  isActive?: boolean;
-  createdAt?: number;
-  updatedAt?: number;
-}
+export type GitProvider = SharedGitProviderSummary;
 
 export interface Deployment {
   id: string;
@@ -74,83 +76,14 @@ export interface Commit {
 }
 
 // Request types
-export interface InitRepositoryRequest {
-  projectId: string;
-  providerId: string;
-  remoteUrl: string;
-  namespace?: string;
-}
+export type InitRepositoryRequest = SharedInitRepositoryRequest;
+export type CloneRepositoryRequest = SharedCloneRepositoryRequest;
+export type CloneFromGitRequest = SharedCloneFromGitRequest;
 
-export interface CloneRepositoryRequest {
-  projectId: string;
-  providerId: string;
-  remoteUrl: string;
-  namespace?: string;
-  conflictStrategy?: 'preferRemote' | 'preferLocal';
-}
-
-export interface CloneFromGitRequest {
-  providerId: string;
-  repoUrl: string;
-  branch?: string;
-  projectName?: string;
-  conflictStrategy?: 'preferRemote' | 'preferLocal';
-}
-
-export interface DeployRequest {
-  projectId: string;
-  message: string;
-  environment?: string;
-  createTag?: boolean;
-  tagName?: string;
-}
-
-export interface RollbackRequest {
-  projectId: string;
-  commitSha: string;
-}
-
-export interface AcquireLockRequest {
-  fileId: string;
-  force?: boolean;
-  visibilityState?: 'visible' | 'hidden';
-  hasInteraction?: boolean;
-}
-
-export interface LockHeartbeatRequest {
-  visibilityState?: 'visible' | 'hidden';
-  hasInteraction?: boolean;
-}
-
-// Response types
-export interface DeploymentResponse {
-  deploymentId: string;
-  commitSha: string;
-  tag?: string;
-  filesChanged: number;
-}
-
-export interface LockResponse {
-  id: string;
-  fileId: string;
-  userId: string;
-  acquiredAt: number;
-  lastInteractionAt: number;
-  expiresAt: number;
-  heartbeatAt: number;
-  visibilityState: 'visible' | 'hidden';
-  visibilityChangedAt: number;
-  sessionStatus: 'active' | 'idle' | 'hidden';
-  userName?: string;
-}
-
-export interface LockHolder {
-  userId: string;
-  name: string;
-  acquiredAt: number;
-  heartbeatAt: number;
-  lastInteractionAt: number;
-  visibilityState: 'visible' | 'hidden';
-  visibilityChangedAt: number;
-  sessionStatus: 'active' | 'idle' | 'hidden';
-}
+export type DeployRequest = SharedDeployRequest;
+export type RollbackRequest = SharedRollbackRequest;
+export type AcquireLockRequest = SharedAcquireLockRequest;
+export type LockHeartbeatRequest = SharedLockHeartbeatRequest;
+export type DeploymentResponse = SharedDeploymentResponse;
+export type LockResponse = SharedLockResponse;
+export type LockHolder = SharedLockHolder;

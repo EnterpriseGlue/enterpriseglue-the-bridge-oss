@@ -6,16 +6,47 @@ import path from 'node:path';
 const API_BASE_URL = process.env.E2E_API_BASE_URL || process.env.API_BASE_URL || 'http://localhost:8787';
 const SEED_FILE = process.env.E2E_SEED_FILE || path.resolve(process.cwd(), 'test/e2e/.seed/user.json');
 
+function isLoopbackOrLocalHost(host: string): boolean {
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local');
+}
+
+function isIsolatedComposeService(host: string): boolean {
+  return process.env.E2E_LOCAL_COMPOSE_NETWORK === 'true'
+    && ['db', 'frontend-tls'].includes(host);
+}
+
 function assertLocalUrl(url: string): void {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname;
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) return;
+    if (isLoopbackOrLocalHost(host) || isIsolatedComposeService(host)) return;
     throw new Error(`E2E teardown refuses to call non-local URL: ${url}`);
   } catch (e) {
     if (e instanceof TypeError) throw new Error(`Invalid API_BASE_URL: ${url}`);
     throw e;
   }
+}
+
+function assertLocalDatabaseTarget(): void {
+  const host = process.env.POSTGRES_HOST || 'localhost';
+  if (isLoopbackOrLocalHost(host) || (process.env.E2E_LOCAL_COMPOSE_NETWORK === 'true' && host === 'db')) return;
+  throw new Error(`E2E teardown refuses to change a non-local database host: ${host}`);
+}
+
+async function tenantMembershipsSupported(pool: import('pg').Pool, schema: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'tenant_memberships'`,
+    [schema],
+  );
+  return (result.rowCount || 0) > 0;
+}
+
+async function tableExists(pool: import('pg').Pool, schema: string, tableName: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2`,
+    [schema, tableName],
+  );
+  return (result.rowCount || 0) > 0;
 }
 
 async function loadBackendEnv() {
@@ -92,7 +123,148 @@ async function fetchJson<T>(
   return data as T;
 }
 
-async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null) {
+/**
+ * Native-grant browser evidence creates a dedicated config bundle whose key is
+ * intentionally not part of the generic e2e key prefix.  Remove only records
+ * bound to the known synthetic engine (or an orphaned engine left by a prior
+ * interrupted local run), and remove dependent rows before their imported
+ * parents so this works with databases that enforce foreign keys.
+ */
+async function cleanupNativeGrantIdentitySourceArtifacts(pool: import('pg').Pool, schema: string) {
+  const marker = 'e2e-native-browser-identity-source';
+  const providerRows = await pool.query(
+    `SELECT id FROM ${schema}.identity_providers WHERE source_ref = $1`,
+    [marker],
+  );
+  const providerIds = providerRows.rows.map((row: { id: string }) => row.id);
+  if (providerIds.length === 0) return;
+
+  const mappingRows = await pool.query(
+    `SELECT id, provider_id FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`,
+    [providerIds],
+  );
+  const membershipRefs = mappingRows.rows.flatMap((row: { id: string; provider_id: string }) => [
+    `identity_provider:${row.provider_id}:mapping:${row.id}`,
+    `identity_mapping:${row.id}`,
+  ]);
+  if (membershipRefs.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.authz_group_memberships WHERE source = 'identity_provider' AND source_ref = ANY($1::text[])`,
+      [membershipRefs],
+    );
+  }
+  await pool.query(`DELETE FROM ${schema}.external_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.sso_normalized_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_providers WHERE id = ANY($1::text[])`, [providerIds]);
+}
+
+/**
+ * Browser rehearsals deliberately create uniquely named providers so parallel
+ * runs cannot share authentication state. Archiving through the product API is
+ * the behavior under test, but archived rows must not accumulate in the local
+ * acceptance database or leak into later screenshots and chooser assertions.
+ *
+ * This hard-delete is restricted to the E2E-only key namespaces below and is
+ * guarded by assertLocalDatabaseTarget() before teardown reaches this helper.
+ */
+async function cleanupDisposableIdentityProviderArtifacts(pool: import('pg').Pool, schema: string) {
+  const providerRows = await pool.query(
+    `SELECT id FROM ${schema}.identity_providers
+     WHERE key LIKE 'local-oidc-authz-%'
+        OR key LIKE 'identity.oidc.config.%'`,
+  );
+  const providerIds = providerRows.rows.map((row: { id: string }) => row.id);
+  if (providerIds.length === 0) return;
+
+  const mappingRows = await pool.query(
+    `SELECT id FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`,
+    [providerIds],
+  );
+  const mappingIds = mappingRows.rows.map((row: { id: string }) => row.id);
+  const mappingMembershipRefs = mappingIds.flatMap((mappingId) => [
+    `identity_mapping:${mappingId}`,
+    ...providerIds.map((providerId) => `identity_provider:${providerId}:mapping:${mappingId}`),
+  ]);
+
+  if (mappingMembershipRefs.length > 0) {
+    await pool.query(
+      `DELETE FROM ${schema}.authz_group_memberships
+       WHERE source = 'identity_provider' AND source_ref = ANY($1::text[])`,
+      [mappingMembershipRefs],
+    );
+  }
+
+  await pool.query(`DELETE FROM ${schema}.sso_sync_events WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.sso_sync_runs WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  if (await tableExists(pool, schema, 'sso_group_mappings')) {
+    await pool.query(`DELETE FROM ${schema}.sso_group_mappings WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  }
+  await pool.query(`DELETE FROM ${schema}.sso_engine_access_snapshots WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.saml_assertion_replays WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_reconciliation_checkpoints WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.config_bundle_identity_replay_tasks WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE identity_provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.external_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.sso_normalized_identities WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(`DELETE FROM ${schema}.identity_entitlement_mappings WHERE provider_id = ANY($1::text[])`, [providerIds]);
+  await pool.query(
+    `DELETE FROM ${schema}.audit_logs
+     WHERE resource_type = 'identity_provider' AND resource_id = ANY($1::text[])`,
+    [providerIds],
+  );
+  await pool.query(`DELETE FROM ${schema}.identity_providers WHERE id = ANY($1::text[])`, [providerIds]);
+}
+
+async function cleanupNativeGrantMigrationArtifacts(pool: import('pg').Pool, schema: string, engineId: string) {
+  await cleanupNativeGrantIdentitySourceArtifacts(pool, schema);
+  const runRows = await pool.query(
+    `SELECT applied_config_bundle_run_id, rollback_config_bundle_run_id FROM ${schema}.camunda_native_grant_import_runs WHERE engine_id = $1 OR NOT EXISTS (SELECT 1 FROM ${schema}.engines AS engine WHERE engine.id = camunda_native_grant_import_runs.engine_id)`,
+    [engineId]
+  );
+  const applyRunIds = [...new Set(runRows.rows.flatMap((row: { applied_config_bundle_run_id?: string | null; rollback_config_bundle_run_id?: string | null }) => [
+    row.applied_config_bundle_run_id,
+    row.rollback_config_bundle_run_id,
+  ].filter((value): value is string => Boolean(value))))];
+  const bundleKeys = applyRunIds.length > 0
+    ? (await pool.query(`SELECT bundle_key FROM ${schema}.config_bundle_apply_runs WHERE id = ANY($1::text[])`, [applyRunIds])).rows
+      .map((row: { bundle_key: string }) => row.bundle_key)
+    : [];
+  const sourceRefs = bundleKeys.map((bundleKey: string) => `config_bundle:${bundleKey}`);
+
+  if (sourceRefs.length > 0) {
+    const [roleRows, groupRows, resourceSetRows] = await Promise.all([
+      pool.query(`SELECT id FROM ${schema}.roles WHERE source_ref = ANY($1::text[])`, [sourceRefs]),
+      pool.query(`SELECT id FROM ${schema}.authz_groups WHERE source_ref = ANY($1::text[])`, [sourceRefs]),
+      pool.query(`SELECT id FROM ${schema}.runtime_resource_sets WHERE source_ref = ANY($1::text[])`, [sourceRefs]),
+    ]);
+    const roleIds = roleRows.rows.map((row: { id: string }) => row.id);
+    const groupIds = groupRows.rows.map((row: { id: string }) => row.id);
+    const resourceSetIds = resourceSetRows.rows.map((row: { id: string }) => row.id);
+
+    await pool.query(`DELETE FROM ${schema}.config_role_assignment_overrides WHERE source_ref = ANY($1::text[])`, [sourceRefs]);
+    await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = ANY($1::text[]) OR group_id = ANY($2::text[])`, [sourceRefs, groupIds]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE source_ref = ANY($1::text[]) OR role_id = ANY($2::text[])`, [sourceRefs, roleIds]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resource_set_materializations WHERE runtime_resource_set_id = ANY($1::text[])`, [resourceSetIds]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resource_sets WHERE id = ANY($1::text[])`, [resourceSetIds]);
+    await pool.query(`DELETE FROM ${schema}.role_permissions WHERE role_id = ANY($1::text[])`, [roleIds]);
+    await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [roleIds]);
+    await pool.query(`DELETE FROM ${schema}.authz_groups WHERE id = ANY($1::text[])`, [groupIds]);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle' AND resource_id = ANY($1::text[])`, [bundleKeys]);
+  }
+
+  if (applyRunIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.config_bundle_identity_replay_tasks WHERE apply_run_id = ANY($1::text[])`, [applyRunIds]);
+    await pool.query(`DELETE FROM ${schema}.config_bundle_runtime_reconciliation_tasks WHERE apply_run_id = ANY($1::text[])`, [applyRunIds]);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle_apply_run' AND resource_id = ANY($1::text[])`, [applyRunIds]);
+  }
+  await pool.query(`DELETE FROM ${schema}.camunda_native_grant_import_runs WHERE engine_id = $1 OR NOT EXISTS (SELECT 1 FROM ${schema}.engines AS engine WHERE engine.id = camunda_native_grant_import_runs.engine_id)`, [engineId]);
+  if (applyRunIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.config_bundle_apply_runs WHERE id = ANY($1::text[])`, [applyRunIds]);
+  }
+}
+
+async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null, membershipSourceRef?: string | null) {
   const pgModule = await import('pg');
   const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
   const schema = process.env.POSTGRES_SCHEMA || 'main';
@@ -113,6 +285,39 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
     ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
     options: `-c search_path=${schema}`,
   });
+  const hasTenantMemberships = await tenantMembershipsSupported(pool, schema);
+  await cleanupDisposableIdentityProviderArtifacts(pool, schema);
+
+  if (membershipSourceRef) {
+    const [engineSetRows, runtimeResourceSetRows] = await Promise.all([
+      pool.query(`SELECT id FROM ${schema}.engine_sets WHERE source_ref = $1`, [membershipSourceRef]),
+      pool.query(`SELECT id FROM ${schema}.runtime_resource_sets WHERE source_ref = $1`, [membershipSourceRef]),
+    ]);
+    const engineSetIds = engineSetRows.rows.map((row: { id: string }) => row.id);
+    const runtimeResourceSetIds = runtimeResourceSetRows.rows.map((row: { id: string }) => row.id);
+    if (engineSetIds.length > 0) {
+      await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_type = 'engine_set' AND scope_id = ANY($1::text[])`, [engineSetIds]);
+      await pool.query(`DELETE FROM ${schema}.engine_set_materializations WHERE engine_set_id = ANY($1::text[])`, [engineSetIds]);
+      await pool.query(`DELETE FROM ${schema}.engine_sets WHERE id = ANY($1::text[])`, [engineSetIds]);
+    }
+    if (runtimeResourceSetIds.length > 0) {
+      await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_type = 'engine_runtime_resource_set' AND scope_id = ANY($1::text[])`, [runtimeResourceSetIds]);
+      await pool.query(`DELETE FROM ${schema}.runtime_resource_set_materializations WHERE runtime_resource_set_id = ANY($1::text[])`, [runtimeResourceSetIds]);
+      await pool.query(`DELETE FROM ${schema}.runtime_resource_sets WHERE id = ANY($1::text[])`, [runtimeResourceSetIds]);
+    }
+    await pool.query(`DELETE FROM ${schema}.authz_group_memberships WHERE source_ref = $1`, [membershipSourceRef]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE source_ref = $1`, [membershipSourceRef]);
+    await pool.query(`DELETE FROM ${schema}.authz_groups WHERE source_ref = $1`, [membershipSourceRef]);
+    const customRoleIds = await pool.query(`SELECT id FROM ${schema}.roles WHERE source_ref = $1`, [membershipSourceRef]);
+    const roleIds = customRoleIds.rows.map((row: { id: string }) => row.id);
+    if (roleIds.length > 0) {
+      await pool.query(`DELETE FROM ${schema}.role_permissions WHERE role_id = ANY($1::text[])`, [roleIds]);
+      await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [roleIds]);
+    }
+  }
+  if (hasTenantMemberships) {
+    await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [userId]);
+  }
 
   const projectIdsResult = await pool.query(
     `SELECT id FROM ${schema}.projects WHERE owner_id = $1`,
@@ -153,6 +358,12 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   );
 
   if (engineId) {
+    await cleanupNativeGrantMigrationArtifacts(pool, schema, engineId);
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'engine' AND resource_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.engine_tenant_mappings WHERE engine_id = $1`, [engineId]);
+    await pool.query(`DELETE FROM ${schema}.external_engine_registrations WHERE engine_id = $1`, [engineId]);
     await pool.query(`DELETE FROM ${schema}.engines WHERE id = $1`, [engineId]);
   }
 
@@ -177,6 +388,7 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
   );
   const staleUserIds = staleUserIdsResult.rows.map((r: any) => r.id);
   if (staleUserIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE principal_type = 'user' AND principal_id = ANY($1::text[])`, [staleUserIds]);
     await pool.query(`DELETE FROM ${schema}.refresh_tokens WHERE user_id = ANY($1::text[])`, [staleUserIds]);
     await pool.query(`DELETE FROM ${schema}.project_member_roles WHERE user_id = ANY($1::text[])`, [staleUserIds]);
     await pool.query(`DELETE FROM ${schema}.project_members WHERE user_id = ANY($1::text[])`, [staleUserIds]);
@@ -185,11 +397,88 @@ async function cleanupDatabaseArtifacts(userId: string, engineId?: string | null
       `DELETE FROM ${schema}.invitations WHERE user_id = ANY($1::text[]) OR email LIKE ANY($2::text[])`,
       [staleUserIds, staleUserEmailPatterns]
     );
+    if (hasTenantMemberships) {
+      await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = ANY($1::text[])`, [staleUserIds]);
+    }
   }
-  await pool.query(`DELETE FROM ${schema}.engines WHERE name LIKE 'e2e-%'`);
+  const staleEngineIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.engines WHERE name LIKE 'e2e-%'`
+  );
+  const staleEngineIds = staleEngineIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleEngineIds.length > 0) {
+    for (const staleEngineId of staleEngineIds) {
+      await cleanupNativeGrantMigrationArtifacts(pool, schema, staleEngineId);
+    }
+    await pool.query(`DELETE FROM ${schema}.audit_logs WHERE resource_type = 'engine' AND resource_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE scope_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.runtime_resources WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.engine_tenant_mappings WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.external_engine_registrations WHERE engine_id = ANY($1::text[])`, [staleEngineIds]);
+    await pool.query(`DELETE FROM ${schema}.engines WHERE id = ANY($1::text[])`, [staleEngineIds]);
+  }
+  // A cancelled browser run can leave its disposable custom roles behind even
+  // after the seeded users have been removed. The `custom.e2e.` namespace is
+  // reserved for this local test harness, so remove its dependants first.
+  const staleRoleIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.roles WHERE key LIKE 'custom.e2e.%'`
+  );
+  const staleRoleIds = staleRoleIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleRoleIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE role_id = ANY($1::text[])`, [staleRoleIds]);
+    await pool.query(`DELETE FROM ${schema}.role_permissions WHERE role_id = ANY($1::text[])`, [staleRoleIds]);
+    await pool.query(`DELETE FROM ${schema}.roles WHERE id = ANY($1::text[])`, [staleRoleIds]);
+  }
+  const staleApiClientIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.api_clients WHERE name LIKE 'e2e-%'`
+  );
+  const staleApiClientIds = staleApiClientIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleApiClientIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.role_assignments WHERE principal_type = 'api_client' AND principal_id = ANY($1::text[])`, [staleApiClientIds]);
+    await pool.query(`DELETE FROM ${schema}.api_clients WHERE id = ANY($1::text[])`, [staleApiClientIds]);
+  }
+  const staleConfigApplyRunIdsResult = await pool.query(
+    `SELECT id FROM ${schema}.config_bundle_apply_runs WHERE bundle_key LIKE 'e2e.%' OR bundle_key LIKE 'e2e-%'`
+  );
+  const staleConfigApplyRunIds = staleConfigApplyRunIdsResult.rows.map((row: { id: string }) => row.id);
+  if (staleConfigApplyRunIds.length > 0) {
+    await pool.query(`DELETE FROM ${schema}.config_bundle_identity_replay_tasks WHERE apply_run_id = ANY($1::text[])`, [staleConfigApplyRunIds]);
+    await pool.query(`DELETE FROM ${schema}.config_bundle_runtime_reconciliation_tasks WHERE apply_run_id = ANY($1::text[])`, [staleConfigApplyRunIds]);
+    await pool.query(
+      `DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle_apply_run' AND resource_id = ANY($1::text[])`,
+      [staleConfigApplyRunIds]
+    );
+    await pool.query(`DELETE FROM ${schema}.config_bundle_apply_runs WHERE id = ANY($1::text[])`, [staleConfigApplyRunIds]);
+  }
+  await pool.query(
+    `DELETE FROM ${schema}.audit_logs WHERE resource_type = 'config_bundle' AND (resource_id LIKE 'e2e.%' OR resource_id LIKE 'e2e-%')`
+  );
   await pool.query(`DELETE FROM ${schema}.users WHERE email LIKE ANY($1::text[])`, [staleUserEmailPatterns]);
 
   await pool.end();
+}
+
+async function restoreDirectProviders(ids: string[] | undefined) {
+  if (!ids || ids.length === 0) return;
+  const pgModule = await import('pg');
+  const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
+  const schema = process.env.POSTGRES_SCHEMA || 'main';
+  const pool = new Pool({
+    host: process.env.POSTGRES_HOST,
+    port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+    user: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DATABASE,
+    ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    options: `-c search_path=${schema}`,
+  });
+  try {
+    await pool.query(
+      `UPDATE ${schema}.identity_providers SET is_enabled = true, updated_at = $2 WHERE id = ANY($1::text[])`,
+      [ids, Date.now()]
+    );
+  } finally {
+    await pool.end();
+  }
 }
 
 export default async function globalTeardown() {
@@ -202,6 +491,8 @@ export default async function globalTeardown() {
   }
 
   await loadBackendEnv();
+  assertLocalUrl(API_BASE_URL);
+  assertLocalDatabaseTarget();
 
   const raw = await readFile(SEED_FILE, 'utf8');
   const data = JSON.parse(raw) as {
@@ -211,6 +502,8 @@ export default async function globalTeardown() {
     adminEmail?: string;
     adminPassword?: string;
     engineId?: string;
+    membershipSourceRef?: string;
+    disabledDirectProviderIds?: string[];
   };
 
   if (!data.userId) {
@@ -223,70 +516,60 @@ export default async function globalTeardown() {
     password: data.adminPassword || getAdminCredentials().password,
   };
 
-  if (adminEmail && adminPassword) {
-    // Login sets httpOnly cookies — fetchJson captures them automatically
-    await fetchJson('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: adminEmail, password: adminPassword }),
-    });
-
-    // Make a GET request to acquire a CSRF token (login endpoint is exempt from CSRF middleware)
-    await fetchJson('/api/dashboard/context', undefined, { allowStatuses: [401, 403, 404, 500] });
-
-    await fetchJson(
-      `/api/users/${data.userId}`,
-      { method: 'DELETE' },
-      { allowStatuses: [404] }
-    );
-
-    if (data.engineId) {
-      await fetchJson(
-        `/engines-api/engines/${data.engineId}`,
-        { method: 'DELETE' },
-        { allowStatuses: [403, 404] }
-      );
-    }
-
-    if (data.cleanupAdmin && data.adminUserId) {
-      await fetchJson(
-        `/api/users/${data.adminUserId}`,
-        { method: 'DELETE' },
-        { allowStatuses: [400, 403, 404, 500] }
-      );
-    }
-
-    if (data.userId) {
-      try {
-        await cleanupDatabaseArtifacts(data.userId, data.engineId || null);
-      } catch (error) {
-        console.warn('E2E DB cleanup failed after API cleanup.', error);
-      }
-    }
-  } else {
+  if (adminEmail && adminPassword && process.env.E2E_DIRECT_DB_CLEANUP !== 'true') {
     try {
-      await cleanupDatabaseArtifacts(data.userId, data.engineId || null);
-
+      // Login sets httpOnly cookies — fetchJson captures them automatically.
+      // SSO policy can legitimately reject a retained local administrator, so
+      // API cleanup is opportunistic; the local fixture cleanup below remains
+      // authoritative and does not depend on a deployed IdP or break-glass row.
+      await fetchJson('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: adminEmail, password: adminPassword }),
+      });
+      await fetchJson('/api/dashboard/context', undefined, { allowStatuses: [401, 403, 404, 500] });
+      await fetchJson(`/api/users/${data.userId}`, { method: 'DELETE' }, { allowStatuses: [404] });
+      if (data.engineId) {
+        await fetchJson(`/engines-api/engines/${data.engineId}`, { method: 'DELETE' }, { allowStatuses: [403, 404] });
+      }
       if (data.cleanupAdmin && data.adminUserId) {
-        const pgModule = await import('pg');
-        const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
-        const schema = process.env.POSTGRES_SCHEMA || 'main';
-        const pool = new Pool({
-          host: process.env.POSTGRES_HOST,
-          port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
-          user: process.env.POSTGRES_USER,
-          password: process.env.POSTGRES_PASSWORD,
-          database: process.env.POSTGRES_DATABASE,
-          ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
-          options: `-c search_path=${schema}`,
-        });
-        await pool.query(`DELETE FROM ${schema}.users WHERE id = $1`, [data.adminUserId]);
-        await pool.end();
+        await fetchJson(`/api/users/${data.adminUserId}`, { method: 'DELETE' }, { allowStatuses: [400, 403, 404, 500] });
       }
     } catch (error) {
-      console.warn('E2E cleanup skipped: missing ADMIN_EMAIL/ADMIN_PASSWORD and DB cleanup failed.', error);
-      return;
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`E2E API cleanup was unavailable; using direct local fixture cleanup. ${message}`);
     }
   }
 
-  await rm(SEED_FILE, { force: true });
+  try {
+    await cleanupDatabaseArtifacts(data.userId, data.engineId || null, data.membershipSourceRef || null);
+
+    if (data.cleanupAdmin && data.adminUserId) {
+      const pgModule = await import('pg');
+      const Pool = (pgModule.default?.Pool || pgModule.Pool) as typeof import('pg').Pool;
+      const schema = process.env.POSTGRES_SCHEMA || 'main';
+      const pool = new Pool({
+        host: process.env.POSTGRES_HOST,
+        port: process.env.POSTGRES_PORT ? Number(process.env.POSTGRES_PORT) : 5432,
+        user: process.env.POSTGRES_USER,
+        password: process.env.POSTGRES_PASSWORD,
+        database: process.env.POSTGRES_DATABASE,
+        ssl: process.env.POSTGRES_SSL === 'true' ? { rejectUnauthorized: false } : false,
+        options: `-c search_path=${schema}`,
+      });
+      if (await tenantMembershipsSupported(pool, schema)) {
+        await pool.query(`DELETE FROM ${schema}.tenant_memberships WHERE user_id = $1`, [data.adminUserId]);
+      }
+      await pool.query(`DELETE FROM ${schema}.users WHERE id = $1`, [data.adminUserId]);
+      await pool.end();
+    }
+  } catch (error) {
+    console.warn('E2E direct local fixture cleanup failed.', error);
+  } finally {
+    try {
+      await restoreDirectProviders(data.disabledDirectProviderIds);
+    } catch (error) {
+      console.warn('E2E direct-provider state restoration failed.', error);
+    }
+    await rm(SEED_FILE, { force: true });
+  }
 }

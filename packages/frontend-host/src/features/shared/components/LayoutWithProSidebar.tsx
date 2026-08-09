@@ -29,29 +29,29 @@ import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformS
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
-import { ExtensionSlot } from '../../../enterprise/ExtensionSlot'
-import { isMultiTenantEnabled, getNavItemsBySection, type NavExtension } from '../../../enterprise/extensionRegistry'
-
-interface TenantBranding {
-  logoUrl: string | null;
-  loginLogoUrl: string | null;
-  logoTitle: string | null;
-  loginTitleVerticalOffset: number;
-  loginTitleColor: string | null;
-  logoScale: number;
-  titleFontUrl: string | null;
-  titleFontWeight: string;
-  titleFontSize: number;
-  titleVerticalOffset: number;
-  menuAccentColor: string | null;
-  faviconUrl: string | null;
-}
+import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
+import { isMultiTenantEnabled, type NavExtension } from '../../../enterprise/extensionRegistry'
+import { evaluateActionSnapshot, GuardedMenuItem } from '../../../shared/auth/guards'
+import {
+  ADMIN_NAV_PLATFORM_PERMISSIONS,
+  hasAnyPlatformPermission,
+  hasEnginesUiAccess,
+  hasMissionControlUiAccess,
+  hasPlatformPermission,
+  hasStarbaseUiAccess,
+  PlatformPermission,
+  PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS,
+  USER_MANAGEMENT_PLATFORM_PERMISSIONS,
+} from '../../../shared/auth/permissions'
+import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
-type EnterpriseNavItem = {
+type AdminNavItem = {
   label: string
   path: string
+  visible: boolean
+  actionIds: string[]
 }
 
 type NotificationItem = {
@@ -75,6 +75,7 @@ const NOTIFICATION_FILTER_ITEMS: NotificationFilterItem[] = [
 // Multi-tenant mode is controlled by EE plugin via extension registry
 // In OSS: always false. In EE: set via registerFeatureOverride('multiTenant', true)
 const isMultiTenant = isMultiTenantEnabled()
+const PLATFORM_ADMIN_NAV_RESOURCE = { type: 'platform' as const }
 
 function formatRelativeTime(ms: number): string {
   const seconds = Math.floor((Date.now() - ms) / 1000)
@@ -88,10 +89,10 @@ function formatRelativeTime(ms: number): string {
   return new Date(ms).toLocaleDateString()
 }
 
-function normalizeEnterpriseNavItems(raw: unknown): EnterpriseNavItem[] {
+function normalizeEnterpriseNavItems(raw: unknown): NavExtension[] {
   if (!Array.isArray(raw)) return []
 
-  const items: EnterpriseNavItem[] = []
+  const items: NavExtension[] = []
   for (const it of raw) {
     if (!it || typeof it !== 'object') continue
     const anyIt = it as any
@@ -101,12 +102,31 @@ function normalizeEnterpriseNavItems(raw: unknown): EnterpriseNavItem[] {
       : (typeof anyIt.to === 'string' ? anyIt.to : (typeof anyIt.href === 'string' ? anyIt.href : null))
     if (!label || !path) continue
     const normalizedPath = String(path).startsWith('/') ? String(path) : `/${String(path)}`
-    items.push({ label, path: normalizedPath })
+    items.push({
+      id: typeof anyIt.id === 'string' ? anyIt.id : `${label}:${normalizedPath}`,
+      label,
+      path: normalizedPath,
+      order: typeof anyIt.order === 'number' ? anyIt.order : undefined,
+      actionId: typeof anyIt.actionId === 'string' ? anyIt.actionId : undefined,
+      actionIds: Array.isArray(anyIt.actionIds)
+        ? anyIt.actionIds.filter((actionId: unknown): actionId is string => typeof actionId === 'string')
+        : undefined,
+      actionResourceType: typeof anyIt.actionResourceType === 'string' ? anyIt.actionResourceType as NavExtension['actionResourceType'] : undefined,
+      actionResourceId: typeof anyIt.actionResourceId === 'string' || anyIt.actionResourceId === null ? anyIt.actionResourceId : undefined,
+      requiredPermission: typeof anyIt.requiredPermission === 'string' ? anyIt.requiredPermission : undefined,
+      requiredPermissions: Array.isArray(anyIt.requiredPermissions)
+        ? anyIt.requiredPermissions.filter((permission: unknown): permission is string => typeof permission === 'string')
+        : undefined,
+      requiresTenantAdmin: typeof anyIt.requiresTenantAdmin === 'boolean' ? anyIt.requiresTenantAdmin : undefined,
+      requiredRole: typeof anyIt.requiredRole === 'string' ? anyIt.requiredRole as NavExtension['requiredRole'] : undefined,
+      section: typeof anyIt.section === 'string' ? anyIt.section as NavExtension['section'] : undefined,
+      tenantOnly: typeof anyIt.tenantOnly === 'boolean' ? anyIt.tenantOnly : undefined,
+    })
   }
   return items
 }
 
-function normalizeBranding(raw: any): TenantBranding {
+function normalizeBranding(raw: any): PlatformBranding {
   const r = raw && typeof raw === 'object' ? raw : {}
   return {
     logoUrl: typeof r.logoUrl === 'string' ? r.logoUrl : null,
@@ -124,7 +144,7 @@ function normalizeBranding(raw: any): TenantBranding {
   }
 }
 
-function readCachedBranding(): TenantBranding | undefined {
+function readCachedBranding(): PlatformBranding | undefined {
   try {
     const raw = window.localStorage.getItem(BRANDING_CACHE_KEY)
     if (!raw) return undefined
@@ -134,7 +154,7 @@ function readCachedBranding(): TenantBranding | undefined {
   }
 }
 
-function writeCachedBranding(branding: TenantBranding): void {
+function writeCachedBranding(branding: PlatformBranding): void {
   try {
     window.localStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(branding))
   } catch {
@@ -144,7 +164,7 @@ function writeCachedBranding(branding: TenantBranding): void {
 export default function LayoutWithProSidebar() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { logout, user, refreshUser } = useAuth()
+  const { logout, user, permissions, refreshUser } = useAuth()
   const queryClient = useQueryClient()
   const { sidebarOpen, setSidebarOpen, sidebarCollapsed, setSidebarCollapsed, toggleSidebarCollapsed } = useLayoutStore()
 
@@ -211,8 +231,8 @@ export default function LayoutWithProSidebar() {
       const previous = queryClient.getQueryData(['notifications', notificationStates.join(',')]) as { notifications: NotificationItem[]; unreadCount: number } | undefined
       if (previous) {
         const filtered = previous.notifications.filter((n) => n.id !== id)
-        queryClient.setQueryData(['notifications', notificationStates.join(',')], { 
-          notifications: filtered, 
+        queryClient.setQueryData(['notifications', notificationStates.join(',')], {
+          notifications: filtered,
           unreadCount: Math.max(0, previous.unreadCount - (previous.notifications.find(n => n.id === id && !n.readAt) ? 1 : 0))
         })
       }
@@ -226,7 +246,7 @@ export default function LayoutWithProSidebar() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   })
 
-  const [enterpriseNavItems, setEnterpriseNavItems] = useState<EnterpriseNavItem[]>([])
+  const [enterpriseNavItems, setEnterpriseNavItems] = useState<NavExtension[]>([])
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -236,9 +256,48 @@ export default function LayoutWithProSidebar() {
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
 
   const inMissionControl = effectivePathname.startsWith('/mission-control')
-  const canViewAdminMenu = Boolean(user?.capabilities?.canViewAdminMenu)
-  const canViewMissionControl = Boolean(user?.capabilities?.canViewMissionControl)
-  const canManagePlatformSettings = Boolean(user?.capabilities?.canManagePlatformSettings)
+  const platformAdminMenuVisible = hasAnyPlatformPermission(permissions, ADMIN_NAV_PLATFORM_PERMISSIONS)
+  const missionControlMenuVisible = hasMissionControlUiAccess(permissions, user)
+  const platformSettingsManager = hasPlatformPermission(permissions, PlatformPermission.SETTINGS_MANAGE)
+  const userManagementAllowed = hasAnyPlatformPermission(permissions, USER_MANAGEMENT_PLATFORM_PERMISSIONS)
+  const adminRouteVisible = (allowedByPermission: boolean) => allowedByPermission
+  const platformSettingsHubVisible = adminRouteVisible(hasAnyPlatformPermission(permissions, PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS))
+  const adminNavItems: AdminNavItem[] = [
+    {
+      label: 'User Management',
+      path: '/admin/users',
+      visible: adminRouteVisible(userManagementAllowed),
+      actionIds: [
+        'platform.users.read',
+        'platform.users.create',
+        'platform.users.update',
+        'platform.users.deactivate',
+        'platform.users.permanent-delete',
+        'platform.users.unlock',
+        'platform.users.manage',
+      ],
+    },
+    {
+      label: 'Platform Settings',
+      path: '/admin/settings',
+      visible: platformSettingsHubVisible,
+      actionIds: [
+        'platform.settings.read',
+        'platform.settings.manage',
+        'platform.git.providers.manage',
+        'platform.external-engines.read',
+        'platform.sso.providers.read',
+        'platform.authz.roles.read',
+        'platform.authz.roles.manage',
+        'platform.sso.engine-assignments.read',
+        'platform.sso.engine-assignments.manage',
+        'platform.authz.policies.read',
+        'platform.audit.read',
+      ],
+    },
+  ].filter((item) => item.visible)
+  const canViewEnginesMenu = hasEnginesUiAccess(permissions, user)
+  const canViewStarbaseMenu = hasStarbaseUiAccess(permissions, user)
 
   const [isTenantAdmin, setIsTenantAdmin] = useState(false)
   const [tenantAdminChecked, setTenantAdminChecked] = useState(false)
@@ -249,15 +308,34 @@ export default function LayoutWithProSidebar() {
   const isMissionControlEnabled = useFeatureFlag('missionControl')
   const isEnginesEnabled = useFeatureFlag('engines')
 
-  const hideVoyagerForPlatformAdmin = isMultiTenant && canManagePlatformSettings
+  const hideVoyagerForPlatformAdmin = isMultiTenant && platformSettingsManager
 
-  const showVoyagerMenu = isVoyagerEnabled && !hideVoyagerForPlatformAdmin
-  const showStarbaseMenu = showVoyagerMenu && isStarbaseEnabled
-  const showEnginesMenu = showVoyagerMenu && isEnginesEnabled
-  const showMissionControlMenu = showVoyagerMenu && isMissionControlEnabled && canViewMissionControl
+  const showVoyagerMenuBase = isVoyagerEnabled && !hideVoyagerForPlatformAdmin
+  const showStarbaseMenu = showVoyagerMenuBase && isStarbaseEnabled && canViewStarbaseMenu
+  const showEnginesMenu = showVoyagerMenuBase && isEnginesEnabled && canViewEnginesMenu
+  const showMissionControlMenu = showVoyagerMenuBase && isMissionControlEnabled && missionControlMenuVisible
+  const showVoyagerMenu = showVoyagerMenuBase && (showStarbaseMenu || showEnginesMenu || showMissionControlMenu)
+  const visibleEnterpriseNavItems = useFilteredExtensionNavItems({
+    items: enterpriseNavItems,
+    capabilities: user?.capabilities,
+    isTenantAdmin,
+    multiTenantEnabled: isMultiTenant,
+  })
+  const tenantAdminExtensionNavItems = useFilteredExtensionNavItems({
+    section: 'tenant-admin',
+    capabilities: user?.capabilities,
+    isTenantAdmin,
+    multiTenantEnabled: isMultiTenant,
+  })
+  const platformAdminExtensionNavItems = useFilteredExtensionNavItems({
+    section: 'admin',
+    capabilities: user?.capabilities,
+    isTenantAdmin,
+    multiTenantEnabled: isMultiTenant,
+  })
 
   useEffect(() => {
-    if (!isMultiTenant || canManagePlatformSettings) {
+    if (!isMultiTenant || platformSettingsManager) {
       setIsTenantAdmin(false)
       setTenantAdminChecked(true)
       return
@@ -290,7 +368,7 @@ export default function LayoutWithProSidebar() {
     return () => {
       cancelled = true
     }
-  }, [tenantSlug, canManagePlatformSettings])
+  }, [tenantSlug, platformSettingsManager])
 
   useEffect(() => {
     if (!isProfileModalOpen) return
@@ -367,9 +445,9 @@ export default function LayoutWithProSidebar() {
   // Fetch tenant branding
   const brandingQuery = useQuery({
     queryKey: ['tenant-branding'],
-    queryFn: async (): Promise<TenantBranding> => {
+    queryFn: async (): Promise<PlatformBranding> => {
       try {
-        const data = await apiClient.get<TenantBranding>('/api/auth/branding', undefined, {
+        const data = await apiClient.get<PlatformBranding>('/api/auth/branding', undefined, {
           credentials: 'include',
         })
         const normalized = normalizeBranding(data)
@@ -459,7 +537,7 @@ export default function LayoutWithProSidebar() {
   const titleFontSize = brandingQuery.data?.titleFontSize ?? 14
   const titleVerticalOffset = brandingQuery.data?.titleVerticalOffset ?? 0
   const brandingLoading = brandingQuery.isLoading && !brandingQuery.data
-  
+
   // Generate unique font family name for custom font
   const customFontFamily = titleFontUrl ? 'CustomBrandingFont' : undefined
   const menuAccentColor = brandingQuery.data?.menuAccentColor
@@ -491,20 +569,20 @@ export default function LayoutWithProSidebar() {
   useEffect(() => {
     document.title = effectiveBrandTitle
   }, [effectiveBrandTitle])
-  
+
   // Inject custom font CSS when titleFontUrl changes
   useEffect(() => {
     if (!titleFontUrl) return
-    
+
     const styleId = 'custom-branding-font'
     let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
-    
+
     if (!styleEl) {
       styleEl = document.createElement('style')
       styleEl.id = styleId
       document.head.appendChild(styleEl)
     }
-    
+
     styleEl.textContent = `
       @font-face {
         font-family: 'CustomBrandingFont';
@@ -514,29 +592,29 @@ export default function LayoutWithProSidebar() {
         font-display: swap;
       }
     `
-    
+
     return () => {
       // Cleanup on unmount or when font changes
     }
   }, [titleFontUrl])
-  
+
   // Inject custom menu accent color CSS
   useEffect(() => {
     const styleId = 'custom-menu-accent-color'
     let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
-    
+
     if (!menuAccentColor) {
       // Remove custom style if no accent color set
       if (styleEl) styleEl.remove()
       return
     }
-    
+
     if (!styleEl) {
       styleEl = document.createElement('style')
       styleEl.id = styleId
       document.head.appendChild(styleEl)
     }
-    
+
     styleEl.textContent = `
       /* Override Carbon CSS custom property at header level */
       .cds--header,
@@ -549,12 +627,12 @@ export default function LayoutWithProSidebar() {
         background-color: ${menuAccentColor} !important;
       }
     `
-    
+
     return () => {
       // Cleanup on unmount
     }
   }, [menuAccentColor])
-  
+
   const handleLogout = async () => {
     try {
       await logout()
@@ -563,11 +641,11 @@ export default function LayoutWithProSidebar() {
       console.error('Logout failed:', error)
     }
   }
-  
+
   React.useEffect(() => {
     if (!sidebarOpen) return
     if (inMissionControl) return
-    const onKey = (e: KeyboardEvent) => { 
+    const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         // Only collapse if expanded, don't expand if already collapsed
         if (!sidebarCollapsed) {
@@ -631,8 +709,8 @@ export default function LayoutWithProSidebar() {
 
           <div>
             <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Role</div>
-            <Tag type={user?.capabilities?.canAccessAdminRoutes ? 'purple' : 'gray'} size="sm">
-              {user?.capabilities?.canAccessAdminRoutes ? 'Platform Admin' : 'User'}
+            <Tag type={platformAdminMenuVisible ? 'purple' : 'gray'} size="sm">
+              {platformAdminMenuVisible ? 'Platform Admin' : 'User'}
             </Tag>
           </div>
 
@@ -679,9 +757,9 @@ export default function LayoutWithProSidebar() {
                     />
                   )}
                   {(customLogoTitle || (!safeCustomLogoSrc && !brandingLoading)) && (
-                    <span style={{ 
+                    <span style={{
                       fontFamily: customFontFamily ? `'${customFontFamily}', sans-serif` : 'inherit',
-                      fontSize: `${titleFontSize}px`, 
+                      fontSize: `${titleFontSize}px`,
                       fontWeight: titleFontWeight,
                       lineHeight: '20px',
                       position: 'relative',
@@ -726,9 +804,9 @@ export default function LayoutWithProSidebar() {
                     )}
                   </HeaderMenu>
                 )}
-                {enterpriseNavItems.length > 0 && (
+                {visibleEnterpriseNavItems.length > 0 && (
                   <HeaderMenu menuLinkName="Enterprise">
-                    {enterpriseNavItems.map((item) => (
+                    {visibleEnterpriseNavItems.map((item) => (
                       <HeaderMenuItem
                         key={`${item.path}:${item.label}`}
                         href={toTenantPath(item.path)}
@@ -740,28 +818,40 @@ export default function LayoutWithProSidebar() {
                     ))}
                   </HeaderMenu>
                 )}
-                {!isMultiTenant && canViewAdminMenu && (
+                {!isMultiTenant && platformAdminMenuVisible && adminNavItems.length > 0 && (
                   <HeaderMenu menuLinkName="Admin">
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/users')}
-                      isCurrentPage={effectivePathname === '/admin/users'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/users')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      User Management
-                    </HeaderMenuItem>
-                    <HeaderMenuItem
-                      href={toTenantPath('/admin/settings')}
-                      isCurrentPage={effectivePathname === '/admin/settings'}
-                      onClick={(e) => { e.preventDefault(); navigate(toTenantPath('/admin/settings')); (document.activeElement as HTMLElement)?.blur() }}
-                    >
-                      Platform Settings
-                    </HeaderMenuItem>
+                    {adminNavItems.map((item) => {
+                      const itemPath = toTenantPath(item.path)
+                      const menuItem = (
+                        <HeaderMenuItem
+                          key={item.path}
+                          href={itemPath}
+                          isCurrentPage={effectivePathname === item.path}
+                          onClick={(e) => { e.preventDefault(); navigate(itemPath); (document.activeElement as HTMLElement)?.blur() }}
+                        >
+                          {item.label}
+                        </HeaderMenuItem>
+                      )
+                      const actionId = item.actionIds.find((candidateActionId) =>
+                        evaluateActionSnapshot(permissions, candidateActionId, PLATFORM_ADMIN_NAV_RESOURCE).allowed
+                      ) || item.actionIds[0]
+                      return (
+                        <GuardedMenuItem
+                          key={item.path}
+                          actionId={actionId}
+                          resource={PLATFORM_ADMIN_NAV_RESOURCE}
+                          fallback={menuItem}
+                        >
+                          {menuItem}
+                        </GuardedMenuItem>
+                      )
+                    })}
                   </HeaderMenu>
                 )}
                 {/* Tenant Admin menu - only shows if EE plugin registers tenant-admin nav items */}
-                {isMultiTenant && !canViewAdminMenu && tenantAdminChecked && isTenantAdmin && getNavItemsBySection('tenant-admin').length > 0 && (
+                {isMultiTenant && !platformAdminMenuVisible && tenantAdminChecked && isTenantAdmin && tenantAdminExtensionNavItems.length > 0 && (
                   <HeaderMenu menuLinkName="Admin">
-                    {getNavItemsBySection('tenant-admin').map((item: NavExtension) => (
+                    {tenantAdminExtensionNavItems.map((item: NavExtension) => (
                       <HeaderMenuItem
                         key={item.id}
                         href={toTenantPath(item.path)}
@@ -773,10 +863,10 @@ export default function LayoutWithProSidebar() {
                     ))}
                   </HeaderMenu>
                 )}
-                {isMultiTenant && canViewAdminMenu && (
+                {isMultiTenant && platformAdminMenuVisible && platformAdminExtensionNavItems.length > 0 && (
                   <HeaderMenu menuLinkName="Admin">
                     {/* EE-only admin nav items (e.g., Tenants) - rendered from extension registry */}
-                    {getNavItemsBySection('admin').map((item: NavExtension) => (
+                    {platformAdminExtensionNavItems.map((item: NavExtension) => (
                       <HeaderMenuItem
                         key={item.id}
                         href={toTenantPath(item.path)}
@@ -815,8 +905,8 @@ export default function LayoutWithProSidebar() {
                 <HeaderGlobalAction aria-label="User" tooltipAlignment="end" onClick={handleOpenProfile}>
                   <UserAvatar size={20} />
                 </HeaderGlobalAction>
-                <HeaderGlobalAction 
-                  aria-label="Logout" 
+                <HeaderGlobalAction
+                  aria-label="Logout"
                   tooltipAlignment="end"
                   onClick={handleLogout}
                 >
@@ -970,11 +1060,11 @@ export default function LayoutWithProSidebar() {
                 </div>
               )}
         </Header>
-      
+
       {/* Main content area below fixed header */}
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'row', 
+      <div style={{
+        display: 'flex',
+        flexDirection: 'row',
         height: 'calc(100vh - 48px)',
         marginTop: '48px',
         width: '100%',
@@ -982,10 +1072,10 @@ export default function LayoutWithProSidebar() {
       }}>
         {/* Sidebar - inherits g100 from root */}
         <ProSidebar />
-        
+
         {/* Page content - g10 light theme for pages */}
         <Theme theme="g10" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <main style={{ 
+          <main style={{
             flex: 1,
             minWidth: 0,
             overflow: 'auto',

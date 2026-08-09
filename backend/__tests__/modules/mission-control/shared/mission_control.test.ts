@@ -1,23 +1,68 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import missionControlRouter from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission_control.js';
+import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { permissionService } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { camundaGet } from '@enterpriseglue/shared/services/bpmn-engine-client.js';
 import {
+  getActiveActivityCounts,
+  getActivityCountsByState,
+  listProcessDefinitions,
+  listProcessInstancesDetailed,
+  getProcessInstanceById,
+  getProcessInstanceVariables,
+  listProcessInstanceActivityHistory,
   getProcessInstanceVariableHistory,
   getProcessInstanceExecutionDetails,
+  getHistoricProcessInstanceById,
+  listProcessInstanceJobs,
+  previewProcessInstanceCount,
+  suspendProcessInstanceById,
+  listHistoricProcessInstances,
+  listHistoricVariableInstances,
+  retryProcessInstanceFailures,
 } from '../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js';
+
+vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
+  getDataSource: vi.fn(),
+}));
+
+vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
+  camundaGet: vi.fn(),
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
 }));
 
-vi.mock('@enterpriseglue/shared/middleware/engineAuth.js', () => ({
-  requireEngineReadOrWrite: () => (req: any, _res: any, next: any) => {
-    req.engineId = req.query.engineId || 'engine-1';
-    next();
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  EnginePermissions: {
+    INSTANCE_VIEW: 'engine:instance:view',
+    INSTANCE_DELETE: 'engine:instance:delete',
+    INSTANCE_RETRY: 'engine:instance:retry',
+    PROCESS_MODIFY: 'engine:process:modify',
+    VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+    VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
+    MEMBERS_MANAGE: 'engine:members:manage',
+  },
+  PlatformPermissions: {
+    USER_MANAGE: 'platform:user:manage',
+    USERS_CREATE: 'platform:users:create',
+  },
+  ProjectPermissions: {
+    MEMBERS_MANAGE: 'project:members:manage',
+  },
+  permissionService: {
+    hasPermission: vi.fn().mockResolvedValue(false),
+    getVisibleRuntimeResources: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -69,7 +114,427 @@ describe('mission-control shared mission_control routes', () => {
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(missionControlRouter);
+    app.use(errorHandler);
     vi.clearAllMocks();
+
+    (getDataSource as unknown as Mock).mockReset().mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) {
+          return {
+            findOne: vi.fn(async ({ where }: any) => ({
+              id: String(where?.id || 'engine-77'),
+              tenantId: 'tenant-default',
+              tenancyMode: 'dedicated',
+            })),
+          };
+        }
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    (camundaGet as unknown as Mock).mockReset();
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockReset().mockResolvedValue([]);
+    (permissionService.hasPermission as unknown as Mock).mockReset().mockImplementation(async (permission: string) =>
+      permission.startsWith('engine:')
+    );
+  });
+
+  it('reads process-definition active activity counts through process-definition action permission', async () => {
+    vi.mocked(getActiveActivityCounts).mockResolvedValueOnce({ approve: 2 } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/active-activity-counts')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ approve: 2 });
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'engine-77',
+    }));
+    expect(getActiveActivityCounts).toHaveBeenCalledWith('engine-77', 'pd-1');
+  });
+
+  it('serializes process-definition XML through the shared response contract', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/xml')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ bpmn20Xml: '' });
+  });
+
+  it('reads five-state activity counts through process-definition action permission', async () => {
+    const counts = {
+      active: { approve: 2 },
+      incidents: { approve: 1 },
+      suspended: {},
+      canceled: { archive: 1 },
+      completed: { end: 3 },
+    };
+    vi.mocked(getActivityCountsByState).mockResolvedValueOnce(counts as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions/pd-1/activity-counts-by-state')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(counts);
+    expect(getActivityCountsByState).toHaveBeenCalledWith('engine-77', 'pd-1');
+  });
+
+  it('fails closed for resource-aware process-instance preview counts because aggregate responses cannot be post-filtered', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([
+      { resourceKey: 'payments' },
+      { resourceKey: 'invoices' },
+    ]);
+    const response = await request(app)
+      .post('/mission-control-api/process-instances/preview-count')
+      .send({ engineId: 'engine-77', active: true });
+
+    expect(response.status).toBe(403);
+    expect(response.body.error).toBe('Resource-aware process-instance preview counts are not supported');
+    expect(previewProcessInstanceCount).not.toHaveBeenCalled();
+  });
+
+  it('serializes engine-wide process-instance preview counts through the shared response contract', async () => {
+    vi.mocked(previewProcessInstanceCount).mockResolvedValueOnce({ count: 42 });
+
+    const response = await request(app)
+      .post('/mission-control-api/process-instances/preview-count')
+      .send({ engineId: 'engine-77', active: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ count: 42 });
+    expect(previewProcessInstanceCount).toHaveBeenCalledWith('engine-77', expect.objectContaining({
+      engineId: 'engine-77',
+      active: true,
+    }));
+  });
+
+  it('rejects malformed process-instance collection filters before querying the engine', async () => {
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-77', active: 'not-a-boolean' });
+
+    expect(response.status).toBe(400);
+    expect(listProcessInstancesDetailed).not.toHaveBeenCalled();
+  });
+
+  it('validates retry requests and keeps their engine selector out of the engine adapter payload', async () => {
+    const retryResponse = await request(app)
+      .post('/mission-control-api/process-instances/instance-1/retry')
+      .send({ engineId: 'engine-77', jobIds: ['job-1'], retries: 2 });
+
+    expect(retryResponse.status).toBe(204);
+    expect(retryProcessInstanceFailures).toHaveBeenCalledWith('engine-77', 'instance-1', { jobIds: ['job-1'], retries: 2 });
+
+    vi.clearAllMocks();
+    const invalidResponse = await request(app)
+      .post('/mission-control-api/process-instances/instance-1/retry')
+      .send({ engineId: 'engine-77', retries: -1 });
+
+    expect(invalidResponse.status).toBe(400);
+    expect(retryProcessInstanceFailures).not.toHaveBeenCalled();
+  });
+
+  it('serializes historic variable instances through the shared contract without dropping engine extensions', async () => {
+    vi.mocked(listHistoricVariableInstances).mockResolvedValueOnce([{
+      id: 'var-1',
+      name: 'customerReference',
+      type: 'String',
+      value: 'reference-42',
+      engineExtension: { source: 'camunda' },
+    }] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{
+      id: 'var-1',
+      name: 'customerReference',
+      type: 'String',
+      value: 'reference-42',
+      engineExtension: { source: 'camunda' },
+    }]);
+  });
+
+  it('bounds compatibility process-definition and instance collections for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const [definitions, instances] = await Promise.all([
+      request(app).get('/mission-control-api/process-definitions').query({ engineId: 'engine-77', maxResults: 25 }),
+      request(app).get('/mission-control-api/process-instances').query({ engineId: 'engine-77', maxResults: 25 }),
+    ]);
+
+    expect(definitions.status).toBe(200);
+    expect(instances.status).toBe(200);
+    expect(listProcessDefinitions).toHaveBeenCalledWith('engine-77', expect.objectContaining({ maxResults: 25 }));
+    expect(listProcessInstancesDetailed).toHaveBeenCalledWith('engine-77', expect.objectContaining({ processDefinitionKey: 'payments', maxResults: 25 }));
+  });
+
+  it('returns action decisions from the production compatibility process-instance route only when requested', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ permission }: { permission: string }) =>
+      permission === 'engine:instance:delete' ? [] : [{ resourceKey: 'payments' }]
+    );
+    vi.mocked(listProcessInstancesDetailed).mockResolvedValueOnce([
+      { id: 'instance-payments', processDefinitionKey: 'payments' },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-77', includeActionDecisions: 'true' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'instance-payments',
+        runtimeActionDecisions: {
+          suspension: { allowed: true },
+          retry: { allowed: true },
+          terminate: { allowed: false, reason: 'Action unavailable for this runtime resource' },
+          migration: { allowed: true },
+        },
+      }),
+    ]);
+  });
+
+  it('preserves the fail-closed status for oversized compatibility collections', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-definitions')
+      .query({ engineId: 'engine-77', maxResults: 101 });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      code: 'runtime_filter_not_supported',
+      error: 'Resource-aware runtime queries require maxResults between 1 and 100',
+    });
+    expect(listProcessDefinitions).not.toHaveBeenCalled();
+  });
+
+  it('drops compatibility process-instance rows outside the authorized definition key', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+    vi.mocked(listProcessInstancesDetailed).mockResolvedValueOnce([
+      { id: 'instance-allowed', processDefinitionKey: 'payments' },
+      { id: 'instance-forbidden', processDefinitionKey: 'benefits' },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'instance-allowed', processDefinitionKey: 'payments' }]);
+  });
+
+  it('allows incidents only when their live process-instance lineage resolves to an authorized runtime resource', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return { findOne: vi.fn().mockResolvedValue({ id: 'central-engine', tenantId: null, tenancyMode: 'shared', runtimeAccessScope: 'resource_aware' }) };
+        if (entity === RuntimeResource) {
+          return {
+            findOne: vi.fn()
+              .mockResolvedValueOnce(null)
+              .mockResolvedValueOnce({
+                id: 'resource-payments',
+                tenantId: 'tenant-default',
+                tenantResolutionStatus: 'resolved',
+              }),
+          };
+        }
+        return { findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+    (camundaGet as unknown as Mock).mockResolvedValue({ id: 'instance-1', definitionKey: 'payments-order' });
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (_permission: string, context: any) =>
+      context.resourceType === 'engine_runtime_resource' && context.resourceId === 'resource-payments'
+    );
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{
+      id: 'resource-payments',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'resolved',
+      resourceKey: 'payments-order',
+    }]);
+    const incidents = [{ id: 'incident-1', incidentType: 'failedJob', engineExtension: { retryable: true } }];
+    const { listProcessInstanceIncidents } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js');
+    vi.mocked(listProcessInstanceIncidents).mockResolvedValueOnce(incidents as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1/incidents')
+      .query({ engineId: 'central-engine' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(incidents);
+    expect(camundaGet).toHaveBeenCalledWith('central-engine', '/process-instance/instance-1');
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      resourceType: 'engine_runtime_resource', resourceId: 'resource-payments',
+    }));
+  });
+
+  it('serializes process-instance jobs through the shared passthrough contract', async () => {
+    vi.mocked(listProcessInstanceJobs).mockResolvedValueOnce([
+      { id: 'job-1', dueDate: '2026-07-17T00:00:00.000Z', retries: 2, engineExtension: { retryable: true } },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1/jobs')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'job-1', dueDate: '2026-07-17T00:00:00.000Z', retries: 2, engineExtension: { retryable: true } },
+    ]);
+    expect(listProcessInstanceJobs).toHaveBeenCalledWith('engine-77', 'instance-1');
+  });
+
+  it('serializes failed external tasks through the shared passthrough contract', async () => {
+    const { listFailedExternalTasks } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js');
+    vi.mocked(listFailedExternalTasks).mockResolvedValueOnce([
+      { id: 'external-task-1', activityId: 'approve', retries: 0, errorMessage: 'Worker unavailable', engineExtension: { retryable: true } },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1/failed-external-tasks')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: 'external-task-1', activityId: 'approve', retries: 0, errorMessage: 'Worker unavailable', engineExtension: { retryable: true } },
+    ]);
+    expect(listFailedExternalTasks).toHaveBeenCalledWith('engine-77', 'instance-1');
+  });
+
+  it('adds requested action decisions to compatibility process-instance details', async () => {
+    vi.mocked(getProcessInstanceById).mockResolvedValueOnce({ id: 'instance-1', processDefinitionKey: 'payments' } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/instance-1')
+      .query({ engineId: 'engine-77', includeActionDecisions: 'true' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'instance-1',
+      runtimeActionDecisions: {
+        suspension: { allowed: true },
+        retry: { allowed: true },
+        terminate: { allowed: true },
+        migration: { allowed: true },
+        modify: { allowed: true },
+        variablesUpdate: { allowed: true },
+      },
+    });
+  });
+
+  it('removes historic values and extension payloads without value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    vi.mocked(listHistoricVariableInstances).mockResolvedValueOnce([{
+      id: 'var-1', name: 'customerReference', type: 'String', value: 'reference-42',
+      valueInfo: { serializationDataFormat: 'application/json' }, engineExtension: { raw: 'reference-42' },
+    }] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([{ id: 'var-1', name: 'customerReference', type: 'String', value: null, valueRedacted: true }]);
+    expect(JSON.stringify(response.body)).not.toContain('reference-42');
+  });
+
+  it('discloses historic values only for the runtime resources with value access', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'engine-77',
+          tenantId: null,
+          tenancyMode: 'shared',
+          runtimeAccessScope: 'resource_aware',
+        }),
+      }),
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockImplementation(async ({ permission }: { permission: string }) => {
+      if (permission === 'engine:variables:metadata:view') {
+        return [{ resourceKey: 'payments' }, { resourceKey: 'benefits' }];
+      }
+      if (permission === 'engine:variables:value:view') {
+        return [{ resourceKey: 'payments' }];
+      }
+      return [];
+    });
+    vi.mocked(listHistoricVariableInstances).mockImplementation(async (_engineId, query) => [{
+      id: `var-${query.processDefinitionKey}`,
+      name: 'customerReference',
+      type: 'String',
+      processDefinitionKey: query.processDefinitionKey,
+      value: `${query.processDefinitionKey}-secret`,
+    }] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(response.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ processDefinitionKey: 'payments', value: 'payments-secret' }),
+      expect.objectContaining({ processDefinitionKey: 'benefits', value: null, valueRedacted: true }),
+    ]));
+    expect(JSON.stringify(response.body)).not.toContain('benefits-secret');
+    expect(permissionService.getVisibleRuntimeResources).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'engine-77',
+      resourceKind: 'process_definition',
+      permission: 'engine:variables:value:view',
+    }));
+  });
+
+  it('does not permit historic variable-value searches without engine-wide value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+
+    const response = await request(app)
+      .get('/mission-control-api/history/variable-instances')
+      .query({ engineId: 'engine-77', variableValue: 'reference-42' });
+
+    expect(response.status).toBe(403);
+    expect(listHistoricVariableInstances).not.toHaveBeenCalled();
   });
 
   it('returns variable history for a process instance variable and allows engineId in query', async () => {
@@ -100,7 +565,86 @@ describe('mission-control shared mission_control routes', () => {
         variableName: 'amount',
       }),
     ]);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:variables:metadata:view', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-77',
+    }));
     expect(getProcessInstanceVariableHistory).toHaveBeenCalledWith('engine-77', 'pi-1', 'var-1');
+  });
+
+  it('serializes process variables through the shared passthrough contract', async () => {
+    vi.mocked(getProcessInstanceVariables).mockResolvedValueOnce({
+      approvalReason: {
+        value: 'Need manager sign-off',
+        type: 'String',
+        valueInfo: { serializationDataFormat: 'application/json' },
+        adapterDiagnostic: { retained: true },
+      },
+    } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/variables')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      approvalReason: expect.objectContaining({
+        type: 'String',
+        value: 'Need manager sign-off',
+        adapterDiagnostic: { retained: true },
+      }),
+    });
+    expect(getProcessInstanceVariables).toHaveBeenCalledWith('engine-77', 'pi-1');
+  });
+
+  it('redacts process-variable history and execution-detail values without value access', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockImplementation(async (permission: string) =>
+      permission !== 'engine:variables:value:view'
+    );
+    vi.mocked(getProcessInstanceVariableHistory).mockResolvedValueOnce([{
+      id: 'detail-1', variableInstanceId: 'var-1', variableName: 'amount', value: 100, type: 'Integer',
+    }] as any);
+
+    const history = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/variable-history')
+      .query({ engineId: 'engine-77', variableInstanceId: 'var-1' });
+    const details = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/execution-details')
+      .query({ engineId: 'engine-77', activityInstanceId: 'act-inst-1' });
+
+    expect(history.status).toBe(200);
+    expect(history.body).toEqual([{ id: 'detail-1', variableInstanceId: 'var-1', variableName: 'amount', type: 'Integer', value: null, valueRedacted: true }]);
+    expect(details.status).toBe(200);
+    expect(details.body.variables).toEqual([{ id: 'var-1', name: 'approvalReason', type: 'String', value: null, valueRedacted: true }]);
+  });
+
+  it('serializes activity history through the shared passthrough contract', async () => {
+    vi.mocked(listProcessInstanceActivityHistory).mockResolvedValueOnce([
+      {
+        id: 'activity-1',
+        activityId: 'review-order',
+        activityName: 'Review order',
+        startTime: '2026-07-17T00:00:00.000Z',
+        endTime: null,
+        executionId: 'execution-1',
+        adapterDiagnostic: { retained: true },
+      },
+    ] as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/history/activity-instances')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'activity-1',
+        activityId: 'review-order',
+        endTime: null,
+        adapterDiagnostic: { retained: true },
+      }),
+    ]);
+    expect(listProcessInstanceActivityHistory).toHaveBeenCalledWith('engine-77', 'pi-1');
   });
 
   it('rejects requests without variableInstanceId', async () => {
@@ -115,7 +659,7 @@ describe('mission-control shared mission_control routes', () => {
   it('returns lazy execution details for a process instance activity instance', async () => {
     const response = await request(app)
       .get('/mission-control-api/process-instances/pi1/execution-details')
-      .query({ activityInstanceId: 'act-inst-1', executionId: 'exec-1', taskId: 'task-1' });
+      .query({ engineId: 'engine-77', activityInstanceId: 'act-inst-1', executionId: 'exec-1', taskId: 'task-1' });
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
@@ -124,10 +668,70 @@ describe('mission-control shared mission_control routes', () => {
       taskId: 'task-1',
       variables: [{ id: 'var-1', name: 'approvalReason' }],
     });
-    expect(getProcessInstanceExecutionDetails).toHaveBeenCalledWith('engine-1', 'pi1', {
+    expect(response.body).toEqual(expect.objectContaining({
+      tasks: expect.any(Array), decisions: expect.any(Array), userOperations: expect.any(Array),
+    }));
+    expect(getProcessInstanceExecutionDetails).toHaveBeenCalledWith('engine-77', 'pi1', {
       activityInstanceId: 'act-inst-1',
       executionId: 'exec-1',
       taskId: 'task-1',
     });
+  });
+
+  it('updates process instance suspension through process modify permission', async () => {
+    const response = await request(app)
+      .put('/mission-control-api/process-instances/pi-1/suspend')
+      .send({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(204);
+    expect(permissionService.hasPermission).toHaveBeenCalledWith('engine:process:modify', expect.objectContaining({
+      resourceType: 'engine',
+      resourceId: 'engine-77',
+    }));
+    expect(suspendProcessInstanceById).toHaveBeenCalledWith('engine-77', 'pi-1');
+  });
+
+  it('bounds historic process-instance collections for resource-aware engines', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'engine-77', tenantId: 'tenant-default', tenancyMode: 'dedicated', runtimeAccessScope: 'resource_aware' }) }
+        : { findOne: vi.fn().mockResolvedValue(null) },
+    });
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+    (permissionService.getVisibleRuntimeResources as unknown as Mock).mockResolvedValue([{ resourceKey: 'payments' }]);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/process-instances')
+      .query({ engineId: 'engine-77', maxResults: 25 });
+
+    expect(response.status).toBe(200);
+    expect(listHistoricProcessInstances).toHaveBeenCalledWith('engine-77', expect.objectContaining({
+      processDefinitionKey: 'payments', maxResults: 25,
+    }));
+  });
+
+  it('serializes historic process-instance details through the shared passthrough contract', async () => {
+    vi.mocked(getHistoricProcessInstanceById).mockResolvedValueOnce({
+      id: 'historic-1', processDefinitionId: 'payments:1:abc', processDefinitionKey: 'payments', processDefinitionVersion: 1,
+      adapterDiagnostic: 'retained',
+    } as any);
+
+    const response = await request(app)
+      .get('/mission-control-api/history/process-instances/historic-1')
+      .query({ engineId: 'engine-77' });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ id: 'historic-1', processDefinitionKey: 'payments', adapterDiagnostic: 'retained' });
+  });
+
+  it('denies shared process instance reads when instance view permission is missing', async () => {
+    (permissionService.hasPermission as unknown as Mock).mockResolvedValue(false);
+
+    const response = await request(app)
+      .get('/mission-control-api/process-instances/pi-1/variable-history')
+      .query({ engineId: 'engine-77', variableInstanceId: 'var-1' });
+
+    expect(response.status).toBe(403);
+    expect(getProcessInstanceVariableHistory).not.toHaveBeenCalled();
   });
 });

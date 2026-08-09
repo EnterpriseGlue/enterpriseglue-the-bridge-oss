@@ -5,6 +5,19 @@ import { apiClient } from '../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useToast } from '../../../../shared/notifications/ToastProvider'
+import { fetchProcessDefinitionXml } from '../../shared/api/definitions'
+import type {
+  MigrationActiveSourcesRequest,
+  MigrationActiveSourcesResponse,
+  MigrationAsyncExecuteResponse,
+  MigrationDirectExecuteResponse,
+  MigrationExecuteRequest,
+  MigrationPlan,
+  MigrationPlanValidationRequest,
+  MigrationPreviewRequest,
+  MigrationPreviewResponse,
+  MigrationValidationResult,
+} from '@enterpriseglue/shared/schemas/mission-control/migration.js'
 
 export interface MigrationDataParams {
   instanceIds: string[]
@@ -65,8 +78,8 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
   const [updateEventTriggers, setUpdateEventTriggers] = React.useState(false)
 
   // Plan state
-  const [plan, setPlan] = React.useState<any | null>(null)
-  const [validation, setValidation] = React.useState<any | null>(null)
+  const [plan, setPlan] = React.useState<MigrationPlan | null>(null)
+  const [validation, setValidation] = React.useState<MigrationValidationResult | null>(null)
   const [overrides, setOverrides] = React.useState<Record<number, string>>({})
   const [triggerOverrides, setTriggerOverrides] = React.useState<Record<number, boolean>>({})
   const [removed, setRemoved] = React.useState<Record<number, boolean>>({})
@@ -115,7 +128,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       const targetDefinitionId = idFor(tgtKey, tgtVer)
       if (!sourceDefinitionId || !targetDefinitionId)
         throw new Error('Select both source and target process+version')
-      const next = await apiClient.post<any>(
+      const next = await apiClient.post<MigrationPlan>(
         '/mission-control-api/migration/generate',
         {
           engineId: selectedEngineId,
@@ -124,11 +137,7 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
         },
         { credentials: 'include' }
       )
-      const enginePlan =
-        next && typeof next === 'object' && Array.isArray((next as any).instructions)
-          ? next
-          : (next as any)?.migrationPlan || next
-      setPlan(enginePlan)
+      setPlan(next)
       setOverrides({})
       setValidation(null)
     } catch (e: any) {
@@ -187,23 +196,38 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
       (planWithOverrides as any)?.sourceProcessDefinitionId,
       instanceIds.join(','),
     ],
-    queryFn: async () =>
-      await apiClient.post<{ count: number }>(
+    queryFn: async () => {
+      if (!selectedEngineId) throw new Error('An engine must be selected to preview migration instances')
+      const request: MigrationPreviewRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+        processInstanceIds: instanceIds,
+      }
+      return await apiClient.post<MigrationPreviewResponse>(
         '/mission-control-api/migration/preview',
-        { engineId: selectedEngineId, plan: planWithOverrides, processInstanceIds: instanceIds },
+        request,
         { credentials: 'include' }
-      ),
-    enabled: !!planWithOverrides,
+      )
+    },
+    // Migration guards resolve the selected source and target definitions
+    // server-side. Permission snapshots deliberately omit that lineage.
+    enabled: !!selectedEngineId && !!planWithOverrides,
   })
 
   // Validate mutation — result handling is done by the component via mutateAsync
   const validateMutation = useMutation({
-    mutationFn: async () =>
-      apiClient.post<any>(
+    mutationFn: async () => {
+      if (!selectedEngineId) throw new Error('An engine must be selected to validate a migration plan')
+      const request: MigrationPlanValidationRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+      }
+      return apiClient.post<MigrationValidationResult>(
         '/mission-control-api/migration/plan/validate',
-        { engineId: selectedEngineId, plan: planWithOverrides },
+        request,
         { credentials: 'include' }
-      ),
+      )
+    },
     onError: (e: any) => notify({ kind: 'error', title: 'Validation failed', subtitle: getUiErrorMessage(e, 'Failed to validate plan') }),
   })
 
@@ -227,40 +251,51 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     }
     return out
   }, [varRows])
-
   // Execute mutations
   const executeMutation = useMutation({
-    mutationFn: async () =>
-      apiClient.post<{ id: string }>(
+    mutationFn: async (auditReason?: string) => {
+      if (!auditReason?.trim()) {
+        throw new Error('Audit reason is required')
+      }
+      const request: MigrationExecuteRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+        processInstanceIds: instanceIds,
+        skipCustomListeners,
+        skipIoMappings,
+        variables: varsObj,
+        auditReason: auditReason.trim(),
+      }
+      return apiClient.post<MigrationAsyncExecuteResponse>(
         '/mission-control-api/migration/execute-async',
-        {
-          engineId: selectedEngineId,
-          plan: planWithOverrides,
-          processInstanceIds: instanceIds,
-          skipCustomListeners,
-          skipIoMappings,
-          variables: varsObj,
-        },
+        request,
         { credentials: 'include' }
-      ),
+      )
+    },
     onSuccess: (data) => tenantNavigate(`/mission-control/batches/${data.id}`),
     onError: (e: any) => notify({ kind: 'error', title: 'Migration failed', subtitle: getUiErrorMessage(e, 'Failed to start migration') }),
   })
 
   const executeDirectMutation = useMutation({
-    mutationFn: async () =>
-      apiClient.post<{ ok: boolean }>(
+    mutationFn: async (auditReason?: string) => {
+      if (!auditReason?.trim()) {
+        throw new Error('Audit reason is required')
+      }
+      const request: MigrationExecuteRequest = {
+        engineId: selectedEngineId,
+        plan: planWithOverrides,
+        processInstanceIds: instanceIds,
+        skipCustomListeners,
+        skipIoMappings,
+        variables: varsObj,
+        auditReason: auditReason.trim(),
+      }
+      return apiClient.post<MigrationDirectExecuteResponse>(
         '/mission-control-api/migration/execute-direct',
-        {
-          engineId: selectedEngineId,
-          plan: planWithOverrides,
-          processInstanceIds: instanceIds,
-          skipCustomListeners,
-          skipIoMappings,
-          variables: varsObj,
-        },
+        request,
         { credentials: 'include' }
-      ),
+      )
+    },
     onSuccess: () => {
       notify({ kind: 'success', title: 'Migration completed' })
       setTimeout(() => tenantNavigate('/mission-control/processes'), 1200)
@@ -274,31 +309,13 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
 
   const targetXmlQ = useQuery({
     queryKey: ['mission-control', 'migration', 'tgt-xml', tgtDefId, selectedEngineId],
-    queryFn: async () => {
-      if (!tgtDefId) return null as any
-      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
-      const data = await apiClient.get<{ bpmn20Xml: string }>(
-        `/mission-control-api/process-definitions/${tgtDefId}/xml${params}`,
-        undefined,
-        { credentials: 'include' }
-      )
-      return data?.bpmn20Xml || null
-    },
+    queryFn: () => tgtDefId ? fetchProcessDefinitionXml(tgtDefId, selectedEngineId) : Promise.resolve(null),
     enabled: !!tgtDefId && !!selectedEngineId,
   })
 
   const sourceXmlQ = useQuery({
     queryKey: ['mission-control', 'migration', 'src-xml', srcDefId, selectedEngineId],
-    queryFn: async () => {
-      if (!srcDefId) return null as any
-      const params = selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''
-      const data = await apiClient.get<{ bpmn20Xml: string }>(
-        `/mission-control-api/process-definitions/${srcDefId}/xml${params}`,
-        undefined,
-        { credentials: 'include' }
-      )
-      return data?.bpmn20Xml || null
-    },
+    queryFn: () => srcDefId ? fetchProcessDefinitionXml(srcDefId, selectedEngineId) : Promise.resolve(null),
     enabled: !!srcDefId && !!selectedEngineId,
   })
 
@@ -307,13 +324,18 @@ export function useMigrationData({ instanceIds, preselectedKey, preselectedVersi
     queryKey: ['mission-control', 'migration', 'active-src', instanceIds.join(',')],
     queryFn: async () => {
       if (instanceIds.length === 0) return {} as Record<string, number>
-      return await apiClient.post<Record<string, number>>(
+      if (!selectedEngineId) return {} as Record<string, number>
+      const request: MigrationActiveSourcesRequest = {
+        engineId: selectedEngineId,
+        processInstanceIds: instanceIds,
+      }
+      return await apiClient.post<MigrationActiveSourcesResponse>(
         '/mission-control-api/migration/active-sources',
-        { engineId: selectedEngineId, processInstanceIds: instanceIds },
+        request,
         { credentials: 'include' }
       )
     },
-    enabled: instanceIds.length > 0,
+    enabled: !!selectedEngineId && instanceIds.length > 0,
   })
 
   const activeSet = React.useMemo(

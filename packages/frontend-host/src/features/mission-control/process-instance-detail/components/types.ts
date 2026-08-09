@@ -1,119 +1,34 @@
-export type DecisionIo = {
-  id?: string
-  clauseId?: string | null
-  clauseName?: string | null
-  type?: string | null
-  value?: any
-  ruleId?: string | null
-}
+import type {
+  HistoricDecisionIo,
+  HistoricDecisionInstance,
+  HistoricTaskInstance,
+  HistoricVariableInstance,
+  VariableHistoryEntry as SharedVariableHistoryEntry,
+  UserOperationLogEntry,
+  ProcessInstanceExecutionDetails as SharedProcessInstanceExecutionDetails,
+} from '@enterpriseglue/shared/schemas/mission-control/history.js'
+import type { ProcessDefinition as SharedProcessDefinition, ProcessInstanceExternalTask, ProcessInstanceIncident, ProcessInstanceJob } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ActivityInstance as SharedActivityInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
-export type HistoricDecisionInstanceLite = {
-  id: string
-  decisionDefinitionId?: string | null
-  decisionDefinitionKey?: string | null
-  decisionDefinitionName?: string | null
-  evaluationTime?: string | null
-  processInstanceId?: string | null
-  activityId?: string | null
-  activityInstanceId?: string | null
-}
+export type DecisionIo = HistoricDecisionIo
 
-export type HistoricVariableInstanceLite = {
-  id: string
-  name: string
-  type?: string | null
-  value?: any
-  createTime?: string | null
-  activityInstanceId?: string | null
-  executionId?: string | null
-  taskId?: string | null
-}
+export type HistoricDecisionInstanceLite = HistoricDecisionInstance
 
-export type HistoricTaskInstanceLite = {
-  id: string
-  name?: string | null
-  assignee?: string | null
-  owner?: string | null
-  startTime?: string | null
-  endTime?: string | null
-  deleteReason?: string | null
-  taskDefinitionKey?: string | null
-  activityInstanceId?: string | null
-  executionId?: string | null
-}
+export type HistoricVariableInstanceLite = HistoricVariableInstance
 
-export type UserOperationLogEntryLite = {
-  id: string
-  operationType?: string | null
-  entityType?: string | null
-  property?: string | null
-  orgValue?: string | null
-  newValue?: string | null
-  annotation?: string | null
-  timestamp?: string | null
-  userId?: string | null
-}
+export type HistoricTaskInstanceLite = HistoricTaskInstance
 
-export type ExecutionDetails = {
-  activityInstanceId: string
-  executionId?: string | null
-  taskId?: string | null
-  variables: HistoricVariableInstanceLite[]
-  tasks: HistoricTaskInstanceLite[]
-  decisions: HistoricDecisionInstanceLite[]
-  userOperations: UserOperationLogEntryLite[]
-}
+export type UserOperationLogEntryLite = UserOperationLogEntry
 
-export type ProcessDefinition = {
-  id: string
-  key: string
-  name: string
-  version: number
-}
+export type ExecutionDetails = SharedProcessInstanceExecutionDetails
 
-export type ActivityInstance = {
-  id: string
-  activityId: string
-  activityName?: string
-  startTime?: string
-  endTime?: string
-  activityType?: string
-  activityInstanceId?: string | null
-  parentActivityInstanceId?: string | null
-  executionId?: string | null
-  calledProcessInstanceId?: string | null
-  taskId?: string | null
-  durationInMillis?: number | null
-  canceled?: boolean
-  completeScope?: boolean
-}
+export type ProcessDefinition = SharedProcessDefinition
 
-export type Variable = {
-  id?: string
-  name: string
-  type: string
-  value: any
-  valueInfo?: any
-  processInstanceId?: string | null
-  executionId?: string | null
-  activityInstanceId?: string | null
-  taskId?: string | null
-  createTime?: string | null
-}
+export type ActivityInstance = SharedActivityInstance
 
-export type VariableHistoryEntry = {
-  id: string
-  variableInstanceId: string
-  variableName: string
-  value: any
-  type?: string | null
-  time?: string | null
-  activityInstanceId?: string | null
-  executionId?: string | null
-  taskId?: string | null
-  revision?: number | null
-  serializerName?: string | null
-}
+export type Variable = HistoricVariableInstance
+
+export type VariableHistoryEntry = SharedVariableHistoryEntry
 
 export type VariableHistoryTarget = {
   variableInstanceId?: string | null
@@ -122,34 +37,14 @@ export type VariableHistoryTarget = {
   activityInstanceId?: string | null
   currentType?: string | null
   currentValue?: any
+  valueRedacted?: boolean
 }
 
-export type Incident = {
-  id: string
-  incidentType?: string
-  type?: string
-  activityId?: string
-  configuration?: string
-  jobId?: string
-  incidentMessage?: string
-  incidentTimestamp?: string
-}
+export type Incident = ProcessInstanceIncident
 
-export type Job = {
-  id: string
-  dueDate?: string
-  duedate?: string
-  retries?: number
-  exceptionMessage?: string
-}
+export type Job = ProcessInstanceJob
 
-export type ExternalTask = {
-  id: string
-  activityId?: string
-  retries?: number
-  errorMessage?: string
-  errorDetails?: string
-}
+export type ExternalTask = ProcessInstanceExternalTask
 
 export type ModificationVariable = {
   name: string

@@ -22,6 +22,7 @@ export const BatchSchemaRaw = z.object({
   updatedAt: z.number(),
   completedAt: z.number().nullable(),
   lastError: z.string().nullable(),
+  suspended: z.boolean().optional(),
 });
 
 // Batch schemas
@@ -46,7 +47,51 @@ export const BatchSchema = BatchSchemaRaw.transform((b) => ({
   updatedAt: Number(b.updatedAt ?? 0),
   completedAt: b.completedAt ? Number(b.completedAt) : undefined,
   lastError: b.lastError ?? undefined,
+  suspended: b.suspended,
 }));
+
+export const BatchEngineInfoSchema = z.object({
+  id: z.string().optional(),
+  totalJobs: z.number().nullable().optional(),
+  jobsCreated: z.number().nullable().optional(),
+  completedJobs: z.number().nullable().optional(),
+  failedJobs: z.number().nullable().optional(),
+  remainingJobs: z.number().nullable().optional(),
+  invocationsPerBatchJob: z.number().nullable().optional(),
+  seedJobDefinitionId: z.string().nullable().optional(),
+  monitorJobDefinitionId: z.string().nullable().optional(),
+  batchJobDefinitionId: z.string().nullable().optional(),
+}).passthrough();
+
+export const BatchStatisticsSchema = z.object({
+  remainingJobs: z.number().nullable().optional(),
+  completedJobs: z.number().nullable().optional(),
+  failedJobs: z.number().nullable().optional(),
+}).passthrough();
+
+export const BatchFailedJobDetailSchema = z.object({
+  id: z.string().optional(),
+  exceptionMessage: z.string().nullable().optional(),
+  retries: z.number().nullable().optional(),
+  jobDefinitionId: z.string().nullable().optional(),
+  processInstanceId: z.string().nullable().optional(),
+  executionId: z.string().nullable().optional(),
+  stacktrace: z.string().nullable().optional(),
+}).passthrough();
+
+export const BatchRuntimeActionDecisionsSchema = z.object({
+  suspension: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
+  cancel: z.object({ allowed: z.boolean(), reason: z.string().optional() }),
+  recordDelete: z.object({ allowed: z.boolean(), reason: z.string().optional() }).optional(),
+}).passthrough();
+
+export const BatchDetailSchema = z.object({
+  batch: BatchSchema,
+  engine: BatchEngineInfoSchema.nullable().optional(),
+  statistics: BatchStatisticsSchema.nullable().optional(),
+  failedJobDetails: z.array(BatchFailedJobDetailSchema).optional(),
+  runtimeActionDecisions: BatchRuntimeActionDecisionsSchema.optional(),
+}).strict();
 
 export const BatchInsertSchema = z.object({
   id: z.string().uuid().optional(),
@@ -58,5 +103,60 @@ export const BatchInsertSchema = z.object({
   updatedAt: z.number().optional(),
 });
 
+export const BatchOperationCreateResponseSchema = z.object({
+  id: z.string(),
+  camundaBatchId: z.string().optional(),
+  type: z.enum([
+    'DELETE_INSTANCES',
+    'SUSPEND_INSTANCES',
+    'ACTIVATE_INSTANCES',
+    'SET_JOB_RETRIES',
+  ]),
+}).strict();
+
+// Batch creation requests are authorized against the selected process
+// instances before validation. Preserve adapter-specific selection fields so
+// existing engine integrations remain compatible while documenting the fields
+// EnterpriseGlue owns.
+export const BatchProcessInstanceSelectionRequestSchema = z.object({
+  engineId: z.string().optional(),
+  processInstanceIds: z.array(z.string()).optional(),
+  processInstanceQuery: z.record(z.string(), z.unknown()).optional(),
+  auditReason: z.string().min(1).max(2000).optional(),
+}).passthrough();
+
+export const BatchDeleteOperationRequestSchema = BatchProcessInstanceSelectionRequestSchema.extend({
+  deleteReason: z.string().optional(),
+  skipCustomListeners: z.boolean().optional(),
+  skipIoMappings: z.boolean().optional(),
+  failIfNotExists: z.boolean().optional(),
+  skipSubprocesses: z.boolean().optional(),
+});
+
+export const BatchProcessInstanceSuspensionRequestSchema = BatchProcessInstanceSelectionRequestSchema.extend({
+  suspended: z.boolean().optional(),
+});
+
+export const BatchRetryOperationRequestSchema = BatchProcessInstanceSelectionRequestSchema.extend({
+  retries: z.number().int().min(0).optional(),
+  jobIds: z.array(z.string()).optional(),
+});
+
+export const BatchSuspensionUpdateRequestSchema = z.object({
+  engineId: z.string().optional(),
+  suspended: z.boolean(),
+});
+
 // Types
 export type Batch = z.infer<typeof BatchSchema>;
+export type BatchEngineInfo = z.infer<typeof BatchEngineInfoSchema>;
+export type BatchStatistics = z.infer<typeof BatchStatisticsSchema>;
+export type BatchFailedJobDetail = z.infer<typeof BatchFailedJobDetailSchema>;
+export type BatchRuntimeActionDecisions = z.infer<typeof BatchRuntimeActionDecisionsSchema>;
+export type BatchDetail = z.infer<typeof BatchDetailSchema>;
+export type BatchOperationCreateResponse = z.infer<typeof BatchOperationCreateResponseSchema>;
+export type BatchProcessInstanceSelectionRequest = z.infer<typeof BatchProcessInstanceSelectionRequestSchema>;
+export type BatchDeleteOperationRequest = z.infer<typeof BatchDeleteOperationRequestSchema>;
+export type BatchProcessInstanceSuspensionRequest = z.infer<typeof BatchProcessInstanceSuspensionRequestSchema>;
+export type BatchRetryOperationRequest = z.infer<typeof BatchRetryOperationRequestSchema>;
+export type BatchSuspensionUpdateRequest = z.infer<typeof BatchSuspensionUpdateRequestSchema>;

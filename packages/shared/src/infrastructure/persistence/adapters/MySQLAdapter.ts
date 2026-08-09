@@ -5,29 +5,31 @@ import { fileURLToPath } from 'url';
 import { DatabaseAdapter, DatabaseFeature } from './DatabaseAdapter.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import {
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 } from '../entities/index.js';
 
 const entities = [
-  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, Notification,
-  Project, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
+  User, RefreshToken, PasswordResetToken, Invitation, AuditLog, ApiClient, ServiceAccount, Notification,
+  Project, ProjectEngineTarget, Folder, File, Version, Comment, ProjectMember, ProjectMemberRole,
   Batch,
-  EnvironmentTag, PlatformSettings, EmailTemplate, EmailSendConfig,
+  EnvironmentTag, ExternalEngineRegistration, ExternalEngineSystem, PlatformSettings, EmailTemplate, EmailSendConfig,
   // Tenant entities removed - multi-tenancy is EE-only
   EngineMember, EngineProjectAccess, EngineAccessRequest, PermissionGrant,
-  GitProvider, SsoProvider, SsoClaimsMapping, AuthzPolicy, AuthzAuditLog,
+  RbacPermission, RbacRole, RbacRoleAssignment, ConfigRoleAssignmentOverride, RbacRolePermission, SamlAssertionReplay, SsoNormalizedIdentity, ExternalIdentity, SsoSyncEvent, SsoSyncRun,
+  GitProvider, IdentityEntitlementMapping, IdentityProvider, IdentityReconciliationCheckpoint, DeploymentReceipt, ConfigBundleApplyRun, CamundaNativeGrantImportRun, ConfigBundleIdentityReplayTask, ConfigBundleRuntimeReconciliationTask, AuthzPolicy, AuthzAuditLog, AuthzGroup, AuthzGroupMembership, AuthzMigrationState,
   Branch, Commit, WorkingFile, FileSnapshot, FileCommitVersion, WorkingFolder, RemoteSyncState, PendingChange,
-  Engine, SavedFilter, EngineHealth,
+  Engine, EngineBackstopGroupMapping, EngineBackstopSyncRun, EngineBackstopSyncTask, EngineTenantMapping, EngineSet, EngineSetMaterialization, RuntimeResourceSet, RuntimeResource, RuntimeResourceSetMaterialization, SavedFilter, EngineHealth,
   GitRepository, GitCredential, GitLock, GitDeployment, GitTag, GitPushQueue, GitAuditLog,
   EngineDeployment, EngineDeploymentArtifact,
 ];
@@ -35,7 +37,7 @@ const entities = [
 /**
  * MySQL/MariaDB Database Adapter
  * Implements database-specific operations for MySQL and MariaDB
- * 
+ *
  * Driver: mysql2 (pnpm add mysql2)
  */
 export class MySQLAdapter implements DatabaseAdapter {
@@ -43,7 +45,7 @@ export class MySQLAdapter implements DatabaseAdapter {
 
   constructor() {
     this.logging = config.nodeEnv === 'development';
-    
+
     this.checkDriverAvailability();
     this.normalizeColumnsForMySQL();
   }
@@ -75,8 +77,18 @@ export class MySQLAdapter implements DatabaseAdapter {
 
     for (const column of metadata.columns) {
       if (column.options.type !== 'text') continue;
-
       const targetName = this.getTargetName(column.target);
+      const isNativeGrantEvidence = (targetName === 'CamundaNativeGrantImportRun'
+        || targetName === 'EngineBackstopSyncRun')
+        && ['classificationsJson', 'encryptedDetailedSnapshot'].includes(column.propertyName);
+      if (isNativeGrantEvidence) {
+        // Native-grant evidence is explicitly capped by its service, but can
+        // exceed MySQL TEXT's 64 KiB limit. LONGTEXT avoids driver-side
+        // narrowing while keeping the column out of all indexes.
+        column.options.type = 'longtext';
+        continue;
+      }
+
       const key = `${targetName}:${column.propertyName}`;
       const needsVarchar =
         column.options.default != null
@@ -153,14 +165,14 @@ export class MySQLAdapter implements DatabaseAdapter {
     const supportedFeatures: DatabaseFeature[] = [
       'jsonb',        // MySQL 5.7+ has JSON type
     ];
-    
+
     // Features NOT supported or different in MySQL:
     // - 'ilike': MySQL uses LIKE with COLLATE for case-insensitive
     // - 'returning': MySQL 8.0.21+ has limited support, MariaDB 10.5+ has full support
     // - 'onConflict': MySQL uses ON DUPLICATE KEY UPDATE
     // - 'uuid': MySQL doesn't have native UUID, use CHAR(36) or BINARY(16)
     // - 'sequences': MySQL uses AUTO_INCREMENT instead
-    
+
     return supportedFeatures.includes(feature);
   }
 

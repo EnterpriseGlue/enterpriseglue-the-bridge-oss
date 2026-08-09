@@ -3,14 +3,7 @@ import { z } from 'zod';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js';
-import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
-import { EngineDeploymentArtifact } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeploymentArtifact.js';
-import { EngineDeployment } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineDeployment.js';
-import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
-import { FileCommitVersion } from '@enterpriseglue/shared/infrastructure/persistence/entities/FileCommitVersion.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { EDIT_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import {
   listDecisionDefinitions,
   fetchDecisionDefinition,
@@ -19,9 +12,21 @@ import {
   evaluateDecisionByKey,
 } from './service.js';
 import {
+  DecisionDefinitionXmlSchema,
+  DecisionDefinitionListSchema,
   DecisionDefinitionQueryParams,
+  DecisionDefinitionSchema,
+  DecisionEvaluationResultSchema,
   EvaluateDecisionRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/decision.js';
+import { DecisionEditTargetSchema } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js';
+import {
+  filterRuntimeItemsByResourceKey,
+  getAuthorizedRuntimeTenantIdForKey,
+  getBoundedRuntimeResourceQuery,
+  withAuthorizedRuntimeTenantQuery,
+} from '../shared/runtime-resource-filter.js';
+import { resolveDeployedEditTarget } from '../shared/edit-target-resolution.js';
 
 const r = Router();
 
@@ -32,210 +37,94 @@ const editTargetQuerySchema = z.object({
   decisionDefinitionId: z.string().min(1).optional(),
 });
 
-r.use(requireAuth);
-
 // Resolve Starbase edit target for a deployed decision version
-r.get('/mission-control-api/decision-definitions/edit-target', validateQuery(editTargetQuerySchema), requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user!.userId;
+r.get('/mission-control-api/decision-definitions/edit-target', requireAuth, validateQuery(editTargetQuerySchema), requireRuntimeDefinitionAction('engine.runtime.decisions.edit-target.read', {
+  resourceKind: 'decision_definition',
+  definitionPath: 'decision-definition',
+  definitionLookup: 'key',
+  definitionIdFrom: 'query',
+  definitionIdKey: 'key',
+}), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const decisionKey = String(req.query.key || '').trim();
   const decisionDefinitionId = req.query.decisionDefinitionId ? String(req.query.decisionDefinitionId) : null;
-  const versionRaw = Number(req.query.version);
-
-  const decisionVersion = Math.trunc(versionRaw);
-  const dataSource = await getDataSource();
-  const artifactRepo = dataSource.getRepository(EngineDeploymentArtifact);
-  const deploymentRepo = dataSource.getRepository(EngineDeployment);
-  const fileCommitVersionRepo = dataSource.getRepository(FileCommitVersion);
-
-  const baseWhere: {
-    engineId: string;
-    artifactKind: 'decision';
-    artifactKey: string;
-    artifactVersion: number;
-  } = {
+  const decisionVersion = Math.trunc(Number(req.query.version));
+  const target = await resolveDeployedEditTarget({
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
     engineId,
     artifactKind: 'decision',
     artifactKey: decisionKey,
     artifactVersion: decisionVersion,
-  };
-
-  let candidates = await artifactRepo.find({
-    where: decisionDefinitionId ? { ...baseWhere, artifactId: decisionDefinitionId } : baseWhere,
-    order: { createdAt: 'DESC' },
-    take: 100,
+    artifactId: decisionDefinitionId,
   });
+  if (!target) throw Errors.notFound('Deployed decision mapping');
 
-  // Compatibility fallback: legacy rows may not have artifactId populated.
-  if (decisionDefinitionId && candidates.length === 0) {
-    candidates = await artifactRepo.find({
-      where: baseWhere,
-      order: { createdAt: 'DESC' },
-      take: 100,
-    });
-  }
-
-  for (const row of candidates) {
-    const projectId = String(row.projectId || '');
-    const fileId = row.fileId ? String(row.fileId) : '';
-    if (!projectId || !fileId) continue;
-
-    const canRead = await projectMemberService.hasAccess(projectId, userId);
-    if (!canRead) continue;
-
-    const canEdit = await projectMemberService.hasRole(projectId, userId, EDIT_ROLES);
-    const commitId = row.fileGitCommitId ? String(row.fileGitCommitId) : null;
-    let fileVersionNumber: number | null = null;
-    let mappingSource: 'git-commit' | 'db-timestamp' | 'db-latest' | 'deployment-timestamp' = 'db-latest';
-
-    const engineDeploymentId = String(row.engineDeploymentId || '');
-    const deploymentRow = engineDeploymentId
-      ? await deploymentRepo.findOne({ where: { id: engineDeploymentId }, select: ['deployedAt'] })
-      : null;
-    const deployedAt = deploymentRow?.deployedAt ? Number(deploymentRow.deployedAt) : null;
-    const deploymentTimestamp = deployedAt ?? Number(row.createdAt);
-
-    if (commitId) {
-      const byCommit = await fileCommitVersionRepo.findOne({
-        where: { fileId, commitId },
-        select: ['versionNumber'],
-      });
-      if (byCommit && Number.isFinite(Number(byCommit.versionNumber))) {
-        fileVersionNumber = Number(byCommit.versionNumber);
-        mappingSource = 'git-commit';
-      }
-    }
-
-    if (fileVersionNumber === null) {
-      const byTimestamp = await fileCommitVersionRepo.createQueryBuilder('v')
-        .select(['v.versionNumber AS "versionNumber"'])
-        .where('v.fileId = :fileId', { fileId })
-        .andWhere('v.createdAt <= :createdAt', { createdAt: deploymentTimestamp })
-        .orderBy('v.createdAt', 'DESC')
-        .limit(1)
-        .getRawOne<{ versionNumber?: number }>();
-
-      if (byTimestamp && Number.isFinite(Number(byTimestamp.versionNumber))) {
-        fileVersionNumber = Number(byTimestamp.versionNumber);
-        mappingSource = deployedAt ? 'deployment-timestamp' : 'db-timestamp';
-      }
-    }
-
-    if (fileVersionNumber === null) {
-      const byLatest = await fileCommitVersionRepo.createQueryBuilder('v')
-        .select(['v.versionNumber AS "versionNumber"'])
-        .where('v.fileId = :fileId', { fileId })
-        .orderBy('v.createdAt', 'DESC')
-        .limit(1)
-        .getRawOne<{ versionNumber?: number }>();
-
-      if (byLatest && Number.isFinite(Number(byLatest.versionNumber))) {
-        fileVersionNumber = Number(byLatest.versionNumber);
-      }
-    }
-
-    return res.json({
-      canShowEditButton: true,
-      canEdit,
-      engineId,
-      decisionKey,
-      decisionVersion,
-      projectId,
-      fileId,
-      engineDeploymentId: String(row.engineDeploymentId || ''),
-      commitId,
-      fileVersionNumber,
-      mappingSource,
-      artifactCreatedAt: Number(row.createdAt),
-    });
-  }
-
-  // Fallback: no artifact mapping found — search File table by dmnDecisionId
-  const fileRepo = dataSource.getRepository(File);
-  const dmnFiles = await fileRepo.find({
-    where: { type: 'dmn', dmnDecisionId: decisionKey },
-    select: ['id', 'projectId', 'name'],
-  });
-
-  for (const f of dmnFiles) {
-    const projectId = String(f.projectId || '');
-    if (!projectId) continue;
-
-    const canRead = await projectMemberService.hasAccess(projectId, userId);
-    if (!canRead) continue;
-
-    const canEdit = await projectMemberService.hasRole(projectId, userId, EDIT_ROLES);
-
-    let fileVersionNumber: number | null = null;
-    let fallbackCommitId: string | null = null;
-    const latestVersion = await fileCommitVersionRepo.createQueryBuilder('v')
-      .select(['v.versionNumber AS "versionNumber"', 'v.commitId AS "commitId"'])
-      .where('v.fileId = :fileId', { fileId: f.id })
-      .orderBy('v.createdAt', 'DESC')
-      .limit(1)
-      .getRawOne<{ versionNumber?: number; commitId?: string }>();
-
-    if (latestVersion && Number.isFinite(Number(latestVersion.versionNumber))) {
-      fileVersionNumber = Number(latestVersion.versionNumber);
-      fallbackCommitId = latestVersion.commitId ? String(latestVersion.commitId) : null;
-    }
-
-    return res.json({
-      canShowEditButton: true,
-      canEdit,
-      engineId,
-      decisionKey,
-      decisionVersion,
-      projectId,
-      fileId: f.id,
-      engineDeploymentId: '',
-      commitId: fallbackCommitId,
-      fileVersionNumber,
-      mappingSource: 'file-key-match' as const,
-      artifactCreatedAt: 0,
-    });
-  }
-
-  throw Errors.notFound('Deployed decision mapping');
+  res.json(DecisionEditTargetSchema.parse({
+    ...target,
+    decisionKey,
+    decisionVersion,
+  }));
 }));
 
 // List decision definitions
-r.get('/mission-control-api/decision-definitions', requireEngineReadOrWrite({ engineIdFrom: 'query' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions', requireAuth, requireRuntimeCollectionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition' }), validateQuery(DecisionDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listDecisionDefinitions(engineId, req.query);
-  res.json(data);
+  const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
+  if (!keys) {
+    return res.json(DecisionDefinitionListSchema.parse(await listDecisionDefinitions(engineId, req.query)));
+  }
+
+  const requestedKey = typeof req.query.key === 'string' ? req.query.key : null;
+  const visibleKeys = keys.filter((candidate) => !requestedKey || candidate === requestedKey);
+  const query = getBoundedRuntimeResourceQuery(req.query);
+  const collections = await Promise.all(visibleKeys.map(async (decisionDefinitionKey) => {
+    const definitions = await listDecisionDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, decisionDefinitionKey), key: decisionDefinitionKey });
+    // Keep the local boundary authoritative if the engine ignores the query.
+    return filterRuntimeItemsByResourceKey(definitions, [decisionDefinitionKey], 'key', scopes);
+  }));
+  res.json(DecisionDefinitionListSchema.parse(collections.flat()));
 }));
 
 // Get decision definition by ID
-r.get('/mission-control-api/decision-definitions/:id', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinition(engineId, definitionId);
-  res.json(data);
+  res.json(DecisionDefinitionSchema.parse(data));
 }));
 
 // Get decision definition XML
-r.get('/mission-control-api/decision-definitions/:id/xml', requireEngineReadOrWrite({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/decision-definitions/:id/xml', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.read', { resourceKind: 'decision_definition', definitionPath: 'decision-definition' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await fetchDecisionDefinitionXml(engineId, definitionId);
-  res.json(data);
+  res.json(DecisionDefinitionXmlSchema.parse(data));
 }));
 
 // Evaluate decision
-r.post('/mission-control-api/decision-definitions/:id/evaluate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/:id/evaluate', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', { resourceKind: 'decision_definition', definitionPath: 'decision-definition', engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionId = String(req.params.id);
   const data = await evaluateDecisionById(engineId, definitionId, req.body);
-  res.json(data);
+  res.json(DecisionEvaluationResultSchema.parse(data));
 }));
 
 // Evaluate decision by key
-r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireEngineReadOrWrite({ engineIdFrom: 'body' }), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/decision-definitions/key/:key/evaluate', requireAuth, requireRuntimeDefinitionAction('engine.runtime.decisions.evaluate', {
+  resourceKind: 'decision_definition',
+  definitionPath: 'decision-definition',
+  definitionLookup: 'key',
+  engineIdFrom: 'body',
+}), validateBody(EvaluateDecisionRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const definitionKey = String(req.params.key);
-  const data = await evaluateDecisionByKey(engineId, definitionKey, req.body);
-  res.json(data);
+  const runtimeTenantId = getAuthorizedRuntimeTenantIdForKey(req.authorizedRuntimeResourceScopes, definitionKey);
+  const data = runtimeTenantId === undefined
+    ? await evaluateDecisionByKey(engineId, definitionKey, req.body)
+    : await evaluateDecisionByKey(engineId, definitionKey, req.body, runtimeTenantId);
+  res.json(DecisionEvaluationResultSchema.parse(data));
 }));
 
 export default r;

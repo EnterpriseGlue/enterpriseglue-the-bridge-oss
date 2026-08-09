@@ -23,14 +23,74 @@ export class PlatformSettings {
   @Column({ name: 'default_deploy_roles', type: 'text', default: '["owner","delegate","operator"]' })
   defaultDeployRoles!: string;
 
+  @Column({ name: 'engine_onboarding_mode', type: 'text', default: 'manual_allowed' })
+  engineOnboardingMode!: 'manual_allowed' | 'external_only' | 'hybrid';
+
+  @Column({ name: 'project_engine_target_mode', type: 'text', default: 'manual_allowed' })
+  projectEngineTargetMode!: 'manual_allowed' | 'external_only' | 'hybrid';
+
+  @Column({ name: 'engine_access_authority', type: 'text', default: 'manual' })
+  engineAccessAuthority!: 'manual' | 'transition_to_sso' | 'sso_managed';
+
+  @Column({ name: 'project_access_authority', type: 'text', default: 'manual' })
+  projectAccessAuthority!: 'manual' | 'transition_to_sso' | 'sso_managed';
+
+  @Column({ name: 'engine_runtime_authorization_mode', type: 'text', default: 'enterpriseglue_authoritative' })
+  engineRuntimeAuthorizationMode!: 'enterpriseglue_authoritative' | 'mirrored_engine_backstop';
+
+  @Column({ name: 'access_governance_source_ref', type: 'text', nullable: true })
+  accessGovernanceSourceRef!: string | null;
+
+  @Column({ name: 'access_governance_ownership_mode', type: 'text', default: 'manual' })
+  accessGovernanceOwnershipMode!: 'manual' | 'config_locked' | 'config_warn';
+
+  @Column({ name: 'access_governance_source_hash', type: 'text', nullable: true })
+  accessGovernanceSourceHash!: string | null;
+
+  @Column({ name: 'access_governance_last_applied_at', type: 'bigint', nullable: true })
+  accessGovernanceLastAppliedAt!: number | null;
+
+  @Column({ name: 'access_governance_drift_status', type: 'text', nullable: true })
+  accessGovernanceDriftStatus!: string | null;
+
+  @Column({ name: 'credentialless_customer_sidecars_enabled', type: 'boolean', default: false })
+  credentiallessCustomerSidecarsEnabled!: boolean;
+
   @Column({ name: 'invite_allow_all_domains', type: 'boolean', default: true })
   inviteAllowAllDomains!: boolean;
 
   @Column({ name: 'invite_allowed_domains', type: 'text', default: '[]' })
   inviteAllowedDomains!: string;
 
-  @Column({ name: 'sso_auto_redirect_single_provider', type: 'boolean', default: false })
-  ssoAutoRedirectSingleProvider!: boolean;
+  @Column({ name: 'local_password_login_mode', type: 'text', default: 'auto' })
+  localPasswordLoginMode!: 'auto' | 'enabled' | 'disabled';
+
+  @Column({ name: 'sso_provider_selection_mode', type: 'text', default: 'auto_redirect_single' })
+  ssoProviderSelectionMode!: 'auto_redirect_single' | 'chooser' | 'progressive';
+
+  @Column({ name: 'sso_all_engines_assignment_mappings_enabled', type: 'boolean', default: true })
+  ssoAllEnginesAssignmentMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_engine_owner_assignment_mappings_enabled', type: 'boolean', default: false })
+  ssoEngineOwnerAssignmentMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_engine_delegate_assignment_mappings_enabled', type: 'boolean', default: false })
+  ssoEngineDelegateAssignmentMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_regex_claim_mappings_enabled', type: 'boolean', default: false })
+  ssoRegexClaimMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_broad_entitlement_mappings_enabled', type: 'boolean', default: false })
+  ssoBroadEntitlementMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_secret_view_mappings_enabled', type: 'boolean', default: false })
+  ssoSecretViewMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_unredacted_audit_mappings_enabled', type: 'boolean', default: false })
+  ssoUnredactedAuditMappingsEnabled!: boolean;
+
+  @Column({ name: 'sso_permanent_delete_mappings_enabled', type: 'boolean', default: false })
+  ssoPermanentDeleteMappingsEnabled!: boolean;
 
   @Column({ name: 'pii_regex_enabled', type: 'boolean', default: false })
   piiRegexEnabled!: boolean;

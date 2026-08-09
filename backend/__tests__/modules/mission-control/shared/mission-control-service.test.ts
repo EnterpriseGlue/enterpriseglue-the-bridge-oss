@@ -11,6 +11,9 @@ let getActivityCountsByState: typeof import('../../../../../packages/backend-hos
 let getProcessInstanceVariables: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariables;
 let getProcessInstanceVariableHistory: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceVariableHistory;
 let getProcessInstanceExecutionDetails: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').getProcessInstanceExecutionDetails;
+let listProcessDefinitions: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').listProcessDefinitions;
+let listProcessInstancesDetailed: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').listProcessInstancesDetailed;
+let resolveProcessDefinition: typeof import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js').resolveProcessDefinition;
 
 vi.mock('@enterpriseglue/shared/services/bpmn-engine-client.js', () => ({
   camundaGet: vi.fn(),
@@ -33,6 +36,9 @@ describe('mission-control-service', () => {
       getProcessInstanceVariables,
       getProcessInstanceVariableHistory,
       getProcessInstanceExecutionDetails,
+      listProcessDefinitions,
+      listProcessInstancesDetailed,
+      resolveProcessDefinition,
     } = await import('../../../../../packages/backend-host/src/modules/mission-control/shared/mission-control-service.js'));
   });
 
@@ -40,29 +46,95 @@ describe('mission-control-service', () => {
     vi.clearAllMocks();
   });
 
-  it('returns only process-scope variables when execution scopes are present', async () => {
-    vi.mocked(camundaGet).mockResolvedValueOnce([
-      { name: 'requestBody', value: { foo: 'bar' }, type: 'Json', executionId: 'proc-1' },
-      { name: 'validStatuses', value: ['ISSUED', 'LAPSED'], type: 'Object', executionId: 'activity-exec-42' },
-    ] as any);
+  it('reads the live process-variable endpoint instead of history so accepted edits are visible', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce({
+      requestBody: { value: { foo: 'bar' }, type: 'Json' },
+      validStatuses: { value: ['ISSUED', 'LAPSED'], type: 'Object' },
+    } as any);
 
     const result = await getProcessInstanceVariables('engine-1', 'proc-1');
 
     expect(result).toEqual({
       requestBody: { value: { foo: 'bar' }, type: 'Json' },
+      validStatuses: { value: ['ISSUED', 'LAPSED'], type: 'Object' },
     });
-    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/history/variable-instance', { processInstanceId: 'proc-1' });
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-instance/proc-1/variables');
   });
 
-  it('keeps compatibility when executionId is not provided by engine response', async () => {
-    vi.mocked(camundaGet).mockResolvedValueOnce([
-      { name: 'legacyVar', value: 'ok', type: 'String' },
-    ] as any);
+  it('passes shared runtime-tenant filters through the compatibility definition list', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce([] as any);
+
+    await listProcessDefinitions('engine-1', {
+      key: 'invoice',
+      tenantIdIn: ['runtime-a'],
+      maxResults: 10,
+    });
+
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition', {
+      key: 'invoice',
+      tenantIdIn: ['runtime-a'],
+      maxResults: 10,
+    });
+  });
+
+  it('preserves runtime tenant lineage while normalizing process-instance rows', async () => {
+    vi.mocked(camundaGet)
+      .mockResolvedValueOnce([{
+        id: 'instance-1',
+        definitionId: 'invoice:3:definition-1',
+        tenantId: 'runtime-blue',
+        suspended: false,
+      }] as any)
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([] as any);
+
+    const result = await listProcessInstancesDetailed('engine-1', {
+      active: 'true',
+      processDefinitionKey: 'invoice',
+      tenantIdIn: ['runtime-blue'],
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'instance-1',
+        processDefinitionKey: 'invoice',
+        tenantId: 'runtime-blue',
+        state: 'ACTIVE',
+      }),
+    ]);
+    expect(camundaGet).toHaveBeenNthCalledWith(1, 'engine-1', '/process-instance', {
+      active: true,
+      suspended: false,
+      processDefinitionKey: 'invoice',
+      tenantIdIn: ['runtime-blue'],
+      withoutTenantId: undefined,
+      maxResults: undefined,
+    });
+  });
+
+  it('resolves an exact definition version inside its authorized runtime tenant', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce([{ id: 'definition-2', key: 'invoice' }] as any);
+
+    await resolveProcessDefinition(
+      'engine-1',
+      { key: 'invoice', version: '2' },
+      'runtime-a',
+    );
+
+    expect(camundaGet).toHaveBeenCalledWith('engine-1', '/process-definition', {
+      key: 'invoice',
+      version: 2,
+      tenantIdIn: ['runtime-a'],
+    });
+  });
+
+  it('keeps compatibility with engines that return an unwrapped variable value', async () => {
+    vi.mocked(camundaGet).mockResolvedValueOnce({ legacyVar: 'ok' } as any);
 
     const result = await getProcessInstanceVariables('engine-1', 'proc-1');
 
     expect(result).toEqual({
-      legacyVar: { value: 'ok', type: 'String' },
+      legacyVar: { value: 'ok', type: 'string' },
     });
   });
 

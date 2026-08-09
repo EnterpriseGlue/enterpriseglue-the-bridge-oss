@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireEngineReadOrWrite } from '@enterpriseglue/shared/middleware/engineAuth.js';
+import { requireRuntimeCollectionAction, requireRuntimeDefinitionAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import {
   listJobs,
   getJobById,
@@ -12,38 +13,66 @@ import {
   listJobDefinitions,
   setJobDefinitionRetriesById,
   setJobDefinitionSuspensionStateById,
+  filterRuntimeItemsByProcessDefinitionKeys,
 } from './jobs-service.js';
 import {
+  JobDefinitionSchema,
   JobQueryParams,
+  JobSchema,
   JobDefinitionQueryParams,
+  ExecuteJobRequest,
   SetJobRetriesRequest,
   SetJobSuspensionStateRequest,
   SetJobDefinitionRetriesRequest,
   SetJobDefinitionSuspensionStateRequest,
 } from '@enterpriseglue/shared/schemas/mission-control/job.js';
+import { getBoundedRuntimeResourceQuery, withAuthorizedRuntimeTenantQuery } from './runtime-resource-filter.js';
 
 const r = Router();
 
 // Apply auth middleware only to /mission-control-api routes (not globally)
-r.use('/mission-control-api', requireAuth, requireEngineReadOrWrite());
+r.use('/mission-control-api', requireAuth);
 
 // Query jobs
-r.get('/mission-control-api/jobs', validateQuery(JobQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/jobs', requireRuntimeCollectionAction('engine.runtime.jobs.read', { resourceKind: 'process_definition' }), validateQuery(JobQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listJobs(engineId, req.query);
-  res.json(data);
+  const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
+  if (!keys) {
+    return res.json(z.array(JobSchema).parse(await listJobs(engineId, req.query)));
+  }
+
+  const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
+  const visibleKeys = keys.filter((key) => !requestedKey || key === requestedKey);
+  const query = getBoundedRuntimeResourceQuery(req.query);
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const data = await listJobs(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
+  }));
+  res.json(z.array(JobSchema).parse(collections.flat()));
 }));
 
 // Get job by ID
-r.get('/mission-control-api/jobs/:id', asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/jobs/:id', requireRuntimeDefinitionAction('engine.runtime.jobs.read', {
+  resourceKind: 'process_definition',
+  definitionPath: 'job',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+}), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobId = String(req.params.id);
   const data = await getJobById(engineId, jobId);
-  res.json(data);
+  res.json(JobSchema.parse(data));
 }));
 
 // Execute job
-r.post('/mission-control-api/jobs/:id/execute', asyncHandler(async (req: Request, res: Response) => {
+r.post('/mission-control-api/jobs/:id/execute', requireRuntimeDefinitionAction('engine.runtime.jobs.execute', {
+  resourceKind: 'process_definition',
+  definitionPath: 'job',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+  engineIdFrom: 'body',
+}), validateBody(ExecuteJobRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobId = String(req.params.id);
   await executeJobById(engineId, jobId);
@@ -51,7 +80,13 @@ r.post('/mission-control-api/jobs/:id/execute', asyncHandler(async (req: Request
 }));
 
 // Set job retries
-r.put('/mission-control-api/jobs/:id/retries', validateBody(SetJobRetriesRequest), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/jobs/:id/retries', requireRuntimeDefinitionAction('engine.runtime.jobs.retries.update', {
+  resourceKind: 'process_definition',
+  definitionPath: 'job',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+  engineIdFrom: 'body',
+}), validateBody(SetJobRetriesRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobId = String(req.params.id);
   await setJobRetriesById(engineId, jobId, req.body);
@@ -59,7 +94,13 @@ r.put('/mission-control-api/jobs/:id/retries', validateBody(SetJobRetriesRequest
 }));
 
 // Set job suspension state
-r.put('/mission-control-api/jobs/:id/suspended', validateBody(SetJobSuspensionStateRequest), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/jobs/:id/suspended', requireRuntimeDefinitionAction('engine.runtime.jobs.suspension.update', {
+  resourceKind: 'process_definition',
+  definitionPath: 'job',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+  engineIdFrom: 'body',
+}), validateBody(SetJobSuspensionStateRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobId = String(req.params.id);
   await setJobSuspensionStateById(engineId, jobId, req.body);
@@ -67,14 +108,32 @@ r.put('/mission-control-api/jobs/:id/suspended', validateBody(SetJobSuspensionSt
 }));
 
 // Query job definitions
-r.get('/mission-control-api/job-definitions', validateQuery(JobDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/mission-control-api/job-definitions', requireRuntimeCollectionAction('engine.runtime.job-definitions.read', { resourceKind: 'process_definition' }), validateQuery(JobDefinitionQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listJobDefinitions(engineId, req.query);
-  res.json(data);
+  const keys = req.authorizedRuntimeResourceKeys;
+  const scopes = req.authorizedRuntimeResourceScopes;
+  if (!keys) {
+    return res.json(z.array(JobDefinitionSchema).parse(await listJobDefinitions(engineId, req.query)));
+  }
+
+  const requestedKey = typeof req.query.processDefinitionKey === 'string' ? req.query.processDefinitionKey : null;
+  const visibleKeys = keys.filter((key) => !requestedKey || key === requestedKey);
+  const query = getBoundedRuntimeResourceQuery(req.query);
+  const collections = await Promise.all(visibleKeys.map(async (processDefinitionKey) => {
+    const data = await listJobDefinitions(engineId, { ...withAuthorizedRuntimeTenantQuery(query, scopes, processDefinitionKey), processDefinitionKey });
+    return filterRuntimeItemsByProcessDefinitionKeys(engineId, data, [processDefinitionKey], scopes);
+  }));
+  res.json(z.array(JobDefinitionSchema).parse(collections.flat()));
 }));
 
 // Set job definition retries
-r.put('/mission-control-api/job-definitions/:id/retries', validateBody(SetJobDefinitionRetriesRequest), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/job-definitions/:id/retries', requireRuntimeDefinitionAction('engine.runtime.job-definitions.retries.update', {
+  resourceKind: 'process_definition',
+  definitionPath: 'job-definition',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+  engineIdFrom: 'body',
+}), validateBody(SetJobDefinitionRetriesRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobDefinitionId = String(req.params.id);
   await setJobDefinitionRetriesById(engineId, jobDefinitionId, req.body);
@@ -82,7 +141,13 @@ r.put('/mission-control-api/job-definitions/:id/retries', validateBody(SetJobDef
 }));
 
 // Set job definition suspension state
-r.put('/mission-control-api/job-definitions/:id/suspended', validateBody(SetJobDefinitionSuspensionStateRequest), asyncHandler(async (req: Request, res: Response) => {
+r.put('/mission-control-api/job-definitions/:id/suspended', requireRuntimeDefinitionAction('engine.runtime.job-definitions.suspension.update', {
+  resourceKind: 'process_definition',
+  definitionPath: 'job-definition',
+  definitionReferenceField: 'processDefinitionId',
+  definitionReferencePath: 'process-definition',
+  engineIdFrom: 'body',
+}), validateBody(SetJobDefinitionSuspensionStateRequest), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const jobDefinitionId = String(req.params.id);
   await setJobDefinitionSuspensionStateById(engineId, jobDefinitionId, req.body);

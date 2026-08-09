@@ -9,7 +9,7 @@ The database layer uses **TypeORM** for type-safe, database-agnostic queries. Th
 ```
 db/
 ├── data-source.ts      # TypeORM DataSource configuration
-├── db-pool.ts          # Database-agnostic connection pool
+├── db-pool.ts          # Deprecated PostgreSQL/Oracle raw-pool compatibility
 ├── run-migrations.ts   # Migration runner + data seeding
 ├── bootstrap.ts        # Initial data seeding
 ├── adapters/           # Database-specific adapters
@@ -43,7 +43,9 @@ db/
 - **Purpose:** All application data in a single database instance
 - **Supported:** PostgreSQL, Oracle, MySQL, SQL Server, Spanner
 - **Schema:** All tables in the configured schema (default: `main`)
-- **Connection:** `getDataSource()` for repositories/query builders; `getConnectionPool()` is infrastructure-only and should not be used in application routes/services
+- **Connection:** `getDataSource()` for repositories/query builders;
+  `getConnectionPool()` is a deprecated PostgreSQL/Oracle compatibility path
+  and must not be used in application routes/services or new plugins
 
 ### Entity Categories
 - **Auth:** User, RefreshToken

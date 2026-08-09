@@ -23,6 +23,7 @@ jobs:
     outputs:
       backend_image_ref: ${{ steps.refs.outputs.backend }}
       frontend_image_ref: ${{ steps.refs.outputs.frontend }}
+      image_platforms: ${{ steps.refs.outputs.platforms }}
     steps:
       - name: Resolve image refs
         id: refs
@@ -30,8 +31,14 @@ jobs:
           owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
           backend="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-backend:latest"
           frontend="ghcr.io/${owner_lc}/enterpriseglue-the-bridge-oss-frontend:latest"
-          echo "backend=${backend}" >> "$GITHUB_OUTPUT"
-          echo "frontend=${frontend}" >> "$GITHUB_OUTPUT"
+          platforms="${IMAGE_PLATFORMS:-linux/amd64,linux/arm64}"
+          {
+            echo "backend=${backend}"
+            echo "frontend=${frontend}"
+            echo "platforms=${platforms}"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          IMAGE_PLATFORMS: ${{ vars.IMAGE_PLATFORMS }}
 
   drift-scan:
     needs: resolve
@@ -39,3 +46,4 @@ jobs:
     with:
       backend_image_ref: ${{ needs.resolve.outputs.backend_image_ref }}
       frontend_image_ref: ${{ needs.resolve.outputs.frontend_image_ref }}
+      image_platforms: ${{ needs.resolve.outputs.image_platforms }}

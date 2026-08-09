@@ -3,7 +3,7 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireEngineAccess, requireEngineDeployer } from '@enterpriseglue/shared/middleware/engineAuth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import {
   listDeployments,
   fetchDeploymentById,
@@ -14,15 +14,20 @@ import { DeploymentQueryParams } from '@enterpriseglue/shared/schemas/mission-co
 
 const r = Router();
 
+function deploymentQuery(req: Request) {
+  const { engineId: _engineId, ...query } = req.query;
+  return query;
+}
+
 // List deployments
-r.get('/starbase-api/deployments', apiLimiter, requireAuth, requireEngineAccess({ engineIdFrom: 'query' }), validateQuery(DeploymentQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/deployments', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'query' }), validateQuery(DeploymentQueryParams.partial()), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
-  const data = await listDeployments(engineId, req.query);
+  const data = await listDeployments(engineId, deploymentQuery(req));
   res.json(data);
 }));
 
 // Get deployment by ID
-r.get('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngineAccess({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const deploymentId = String(req.params.id);
   const data = await fetchDeploymentById(engineId, deploymentId);
@@ -30,7 +35,7 @@ r.get('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngineAcc
 }));
 
 // Delete deployment
-r.delete('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngineDeployer({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.delete('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireAction('engine.deployments.delete', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const cascade = req.query.cascade === 'true';
   const deploymentId = String(req.params.id);
@@ -39,7 +44,7 @@ r.delete('/starbase-api/deployments/:id', apiLimiter, requireAuth, requireEngine
 }));
 
 // Get process definition diagram
-r.get('/starbase-api/process-definitions/:id/diagram', apiLimiter, requireAuth, requireEngineAccess({ engineIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
+r.get('/starbase-api/process-definitions/:id/diagram', apiLimiter, requireAuth, requireAction('engine.deployments.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const engineId = (req as any).engineId as string;
   const processDefinitionId = String(req.params.id);
   const data = await fetchProcessDefinitionDiagram(engineId, processDefinitionId);

@@ -1,4 +1,5 @@
 import { camundaGet, camundaPost, camundaDelete } from '@enterpriseglue/shared/services/bpmn-engine-client.js'
+import type { RuntimeActivityInstanceTree } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 
 export interface ProcessInstance {
   id: string
@@ -12,15 +13,21 @@ export interface ProcessInstance {
 
 export interface ProcessInstanceListParams {
   processDefinitionKey?: string
+  tenantIdIn?: string[]
+  withoutTenantId?: boolean
   active?: boolean
   suspended?: boolean
+  maxResults?: number
 }
 
 export async function listProcessInstances(engineId: string, params: ProcessInstanceListParams = {}): Promise<ProcessInstance[]> {
   const queryParams: Record<string, any> = {}
   if (params.processDefinitionKey) queryParams.processDefinitionKey = params.processDefinitionKey
+  if (params.tenantIdIn?.length) queryParams.tenantIdIn = params.tenantIdIn
+  if (params.withoutTenantId) queryParams.withoutTenantId = true
   if (params.active !== undefined) queryParams.active = params.active
   if (params.suspended !== undefined) queryParams.suspended = params.suspended
+  if (params.maxResults !== undefined) queryParams.maxResults = params.maxResults
   return camundaGet<ProcessInstance[]>(engineId, '/process-instance', queryParams)
 }
 
@@ -32,8 +39,8 @@ export async function getProcessInstanceVariables(engineId: string, id: string):
   return camundaGet<Record<string, any>>(engineId, `/process-instance/${encodeURIComponent(id)}/variables`)
 }
 
-export async function getActivityInstances(engineId: string, id: string): Promise<any> {
-  return camundaGet<any>(engineId, `/process-instance/${encodeURIComponent(id)}/activity-instances`)
+export async function getActivityInstances(engineId: string, id: string): Promise<RuntimeActivityInstanceTree> {
+  return camundaGet<RuntimeActivityInstanceTree>(engineId, `/process-instance/${encodeURIComponent(id)}/activity-instances`)
 }
 
 export interface DeleteProcessInstanceParams {

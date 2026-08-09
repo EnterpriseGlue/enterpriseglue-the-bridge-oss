@@ -25,6 +25,9 @@ describe('Backend host contract conformance', () => {
         getNotificationTenantResolver: async () => ({
           resolve: () => ({ userId: 'user-1', tenantId: 'tenant-1' }),
         }),
+        getEngineTenantReferenceResolver: async () => ({
+          resolve: async () => ({ tenantId: 'tenant-1', authorized: true }),
+        }),
       }),
     ).not.toThrow();
 
@@ -57,17 +60,40 @@ describe('Backend host contract conformance', () => {
     };
 
     const hostContext: EnterpriseBackendContext = {
+      database: {
+        kind: 'typeorm',
+        databaseType: 'postgres',
+        async getDataSource<TDataSource = unknown>() {
+          return {} as TDataSource;
+        },
+        async transaction(work) {
+          return work({});
+        },
+      },
       connectionPool: mockPool,
       config: {},
+      authz: {
+        requireAction: () => () => undefined,
+        requireCompositeAction: () => () => undefined,
+        requireDeclaredAction: () => () => undefined,
+        buildOpenApiAuthzMetadata: () => [],
+      },
     };
 
     // Runtime shape checks — if the contract adds a required property,
     // this test will fail at the type level (tsc) AND runtime level.
+    expect(hostContext.database.kind).toBe('typeorm');
+    expect(typeof hostContext.database.getDataSource).toBe('function');
+    expect(typeof hostContext.database.transaction).toBe('function');
     expect(hostContext.connectionPool).toBeDefined();
     expect(typeof hostContext.connectionPool.query).toBe('function');
     expect(typeof hostContext.connectionPool.close).toBe('function');
     expect(typeof hostContext.connectionPool.getNativePool).toBe('function');
     expect(hostContext.config).toBeDefined();
+    expect(typeof hostContext.authz.requireAction).toBe('function');
+    expect(typeof hostContext.authz.requireCompositeAction).toBe('function');
+    expect(typeof hostContext.authz.requireDeclaredAction).toBe('function');
+    expect(typeof hostContext.authz.buildOpenApiAuthzMetadata).toBe('function');
   });
 
   it('ConnectionPool.query returns expected shape', async () => {

@@ -1,6 +1,6 @@
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { UserAvatar, Document, Security, UserMultiple, Settings, Policy, RecentlyViewed, Enterprise } from '@carbon/icons-react'
+import { UserAvatar, Document, Security, Settings, Policy, RecentlyViewed, Enterprise } from '@carbon/icons-react'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 
 export default function PlatformHome() {
@@ -22,11 +22,11 @@ export default function PlatformHome() {
       color: '#0f62fe'
     },
     {
-      title: 'SSO Role Mappings',
-      description: 'Map SSO claims (groups, roles, email domains) to platform roles for automatic provisioning.',
-      icon: UserMultiple,
-      path: '/admin/sso-mappings',
-      color: '#8a3ffc'
+      title: 'Access Control',
+      description: 'Review system roles, permission catalog, and effective access.',
+      icon: Security,
+      path: '/admin/access-control',
+      color: '#0043ce'
     },
     {
       title: 'Authorization Policies',

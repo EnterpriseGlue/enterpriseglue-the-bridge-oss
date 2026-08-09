@@ -7,8 +7,57 @@
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
-import { IsNull, MoreThan, LessThan } from 'typeorm';
+import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { ProjectMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMember.js';
+import { ProjectMemberRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectMemberRole.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { EngineSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSet.js';
+import { EngineSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineSetMaterialization.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
+import { RuntimeResourceSet } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSet.js';
+import { RuntimeResourceSetMaterialization } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResourceSetMaterialization.js';
+import { EngineMember } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineMember.js';
+import { ExternalEngineRegistration } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineRegistration.js';
+import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuditLog.js';
+import { ApiClient } from '@enterpriseglue/shared/infrastructure/persistence/entities/ApiClient.js';
+import { AuthzGroup } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroup.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
+import { ExternalEngineSystem } from '@enterpriseglue/shared/infrastructure/persistence/entities/ExternalEngineSystem.js';
+import { ServiceAccount } from '@enterpriseglue/shared/infrastructure/persistence/entities/ServiceAccount.js';
+import { IdentityEntitlementMapping } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityEntitlementMapping.js';
+import { AuthzPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzPolicy.js';
+import { RbacPermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacPermission.js';
+import { RbacRole } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRole.js';
+import { RbacRolePermission } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRolePermission.js';
+import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
+import { ConfigRoleAssignmentOverride } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigRoleAssignmentOverride.js';
+import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { slugifyIdentifier } from '@enterpriseglue/shared/utils/identifier-slug.js';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { In, IsNull, Not, type DataSource, type EntityManager } from 'typeorm';
+import { normalizeTenantIdForPersistence, tenantIdsForAuthz } from '../../authz/tenant-scope.js';
+import { canonicalRoleAssignmentKey } from '../../authz/role-assignment-identity.js';
+import type { AuthzPrincipalType, AuthzResourceType } from '../../authz/permission-actions.js';
+import {
+  isTenantSafePermission,
+  rolePermissionDependencyError,
+  rolePermissionValidationError,
+  TENANT_MACHINE_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  TENANT_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_PROJECT_PERMISSION_IDS,
+} from '../../authz/tenant-role-policy.js';
+
+export {
+  isTenantSafePermission,
+  rolePermissionDependencyError,
+  TENANT_MACHINE_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  TENANT_SAFE_PERMISSION_IDS,
+  TENANT_SAFE_PROJECT_PERMISSION_IDS,
+} from '../../authz/tenant-role-policy.js';
 
 // ============================================================================
 // Permission String Constants
@@ -18,22 +67,72 @@ import { generateId } from '@enterpriseglue/shared/utils/id.js';
  * Platform-level permissions (no resource scope)
  */
 export const PlatformPermissions = {
+  // Dashboard
+  DASHBOARD_VIEW: 'platform:dashboard:view',
+
+  // Projects
+  PROJECT_CREATE: 'project:create',
+
   // Engine management
   ENGINE_CREATE: 'platform:engine:create',
   ENGINE_DELETE: 'platform:engine:delete',
+  ENGINE_REGISTRATION_MANAGE: 'platform:engine-registration:manage',
+  ENGINE_SETS_VIEW: 'platform:engine-sets:view',
+  ENGINE_SETS_MANAGE: 'platform:engine-sets:manage',
+  PROJECT_ENGINE_TARGETS_VIEW: 'platform:project-engine-targets:view',
+  PROJECT_ENGINE_TARGETS_MANAGE: 'platform:project-engine-targets:manage',
   
   // User management  
   USER_MANAGE: 'platform:user:manage',
   USER_VIEW: 'platform:user:view',
+  USERS_VIEW: 'platform:users:view',
+  USERS_CREATE: 'platform:users:create',
+  USERS_UPDATE: 'platform:users:update',
+  USERS_DEACTIVATE: 'platform:users:deactivate',
+  USERS_DELETE: 'platform:users:delete',
+  USERS_PERMANENT_DELETE: 'platform:users:permanent-delete',
+  USERS_UNLOCK: 'platform:users:unlock',
   
   // Settings
   SETTINGS_MANAGE: 'platform:settings:manage',
+
+  // SSO administration
+  SSO_PROVIDERS_VIEW: 'platform:sso-providers:view',
+  SSO_PROVIDERS_MANAGE: 'platform:sso-providers:manage',
+  SSO_PLATFORM_ROLE_MAPPINGS_VIEW: 'platform:sso-platform-role-mappings:view',
+  SSO_PLATFORM_ROLE_MAPPINGS_MANAGE: 'platform:sso-platform-role-mappings:manage',
   
   // Audit
   AUDIT_VIEW: 'platform:audit:view',
+  AUDIT_UNREDACTED_VIEW: 'platform:audit:unredacted-view',
   
   // Git providers
   GIT_PROVIDER_MANAGE: 'platform:git-provider:manage',
+
+  // RBAC foundation
+  AUTHZ_ROLES_VIEW: 'platform:authz:roles:view',
+  AUTHZ_ROLES_MANAGE: 'platform:authz:roles:manage',
+  AUTHZ_CHECK: 'platform:authz:check',
+  CONFIG_BUNDLES_VIEW: 'platform:config-bundles:view',
+  CONFIG_BUNDLES_PREVIEW: 'platform:config-bundles:preview',
+  CONFIG_BUNDLES_APPLY: 'platform:config-bundles:apply',
+  CONFIG_BUNDLES_EXPORT: 'platform:config-bundles:export',
+  CAMUNDA_NATIVE_GRANTS_PREVIEW: 'platform:camunda-native-grants:preview',
+  CAMUNDA_NATIVE_GRANTS_SENSITIVE_VIEW: 'platform:camunda-native-grants:sensitive-view',
+  CAMUNDA_NATIVE_GRANTS_DRAFT: 'platform:camunda-native-grants:draft',
+  CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW: 'platform:camunda-native-grants:history-view',
+  ENGINE_BACKSTOP_VIEW: 'platform:engine-backstop:view',
+  ENGINE_BACKSTOP_MANAGE: 'platform:engine-backstop:manage',
+  ENGINE_BACKSTOP_PREVIEW: 'platform:engine-backstop:preview',
+  ENGINE_BACKSTOP_SENSITIVE_VIEW: 'platform:engine-backstop:sensitive-view',
+  ENGINE_BACKSTOP_APPLY: 'platform:engine-backstop:apply',
+  ENGINE_BACKSTOP_DRIFT_CHECK: 'platform:engine-backstop:drift-check',
+  SSO_ASSIGNMENTS_VIEW: 'platform:sso-assignments:view',
+  SSO_ASSIGNMENTS_MANAGE: 'platform:sso-assignments:manage',
+  API_CLIENTS_VIEW: 'platform:api-clients:view',
+  API_CLIENTS_MANAGE: 'platform:api-clients:manage',
+  SERVICE_ACCOUNTS_VIEW: 'platform:service-accounts:view',
+  SERVICE_ACCOUNTS_MANAGE: 'platform:service-accounts:manage',
 } as const;
 
 /**
@@ -47,6 +146,14 @@ export const ProjectPermissions = {
   // Members
   MEMBERS_MANAGE: 'project:members:manage',
   MEMBERS_VIEW: 'project:members:view',
+  MEMBERS_SEARCH: 'project:members:search',
+  MEMBERS_INVITE: 'project:members:invite',
+  MEMBERS_ADD: 'project:members:add',
+  MEMBERS_UPDATE_ROLE: 'project:members:update-role',
+  MEMBERS_REMOVE: 'project:members:remove',
+  MEMBERS_MANAGE_DEPLOY_GRANT: 'project:members:manage-deploy-grant',
+  DELEGATE_MANAGE: 'project:delegate:manage',
+  OWNERSHIP_TRANSFER: 'project:ownership:transfer',
   
   // Files
   FILES_CREATE: 'project:files:create',
@@ -65,6 +172,8 @@ export const ProjectPermissions = {
   
   // Deploy (to engine)
   DEPLOY: 'project:deploy',
+  DEPLOYMENT_TARGETS_VIEW: 'project:deployment-targets:view',
+  DEPLOYMENT_TARGETS_MANAGE: 'project:deployment-targets:manage',
 } as const;
 
 /**
@@ -75,10 +184,27 @@ export const EnginePermissions = {
   ENGINE_EDIT: 'engine:edit',
   ENGINE_DELETE: 'engine:delete',
   ENGINE_ACTIVATE: 'engine:activate',
+  SECRETS_VIEW: 'engine:secrets:view',
+  SECRETS_MANAGE: 'engine:secrets:manage',
+  ENVIRONMENT_SET: 'engine:environment:set',
+  ENVIRONMENT_LOCK: 'engine:environment:lock',
+  DELEGATE_MANAGE: 'engine:delegate:manage',
+  OWNERSHIP_TRANSFER: 'engine:ownership:transfer',
   
   // Members
   MEMBERS_MANAGE: 'engine:members:manage',
   MEMBERS_VIEW: 'engine:members:view',
+  MEMBERS_LOOKUP: 'engine:members:lookup',
+  MEMBERS_INVITE: 'engine:members:invite',
+  MEMBERS_ADD: 'engine:members:add',
+  MEMBERS_UPDATE_ROLE: 'engine:members:update-role',
+  MEMBERS_REMOVE: 'engine:members:remove',
+
+  // Project access
+  PROJECT_ACCESS_VIEW: 'engine:project-access:view',
+  PROJECT_ACCESS_APPROVE: 'engine:project-access:approve',
+  PROJECT_ACCESS_DENY: 'engine:project-access:deny',
+  PROJECT_ACCESS_REVOKE: 'engine:project-access:revoke',
   
   // Deployments
   DEPLOY: 'engine:deploy',
@@ -93,7 +219,20 @@ export const EnginePermissions = {
   INSTANCE_DELETE: 'engine:instance:delete',
   INSTANCE_RETRY: 'engine:instance:retry',
   
+  // Runtime data disclosure. Metadata lets an operator diagnose the presence
+  // and type of a variable without receiving its value. Values are a separate
+  // high-risk grant and are also required before a value can be changed.
+  VARIABLES_METADATA_VIEW: 'engine:variables:metadata:view',
+  VARIABLES_VALUE_VIEW: 'engine:variables:value:view',
   VARIABLES_EDIT: 'engine:variables:edit',
+} as const;
+
+/**
+ * External-engine-system scoped permissions.
+ */
+export const ExternalEngineSystemPermissions = {
+  ENGINE_REGISTRATION_MANAGE: 'external-engine-system:engine-registration:manage',
+  PROJECT_TARGETS_MANAGE: 'external-engine-system:project-targets:manage',
 } as const;
 
 // All permissions combined for validation
@@ -101,14 +240,606 @@ export const AllPermissions = {
   ...PlatformPermissions,
   ...ProjectPermissions,
   ...EnginePermissions,
+  ...ExternalEngineSystemPermissions,
 } as const;
 
 export type PlatformPermission = typeof PlatformPermissions[keyof typeof PlatformPermissions];
 export type ProjectPermission = typeof ProjectPermissions[keyof typeof ProjectPermissions];
 export type EnginePermission = typeof EnginePermissions[keyof typeof EnginePermissions];
-export type Permission = PlatformPermission | ProjectPermission | EnginePermission;
+export type ExternalEngineSystemPermission = typeof ExternalEngineSystemPermissions[keyof typeof ExternalEngineSystemPermissions];
+export type Permission = string;
 
-export type ResourceType = 'platform' | 'project' | 'engine';
+export type ResourceType = AuthzResourceType;
+export type RoleScope = ResourceType;
+export type PrincipalType = AuthzPrincipalType;
+export type RoleKind = 'system' | 'custom';
+export type RoleSource = 'system' | 'manual' | 'config' | 'api' | 'automation';
+export type ConfigOwnershipMode = 'manual' | 'config_locked' | 'config_warn';
+export type PermissionKind = 'system' | 'custom';
+export type RoleAssignmentSource = 'legacy' | 'manual' | 'sso' | 'api' | 'system' | 'automation' | 'bootstrap' | 'config';
+
+export interface PermissionDefinition {
+  key: Permission;
+  scope: ResourceType;
+  category: string;
+  label: string;
+  description: string;
+  tenantSafe?: boolean;
+  kind?: PermissionKind;
+  isEditable?: boolean;
+  isArchived?: boolean;
+  createdById?: string | null;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface SystemRoleDefinition {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  scope: RoleScope;
+  kind: RoleKind;
+  isEditable: boolean;
+  isAssignable: boolean;
+  permissions: Permission[];
+}
+
+export interface RoleSummary {
+  id: string;
+  tenantId: string | null;
+  key: string;
+  name: string;
+  description: string | null;
+  scope: RoleScope;
+  kind: RoleKind;
+  isEditable: boolean;
+  isAssignable: boolean;
+  isArchived: boolean;
+  source: RoleSource;
+  sourceRef: string | null;
+  ownershipMode: ConfigOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
+  permissionCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RoleDetail extends RoleSummary {
+  permissions: Permission[];
+}
+
+export interface CreateCustomRoleInput {
+  tenantId?: string | null;
+  /** Reserved for controlled config/API provisioning; public UI creation still generates a key. */
+  key?: string;
+  name: string;
+  description?: string | null;
+  scope: RoleScope;
+  permissionIds: Permission[];
+  createdById: string;
+  source?: Exclude<RoleSource, 'system'>;
+  sourceRef?: string | null;
+  ownershipMode?: ConfigOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+}
+
+export interface CreateCustomPermissionInput {
+  tenantId?: string | null;
+  key: Permission;
+  scope: ResourceType;
+  category: string;
+  label: string;
+  description?: string | null;
+  createdById: string;
+}
+
+export interface UpdateCustomRoleInput {
+  tenantId?: string | null;
+  name?: string;
+  description?: string | null;
+  permissionIds?: Permission[];
+  isAssignable?: boolean;
+  isArchived?: boolean;
+  updatedById?: string;
+}
+
+export interface ConfiguredCustomRoleUpdate {
+  name?: string;
+  description?: string | null;
+  scope?: RoleScope;
+  permissionIds?: Permission[];
+  isArchived?: boolean;
+  isAssignable?: boolean;
+  ownershipMode?: ConfigOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+}
+
+const CUSTOM_ROLE_DENY_FIELD_NAMES = [
+  'denyPermissionIds',
+  'deniedPermissionIds',
+  'denyPermissions',
+  'deniedPermissions',
+  'permissionDenies',
+] as const;
+
+const CUSTOM_ROLE_ALLOW_ONLY_MESSAGE = 'Custom roles are allow-only; use authorization policies for deny rules';
+
+function assertCustomRoleAllowOnlyInput(input: unknown): void {
+  if (!input || typeof input !== 'object') return;
+  for (const field of CUSTOM_ROLE_DENY_FIELD_NAMES) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      throw new Error(CUSTOM_ROLE_ALLOW_ONLY_MESSAGE);
+    }
+  }
+}
+
+function normalizeTenantId(tenantId?: string | null): string | null {
+  return normalizeTenantIdForPersistence(tenantId);
+}
+
+function canonicalRoleKeyIdentity(tenantId: string | null | undefined, key: string): string {
+  return `${normalizeTenantId(tenantId) || 'platform'}:${key.trim()}`;
+}
+
+function normalizeRoleSource(source?: Exclude<RoleSource, 'system'>): Exclude<RoleSource, 'system'> {
+  const normalized = source || 'manual';
+  if (!['manual', 'config', 'api', 'automation'].includes(normalized)) {
+    throw new Error('Unsupported custom role source');
+  }
+  return normalized;
+}
+
+function normalizeCustomRoleKey(key: string | undefined, scope: RoleScope, name: string, id: string): string {
+  const normalized = key?.trim() || `custom.${scope}.${slugifyRoleName(name)}.${id.slice(0, 8)}`;
+  if (!/^custom\.[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(normalized)) {
+    throw new Error('Custom role keys must use a stable custom.* key');
+  }
+  return normalized;
+}
+
+function addTenantScopeFilter(qb: { andWhere: (...args: any[]) => any }, alias: string, tenantId?: string | null): void {
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  if (visibleTenantIds.length === 0) return;
+  qb.andWhere(`(${alias}.tenantId IN (:...tenantIds) OR ${alias}.tenantId IS NULL)`, { tenantIds: visibleTenantIds });
+}
+
+function stableVersionHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function tenantScopedWhere<T extends Record<string, unknown>>(where: T, tenantId?: string | null): T | T[] {
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  if (visibleTenantIds.length === 0) return where;
+  return [
+    ...visibleTenantIds.map((visibleTenantId) => ({ ...where, tenantId: visibleTenantId })),
+    { ...where, tenantId: IsNull() },
+  ] as T[];
+}
+
+function tenantOwnedWhere<T extends Record<string, unknown>>(where: T, tenantId?: string | null): T | T[] {
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  if (visibleTenantIds.length === 0) return { ...where, tenantId: IsNull() } as T;
+  return visibleTenantIds.map((visibleTenantId) => ({ ...where, tenantId: visibleTenantId })) as T[];
+}
+
+function engineResourceWhere<T extends Record<string, unknown>>(
+  where: T,
+  tenantId?: string | null,
+): T[] {
+  const visibleTenantIds = tenantIdsForAuthz(tenantId);
+  return [
+    ...visibleTenantIds.map((visibleTenantId) => ({ ...where, tenantId: visibleTenantId })),
+    { ...where, tenantId: IsNull(), tenancyMode: 'shared' },
+  ] as T[];
+}
+
+function resolvedRuntimeResourceWhere<T extends Record<string, unknown>>(where: T, tenantId?: string | null): T | T[] {
+  return tenantOwnedWhere({ ...where, tenantResolutionStatus: 'resolved' }, tenantId) as T | T[];
+}
+
+function parseJsonRecord(value?: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export interface RoleAssignmentView {
+  id: string;
+  tenantId: string | null;
+  userId: string | null;
+  principalType: PrincipalType;
+  principalId: string;
+  principalDisplayName: string | null;
+  principalSecondary: string | null;
+  roleId: string;
+  roleKey: string | null;
+  roleName: string | null;
+  roleScope: RoleScope | null;
+  resourceType: ResourceType | null;
+  resourceId: string | null;
+  resourceDisplayName: string | null;
+  resourceSecondary: string | null;
+  scopeType: ResourceType | null;
+  scopeId: string | null;
+  source: RoleAssignmentSource;
+  sourceRef: string | null;
+  ownershipMode: ConfigOwnershipMode;
+  sourceHash: string | null;
+  lastAppliedAt: number | null;
+  driftStatus: string | null;
+  expiresAt: number | null;
+  lastSeenAt: number | null;
+  createdById: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface RoleAssignmentFilters {
+  tenantId?: string | null;
+  userId?: string;
+  principalType?: PrincipalType;
+  principalId?: string;
+  resourceType?: ResourceType;
+  resourceId?: string | null;
+  scopeType?: ResourceType;
+  scopeId?: string | null;
+  /**
+   * Restricts the result to assignments targeting runtime resources or
+   * runtime-resource sets that belong to one engine. This deliberately does
+   * not include engine-wide assignments.
+   */
+  runtimeEngineId?: string;
+}
+
+export interface CreateRoleAssignmentInput {
+  tenantId?: string | null;
+  userId?: string;
+  principalType?: PrincipalType;
+  principalId?: string;
+  roleId: string;
+  resourceType?: ResourceType;
+  resourceId?: string | null;
+  scopeType?: ResourceType;
+  scopeId?: string | null;
+  source?: RoleAssignmentSource;
+  sourceRef?: string | null;
+  ownershipMode?: ConfigOwnershipMode;
+  sourceHash?: string | null;
+  lastAppliedAt?: number | null;
+  driftStatus?: string | null;
+  expiresAt?: number | null;
+  createdById: string;
+}
+
+export interface SyncLegacyRoleAssignmentsOptions {
+  projectIds?: string[];
+  engineIds?: string[];
+  now?: number;
+}
+
+export interface SyncLegacyRoleAssignmentsResult {
+  scannedProjects: number;
+  scannedEngines: number;
+  upserted: number;
+  removed: number;
+}
+
+export interface PermissionEvaluationSource {
+  type: 'legacy-role' | 'role-assignment' | 'explicit-grant';
+  assignmentId?: string;
+  roleId?: string;
+  role?: string;
+  principalType?: PrincipalType;
+  principalId?: string;
+  source?: string;
+  sourceRef?: string | null;
+  tenantId?: string | null;
+  expiresAt?: number | null;
+  scopeType?: ResourceType | null;
+  scopeId?: string | null;
+  runtimeTenantResolution?: {
+    tenantId: string;
+    status: 'resolved';
+    mappingId: string | null;
+    mappingVersion: number;
+    code: string | null;
+    engineTenancyMode: 'dedicated' | 'shared';
+  } | null;
+  groupId?: string | null;
+  groupKey?: string | null;
+  groupName?: string | null;
+  groupMembership?: {
+    id: string;
+    source: string;
+    sourceRef: string | null;
+    expiresAt: number | null;
+  } | null;
+  engineSetId?: string | null;
+  engineSetKey?: string | null;
+  engineSetName?: string | null;
+  selectorFingerprint?: string | null;
+  materializationId?: string | null;
+  matchedEngineId?: string | null;
+  engineRegistration?: {
+    engineId: string;
+    engineName: string | null;
+    externalId: string | null;
+    registrationId: string | null;
+    registrationSource: string | null;
+    externalSystemId: string | null;
+    lifecycleStatus: string | null;
+    apiClientId: string | null;
+    lastExternalSyncAt: number | null;
+    lastRegisteredAt: number | null;
+    externalUpdatedAt: number | null;
+  } | null;
+  matchedBy?: Record<string, unknown> | null;
+  lineage?: Record<string, unknown> | null;
+  configBundle?: {
+    bundleKey: string;
+    sourceRef: string;
+    objectType: 'role_assignment';
+    objectId: string;
+    sourceHash: string | null;
+    lastAppliedAt: number | null;
+    driftStatus: string | null;
+    ownershipMode: string;
+    applyRun: {
+      id: string;
+      canonicalHash: string;
+      appliedAt: number;
+    } | null;
+  };
+  ssoMapping?: {
+    id: string;
+    providerId: string | null;
+    claimType: string;
+    claimKey: string;
+    claimValue: string;
+    claimOperator: string | null;
+    targetSelectorType: string;
+  } | null;
+  ssoGroupMapping?: {
+    id: string;
+    providerId: string | null;
+    claimType: string;
+    claimKey: string;
+    claimValue: string;
+    claimOperator: string | null;
+    targetGroupId: string;
+    syncMode: string;
+  } | null;
+  identityEntitlementMapping?: {
+    id: string;
+    providerId: string;
+    entitlementType: string;
+    externalId: string | null;
+    matchOperator: string;
+    targetGroupId: string;
+    syncMode: string;
+  } | null;
+  shadowedRuntimeAssignmentIds?: string[];
+  permission?: string;
+}
+
+export interface BasePermissionEvaluation {
+  allowed: boolean;
+  reason: string;
+  sources: PermissionEvaluationSource[];
+}
+
+function configBundleLineageForAssignment(assignment: RbacRoleAssignment): PermissionEvaluationSource['configBundle'] {
+  const sourceRef = assignment.sourceRef || '';
+  if (assignment.source !== 'config' || !sourceRef.startsWith('config_bundle:')) return undefined;
+  return {
+    bundleKey: sourceRef.slice('config_bundle:'.length),
+    sourceRef,
+    objectType: 'role_assignment',
+    objectId: assignment.id,
+    sourceHash: assignment.sourceHash ?? null,
+    lastAppliedAt: assignment.lastAppliedAt ?? null,
+    driftStatus: assignment.driftStatus ?? null,
+    ownershipMode: assignment.ownershipMode || 'config_locked',
+    applyRun: null,
+  };
+}
+
+/** Marks broad engine grants that make narrower runtime grants redundant for this evaluation. */
+export function annotateRuntimeGrantShadowing(sources: PermissionEvaluationSource[]): PermissionEvaluationSource[] {
+  const narrowAssignmentIds = sources
+    .filter((source) =>
+      (source.scopeType === 'engine_runtime_resource' || source.scopeType === 'engine_runtime_resource_set') &&
+      Boolean(source.assignmentId)
+    )
+    .map((source) => source.assignmentId as string);
+  if (narrowAssignmentIds.length === 0) return sources;
+  return sources.map((source) =>
+    source.scopeType === 'engine' || source.scopeType === 'tenant'
+      ? { ...source, shadowedRuntimeAssignmentIds: narrowAssignmentIds }
+      : source
+  );
+}
+
+export interface EffectiveResourcePermissions {
+  resourceId: string;
+  permissions: Permission[];
+}
+
+export interface EffectiveEngineResourcePermissions extends EffectiveResourcePermissions {
+  runtimePermissions: Permission[];
+}
+
+export interface CurrentUserPermissionsSnapshot {
+  userId: string;
+  platform: Permission[];
+  projects: EffectiveResourcePermissions[];
+  engines: EffectiveEngineResourcePermissions[];
+  authorizationVersion: string;
+  generatedAt: number;
+}
+
+export const SYSTEM_ROLE_IDS = {
+  PLATFORM_ADMIN: 'system.platform.admin',
+  PLATFORM_DEVELOPER: 'system.platform.developer',
+  PLATFORM_USER: 'system.platform.user',
+  PLATFORM_ACCESS_ADMIN: 'system.platform.access_admin',
+  PLATFORM_ACCESS_AUDITOR: 'system.platform.access_auditor',
+  PLATFORM_USER_ADMIN: 'system.platform.user_admin',
+  PLATFORM_SSO_ADMIN: 'system.platform.sso_admin',
+  PLATFORM_ENGINE_REGISTRY_ADMIN: 'system.platform.engine_registry_admin',
+  PLATFORM_API_CLIENT_ADMIN: 'system.platform.api_client_admin',
+  TENANT_ADMIN: 'system.tenant.admin',
+  TENANT_ENGINE_OPERATOR: 'system.tenant.engine_operator',
+  TENANT_VIEWER: 'system.tenant.viewer',
+  PROJECT_OWNER: 'system.project.owner',
+  PROJECT_DELEGATE: 'system.project.delegate',
+  PROJECT_DEPLOYER: 'system.project.deployer',
+  PROJECT_DEVELOPER: 'system.project.developer',
+  PROJECT_EDITOR: 'system.project.editor',
+  PROJECT_VIEWER: 'system.project.viewer',
+  ENGINE_OWNER: 'system.engine.owner',
+  ENGINE_DELEGATE: 'system.engine.delegate',
+  ENGINE_OPERATOR: 'system.engine.operator',
+  ENGINE_RUNTIME_VIEWER: 'system.engine.runtime_viewer',
+  ENGINE_RUNTIME_INVESTIGATOR: 'system.engine.runtime_investigator',
+  ENGINE_VARIABLE_OPERATOR: 'system.engine.variable_operator',
+  ENGINE_DEPLOYER: 'system.engine.deployer',
+  API_ENGINE_REGISTRAR: 'system.api.engine_registrar',
+  API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR: 'system.api.external_engine_system_registrar',
+  API_PROJECT_ENGINE_TARGET_REGISTRAR: 'system.api.project_engine_target_registrar',
+} as const;
+
+export const ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE: Record<string, 'owner' | 'delegate' | 'operator' | 'deployer'> = {
+  [SYSTEM_ROLE_IDS.ENGINE_OWNER]: 'owner',
+  [SYSTEM_ROLE_IDS.ENGINE_DELEGATE]: 'delegate',
+  [SYSTEM_ROLE_IDS.ENGINE_OPERATOR]: 'operator',
+  [SYSTEM_ROLE_IDS.ENGINE_DEPLOYER]: 'deployer',
+};
+
+export const PROJECT_SYSTEM_ROLE_TO_LEGACY_ROLE: Record<string, 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer'> = {
+  [SYSTEM_ROLE_IDS.PROJECT_OWNER]: 'owner',
+  [SYSTEM_ROLE_IDS.PROJECT_DELEGATE]: 'delegate',
+  [SYSTEM_ROLE_IDS.PROJECT_DEVELOPER]: 'developer',
+  [SYSTEM_ROLE_IDS.PROJECT_EDITOR]: 'editor',
+  [SYSTEM_ROLE_IDS.PROJECT_VIEWER]: 'viewer',
+};
+
+const LEGACY_PROJECT_ROLE_TO_SYSTEM_ROLE: Record<string, string | undefined> = {
+  owner: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+  delegate: SYSTEM_ROLE_IDS.PROJECT_DELEGATE,
+  developer: SYSTEM_ROLE_IDS.PROJECT_DEVELOPER,
+  editor: SYSTEM_ROLE_IDS.PROJECT_EDITOR,
+  viewer: SYSTEM_ROLE_IDS.PROJECT_VIEWER,
+};
+
+const LEGACY_ENGINE_ROLE_TO_SYSTEM_ROLE: Record<string, string | undefined> = {
+  owner: SYSTEM_ROLE_IDS.ENGINE_OWNER,
+  delegate: SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
+  operator: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+  deployer: SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+};
+
+const ENGINE_ROLE_PRECEDENCE: Array<'owner' | 'delegate' | 'operator' | 'deployer'> = ['owner', 'delegate', 'operator', 'deployer'];
+
+function labelFromPermission(permission: string): string {
+  return permission
+    .split(':')
+    .slice(1)
+    .join(' ')
+    .replace(/-/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function permissionDefinition(permission: Permission, scope: ResourceType, category: string, description: string): PermissionDefinition {
+  return {
+    key: permission,
+    scope,
+    category,
+    label: labelFromPermission(permission),
+    description,
+    tenantSafe: isTenantSafePermission(permission),
+    kind: 'system',
+    isEditable: false,
+    isArchived: false,
+  };
+}
+
+export const PermissionCatalog: PermissionDefinition[] = [
+  permissionDefinition(PlatformPermissions.DASHBOARD_VIEW, 'platform', 'Dashboard', 'View the authenticated user dashboard shell and own-resource summary widgets.'),
+  permissionDefinition(PlatformPermissions.PROJECT_CREATE, 'platform', 'Projects', 'Create projects from blank, Git-backed, or imported sources.'),
+  permissionDefinition(PlatformPermissions.ENGINE_CREATE, 'platform', 'Engine Management', 'Create engines.'),
+  permissionDefinition(PlatformPermissions.ENGINE_DELETE, 'platform', 'Engine Management', 'Delete engines.'),
+  permissionDefinition(PlatformPermissions.ENGINE_REGISTRATION_MANAGE, 'platform', 'Engine Management', 'Manage external engine registration API clients.'),
+  permissionDefinition(PlatformPermissions.ENGINE_SETS_VIEW, 'platform', 'Engine Sets', 'View Engine Sets and materialized engine matches.'),
+  permissionDefinition(PlatformPermissions.ENGINE_SETS_MANAGE, 'platform', 'Engine Sets', 'Manage Engine Sets and refresh materializations.'),
+  permissionDefinition(PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW, 'platform', 'Project Engine Targets', 'View project-to-engine deployment and import targets.'),
+  permissionDefinition(PlatformPermissions.PROJECT_ENGINE_TARGETS_MANAGE, 'platform', 'Project Engine Targets', 'Manage project-to-engine deployment and import targets.'),
+  permissionDefinition(PlatformPermissions.USER_MANAGE, 'platform', 'User Management', 'Manage users. Backward-compatible umbrella permission for user operations.'),
+  permissionDefinition(PlatformPermissions.USER_VIEW, 'platform', 'User Management', 'View users. Backward-compatible user-view permission.'),
+  permissionDefinition(PlatformPermissions.USERS_VIEW, 'platform', 'User Management', 'View users.'),
+  permissionDefinition(PlatformPermissions.USERS_CREATE, 'platform', 'User Management', 'Create and invite platform users.'),
+  permissionDefinition(PlatformPermissions.USERS_UPDATE, 'platform', 'User Management', 'Update user profile, status, or platform role.'),
+  permissionDefinition(PlatformPermissions.USERS_DEACTIVATE, 'platform', 'User Management', 'Deactivate platform users.'),
+  permissionDefinition(PlatformPermissions.USERS_DELETE, 'platform', 'User Management', 'Soft delete platform users.'),
+  permissionDefinition(PlatformPermissions.USERS_PERMANENT_DELETE, 'platform', 'User Management', 'Permanently delete eligible platform users.'),
+  permissionDefinition(PlatformPermissions.USERS_UNLOCK, 'platform', 'User Management', 'Unlock locked platform users.'),
+  permissionDefinition(PlatformPermissions.SETTINGS_MANAGE, 'platform', 'Settings', 'Manage platform settings.'),
+  permissionDefinition(PlatformPermissions.SSO_PROVIDERS_VIEW, 'platform', 'SSO', 'View configured SSO identity providers.'),
+  permissionDefinition(PlatformPermissions.SSO_PROVIDERS_MANAGE, 'platform', 'SSO', 'Create, update, delete, enable, or disable SSO identity providers.'),
+  permissionDefinition(PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW, 'platform', 'SSO', 'View SSO claim mappings that provision platform roles.'),
+  permissionDefinition(PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_MANAGE, 'platform', 'SSO', 'Create, update, delete, or test SSO claim mappings that provision platform roles.'),
+  permissionDefinition(PlatformPermissions.AUDIT_VIEW, 'platform', 'Audit', 'View audit logs.'),
+  permissionDefinition(PlatformPermissions.AUDIT_UNREDACTED_VIEW, 'platform', 'Audit', 'View unredacted audit log payloads when PII redaction is enabled.'),
+  permissionDefinition(PlatformPermissions.GIT_PROVIDER_MANAGE, 'platform', 'Git Providers', 'Manage Git provider configuration.'),
+  permissionDefinition(PlatformPermissions.AUTHZ_ROLES_VIEW, 'platform', 'Access Control', 'View roles and permissions.'),
+  permissionDefinition(PlatformPermissions.AUTHZ_ROLES_MANAGE, 'platform', 'Access Control', 'Manage custom roles.'),
+  permissionDefinition(PlatformPermissions.AUTHZ_CHECK, 'platform', 'Access Control', 'Evaluate effective access.'),
+  permissionDefinition(PlatformPermissions.CONFIG_BUNDLES_VIEW, 'platform', 'Configuration Bundles', 'View configuration bundle apply history and receipts.'),
+  permissionDefinition(PlatformPermissions.CONFIG_BUNDLES_PREVIEW, 'platform', 'Configuration Bundles', 'Preview, diff, import, and validate configuration bundles.'),
+  permissionDefinition(PlatformPermissions.CONFIG_BUNDLES_APPLY, 'platform', 'Configuration Bundles', 'Apply reviewed configuration bundles.'),
+  permissionDefinition(PlatformPermissions.CONFIG_BUNDLES_EXPORT, 'platform', 'Configuration Bundles', 'Export configuration-managed bundle state.'),
+  permissionDefinition(PlatformPermissions.CAMUNDA_NATIVE_GRANTS_PREVIEW, 'platform', 'Camunda Native Grant Migration', 'Read a Camunda 7 native-grant inventory and create a sanitized migration preview.'),
+  permissionDefinition(PlatformPermissions.CAMUNDA_NATIVE_GRANTS_SENSITIVE_VIEW, 'platform', 'Camunda Native Grant Migration', 'View the short-lived encrypted native-grant detail required to map source groups.'),
+  permissionDefinition(PlatformPermissions.CAMUNDA_NATIVE_GRANTS_DRAFT, 'platform', 'Camunda Native Grant Migration', 'Generate a reviewed EnterpriseGlue configuration draft from a native-grant preview.'),
+  permissionDefinition(PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW, 'platform', 'Camunda Native Grant Migration', 'Read sanitized Camunda native-grant migration history and receipts.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_VIEW, 'platform', 'Mirrored Engine Backstop', 'Read sanitized mirrored-engine backstop mappings and synchronization receipts.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_MANAGE, 'platform', 'Mirrored Engine Backstop', 'Create or update encrypted EnterpriseGlue-to-native-engine group mappings.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_PREVIEW, 'platform', 'Mirrored Engine Backstop', 'Create a read-only mirrored-engine backstop preview.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_SENSITIVE_VIEW, 'platform', 'Mirrored Engine Backstop', 'View short-lived encrypted mirrored-engine backstop detail.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_APPLY, 'platform', 'Mirrored Engine Backstop', 'Apply an acknowledged, hash-bound mirrored-engine backstop synchronization.'),
+  permissionDefinition(PlatformPermissions.ENGINE_BACKSTOP_DRIFT_CHECK, 'platform', 'Mirrored Engine Backstop', 'Read only tracked native grants and record an auditable backstop drift observation.'),
+  permissionDefinition(PlatformPermissions.SSO_ASSIGNMENTS_VIEW, 'platform', 'SSO Assignments', 'View SSO engine assignment mappings.'),
+  permissionDefinition(PlatformPermissions.SSO_ASSIGNMENTS_MANAGE, 'platform', 'SSO Assignments', 'Manage SSO engine assignment mappings.'),
+  permissionDefinition(PlatformPermissions.API_CLIENTS_VIEW, 'platform', 'API Clients', 'View API client machine identities.'),
+  permissionDefinition(PlatformPermissions.API_CLIENTS_MANAGE, 'platform', 'API Clients', 'Create, rotate, revoke, and audit API client machine identities.'),
+  permissionDefinition(PlatformPermissions.SERVICE_ACCOUNTS_VIEW, 'platform', 'Service Accounts', 'View service-account machine identities.'),
+  permissionDefinition(PlatformPermissions.SERVICE_ACCOUNTS_MANAGE, 'platform', 'Service Accounts', 'Create, rotate, revoke, and audit service-account machine identities.'),
+  permissionDefinition(ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE, 'external_engine_system', 'External Engine Systems', 'Register or update engines for a specific external engine source system.'),
+  permissionDefinition(ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE, 'external_engine_system', 'External Engine Systems', 'Register or update project-engine deployment targets for a specific external engine source system.'),
+  ...Object.values(ProjectPermissions).map((permission) =>
+    permissionDefinition(permission, 'project', 'Project', `Grants ${labelFromPermission(permission).toLowerCase()} on projects.`)
+  ),
+  ...Object.values(EnginePermissions).map((permission) =>
+    permissionDefinition(permission, 'engine', 'Engine', `Grants ${labelFromPermission(permission).toLowerCase()} on engines.`)
+  ),
+];
 
 // ============================================================================
 // Role → Permission Mapping
@@ -122,8 +853,205 @@ export const PlatformRolePermissions: Record<string, Permission[]> = {
     // Admins get all platform permissions
     ...Object.values(PlatformPermissions),
   ],
-  user: [],
+  developer: [
+    PlatformPermissions.DASHBOARD_VIEW,
+    PlatformPermissions.PROJECT_CREATE,
+    PlatformPermissions.ENGINE_CREATE,
+    PlatformPermissions.USER_VIEW,
+    PlatformPermissions.USERS_VIEW,
+  ],
+  user: [
+    PlatformPermissions.DASHBOARD_VIEW,
+    PlatformPermissions.PROJECT_CREATE,
+  ],
 };
+
+const CompatiblePermissionCandidates: Partial<Record<Permission, Permission[]>> = {
+  [PlatformPermissions.USER_VIEW]: [
+    PlatformPermissions.USER_VIEW,
+    PlatformPermissions.USERS_VIEW,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_VIEW]: [
+    PlatformPermissions.USERS_VIEW,
+    PlatformPermissions.USER_VIEW,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_CREATE]: [
+    PlatformPermissions.USERS_CREATE,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_UPDATE]: [
+    PlatformPermissions.USERS_UPDATE,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_DEACTIVATE]: [
+    PlatformPermissions.USERS_DEACTIVATE,
+    PlatformPermissions.USERS_DELETE,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_DELETE]: [
+    PlatformPermissions.USERS_DELETE,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_PERMANENT_DELETE]: [
+    PlatformPermissions.USERS_PERMANENT_DELETE,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.USERS_UNLOCK]: [
+    PlatformPermissions.USERS_UNLOCK,
+    PlatformPermissions.USER_MANAGE,
+  ],
+  [PlatformPermissions.SSO_PROVIDERS_VIEW]: [
+    PlatformPermissions.SSO_PROVIDERS_VIEW,
+    PlatformPermissions.SSO_PROVIDERS_MANAGE,
+    PlatformPermissions.SETTINGS_MANAGE,
+  ],
+  [PlatformPermissions.SSO_PROVIDERS_MANAGE]: [
+    PlatformPermissions.SSO_PROVIDERS_MANAGE,
+    PlatformPermissions.SETTINGS_MANAGE,
+  ],
+  [PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW]: [
+    PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW,
+    PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_MANAGE,
+    PlatformPermissions.SETTINGS_MANAGE,
+  ],
+  [PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_MANAGE]: [
+    PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_MANAGE,
+    PlatformPermissions.SETTINGS_MANAGE,
+  ],
+  [PlatformPermissions.AUTHZ_ROLES_VIEW]: [
+    PlatformPermissions.AUTHZ_ROLES_VIEW,
+    PlatformPermissions.AUTHZ_ROLES_MANAGE,
+  ],
+  [PlatformPermissions.ENGINE_SETS_VIEW]: [
+    PlatformPermissions.ENGINE_SETS_VIEW,
+    PlatformPermissions.ENGINE_SETS_MANAGE,
+  ],
+  [PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW]: [
+    PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW,
+    PlatformPermissions.PROJECT_ENGINE_TARGETS_MANAGE,
+  ],
+  [PlatformPermissions.SSO_ASSIGNMENTS_VIEW]: [
+    PlatformPermissions.SSO_ASSIGNMENTS_VIEW,
+    PlatformPermissions.SSO_ASSIGNMENTS_MANAGE,
+  ],
+  [PlatformPermissions.API_CLIENTS_VIEW]: [
+    PlatformPermissions.API_CLIENTS_VIEW,
+    PlatformPermissions.API_CLIENTS_MANAGE,
+    PlatformPermissions.ENGINE_REGISTRATION_MANAGE,
+  ],
+  [PlatformPermissions.API_CLIENTS_MANAGE]: [
+    PlatformPermissions.API_CLIENTS_MANAGE,
+    PlatformPermissions.ENGINE_REGISTRATION_MANAGE,
+  ],
+  [PlatformPermissions.SERVICE_ACCOUNTS_VIEW]: [
+    PlatformPermissions.SERVICE_ACCOUNTS_VIEW,
+    PlatformPermissions.SERVICE_ACCOUNTS_MANAGE,
+    PlatformPermissions.ENGINE_REGISTRATION_MANAGE,
+  ],
+  [PlatformPermissions.SERVICE_ACCOUNTS_MANAGE]: [
+    PlatformPermissions.SERVICE_ACCOUNTS_MANAGE,
+    PlatformPermissions.ENGINE_REGISTRATION_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_VIEW]: [
+    ProjectPermissions.MEMBERS_VIEW,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_SEARCH]: [
+    ProjectPermissions.MEMBERS_SEARCH,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_INVITE]: [
+    ProjectPermissions.MEMBERS_INVITE,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_ADD]: [
+    ProjectPermissions.MEMBERS_ADD,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_UPDATE_ROLE]: [
+    ProjectPermissions.MEMBERS_UPDATE_ROLE,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_REMOVE]: [
+    ProjectPermissions.MEMBERS_REMOVE,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.MEMBERS_MANAGE_DEPLOY_GRANT]: [
+    ProjectPermissions.MEMBERS_MANAGE_DEPLOY_GRANT,
+    ProjectPermissions.MEMBERS_MANAGE,
+  ],
+  [ProjectPermissions.DEPLOYMENT_TARGETS_VIEW]: [
+    ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
+    ProjectPermissions.DEPLOYMENT_TARGETS_MANAGE,
+  ],
+  [EnginePermissions.MEMBERS_VIEW]: [
+    EnginePermissions.MEMBERS_VIEW,
+    EnginePermissions.MEMBERS_MANAGE,
+    EnginePermissions.MEMBERS_LOOKUP,
+    EnginePermissions.INSTANCE_VIEW,
+  ],
+  [EnginePermissions.MEMBERS_LOOKUP]: [
+    EnginePermissions.MEMBERS_LOOKUP,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.MEMBERS_INVITE]: [
+    EnginePermissions.MEMBERS_INVITE,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.MEMBERS_ADD]: [
+    EnginePermissions.MEMBERS_ADD,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.MEMBERS_UPDATE_ROLE]: [
+    EnginePermissions.MEMBERS_UPDATE_ROLE,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.MEMBERS_REMOVE]: [
+    EnginePermissions.MEMBERS_REMOVE,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.INSTANCE_VIEW]: [
+    EnginePermissions.INSTANCE_VIEW,
+    EnginePermissions.ENGINE_EDIT,
+    EnginePermissions.ENGINE_DELETE,
+    EnginePermissions.MEMBERS_VIEW,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.SECRETS_VIEW]: [
+    EnginePermissions.SECRETS_VIEW,
+    EnginePermissions.SECRETS_MANAGE,
+  ],
+  [EnginePermissions.ENVIRONMENT_SET]: [
+    EnginePermissions.ENVIRONMENT_SET,
+    EnginePermissions.ENGINE_EDIT,
+  ],
+  [EnginePermissions.ENVIRONMENT_LOCK]: [
+    EnginePermissions.ENVIRONMENT_LOCK,
+    EnginePermissions.ENGINE_EDIT,
+  ],
+  [EnginePermissions.PROJECT_ACCESS_VIEW]: [
+    EnginePermissions.PROJECT_ACCESS_VIEW,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.PROJECT_ACCESS_APPROVE]: [
+    EnginePermissions.PROJECT_ACCESS_APPROVE,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.PROJECT_ACCESS_DENY]: [
+    EnginePermissions.PROJECT_ACCESS_DENY,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+  [EnginePermissions.PROJECT_ACCESS_REVOKE]: [
+    EnginePermissions.PROJECT_ACCESS_REVOKE,
+    EnginePermissions.MEMBERS_MANAGE,
+  ],
+};
+
+function compatiblePermissionCandidates(permission: Permission): Permission[] {
+  return Array.from(new Set(CompatiblePermissionCandidates[permission] || [permission]));
+}
 
 /**
  * Project roles and their implicit permissions
@@ -134,6 +1062,14 @@ export const ProjectRolePermissions: Record<string, ProjectPermission[]> = {
     ProjectPermissions.PROJECT_SETTINGS,
     ProjectPermissions.MEMBERS_MANAGE,
     ProjectPermissions.MEMBERS_VIEW,
+    ProjectPermissions.MEMBERS_SEARCH,
+    ProjectPermissions.MEMBERS_INVITE,
+    ProjectPermissions.MEMBERS_ADD,
+    ProjectPermissions.MEMBERS_UPDATE_ROLE,
+    ProjectPermissions.MEMBERS_REMOVE,
+    ProjectPermissions.MEMBERS_MANAGE_DEPLOY_GRANT,
+    ProjectPermissions.DELEGATE_MANAGE,
+    ProjectPermissions.OWNERSHIP_TRANSFER,
     ProjectPermissions.FILES_CREATE,
     ProjectPermissions.FILES_EDIT,
     ProjectPermissions.FILES_DELETE,
@@ -144,11 +1080,19 @@ export const ProjectRolePermissions: Record<string, ProjectPermission[]> = {
     ProjectPermissions.GIT_PULL,
     ProjectPermissions.GIT_CONNECT,
     ProjectPermissions.DEPLOY,
+    ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
+    ProjectPermissions.DEPLOYMENT_TARGETS_MANAGE,
   ],
   delegate: [
     ProjectPermissions.PROJECT_SETTINGS,
     ProjectPermissions.MEMBERS_MANAGE,
     ProjectPermissions.MEMBERS_VIEW,
+    ProjectPermissions.MEMBERS_SEARCH,
+    ProjectPermissions.MEMBERS_INVITE,
+    ProjectPermissions.MEMBERS_ADD,
+    ProjectPermissions.MEMBERS_UPDATE_ROLE,
+    ProjectPermissions.MEMBERS_REMOVE,
+    ProjectPermissions.MEMBERS_MANAGE_DEPLOY_GRANT,
     ProjectPermissions.FILES_CREATE,
     ProjectPermissions.FILES_EDIT,
     ProjectPermissions.FILES_DELETE,
@@ -159,6 +1103,8 @@ export const ProjectRolePermissions: Record<string, ProjectPermission[]> = {
     ProjectPermissions.GIT_PULL,
     ProjectPermissions.GIT_CONNECT,
     ProjectPermissions.DEPLOY,
+    ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
+    ProjectPermissions.DEPLOYMENT_TARGETS_MANAGE,
   ],
   developer: [
     ProjectPermissions.MEMBERS_VIEW,
@@ -194,8 +1140,23 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.ENGINE_EDIT,
     EnginePermissions.ENGINE_DELETE,
     EnginePermissions.ENGINE_ACTIVATE,
+    EnginePermissions.SECRETS_VIEW,
+    EnginePermissions.SECRETS_MANAGE,
+    EnginePermissions.ENVIRONMENT_SET,
+    EnginePermissions.ENVIRONMENT_LOCK,
+    EnginePermissions.DELEGATE_MANAGE,
+    EnginePermissions.OWNERSHIP_TRANSFER,
     EnginePermissions.MEMBERS_MANAGE,
     EnginePermissions.MEMBERS_VIEW,
+    EnginePermissions.MEMBERS_LOOKUP,
+    EnginePermissions.MEMBERS_INVITE,
+    EnginePermissions.MEMBERS_ADD,
+    EnginePermissions.MEMBERS_UPDATE_ROLE,
+    EnginePermissions.MEMBERS_REMOVE,
+    EnginePermissions.PROJECT_ACCESS_VIEW,
+    EnginePermissions.PROJECT_ACCESS_APPROVE,
+    EnginePermissions.PROJECT_ACCESS_DENY,
+    EnginePermissions.PROJECT_ACCESS_REVOKE,
     EnginePermissions.DEPLOY,
     EnginePermissions.DEPLOY_VIEW,
     EnginePermissions.PROCESS_START,
@@ -204,13 +1165,28 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_VIEW,
     EnginePermissions.INSTANCE_DELETE,
     EnginePermissions.INSTANCE_RETRY,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+    EnginePermissions.VARIABLES_VALUE_VIEW,
     EnginePermissions.VARIABLES_EDIT,
   ],
   delegate: [
     EnginePermissions.ENGINE_EDIT,
     EnginePermissions.ENGINE_ACTIVATE,
+    EnginePermissions.SECRETS_VIEW,
+    EnginePermissions.SECRETS_MANAGE,
+    EnginePermissions.ENVIRONMENT_SET,
+    EnginePermissions.ENVIRONMENT_LOCK,
     EnginePermissions.MEMBERS_MANAGE,
     EnginePermissions.MEMBERS_VIEW,
+    EnginePermissions.MEMBERS_LOOKUP,
+    EnginePermissions.MEMBERS_INVITE,
+    EnginePermissions.MEMBERS_ADD,
+    EnginePermissions.MEMBERS_UPDATE_ROLE,
+    EnginePermissions.MEMBERS_REMOVE,
+    EnginePermissions.PROJECT_ACCESS_VIEW,
+    EnginePermissions.PROJECT_ACCESS_APPROVE,
+    EnginePermissions.PROJECT_ACCESS_DENY,
+    EnginePermissions.PROJECT_ACCESS_REVOKE,
     EnginePermissions.DEPLOY,
     EnginePermissions.DEPLOY_VIEW,
     EnginePermissions.PROCESS_START,
@@ -219,6 +1195,8 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_VIEW,
     EnginePermissions.INSTANCE_DELETE,
     EnginePermissions.INSTANCE_RETRY,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+    EnginePermissions.VARIABLES_VALUE_VIEW,
     EnginePermissions.VARIABLES_EDIT,
   ],
   operator: [
@@ -231,7 +1209,8 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
     EnginePermissions.INSTANCE_VIEW,
     EnginePermissions.INSTANCE_DELETE,
     EnginePermissions.INSTANCE_RETRY,
-    EnginePermissions.VARIABLES_EDIT,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+    EnginePermissions.VARIABLES_VALUE_VIEW,
   ],
   deployer: [
     EnginePermissions.DEPLOY,
@@ -239,20 +1218,434 @@ export const EngineRolePermissions: Record<string, EnginePermission[]> = {
   ],
 };
 
+export const TenantRolePermissions: Record<'admin' | 'engineOperator' | 'viewer', Permission[]> = {
+  admin: [
+    ...TENANT_SAFE_PROJECT_PERMISSION_IDS,
+    ...TENANT_SAFE_ENGINE_PERMISSION_IDS,
+  ],
+  engineOperator: TENANT_SAFE_ENGINE_PERMISSION_IDS.filter((permission) => permission !== EnginePermissions.VARIABLES_EDIT),
+  viewer: [
+    ProjectPermissions.MEMBERS_VIEW,
+    ProjectPermissions.FILES_VIEW,
+    ProjectPermissions.DEPLOYMENT_TARGETS_VIEW,
+    EnginePermissions.DEPLOY_VIEW,
+    EnginePermissions.INSTANCE_VIEW,
+    EnginePermissions.VARIABLES_METADATA_VIEW,
+  ],
+};
+
+export const SystemRoleDefinitions: SystemRoleDefinition[] = [
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_ADMIN,
+    key: SYSTEM_ROLE_IDS.PLATFORM_ADMIN,
+    name: 'Platform Admin',
+    description: 'Preserves current platform administrator behavior.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: PlatformRolePermissions.admin,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_USER,
+    key: SYSTEM_ROLE_IDS.PLATFORM_USER,
+    name: 'Platform User',
+    description: 'View the dashboard and create projects. Engine access is granted separately for each engine.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: PlatformRolePermissions.user,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_DEVELOPER,
+    key: SYSTEM_ROLE_IDS.PLATFORM_DEVELOPER,
+    name: 'Platform Developer',
+    description: 'Compatibility role for legacy platform developer users.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: false,
+    permissions: PlatformRolePermissions.developer,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_ACCESS_ADMIN,
+    key: SYSTEM_ROLE_IDS.PLATFORM_ACCESS_ADMIN,
+    name: 'Access Administrator',
+    description: 'Manage authorization roles, assignments, policies, groups, and effective-access diagnostics without full platform administration.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      PlatformPermissions.AUTHZ_ROLES_VIEW,
+      PlatformPermissions.AUTHZ_ROLES_MANAGE,
+      PlatformPermissions.AUTHZ_CHECK,
+      PlatformPermissions.CONFIG_BUNDLES_VIEW,
+      PlatformPermissions.CONFIG_BUNDLES_PREVIEW,
+      PlatformPermissions.CONFIG_BUNDLES_APPLY,
+      PlatformPermissions.CONFIG_BUNDLES_EXPORT,
+      PlatformPermissions.CAMUNDA_NATIVE_GRANTS_PREVIEW,
+      PlatformPermissions.CAMUNDA_NATIVE_GRANTS_DRAFT,
+      PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW,
+      PlatformPermissions.ENGINE_BACKSTOP_VIEW,
+      PlatformPermissions.ENGINE_BACKSTOP_MANAGE,
+      PlatformPermissions.ENGINE_BACKSTOP_PREVIEW,
+      PlatformPermissions.ENGINE_BACKSTOP_SENSITIVE_VIEW,
+      PlatformPermissions.ENGINE_BACKSTOP_APPLY,
+      PlatformPermissions.ENGINE_BACKSTOP_DRIFT_CHECK,
+      PlatformPermissions.AUDIT_VIEW,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_ACCESS_AUDITOR,
+    key: SYSTEM_ROLE_IDS.PLATFORM_ACCESS_AUDITOR,
+    name: 'Access Auditor',
+    description: 'Read authorization state, effective-access diagnostics, and audit data without mutations.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      PlatformPermissions.AUTHZ_ROLES_VIEW,
+      PlatformPermissions.AUTHZ_CHECK,
+      PlatformPermissions.AUDIT_VIEW,
+      PlatformPermissions.CAMUNDA_NATIVE_GRANTS_HISTORY_VIEW,
+      PlatformPermissions.ENGINE_BACKSTOP_VIEW,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_USER_ADMIN,
+    key: SYSTEM_ROLE_IDS.PLATFORM_USER_ADMIN,
+    name: 'User Administrator',
+    description: 'Manage users and account lifecycle without permanent-delete authority.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      PlatformPermissions.USER_VIEW,
+      PlatformPermissions.USERS_VIEW,
+      PlatformPermissions.USERS_CREATE,
+      PlatformPermissions.USERS_UPDATE,
+      PlatformPermissions.USERS_DEACTIVATE,
+      PlatformPermissions.USERS_DELETE,
+      PlatformPermissions.USERS_UNLOCK,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_SSO_ADMIN,
+    key: SYSTEM_ROLE_IDS.PLATFORM_SSO_ADMIN,
+    name: 'SSO Administrator',
+    description: 'Manage SSO assignment mappings and current SSO provider settings.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      PlatformPermissions.SSO_ASSIGNMENTS_VIEW,
+      PlatformPermissions.SSO_ASSIGNMENTS_MANAGE,
+      PlatformPermissions.SSO_PROVIDERS_VIEW,
+      PlatformPermissions.SSO_PROVIDERS_MANAGE,
+      PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_VIEW,
+      PlatformPermissions.SSO_PLATFORM_ROLE_MAPPINGS_MANAGE,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_ENGINE_REGISTRY_ADMIN,
+    key: SYSTEM_ROLE_IDS.PLATFORM_ENGINE_REGISTRY_ADMIN,
+    name: 'Engine Registry Administrator',
+    description: 'Manage engine inventory registration, Engine Sets, and project-engine target registry state.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      PlatformPermissions.ENGINE_REGISTRATION_MANAGE,
+      PlatformPermissions.ENGINE_SETS_VIEW,
+      PlatformPermissions.ENGINE_SETS_MANAGE,
+      PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW,
+      PlatformPermissions.PROJECT_ENGINE_TARGETS_MANAGE,
+      PlatformPermissions.ENGINE_CREATE,
+      PlatformPermissions.ENGINE_DELETE,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PLATFORM_API_CLIENT_ADMIN,
+    key: SYSTEM_ROLE_IDS.PLATFORM_API_CLIENT_ADMIN,
+    name: 'API Client Administrator',
+    description: 'Manage API clients and service-account registry permissions through the current engine-registration administration surface.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      PlatformPermissions.API_CLIENTS_VIEW,
+      PlatformPermissions.API_CLIENTS_MANAGE,
+      PlatformPermissions.SERVICE_ACCOUNTS_VIEW,
+      PlatformPermissions.SERVICE_ACCOUNTS_MANAGE,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.TENANT_ADMIN,
+    key: SYSTEM_ROLE_IDS.TENANT_ADMIN,
+    name: 'Tenant Administrator',
+    description: 'Manage tenant-owned project and runtime actions without platform authorization or engine-secret administration.',
+    scope: 'tenant',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: TenantRolePermissions.admin,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
+    key: SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
+    name: 'Tenant Engine Operator',
+    description: 'Operate dedicated or explicitly mapped runtime resources inside one tenant without connection administration.',
+    scope: 'tenant',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: TenantRolePermissions.engineOperator,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.TENANT_VIEWER,
+    key: SYSTEM_ROLE_IDS.TENANT_VIEWER,
+    name: 'Tenant Viewer',
+    description: 'Read tenant-owned project content, deployment state, and runtime instances without mutation.',
+    scope: 'tenant',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: TenantRolePermissions.viewer,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+    key: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+    name: 'Project Owner',
+    description: 'Full project access, including delete.',
+    scope: 'project',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: ProjectRolePermissions.owner,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PROJECT_DELEGATE,
+    key: SYSTEM_ROLE_IDS.PROJECT_DELEGATE,
+    name: 'Project Delegate',
+    description: 'Project management access without implicit ownership transfer.',
+    scope: 'project',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: ProjectRolePermissions.delegate,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PROJECT_DEVELOPER,
+    key: SYSTEM_ROLE_IDS.PROJECT_DEVELOPER,
+    name: 'Project Developer',
+    description: 'Project content, versioning, Git, and deploy access.',
+    scope: 'project',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: ProjectRolePermissions.developer,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
+    key: SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
+    name: 'Project Deployer',
+    description: 'Deployment-focused project access for humans or automation.',
+    scope: 'project',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [ProjectPermissions.DEPLOY],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PROJECT_EDITOR,
+    key: SYSTEM_ROLE_IDS.PROJECT_EDITOR,
+    name: 'Project Editor',
+    description: 'Project content editing and version creation access.',
+    scope: 'project',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: ProjectRolePermissions.editor,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.PROJECT_VIEWER,
+    key: SYSTEM_ROLE_IDS.PROJECT_VIEWER,
+    name: 'Project Viewer',
+    description: 'Project read-only access.',
+    scope: 'project',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: ProjectRolePermissions.viewer,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_OWNER,
+    key: SYSTEM_ROLE_IDS.ENGINE_OWNER,
+    name: 'Engine Owner',
+    description: 'Full engine access, including delete.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: false,
+    permissions: EngineRolePermissions.owner,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
+    key: SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
+    name: 'Engine Delegate',
+    description: 'Engine management access without implicit ownership transfer.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: false,
+    permissions: EngineRolePermissions.delegate,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+    key: SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+    name: 'Engine Operator',
+    description: 'Mission Control operation access.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: EngineRolePermissions.operator,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_VIEWER,
+    key: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_VIEWER,
+    name: 'Runtime Viewer',
+    description: 'View process and task runtime state, including variable names and types, without receiving variable values.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_INVESTIGATOR,
+    key: SYSTEM_ROLE_IDS.ENGINE_RUNTIME_INVESTIGATOR,
+    name: 'Runtime Investigator',
+    description: 'Investigate runtime state and variable values without permission to change them.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_VARIABLE_OPERATOR,
+    key: SYSTEM_ROLE_IDS.ENGINE_VARIABLE_OPERATOR,
+    name: 'Variable Operator',
+    description: 'Inspect and change runtime variables. This role includes value access because blind variable writes are not allowed.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [
+      EnginePermissions.INSTANCE_VIEW,
+      EnginePermissions.VARIABLES_METADATA_VIEW,
+      EnginePermissions.VARIABLES_VALUE_VIEW,
+      EnginePermissions.VARIABLES_EDIT,
+    ],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+    key: SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+    name: 'Engine Deployer',
+    description: 'Deployment-focused engine access.',
+    scope: 'engine',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: EngineRolePermissions.deployer,
+  },
+  {
+    id: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+    key: SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+    name: 'API Engine Registrar',
+    description: 'Machine role for API clients that register or update external engine inventory across all external systems.',
+    scope: 'platform',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [PlatformPermissions.ENGINE_REGISTRATION_MANAGE],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
+    key: SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
+    name: 'API External System Registrar',
+    description: 'Machine role for API clients that register or update engine inventory for one external engine system.',
+    scope: 'external_engine_system',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE],
+  },
+  {
+    id: SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
+    key: SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
+    name: 'API Project Engine Target Registrar',
+    description: 'Machine role for API clients that register or update project-engine deployment targets for one external engine system.',
+    scope: 'external_engine_system',
+    kind: 'system',
+    isEditable: false,
+    isAssignable: true,
+    permissions: [ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE],
+  },
+];
+
+const MACHINE_PRINCIPAL_TYPES = new Set<PrincipalType>(['api_client', 'service_account']);
+const MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS = new Set<string>([
+  SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR,
+  SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR,
+  SYSTEM_ROLE_IDS.API_PROJECT_ENGINE_TARGET_REGISTRAR,
+  SYSTEM_ROLE_IDS.TENANT_ENGINE_OPERATOR,
+  SYSTEM_ROLE_IDS.TENANT_VIEWER,
+  SYSTEM_ROLE_IDS.PROJECT_DEPLOYER,
+  SYSTEM_ROLE_IDS.ENGINE_OPERATOR,
+  SYSTEM_ROLE_IDS.ENGINE_DEPLOYER,
+]);
+const MACHINE_ASSIGNABLE_CUSTOM_ROLE_PERMISSIONS: Partial<Record<RoleScope, Set<Permission>>> = {
+  platform: new Set<Permission>([PlatformPermissions.ENGINE_REGISTRATION_MANAGE]),
+  tenant: TENANT_MACHINE_SAFE_PERMISSION_IDS,
+  external_engine_system: new Set<Permission>([
+    ExternalEngineSystemPermissions.ENGINE_REGISTRATION_MANAGE,
+    ExternalEngineSystemPermissions.PROJECT_TARGETS_MANAGE,
+  ]),
+  project: new Set<Permission>([ProjectPermissions.DEPLOY]),
+  engine: new Set<Permission>(EngineRolePermissions.operator),
+};
+
 // ============================================================================
 // Permission Service
 // ============================================================================
 
 export interface PermissionContext {
-  userId: string;
-  platformRole?: string;
-  projectRole?: string;
-  engineRole?: string;
+  userId?: string;
+  principalType?: PrincipalType;
+  principalId?: string;
+  tenantId?: string | null;
   resourceType?: ResourceType;
   resourceId?: string;
 }
 
 export interface GrantPermissionInput {
+  tenantId?: string | null;
   userId: string;
   permission: Permission;
   resourceType?: ResourceType;
@@ -261,60 +1654,2527 @@ export interface GrantPermissionInput {
   expiresAt?: number;
 }
 
+function slugifyRoleName(name: string): string {
+  return slugifyIdentifier(name, { maxLength: 48, fallback: 'role' });
+}
+
+async function recordAuthzAudit(
+  store: DataSource | EntityManager,
+  entry: {
+    tenantId?: string | null;
+    userId?: string | null;
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    details?: Record<string, unknown>;
+  }
+): Promise<void> {
+  try {
+    await store.getRepository(AuditLog).insert({
+      id: generateId(),
+      tenantId: normalizeTenantId(entry.tenantId),
+      userId: entry.userId || null,
+      action: entry.action,
+      resourceType: entry.resourceType,
+      resourceId: entry.resourceId,
+      ipAddress: null,
+      userAgent: null,
+      details: entry.details ? JSON.stringify(entry.details) : null,
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    logger.error('Failed to write authorization audit log:', error);
+  }
+}
+
 class PermissionServiceClass {
+  async getPermissionCatalog(): Promise<PermissionDefinition[]> {
+    try {
+      const dataSource = await getDataSource();
+      const rows = await dataSource.getRepository(RbacPermission).find({
+        order: { scope: 'ASC', category: 'ASC', key: 'ASC' },
+      });
+      const byKey = new Map<string, PermissionDefinition>(
+        PermissionCatalog.map((permission) => [permission.key, permission])
+      );
+
+      for (const row of rows) {
+        byKey.set(row.key, {
+          key: row.key,
+          scope: row.scope as ResourceType,
+          category: row.category,
+          label: row.label,
+          description: row.description || '',
+          tenantSafe: isTenantSafePermission(row.key),
+          kind: (row.kind === 'custom' ? 'custom' : 'system'),
+          isEditable: Boolean(row.isEditable),
+          isArchived: Boolean(row.isArchived),
+          createdById: row.createdById,
+          createdAt: Number(row.createdAt),
+          updatedAt: Number(row.updatedAt),
+        });
+      }
+
+      return Array.from(byKey.values())
+        .filter((permission) => !permission.isArchived)
+        .sort((left, right) =>
+          left.scope.localeCompare(right.scope) ||
+          left.category.localeCompare(right.category) ||
+          left.key.localeCompare(right.key)
+        );
+    } catch (error) {
+      logger.warn('Falling back to static permission catalog:', error);
+      return PermissionCatalog;
+    }
+  }
+
+  getSystemRoles(): SystemRoleDefinition[] {
+    return SystemRoleDefinitions;
+  }
+
+  async seedRbacFoundation(dataSource: DataSource, now: number = Date.now()): Promise<void> {
+    const permissionRepo = dataSource.getRepository(RbacPermission);
+    const roleRepo = dataSource.getRepository(RbacRole);
+    const rolePermissionRepo = dataSource.getRepository(RbacRolePermission);
+
+    await permissionRepo.upsert(
+      PermissionCatalog.map((permission) => ({
+        id: permission.key,
+        key: permission.key,
+        scope: permission.scope,
+        category: permission.category,
+        label: permission.label,
+        description: permission.description,
+        kind: 'system',
+        isEditable: false,
+        isArchived: false,
+        createdById: null,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true }
+    );
+
+    await roleRepo.upsert(
+      SystemRoleDefinitions.map((role) => ({
+        id: role.id,
+        tenantId: null,
+        key: role.key,
+        roleKeyIdentity: canonicalRoleKeyIdentity(null, role.key),
+        name: role.name,
+        description: role.description,
+        scope: role.scope,
+        kind: role.kind,
+        isEditable: role.isEditable,
+        isAssignable: role.isAssignable,
+        isArchived: false,
+        source: 'system',
+        sourceRef: 'rbac-foundation',
+        createdById: null,
+        createdAt: now,
+        updatedAt: now,
+      })),
+      { conflictPaths: ['id'], skipUpdateIfNoValuesChanged: true }
+    );
+
+    const rolePermissionRows = SystemRoleDefinitions.flatMap((role) =>
+      role.permissions.map((permission) => ({
+        id: `${role.id}:${permission}`,
+        roleId: role.id,
+        permissionId: permission,
+        createdAt: now,
+      }))
+    );
+
+    if (rolePermissionRows.length > 0) {
+      await rolePermissionRepo.upsert(rolePermissionRows, {
+        conflictPaths: ['roleId', 'permissionId'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+    }
+
+    // System roles are immutable templates. Reconcile removed permissions as
+    // well as upserting additions so an upgrade cannot retain a stale grant
+    // (for example the former Engine Operator variable-edit capability).
+    const desiredSystemRolePermissions = new Set(
+      rolePermissionRows.map((row) => `${row.roleId}\u0000${row.permissionId}`),
+    );
+    const existingSystemRolePermissions = await rolePermissionRepo.find({
+      where: { roleId: In(SystemRoleDefinitions.map((role) => role.id)) },
+      select: ['id', 'roleId', 'permissionId'],
+    });
+    const obsoleteSystemRolePermissionIds = existingSystemRolePermissions
+      .filter((row) => !desiredSystemRolePermissions.has(`${row.roleId}\u0000${row.permissionId}`))
+      .map((row) => row.id);
+    if (obsoleteSystemRolePermissionIds.length > 0) {
+      await rolePermissionRepo.delete({ id: In(obsoleteSystemRolePermissionIds) });
+    }
+  }
+
+  async syncLegacyRoleAssignments(
+    options: SyncLegacyRoleAssignmentsOptions = {},
+    providedDataSource?: DataSource | EntityManager
+  ): Promise<SyncLegacyRoleAssignmentsResult> {
+    const dataSource = providedDataSource || await getDataSource();
+    const now = options.now ?? Date.now();
+    const projectIds = Array.from(new Set((options.projectIds || []).map(String).filter(Boolean)));
+    const engineIds = Array.from(new Set((options.engineIds || []).map(String).filter(Boolean)));
+    const hasProjectScope = Array.isArray(options.projectIds);
+    const hasEngineScope = Array.isArray(options.engineIds);
+    const globalSync = !hasProjectScope && !hasEngineScope;
+    const scanProjects = globalSync || hasProjectScope;
+    const scanEngines = globalSync || hasEngineScope;
+
+    type LegacyAssignmentTarget = Pick<
+      RbacRoleAssignment,
+      | 'id'
+      | 'tenantId'
+      | 'principalType'
+      | 'principalId'
+      | 'assignmentKey'
+      | 'roleId'
+      | 'scopeType'
+      | 'scopeId'
+      | 'source'
+      | 'sourceRef'
+      | 'expiresAt'
+      | 'lastSeenAt'
+      | 'createdById'
+      | 'createdAt'
+      | 'updatedAt'
+    >;
+
+    const targets = new Map<string, LegacyAssignmentTarget>();
+    const addTarget = (input: {
+      tenantId?: string | null;
+      userId?: string | null;
+      roleId?: string;
+      resourceType: ResourceType;
+      resourceId: string;
+      createdAt?: number | null;
+      sourceKey: string;
+    }): void => {
+      if (!input.userId || !input.roleId) return;
+      const id = `legacy:${input.resourceType}:${input.resourceId}:${input.userId}:${input.roleId}`;
+      targets.set(id, {
+        id,
+        tenantId: input.tenantId ?? null,
+        principalType: 'user',
+        principalId: String(input.userId),
+        assignmentKey: canonicalRoleAssignmentKey({
+          tenantId: input.tenantId ?? null,
+          principalType: 'user',
+          principalId: String(input.userId),
+          roleId: input.roleId,
+          scopeType: input.resourceType,
+          scopeId: input.resourceId,
+          source: 'legacy',
+          sourceRef: input.sourceKey,
+        }),
+        roleId: input.roleId,
+        scopeType: input.resourceType,
+        scopeId: input.resourceId,
+        source: 'legacy',
+        sourceRef: input.sourceKey,
+        expiresAt: null,
+        lastSeenAt: now,
+        createdById: null,
+        createdAt: Number(input.createdAt || now),
+        updatedAt: now,
+      });
+    };
+
+    let scannedProjects = 0;
+    let scannedEngines = 0;
+
+    if (scanProjects) {
+      const projectRepo = dataSource.getRepository(Project);
+      const projectMemberRepo = dataSource.getRepository(ProjectMember);
+      const projectMemberRoleRepo = dataSource.getRepository(ProjectMemberRole);
+      const projects = hasProjectScope && projectIds.length === 0
+        ? []
+        : await projectRepo.find({
+          where: hasProjectScope ? { id: In(projectIds) } : undefined,
+          select: ['id', 'ownerId', 'tenantId', 'createdAt', 'updatedAt'],
+        });
+      scannedProjects = projects.length;
+      const projectTenantById = new Map(projects.map((project) => [String(project.id), project.tenantId ?? null]));
+      const existingProjectIds = projects.map((project) => String(project.id));
+
+      for (const project of projects) {
+        addTarget({
+          tenantId: project.tenantId,
+          userId: project.ownerId,
+          roleId: SYSTEM_ROLE_IDS.PROJECT_OWNER,
+          resourceType: 'project',
+          resourceId: String(project.id),
+          createdAt: project.createdAt,
+          sourceKey: `project:${project.id}:owner`,
+        });
+      }
+
+      const projectScopeWhere = hasProjectScope ? { projectId: In(existingProjectIds) } : undefined;
+      const [memberships, roleRows] = existingProjectIds.length === 0 && hasProjectScope
+        ? [[], []] as [ProjectMember[], ProjectMemberRole[]]
+        : await Promise.all([
+          projectMemberRepo.find({ where: projectScopeWhere }),
+          projectMemberRoleRepo.find({ where: projectScopeWhere }),
+        ]);
+
+      for (const membership of memberships) {
+        const projectId = String(membership.projectId);
+        addTarget({
+          tenantId: projectTenantById.get(projectId) ?? null,
+          userId: membership.userId,
+          roleId: LEGACY_PROJECT_ROLE_TO_SYSTEM_ROLE[membership.role],
+          resourceType: 'project',
+          resourceId: projectId,
+          createdAt: membership.createdAt || membership.joinedAt,
+          sourceKey: `project_member:${projectId}:${membership.userId}:${membership.role}`,
+        });
+      }
+
+      for (const roleRow of roleRows) {
+        const projectId = String(roleRow.projectId);
+        addTarget({
+          tenantId: projectTenantById.get(projectId) ?? null,
+          userId: roleRow.userId,
+          roleId: LEGACY_PROJECT_ROLE_TO_SYSTEM_ROLE[roleRow.role],
+          resourceType: 'project',
+          resourceId: projectId,
+          createdAt: roleRow.createdAt,
+          sourceKey: `project_member_role:${projectId}:${roleRow.userId}:${roleRow.role}`,
+        });
+      }
+    }
+
+    if (scanEngines) {
+      const engineRepo = dataSource.getRepository(Engine);
+      const engineMemberRepo = dataSource.getRepository(EngineMember);
+      const engines = hasEngineScope && engineIds.length === 0
+        ? []
+        : await engineRepo.find({
+          where: hasEngineScope ? { id: In(engineIds) } : undefined,
+          select: ['id', 'ownerId', 'delegateId', 'tenantId', 'createdAt', 'updatedAt'],
+        });
+      scannedEngines = engines.length;
+      const engineTenantById = new Map(engines.map((engine) => [String(engine.id), engine.tenantId ?? null]));
+      const existingEngineIds = engines.map((engine) => String(engine.id));
+
+      for (const engine of engines) {
+        addTarget({
+          tenantId: engine.tenantId,
+          userId: engine.ownerId,
+          roleId: SYSTEM_ROLE_IDS.ENGINE_OWNER,
+          resourceType: 'engine',
+          resourceId: String(engine.id),
+          createdAt: engine.createdAt,
+          sourceKey: `engine:${engine.id}:owner`,
+        });
+        addTarget({
+          tenantId: engine.tenantId,
+          userId: engine.delegateId,
+          roleId: SYSTEM_ROLE_IDS.ENGINE_DELEGATE,
+          resourceType: 'engine',
+          resourceId: String(engine.id),
+          createdAt: engine.updatedAt || engine.createdAt,
+          sourceKey: `engine:${engine.id}:delegate`,
+        });
+      }
+
+      const memberWhere = hasEngineScope ? { engineId: In(existingEngineIds) } : undefined;
+      const memberships = existingEngineIds.length === 0 && hasEngineScope
+        ? []
+        : await engineMemberRepo.find({ where: memberWhere });
+
+      for (const membership of memberships) {
+        const engineId = String(membership.engineId);
+        addTarget({
+          tenantId: engineTenantById.get(engineId) ?? null,
+          userId: membership.userId,
+          roleId: LEGACY_ENGINE_ROLE_TO_SYSTEM_ROLE[membership.role],
+          resourceType: 'engine',
+          resourceId: engineId,
+          createdAt: membership.createdAt,
+          sourceKey: `engine_member:${engineId}:${membership.userId}:${membership.role}`,
+        });
+      }
+    }
+
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const scopedExistingWhere = [
+      ...(scanProjects && hasProjectScope && projectIds.length > 0
+        ? [{ source: 'legacy', scopeType: 'project', scopeId: In(projectIds) }]
+        : []),
+      ...(scanEngines && hasEngineScope && engineIds.length > 0
+        ? [{ source: 'legacy', scopeType: 'engine', scopeId: In(engineIds) }]
+        : []),
+    ];
+    const existing = globalSync
+      ? await assignmentRepo.find({ where: { source: 'legacy' } })
+      : (scopedExistingWhere.length > 0 ? await assignmentRepo.find({ where: scopedExistingWhere }) : []);
+    const targetIds = new Set(targets.keys());
+    const staleIds = existing
+      .filter((assignment) => !targetIds.has(assignment.id))
+      .map((assignment) => assignment.id);
+
+    if (staleIds.length > 0) {
+      await assignmentRepo.delete({ id: In(staleIds) });
+    }
+
+    const rows = Array.from(targets.values());
+    if (rows.length > 0) {
+      await assignmentRepo.upsert(rows, {
+        conflictPaths: ['id'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+    }
+
+    return {
+      scannedProjects,
+      scannedEngines,
+      upserted: rows.length,
+      removed: staleIds.length,
+    };
+  }
+
+  async getRoles(tenantId?: string | null): Promise<RoleSummary[]> {
+    const dataSource = await getDataSource();
+    const roleRepo = dataSource.getRepository(RbacRole);
+    const rolePermissionRepo = dataSource.getRepository(RbacRolePermission);
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    const roles = await roleRepo.find({
+      where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : undefined,
+      order: { scope: 'ASC', name: 'ASC' },
+    });
+    const rolePermissions = await rolePermissionRepo.find();
+    const counts = new Map<string, number>();
+
+    for (const rolePermission of rolePermissions) {
+      counts.set(rolePermission.roleId, (counts.get(rolePermission.roleId) || 0) + 1);
+    }
+
+    return roles.map((role) => ({
+      id: role.id,
+      tenantId: role.tenantId,
+      key: role.key,
+      name: role.name,
+      description: role.description,
+      scope: role.scope as RoleScope,
+      kind: role.kind as RoleKind,
+      isEditable: role.isEditable,
+      isAssignable: role.isAssignable,
+      isArchived: role.isArchived,
+      source: (role.source || (role.kind === 'system' ? 'system' : 'manual')) as RoleSource,
+      sourceRef: role.sourceRef || null,
+      ownershipMode: (role.ownershipMode || (role.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
+      sourceHash: role.sourceHash || null,
+      lastAppliedAt: role.lastAppliedAt ? Number(role.lastAppliedAt) : null,
+      driftStatus: role.driftStatus || null,
+      permissionCount: counts.get(role.id) || 0,
+      createdAt: Number(role.createdAt),
+      updatedAt: Number(role.updatedAt),
+    }));
+  }
+
+  async getRole(id: string, tenantId?: string | null): Promise<RoleDetail | null> {
+    const dataSource = await getDataSource();
+    const role = await dataSource.getRepository(RbacRole).findOne({ where: { id } });
+    if (!role) return null;
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (normalizedTenantId && role.tenantId && role.tenantId !== normalizedTenantId) {
+      return null;
+    }
+
+    const permissions = await dataSource.getRepository(RbacRolePermission).find({
+      where: { roleId: id },
+      order: { permissionId: 'ASC' },
+    });
+
+    return {
+      id: role.id,
+      tenantId: role.tenantId,
+      key: role.key,
+      name: role.name,
+      description: role.description,
+      scope: role.scope as RoleScope,
+      kind: role.kind as RoleKind,
+      isEditable: role.isEditable,
+      isAssignable: role.isAssignable,
+      isArchived: role.isArchived,
+      source: (role.source || (role.kind === 'system' ? 'system' : 'manual')) as RoleSource,
+      sourceRef: role.sourceRef || null,
+      ownershipMode: (role.ownershipMode || (role.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
+      sourceHash: role.sourceHash || null,
+      lastAppliedAt: role.lastAppliedAt ? Number(role.lastAppliedAt) : null,
+      driftStatus: role.driftStatus || null,
+      permissionCount: permissions.length,
+      permissions: permissions.map((permission) => permission.permissionId as Permission),
+      createdAt: Number(role.createdAt),
+      updatedAt: Number(role.updatedAt),
+    };
+  }
+
+  async createCustomRole(input: CreateCustomRoleInput, store?: DataSource | EntityManager): Promise<{ id: string }> {
+    assertCustomRoleAllowOnlyInput(input);
+    const dataSource = store || await getDataSource();
+    const id = generateId();
+    const now = Date.now();
+    const permissionIds = await this.validateRolePermissions(input.scope, input.permissionIds);
+    const name = input.name.trim();
+    const source = normalizeRoleSource(input.source);
+    const sourceRef = input.sourceRef?.trim() || null;
+
+    if (!name) {
+      throw new Error('Role name is required');
+    }
+    if (source === 'config' && !sourceRef) {
+      throw new Error('Config-managed roles require a source reference');
+    }
+    const key = normalizeCustomRoleKey(input.key, input.scope, name, id);
+    const tenantId = normalizeTenantId(input.tenantId);
+
+    const create = async (manager: EntityManager) => {
+      await manager.getRepository(RbacRole).insert({
+        id,
+        tenantId,
+        key,
+        roleKeyIdentity: canonicalRoleKeyIdentity(tenantId, key),
+        name,
+        description: input.description?.trim() || null,
+        scope: input.scope,
+        kind: 'custom',
+        isEditable: true,
+        isAssignable: true,
+        isArchived: false,
+        source,
+        sourceRef,
+        ownershipMode: input.ownershipMode || (source === 'config' ? 'config_locked' : 'manual'),
+        sourceHash: input.sourceHash || null,
+        lastAppliedAt: input.lastAppliedAt || null,
+        driftStatus: input.driftStatus || null,
+        createdById: input.createdById,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await this.replaceRolePermissions(manager, id, permissionIds, now);
+      await recordAuthzAudit(manager, {
+        tenantId: input.tenantId,
+        userId: input.createdById,
+        action: 'authz.role.create',
+        resourceType: 'role',
+        resourceId: id,
+        details: {
+          roleId: id,
+          tenantId: normalizeTenantId(input.tenantId),
+          name,
+          key,
+          scope: input.scope,
+          kind: 'custom',
+          source,
+          sourceRef,
+          permissionIds,
+        },
+      });
+    };
+    if (store) await create(store as EntityManager);
+    else await (dataSource as DataSource).transaction(create);
+
+    return { id };
+  }
+
+  async createCustomPermission(input: CreateCustomPermissionInput): Promise<{ id: string; key: string }> {
+    const dataSource = await getDataSource();
+    const now = Date.now();
+    const key = input.key.trim().toLowerCase();
+    const category = input.category.trim();
+    const label = input.label.trim();
+    const description = input.description?.trim() || null;
+
+    this.validateCustomPermissionKey(input.scope, key);
+    if (!category) {
+      throw new Error('Permission category is required');
+    }
+    if (!label) {
+      throw new Error('Permission label is required');
+    }
+
+    const permissionRepo = dataSource.getRepository(RbacPermission);
+    const existing = await permissionRepo.findOne({ where: { key } });
+    if (existing) {
+      throw new Error('Permission key already exists');
+    }
+
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(RbacPermission).insert({
+        id: key,
+        key,
+        scope: input.scope,
+        category,
+        label,
+        description,
+        kind: 'custom',
+        isEditable: true,
+        isArchived: false,
+        createdById: input.createdById,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await recordAuthzAudit(manager, {
+        tenantId: input.tenantId,
+        userId: input.createdById,
+        action: 'authz.permission.create',
+        resourceType: 'permission',
+        resourceId: key,
+        details: {
+          key,
+          scope: input.scope,
+          category,
+          label,
+          kind: 'custom',
+        },
+      });
+    });
+
+    return { id: key, key };
+  }
+
+  async updateCustomRole(id: string, input: UpdateCustomRoleInput): Promise<void> {
+    assertCustomRoleAllowOnlyInput(input);
+    const dataSource = await getDataSource();
+    const roleRepo = dataSource.getRepository(RbacRole);
+    const role = await roleRepo.findOne({ where: { id } });
+    if (!role) {
+      throw new Error('Role not found');
+    }
+    if (role.kind !== 'custom' || !role.isEditable) {
+      throw new Error('System roles cannot be edited');
+    }
+    const isConfigWarn = role.source === 'config' && role.ownershipMode === 'config_warn';
+    if (role.source === 'config' && !isConfigWarn) {
+      throw new Error('Config-managed roles must be updated through their configuration bundle');
+    }
+    const normalizedTenantId = normalizeTenantId(input.tenantId);
+    if (normalizedTenantId && role.tenantId && role.tenantId !== normalizedTenantId) {
+      throw new Error('Role not found');
+    }
+
+    const now = Date.now();
+    const updates: Partial<RbacRole> = {
+      updatedAt: now,
+      ...(isConfigWarn ? { driftStatus: 'drifted' } : {}),
+    };
+    if (input.name !== undefined) {
+      const name = input.name.trim();
+      if (!name) {
+        throw new Error('Role name is required');
+      }
+      updates.name = name;
+    }
+    if (input.description !== undefined) {
+      updates.description = input.description?.trim() || null;
+    }
+    if (input.isArchived !== undefined) {
+      updates.isArchived = input.isArchived;
+      updates.isAssignable = input.isArchived ? false : input.isAssignable ?? role.isAssignable;
+    } else if (input.isAssignable !== undefined) {
+      updates.isAssignable = input.isAssignable;
+    }
+    const permissionIds = input.permissionIds !== undefined
+      ? await this.validateRolePermissions(role.scope as RoleScope, input.permissionIds)
+      : undefined;
+
+    await dataSource.transaction(async (manager) => {
+      await manager.getRepository(RbacRole).update(id, updates);
+      if (permissionIds) {
+        await this.replaceRolePermissions(manager, id, permissionIds, now);
+      }
+      await recordAuthzAudit(manager, {
+        tenantId: input.tenantId ?? role.tenantId,
+        userId: input.updatedById || null,
+        action: input.isArchived && !role.isArchived ? 'authz.role.archive' : 'authz.role.update',
+        resourceType: 'role',
+        resourceId: id,
+        details: {
+          roleId: id,
+          previousName: role.name,
+          scope: role.scope,
+          changedFields: Object.keys(updates).filter((key) => key !== 'updatedAt'),
+          permissionIds: permissionIds || undefined,
+          ownershipMode: role.ownershipMode || 'manual',
+          driftStatus: updates.driftStatus || role.driftStatus || null,
+        },
+      });
+    });
+  }
+
+  async archiveCustomRole(id: string, archivedById?: string): Promise<void> {
+    await this.updateCustomRole(id, { isArchived: true, updatedById: archivedById });
+  }
+
+  /** Configuration reconciliation write; apply owns the audit event and source authorization. */
+  async updateConfiguredCustomRole(id: string, input: ConfiguredCustomRoleUpdate, store: EntityManager): Promise<void> {
+    const now = Date.now();
+    const values: Partial<RbacRole> = { updatedAt: now };
+    if (input.name !== undefined) values.name = input.name.trim();
+    if (input.description !== undefined) values.description = input.description || null;
+    if (input.scope !== undefined) values.scope = input.scope;
+    if (input.isArchived !== undefined) values.isArchived = input.isArchived;
+    if (input.isAssignable !== undefined) values.isAssignable = input.isAssignable;
+    if (input.ownershipMode !== undefined) values.ownershipMode = input.ownershipMode;
+    if (input.sourceHash !== undefined) values.sourceHash = input.sourceHash;
+    if (input.lastAppliedAt !== undefined) values.lastAppliedAt = input.lastAppliedAt;
+    if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
+    await store.getRepository(RbacRole).update({ id }, values);
+    if (input.permissionIds !== undefined) {
+      const permissions = await this.validateRolePermissions(input.scope!, input.permissionIds);
+      await this.replaceRolePermissions(store, id, permissions, now);
+    }
+  }
+
+  async listRoleAssignments(filters: RoleAssignmentFilters = {}): Promise<RoleAssignmentView[]> {
+    const dataSource = await getDataSource();
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const qb = assignmentRepo.createQueryBuilder('assignment')
+      .orderBy('assignment.createdAt', 'DESC');
+
+    addTenantScopeFilter(qb, 'assignment', filters.tenantId);
+    if (filters.userId) {
+      qb.andWhere(
+        '(assignment.principalType = :userPrincipalType AND assignment.principalId = :userId)',
+        { userPrincipalType: 'user', userId: filters.userId }
+      );
+    }
+    if (filters.principalType) {
+      qb.andWhere('assignment.principalType = :principalType', { principalType: filters.principalType });
+    }
+    if (filters.principalId) {
+      qb.andWhere('assignment.principalId = :principalId', { principalId: filters.principalId });
+    }
+    if (filters.resourceType) {
+      qb.andWhere(
+        'assignment.scopeType = :resourceType',
+        { resourceType: filters.resourceType }
+      );
+    }
+    if (filters.resourceId !== undefined) {
+      if (filters.resourceId) {
+        qb.andWhere(
+          'assignment.scopeId = :resourceId',
+          { resourceId: filters.resourceId }
+        );
+      } else {
+        qb.andWhere('assignment.scopeId IS NULL');
+      }
+    }
+    if (filters.scopeType) {
+      qb.andWhere('assignment.scopeType = :scopeType', { scopeType: filters.scopeType });
+    }
+    if (filters.scopeId !== undefined) {
+      if (filters.scopeId) {
+        qb.andWhere('assignment.scopeId = :scopeId', { scopeId: filters.scopeId });
+      } else {
+        qb.andWhere('assignment.scopeId IS NULL');
+      }
+    }
+    if (filters.runtimeEngineId) {
+      qb
+        .leftJoin(
+          RuntimeResource,
+          'runtimeResource',
+          "runtimeResource.id = assignment.scopeId AND assignment.scopeType = 'engine_runtime_resource'"
+        )
+        .leftJoin(
+          RuntimeResourceSet,
+          'runtimeResourceSet',
+          "runtimeResourceSet.id = assignment.scopeId AND assignment.scopeType = 'engine_runtime_resource_set'"
+        )
+        .andWhere('(runtimeResource.engineId = :runtimeEngineId OR runtimeResourceSet.engineId = :runtimeEngineId)', {
+          runtimeEngineId: filters.runtimeEngineId,
+        });
+    }
+
+    const assignments = await qb.getMany();
+    const roleIds = Array.from(new Set(assignments.map((assignment) => assignment.roleId)));
+    const roles = roleIds.length > 0
+      ? await dataSource.getRepository(RbacRole).find({ where: { id: In(roleIds) } })
+      : [];
+    const rolesById = new Map(roles.map((role) => [role.id, role]));
+
+    const principalIdsByType = <T extends PrincipalType>(principalType: T) =>
+      Array.from(new Set(assignments
+        .filter((assignment) => assignment.principalType === principalType)
+        .map((assignment) => assignment.principalId)));
+    const scopeIdsByType = (scopeType: ResourceType) =>
+      Array.from(new Set(assignments
+        .filter((assignment) => assignment.scopeType === scopeType && assignment.scopeId)
+        .map((assignment) => assignment.scopeId as string)));
+
+    const userIds = principalIdsByType('user');
+    const groupIds = principalIdsByType('group');
+    const apiClientIds = principalIdsByType('api_client');
+    const serviceAccountIds = principalIdsByType('service_account');
+    const engineIds = scopeIdsByType('engine');
+    const projectIds = scopeIdsByType('project');
+    const engineSetIds = scopeIdsByType('engine_set');
+    const runtimeResourceIds = scopeIdsByType('engine_runtime_resource');
+    const runtimeResourceSetIds = scopeIdsByType('engine_runtime_resource_set');
+    const externalSystemIds = scopeIdsByType('external_engine_system');
+
+    const [
+      users,
+      groups,
+      apiClients,
+      serviceAccounts,
+      engines,
+      projects,
+      engineSets,
+      runtimeResources,
+      runtimeResourceSets,
+      externalSystems,
+    ] = await Promise.all([
+      userIds.length ? dataSource.getRepository(User).find({ where: { id: In(userIds) } }) : [],
+      groupIds.length ? dataSource.getRepository(AuthzGroup).find({ where: { id: In(groupIds) } }) : [],
+      apiClientIds.length ? dataSource.getRepository(ApiClient).find({ where: { id: In(apiClientIds) } }) : [],
+      serviceAccountIds.length ? dataSource.getRepository(ServiceAccount).find({ where: { id: In(serviceAccountIds) } }) : [],
+      engineIds.length ? dataSource.getRepository(Engine).find({ where: { id: In(engineIds) } }) : [],
+      projectIds.length ? dataSource.getRepository(Project).find({ where: { id: In(projectIds) } }) : [],
+      engineSetIds.length ? dataSource.getRepository(EngineSet).find({ where: { id: In(engineSetIds) } }) : [],
+      runtimeResourceIds.length ? dataSource.getRepository(RuntimeResource).find({ where: { id: In(runtimeResourceIds) } }) : [],
+      runtimeResourceSetIds.length ? dataSource.getRepository(RuntimeResourceSet).find({ where: { id: In(runtimeResourceSetIds) } }) : [],
+      externalSystemIds.length ? dataSource.getRepository(ExternalEngineSystem).find({ where: { id: In(externalSystemIds) } }) : [],
+    ]);
+
+    const runtimeEngineIds = Array.from(new Set([
+      ...runtimeResources.map((resource) => resource.engineId),
+      ...runtimeResourceSets.map((resourceSet) => resourceSet.engineId),
+    ]));
+    const missingRuntimeEngineIds = runtimeEngineIds.filter((id) => !engines.some((engine) => engine.id === id));
+    const runtimeEngines = missingRuntimeEngineIds.length
+      ? await dataSource.getRepository(Engine).find({ where: { id: In(missingRuntimeEngineIds) } })
+      : [];
+
+    const usersById = new Map(users.map((user) => [user.id, user]));
+    const groupsById = new Map(groups.map((group) => [group.id, group]));
+    const apiClientsById = new Map(apiClients.map((client) => [client.id, client]));
+    const serviceAccountsById = new Map(serviceAccounts.map((account) => [account.id, account]));
+    const enginesById = new Map([...engines, ...runtimeEngines].map((engine) => [engine.id, engine]));
+    const projectsById = new Map(projects.map((project) => [project.id, project]));
+    const engineSetsById = new Map(engineSets.map((engineSet) => [engineSet.id, engineSet]));
+    const runtimeResourcesById = new Map(runtimeResources.map((resource) => [resource.id, resource]));
+    const runtimeResourceSetsById = new Map(runtimeResourceSets.map((resourceSet) => [resourceSet.id, resourceSet]));
+    const externalSystemsById = new Map(externalSystems.map((system) => [system.id, system]));
+
+    const principalPresentation = (assignment: RbacRoleAssignment): { displayName: string; secondary: string } => {
+      const principalId = assignment.principalId;
+      if (assignment.principalType === 'user') {
+        const user = usersById.get(principalId);
+        const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+        return {
+          displayName: user?.email || fullName || principalId,
+          secondary: fullName ? `${fullName} · ${principalId}` : principalId,
+        };
+      }
+      if (assignment.principalType === 'group') {
+        const group = groupsById.get(principalId);
+        return { displayName: group?.name || principalId, secondary: group?.key ? `${group.key} · ${principalId}` : principalId };
+      }
+      if (assignment.principalType === 'api_client') {
+        return { displayName: apiClientsById.get(principalId)?.name || principalId, secondary: principalId };
+      }
+      return { displayName: serviceAccountsById.get(principalId)?.name || principalId, secondary: principalId };
+    };
+
+    const resourcePresentation = (assignment: RbacRoleAssignment): { displayName: string; secondary: string | null } => {
+      const scopeType = assignment.scopeType as ResourceType | null;
+      const scopeId = assignment.scopeId;
+      if (scopeType === 'platform') return { displayName: 'Platform', secondary: null };
+      if (!scopeId) return { displayName: scopeType === 'tenant' ? 'Current tenant' : 'Unscoped', secondary: null };
+      if (scopeType === 'tenant') return { displayName: 'Tenant', secondary: scopeId };
+      if (scopeType === 'engine') return { displayName: enginesById.get(scopeId)?.name || scopeId, secondary: `engine:${scopeId}` };
+      if (scopeType === 'project') return { displayName: projectsById.get(scopeId)?.name || scopeId, secondary: `project:${scopeId}` };
+      if (scopeType === 'engine_set') {
+        const set = engineSetsById.get(scopeId);
+        return { displayName: set?.name || scopeId, secondary: set?.key ? `${set.key} · ${scopeId}` : scopeId };
+      }
+      if (scopeType === 'engine_runtime_resource') {
+        const resource = runtimeResourcesById.get(scopeId);
+        const engineName = resource ? enginesById.get(resource.engineId)?.name : null;
+        return {
+          displayName: resource ? `${resource.resourceKey}${engineName ? ` · ${engineName}` : ''}` : scopeId,
+          secondary: resource ? `${resource.resourceKind} · ${scopeId}` : scopeId,
+        };
+      }
+      if (scopeType === 'engine_runtime_resource_set') {
+        const set = runtimeResourceSetsById.get(scopeId);
+        const engineName = set ? enginesById.get(set.engineId)?.name : null;
+        return {
+          displayName: set ? `${set.name}${engineName ? ` · ${engineName}` : ''}` : scopeId,
+          secondary: set?.key ? `${set.key} · ${scopeId}` : scopeId,
+        };
+      }
+      if (scopeType === 'external_engine_system') {
+        const system = externalSystemsById.get(scopeId);
+        return { displayName: system?.name || scopeId, secondary: system?.key ? `${system.key} · ${scopeId}` : scopeId };
+      }
+      return { displayName: scopeId, secondary: `${scopeType}:${scopeId}` };
+    };
+
+    return assignments.map((assignment) => {
+      const role = rolesById.get(assignment.roleId);
+      const principal = principalPresentation(assignment);
+      const resource = resourcePresentation(assignment);
+      return {
+        id: assignment.id,
+        tenantId: assignment.tenantId,
+        userId: assignment.principalType === 'user' ? assignment.principalId : null,
+        principalType: assignment.principalType as PrincipalType,
+        principalId: assignment.principalId!,
+        principalDisplayName: principal.displayName,
+        principalSecondary: principal.secondary,
+        roleId: assignment.roleId,
+        roleKey: role?.key || null,
+        roleName: role?.name || null,
+        roleScope: role ? role.scope as RoleScope : null,
+        resourceType: assignment.scopeType as ResourceType | null,
+        resourceId: assignment.scopeId,
+        resourceDisplayName: resource.displayName,
+        resourceSecondary: resource.secondary,
+        scopeType: assignment.scopeType as ResourceType | null,
+        scopeId: assignment.scopeId,
+        source: assignment.source as RoleAssignmentSource,
+        sourceRef: assignment.sourceRef,
+        ownershipMode: (assignment.ownershipMode || (assignment.source === 'config' ? 'config_locked' : 'manual')) as ConfigOwnershipMode,
+        sourceHash: assignment.sourceHash || null,
+        lastAppliedAt: assignment.lastAppliedAt ? Number(assignment.lastAppliedAt) : null,
+        driftStatus: assignment.driftStatus || null,
+        expiresAt: assignment.expiresAt == null ? null : Number(assignment.expiresAt),
+        lastSeenAt: assignment.lastSeenAt == null ? null : Number(assignment.lastSeenAt),
+        createdById: assignment.createdById,
+        createdAt: Number(assignment.createdAt),
+        updatedAt: Number(assignment.updatedAt),
+      };
+    });
+  }
+
+  async assignRole(input: CreateRoleAssignmentInput, store?: DataSource | EntityManager): Promise<{ id: string; warnings: string[] }> {
+    const dataSource = store || await getDataSource();
+    const role = await dataSource.getRepository(RbacRole).findOne({ where: { id: input.roleId } });
+    if (!role) {
+      throw new Error('Role not found');
+    }
+    if (role.isArchived || !role.isAssignable) {
+      throw new Error('Role is not assignable');
+    }
+    const normalizedTenantId = normalizeTenantId(input.tenantId);
+    if (normalizedTenantId && role.tenantId && role.tenantId !== normalizedTenantId) {
+      throw new Error('Role is not assignable in this tenant');
+    }
+
+    const principal = this.normalizeAssignmentPrincipal(input);
+    if (principal.principalType === 'user') {
+      const user = await dataSource.getRepository(User).findOne({
+        where: { id: principal.principalId },
+        select: ['id'],
+      });
+      if (!user) {
+        throw new Error('User not found');
+      }
+    }
+    await this.assertAssignablePrincipalExists(dataSource, principal, normalizedTenantId);
+    await this.assertMachinePrincipalCanReceiveRole(dataSource, principal, role);
+
+    const scope = role.scope as RoleScope;
+    const requestedScopeType = input.scopeType ?? input.resourceType;
+    const requestedScopeId = input.scopeId !== undefined ? input.scopeId : input.resourceId;
+    const { resourceType, resourceId, scopeType, scopeId } = this.normalizeAssignmentScope(scope, requestedScopeType, requestedScopeId);
+    await this.assertResourceExists(dataSource, scopeType, scopeId, normalizedTenantId);
+    await this.assertRuntimeScopeEnabled(dataSource, scopeType, scopeId, normalizedTenantId);
+    const source = input.source ?? 'manual';
+    const sourceRef = input.sourceRef ?? null;
+    const assignmentKey = canonicalRoleAssignmentKey({
+      tenantId: input.tenantId ?? null,
+      principalType: principal.principalType,
+      principalId: principal.principalId,
+      roleId: input.roleId,
+      scopeType,
+      scopeId,
+      source,
+      sourceRef,
+    });
+
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const duplicateQb = assignmentRepo.createQueryBuilder('assignment')
+      .where('assignment.assignmentKey = :assignmentKey', { assignmentKey });
+
+    const existing = await duplicateQb.getOne();
+    if (existing) {
+      return { id: existing.id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
+    }
+
+    const id = await this.createResolvedRoleAssignment(dataSource, assignmentKey, principal, {
+      ...input, tenantId: normalizedTenantId, scopeType, scopeId, source, sourceRef,
+    });
+    await recordAuthzAudit(dataSource, {
+      tenantId: normalizedTenantId,
+      userId: input.createdById,
+      action: 'authz.role_assignment.create',
+      resourceType: 'role_assignment',
+      resourceId: id,
+      details: {
+        assignmentId: id,
+        tenantId: normalizedTenantId,
+        assignedUserId: principal.principalType === 'user' ? principal.principalId : null,
+        principalType: principal.principalType,
+        principalId: principal.principalId,
+        roleId: input.roleId,
+        scopeType,
+        scopeId,
+        resourceType: scopeType,
+        resourceId: scopeId,
+        source,
+        sourceRef,
+      },
+    });
+
+    return { id, warnings: store ? [] : await this.getRuntimeAssignmentWarnings(dataSource as DataSource, principal, role, scopeType, scopeId, normalizedTenantId) };
+  }
+
+  async createResolvedRoleAssignment(dataSource: DataSource | EntityManager, assignmentKey: string, principal: { principalType: PrincipalType; principalId: string }, input: CreateRoleAssignmentInput & { scopeType: ResourceType; scopeId: string | null; source: RoleAssignmentSource; sourceRef: string | null }): Promise<string> {
+    const id = generateId();
+    const now = Date.now();
+    await dataSource.getRepository(RbacRoleAssignment).insert({
+      id,
+      tenantId: input.tenantId ?? null,
+      principalType: principal.principalType,
+      principalId: principal.principalId,
+      assignmentKey,
+      roleId: input.roleId,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId,
+      source: input.source,
+      sourceRef: input.sourceRef,
+      ownershipMode: input.ownershipMode || (input.source === 'config' ? 'config_locked' : 'manual'),
+      sourceHash: input.sourceHash ?? null,
+      lastAppliedAt: input.lastAppliedAt ?? null,
+      driftStatus: input.driftStatus ?? null,
+      expiresAt: input.expiresAt ?? null,
+      lastSeenAt: null,
+      createdById: input.createdById,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
+  }
+
+  /** Shared resolved-assignment lifecycle write for authorized callers such as configuration reconciliation. */
+  async updateResolvedRoleAssignment(dataSource: DataSource | EntityManager, id: string, input: {
+    expiresAt?: number | null;
+    ownershipMode?: ConfigOwnershipMode;
+    sourceHash?: string | null;
+    lastAppliedAt?: number | null;
+    driftStatus?: string | null;
+    lastSeenAt?: number | null;
+  }): Promise<void> {
+    const values: Record<string, unknown> = { updatedAt: Date.now() };
+    if (input.expiresAt !== undefined) values.expiresAt = input.expiresAt;
+    if (input.ownershipMode !== undefined) values.ownershipMode = input.ownershipMode;
+    if (input.sourceHash !== undefined) values.sourceHash = input.sourceHash;
+    if (input.lastAppliedAt !== undefined) values.lastAppliedAt = input.lastAppliedAt;
+    if (input.driftStatus !== undefined) values.driftStatus = input.driftStatus;
+    if (input.lastSeenAt !== undefined) values.lastSeenAt = input.lastSeenAt;
+    await dataSource.getRepository(RbacRoleAssignment).update({ id }, values);
+  }
+
+  async deleteResolvedRoleAssignments(dataSource: DataSource | EntityManager, ids: string[]): Promise<void> {
+    if (ids.length > 0) await dataSource.getRepository(RbacRoleAssignment).delete(ids);
+  }
+
+  private async getRuntimeAssignmentWarnings(
+    dataSource: DataSource,
+    principal: { principalType: PrincipalType; principalId: string },
+    role: RbacRole,
+    scopeType: ResourceType,
+    scopeId: string | null,
+    tenantId?: string | null,
+  ): Promise<string[]> {
+    if (scopeType !== 'engine_runtime_resource' && scopeType !== 'engine_runtime_resource_set') return [];
+    const engineId = await this.resolveRuntimeScopeEngineId(dataSource, scopeType, scopeId, tenantId);
+    if (!engineId) return [];
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: engineId },
+      select: ['id', 'tenancyMode'],
+    });
+    if (engine?.tenancyMode === 'shared') return [];
+
+    const rolePermissions = await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: role.id }, select: ['permissionId'] });
+    const requestedPermissions = new Set(rolePermissions.map((permission) => permission.permissionId));
+    if (requestedPermissions.size === 0) return [];
+
+    const principalRefs = [{ principalType: principal.principalType, principalId: principal.principalId }];
+    if (principal.principalType === 'user') {
+      const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, principal.principalId, tenantId);
+      principalRefs.push(...groupIds.map((principalId) => ({ principalType: 'group' as const, principalId })));
+    }
+    const candidateAssignments = await dataSource.getRepository(RbacRoleAssignment).find({
+      where: principalRefs,
+      select: ['roleId', 'scopeType', 'scopeId', 'expiresAt', 'source'],
+    });
+    const activeAssignments = candidateAssignments
+      .filter((assignment) => assignment.source !== 'legacy' && (!assignment.expiresAt || assignment.expiresAt > Date.now()));
+    const directEngineRoleIds = activeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine' && assignment.scopeId === engineId)
+      .map((assignment) => assignment.roleId);
+    const engineSetIds = activeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_set' && assignment.scopeId)
+      .map((assignment) => assignment.scopeId!);
+    const matchingEngineSetIds = engineSetIds.length > 0
+      ? new Set((await dataSource.getRepository(EngineSetMaterialization).find({ where: { engineSetId: In(engineSetIds), engineId }, select: ['engineSetId'] })).map((row) => row.engineSetId))
+      : new Set<string>();
+    const engineSetRoleIds = activeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_set' && assignment.scopeId && matchingEngineSetIds.has(assignment.scopeId))
+      .map((assignment) => assignment.roleId);
+    const activeRoleIds = Array.from(new Set([...directEngineRoleIds, ...engineSetRoleIds]));
+    if (activeRoleIds.length === 0) return [];
+
+    const broadPermissions = await dataSource.getRepository(RbacRolePermission).find({ where: { roleId: In(activeRoleIds) }, select: ['permissionId'] });
+    const overlap = Array.from(new Set(broadPermissions.map((permission) => permission.permissionId).filter((permission) => requestedPermissions.has(permission))));
+    return overlap.length > 0
+      ? [`A direct engine-wide assignment already grants: ${overlap.join(', ')}. This runtime-scoped assignment remains additive but does not narrow those permissions.`]
+      : [];
+  }
+
+  private async resolveRuntimeScopeEngineId(
+    dataSource: DataSource,
+    scopeType: ResourceType,
+    scopeId: string | null,
+    tenantId?: string | null,
+  ): Promise<string | null> {
+    if (scopeType === 'engine_runtime_resource') {
+      const resource = await dataSource.getRepository(RuntimeResource).findOne({ where: tenantScopedWhere({ id: scopeId || '', isActive: true }, tenantId), select: ['engineId'] });
+      return resource?.engineId || null;
+    }
+    if (scopeType === 'engine_runtime_resource_set') {
+      const set = await dataSource.getRepository(RuntimeResourceSet).findOne({ where: tenantOwnedWhere({ id: scopeId || '', isArchived: false }, tenantId), select: ['engineId'] });
+      return set?.engineId || null;
+    }
+    return null;
+  }
+
+  async removeRoleAssignment(id: string, removedById?: string): Promise<void> {
+    const dataSource = await getDataSource();
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const assignment = await assignmentRepo.findOne({ where: { id } });
+    if (!assignment) {
+      throw new Error('Role assignment not found');
+    }
+    const configWarningAssignment = assignment.source === 'config' && assignment.ownershipMode === 'config_warn';
+    if (assignment.source !== 'manual' && !configWarningAssignment) {
+      throw new Error('Only manual role assignments can be removed here');
+    }
+
+    if (configWarningAssignment) {
+      await dataSource.transaction(async (manager) => {
+        await manager.getRepository(ConfigRoleAssignmentOverride).upsert({
+          tenantId: assignment.tenantId, assignmentKey: assignment.assignmentKey, sourceRef: assignment.sourceRef || '',
+          removedAssignmentId: assignment.id, removedById: removedById || null, createdAt: Date.now(), updatedAt: Date.now(),
+        }, { conflictPaths: ['assignmentKey', 'sourceRef'] });
+        await manager.getRepository(RbacRoleAssignment).delete({ id });
+      });
+    } else await assignmentRepo.delete({ id });
+    await recordAuthzAudit(dataSource, {
+      tenantId: assignment.tenantId,
+      userId: removedById || null,
+      action: 'authz.role_assignment.delete',
+      resourceType: 'role_assignment',
+      resourceId: id,
+      details: {
+        assignmentId: id,
+        tenantId: assignment.tenantId,
+        assignedUserId: assignment.principalType === 'user' ? assignment.principalId : null,
+        roleId: assignment.roleId,
+        resourceType: assignment.scopeType,
+        resourceId: assignment.scopeId,
+        source: assignment.source,
+        configOverride: configWarningAssignment,
+      },
+    });
+  }
+
+  private async validateRolePermissions(scope: RoleScope, permissionIds: Permission[]): Promise<Permission[]> {
+    const catalogByKey = new Map((await this.getPermissionCatalog()).map((permission) => [permission.key, permission]));
+    const uniquePermissionIds = Array.from(new Set(permissionIds));
+
+    if (uniquePermissionIds.length === 0) {
+      throw new Error('At least one permission is required');
+    }
+
+    for (const permissionId of uniquePermissionIds) {
+      const permission = catalogByKey.get(permissionId);
+      if (!permission) {
+        throw new Error(`Unknown permission: ${permissionId}`);
+      }
+      if (permission.isArchived) {
+        throw new Error(`Permission ${permissionId} is archived`);
+      }
+      const validationError = rolePermissionValidationError(scope, permission);
+      if (validationError) throw new Error(validationError);
+    }
+
+    const dependencyError = rolePermissionDependencyError(uniquePermissionIds);
+    if (dependencyError) throw new Error(dependencyError);
+
+    return uniquePermissionIds;
+  }
+
+  private validateCustomPermissionKey(scope: ResourceType, key: string): void {
+    if (!/^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*){2,}$/.test(key)) {
+      throw new Error('Permission key must use lowercase colon-separated segments');
+    }
+    if (!key.startsWith(`${scope}:custom:`)) {
+      throw new Error(`Custom ${scope} permissions must start with ${scope}:custom:`);
+    }
+    if (PermissionCatalog.some((permission) => permission.key === key)) {
+      throw new Error('Permission key is reserved by the system catalog');
+    }
+  }
+
+  private async replaceRolePermissions(
+    manager: EntityManager,
+    roleId: string,
+    permissionIds: Permission[],
+    now: number
+  ): Promise<void> {
+    const rolePermissionRepo = manager.getRepository(RbacRolePermission);
+    await rolePermissionRepo.delete({ roleId });
+    await rolePermissionRepo.insert(permissionIds.map((permissionId) => ({
+      id: `${roleId}:${permissionId}`,
+      roleId,
+      permissionId,
+      createdAt: now,
+    })));
+  }
+
+  private normalizeAssignmentPrincipal(input: {
+    userId?: string;
+    principalType?: PrincipalType;
+    principalId?: string;
+  }): { principalType: PrincipalType; principalId: string } {
+    const principalType = input.principalType ?? 'user';
+    const principalId = input.principalId ?? input.userId;
+    if (!principalId) {
+      throw new Error('Role assignments require a principalId');
+    }
+    if (principalType === 'user' && input.userId && input.userId !== principalId) {
+      throw new Error('userId must match principalId for user role assignments');
+    }
+
+    return { principalType, principalId };
+  }
+
+  private async assertAssignablePrincipalExists(
+    dataSource: DataSource | EntityManager,
+    principal: { principalType: PrincipalType; principalId: string },
+    tenantId?: string | null,
+  ): Promise<void> {
+    if (principal.principalType === 'api_client') {
+      const client = await dataSource.getRepository(ApiClient).findOne({
+        where: { id: principal.principalId },
+        select: ['id', 'isActive'],
+      });
+      if (!client || !client.isActive) {
+        throw new Error('API client not found or inactive');
+      }
+      return;
+    }
+
+    if (principal.principalType === 'group') {
+      const group = await dataSource.getRepository(AuthzGroup).findOne({
+        where: tenantScopedWhere({ id: principal.principalId, isArchived: false }, tenantId),
+        select: ['id', 'isArchived'],
+      });
+      if (!group || group.isArchived) {
+        throw new Error('Group not found or archived');
+      }
+      return;
+    }
+
+    if (principal.principalType === 'service_account') {
+      const account = await dataSource.getRepository(ServiceAccount).findOne({
+        where: { id: principal.principalId },
+        select: ['id', 'isActive'],
+      });
+      if (!account || !account.isActive) {
+        throw new Error('Service account not found or inactive');
+      }
+      return;
+    }
+  }
+
+  private async assertMachinePrincipalCanReceiveRole(
+    dataSource: DataSource | EntityManager,
+    principal: { principalType: PrincipalType; principalId: string },
+    role: RbacRole
+  ): Promise<void> {
+    if (!MACHINE_PRINCIPAL_TYPES.has(principal.principalType)) {
+      return;
+    }
+
+    if (role.kind === 'system') {
+      if (MACHINE_ASSIGNABLE_SYSTEM_ROLE_IDS.has(role.id)) {
+        if (role.id === SYSTEM_ROLE_IDS.API_ENGINE_REGISTRAR && principal.principalType !== 'api_client') {
+          throw new Error('Role is assignable only to API client principals');
+        }
+        if (role.id === SYSTEM_ROLE_IDS.API_EXTERNAL_ENGINE_SYSTEM_REGISTRAR && principal.principalType !== 'api_client') {
+          throw new Error('Role is assignable only to API client principals');
+        }
+        return;
+      }
+      throw new Error('Role is not assignable to machine principals');
+    }
+
+    if (role.kind !== 'custom') {
+      throw new Error('Role is not assignable to machine principals');
+    }
+
+    const roleScope = role.scope as RoleScope;
+    if (roleScope === 'platform' && principal.principalType !== 'api_client') {
+      throw new Error('Platform machine roles are assignable only to API client principals');
+    }
+    const allowedPermissions = MACHINE_ASSIGNABLE_CUSTOM_ROLE_PERMISSIONS[roleScope];
+    if (!allowedPermissions) {
+      throw new Error('Role is not assignable to machine principals');
+    }
+
+    const rolePermissions = await dataSource.getRepository(RbacRolePermission).find({
+      where: { roleId: role.id },
+      select: ['permissionId'],
+    });
+    const unsafePermissions = rolePermissions
+      .map((permission) => permission.permissionId)
+      .filter((permission) => !allowedPermissions.has(permission));
+    if (unsafePermissions.length > 0) {
+      throw new Error(`Role is not assignable to machine principals; unsafe permissions: ${unsafePermissions.join(', ')}`);
+    }
+  }
+
+  private normalizeAssignmentScope(
+    roleScope: RoleScope,
+    requestedResourceType?: ResourceType,
+    requestedResourceId?: string | null
+  ): { resourceType: ResourceType; resourceId: string | null; scopeType: ResourceType; scopeId: string | null } {
+    const scopeType = requestedResourceType || roleScope;
+    const engineScopeTarget = scopeType === 'engine_set' || scopeType === 'engine_runtime_resource' || scopeType === 'engine_runtime_resource_set';
+    if (scopeType !== roleScope && !(roleScope === 'engine' && engineScopeTarget)) {
+      throw new Error(`Role scope ${roleScope} cannot be assigned to ${scopeType}`);
+    }
+
+    if (roleScope === 'platform') {
+      return { resourceType: 'platform', resourceId: null, scopeType: 'platform', scopeId: null };
+    }
+
+    if (!requestedResourceId) {
+      throw new Error(`${scopeType} role assignments require a resource ID`);
+    }
+
+    if (roleScope === 'engine' && engineScopeTarget) {
+      return { resourceType: 'engine', resourceId: null, scopeType, scopeId: requestedResourceId };
+    }
+
+    return { resourceType: roleScope, resourceId: requestedResourceId, scopeType, scopeId: requestedResourceId };
+  }
+
+  private async assertResourceExists(dataSource: DataSource | EntityManager, resourceType: ResourceType, resourceId: string | null, tenantId?: string | null): Promise<void> {
+    if (resourceType === 'platform') return;
+
+    if (resourceType === 'tenant') {
+      const normalizedTenantId = normalizeTenantId(tenantId);
+      if (!normalizedTenantId || normalizeTenantId(resourceId) !== normalizedTenantId) {
+        throw new Error('Tenant role assignments require the active tenant ID');
+      }
+      return;
+    }
+
+    if (resourceType === 'project') {
+      const project = await dataSource.getRepository(Project).findOne({
+        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
+        select: ['id'],
+      });
+      if (!project) {
+        throw new Error('Project not found');
+      }
+      return;
+    }
+
+    if (resourceType === 'engine') {
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: engineResourceWhere({ id: resourceId || '' }, tenantId),
+        select: ['id'],
+      });
+      if (!engine) {
+        throw new Error('Engine not found');
+      }
+      return;
+    }
+
+    if (resourceType === 'engine_set') {
+      const engineSet = await dataSource.getRepository(EngineSet).findOne({
+        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
+        select: ['id'],
+      });
+      if (!engineSet) {
+        throw new Error('Engine Set not found');
+      }
+      return;
+    }
+
+    if (resourceType === 'engine_runtime_resource') {
+      const runtimeResource = await dataSource.getRepository(RuntimeResource).findOne({
+        where: resolvedRuntimeResourceWhere({ id: resourceId || '', isActive: true }, tenantId),
+        select: ['id'],
+      });
+      if (!runtimeResource) throw new Error('Runtime resource not found, unresolved, or inactive');
+      return;
+    }
+
+    if (resourceType === 'engine_runtime_resource_set') {
+      const runtimeResourceSet = await dataSource.getRepository(RuntimeResourceSet).findOne({
+        where: tenantOwnedWhere({ id: resourceId || '', isArchived: false }, tenantId),
+        select: ['id'],
+      });
+      if (!runtimeResourceSet) throw new Error('Runtime Resource Set not found or archived');
+      return;
+    }
+
+    if (resourceType === 'external_engine_system') {
+      const externalSystem = await dataSource.getRepository(ExternalEngineSystem).findOne({
+        where: tenantScopedWhere({ id: resourceId || '' }, tenantId),
+        select: ['id', 'isActive'],
+      });
+      if (!externalSystem || !externalSystem.isActive) {
+        throw new Error('External engine system not found or inactive');
+      }
+      return;
+    }
+
+    if (!resourceId) {
+      throw new Error(`${resourceType} role assignments require a resource ID`);
+    }
+  }
+
+  private async assertRuntimeScopeEnabled(
+    dataSource: DataSource | EntityManager,
+    scopeType: ResourceType,
+    scopeId: string | null,
+    tenantId?: string | null,
+  ): Promise<void> {
+    if (scopeType !== 'engine_runtime_resource' && scopeType !== 'engine_runtime_resource_set') return;
+
+    const runtimeScope = scopeType === 'engine_runtime_resource'
+      ? await dataSource.getRepository(RuntimeResource).findOne({
+        where: resolvedRuntimeResourceWhere({ id: scopeId || '', isActive: true }, tenantId),
+        select: ['engineId'],
+      })
+      : await dataSource.getRepository(RuntimeResourceSet).findOne({
+        where: tenantOwnedWhere({ id: scopeId || '', isArchived: false }, tenantId),
+        select: ['engineId'],
+      });
+    if (!runtimeScope) throw new Error('Runtime resource scope not found');
+
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: engineResourceWhere({ id: runtimeScope.engineId }, tenantId),
+      select: ['id', 'runtimeAccessScope'],
+    });
+    if (!engine) throw new Error('Runtime resource engine not found');
+    if (engine.runtimeAccessScope !== 'resource_aware') {
+      throw new Error('Runtime resource assignments require an engine with resource-aware runtime access');
+    }
+  }
+
   /**
    * Check if user has a specific permission.
-   * 
+   *
    * Resolution order:
-   * 1. Check if platform admin (admin role = all permissions)
-   * 2. Check role-based permissions
-   * 3. Check explicit permission grants
+   * 1. Check scoped RBAC role assignments
+   * 2. Check explicit permission grants
    */
   async hasPermission(
     permission: Permission,
     context: PermissionContext
   ): Promise<boolean> {
-    const { userId, platformRole, projectRole, engineRole, resourceType, resourceId } = context;
+    const result = await this.evaluatePermission(permission, context);
+    return result.allowed;
+  }
 
-    // 1. Platform admin has all permissions
-    if (platformRole === 'admin') {
-      return true;
+  async evaluatePermission(
+    permission: Permission,
+    context: PermissionContext
+  ): Promise<BasePermissionEvaluation> {
+    const { tenantId, resourceType, resourceId } = context;
+    const principal = this.resolvePermissionPrincipal(context);
+    const candidatePermissions = compatiblePermissionCandidates(permission);
+    const sources: PermissionEvaluationSource[] = [];
+
+    for (const candidatePermission of candidatePermissions) {
+      const roleAssignmentSources = await this.getRoleAssignmentPermissionSources(
+        principal,
+        candidatePermission,
+        resourceType,
+        resourceId,
+        tenantId
+      );
+      if (roleAssignmentSources.length > 0) {
+        return {
+          allowed: true,
+          reason: `role-assignment:${roleAssignmentSources[0].roleId}`,
+          sources: roleAssignmentSources,
+        };
+      }
     }
 
-    // 2. Check role-based permissions
-    if (this.roleHasPermission(permission, { platformRole, projectRole, engineRole })) {
-      return true;
+    if (principal.principalType === 'user') {
+      for (const candidatePermission of candidatePermissions) {
+        if (await this.hasExplicitGrant(principal.principalId, candidatePermission, resourceType, resourceId, tenantId)) {
+          return {
+            allowed: true,
+            reason: 'grant:explicit',
+            sources: [{ type: 'explicit-grant', permission: candidatePermission }],
+          };
+        }
+      }
     }
 
-    // 3. Check explicit grants
-    return this.hasExplicitGrant(userId, permission, resourceType, resourceId);
+    return { allowed: false, reason: 'no-permission', sources: [] };
+  }
+
+  async getCurrentUserPermissions(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
+    const dataSource = await getDataSource();
+    const generatedAt = Date.now();
+    const projectIds = await this.getKnownProjectIds(dataSource, userId, tenantId);
+    const engineIds = await this.getKnownEngineIds(dataSource, userId, tenantId);
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+
+    return {
+      userId,
+      platform: await this.evaluatePermissionSet(userId, 'platform', undefined, tenantId),
+      projects: await Promise.all(projectIds.map(async (projectId) => ({
+        resourceId: projectId,
+        permissions: await this.evaluatePermissionSet(userId, 'project', projectId, tenantId),
+      }))),
+      engines: await Promise.all(engineIds.map(async (engineId) => {
+        const [permissions, runtimePermissions] = await Promise.all([
+          this.evaluatePermissionSet(userId, 'engine', engineId, tenantId),
+          this.getRuntimeNavigationPermissions(dataSource, userId, groupIds, tenantId, engineId),
+        ]);
+        return { resourceId: engineId, permissions, runtimePermissions };
+      })),
+      authorizationVersion: await this.getAuthorizationVersion(dataSource, {
+        userId,
+        tenantId,
+        projectIds,
+        engineIds,
+      }),
+      generatedAt,
+    };
+  }
+
+  async getKnownProjectIdsForUser(userId: string, tenantId?: string | null): Promise<string[]> {
+    const dataSource = await getDataSource();
+    return this.getKnownProjectIds(dataSource, userId, tenantId);
+  }
+
+  async getKnownEngineIdsForUser(userId: string, tenantId?: string | null): Promise<string[]> {
+    const dataSource = await getDataSource();
+    return this.getKnownEngineIds(dataSource, userId, tenantId);
   }
 
   /**
-   * Check if a role implicitly grants a permission
+   * Return only a coarse runtime-navigation capability for an engine. It is
+   * intentionally derived without serializing runtime resource names, ids, or
+   * tenant resolution data; collection routes remain the enforcement point.
    */
-  roleHasPermission(
+  private async getRuntimeNavigationPermissions(
+    dataSource: DataSource,
+    userId: string,
+    groupIds: string[],
+    tenantId: string | null | undefined,
+    engineId: string,
+  ): Promise<Permission[]> {
+    const now = Date.now();
+    const permission = EnginePermissions.INSTANCE_VIEW;
+    const candidatePermissions = compatiblePermissionCandidates(permission);
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+
+    const directAssignments = assignmentRepo.createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = assignment.scopeId')
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine_runtime_resource' })
+      .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('rolePermission.permissionId IN (:...permissions)', { permissions: candidatePermissions })
+      .andWhere('runtimeResource.engineId = :engineId', { engineId })
+      .andWhere('runtimeResource.isActive = :isActive', { isActive: true })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(directAssignments, 'assignment', userId, groupIds);
+    addTenantScopeFilter(directAssignments, 'assignment', tenantId);
+    addTenantScopeFilter(directAssignments, 'role', tenantId);
+    addTenantScopeFilter(directAssignments, 'runtimeResource', tenantId);
+
+    const resourceSetAssignments = assignmentRepo.createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .innerJoin(RuntimeResourceSet, 'runtimeResourceSet', 'runtimeResourceSet.id = assignment.scopeId')
+      .innerJoin(RuntimeResourceSetMaterialization, 'runtimeMaterialization', 'runtimeMaterialization.runtimeResourceSetId = assignment.scopeId')
+      .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = runtimeMaterialization.runtimeResourceId')
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine_runtime_resource_set' })
+      .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('rolePermission.permissionId IN (:...permissions)', { permissions: candidatePermissions })
+      .andWhere('runtimeResourceSet.engineId = :engineId', { engineId })
+      .andWhere('runtimeResource.isActive = :isActive', { isActive: true })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(resourceSetAssignments, 'assignment', userId, groupIds);
+    addTenantScopeFilter(resourceSetAssignments, 'assignment', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'role', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'runtimeResourceSet', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'runtimeMaterialization', tenantId);
+    addTenantScopeFilter(resourceSetAssignments, 'runtimeResource', tenantId);
+
+    const explicitGrants = dataSource.getRepository(PermissionGrant)
+      .createQueryBuilder('grant')
+      .innerJoin(RuntimeResource, 'runtimeResource', 'runtimeResource.id = grant.resourceId')
+      .where('grant.userId = :userId', { userId })
+      .andWhere('grant.resourceType = :resourceType', { resourceType: 'engine_runtime_resource' })
+      .andWhere('grant.permission IN (:...permissions)', { permissions: candidatePermissions })
+      .andWhere('runtimeResource.engineId = :engineId', { engineId })
+      .andWhere('runtimeResource.isActive = :isActive', { isActive: true })
+      .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now });
+    addTenantScopeFilter(explicitGrants, 'grant', tenantId);
+    addTenantScopeFilter(explicitGrants, 'runtimeResource', tenantId);
+
+    const [directCount, setCount, explicitGrantCount] = await Promise.all([
+      directAssignments.getCount(), resourceSetAssignments.getCount(), explicitGrants.getCount(),
+    ]);
+    return directCount > 0 || setCount > 0 || explicitGrantCount > 0 ? [permission] : [];
+  }
+
+  /**
+   * Returns the runtime inventory rows a principal may act on. This is used
+   * only for resource-aware engines; callers must use engine query pushdown
+   * where available and must not substitute an unbounded post-filter.
+   */
+  async getVisibleRuntimeResources(input: {
+    userId: string;
+    tenantId?: string | null;
+    engineId: string;
+    resourceKind: 'process_definition' | 'decision_definition';
+    permission: Permission;
+    limit?: number;
+  }): Promise<RuntimeResource[]> {
+    const maxRows = input.limit ?? 500;
+    if (!Number.isInteger(maxRows) || maxRows < 1 || maxRows > 5_000) {
+      throw new Error('Runtime resource authorization limit must be between 1 and 5000');
+    }
+    const dataSource = await getDataSource();
+    const rows = await dataSource.getRepository(RuntimeResource).find({
+      where: resolvedRuntimeResourceWhere({
+        engineId: input.engineId,
+        resourceKind: input.resourceKind,
+        isActive: true,
+      }, input.tenantId),
+      take: maxRows + 1,
+      order: { resourceKey: 'ASC', id: 'ASC' },
+    });
+    if (rows.length > maxRows) {
+      throw new Error('Runtime resource authorization requires engine query pushdown or a bounded result set');
+    }
+    const decisions = await Promise.all(rows.map(async (resource) => ({
+      resource,
+      allowed: (await this.evaluatePermission(input.permission, {
+        userId: input.userId,
+        tenantId: input.tenantId,
+        resourceType: 'engine_runtime_resource',
+        resourceId: resource.id,
+      })).allowed,
+    })));
+    return decisions.filter((decision) => decision.allowed).map((decision) => decision.resource);
+  }
+
+  private async evaluatePermissionSet(
+    userId: string,
+    scope: ResourceType,
+    resourceId?: string,
+    tenantId?: string | null
+  ): Promise<Permission[]> {
+    const permissions = (await this.getPermissionCatalog())
+      .filter((permission) => permission.scope === scope)
+      .map((permission) => permission.key);
+    const allowed = await Promise.all(permissions.map(async (permission) => ({
+      permission,
+      allowed: (await this.evaluatePermission(permission, {
+        userId,
+        tenantId,
+        resourceType: scope,
+        resourceId,
+      })).allowed,
+    })));
+
+    return allowed
+      .filter((entry) => entry.allowed)
+      .map((entry) => entry.permission)
+      .sort();
+  }
+
+  private async getKnownProjectIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
+    const ids = new Set<string>();
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    const explicitGrantQb = dataSource.getRepository(PermissionGrant)
+      .createQueryBuilder('grant')
+      .select(['grant.resourceId'])
+      .where('grant.userId = :userId', { userId })
+      .andWhere('grant.resourceType = :resourceType', { resourceType: 'project' })
+      .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now: Date.now() });
+    addTenantScopeFilter(explicitGrantQb, 'grant', tenantId);
+    const explicitGrants = await explicitGrantQb.getMany();
+    const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
+    explicitGrants.forEach((grant) => {
+      if (grant.resourceId) ids.add(grant.resourceId);
+    });
+
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
+    const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.scopeId'])
+      .where('1 = 1')
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'project' })
+      .andWhere('assignment.scopeId IS NOT NULL')
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
+    const assignments = await assignmentQb.getMany();
+    assignments.forEach((assignment) => {
+      const projectId = assignment.scopeId;
+      if (projectId) ids.add(projectId);
+    });
+
+    if (hasTenantAssignment && normalizedTenantId) {
+      const projects = await dataSource.getRepository(Project).find({
+        where: tenantOwnedWhere({}, normalizedTenantId),
+        select: ['id'],
+      });
+      projects.forEach((project) => ids.add(project.id));
+    }
+
+    if (hasGlobalExplicitGrant) {
+      const projects = await dataSource.getRepository(Project).find({
+        where: normalizedTenantId
+          ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }]
+          : undefined,
+        select: ['id'],
+      });
+      projects.forEach((project) => ids.add(project.id));
+    }
+
+    if (!normalizedTenantId || ids.size === 0) {
+      return Array.from(ids).sort();
+    }
+    const visibleProjects = await dataSource.getRepository(Project).find({
+      where: [
+        { id: In(Array.from(ids)), tenantId: normalizedTenantId },
+        { id: In(Array.from(ids)), tenantId: IsNull() },
+      ],
+      select: ['id'],
+    });
+    return visibleProjects.map((project) => project.id).sort();
+  }
+
+  private async getKnownEngineIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
+    const ids = new Set<string>();
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    const explicitGrantQb = dataSource.getRepository(PermissionGrant)
+      .createQueryBuilder('grant')
+      .select(['grant.resourceId'])
+      .where('grant.userId = :userId', { userId })
+      .andWhere('grant.resourceType = :resourceType', { resourceType: 'engine' })
+      .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now: Date.now() });
+    addTenantScopeFilter(explicitGrantQb, 'grant', tenantId);
+    const explicitGrants = await explicitGrantQb.getMany();
+    const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
+    explicitGrants.forEach((grant) => {
+      if (grant.resourceId) ids.add(grant.resourceId);
+    });
+
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
+    const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.scopeId'])
+      .where('1 = 1')
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
+    const assignments = await assignmentQb.getMany();
+    const hasGlobalEngineAssignment = assignments.some((assignment) => assignment.scopeId === null);
+    assignments.forEach((assignment) => {
+      const engineId = assignment.scopeId;
+      if (engineId) ids.add(engineId);
+    });
+
+    const engineSetAssignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.scopeId'])
+      .where('assignment.scopeType = :scopeType', { scopeType: 'engine_set' })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(engineSetAssignmentQb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(engineSetAssignmentQb, 'assignment', tenantId);
+    const engineSetAssignments = await engineSetAssignmentQb.getMany();
+    const engineSetIds = Array.from(new Set(engineSetAssignments.map((assignment) => assignment.scopeId).filter((id): id is string => Boolean(id))));
+    if (engineSetIds.length > 0) {
+      const materializations = await dataSource.getRepository(EngineSetMaterialization).find({
+        where: normalizedTenantId
+          ? [
+            { engineSetId: In(engineSetIds), tenantId: normalizedTenantId },
+            { engineSetId: In(engineSetIds), tenantId: IsNull() },
+          ]
+          : { engineSetId: In(engineSetIds) },
+        select: ['engineId'],
+      });
+      materializations.forEach((materialization) => ids.add(materialization.engineId));
+    }
+
+    // Runtime-resource assignments are not engine-wide grants, but the user
+    // must still be able to discover the containing central engine before a
+    // later route filters its process/decision resources.
+    const runtimeAssignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.scopeType', 'assignment.scopeId'])
+      .where('assignment.scopeType IN (:...scopeTypes)', {
+        scopeTypes: ['engine_runtime_resource', 'engine_runtime_resource_set'],
+      })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(runtimeAssignmentQb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(runtimeAssignmentQb, 'assignment', tenantId);
+    const runtimeAssignments = await runtimeAssignmentQb.getMany();
+    const runtimeResourceIds = runtimeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_runtime_resource')
+      .map((assignment) => assignment.scopeId)
+      .filter((id): id is string => Boolean(id));
+    const runtimeSetIds = runtimeAssignments
+      .filter((assignment) => assignment.scopeType === 'engine_runtime_resource_set')
+      .map((assignment) => assignment.scopeId)
+      .filter((id): id is string => Boolean(id));
+    if (runtimeSetIds.length > 0) {
+      const materializations = await dataSource.getRepository(RuntimeResourceSetMaterialization).find({
+        where: normalizedTenantId
+          ? [
+            { runtimeResourceSetId: In(runtimeSetIds), tenantId: normalizedTenantId },
+            { runtimeResourceSetId: In(runtimeSetIds), tenantId: IsNull() },
+          ]
+          : { runtimeResourceSetId: In(runtimeSetIds) },
+        select: ['runtimeResourceId'],
+      });
+      runtimeResourceIds.push(...materializations.map((materialization) => materialization.runtimeResourceId));
+    }
+    if (runtimeResourceIds.length > 0) {
+      const runtimeResources = await dataSource.getRepository(RuntimeResource).find({
+        where: resolvedRuntimeResourceWhere({
+          id: In(Array.from(new Set(runtimeResourceIds))),
+          isActive: true,
+        }, normalizedTenantId),
+        select: ['engineId'],
+      });
+      runtimeResources.forEach((runtimeResource) => ids.add(runtimeResource.engineId));
+    }
+
+    if (hasTenantAssignment && normalizedTenantId) {
+      const [dedicatedEngines, sharedResources] = await Promise.all([
+        dataSource.getRepository(Engine).find({
+          where: tenantOwnedWhere({ tenancyMode: 'dedicated' }, normalizedTenantId),
+          select: ['id'],
+        }),
+        dataSource.getRepository(RuntimeResource).find({
+          where: resolvedRuntimeResourceWhere({ isActive: true }, normalizedTenantId),
+          select: ['engineId'],
+        }),
+      ]);
+      dedicatedEngines.forEach((engine) => ids.add(engine.id));
+      sharedResources.forEach((resource) => ids.add(resource.engineId));
+    }
+
+    if (hasGlobalEngineAssignment || hasGlobalExplicitGrant) {
+      const engines = await dataSource.getRepository(Engine).find({
+        where: engineResourceWhere({}, normalizedTenantId),
+        select: ['id'],
+      });
+      engines.forEach((engine) => ids.add(engine.id));
+    }
+
+    if (ids.size === 0) return [];
+    const visibleEngines = await dataSource.getRepository(Engine).find({
+      where: engineResourceWhere({ id: In(Array.from(ids)) }, normalizedTenantId),
+      select: ['id'],
+    });
+    return visibleEngines.map((engine) => engine.id).sort();
+  }
+
+  private async getUserGroupIdsForEvaluation(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
+    const now = Date.now();
+    const qb = dataSource.getRepository(AuthzGroupMembership)
+      .createQueryBuilder('membership')
+      .innerJoin(AuthzGroup, 'authzGroup', 'authzGroup.id = membership.groupId')
+      .where('membership.userId = :userId', { userId })
+      .andWhere('(membership.expiresAt IS NULL OR membership.expiresAt > :now)', { now })
+      .andWhere('authzGroup.isArchived = :isArchived', { isArchived: false });
+    addTenantScopeFilter(qb, 'membership', tenantId);
+    addTenantScopeFilter(qb, 'authzGroup', tenantId);
+
+    const memberships = await qb.getMany();
+    return Array.from(new Set(memberships.map((membership) => membership.groupId))).sort();
+  }
+
+  private addPrincipalAssignmentFilter(
+    qb: { andWhere: (...args: any[]) => any },
+    alias: string,
+    userId: string,
+    groupIds: string[]
+  ): void {
+    if (groupIds.length > 0) {
+      qb.andWhere(
+        `((${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId) OR ` +
+        `(${alias}.principalType = :groupPrincipalType AND ${alias}.principalId IN (:...groupIds)))`,
+        { userPrincipalType: 'user', groupPrincipalType: 'group', userId, groupIds }
+      );
+      return;
+    }
+
+    qb.andWhere(
+      `(${alias}.principalType = :userPrincipalType AND ${alias}.principalId = :userId)`,
+      { userPrincipalType: 'user', userId }
+    );
+  }
+
+  private async hasActiveTenantAssignment(
+    dataSource: DataSource,
+    userId: string,
+    groupIds: string[],
+    tenantId?: string | null,
+  ): Promise<boolean> {
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (!normalizedTenantId) return false;
+    const qb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.id'])
+      .where('assignment.scopeType = :tenantScope', { tenantScope: 'tenant' })
+      .andWhere('assignment.scopeId = :tenantScopeId', { tenantScopeId: normalizedTenantId })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(qb, 'assignment', normalizedTenantId);
+    return (await qb.getMany()).length > 0;
+  }
+
+  private async getAuthorizationVersion(
+    dataSource: DataSource,
+    input: {
+      userId: string;
+      tenantId?: string | null;
+      projectIds: string[];
+      engineIds: string[];
+    }
+  ): Promise<string> {
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, input.userId, input.tenantId).catch(() => []);
+    const normalizedTenantId = normalizeTenantId(input.tenantId);
+    const projectIds = [...input.projectIds].sort();
+    const engineIds = [...input.engineIds].sort();
+
+    const timestamps = await Promise.all([
+      this.maxEntityTimestamp(dataSource, User, 'user', ['createdAt', 'updatedAt'], (qb) => {
+        qb.where('user.id = :userId', { userId: input.userId });
+      }),
+      this.maxEntityTimestamp(dataSource, PermissionGrant, 'grant', ['createdAt'], (qb) => {
+        qb.where('grant.userId = :userId', { userId: input.userId });
+        addTenantScopeFilter(qb, 'grant', input.tenantId);
+      }),
+      this.maxEntityTimestamp(dataSource, AuthzGroupMembership, 'membership', ['createdAt', 'updatedAt'], (qb) => {
+        qb.where('membership.userId = :userId', { userId: input.userId });
+        addTenantScopeFilter(qb, 'membership', input.tenantId);
+      }),
+      this.maxEntityTimestamp(dataSource, AuthzGroup, 'authzGroup', ['createdAt', 'updatedAt'], (qb) => {
+        if (groupIds.length > 0) {
+          qb.where('authzGroup.id IN (:...groupIds)', { groupIds });
+        } else {
+          qb.where('1 = 0');
+        }
+        addTenantScopeFilter(qb, 'authzGroup', input.tenantId);
+      }),
+      this.maxEntityTimestamp(dataSource, RbacRoleAssignment, 'assignment', ['createdAt', 'updatedAt', 'lastSeenAt'], (qb) => {
+        this.addPrincipalAssignmentFilter(qb, 'assignment', input.userId, groupIds);
+        addTenantScopeFilter(qb, 'assignment', input.tenantId);
+      }),
+      this.maxEntityTimestamp(dataSource, RbacRole, 'role', ['createdAt', 'updatedAt'], (qb) => {
+        addTenantScopeFilter(qb, 'role', input.tenantId);
+      }),
+      this.maxEntityTimestamp(dataSource, RbacRolePermission, 'rolePermission', ['createdAt']),
+      this.maxEntityTimestamp(dataSource, RbacPermission, 'permission', ['createdAt', 'updatedAt']),
+      this.maxEntityTimestamp(dataSource, Project, 'project', ['createdAt', 'updatedAt'], (qb) => {
+        if (projectIds.length > 0) {
+          qb.where('project.id IN (:...projectIds)', { projectIds });
+          addTenantScopeFilter(qb, 'project', input.tenantId);
+        } else {
+          qb.where('1 = 0');
+        }
+      }),
+      this.maxEntityTimestamp(dataSource, Engine, 'engine', ['createdAt', 'updatedAt', 'lastExternalSyncAt', 'externalUpdatedAt'], (qb) => {
+        if (engineIds.length > 0) {
+          qb.where('engine.id IN (:...engineIds)', { engineIds });
+          addTenantScopeFilter(qb, 'engine', input.tenantId);
+        } else {
+          qb.where('1 = 0');
+        }
+      }),
+      this.maxEntityTimestamp(dataSource, EngineSet, 'engineSet', ['createdAt', 'updatedAt', 'lastMaterializedAt'], (qb) => {
+        addTenantScopeFilter(qb, 'engineSet', input.tenantId);
+      }),
+      this.maxEntityTimestamp(dataSource, EngineSetMaterialization, 'materialization', ['createdAt', 'updatedAt', 'lastSeenAt'], (qb) => {
+        if (engineIds.length > 0) {
+          qb.where('materialization.engineId IN (:...engineIds)', { engineIds });
+          addTenantScopeFilter(qb, 'materialization', input.tenantId);
+        } else {
+          qb.where('1 = 0');
+        }
+      }),
+      this.maxEntityTimestamp(dataSource, AuthzPolicy, 'policy', ['createdAt', 'updatedAt'], (qb) => {
+        addTenantScopeFilter(qb, 'policy', input.tenantId);
+      }),
+    ]);
+
+    const maxTimestamp = Math.max(0, ...timestamps);
+    const fingerprint = stableVersionHash(JSON.stringify({
+      tenantId: normalizedTenantId,
+      userId: input.userId,
+      groups: groupIds,
+      projects: projectIds,
+      engines: engineIds,
+    }));
+    return `authz:${maxTimestamp}:${fingerprint}`;
+  }
+
+  private async maxEntityTimestamp(
+    dataSource: DataSource,
+    entity: unknown,
+    alias: string,
+    columns: string[],
+    configure?: (qb: {
+      where: (...args: any[]) => any;
+      andWhere: (...args: any[]) => any;
+    }) => void
+  ): Promise<number> {
+    try {
+      const values = await Promise.all(columns.map(async (column) => {
+        const qb = dataSource.getRepository(entity as any)
+          .createQueryBuilder(alias)
+          .select(`MAX(${alias}.${column})`, 'value');
+        configure?.(qb);
+        const row = await qb.getRawOne();
+        const value = Number(row?.value ?? 0);
+        return Number.isFinite(value) ? value : 0;
+      }));
+      return Math.max(0, ...values);
+    } catch {
+      return 0;
+    }
+  }
+
+  private resolvePermissionPrincipal(context: PermissionContext): { principalType: PrincipalType; principalId: string } {
+    const principalType = context.principalType ?? 'user';
+    const principalId = context.principalId ?? context.userId;
+    if (!principalId) {
+      throw new Error('Permission checks require a principalId');
+    }
+    if (principalType === 'user' && context.userId && context.userId !== principalId) {
+      throw new Error('userId must match principalId for user permission checks');
+    }
+    return { principalType, principalId };
+  }
+
+  private async addPermissionPrincipalAssignmentFilter(
+    dataSource: DataSource,
+    qb: { andWhere: (...args: any[]) => any },
+    alias: string,
+    principal: { principalType: PrincipalType; principalId: string },
+    tenantId?: string | null
+  ): Promise<void> {
+    if (principal.principalType === 'user') {
+      const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, principal.principalId, tenantId);
+      this.addPrincipalAssignmentFilter(qb, alias, principal.principalId, groupIds);
+      return;
+    }
+
+    qb.andWhere(
+      `(${alias}.principalType = :principalType AND ${alias}.principalId = :principalId)`,
+      { principalType: principal.principalType, principalId: principal.principalId }
+    );
+  }
+
+  private async resolveTenantInheritanceScope(
+    dataSource: DataSource,
     permission: Permission,
-    roles: { platformRole?: string; projectRole?: string; engineRole?: string }
-  ): boolean {
-    const { platformRole, projectRole, engineRole } = roles;
+    resourceType: ResourceType | undefined,
+    resourceId: string | undefined,
+    tenantId: string | null | undefined,
+    runtimeResource: RuntimeResource | null,
+  ): Promise<string | null> {
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (!normalizedTenantId || !resourceType || !resourceId || !isTenantSafePermission(permission)) return null;
+    if (resourceType === 'tenant') {
+      return normalizeTenantId(resourceId) === normalizedTenantId ? normalizedTenantId : null;
+    }
+    if (resourceType === 'engine_runtime_resource') {
+      return runtimeResource && normalizeTenantId(runtimeResource.tenantId) === normalizedTenantId
+        ? normalizedTenantId
+        : null;
+    }
+    if (resourceType === 'project') {
+      const project = await dataSource.getRepository(Project).findOne({
+        where: tenantOwnedWhere({ id: resourceId }, normalizedTenantId),
+        select: ['id'],
+      });
+      return project ? normalizedTenantId : null;
+    }
+    if (resourceType === 'engine') {
+      const engine = await dataSource.getRepository(Engine).findOne({
+        where: tenantOwnedWhere({ id: resourceId, tenancyMode: 'dedicated' }, normalizedTenantId),
+        select: ['id'],
+      });
+      return engine ? normalizedTenantId : null;
+    }
+    if (resourceType === 'engine_runtime_resource_set') {
+      const set = await dataSource.getRepository(RuntimeResourceSet).findOne({
+        where: tenantOwnedWhere({ id: resourceId, isArchived: false }, normalizedTenantId),
+        select: ['id'],
+      });
+      return set ? normalizedTenantId : null;
+    }
+    return null;
+  }
 
-    // Check platform role permissions
-    if (platformRole && PlatformRolePermissions[platformRole]?.includes(permission as any)) {
-      return true;
+  private async getRoleAssignmentPermissionSources(
+    principal: { principalType: PrincipalType; principalId: string },
+    permission: Permission,
+    resourceType?: ResourceType,
+    resourceId?: string,
+    tenantId?: string | null
+  ): Promise<PermissionEvaluationSource[]> {
+    const dataSource = await getDataSource();
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const now = Date.now();
+    const runtimeResource = resourceType === 'engine_runtime_resource' && resourceId
+      ? await dataSource.getRepository(RuntimeResource).findOne({
+        where: resolvedRuntimeResourceWhere({ id: resourceId, isActive: true }, tenantId),
+      })
+      : null;
+    if (resourceType === 'engine_runtime_resource' && resourceId && (!runtimeResource || !runtimeResource.tenantId)) {
+      return [];
+    }
+    const runtimeEngine = runtimeResource
+      ? await dataSource.getRepository(Engine).findOne({ where: { id: runtimeResource.engineId } })
+      : null;
+    if (runtimeResource && !runtimeEngine) return [];
+    const tenantInheritanceScope = await this.resolveTenantInheritanceScope(
+      dataSource,
+      permission,
+      resourceType,
+      resourceId,
+      tenantId,
+      runtimeResource,
+    );
+    const runtimeTenantResolution: PermissionEvaluationSource['runtimeTenantResolution'] = runtimeResource && runtimeEngine
+      ? {
+          tenantId: runtimeResource.tenantId!,
+          status: 'resolved',
+          mappingId: runtimeResource.tenantMappingId || null,
+          mappingVersion: Number(runtimeResource.tenantMappingVersion || 0),
+          code: typeof parseJsonRecord(runtimeResource.tenantResolutionDetailsJson)?.code === 'string'
+            ? String(parseJsonRecord(runtimeResource.tenantResolutionDetailsJson)?.code)
+            : null,
+          engineTenancyMode: runtimeEngine.tenancyMode === 'shared' ? 'shared' : 'dedicated',
+        }
+      : null;
+    const qb = assignmentRepo.createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .where('1 = 1')
+      .andWhere('rolePermission.permissionId = :permission', { permission })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    await this.addPermissionPrincipalAssignmentFilter(dataSource, qb, 'assignment', principal, tenantId);
+    addTenantScopeFilter(qb, 'assignment', tenantId);
+    addTenantScopeFilter(qb, 'role', tenantId);
+
+    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource && runtimeEngine) {
+      const engineScopeClause = runtimeEngine.tenancyMode === 'shared'
+        ? ''
+        : ' OR (assignment.scopeType = :engineScope AND (assignment.scopeId = :engineId OR assignment.scopeId IS NULL))';
+      const tenantScopeClause = tenantInheritanceScope
+        ? ' OR (assignment.scopeType = :tenantScope AND assignment.scopeId = :tenantScopeId)'
+        : '';
+      qb.andWhere(
+        `((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId)${engineScopeClause}${tenantScopeClause})`,
+        {
+          resourceType,
+          resourceId,
+          engineScope: 'engine',
+          engineId: runtimeResource.engineId,
+          tenantScope: 'tenant',
+          tenantScopeId: tenantInheritanceScope,
+        }
+      );
+    } else if (resourceType && resourceId) {
+      const tenantScopeClause = tenantInheritanceScope
+        ? ' OR (assignment.scopeType = :tenantScope AND assignment.scopeId = :tenantScopeId)'
+        : '';
+      qb.andWhere(
+        '((assignment.scopeType = :resourceType AND assignment.scopeId = :resourceId) OR ' +
+        `(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL)${tenantScopeClause})`,
+        {
+          resourceType,
+          resourceId,
+          tenantScope: 'tenant',
+          tenantScopeId: tenantInheritanceScope,
+        }
+      );
+    } else if (resourceType) {
+      qb.andWhere(
+        '(assignment.scopeType = :resourceType AND assignment.scopeId IS NULL)',
+        { resourceType }
+      );
+    } else {
+      qb.andWhere('(assignment.scopeType = :platform AND assignment.scopeId IS NULL)', { platform: 'platform' });
     }
 
-    // Check project role permissions
-    if (projectRole && ProjectRolePermissions[projectRole]?.includes(permission as ProjectPermission)) {
-      return true;
+    const assignments = await qb.getMany();
+    const directSources: PermissionEvaluationSource[] = assignments.map((assignment) => ({
+      type: 'role-assignment' as const,
+      assignmentId: assignment.id,
+      roleId: assignment.roleId,
+      principalType: assignment.principalType as PrincipalType,
+      principalId: assignment.principalId!,
+      source: assignment.source,
+      sourceRef: assignment.sourceRef,
+      tenantId: assignment.tenantId,
+      expiresAt: assignment.expiresAt == null ? null : Number(assignment.expiresAt),
+      scopeType: assignment.scopeType as ResourceType | null,
+      scopeId: assignment.scopeId,
+      runtimeTenantResolution,
+      configBundle: configBundleLineageForAssignment(assignment),
+    }));
+
+    if (resourceType === 'engine_runtime_resource' && resourceId && runtimeResource && runtimeEngine) {
+      const runtimeSetQb = assignmentRepo.createQueryBuilder('assignment')
+        .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+        .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+        .innerJoin(RuntimeResourceSetMaterialization, 'runtimeMaterialization', 'runtimeMaterialization.runtimeResourceSetId = assignment.scopeId AND runtimeMaterialization.runtimeResourceId = :resourceId', { resourceId })
+        .where('rolePermission.permissionId = :permission', { permission })
+        .andWhere('role.isArchived = :isArchived', { isArchived: false })
+        .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+        .andWhere('assignment.scopeType = :runtimeSetScope', { runtimeSetScope: 'engine_runtime_resource_set' })
+        .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+      await this.addPermissionPrincipalAssignmentFilter(dataSource, runtimeSetQb, 'assignment', principal, tenantId);
+      addTenantScopeFilter(runtimeSetQb, 'assignment', tenantId);
+      addTenantScopeFilter(runtimeSetQb, 'role', tenantId);
+      addTenantScopeFilter(runtimeSetQb, 'runtimeMaterialization', tenantId);
+
+      const engineSetQb = runtimeEngine.tenancyMode === 'shared' ? null : assignmentRepo.createQueryBuilder('assignment')
+        .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+        .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+        .innerJoin(EngineSetMaterialization, 'engineMaterialization', 'engineMaterialization.engineSetId = assignment.scopeId AND engineMaterialization.engineId = :engineId', { engineId: runtimeResource.engineId })
+        .where('rolePermission.permissionId = :permission', { permission })
+        .andWhere('role.isArchived = :isArchived', { isArchived: false })
+        .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+        .andWhere('assignment.scopeType = :engineSetScope', { engineSetScope: 'engine_set' })
+        .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+      if (engineSetQb) {
+        await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
+        addTenantScopeFilter(engineSetQb, 'assignment', tenantId);
+        addTenantScopeFilter(engineSetQb, 'role', tenantId);
+        addTenantScopeFilter(engineSetQb, 'engineMaterialization', tenantId);
+      }
+      const [runtimeSetAssignments, engineSetAssignments] = await Promise.all([
+        runtimeSetQb.getMany(),
+        engineSetQb ? engineSetQb.getMany() : Promise.resolve([]),
+      ]);
+      const inheritedSources: PermissionEvaluationSource[] = [...runtimeSetAssignments, ...engineSetAssignments].map((assignment) => ({
+        type: 'role-assignment' as const, assignmentId: assignment.id, roleId: assignment.roleId,
+        principalType: assignment.principalType as PrincipalType, principalId: assignment.principalId!, source: assignment.source,
+        sourceRef: assignment.sourceRef,
+        tenantId: assignment.tenantId,
+        expiresAt: assignment.expiresAt == null ? null : Number(assignment.expiresAt),
+        scopeType: assignment.scopeType as ResourceType | null, scopeId: assignment.scopeId,
+        runtimeTenantResolution,
+        configBundle: configBundleLineageForAssignment(assignment),
+      }));
+      const shadowingSources = annotateRuntimeGrantShadowing([...directSources, ...inheritedSources]);
+      const groupLineageSources = await this.attachGroupLineage(dataSource, shadowingSources, principal, tenantId);
+      return this.attachConfigBundleLineage(dataSource, groupLineageSources, tenantId);
     }
 
-    // Check engine role permissions
-    if (engineRole && EngineRolePermissions[engineRole]?.includes(permission as EnginePermission)) {
-      return true;
+    if (resourceType !== 'engine' || !resourceId) {
+      const groupLineageSources = await this.attachGroupLineage(dataSource, directSources, principal, tenantId);
+      return this.attachConfigBundleLineage(dataSource, groupLineageSources, tenantId);
     }
 
-    return false;
+    const engineSetQb = assignmentRepo.createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .innerJoin(EngineSetMaterialization, 'materialization', 'materialization.engineSetId = assignment.scopeId AND materialization.engineId = :engineId', { engineId: resourceId })
+      .where('1 = 1')
+      .andWhere('rolePermission.permissionId = :permission', { permission })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('role.scope = :roleScope', { roleScope: 'engine' })
+      .andWhere('assignment.scopeType = :engineSetScopeType', { engineSetScopeType: 'engine_set' })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    await this.addPermissionPrincipalAssignmentFilter(dataSource, engineSetQb, 'assignment', principal, tenantId);
+    addTenantScopeFilter(engineSetQb, 'assignment', tenantId);
+    addTenantScopeFilter(engineSetQb, 'role', tenantId);
+    addTenantScopeFilter(engineSetQb, 'materialization', tenantId);
+
+    const engineSetAssignments = (await engineSetQb.getMany()).filter((assignment) => Boolean(assignment.scopeId));
+    const engineSetIds = Array.from(new Set(engineSetAssignments.map((assignment) => assignment.scopeId).filter((id): id is string => Boolean(id))));
+    const [materializations, engineSets, matchedEngines, externalRegistrations] = engineSetIds.length > 0
+      ? await Promise.all([
+        dataSource.getRepository(EngineSetMaterialization).find({
+          where: tenantScopedWhere({ engineSetId: In(engineSetIds), engineId: resourceId }, tenantId),
+        }),
+        dataSource.getRepository(EngineSet).find({
+          where: tenantScopedWhere({ id: In(engineSetIds), isArchived: false }, tenantId),
+        }),
+        dataSource.getRepository(Engine).find({
+          where: engineResourceWhere({ id: resourceId }, tenantId),
+        }),
+        dataSource.getRepository(ExternalEngineRegistration).find({
+          where: { engineId: resourceId },
+        }),
+      ])
+      : [[], [], [], []];
+    const materializationByEngineSetId = new Map(materializations.map((materialization) => [materialization.engineSetId, materialization]));
+    const engineSetById = new Map(engineSets.map((engineSet) => [engineSet.id, engineSet]));
+    const matchedEngine = matchedEngines[0] || null;
+    const externalRegistration = externalRegistrations[0] || null;
+    const engineRegistration = matchedEngine || externalRegistration
+      ? {
+        engineId: resourceId,
+        engineName: matchedEngine?.name ?? null,
+        externalId: externalRegistration?.externalId ?? matchedEngine?.externalId ?? null,
+        registrationId: externalRegistration?.id ?? null,
+        registrationSource: externalRegistration?.registrationSource ?? matchedEngine?.registrationSource ?? null,
+        externalSystemId: externalRegistration?.externalSystemId ?? matchedEngine?.externalSystemId ?? null,
+        lifecycleStatus: externalRegistration?.lifecycleStatus ?? matchedEngine?.lifecycleStatus ?? null,
+        apiClientId: externalRegistration?.apiClientId ?? null,
+        lastExternalSyncAt: externalRegistration?.lastExternalSyncAt ?? matchedEngine?.lastExternalSyncAt ?? null,
+        lastRegisteredAt: externalRegistration?.lastRegisteredAt ?? null,
+        externalUpdatedAt: matchedEngine?.externalUpdatedAt ?? null,
+      }
+      : null;
+    const engineSetSources: PermissionEvaluationSource[] = engineSetAssignments.map((assignment) => {
+      const materialization = assignment.scopeId ? materializationByEngineSetId.get(assignment.scopeId) : null;
+      const engineSet = assignment.scopeId ? engineSetById.get(assignment.scopeId) : null;
+      return {
+        type: 'role-assignment' as const,
+        assignmentId: assignment.id,
+        roleId: assignment.roleId,
+        principalType: assignment.principalType as PrincipalType,
+        principalId: assignment.principalId || undefined,
+        source: assignment.source,
+        sourceRef: assignment.sourceRef,
+        tenantId: assignment.tenantId,
+        expiresAt: assignment.expiresAt == null ? null : Number(assignment.expiresAt),
+        scopeType: 'engine_set' as ResourceType,
+        scopeId: assignment.scopeId,
+        engineSetId: assignment.scopeId,
+        engineSetKey: engineSet?.key ?? null,
+        engineSetName: engineSet?.name ?? null,
+        selectorFingerprint: materialization?.selectorFingerprint ?? engineSet?.selectorFingerprint ?? null,
+        materializationId: materialization?.id ?? null,
+        matchedEngineId: materialization?.engineId ?? resourceId,
+        engineRegistration,
+        matchedBy: parseJsonRecord(materialization?.matchedByJson),
+        lineage: parseJsonRecord(materialization?.lineageJson),
+        configBundle: configBundleLineageForAssignment(assignment),
+      };
+    });
+
+    const groupLineageSources = await this.attachGroupLineage(dataSource, [...directSources, ...engineSetSources], principal, tenantId);
+    return this.attachConfigBundleLineage(dataSource, groupLineageSources, tenantId);
+  }
+
+  private async attachGroupLineage(
+    dataSource: DataSource,
+    sources: PermissionEvaluationSource[],
+    principal: { principalType: PrincipalType; principalId: string },
+    tenantId?: string | null
+  ): Promise<PermissionEvaluationSource[]> {
+    if (principal.principalType !== 'user') return sources;
+    const groupIds = Array.from(new Set(
+      sources
+        .filter((source) => source.principalType === 'group' && source.principalId)
+        .map((source) => source.principalId as string)
+    ));
+    if (groupIds.length === 0) return sources;
+
+    const now = Date.now();
+    const [groups, memberships] = await Promise.all([
+      dataSource.getRepository(AuthzGroup).find({
+        where: tenantScopedWhere({ id: In(groupIds), isArchived: false }, tenantId),
+      }),
+      dataSource.getRepository(AuthzGroupMembership).find({
+        where: tenantScopedWhere({ groupId: In(groupIds), userId: principal.principalId }, tenantId),
+      }),
+    ]);
+    const groupById = new Map(groups.map((group) => [group.id, group]));
+    const membershipsByGroupId = new Map<string, AuthzGroupMembership>();
+    const activeMemberships = memberships.filter((membership) => !membership.expiresAt || membership.expiresAt > now);
+    activeMemberships.forEach((membership) => {
+      const existing = membershipsByGroupId.get(membership.groupId);
+      if (!existing || (existing.source !== 'sso' && membership.source === 'sso')) {
+        membershipsByGroupId.set(membership.groupId, membership);
+      }
+    });
+    const identityEntitlementMappingIds = Array.from(new Set(
+      activeMemberships
+        .filter((membership) => membership.source === 'identity_provider' && membership.sourceRef?.startsWith('identity_mapping:'))
+        .map((membership) => membership.sourceRef!.slice('identity_mapping:'.length))
+    ));
+    const identityEntitlementMappings = await (identityEntitlementMappingIds.length > 0
+        ? dataSource.getRepository(IdentityEntitlementMapping).find({ where: tenantScopedWhere({ id: In(identityEntitlementMappingIds) }, tenantId) })
+        : Promise.resolve([]));
+    const identityEntitlementMappingById = new Map(identityEntitlementMappings.map((mapping) => [mapping.id, mapping]));
+
+    return sources.map((source) => {
+      if (source.principalType !== 'group' || !source.principalId) return source;
+      const group = groupById.get(source.principalId);
+      const membership = membershipsByGroupId.get(source.principalId);
+      const identityMappingId = membership?.source === 'identity_provider' && membership.sourceRef?.startsWith('identity_mapping:')
+        ? membership.sourceRef.slice('identity_mapping:'.length)
+        : null;
+      const identityMapping = identityMappingId ? identityEntitlementMappingById.get(identityMappingId) : null;
+      return {
+        ...source,
+        groupId: source.principalId,
+        groupKey: group?.key ?? null,
+        groupName: group?.name ?? null,
+        groupMembership: membership
+          ? {
+            id: membership.id,
+            source: membership.source,
+            sourceRef: membership.sourceRef,
+            expiresAt: membership.expiresAt == null ? null : Number(membership.expiresAt),
+          }
+          : null,
+        identityEntitlementMapping: identityMapping
+          ? {
+            id: identityMapping.id,
+            providerId: identityMapping.providerId,
+            entitlementType: identityMapping.entitlementType,
+            externalId: identityMapping.externalId,
+            matchOperator: identityMapping.matchOperator,
+            targetGroupId: identityMapping.targetGroupId,
+            syncMode: identityMapping.syncMode,
+          }
+          : null,
+      };
+    });
+  }
+
+  private async attachConfigBundleLineage(
+    dataSource: DataSource,
+    sources: PermissionEvaluationSource[],
+    tenantId?: string | null
+  ): Promise<PermissionEvaluationSource[]> {
+    const bundleKeys = Array.from(new Set(
+      sources.map((source) => source.configBundle?.bundleKey).filter((key): key is string => Boolean(key))
+    ));
+    if (bundleKeys.length === 0) return sources;
+
+    const runs = await dataSource.getRepository(ConfigBundleApplyRun).find({
+      where: tenantScopedWhere({ bundleKey: In(bundleKeys), status: 'succeeded' as const }, tenantId),
+      order: { completedAt: 'DESC', createdAt: 'DESC' },
+    });
+    const latestRunByBundleKey = new Map<string, ConfigBundleApplyRun>();
+    for (const run of runs) {
+      if (!latestRunByBundleKey.has(run.bundleKey)) latestRunByBundleKey.set(run.bundleKey, run);
+    }
+
+    return sources.map((source) => {
+      if (!source.configBundle) return source;
+      const run = latestRunByBundleKey.get(source.configBundle.bundleKey);
+      return {
+        ...source,
+        configBundle: {
+          ...source.configBundle,
+          applyRun: run ? {
+            id: run.id,
+            canonicalHash: run.canonicalHash,
+            appliedAt: run.completedAt ?? run.updatedAt,
+          } : null,
+        },
+      };
+    });
+  }
+
+  async getAssignedEngineRole(userId: string, engineId: string, tenantId?: string | null): Promise<'owner' | 'delegate' | 'operator' | 'deployer' | null> {
+    const dataSource = await getDataSource();
+    const now = Date.now();
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const qb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .where('1 = 1')
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
+      .andWhere('(assignment.scopeId = :engineId OR assignment.scopeId IS NULL)', { engineId })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(qb, 'assignment', tenantId);
+    addTenantScopeFilter(qb, 'role', tenantId);
+    const assignments = await qb.getMany();
+
+    const roles = assignments
+      .map((assignment) => ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE[assignment.roleId])
+      .filter((role): role is 'owner' | 'delegate' | 'operator' | 'deployer' => Boolean(role));
+
+    for (const role of ENGINE_ROLE_PRECEDENCE) {
+      if (roles.includes(role)) return role;
+    }
+
+    return null;
+  }
+
+  async getAssignedEngineRoles(userId: string, tenantId?: string | null): Promise<Array<{ engineId: string | null; role: 'owner' | 'delegate' | 'operator' | 'deployer' }>> {
+    const dataSource = await getDataSource();
+    const now = Date.now();
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const qb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .where('1 = 1')
+      .andWhere('assignment.scopeType = :resourceType', { resourceType: 'engine' })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(qb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(qb, 'assignment', tenantId);
+    addTenantScopeFilter(qb, 'role', tenantId);
+    const assignments = await qb.getMany();
+
+    return assignments
+      .map((assignment) => ({
+        engineId: assignment.scopeId,
+        role: ENGINE_SYSTEM_ROLE_TO_LEGACY_ROLE[assignment.roleId],
+      }))
+      .filter((assignment): assignment is { engineId: string | null; role: 'owner' | 'delegate' | 'operator' | 'deployer' } => Boolean(assignment.role));
   }
 
   /**
@@ -324,7 +4184,8 @@ class PermissionServiceClass {
     userId: string,
     permission: Permission,
     resourceType?: ResourceType,
-    resourceId?: string
+    resourceId?: string,
+    tenantId?: string | null
   ): Promise<boolean> {
     const dataSource = await getDataSource();
     const grantRepo = dataSource.getRepository(PermissionGrant);
@@ -335,6 +4196,7 @@ class PermissionServiceClass {
       .where('g.userId = :userId', { userId })
       .andWhere('g.permission = :permission', { permission })
       .andWhere('(g.expiresAt IS NULL OR g.expiresAt > :now)', { now });
+    addTenantScopeFilter(qb, 'g', tenantId);
 
     // Resource scope matching
     if (resourceType && resourceId) {
@@ -366,6 +4228,7 @@ class PermissionServiceClass {
 
     await grantRepo.insert({
       id,
+      tenantId: normalizeTenantId(input.tenantId),
       userId: input.userId,
       permission: input.permission,
       resourceType: input.resourceType || null,
@@ -385,7 +4248,8 @@ class PermissionServiceClass {
     userId: string,
     permission: Permission,
     resourceType?: ResourceType,
-    resourceId?: string
+    resourceId?: string,
+    tenantId?: string | null
   ): Promise<boolean> {
     const dataSource = await getDataSource();
     const grantRepo = dataSource.getRepository(PermissionGrant);
@@ -394,6 +4258,10 @@ class PermissionServiceClass {
       .delete()
       .where('userId = :userId', { userId })
       .andWhere('permission = :permission', { permission });
+    const normalizedTenantId = normalizeTenantId(tenantId);
+    if (normalizedTenantId) {
+      qb.andWhere('(tenantId = :tenantId OR tenantId IS NULL)', { tenantId: normalizedTenantId });
+    }
 
     if (resourceType) {
       qb.andWhere('resourceType = :resourceType', { resourceType });
@@ -414,7 +4282,7 @@ class PermissionServiceClass {
   /**
    * Get all explicit grants for a user
    */
-  async getUserGrants(userId: string): Promise<Array<{
+  async getUserGrants(userId: string, tenantId?: string | null): Promise<Array<{
     id: string;
     permission: string;
     resourceType: string | null;
@@ -428,10 +4296,11 @@ class PermissionServiceClass {
 
     const grants = await grantRepo.createQueryBuilder('g')
       .where('g.userId = :userId', { userId })
-      .andWhere('(g.expiresAt IS NULL OR g.expiresAt > :now)', { now })
-      .getMany();
+      .andWhere('(g.expiresAt IS NULL OR g.expiresAt > :now)', { now });
+    addTenantScopeFilter(grants, 'g', tenantId);
+    const rows = await grants.getMany();
 
-    return grants.map((g) => ({
+    return rows.map((g) => ({
       id: g.id,
       permission: g.permission,
       resourceType: g.resourceType,
@@ -439,6 +4308,46 @@ class PermissionServiceClass {
       expiresAt: g.expiresAt,
       createdAt: g.createdAt,
     }));
+  }
+
+  /**
+   * Removes expired role assignments while retaining the lifecycle evidence
+   * needed to explain why a formerly valid principal lost access.
+   */
+  async cleanupExpiredRoleAssignments(options: { now?: number; assignmentIds?: string[] } = {}): Promise<number> {
+    const dataSource = await getDataSource();
+    const assignmentRepo = dataSource.getRepository(RbacRoleAssignment);
+    const now = options.now ?? Date.now();
+    const expired = await assignmentRepo.createQueryBuilder('assignment')
+      .where('assignment.expiresAt IS NOT NULL')
+      .andWhere('assignment.expiresAt <= :now', { now });
+    if (options.assignmentIds?.length) {
+      expired.andWhere('assignment.id IN (:...assignmentIds)', { assignmentIds: options.assignmentIds });
+    }
+    const rows = await expired.getMany();
+    if (rows.length === 0) return 0;
+
+    for (const assignment of rows) {
+      await recordAuthzAudit(dataSource, {
+        tenantId: assignment.tenantId,
+        userId: null,
+        action: 'authz.role_assignment.expire',
+        resourceType: 'role_assignment',
+        resourceId: assignment.id,
+        details: {
+          assignmentId: assignment.id,
+          tenantId: assignment.tenantId,
+          principalType: assignment.principalType,
+          principalId: assignment.principalId,
+          roleId: assignment.roleId,
+          scopeType: assignment.scopeType,
+          scopeId: assignment.scopeId,
+          expiresAt: assignment.expiresAt,
+        },
+      });
+    }
+    await assignmentRepo.delete({ id: In(rows.map((assignment) => assignment.id)) });
+    return rows.length;
   }
 
   /**

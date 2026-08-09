@@ -68,8 +68,32 @@ jobs:
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "Publishing $NAME@$VERSION"
 
-      - name: Validate package contents
-        run: npm pack --dry-run
+      - name: Pack and validate package contents
+        id: pack
+        run: |
+          PACK_DIR="$RUNNER_TEMP/backend-host-pack"
+          mkdir -p "$PACK_DIR"
+          TARBALL="$(pnpm pack --pack-destination "$PACK_DIR" | tail -n 1)"
+          case "$TARBALL" in
+            /*) ;;
+            *) TARBALL="$PACK_DIR/$TARBALL" ;;
+          esac
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          tar -xOf "$TARBALL" package/package.json > "$RUNNER_TEMP/backend-host-package.json"
+          node - <<'NODE'
+          const pkg = require(`${process.env.RUNNER_TEMP}/backend-host-package.json`);
+          for (const name of ['@enterpriseglue/shared', '@enterpriseglue/enterprise-plugin-api']) {
+            const range = pkg.dependencies?.[name];
+            if (!range || range.startsWith('workspace:')) {
+              console.error(`ERROR: packed backend host has an invalid ${name} dependency: ${String(range)}`);
+              process.exit(1);
+            }
+          }
+          NODE
+
+      - name: Verify packed runtime import
+        run: pnpm run guard:published-package-runtime
+        working-directory: .
 
       - name: Verify not already published
         id: check
@@ -90,7 +114,7 @@ jobs:
         if: >-
           (github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        run: npm publish --dry-run
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --dry-run --registry=https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -98,7 +122,7 @@ jobs:
         if: >-
           !(github.event_name == 'workflow_dispatch' && inputs.dry_run == 'true')
           && steps.check.outcome != 'success'
-        run: npm publish
+        run: npm publish "${{ steps.pack.outputs.tarball }}" --ignore-scripts --registry=https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

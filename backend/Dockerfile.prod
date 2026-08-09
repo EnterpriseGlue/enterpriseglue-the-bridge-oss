@@ -7,7 +7,7 @@ WORKDIR /repo
 RUN npm install -g pnpm@11.0.8
 
 # Copy workspace manifests for pnpm install layer caching
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend-host/package.json packages/backend-host/
@@ -35,7 +35,7 @@ WORKDIR /repo
 # Install pnpm globally
 RUN npm install -g pnpm@11.0.8
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend-host/package.json packages/backend-host/
@@ -49,15 +49,23 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store,sharing=locked \
 
 FROM cgr.dev/chainguard/node:latest-dev AS runtime-base
 USER root
-RUN apk upgrade --no-cache \
-    && apk del --no-network npm \
-    && rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
+RUN set -eux; \
+    apk upgrade --no-cache; \
+    npm_packages="$(awk -F: '$1 == "P" && $2 ~ /^npm(-[0-9]+)?$/ { print $2 }' /lib/apk/db/installed)"; \
+    if [ -n "${npm_packages}" ]; then apk del --no-network ${npm_packages}; fi; \
+    rm -rf /usr/lib/node_modules/npm /usr/bin/npm /usr/bin/npx
 USER 65532
 
 FROM runtime-base
 
+USER root
 WORKDIR /app
 ENV NODE_ENV=production
+
+# The optional Compose/OpenShift config projection targets this directory. It
+# must exist and be readable by the non-root Chainguard runtime user.
+RUN mkdir -p /etc/enterpriseglue/config /var/run/secrets/enterpriseglue \
+    && chown -R 65532:65532 /etc/enterpriseglue /var/run/secrets/enterpriseglue
 
 COPY backend/package.json ./package.json
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Test"
+  short_description: "Select and run EnterpriseGlue test gates"
+  default_prompt: "Use $enterpriseglue-test to help with this EnterpriseGlue task."

@@ -5,6 +5,7 @@ describe('platform-admin module index', () => {
   it('exports platform-admin routes', () => {
     expect(platformAdminModule).toHaveProperty('platformAdminRoute');
     expect(platformAdminModule).toHaveProperty('authzRoute');
-    expect(platformAdminModule).toHaveProperty('ssoProvidersRoute');
+    expect(platformAdminModule).toHaveProperty('identityProvidersRoute');
+    expect(platformAdminModule).toHaveProperty('identityMappingsRoute');
   });
 });

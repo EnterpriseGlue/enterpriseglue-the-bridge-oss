@@ -18,6 +18,14 @@ vi.mock('@src/features/platform-admin/hooks/usePlatformSyncSettings', () => ({
   }),
 }));
 
+vi.mock('@src/shared/hooks/useAuth', () => ({
+  useAuth: () => ({
+    hasPlatformPermission: vi.fn(() => true),
+    hasProjectPermission: vi.fn(() => false),
+    hasEnginePermission: vi.fn(() => false),
+  }),
+}));
+
 describe('ProjectOverview loading state', () => {
   it('shows the loading table skeleton while projects are loading', () => {
     vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {

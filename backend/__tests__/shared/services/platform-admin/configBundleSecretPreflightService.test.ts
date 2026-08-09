@@ -1,0 +1,106 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { configBundleSecretPreflightService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundleSecretPreflightService.js';
+
+const bundle = {
+  apiVersion: 'enterpriseglue.ai/v1alpha1',
+  kind: 'EnterpriseGlueConfigBundle',
+  metadata: { key: 'acme.authz', owner: 'platform' },
+  tenantKey: 'acme',
+  mode: 'preview_only',
+  settings: {},
+  imports: ['./engines.json', './identity-providers.json'],
+};
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe('configBundleSecretPreflightService', () => {
+  it('reports available opaque references and locations without returning secret values', () => {
+    vi.stubEnv('PAYMENTS_ENGINE_PASSWORD', 'not-returned');
+    vi.stubEnv('OIDC_CLIENT_SECRET', 'not-returned');
+
+    const result = configBundleSecretPreflightService.check({
+      bundle,
+      files: {
+        './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'PAYMENTS_ENGINE_PASSWORD' } }] },
+        './identity-providers.json': { identityProviders: [{
+          key: 'identity.oidc.main', type: 'oidc', enabled: true, authenticationMode: 'claims_only',
+          sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+          oidc: { issuerUrl: 'https://login.example.test', clientId: 'enterpriseglue', clientSecretRef: 'env://OIDC_CLIENT_SECRET', callbackUrl: 'https://app.example.test/callback', scopes: ['openid'] },
+        }] },
+      },
+    });
+
+    expect(result).toMatchObject({ valid: true, availabilityHash: expect.any(String), available: true, errors: [] });
+    expect(result.references).toEqual([
+      { reference: 'env://OIDC_CLIENT_SECRET', locations: ['./identity-providers.json.identityProviders.0.oidc.clientSecretRef'], available: true },
+      { reference: 'PAYMENTS_ENGINE_PASSWORD', locations: ['./engines.json.engines.0.auth.passwordRef'], available: true },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('not-returned');
+  });
+
+  it('reports an unavailable reference without reading or exposing a secret', () => {
+    const result = configBundleSecretPreflightService.check({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest', auth: { type: 'bearer', tokenRef: 'MISSING_ENGINE_TOKEN' } }] },
+      },
+    });
+
+    expect(result).toMatchObject({ valid: true, availabilityHash: expect.any(String), available: false, errors: [] });
+    expect(result.references).toEqual([{
+      reference: 'MISSING_ENGINE_TOKEN',
+      locations: ['./engines.json.engines.0.auth.tokenRef'],
+      available: false,
+      reason: 'environment_variable_missing',
+    }]);
+  });
+
+  it('preflights a backstop native-group reference without returning its value', () => {
+    vi.stubEnv('CAMUNDA_OPERATORS_GROUP', 'not-returned-native-group');
+    const result = configBundleSecretPreflightService.check({
+      bundle: { ...bundle, imports: ['./engines.json', './groups.json', './engine-backstop-mappings.json'] },
+      files: {
+        './engines.json': { engines: [{ key: 'engine.camunda', name: 'Camunda', type: 'camunda7', baseUrl: 'https://camunda.example.test/engine-rest', auth: { type: 'basic', username: 'eg', passwordRef: 'CAMUNDA_PASSWORD' } }] },
+        './groups.json': { groups: [{ key: 'group.operators', name: 'Operators' }] },
+        './engine-backstop-mappings.json': { engineBackstopMappings: [{ key: 'engine-backstop-mapping.camunda-operators', engineRef: { engineKey: 'engine.camunda' }, groupRef: { groupKey: 'group.operators' }, nativeGroupIdRef: 'CAMUNDA_OPERATORS_GROUP' }] },
+      },
+    });
+
+    expect(result.references).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reference: 'CAMUNDA_OPERATORS_GROUP',
+        locations: ['./engine-backstop-mappings.json.engineBackstopMappings.0.nativeGroupIdRef'],
+        available: true,
+      }),
+    ]));
+    expect(JSON.stringify(result)).not.toContain('not-returned-native-group');
+  });
+
+  it('does not inspect references from an invalid bundle', () => {
+    const result = configBundleSecretPreflightService.check({
+      bundle,
+      files: { './engines.json': { engines: [] } },
+    });
+
+    expect(result).toMatchObject({ valid: false, available: false });
+    expect(result.references).toEqual([]);
+  });
+
+  it('rejects raw secret fields without echoing their values in preflight output', () => {
+    const plaintext = 'forbidden-plaintext-secret-sentinel';
+    const result = configBundleSecretPreflightService.check({
+      bundle: { ...bundle, imports: ['./engines.json'] },
+      files: {
+        './engines.json': {
+          engines: [{
+            key: 'engine.payments', name: 'Payments', type: 'operaton', baseUrl: 'https://payments.example.test/engine-rest',
+            auth: { type: 'basic', username: 'eg', password: plaintext },
+          }],
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ valid: false, available: false, references: [] });
+    expect(JSON.stringify(result)).not.toContain(plaintext);
+  });
+});

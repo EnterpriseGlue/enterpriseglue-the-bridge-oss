@@ -1,0 +1,4 @@
+interface:
+  display_name: "EnterpriseGlue Release Publish Watch"
+  short_description: "Monitor EnterpriseGlue release publishing"
+  default_prompt: "Use $enterpriseglue-release-publish-watch to help with this EnterpriseGlue task."

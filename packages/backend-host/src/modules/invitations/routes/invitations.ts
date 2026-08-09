@@ -1,9 +1,9 @@
 import { Router, type Response as ExpressResponse } from 'express';
-import { z } from 'zod';
 import { validateBody, validateParams } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter, createUserLimiter, passwordResetVerifyLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireInvitationCreateAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -12,45 +12,34 @@ import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/
 import { userService } from '@enterpriseglue/shared/services/platform-admin/UserService.js';
 import { invitationService } from '@enterpriseglue/shared/services/invitations.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/EngineService.js';
-import { ENGINE_MANAGE_ROLES, MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
 import { generateOnboardingToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
+import {
+  CreateInvitationRequestSchema,
+  CreateInvitationResponseSchema,
+  InvitationCapabilitiesResponseSchema,
+  InvitationInfoSchema,
+  InvitationOnboardingResponseSchema,
+  InvitationTokenParamsSchema,
+  VerifyInvitationOtpRequestSchema,
+  type CreateInvitationRequest,
+  type VerifyInvitationOtpRequest,
+} from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 
 const router = Router();
 
-const invitationParamsSchema = z.object({
-  token: z.string().min(1),
-});
-
-const createInvitationSchema = z.object({
-  email: z.string().email(),
-  resourceType: z.enum(['tenant', 'project', 'engine']),
-  resourceId: z.string().optional(),
-  resourceName: z.string().optional(),
-  role: z.string().optional(),
-  deliveryMethod: z.enum(['email', 'manual']).default('email'),
-});
-
-const verifyInvitationSchema = z.object({
-  oneTimePassword: z.string().min(1),
-});
-
 function setOnboardingCookie(res: ExpressResponse, payload: {
   userId: string;
-  email: string;
-  platformRole: User['platformRole'];
   invitationId: string;
   tenantSlug: string;
+  authSessionVersion?: number;
 }) {
   const onboardingToken = generateOnboardingToken({
     userId: payload.userId,
-    email: payload.email,
-    platformRole: payload.platformRole as any,
     invitationId: payload.invitationId,
     tenantSlug: payload.tenantSlug,
+    authSessionVersion: payload.authSessionVersion,
   });
 
   res.cookie('onboardingToken', onboardingToken, {
@@ -60,33 +49,6 @@ function setOnboardingCookie(res: ExpressResponse, payload: {
     maxAge: config.jwtAccessTokenExpires * 1000,
     path: '/',
   });
-}
-
-async function ensureInvitationPermission(req: Express.Request, resourceType: 'tenant' | 'project' | 'engine', resourceId?: string): Promise<void> {
-  if (resourceType === 'tenant') {
-    if (req.user?.platformRole !== 'admin') {
-      throw Errors.forbidden('Only platform admins can invite workspace users');
-    }
-    return;
-  }
-
-  if (!resourceId) {
-    throw Errors.validation('Resource ID is required');
-  }
-
-  if (resourceType === 'project') {
-    const membership = await projectMemberService.getMembership(resourceId, req.user!.userId);
-    const roles = Array.isArray((membership as any)?.roles) ? (membership as any).roles : membership ? [membership.role] : [];
-    if (!roles.some((role: string) => MANAGE_ROLES.includes(role as any))) {
-      throw Errors.forbidden('Only owners and delegates can invite project members');
-    }
-    return;
-  }
-
-  const canManageEngine = await engineService.hasEngineAccess(req.user!.userId, resourceId, ENGINE_MANAGE_ROLES);
-  if (!canManageEngine) {
-    throw Errors.forbidden('Only owners and delegates can invite engine members');
-  }
 }
 
 async function loadResourceName(resourceType: 'tenant' | 'project' | 'engine', tenantSlug: string, resourceId?: string, providedResourceName?: string): Promise<string> {
@@ -116,18 +78,16 @@ router.get('/api/t/:tenantSlug/invitations/capabilities', apiLimiter, requireAut
   const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
   const ssoRequired = await invitationService.isLocalLoginDisabled();
 
-  res.json({
+  res.json(InvitationCapabilitiesResponseSchema.parse({
     ssoRequired,
     emailConfigured: Boolean(emailConfig),
-  });
+  }));
 }));
 
-router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(createInvitationSchema), asyncHandler(async (req, res) => {
+router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUserLimiter, validateBody(CreateInvitationRequestSchema), requireInvitationCreateAction('invitations.create'), asyncHandler(async (req, res) => {
   const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
-  const { email, resourceType, resourceId, resourceName, role, deliveryMethod } = req.body as z.infer<typeof createInvitationSchema>;
+  const { email, resourceType, resourceId, resourceName, role, deliveryMethod } = req.body as CreateInvitationRequest;
   const normalizedEmail = email.toLowerCase();
-
-  await ensureInvitationPermission(req, resourceType, resourceId);
 
   if (resourceType === 'engine' && role && role !== 'operator' && role !== 'deployer') {
     throw Errors.validation('Engine invitations only support operator or deployer roles');
@@ -145,7 +105,6 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUse
 
   const pendingUser = existingUser || await userService.createPendingUser({
     email: normalizedEmail,
-    platformRole: 'user',
     createdByUserId: req.user!.userId,
   }).then((user) => ({ id: user.id, email: user.email } as Pick<User, 'id' | 'email'>));
 
@@ -182,23 +141,23 @@ router.post('/api/t/:tenantSlug/invitations', apiLimiter, requireAuth, createUse
     },
   });
 
-  res.status(201).json({
+  res.status(201).json(CreateInvitationResponseSchema.parse({
     invited: true,
     emailSent: result.emailSent,
     emailError: result.emailError,
     inviteUrl: result.emailSent ? undefined : result.inviteUrl,
     oneTimePassword: deliveryMethod === 'manual' ? result.oneTimePassword : undefined,
-  });
+  }));
 }));
 
-router.get('/api/invitations/:token', apiLimiter, validateParams(invitationParamsSchema), asyncHandler(async (req, res) => {
+router.get('/api/invitations/:token', apiLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
   const info = await invitationService.getInvitationInfo(String(req.params.token));
-  res.json(info);
+  res.json(InvitationInfoSchema.parse(info));
 }));
 
-router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(invitationParamsSchema), validateBody(verifyInvitationSchema), asyncHandler(async (req, res) => {
+router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), validateBody(VerifyInvitationOtpRequestSchema), asyncHandler(async (req, res) => {
   const token = String(req.params.token);
-  const { oneTimePassword } = req.body as z.infer<typeof verifyInvitationSchema>;
+  const { oneTimePassword } = req.body as VerifyInvitationOtpRequest;
   const invitationInfo = await invitationService.getInvitationInfo(token);
   const verified = await invitationService.verifyOneTimePassword(token, oneTimePassword);
   const dataSource = await getDataSource();
@@ -210,10 +169,9 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
 
   setOnboardingCookie(res, {
     userId: user.id,
-    email: user.email,
-    platformRole: user.platformRole,
     invitationId: verified.invitationId,
     tenantSlug: verified.tenantSlug,
+    authSessionVersion: user.authSessionVersion,
   });
 
   await logAudit({
@@ -232,10 +190,10 @@ router.post('/api/invitations/:token/verify-otp', apiLimiter, passwordResetVerif
     },
   });
 
-  res.json({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'manual' });
+  res.json(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'manual' }));
 }));
 
-router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLimiter, validateParams(invitationParamsSchema), asyncHandler(async (req, res) => {
+router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLimiter, validateParams(InvitationTokenParamsSchema), asyncHandler(async (req, res) => {
   const token = String(req.params.token);
   const invitationInfo = await invitationService.getInvitationInfo(token);
   const verified = await invitationService.redeemEmailInvitation(token);
@@ -248,10 +206,9 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
 
   setOnboardingCookie(res, {
     userId: user.id,
-    email: user.email,
-    platformRole: user.platformRole,
     invitationId: verified.invitationId,
     tenantSlug: verified.tenantSlug,
+    authSessionVersion: user.authSessionVersion,
   });
 
   await logAudit({
@@ -270,7 +227,7 @@ router.post('/api/invitations/:token/redeem', apiLimiter, passwordResetVerifyLim
     },
   });
 
-  res.json({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'email' });
+  res.json(InvitationOnboardingResponseSchema.parse({ requiresPasswordSet: true, tenantSlug: verified.tenantSlug, deliveryMethod: 'email' }));
 }));
 
 export default router;

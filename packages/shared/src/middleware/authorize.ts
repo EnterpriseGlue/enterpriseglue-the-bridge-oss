@@ -1,37 +1,51 @@
 /**
  * Unified Authorization Middleware
- * Flexible authorization that can check platform, project, and engine roles
+ * Flexible authorization that can check platform, project, and engine permissions
  * in a single middleware call.
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { Errors } from './errorHandler.js';
-import { projectMemberService } from '../services/platform-admin/ProjectMemberService.js';
-import { engineService } from '../services/platform-admin/EngineService.js';
 import { logAudit } from '../services/audit.js';
 import type { ProjectRole } from '@enterpriseglue/shared/contracts/roles.js';
 import type { EngineRole } from '@enterpriseglue/shared/constants/roles.js';
+import { permissionService, type Permission, type PermissionContext } from '../services/platform-admin/permissions.js';
+
+type PermissionFallback = Permission | Permission[];
 
 export interface AuthorizeOptions {
   /**
-   * Platform level roles to check
-   * e.g., ['admin'] or ['admin', 'user']
+   * Deprecated platform role metadata. Role values no longer grant access.
+   * Use platformPermissions for authorization.
    */
   platformRoles?: string[];
 
   /**
-   * Project level roles to check
-   * Requires projectId in params or body
-   * e.g., ['owner', 'delegate'] or ['owner', 'delegate', 'developer']
+   * Platform permissions that satisfy the platform check.
+   */
+  platformPermissions?: PermissionFallback;
+
+  /**
+   * Deprecated project role metadata. Role values no longer grant access.
+   * Use projectPermissions for authorization.
    */
   projectRoles?: ProjectRole[];
 
   /**
-   * Engine level roles to check
-   * Requires engineId in params or body
-   * e.g., ['owner', 'delegate'] or ['operator', 'deployer']
+   * Project permissions that satisfy the project check.
+   */
+  projectPermissions?: PermissionFallback;
+
+  /**
+   * Deprecated engine role metadata. Role values no longer grant access.
+   * Use enginePermissions for authorization.
    */
   engineRoles?: EngineRole[];
+
+  /**
+   * Engine permissions that satisfy the engine check.
+   */
+  enginePermissions?: PermissionFallback;
 
   /**
    * Custom authorization check function
@@ -46,27 +60,45 @@ export interface AuthorizeOptions {
   auditDenials?: boolean;
 }
 
+function normalizePermissions(permissions?: PermissionFallback): Permission[] {
+  if (!permissions) return [];
+  return Array.isArray(permissions) ? permissions : [permissions];
+}
+
+async function hasAnyPermission(permissions: Permission[], context: PermissionContext): Promise<boolean> {
+  for (const permission of permissions) {
+    if (await permissionService.hasPermission(permission, context)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function permissionLabel(permissions: Permission[]): string {
+  return permissions.length > 0 ? permissions.join('|') : 'none';
+}
+
 /**
  * Flexible authorization middleware
  * 
  * Usage:
  * ```typescript
- * // Require platform admin
- * app.get('/admin', authorize({ platformRoles: ['admin'] }), handler);
+ * // Require platform administration permission
+ * app.get('/admin', authorize({ platformPermissions: 'platform:authz:roles:manage' }), handler);
  * 
- * // Require project owner or delegate
+ * // Require project settings permission
  * app.post('/projects/:projectId/settings', 
- *   authorize({ projectRoles: ['owner', 'delegate'] }), handler);
+ *   authorize({ projectPermissions: 'project:settings:manage' }), handler);
  * 
- * // Require engine access
+ * // Require engine deployment permission
  * app.post('/engines/:engineId/deploy',
- *   authorize({ engineRoles: ['owner', 'delegate', 'deployer'] }), handler);
+ *   authorize({ enginePermissions: 'engine:deploy' }), handler);
  * 
  * // Combined checks
  * app.post('/admin/engines/:engineId',
  *   authorize({ 
- *     platformRoles: ['admin'], 
- *     engineRoles: ['owner'] 
+ *     platformPermissions: 'platform:authz:roles:manage',
+ *     enginePermissions: 'engine:ownership:transfer'
  *   }), handler);
  * ```
  */
@@ -82,44 +114,60 @@ export function authorize(options: AuthorizeOptions) {
     const failures: string[] = [];
 
     try {
-      // Platform role check
-      if (options.platformRoles && options.platformRoles.length > 0) {
-        const userRole = (req.user as any).platformRole || 'user';
-        if (!options.platformRoles.includes(userRole)) {
-          failures.push(`Platform role: need ${options.platformRoles.join('|')}, have ${userRole}`);
+      // Platform permission check
+      const platformPermissions = normalizePermissions(options.platformPermissions);
+      if ((options.platformRoles && options.platformRoles.length > 0) || platformPermissions.length > 0) {
+        const permissionAllowed = platformPermissions.length > 0
+          ? await hasAnyPermission(platformPermissions, {
+            userId,
+            tenantId: req.tenant?.tenantId || null,
+            resourceType: 'platform',
+          })
+          : false;
+        if (!permissionAllowed) {
+          failures.push(`Platform access requires permission ${permissionLabel(platformPermissions)}; legacy platformRoles are unsupported.`);
         }
       }
 
-      // Project role check
-      if (options.projectRoles && options.projectRoles.length > 0) {
+      // Project permission check
+      const projectPermissions = normalizePermissions(options.projectPermissions);
+      if ((options.projectRoles && options.projectRoles.length > 0) || projectPermissions.length > 0) {
         const projectId = req.params.projectId || req.body?.projectId;
         if (!projectId) {
           throw Errors.validation('projectId required for this operation');
         }
 
-        const membership = await projectMemberService.getMembership(projectId, userId);
-        if (!membership || !options.projectRoles.includes(membership.role as ProjectRole)) {
-          failures.push(
-            `Project role: need ${options.projectRoles.join('|')}, have ${membership?.role || 'none'}`
-          );
-        } else {
-          (req as any).projectRole = membership.role;
-          (req as any).projectMembership = membership;
+        const permissionAllowed = projectPermissions.length > 0
+          ? await hasAnyPermission(projectPermissions, {
+            userId,
+            tenantId: req.tenant?.tenantId || null,
+            resourceType: 'project',
+            resourceId: String(projectId),
+          })
+          : false;
+        if (!permissionAllowed) {
+          failures.push(`Project access requires permission ${permissionLabel(projectPermissions)}; legacy projectRoles are unsupported.`);
         }
       }
 
-      // Engine role check
-      if (options.engineRoles && options.engineRoles.length > 0) {
+      // Engine permission check
+      const enginePermissions = normalizePermissions(options.enginePermissions);
+      if ((options.engineRoles && options.engineRoles.length > 0) || enginePermissions.length > 0) {
         const engineId = req.params.engineId || req.body?.engineId;
         if (!engineId) {
           throw Errors.validation('engineId required for this operation');
         }
 
-        const role = await engineService.getEngineRole(userId, engineId);
-        if (!role || !options.engineRoles.includes(role)) {
-          failures.push(`Engine role: need ${options.engineRoles.join('|')}, have ${role || 'none'}`);
-        } else {
-          (req as any).engineRole = role;
+        const permissionAllowed = enginePermissions.length > 0
+          ? await hasAnyPermission(enginePermissions, {
+            userId,
+            tenantId: req.tenant?.tenantId || null,
+            resourceType: 'engine',
+            resourceId: String(engineId),
+          })
+          : false;
+        if (!permissionAllowed) {
+          failures.push(`Engine access requires permission ${permissionLabel(enginePermissions)}; legacy engineRoles are unsupported.`);
         }
       }
 
@@ -136,9 +184,7 @@ export function authorize(options: AuthorizeOptions) {
         // Log denial
         if (auditDenials) {
           const isTenantScopedRequest = String(req.originalUrl || '').startsWith('/api/t/');
-          const tenantId = req.user?.platformRole === 'admin' && !isTenantScopedRequest
-            ? null
-            : (req as any).tenant?.tenantId;
+          const tenantId = isTenantScopedRequest ? (req as any).tenant?.tenantId : null;
 
           await logAudit({
             tenantId,
@@ -171,45 +217,45 @@ export const auth = {
   /**
    * Require platform admin
    */
-  platformAdmin: () => authorize({ platformRoles: ['admin'] }),
+  platformAdmin: () => authorize({ platformPermissions: 'platform:authz:roles:manage' as Permission }),
 
   /**
    * Require project owner
    */
-  projectOwner: () => authorize({ projectRoles: ['owner'] }),
+  projectOwner: () => authorize({ projectPermissions: 'project:ownership:transfer' as Permission }),
 
   /**
    * Require project owner or delegate
    */
-  projectManager: () => authorize({ projectRoles: ['owner', 'delegate'] }),
+  projectManager: () => authorize({ projectPermissions: 'project:settings:manage' as Permission }),
 
   /**
    * Require project member with any role
    */
-  projectMember: () => authorize({ projectRoles: ['owner', 'delegate', 'developer', 'editor', 'viewer'] }),
+  projectMember: () => authorize({ projectPermissions: 'project:files:view' as Permission }),
 
   /**
    * Require project member who can edit
    */
-  projectEditor: () => authorize({ projectRoles: ['owner', 'delegate', 'developer', 'editor'] }),
+  projectEditor: () => authorize({ projectPermissions: 'project:files:edit' as Permission }),
 
   /**
    * Require engine owner
    */
-  engineOwner: () => authorize({ engineRoles: ['owner'] }),
+  engineOwner: () => authorize({ enginePermissions: 'engine:ownership:transfer' as Permission }),
 
   /**
    * Require engine owner or delegate
    */
-  engineManager: () => authorize({ engineRoles: ['owner', 'delegate'] }),
+  engineManager: () => authorize({ enginePermissions: 'engine:edit' as Permission }),
 
   /**
    * Require engine access (any role)
    */
-  engineAccess: () => authorize({ engineRoles: ['owner', 'delegate', 'operator'] }),
+  engineAccess: () => authorize({ enginePermissions: 'engine:instance:view' as Permission }),
 
   /**
    * Require deploy permission on engine
    */
-  engineDeployer: () => authorize({ engineRoles: ['owner', 'delegate', 'operator', 'deployer'] }),
+  engineDeployer: () => authorize({ enginePermissions: 'engine:deploy' as Permission }),
 };

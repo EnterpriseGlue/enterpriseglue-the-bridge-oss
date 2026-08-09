@@ -2,13 +2,13 @@ import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '../../../packages/backend-host/src/app.js';
 import { cleanupSeededData, seedUser } from '../utils/seed.js';
-import { generateAccessToken } from '@enterpriseglue/shared/utils/jwt.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
 
 const prefix = `test_pii_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 let userId = '';
+let adminUserId = '';
 let adminToken = '';
 let userToken = '';
 
@@ -21,16 +21,20 @@ async function cleanupPlatformSettings() {
 
 describe('Platform settings PII fields API', () => {
   beforeAll(async () => {
-    const user = await seedUser(prefix);
+    const [user, admin] = await Promise.all([
+      seedUser(prefix),
+      seedUser(`${prefix}-admin`, { platformRole: 'admin' }),
+    ]);
     userId = user.id;
+    adminUserId = admin.id;
     userToken = user.token;
-    adminToken = generateAccessToken({ id: user.id, email: user.email, platformRole: 'admin' });
+    adminToken = admin.token;
     await cleanupPlatformSettings();
   });
 
   afterAll(async () => {
     await cleanupPlatformSettings();
-    await cleanupSeededData(prefix, [], [userId]);
+    await cleanupSeededData(prefix, [], [userId, adminUserId]);
   });
 
   it('rejects non-admin GET of platform settings', async () => {

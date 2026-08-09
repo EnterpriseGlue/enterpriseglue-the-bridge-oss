@@ -1,5 +1,7 @@
 /**
- * Database-agnostic connection pool interface
+ * Legacy raw-SQL connection pool. SQL and placeholder syntax are driver
+ * specific, so new plugins should use EnterpriseDatabaseContext instead.
+ * @deprecated Use EnterpriseBackendContext.database.
  */
 export interface ConnectionPool {
   query<T = unknown>(
@@ -8,6 +10,18 @@ export interface ConnectionPool {
   ): Promise<{ rows: T[]; rowCount: number }>;
   close(): Promise<void>;
   getNativePool(): unknown;
+}
+
+export type EnterpriseDatabaseType = 'postgres' | 'oracle' | 'mysql' | 'mssql' | 'spanner';
+
+/** Portable TypeORM command boundary exposed by the OSS host. */
+export interface EnterpriseDatabaseContext {
+  kind: 'typeorm';
+  databaseType: EnterpriseDatabaseType;
+  /** Resolve the initialized TypeORM DataSource without exposing raw driver pools. */
+  getDataSource<TDataSource = unknown>(): Promise<TDataSource>;
+  /** Execute a unit of work in a TypeORM transaction on every supported adapter. */
+  transaction<TResult>(work: (manager: unknown) => Promise<TResult>): Promise<TResult>;
 }
 
 export interface NotificationTenantResolveContext {
@@ -23,15 +37,130 @@ export interface NotificationTenantResolver {
   };
 }
 
+export type EngineTenancyPrincipalType = 'user' | 'api_client' | 'service_account' | 'system';
+export type EngineTenantReference =
+  | { type: 'request_context' }
+  | { type: 'default' }
+  | { type: 'key'; key: string }
+  | { type: 'id'; id: string };
+
+export interface EngineTenantReferenceResolver {
+  resolve(input: {
+    reference: EngineTenantReference;
+    requestTenantId: string | null;
+    principalType: EngineTenancyPrincipalType;
+    principalId: string | null;
+  }): Promise<{
+    tenantId: string;
+    tenantKey?: string | null;
+    authorized: boolean;
+  } | null>;
+}
+
+export type EnterpriseAuthzBackendRouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+export interface EnterpriseBackendRouteAuthz {
+  /** HTTP method for the plugin route. */
+  method: EnterpriseAuthzBackendRouteMethod;
+  /** Express/OpenAPI-style route path, starting with `/`. */
+  path: string;
+  /** Shared authorization action id required by this route. */
+  actionId: string;
+  /** Shared authorization resource resolver id used by the backend guard. */
+  resourceResolver: string;
+  /** Extra contextual checks enforced by the route, if any. */
+  additionalChecks?: string[];
+  /** Optional OpenAPI operation id for generated docs parity. */
+  openApiOperationId?: string;
+  /** Set to false only for intentionally undocumented internal routes. */
+  openApi?: boolean;
+}
+
+export type EnterpriseBackendResourceIdLocation = 'params' | 'body' | 'query' | 'any';
+export type EnterpriseBackendCompositeActionKind = 'deployment';
+export type EnterpriseBackendDeploymentMode = 'manual' | 'ci' | 'api' | 'import';
+export type EnterpriseBackendMiddleware = (...args: any[]) => any;
+
+export interface EnterpriseBackendRequireActionOptions {
+  resourceResolver?: string;
+  resourceIdFrom?: EnterpriseBackendResourceIdLocation;
+  resourceIdKey?: string;
+  collectionIdsFrom?: EnterpriseBackendResourceIdLocation;
+  collectionIdsKey?: string;
+  acceptedPermissions?: string[];
+}
+
+export interface EnterpriseBackendRequireCompositeActionOptions {
+  kind?: EnterpriseBackendCompositeActionKind;
+  projectIdFrom?: EnterpriseBackendResourceIdLocation;
+  projectIdKey?: string;
+  engineIdFrom?: EnterpriseBackendResourceIdLocation;
+  engineIdKey?: string;
+  mode?: EnterpriseBackendDeploymentMode;
+  optionalWhenMissingEngineId?: boolean;
+  legacyAutoGrant?: boolean;
+  attachDeployContext?: boolean;
+  hideUnauthorizedEngine?: boolean;
+}
+
+export interface EnterpriseBackendRequireDeclaredActionOptions {
+  resourceIdFrom?: EnterpriseBackendResourceIdLocation;
+  resourceIdKey?: string;
+  collectionIdsFrom?: EnterpriseBackendResourceIdLocation;
+  collectionIdsKey?: string;
+  acceptedPermissions?: string[];
+}
+
+export interface EnterpriseBackendRouteOpenApiAuthzExtension {
+  actionId: string;
+  permission: string;
+  resourceResolver: string;
+  additionalChecks?: string[];
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  audit: boolean;
+  uiBehavior: 'hide' | 'disable' | 'redact' | 'deny-route' | 'diagnostic';
+}
+
+export interface EnterpriseBackendRouteOpenApiAuthzMetadata {
+  method: EnterpriseAuthzBackendRouteMethod;
+  path: string;
+  actionId: string;
+  openApiOperationId?: string;
+  openApi?: boolean;
+  extension: EnterpriseBackendRouteOpenApiAuthzExtension;
+}
+
+export interface EnterpriseBackendAuthzContext {
+  requireAction(actionId: string, options?: EnterpriseBackendRequireActionOptions): EnterpriseBackendMiddleware;
+  requireCompositeAction(actionId: string, options?: EnterpriseBackendRequireCompositeActionOptions): EnterpriseBackendMiddleware;
+  requireDeclaredAction(
+    authzRoutes: EnterpriseBackendRouteAuthz[] | undefined,
+    method: EnterpriseAuthzBackendRouteMethod,
+    path: string,
+    options?: EnterpriseBackendRequireDeclaredActionOptions
+  ): EnterpriseBackendMiddleware;
+  buildOpenApiAuthzMetadata(
+    authzRoutes?: EnterpriseBackendRouteAuthz[],
+    options?: { includeInternal?: boolean }
+  ): EnterpriseBackendRouteOpenApiAuthzMetadata[];
+}
+
 export interface EnterpriseBackendContext {
+  database: EnterpriseDatabaseContext;
+  /** @deprecated Use database for portable TypeORM access. */
   connectionPool: ConnectionPool;
   config: unknown;
+  authz: EnterpriseBackendAuthzContext;
 }
 
 export interface EnterpriseBackendPlugin {
   registerRoutes?: (app: unknown, ctx: EnterpriseBackendContext) => void | Promise<void>;
+  authzRoutes?: EnterpriseBackendRouteAuthz[];
   migrateEnterpriseDatabase?: (ctx: EnterpriseBackendContext) => void | Promise<void>;
   getNotificationTenantResolver?: (
     ctx: EnterpriseBackendContext,
   ) => NotificationTenantResolver | undefined | Promise<NotificationTenantResolver | undefined>;
+  getEngineTenantReferenceResolver?: (
+    ctx: EnterpriseBackendContext,
+  ) => EngineTenantReferenceResolver | undefined | Promise<EngineTenantReferenceResolver | undefined>;
 }

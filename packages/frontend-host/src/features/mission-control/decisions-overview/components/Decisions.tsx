@@ -16,40 +16,25 @@ import { DecisionsDataTable } from './DecisionsDataTable'
 import { PageLoader } from '../../../../shared/components/PageLoader'
 import { useDecisionsFilterStore } from '../../shared/stores/decisionsFilterStore'
 import { EngineAccessError, isEngineAccessError } from '../../shared/components/EngineAccessError'
+import { RuntimeCollectionEmptyState } from '../../shared/components/RuntimeCollectionEmptyState'
 import { useSelectedEngine } from '../../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../../stores/engineSelectorStore'
 import { apiClient } from '../../../../shared/api/client'
+import { getUiErrorMessage } from '../../../../shared/api/apiErrorUtils'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../../shared/auth/BridgeAccessNotice'
+import { useActionDecision } from '../../../../shared/auth/guards'
 import styles from './Decisions.module.css'
 import { LoadingState } from '../../../shared/components/LoadingState'
+import type { DecisionDefinition } from '@enterpriseglue/shared/schemas/mission-control/decision.js'
+import type { DecisionEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const DMNDrdMini = React.lazy(() => import('../../../starbase/components/DMNDrdMini'))
 
 const SPLIT_PANE_STORAGE_KEY = 'decisions-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '60%'
 
-type DecisionEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  decisionKey: string
-  decisionVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
-}
-
-type DecisionDef = {
-  id: string
-  key: string
-  name?: string | null
-  version: number
-  versionTag?: string | null
-  decisionRequirementsDefinitionId?: string | null
-  decisionRequirementsDefinitionKey?: string | null
-}
+type DecisionDef = DecisionDefinition
 
 export default function Decisions() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
@@ -107,6 +92,13 @@ export default function Decisions() {
   const [maxResults] = React.useState(50)
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId],
+  )
+  const decisionsReadDecision = useActionDecision('engine.runtime.decisions.read', selectedEngineResource)
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
 
   React.useEffect(() => {
     const engineIdParam = String(searchParams.get('engineId') || '')
@@ -123,7 +115,7 @@ export default function Decisions() {
   const defsQ = useQuery({
     queryKey: ['mission-control', 'decision-defs', selectedEngineId],
     queryFn: () => listDecisionDefinitions(selectedEngineId),
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   const defItems = React.useMemo(() => {
@@ -220,7 +212,7 @@ export default function Decisions() {
       if (!currentDef) return ''
       return fetchDecisionDefinitionDmnXml(currentDef.id, selectedEngineId)
     },
-    enabled: !!currentDef?.id && !!selectedEngineId,
+    enabled: !!currentDef?.id && !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
   // Derived boolean flags from selectedStates
@@ -249,7 +241,7 @@ export default function Decisions() {
       })
       return listDecisionHistory(params)
     },
-    enabled: !!selectedEngineId,
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed,
   })
 
 
@@ -269,7 +261,10 @@ export default function Decisions() {
       version: selectedVersion,
       decisionDefinitionId: defIdForVersion,
     }),
-    enabled: !!selectedEngineId && !!currentKey && selectedVersion !== null,
+    // The API resolves the selected definition and makes the authoritative
+    // runtime-resource decision. The browser snapshot intentionally excludes
+    // runtime-resource keys, so it cannot safely gate this request.
+    enabled: !!selectedEngineId && decisionsReadDecision.allowed && !!currentKey && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
   })
@@ -282,8 +277,29 @@ export default function Decisions() {
     decisionEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(() => {
+  const handleEditInStarbase = React.useCallback(async () => {
     if (!decisionEditTarget?.fileId || selectedVersion === null || !currentKey) return
+    setBridgeError(null)
+    setBridgeDecision(null)
+    try {
+      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
+        engineId: String(selectedEngineId || decisionEditTarget.engineId || ''),
+        projectId: decisionEditTarget.projectId,
+        fileId: decisionEditTarget.fileId,
+        definitionId: defIdForVersion || undefined,
+        definitionKey: currentKey,
+        decisionDefinitionId: defIdForVersion || undefined,
+        decisionDefinitionKey: currentKey,
+        kind: 'decision',
+      })
+      if (!bridgeDecision.allowed) {
+        setBridgeDecision(bridgeDecision)
+        return
+      }
+    } catch (error) {
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
+      return
+    }
 
     const params = new URLSearchParams({
       source: 'mission-control',
@@ -302,7 +318,7 @@ export default function Decisions() {
     }
 
     tenantNavigate(`/starbase/editor/${encodeURIComponent(sanitizePathParam(decisionEditTarget.fileId))}?${params.toString()}`)
-  }, [decisionEditTarget, selectedVersion, currentKey, selectedEngineId, tenantNavigate])
+  }, [decisionEditTarget, selectedVersion, currentKey, defIdForVersion, selectedEngineId, tenantNavigate])
 
   const rows = React.useMemo(() => {
     const list = historyQ.data || []
@@ -334,6 +350,19 @@ export default function Decisions() {
   const engineAccessError = isEngineAccessError(defsQ.error)
   if (engineAccessError) {
     return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  }
+  if (selectedEngineId && !decisionsReadDecision.allowed) {
+    return (
+      <div style={{ padding: 'var(--spacing-5)' }}>
+        <InlineNotification
+          kind="warning"
+          title="Decision definitions unavailable"
+          subtitle={decisionsReadDecision.reason}
+          lowContrast
+          hideCloseButton
+        />
+      </div>
+    )
   }
 
   return (
@@ -440,6 +469,10 @@ export default function Decisions() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
+        <RuntimeCollectionEmptyState kind="decision_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
+      )}
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

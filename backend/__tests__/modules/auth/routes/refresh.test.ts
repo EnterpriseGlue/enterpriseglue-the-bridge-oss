@@ -6,6 +6,7 @@ import refreshRouter from '../../../../../packages/backend-host/src/modules/auth
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/db/entities/User.js';
 import { RefreshToken } from '@enterpriseglue/shared/db/entities/RefreshToken.js';
+import { AuthzGroupMembership } from '@enterpriseglue/shared/infrastructure/persistence/entities/AuthzGroupMembership.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import * as jwt from '@enterpriseglue/shared/utils/jwt.js';
 import bcrypt from 'bcryptjs';
@@ -19,7 +20,18 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
 }));
 
-vi.mock('@enterpriseglue/shared/utils/jwt.js');
+vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({
+  verifyToken: vi.fn(),
+  generateAccessToken: vi.fn(),
+  normalizeUserJwtPayload: (payload: any) => {
+    const principalType = payload.principalType ?? 'user';
+    const principalId = payload.principalId ?? payload.userId;
+    if (principalType !== 'user' || !principalId || (payload.userId !== undefined && payload.userId !== principalId)) {
+      throw new Error('Invalid user principal');
+    }
+    return { ...payload, userId: principalId, principalType, principalId };
+  },
+}));
 
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
@@ -76,6 +88,7 @@ describe('POST /api/auth/refresh', () => {
       email: 'test@example.com',
       platformRole: 'user',
       isActive: true,
+      authSessionVersion: 2,
     };
 
     const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 10);
@@ -93,7 +106,13 @@ describe('POST /api/auth/refresh', () => {
       },
     });
 
-    (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'refresh' });
+    (jwt.verifyToken as any).mockReturnValue({
+      userId: 'user-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      authSessionVersion: 2,
+      type: 'refresh',
+    });
     (jwt.generateAccessToken as any).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
 
     const response = await request(app)
@@ -102,6 +121,49 @@ describe('POST /api/auth/refresh', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.expiresIn).toBe(3600);
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, { administratorRecovery: false });
+  });
+
+  it('refreshes a canonical-principal refresh token without legacy user fields', async () => {
+    const mockUser = { id: 'user-1', email: 'test@example.com', isActive: true, authSessionVersion: 2 };
+    const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 10);
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(mockUser) };
+    const refreshTokenRepo = { find: vi.fn().mockResolvedValue([{ tokenHash }]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === User ? userRepo : entity === RefreshToken ? refreshTokenRepo : (() => { throw new Error('Unexpected repository'); })(),
+    });
+    (jwt.verifyToken as any).mockReturnValue({ principalType: 'user', principalId: 'user-1', authSessionVersion: 2, type: 'refresh' });
+    (jwt.generateAccessToken as any).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
+
+    const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(200);
+    expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, { administratorRecovery: false });
+  });
+
+  it('rejects an existing administrator-recovery refresh session after membership expires or is removed', async () => {
+    const mockUser = { id: 'user-1', email: 'admin@example.com', isActive: true, authSessionVersion: 2 };
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(mockUser) };
+    const refreshTokenRepo = { find: vi.fn() };
+    const membershipRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        if (entity === AuthzGroupMembership) return membershipRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    (jwt.verifyToken as any).mockReturnValue({
+      principalType: 'user', principalId: 'user-1', authSessionVersion: 2, type: 'refresh', recovery: 'platform_administrator',
+    });
+
+    const response = await request(app).post('/api/auth/refresh').send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Session has been revoked');
+    expect(refreshTokenRepo.find).not.toHaveBeenCalled();
+    expect(jwt.generateAccessToken).not.toHaveBeenCalled();
   });
 
   it('rejects missing refresh token', async () => {
@@ -143,6 +205,85 @@ describe('POST /api/auth/refresh', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('User not found or inactive');
+    expect(refreshTokenRepo.find).not.toHaveBeenCalled();
+  });
+
+  it('accepts a compatible legacy refresh token without principal fields', async () => {
+    const mockUser = {
+      id: 'user-1',
+      email: 'test@example.com',
+      isActive: true,
+      authSessionVersion: 0,
+    };
+    const tokenHash = await bcrypt.hash(TEST_REFRESH_TOKEN, 10);
+    const userRepo = { findOneBy: vi.fn().mockResolvedValue(mockUser) };
+    const refreshTokenRepo = { find: vi.fn().mockResolvedValue([{ tokenHash }]) };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    (jwt.verifyToken as any).mockReturnValue({ userId: 'user-1', type: 'refresh' });
+    (jwt.generateAccessToken as any).mockReturnValue(TEST_NEW_ACCESS_TOKEN);
+
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('rejects a refresh token with a mismatched canonical principal before database access', async () => {
+    (jwt.verifyToken as any).mockReturnValue({
+      userId: 'user-1',
+      principalType: 'user',
+      principalId: 'other-user',
+      type: 'refresh',
+    });
+
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Invalid user principal');
+    expect(getDataSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects a refresh token after its session version is revoked', async () => {
+    const userRepo = {
+      findOneBy: vi.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'test@example.com',
+        isActive: true,
+        authSessionVersion: 3,
+      }),
+    };
+    const refreshTokenRepo = { find: vi.fn() };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === User) return userRepo;
+        if (entity === RefreshToken) return refreshTokenRepo;
+        throw new Error('Unexpected repository');
+      },
+    });
+    (jwt.verifyToken as any).mockReturnValue({
+      userId: 'user-1',
+      principalType: 'user',
+      principalId: 'user-1',
+      authSessionVersion: 2,
+      type: 'refresh',
+    });
+
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({ refreshToken: TEST_REFRESH_TOKEN });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toBe('Session has been revoked');
     expect(refreshTokenRepo.find).not.toHaveBeenCalled();
   });
 

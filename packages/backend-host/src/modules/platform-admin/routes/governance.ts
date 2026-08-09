@@ -7,9 +7,14 @@ import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { z } from 'zod';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { requirePermission } from '@enterpriseglue/shared/middleware/requirePermission.js';
-import { projectMemberService, engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import {
+  projectMemberService,
+  engineService,
+  getAccessAuthorityDecision,
+} from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -17,6 +22,7 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
 import { addCaseInsensitiveLike } from '@enterpriseglue/shared/infrastructure/persistence/adapters/index.js';
 import { PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { UserSearchResultSchema } from '@enterpriseglue/shared/schemas/platform-admin/admin.js';
 
 const router = Router();
 
@@ -32,6 +38,24 @@ const assignOwnerSchema = z.object({
   userId: z.string().uuid(),
   reason: z.string().min(1),
 });
+
+const requireGovernanceCatalogRead = requireAction('platform.governance.read', {
+  resourceResolver: 'platform.self',
+  acceptedPermissions: [
+    PlatformPermissions.SETTINGS_MANAGE,
+    PlatformPermissions.AUTHZ_ROLES_VIEW,
+    PlatformPermissions.AUTHZ_CHECK,
+    PlatformPermissions.ENGINE_SETS_VIEW,
+    PlatformPermissions.PROJECT_ENGINE_TARGETS_VIEW,
+  ],
+});
+
+async function assertManualGovernanceAllowed(resourceType: 'project' | 'engine'): Promise<void> {
+  const decision = await getAccessAuthorityDecision(resourceType);
+  if (decision && !decision.manualMutationsAllowed) {
+    throw Errors.forbidden(decision.reason || `Manual ${resourceType} access changes are disabled`);
+  }
+}
 
 // ============ User Search (for assigning owners) ============
 
@@ -53,14 +77,14 @@ router.get('/users/search', apiLimiter, requirePermission({ permission: Platform
     const dataSource = await getDataSource();
     const userRepo = dataSource.getRepository(User);
     let qb = userRepo.createQueryBuilder('u')
-      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName', 'u.platformRole'])
+      .select(['u.id', 'u.email', 'u.firstName', 'u.lastName'])
       .take(10)
       .orderBy('u.email', 'ASC');
     qb = addCaseInsensitiveLike(qb, 'u', 'email', 'query', `%${query}%`);
 
     const result = await qb.getMany();
 
-    res.json(result);
+    res.json(z.array(UserSearchResultSchema).parse(result));
   } catch (error) {
     logger.error('Search users error:', error);
     throw Errors.internal('Failed to search users');
@@ -73,7 +97,7 @@ router.get('/users/search', apiLimiter, requirePermission({ permission: Platform
  * GET /api/platform-admin/admin/governance/projects
  * List projects with owner info for governance
  */
-router.get('/projects', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/projects', apiLimiter, requireGovernanceCatalogRead, validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const searchRaw = req.query['search'];
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
@@ -110,7 +134,7 @@ router.get('/projects', apiLimiter, requirePermission({ permission: PlatformPerm
  * GET /api/platform-admin/admin/governance/engines
  * List engines with owner info for governance
  */
-router.get('/engines', apiLimiter, requirePermission({ permission: PlatformPermissions.SETTINGS_MANAGE }), validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
+router.get('/engines', apiLimiter, requireGovernanceCatalogRead, validateQuery(governanceSearchQuerySchema), asyncHandler(async (req, res) => {
   try {
     const searchRaw = req.query['search'];
     const search = typeof searchRaw === 'string' ? searchRaw.trim() : '';
@@ -130,6 +154,7 @@ router.get('/engines', apiLimiter, requirePermission({ permission: PlatformPermi
       id: e.id,
       name: e.name,
       type: e.type,
+      lifecycleStatus: e.lifecycleStatus || null,
       ownerEmail: null,
       ownerName: null,
       delegateEmail: null,
@@ -157,6 +182,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('project');
       const projectId = String(req.params.projectId);
       const { userId, reason } = req.body;
 
@@ -175,6 +201,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Assign project owner error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign project owner');
     }
   })
@@ -191,6 +218,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('project');
       const projectId = String(req.params.projectId);
       const { userId, reason } = req.body;
 
@@ -209,6 +237,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Assign project delegate error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign delegate');
     }
   })
@@ -225,6 +254,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('engine');
       const engineId = String(req.params.engineId);
       const { userId, reason } = req.body;
 
@@ -243,6 +273,7 @@ router.post(
       res.json({ success: true });
     } catch (error) {
       logger.error('Assign engine owner error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign engine owner');
     }
   })
@@ -259,6 +290,7 @@ router.post(
   validateBody(assignOwnerSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualGovernanceAllowed('engine');
       const engineId = String(req.params.engineId);
       const { userId, reason } = req.body;
       const adminUserId = req.user!.userId;
@@ -288,12 +320,7 @@ router.post(
         }
       }
 
-      // Update engine with new delegate
-      const now = Date.now();
-      await engineRepo.update({ id: engineId }, {
-        delegateId: userId || null,
-        updatedAt: now,
-      });
+      await engineService.assignDelegate(engineId, userId || null);
 
       // Log the action
       await logAudit({
@@ -327,6 +354,7 @@ router.post(
       });
     } catch (error) {
       logger.error('Assign engine delegate error:', error);
+      if (error instanceof AppError) throw error;
       throw Errors.internal('Failed to assign delegate');
     }
   })

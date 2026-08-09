@@ -14,7 +14,9 @@ export const DecisionDefinitionSchema = z.object({
   decisionRequirementsDefinitionKey: z.string().optional().nullable(),
   historyTimeToLive: z.number().optional().nullable(),
   versionTag: z.string().optional().nullable(),
-});
+}).passthrough();
+
+export const DecisionDefinitionListSchema = z.array(DecisionDefinitionSchema);
 
 export const DecisionDefinitionXmlSchema = z.object({
   id: z.string().optional(),
@@ -46,8 +48,8 @@ export const DecisionDefinitionQueryParams = z.object({
   versionTagLike: z.string().optional(),
   sortBy: z.enum(['category', 'key', 'id', 'name', 'version', 'deploymentId', 'tenantId', 'decisionRequirementsDefinitionKey']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  firstResult: z.number().optional(),
-  maxResults: z.number().optional(),
+  firstResult: z.coerce.number().int().nonnegative().optional(),
+  maxResults: z.coerce.number().int().positive().optional(),
 });
 
 export const EvaluateDecisionRequest = z.object({
@@ -57,14 +59,18 @@ export const EvaluateDecisionRequest = z.object({
   })),
 });
 
-export const DecisionEvaluationResultSchema = z.array(z.record(z.string(), z.object({
+export const DecisionEvaluationVariableSchema = z.object({
   value: z.any(),
-  type: z.string(),
-})));
+  type: z.string().optional(),
+}).passthrough();
+
+export const DecisionEvaluationResultSchema = z.array(z.record(z.string(), DecisionEvaluationVariableSchema));
 
 // Types
 export type DecisionDefinition = z.infer<typeof DecisionDefinitionSchema>;
+export type DecisionDefinitionList = z.infer<typeof DecisionDefinitionListSchema>;
 export type DecisionDefinitionXml = z.infer<typeof DecisionDefinitionXmlSchema>;
 export type DecisionDefinitionQueryParams = z.infer<typeof DecisionDefinitionQueryParams>;
 export type EvaluateDecisionRequest = z.infer<typeof EvaluateDecisionRequest>;
+export type DecisionEvaluationVariable = z.infer<typeof DecisionEvaluationVariableSchema>;
 export type DecisionEvaluationResult = z.infer<typeof DecisionEvaluationResultSchema>;

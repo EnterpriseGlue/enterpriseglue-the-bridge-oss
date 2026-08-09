@@ -3,20 +3,172 @@ import request from 'supertest';
 import express from 'express';
 import { existsSync } from 'fs';
 import enginesRouter from '../../../../../packages/backend-host/src/modules/mission-control/engines/routes.js';
-import { engineService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { engineService, engineSetService, projectEngineTargetService } from '@enterpriseglue/shared/services/platform-admin/index.js';
+import { engineMetadataReconciliationService } from '@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js';
+import { runtimeResourceInventoryService } from '@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entities/Engine.js';
+import { RuntimeResource } from '@enterpriseglue/shared/infrastructure/persistence/entities/RuntimeResource.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
+
+const apiClientAuthMock = vi.hoisted(() => ({
+  authenticateToken: vi.fn(),
+}));
+const permissionServiceMock = vi.hoisted(() => ({
+  hasPermission: vi.fn().mockResolvedValue(false),
+  getKnownEngineIdsForUser: vi.fn().mockResolvedValue(['e1']),
+  syncLegacyRoleAssignments: vi.fn().mockResolvedValue({ scannedProjects: 0, scannedEngines: 1, upserted: 1, removed: 0 }),
+}));
+const platformSettingsServiceMock = vi.hoisted(() => ({
+  get: vi.fn().mockResolvedValue({ engineOnboardingMode: 'manual_allowed' }),
+}));
+const policyServiceMock = vi.hoisted(() => ({
+  evaluateGate: vi.fn().mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' }),
+}));
+const fetchMock = vi.hoisted(() => vi.fn());
+const secretResolverMock = vi.hoisted(() => ({
+  normalizeForStorage: vi.fn((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null),
+  resolveStored: vi.fn((value: string | null | undefined) => value?.startsWith('v2:test:') ? Buffer.from(value.slice('v2:test:'.length), 'base64').toString() : value || null),
+}));
+const engineTenantMappingServiceMock = vi.hoisted(() => ({
+  list: vi.fn(),
+  getDiagnostics: vi.fn(),
+  upsert: vi.fn(),
+}));
+const engineTenancyTransitionServiceMock = vi.hoisted(() => ({
+  preview: vi.fn(),
+  apply: vi.fn(),
+  classificationReport: vi.fn(),
+}));
+const nativeGrantMigrationMock = vi.hoisted(() => ({
+  evidenceLimitError: class CamundaNativeGrantEvidenceLimitError extends Error {},
+  fromCustomerExport: vi.fn(),
+  listLive: vi.fn(),
+  classify: vi.fn(),
+  createPreview: vi.fn(),
+  listForEngine: vi.fn(),
+  getSummary: vi.fn(),
+  getDetailedSnapshot: vi.fn(),
+  setDraft: vi.fn(),
+  getGeneratedDraft: vi.fn(),
+  markApplied: vi.fn(),
+  markRolledBack: vi.fn(),
+  generate: vi.fn(),
+  externalEngineKey: vi.fn((engineId: string) => `external.camunda-native-${engineId}`),
+  migrationCommitments: vi.fn(() => ({ engineConnectionCommitment: 'a'.repeat(64), runtimeInventoryCommitment: 'b'.repeat(64) })),
+  assertMigrationContext: vi.fn(),
+}));
+const configBundleApplyMock = vi.hoisted(() => ({ apply: vi.fn() }));
+const configBundleRollbackMock = vi.hoisted(() => ({ compile: vi.fn(), diff: vi.fn() }));
+const backstopMock = vi.hoisted(() => ({
+  listMappings: vi.fn(), writeMappings: vi.fn(), listRuns: vi.fn(), getRun: vi.fn(), getDetail: vi.fn(), preview: vi.fn(), apply: vi.fn(), rollback: vi.fn(), driftCheck: vi.fn(),
+}));
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(() => false),
 }));
 
+vi.mock('undici', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('undici')>()),
+  fetch: fetchMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/SecretResolver.js', () => ({
+  secretResolver: secretResolverMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenantMappingService.js', () => ({
+  engineTenantMappingService: engineTenantMappingServiceMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineTenancyTransitionService.js', () => ({
+  engineTenancyTransitionService: engineTenancyTransitionServiceMock,
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantInventoryService.js', () => ({
+  camundaNativeGrantInventoryService: { fromCustomerExport: nativeGrantMigrationMock.fromCustomerExport, listLive: nativeGrantMigrationMock.listLive },
+  classifyCamundaNativeGrant: nativeGrantMigrationMock.classify,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantImportRunService.js', () => ({
+  CamundaNativeGrantEvidenceLimitError: nativeGrantMigrationMock.evidenceLimitError,
+  camundaNativeGrantMigrationCommitments: nativeGrantMigrationMock.migrationCommitments,
+  assertCamundaNativeGrantMigrationContext: nativeGrantMigrationMock.assertMigrationContext,
+  camundaNativeGrantImportRunService: {
+    createPreview: nativeGrantMigrationMock.createPreview, listForEngine: nativeGrantMigrationMock.listForEngine, getSummary: nativeGrantMigrationMock.getSummary,
+    getDetailedSnapshot: nativeGrantMigrationMock.getDetailedSnapshot, setDraft: nativeGrantMigrationMock.setDraft,
+    getGeneratedDraft: nativeGrantMigrationMock.getGeneratedDraft, markApplied: nativeGrantMigrationMock.markApplied,
+    markRolledBack: nativeGrantMigrationMock.markRolledBack,
+  },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/CamundaNativeGrantDraftService.js', () => ({
+  camundaNativeGrantDraftService: { generate: nativeGrantMigrationMock.generate },
+  camundaNativeGrantExternalEngineKey: nativeGrantMigrationMock.externalEngineKey,
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopGroupMappingService.js', () => ({
+  engineBackstopGroupMappingService: { list: backstopMock.listMappings, write: backstopMock.writeMappings },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncRunService.js', () => ({
+  EngineBackstopEvidenceLimitError: class EngineBackstopEvidenceLimitError extends Error {},
+  engineBackstopSyncRunService: { listForEngine: backstopMock.listRuns, getSummary: backstopMock.getRun, getDetailedSnapshot: backstopMock.getDetail },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineBackstopSyncService.js', () => ({
+  engineBackstopSyncService: { preview: backstopMock.preview, apply: backstopMock.apply, rollback: backstopMock.rollback, driftCheck: backstopMock.driftCheck },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleApplyService.js', () => ({
+  configBundleApplyService: { apply: configBundleApplyMock.apply },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js', () => ({
+  configBundlePreviewService: { compile: configBundleRollbackMock.compile },
+}));
+vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundleDiffService.js', () => ({
+  configBundleDiffService: { diff: configBundleRollbackMock.diff },
+}));
+
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'user-1' };
-    req.tenant = { tenantId: null };
+    req.tenant = { tenantId: 'tenant-default' };
     next();
   },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/ApiClientService.js', () => ({
+  ApiClientScopes: {
+    ENGINE_REGISTER: 'engine:register',
+    DEPLOYMENT_EXECUTE: 'deployment:execute',
+  },
+  apiClientService: {
+    authenticateToken: apiClientAuthMock.authenticateToken,
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => ({
+  PlatformPermissions: {
+    ENGINE_REGISTRATION_MANAGE: 'platform:engine-registration:manage',
+  },
+  EnginePermissions: {
+    ENGINE_EDIT: 'engine:edit',
+    ENGINE_DELETE: 'engine:delete',
+    SECRETS_VIEW: 'engine:secrets:view',
+    SECRETS_MANAGE: 'engine:secrets:manage',
+    MEMBERS_MANAGE: 'engine:members:manage',
+    MEMBERS_VIEW: 'engine:members:view',
+    PROJECT_ACCESS_VIEW: 'engine:project-access:view',
+    INSTANCE_VIEW: 'engine:instance:view',
+  },
+  ExternalEngineSystemPermissions: {
+    ENGINE_REGISTRATION_MANAGE: 'external-engine-system:engine-registration:manage',
+    PROJECT_TARGETS_MANAGE: 'external-engine-system:project-targets:manage',
+  },
+  permissionService: {
+    hasPermission: permissionServiceMock.hasPermission,
+    getKnownEngineIdsForUser: permissionServiceMock.getKnownEngineIdsForUser,
+    syncLegacyRoleAssignments: permissionServiceMock.syncLegacyRoleAssignments,
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/PolicyService.js', () => ({
+  policyService: policyServiceMock,
 }));
 
 vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
@@ -26,6 +178,8 @@ vi.mock('@enterpriseglue/shared/middleware/platformAuth.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/rateLimiter.js', () => ({
   apiLimiter: (_req: any, _res: any, next: any) => next(),
   engineLimiter: (_req: any, _res: any, next: any) => next(),
+  engineRegistrationLimiter: (_req: any, _res: any, next: any) => next(),
+  reconciliationLimiter: (_req: any, _res: any, next: any) => next(),
 }));
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -33,6 +187,10 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
+  ApiClientScopes: {
+    ENGINE_REGISTER: 'engine:register',
+    DEPLOYMENT_EXECUTE: 'deployment:execute',
+  },
   engineService: {
     listEngines: vi.fn().mockResolvedValue([]),
     getEngine: vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1' }),
@@ -41,6 +199,40 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
       { engine: { id: 'e1', name: 'Engine 1' }, role: 'admin' },
     ]),
     getEngineRole: vi.fn().mockResolvedValue('owner'),
+    decommissionEngine: vi.fn().mockResolvedValue(undefined),
+    assertBackstopRetirementComplete: vi.fn().mockResolvedValue(undefined),
+    hasBackstopHistory: vi.fn().mockResolvedValue(false),
+    createEngineWithGovernanceAssignments: vi.fn(async (engine: unknown, dataSource: any) => {
+      await dataSource.getRepository({ name: 'Engine' }).insert(engine);
+    }),
+  },
+  engineSetService: {
+    materializeEngineSetsForEngine: vi.fn().mockResolvedValue(undefined),
+  },
+  platformSettingsService: platformSettingsServiceMock,
+  projectEngineTargetService: {
+    listTargets: vi.fn().mockResolvedValue([]),
+    createTarget: vi.fn(),
+    getTarget: vi.fn(),
+    archiveTarget: vi.fn(),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/EngineMetadataReconciliationService.js', () => ({
+  engineMetadataReconciliationService: {
+    reconcileEngine: vi.fn().mockResolvedValue({
+      created: 0,
+      updated: 0,
+      deactivated: 0,
+      materializedSets: 0,
+      deployments: { created: 0, updated: 0, artifactsCreated: 0 },
+    }),
+  },
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/RuntimeResourceInventoryService.js', () => ({
+  runtimeResourceInventoryService: {
+    materializeForEngine: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -58,25 +250,193 @@ vi.mock('@enterpriseglue/shared/config/index.js', () => ({
   },
 }));
 
+function transactionalDataSource(getRepository: (entity: any) => any) {
+  return {
+    getRepository,
+    transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
+  };
+}
+
 describe('mission-control engines routes', () => {
   let app: express.Application;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    apiClientAuthMock.authenticateToken.mockReset();
+    permissionServiceMock.hasPermission.mockReset();
+    permissionServiceMock.getKnownEngineIdsForUser.mockReset();
+    permissionServiceMock.syncLegacyRoleAssignments.mockReset();
+    platformSettingsServiceMock.get.mockReset();
+    policyServiceMock.evaluateGate.mockReset();
+    secretResolverMock.normalizeForStorage.mockReset();
+    secretResolverMock.resolveStored.mockReset();
+    engineTenantMappingServiceMock.list.mockReset();
+    engineTenantMappingServiceMock.getDiagnostics.mockReset();
+    engineTenantMappingServiceMock.upsert.mockReset();
+    engineTenancyTransitionServiceMock.preview.mockReset();
+    engineTenancyTransitionServiceMock.apply.mockReset();
+    engineTenancyTransitionServiceMock.classificationReport.mockReset();
+    nativeGrantMigrationMock.fromCustomerExport.mockReset();
+    nativeGrantMigrationMock.listLive.mockReset();
+    nativeGrantMigrationMock.classify.mockReset();
+    nativeGrantMigrationMock.createPreview.mockReset();
+    nativeGrantMigrationMock.listForEngine.mockReset();
+    nativeGrantMigrationMock.getSummary.mockReset();
+    nativeGrantMigrationMock.getDetailedSnapshot.mockReset();
+    nativeGrantMigrationMock.setDraft.mockReset();
+    nativeGrantMigrationMock.getGeneratedDraft.mockReset();
+    nativeGrantMigrationMock.markApplied.mockReset();
+    nativeGrantMigrationMock.markRolledBack.mockReset();
+    nativeGrantMigrationMock.generate.mockReset();
+    nativeGrantMigrationMock.externalEngineKey.mockImplementation((engineId: string) => `external.camunda-native-${engineId}`);
+    nativeGrantMigrationMock.migrationCommitments.mockReset();
+    nativeGrantMigrationMock.migrationCommitments.mockReturnValue({ engineConnectionCommitment: 'a'.repeat(64), runtimeInventoryCommitment: 'b'.repeat(64) });
+    nativeGrantMigrationMock.assertMigrationContext.mockReset();
+    configBundleApplyMock.apply.mockReset();
+    configBundleRollbackMock.compile.mockReset();
+    configBundleRollbackMock.diff.mockReset();
+    backstopMock.listMappings.mockReset();
+    backstopMock.writeMappings.mockReset();
+    backstopMock.listRuns.mockReset();
+    backstopMock.getRun.mockReset();
+    backstopMock.getDetail.mockReset();
+    backstopMock.preview.mockReset();
+    backstopMock.apply.mockReset();
+    backstopMock.rollback.mockReset();
+    (engineService as any).listEngines.mockReset();
+    (engineService as any).getEngine.mockReset();
+    (engineService as any).hasEngineAccess.mockReset();
+    (engineService as any).getUserEngines.mockReset();
+    (engineService as any).getEngineRole.mockReset();
+    (engineService as any).decommissionEngine.mockReset();
+    (engineService as any).assertBackstopRetirementComplete.mockReset();
+    (engineService as any).hasBackstopHistory.mockReset();
+    (engineService as any).createEngineWithGovernanceAssignments.mockReset();
+    (engineSetService as any).materializeEngineSetsForEngine.mockReset();
+    (projectEngineTargetService as any).listTargets.mockReset();
+    (projectEngineTargetService as any).createTarget.mockReset();
+    (projectEngineTargetService as any).getTarget.mockReset();
+    (projectEngineTargetService as any).archiveTarget.mockReset();
+    (engineMetadataReconciliationService as any).reconcileEngine.mockReset();
+    (runtimeResourceInventoryService as any).materializeForEngine.mockReset();
+    (getDataSource as any).mockReset();
+    (existsSync as any).mockReset();
+
+    apiClientAuthMock.authenticateToken.mockResolvedValue(null);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:instance:view' ||
+      permission === 'platform:engine:create' ||
+      permission === 'platform:engine-registration:manage'
+    );
+    permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['e1']);
+    permissionServiceMock.syncLegacyRoleAssignments.mockResolvedValue({ scannedProjects: 0, scannedEngines: 1, upserted: 1, removed: 0 });
+    platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'manual_allowed' });
+    policyServiceMock.evaluateGate.mockResolvedValue({ decision: 'allow', reason: 'no-policy-deny' });
+    secretResolverMock.normalizeForStorage.mockImplementation((value: string | null | undefined) => value ? `v2:test:${Buffer.from(value).toString('base64')}` : null);
+    secretResolverMock.resolveStored.mockImplementation((value: string | null | undefined) => value?.startsWith('v2:test:') ? Buffer.from(value.slice('v2:test:'.length), 'base64').toString() : value || null);
+    (engineService as any).listEngines.mockResolvedValue([]);
+    (engineService as any).getEngine.mockResolvedValue({ id: 'e1', name: 'Engine 1' });
+    (engineService as any).getUserEngines.mockResolvedValue([{ engine: { id: 'e1', name: 'Engine 1' }, role: 'admin' }]);
+    (engineService as any).decommissionEngine.mockResolvedValue(undefined);
+    (engineService as any).assertBackstopRetirementComplete.mockResolvedValue(undefined);
+    (engineService as any).hasBackstopHistory.mockResolvedValue(false);
+    (engineSetService as any).materializeEngineSetsForEngine.mockResolvedValue(undefined);
+    (projectEngineTargetService as any).listTargets.mockResolvedValue([]);
+    (projectEngineTargetService as any).createTarget.mockResolvedValue({ id: 'target-1' });
+    (projectEngineTargetService as any).getTarget.mockResolvedValue({
+      id: 'target-1',
+      projectId: 'project-1',
+      engineId: 'e1',
+      status: 'active',
+      source: 'external',
+      sourceRef: 'external_engine_system:system-1:project_engine_target:project-1:e1',
+      allowManualDeploy: true,
+      allowCiDeploy: false,
+      allowApiDeploy: false,
+      allowImport: true,
+    });
+    (projectEngineTargetService as any).archiveTarget.mockResolvedValue(true);
+    (engineService as any).createEngineWithGovernanceAssignments.mockImplementation(async (engine: unknown, dataSource: any) => {
+      await dataSource.getRepository({ name: 'Engine' }).insert(engine);
+    });
+    (engineMetadataReconciliationService as any).reconcileEngine.mockResolvedValue({
+      created: 0,
+      updated: 0,
+      deactivated: 0,
+      materializedSets: 0,
+      deployments: { created: 0, updated: 0, artifactsCreated: 0 },
+    });
+    (runtimeResourceInventoryService as any).materializeForEngine.mockResolvedValue([]);
+    (existsSync as any).mockReturnValue(false);
+    engineTenantMappingServiceMock.list.mockResolvedValue([]);
+    backstopMock.listMappings.mockResolvedValue([]);
+    backstopMock.listRuns.mockResolvedValue([]);
+    engineTenantMappingServiceMock.getDiagnostics.mockResolvedValue({
+      mode: 'shared',
+      tenantId: null,
+      mappingStrategy: 'engine_tenant_id',
+      mappingVersion: 0,
+      resolutionStatus: 'incomplete',
+      lastReconciledAt: null,
+      mappedResourceCount: 0,
+      unmappedResourceCount: 0,
+      conflictingResourceCount: 0,
+    });
+    engineTenancyTransitionServiceMock.classificationReport.mockResolvedValue({
+      generatedAt: 10,
+      defaultTenantId: 'tenant-default',
+      totals: {
+        engines: 1,
+        classified: 1,
+        readyForApply: 0,
+        requiresReview: 0,
+        conflicts: 0,
+      },
+      rows: [{
+        engineId: 'e1',
+        engineName: 'Engine 1',
+        status: 'classified',
+        reason: 'Dedicated engine has a concrete owning tenant.',
+        current: {
+          mode: 'dedicated',
+          tenantId: 'tenant-default',
+          mappingStrategy: null,
+          mappingVersion: 0,
+          resolutionStatus: 'ready',
+          runtimeAccessScope: 'engine_wide',
+        },
+        proposed: null,
+      }],
+    });
+    fetchMock.mockReset();
+    (engineService as any).hasEngineAccess.mockResolvedValue(true);
+    (engineService as any).getEngineRole.mockResolvedValue('owner');
+    const defaultGetRepository = () => ({
+        find: vi.fn().mockResolvedValue([{
+          id: 'e1',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+          name: 'Engine 1',
+          username: 'engine-user',
+          passwordEnc: 'secret',
+        }]),
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }),
+        findOneBy: vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }),
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: defaultGetRepository,
+      transaction: async (callback: (manager: { getRepository: typeof defaultGetRepository }) => unknown) => callback({ getRepository: defaultGetRepository }),
+    });
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
     app.use(enginesRouter);
     app.use(errorHandler);
-    vi.clearAllMocks();
-    (getDataSource as any).mockResolvedValue({
-      getRepository: () => ({
-        find: vi.fn().mockResolvedValue([{ id: 'e1', name: 'Engine 1' }]),
-        findOneBy: vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1' }),
-      }),
-    });
   });
 
   it('returns list of engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+
     const response = await request(app).get('/engines-api/engines');
 
     expect(response.status).toBe(200);
@@ -84,7 +444,8 @@ describe('mission-control engines routes', () => {
       expect.objectContaining({
         id: 'e1',
         name: 'Engine 1',
-        myRole: 'admin',
+        myRole: 'owner',
+        governance: { accountableOwnerId: null, delegateId: null },
         username: null,
         passwordEnc: null,
         capabilities: expect.objectContaining({
@@ -96,12 +457,1594 @@ describe('mission-control engines routes', () => {
     ]);
   });
 
+  it('rejects an invalid manageable-shared inventory query before authorization', async () => {
+    const response = await request(app)
+      .get('/engines-api/engines?includeManageableShared=yes');
+
+    expect(response.status).toBe(400);
+    expect(permissionServiceMock.getKnownEngineIdsForUser).not.toHaveBeenCalled();
+  });
+
+  it('normalizes PostgreSQL bigint timestamps in an authorization-filtered inventory response', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([{
+          id: 'e1',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+          name: 'Engine 1',
+          createdAt: '1700000000000',
+          updatedAt: '1700000000001',
+          lastAppliedAt: '1700000000002',
+          lastExternalSyncAt: '1700000000003',
+          lastTenantReconciledAt: '1700000000004',
+          lastMetadataReconciledAt: '1700000000005',
+          externalUpdatedAt: '1700000000006',
+        }]),
+      }),
+    });
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      id: 'e1',
+      createdAt: 1700000000000,
+      updatedAt: 1700000000001,
+      lastAppliedAt: 1700000000002,
+      lastExternalSyncAt: 1700000000003,
+      lastTenantReconciledAt: 1700000000004,
+      lastMetadataReconciledAt: 1700000000005,
+      externalUpdatedAt: 1700000000006,
+    });
+  });
+
+  it('keeps Mission Control list authorization identical for direct and customer-sidecar engines', async () => {
+    permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['engine-direct', 'engine-sidecar']);
+    (engineService as any).getEngineRole.mockResolvedValue(null);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([
+          {
+            id: 'engine-direct', name: 'Direct engine', type: 'operaton',
+            tenantId: 'tenant-default', tenancyMode: 'dedicated',
+            connectionMode: 'direct', runtimeAccessScope: 'engine_wide',
+          },
+          {
+            id: 'engine-sidecar', name: 'Sidecar engine', type: 'operaton',
+            tenantId: 'tenant-default', tenancyMode: 'dedicated',
+            connectionMode: 'customer_sidecar', runtimeAccessScope: 'engine_wide',
+          },
+        ]),
+      }),
+    });
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((engine: any) => ({
+      id: engine.id,
+      connectionMode: engine.connectionMode,
+      myRole: engine.myRole,
+      capabilities: engine.capabilities,
+    }))).toEqual([
+      expect.objectContaining({
+        id: 'engine-direct', connectionMode: 'direct', myRole: null,
+        capabilities: expect.objectContaining({ compatibilityProfile: 'camunda7-rest' }),
+      }),
+      expect.objectContaining({
+        id: 'engine-sidecar', connectionMode: 'customer_sidecar', myRole: null,
+        capabilities: expect.objectContaining({ compatibilityProfile: 'camunda7-rest' }),
+      }),
+    ]);
+    expect(response.body[1].capabilities).toEqual(response.body[0].capabilities);
+  });
+
+  it('lists evaluator-visible engines for a custom-role user without inventing a legacy role string', async () => {
+    permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['custom-engine']);
+    permissionServiceMock.hasPermission.mockImplementation(async (_permission: string, context: { resourceId?: string }) =>
+      context.resourceId === 'custom-engine'
+    );
+    (engineService as any).getEngineRole.mockResolvedValue(null);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        find: vi.fn().mockResolvedValue([{
+          id: 'custom-engine',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+          name: 'Custom role engine',
+          runtimeAccessScope: 'engine_wide',
+        }]),
+        findOne: vi.fn().mockResolvedValue({ id: 'custom-engine', tenantId: 'tenant-default', tenancyMode: 'dedicated', name: 'Custom role engine' }),
+      }),
+    });
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({ id: 'custom-engine', name: 'Custom role engine', myRole: null }),
+    ]);
+    expect(permissionServiceMock.getKnownEngineIdsForUser).toHaveBeenCalledWith('user-1', 'tenant-default');
+    expect(engineService.getEngineRole).toHaveBeenCalledWith('user-1', 'custom-engine', 'tenant-default');
+  });
+
+  it('returns engine credential state but never the stored secret through scoped engine secret view permission', async () => {
+    (engineService as any).getUserEngines.mockResolvedValueOnce([
+      { engine: { id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }, role: 'operator' },
+    ]);
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:instance:view' || permission === 'engine:secrets:view'
+    );
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      id: 'e1',
+      username: 'engine-user',
+      passwordEnc: null,
+      hasCredential: true,
+    });
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:secrets:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+  });
+
+  it('redacts engine list secret fields when user has edit without secret view', async () => {
+    (engineService as any).getUserEngines.mockResolvedValueOnce([
+      { engine: { id: 'e1', name: 'Engine 1', username: 'engine-user', passwordEnc: 'secret' }, role: 'operator' },
+    ]);
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:instance:view' || permission === 'engine:edit'
+    );
+
+    const response = await request(app).get('/engines-api/engines');
+
+    expect(response.status).toBe(200);
+    expect(response.body[0]).toMatchObject({
+      id: 'e1',
+      username: null,
+      passwordEnc: null,
+    });
+  });
+
   it('returns engine detail when user has access', async () => {
     const response = await request(app).get('/engines-api/engines/e1');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ id: 'e1', name: 'Engine 1' });
-    expect((engineService as any).hasEngineAccess).toHaveBeenCalled();
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+  });
+
+  it('lists only tenant-visible sanitized runtime inventory for an authorized engine viewer', async () => {
+    const resourceRepo = {
+      find: vi.fn().mockResolvedValue([
+        {
+          id: 'resource-payments', tenantId: 'tenant-default', tenantResolutionStatus: 'resolved', engineId: 'e1', resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '',
+          engineResourceId: null, deploymentId: null, projectId: null, fileId: null, version: 1, labelsJson: '{}', lineageJson: '{}', source: 'engine_discovery',
+          sourceRef: null, observedAt: '1', isActive: true, createdAt: '2', updatedAt: '3',
+        },
+        { id: 'resource-foreign', tenantId: 'tenant-b', engineId: 'e1', resourceKind: 'decision_definition', resourceKey: 'foreign', isActive: true, lineageJson: '{}' },
+      ]),
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === RuntimeResource
+        ? resourceRepo
+        : entity === Engine
+          ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) }
+          : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) },
+    });
+
+    const response = await request(app).get('/engines-api/engines/e1/runtime-resources?resourceKind=process_definition');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([expect.objectContaining({
+      id: 'resource-payments',
+      resourceKey: 'payments',
+      observedAt: 1,
+      createdAt: 2,
+      updatedAt: 3,
+    })]);
+    expect(resourceRepo.find).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ engineId: 'e1', resourceKind: 'process_definition', isActive: true }),
+    }));
+  });
+
+  it('reconciles one engine runtime inventory through engine edit authorization', async () => {
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:edit'
+    );
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: unknown) => entity === Engine
+        ? { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) }
+        : { findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) },
+    });
+    (engineMetadataReconciliationService as any).reconcileEngine.mockResolvedValue({
+      created: 1, updated: 2, deactivated: 0, materializedSets: 1,
+      deployments: { created: 1, updated: 0, artifactsCreated: 2 },
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/runtime-resources/reconcile');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ created: 1, deployments: { artifactsCreated: 2 } });
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith('e1', 'tenant-default');
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
+      resourceType: 'engine', resourceId: 'e1',
+    }));
+  });
+
+  it('lists only sanitized tenant-scoped native-grant receipts for a visible compatible engine', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+    nativeGrantMigrationMock.listForEngine.mockResolvedValue([{
+      id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', sourceKind: 'live_api', status: 'applied', inputHash: 'a'.repeat(64),
+      mappingCatalogVersion: 'camunda7-v1-read-only', inventoryTruncated: false,
+      normalizedCounts: { total: 1, proposed: 1, approval_required: 0, manual_required: 0, blocked: 0 }, classifications: [],
+      draftHash: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, appliedConfigBundleRunId: 'apply-1', rollbackConfigBundleRunId: null, rolledBackAt: null, createdAt: 1, updatedAt: 1,
+    }]);
+
+    const response = await request(app).get('/engines-api/engines/e1/camunda-native-grants/imports');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ runs: [expect.objectContaining({ id: 'run-1', appliedConfigBundleRunId: 'apply-1' })] });
+    expect(JSON.stringify(response.body)).not.toContain('sensitive-native-group');
+    expect(nativeGrantMigrationMock.listForEngine).toHaveBeenCalledWith({ engineId: 'e1', tenantId: 'tenant-default' });
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('platform:camunda-native-grants:history-view', expect.anything());
+  });
+
+  it('writes and reads opaque backstop mappings without returning the native group ID', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+    const mapping = { id: 'mapping-1', engineId: 'e1', tenantId: 'tenant-default', authzGroupId: 'group-1', nativeGroupReference: 'camunda-group-aaaaaaaaaaaaaaaaaaaaaaaa', source: 'manual', ownershipMode: 'manual', isActive: true, createdById: 'user-1', createdAt: 1, updatedAt: 1 };
+    backstopMock.writeMappings.mockResolvedValue({ mappings: [mapping] });
+    backstopMock.listMappings.mockResolvedValue([mapping]);
+
+    const created = await request(app).post('/engines-api/engines/e1/backstop/mappings').send({
+      mappings: [{ authzGroupId: 'group-1', nativeGroupId: 'sensitive-camunda-group', isActive: true }],
+    });
+    const listed = await request(app).get('/engines-api/engines/e1/backstop/mappings');
+
+    expect(created.status).toBe(200);
+    expect(listed.status).toBe(200);
+    expect(JSON.stringify(created.body)).not.toContain('sensitive-camunda-group');
+    expect(JSON.stringify(listed.body)).not.toContain('sensitive-camunda-group');
+    expect(backstopMock.writeMappings).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', tenantId: 'tenant-default', actorId: 'user-1', request: expect.objectContaining({ mappings: [expect.objectContaining({ nativeGroupId: 'sensitive-camunda-group' })] }),
+    }));
+    expect(backstopMock.listMappings).toHaveBeenCalledWith('e1', 'tenant-default');
+  });
+
+  it('creates a sanitized hash-bound backstop preview and requires acknowledgment before apply', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+    const run = { id: 'backstop-run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed', sourceHash: 'a'.repeat(64), desiredHash: 'b'.repeat(64), resultHash: null, catalogVersion: 'camunda7-mirrored-backstop-v1', capability: {}, counts: { total: 0, proposed: 0, manual_required: 0, blocked: 0, proposedGrantCount: 0 }, classifications: [], rollbackOfRunId: null, observedOfRunId: null, detailedSnapshotAvailable: false, detailedSnapshotExpiresAt: null, completedAt: null, createdAt: 1, updatedAt: 1 };
+    backstopMock.preview.mockResolvedValue(run);
+    backstopMock.apply.mockResolvedValue({ run: { ...run, status: 'succeeded', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
+    backstopMock.rollback.mockResolvedValue({ run: { ...run, id: 'rollback-run-1', status: 'rolled_back', rollbackOfRunId: 'backstop-run-1', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
+    backstopMock.driftCheck.mockResolvedValue({ run: { ...run, id: 'drift-run-1', status: 'out_of_sync', observedOfRunId: 'backstop-run-1', resultHash: 'c'.repeat(64) }, task: { status: 'completed' } });
+
+    const preview = await request(app).post('/engines-api/engines/e1/backstop/sync/preview').send({});
+    const rejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64) });
+    const applied = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/apply').send({ desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true });
+    const rollbackRejected = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({});
+    const rolledBack = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/rollback').send({ acknowledgeOwnedGrantDeletion: true });
+    const drift = await request(app).post('/engines-api/engines/e1/backstop/sync/backstop-run-1/drift-check').send({});
+
+    expect(preview.status).toBe(201);
+    expect(JSON.stringify(preview.body)).not.toContain('sensitive-camunda-group');
+    expect(rejected.status).toBe(400);
+    expect(applied.status).toBe(200);
+    expect(rollbackRejected.status).toBe(400);
+    expect(rolledBack.status).toBe(200);
+    expect(drift.status).toBe(200);
+    expect(backstopMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', request: { desiredHash: 'b'.repeat(64), acknowledgeDirectIdentityBoundary: true },
+    }));
+    expect(backstopMock.rollback).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', request: { acknowledgeOwnedGrantDeletion: true },
+    }));
+    expect(backstopMock.driftCheck).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', tenantId: 'tenant-default', runId: 'backstop-run-1', actorId: 'user-1',
+    }));
+  });
+
+  it('creates a sanitized, read-only Camunda native-grant preview and never returns native identities', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([{ resourceKind: 'process_definition', resourceKey: 'payments', runtimeTenantId: '', isActive: true, tenantResolutionStatus: 'resolved' }]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : entity === RuntimeResource ? runtimeRepo : { insert: vi.fn().mockResolvedValue(undefined) } });
+    nativeGrantMigrationMock.fromCustomerExport.mockReturnValue({ inventoryHash: 'a'.repeat(64), truncated: false, authorizations: [{ id: 'native-1' }] });
+    nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] });
+    nativeGrantMigrationMock.createPreview.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', sourceKind: 'customer_export', inputHash: 'a'.repeat(64), normalizedCounts: { total: 1 }, classifications: [], status: 'previewed' });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
+      sourceKind: 'customer_export', customerExport: { apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1', authorizations: [{ id: 'native-1', type: 1, permissions: ['READ'], groupId: 'sensitive-native-group', resourceType: 6, resourceId: 'payments' }] },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ run: expect.objectContaining({ id: 'run-1', classifications: [] }) });
+    expect(JSON.stringify(response.body)).not.toContain('sensitive-native-group');
+    expect(nativeGrantMigrationMock.listLive).not.toHaveBeenCalled();
+    expect(nativeGrantMigrationMock.createPreview).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1', sourceKind: 'customer_export', detailedSnapshot: expect.objectContaining({ authorizations: [{ id: 'native-1' }] }),
+    }));
+  });
+
+  it('rejects native-grant migration for a shared engine before reading or retaining cross-tenant inventory', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'shared-camunda', type: 'camunda7', tenantId: null, tenancyMode: 'shared' }) };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => engineRepo });
+
+    const response = await request(app).post('/engines-api/engines/shared-camunda/camunda-native-grants/imports/preview').send({
+      sourceKind: 'live_api',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('dedicated engine');
+    expect(nativeGrantMigrationMock.listLive).not.toHaveBeenCalled();
+    expect(nativeGrantMigrationMock.createPreview).not.toHaveBeenCalled();
+  });
+
+  it('returns a validation response when secure migration evidence would exceed the portable persistence limit', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' }) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === Engine ? engineRepo : entity === RuntimeResource ? runtimeRepo : {} });
+    nativeGrantMigrationMock.fromCustomerExport.mockReturnValue({ inventoryHash: 'a'.repeat(64), truncated: false, authorizations: [{ id: 'native-1' }] });
+    nativeGrantMigrationMock.classify.mockReturnValue({ sourceAuthorizationId: 'native-1', disposition: 'blocked', reasonCodes: ['unsupported_resource_type'], principal: { type: 'global' }, resourceKind: null, resourceId: null, runtimeTenantId: null, mappedActionIds: [] });
+    nativeGrantMigrationMock.createPreview.mockRejectedValue(new nativeGrantMigrationMock.evidenceLimitError('Encrypted native-grant evidence exceeds the cross-database secure evidence limit; narrow the migration scope before retrying'));
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/preview').send({
+      sourceKind: 'customer_export', customerExport: { apiVersion: 'enterpriseglue.ai/camunda7-native-authorizations/v1', authorizations: [{ id: 'native-1', type: 1, permissions: ['READ'], resourceType: 0 }] },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('narrow the migration scope');
+  });
+
+  it('generates a migration draft for a UI-created engine without requiring it to be re-added through configuration', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', configKey: null, registrationSource: 'user' };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === RuntimeResource ? runtimeRepo : engineRepo });
+    const classification = { sourceAuthorizationId: 'native-1', disposition: 'proposed', reasonCodes: ['group_grant_process_definition'], principal: { type: 'group', groupId: 'sensitive-native-group' }, resourceKind: 'process_definition', resourceId: 'payments', runtimeTenantId: null, mappedActionIds: ['engine.runtime.process-definitions.read'] };
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed' });
+    nativeGrantMigrationMock.getDetailedSnapshot.mockResolvedValue({ classifications: [classification] });
+    nativeGrantMigrationMock.generate.mockReturnValue({ bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: 'a'.repeat(64), generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 }, manualWorkAuthorizationIds: [] });
+    nativeGrantMigrationMock.setDraft.mockResolvedValue({ id: 'run-1', status: 'draft_generated', draftHash: 'a'.repeat(64) });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
+      base: {
+        bundle: {
+          apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
+          metadata: { key: 'migration.camunda-native-run-1', owner: 'camunda-native-grant-migration' },
+          tenantKey: 'default', mode: 'additive', settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' }, imports: ['./groups.json'],
+        },
+        files: { './groups.json': { groups: [] } },
+      },
+      groupMappings: [{ nativeGroupId: 'sensitive-native-group', target: { mode: 'new', key: 'group.imported-operators', name: 'Imported operators' } }],
+    });
+
+    expect(response.status).toBe(200);
+    expect(nativeGrantMigrationMock.generate).toHaveBeenCalledWith(expect.objectContaining({
+      engineKey: 'external.camunda-native-e1', engineReferenceMode: 'existing_registered',
+    }));
+    expect(nativeGrantMigrationMock.setDraft).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' } }),
+    }));
+    expect(nativeGrantMigrationMock.assertMigrationContext).toHaveBeenCalledWith(expect.any(Object), engine, []);
+  });
+
+  it('rejects a migration draft before generation when the engine or runtime inventory changed after preview', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', baseUrl: 'https://replacement.example.test/engine-rest' };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue(engine) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([{ id: 'resource-changed', engineId: 'e1', resourceKey: 'refunds', isActive: true }]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === RuntimeResource ? runtimeRepo : engineRepo });
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'previewed' });
+    nativeGrantMigrationMock.getDetailedSnapshot.mockResolvedValue({ classifications: [] });
+    nativeGrantMigrationMock.assertMigrationContext.mockImplementationOnce(() => {
+      throw new Error('The engine connection or topology changed since the native-grant preview; create and review a new preview');
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/draft').send({
+      base: {
+        bundle: {
+          apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle',
+          metadata: { key: 'migration.camunda-native-run-1', owner: 'camunda-native-grant-migration' },
+          tenantKey: 'default', mode: 'additive', settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' }, imports: ['./groups.json'],
+        },
+        files: { './groups.json': { groups: [] } },
+      },
+      groupMappings: [],
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('engine connection or topology changed');
+    expect(nativeGrantMigrationMock.generate).not.toHaveBeenCalled();
+    expect(nativeGrantMigrationMock.setDraft).not.toHaveBeenCalled();
+  });
+
+  it('applies only the persisted reviewed migration draft and records the configuration apply receipt', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const draftHash = 'b'.repeat(64);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated', configKey: null, registrationSource: 'user' };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === RuntimeResource ? runtimeRepo : engineRepo });
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'draft_generated', draftHash });
+    nativeGrantMigrationMock.getGeneratedDraft.mockResolvedValue({
+      bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: draftHash,
+      engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' },
+      generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 }, manualWorkAuthorizationIds: [],
+    });
+    nativeGrantMigrationMock.getDetailedSnapshot.mockResolvedValue({ contextCommitments: { engineConnectionCommitment: 'a'.repeat(64), runtimeInventoryCommitment: 'b'.repeat(64) } });
+    configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-apply-1', canonicalHash: draftHash, created: 4, updated: 0, archived: 0, reconciliation: { status: 'completed' } });
+    nativeGrantMigrationMock.markApplied.mockResolvedValue({ id: 'run-1', status: 'applied', draftHash });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
+
+    expect(response.status).toBe(200);
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      expectedPreviewHash: draftHash, idempotencyKey: `camunda-native-grant:run-1:${draftHash}`, identityReconciliationMode: 'none',
+    }), expect.objectContaining({ externalEngineReferences: [{ key: 'external.camunda-native-e1', engineId: 'e1' }] }));
+    expect(nativeGrantMigrationMock.markApplied).toHaveBeenCalledWith({ id: 'run-1', configBundleApplyRunId: 'config-apply-1' });
+    expect(nativeGrantMigrationMock.assertMigrationContext).toHaveBeenCalledWith(expect.any(Object), engine, []);
+  });
+
+  it('rejects applying a reviewed migration before config mutation when its bound runtime inventory changed', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const draftHash = 'b'.repeat(64);
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue(engine) };
+    const runtimeRepo = { find: vi.fn().mockResolvedValue([{ id: 'new-resource', engineId: 'e1', resourceKey: 'refunds', isActive: true }]) };
+    (getDataSource as any).mockResolvedValue({ getRepository: (entity: unknown) => entity === RuntimeResource ? runtimeRepo : engineRepo });
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'draft_generated', draftHash });
+    nativeGrantMigrationMock.getGeneratedDraft.mockResolvedValue({
+      bundle: { metadata: { key: 'migration' } }, files: {}, canonicalHash: draftHash,
+      engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' },
+      generated: { groupCount: 1, roleCount: 1, runtimeResourceSetCount: 1, assignmentCount: 1 }, manualWorkAuthorizationIds: [],
+    });
+    nativeGrantMigrationMock.getDetailedSnapshot.mockResolvedValue({ contextCommitments: {} });
+    nativeGrantMigrationMock.assertMigrationContext.mockImplementationOnce(() => {
+      throw new Error('The runtime-resource inventory changed since the native-grant preview; reconcile resources and create a new preview');
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/apply').send({ expectedDraftHash: draftHash });
+
+    expect(response.status).toBe(400);
+    expect(response.text).toContain('runtime-resource inventory changed');
+    expect(configBundleApplyMock.apply).not.toHaveBeenCalled();
+    expect(nativeGrantMigrationMock.markApplied).not.toHaveBeenCalled();
+  });
+
+  it('previews and rolls back only the dedicated migration bundle after explicit archive acknowledgements', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const draftHash = 'b'.repeat(64);
+    const rollbackHash = 'c'.repeat(64);
+    // Assignment acknowledgements contain canonical principal/role/scope/source
+    // identifiers. They can be longer than a UUID-based object acknowledgement
+    // while still fitting the shared config-bundle contract (500 characters).
+    const assignmentAcknowledgement = `config.authoritative_archive:assignment:${'a'.repeat(256)}`;
+    const engine = { id: 'e1', type: 'camunda7', tenantId: 'tenant-default', tenancyMode: 'dedicated' };
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne: vi.fn().mockResolvedValue(engine), insert: vi.fn().mockResolvedValue(undefined) }) });
+    nativeGrantMigrationMock.getSummary.mockResolvedValue({ id: 'run-1', engineId: 'e1', tenantId: 'tenant-default', status: 'applied', draftHash });
+    nativeGrantMigrationMock.getGeneratedDraft.mockResolvedValue({
+      bundle: { apiVersion: 'enterpriseglue.ai/v1alpha1', kind: 'EnterpriseGlueConfigBundle', metadata: { key: 'migration.camunda-native-run-1', owner: 'migration' }, tenantKey: 'default', mode: 'additive', settings: { engineRuntimeAuthorizationMode: 'enterpriseglue_authoritative' }, imports: ['./groups.json', './roles.json', './runtime-resource-sets.json', './assignments.json'] },
+      files: { './groups.json': { groups: [{ key: 'group.imported', name: 'Imported' }] }, './roles.json': { roles: [] }, './runtime-resource-sets.json': { runtimeResourceSets: [] }, './assignments.json': { assignments: [] } },
+      canonicalHash: draftHash, engineReference: { key: 'external.camunda-native-e1', engineId: 'e1', mode: 'existing_registered' }, generated: { groupCount: 1, roleCount: 0, runtimeResourceSetCount: 0, assignmentCount: 0 }, manualWorkAuthorizationIds: [],
+    });
+    configBundleRollbackMock.compile.mockReturnValue({ preview: { valid: true, canonicalHash: rollbackHash } });
+    configBundleRollbackMock.diff.mockResolvedValue({ valid: true, requiredAcknowledgements: [assignmentAcknowledgement], changes: [{ objectType: 'group', key: 'group.imported', operation: 'archive' }], warnings: [] });
+
+    const preview = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback/preview').send({});
+    expect(preview.status).toBe(200);
+    expect(preview.body.rollback).toMatchObject({ canonicalHash: rollbackHash, requiredAcknowledgements: [assignmentAcknowledgement] });
+
+    configBundleApplyMock.apply.mockResolvedValue({ applyRunId: 'config-rollback-1', canonicalHash: rollbackHash, created: 0, updated: 0, archived: 4, reconciliation: { status: 'completed' } });
+    nativeGrantMigrationMock.markRolledBack.mockResolvedValue({ id: 'run-1', status: 'rolled_back', draftHash, rollbackConfigBundleRunId: 'config-rollback-1' });
+    const response = await request(app).post('/engines-api/engines/e1/camunda-native-grants/imports/run-1/rollback').send({
+      expectedRollbackHash: rollbackHash,
+      acknowledgements: [assignmentAcknowledgement],
+    });
+
+    expect(response.status).toBe(200);
+    expect(configBundleApplyMock.apply).toHaveBeenCalledWith(expect.objectContaining({
+      expectedPreviewHash: rollbackHash,
+      acknowledgements: [assignmentAcknowledgement],
+      idempotencyKey: `camunda-native-grant-rollback:run-1:${rollbackHash}`,
+    }), expect.objectContaining({
+      externalEngineReferences: [{ key: 'external.camunda-native-e1', engineId: 'e1' }],
+    }));
+    expect(nativeGrantMigrationMock.markRolledBack).toHaveBeenCalledWith({ id: 'run-1', configBundleApplyRunId: 'config-rollback-1' });
+  });
+
+  it('returns engine credential state but never the stored secret in engine detail', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    (engineService as any).getEngineRole.mockResolvedValue(null);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:instance:view' || permission === 'engine:secrets:view'
+    );
+
+    const response = await request(app).get('/engines-api/engines/e1');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: 'e1',
+      username: 'engine-user',
+      passwordEnc: null,
+      hasCredential: true,
+    });
+  });
+
+  it('lists project-engine deployment targets through scoped engine project access view permission', async () => {
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:project-access:view'
+    );
+    (projectEngineTargetService as any).listTargets.mockResolvedValue([
+      {
+        id: 'target-1',
+        projectId: 'project-1',
+        projectName: 'Payments App',
+        engineId: 'e1',
+        engineName: 'Engine 1',
+        engineBaseUrl: null,
+        status: 'active',
+        source: 'legacy',
+        sourceRef: null,
+        ownershipMode: 'manual',
+        sourceHash: null,
+        lastAppliedAt: null,
+        driftStatus: null,
+        externalSystemId: null,
+        externalProjectId: null,
+        externalEngineId: null,
+        externalTargetId: null,
+        allowManualDeploy: true,
+        allowCiDeploy: false,
+        allowApiDeploy: true,
+        allowImport: true,
+        environment: null,
+        tenantId: null,
+        createdById: null,
+        approvedById: null,
+        approvalStatus: 'not_required',
+        approvedAt: null,
+        policyTags: [],
+        diagnostics: null,
+        lastSeenAt: 1,
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ]);
+
+    const response = await request(app).get('/engines-api/engines/e1/project-targets');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'target-1',
+        projectName: 'Payments App',
+        allowManualDeploy: true,
+        allowApiDeploy: true,
+      }),
+    ]);
+    expect(projectEngineTargetService.listTargets).toHaveBeenCalledWith({
+      engineId: 'e1',
+      status: 'all',
+      tenantId: 'tenant-default',
+    });
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:project-access:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+  });
+
+  it('rejects project-engine deployment target reads without engine project access view permission', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(false);
+
+    const response = await request(app).get('/engines-api/engines/e1/project-targets');
+
+    expect(response.status).toBe(403);
+    expect(projectEngineTargetService.listTargets).not.toHaveBeenCalled();
+  });
+
+  it('allows engine updates from scoped engine edit permission without legacy manage role', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1', username: 'protected-client-id' })
+      .mockResolvedValueOnce({ id: 'e1', name: 'Updated Engine', username: 'protected-client-id' });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Updated Engine' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.username).toBeNull();
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({ name: 'Updated Engine' }));
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:edit', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+  });
+
+  it('retains credential metadata in an engine update response only with scoped secret-view permission', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'engine:edit' || permission === 'engine:secrets:view'
+    );
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1', username: 'protected-client-id' })
+      .mockResolvedValueOnce({ id: 'e1', name: 'Updated Engine', username: 'protected-client-id' });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne, findOneBy, update }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Updated Engine' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.username).toBe('protected-client-id');
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:secrets:view', expect.objectContaining({
+      userId: 'user-1', resourceType: 'engine', resourceId: 'e1',
+    }));
+  });
+
+  it('rejects engine authentication updates without secret management permission', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', name: 'Engine 1', tenantId: null });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ passwordEnc: 'new-secret' });
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('Engine secret management permission is required');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('allows engine authentication updates from scoped engine secret management permission', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:secrets:manage');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1', tenantId: null })
+      .mockResolvedValueOnce({ id: 'e1', name: 'Engine 1', passwordEnc: 'new-secret', tenantId: null });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ passwordEnc: 'new-secret' });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      passwordEnc: 'v2:test:bmV3LXNlY3JldA==',
+    }));
+    expect(secretResolverMock.normalizeForStorage).toHaveBeenCalledWith('new-secret');
+  });
+
+  it('rejects manual updates to externally managed engine registration fields', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'External Engine',
+      registrationSource: 'external_api',
+      externalId: 'cluster-a/prod',
+      tenantId: null,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ baseUrl: 'https://manual.example.com/engine-rest' });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('Externally managed engine fields are read-only: baseUrl');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual ingestion-control updates to externally managed engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'external_api', managementMode: 'external_managed', tenantId: null, fieldOwnershipJson: '{}' });
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
+
+    const response = await request(app).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('metadataDiscoveryEnabled');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual updates to config-locked engine fields', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Config Engine',
+      registrationSource: 'config',
+      ownershipMode: 'config_locked',
+      tenantId: null,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne, findOneBy, update }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Changed locally' });
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('Configuration-managed engine fields are read-only: name');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual ingestion-control updates to config-locked engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({ id: 'e1', registrationSource: 'config', ownershipMode: 'config_locked', tenantId: null });
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ findOne, findOneBy, update }) });
+
+    const response = await request(app).put('/engines-api/engines/e1').send({ metadataDiscoveryEnabled: false, pipelineReceiptEnabled: false });
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('metadataDiscoveryEnabled');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('marks config-warn engine updates as manual drift', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Config Engine',
+        registrationSource: 'config',
+        ownershipMode: 'config_warn',
+        tenantId: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Changed locally',
+        registrationSource: 'config',
+        ownershipMode: 'config_warn',
+        driftStatus: 'manual_override',
+        tenantId: null,
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne, findOneBy, update }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Changed locally' });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      name: 'Changed locally',
+      driftStatus: 'manual_override',
+    }));
+  });
+
+  it('allows manual updates to hybrid engines when field ownership is manual', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Hybrid Engine',
+        registrationSource: 'external_api',
+        managementMode: 'hybrid',
+        fieldOwnershipJson: JSON.stringify({ connection: 'manual', auth: 'external', labels: 'external' }),
+        externalId: 'cluster-a/prod',
+        tenantId: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Hybrid Engine',
+        baseUrl: 'https://manual.example.com/engine-rest',
+        registrationSource: 'external_api',
+        managementMode: 'hybrid',
+        fieldOwnershipJson: JSON.stringify({ connection: 'manual', auth: 'external', labels: 'external' }),
+        externalId: 'cluster-a/prod',
+        tenantId: null,
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ baseUrl: 'https://manual.example.com/engine-rest' });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      baseUrl: 'https://manual.example.com/engine-rest',
+    }));
+  });
+
+  it('allows local display updates on externally managed engines without clearing omitted environment tags', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'External Engine',
+        registrationSource: 'external_api',
+        externalId: 'cluster-a/prod',
+        environmentTagId: 'env-prod',
+        tenantId: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Display Name',
+        registrationSource: 'external_api',
+        externalId: 'cluster-a/prod',
+        environmentTagId: 'env-prod',
+        tenantId: null,
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Display Name' });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      name: 'Display Name',
+      environmentTagId: undefined,
+    }));
+  });
+
+  it('rolls back a manual externalId update when the registration identity conflicts', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const committedUpdates: unknown[] = [];
+    const existing = {
+      id: 'e1', name: 'Manual Engine', baseUrl: 'https://engine.example.com/engine-rest', type: 'operaton',
+      externalId: 'cluster-a/old', labelsJson: null, registrationSource: 'user', externalSystemId: null,
+      managementMode: 'manual', lifecycleStatus: 'active', runtimeAccessScope: 'engine_wide',
+      tenancyMode: 'dedicated', tenantId: 'tenant-default', authType: 'basic', connectionMode: 'direct',
+    };
+    const transaction = vi.fn(async (callback: (manager: { getRepository: (entity: any) => any }) => unknown) => {
+      const pendingUpdates: unknown[] = [];
+      const manager = {
+        getRepository: (entity: any) => entity?.name === 'ExternalEngineRegistration'
+          ? {
+            findOne: vi.fn()
+              .mockResolvedValueOnce({ id: 'registration-old', engineId: 'e1', externalId: 'cluster-a/old' })
+              .mockResolvedValueOnce({ id: 'registration-other', engineId: 'e2', externalId: 'cluster-a/new' }),
+          }
+          : { update: vi.fn(async (_where: unknown, values: unknown) => { pendingUpdates.push(values); }) },
+      };
+      const result = await callback(manager);
+      committedUpdates.push(...pendingUpdates);
+      return result;
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }),
+        findOneBy: vi.fn().mockResolvedValue(existing),
+        update: vi.fn(),
+      }),
+      transaction,
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ externalId: 'cluster-a/new' });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({ error: 'An engine with this externalId already exists' });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(committedUpdates).toEqual([]);
+    expect(runtimeResourceInventoryService.materializeForEngine).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual engine registration when onboarding mode is external-only', async () => {
+    platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'external_only' });
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        insert,
+      }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({ name: 'Manual engine', baseUrl: 'https://engine.example.com/engine-rest' });
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('Manual engine registration is disabled');
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual-owned engine updates when onboarding mode is external-only', async () => {
+    platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'external_only' });
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Manual Engine',
+      registrationSource: 'user',
+      tenantId: null,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Updated Manual Engine' });
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('Manual engine updates are disabled');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('allows local display updates on externally managed engines when onboarding mode is external-only', async () => {
+    platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'external_only' });
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const update = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn()
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'External Engine',
+        registrationSource: 'external_api',
+        externalId: 'cluster-a/prod',
+        tenantId: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'e1',
+        name: 'Display Name',
+        registrationSource: 'external_api',
+        externalId: 'cluster-a/prod',
+        tenantId: null,
+      });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ name: 'Display Name' });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      name: 'Display Name',
+    }));
+  });
+
+  it('rejects manual engine deletion when onboarding mode is external-only', async () => {
+    platformSettingsServiceMock.get.mockResolvedValue({ engineOnboardingMode: 'external_only' });
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const engineDelete = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Manual Engine',
+      registrationSource: 'user',
+      tenantId: null,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne,
+        findOneBy,
+        delete: engineDelete,
+      }),
+    });
+
+    const response = await request(app).delete('/engines-api/engines/e1');
+
+    expect(response.status).toBe(403);
+    expect(String(response.body.error || '')).toContain('Manual engine deletion is disabled');
+    expect(engineDelete).not.toHaveBeenCalled();
+  });
+
+  it('prunes every scoped canonical assignment when a manual engine is deleted', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const engineDelete = vi.fn().mockResolvedValue({ affected: 1 });
+    const registrationDelete = vi.fn().mockResolvedValue(undefined);
+    const materializationDelete = vi.fn().mockResolvedValue(undefined);
+    const assignmentDelete = vi.fn().mockResolvedValue(undefined);
+    const tenantMappingDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeResourceDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeResourceSetDelete = vi.fn().mockResolvedValue(undefined);
+    const runtimeMaterializationDelete = vi.fn().mockResolvedValue(undefined);
+    const projectTargetDelete = vi.fn().mockResolvedValue(undefined);
+    const healthDelete = vi.fn().mockResolvedValue(undefined);
+    const backstopMappingDelete = vi.fn().mockResolvedValue(undefined);
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const getRepository = (entity: any) => {
+        if (entity?.name === 'Engine') return {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'e1', name: 'Manual Engine', registrationSource: 'user', lifecycleStatus: 'active', tenantId: 'tenant-default', tenancyMode: 'dedicated',
+          }),
+          update: vi.fn().mockResolvedValue({ affected: 1 }),
+          delete: engineDelete,
+        };
+        if (entity?.name === 'ExternalEngineRegistration') return { delete: registrationDelete };
+        if (entity?.name === 'EngineSetMaterialization') return { delete: materializationDelete };
+        if (entity?.name === 'RbacRoleAssignment') return { delete: assignmentDelete };
+        if (entity?.name === 'EngineTenantMapping') return { delete: tenantMappingDelete };
+        if (entity?.name === 'ProjectEngineTarget') return { delete: projectTargetDelete };
+        if (entity?.name === 'EngineHealth') return { delete: healthDelete };
+        if (entity?.name === 'EngineBackstopGroupMapping') return { delete: backstopMappingDelete };
+        if (entity?.name === 'RuntimeResource') {
+          return {
+            find: vi.fn().mockResolvedValue([{ id: 'resource-1' }]),
+            delete: runtimeResourceDelete,
+          };
+        }
+        if (entity?.name === 'RuntimeResourceSet') {
+          return {
+            find: vi.fn().mockResolvedValue([{ id: 'resource-set-1' }]),
+            delete: runtimeResourceSetDelete,
+          };
+        }
+        if (entity?.name === 'RuntimeResourceSetMaterialization') {
+          return { delete: runtimeMaterializationDelete };
+        }
+        return { findOne, delete: vi.fn().mockResolvedValue(undefined) };
+      };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: async (callback: any) => callback({ getRepository }),
+    });
+
+    await request(app).delete('/engines-api/engines/e1').expect(204);
+
+    expect(engineDelete).toHaveBeenCalledWith({ id: 'e1' });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      scopeType: 'engine',
+      scopeId: 'e1',
+    });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      scopeType: 'engine_runtime_resource',
+      scopeId: expect.anything(),
+    });
+    expect(assignmentDelete).toHaveBeenCalledWith({
+      scopeType: 'engine_runtime_resource_set',
+      scopeId: expect.anything(),
+    });
+    expect(runtimeMaterializationDelete).toHaveBeenCalledTimes(2);
+    expect(runtimeResourceDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(runtimeResourceSetDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(tenantMappingDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(projectTargetDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(healthDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect(backstopMappingDelete).toHaveBeenCalledWith({ engineId: 'e1' });
+    expect((engineService as any).assertBackstopRetirementComplete).toHaveBeenCalledWith('e1', expect.anything());
+    expect((engineService as any).hasBackstopHistory).toHaveBeenCalledWith('e1', expect.anything());
+    expect(permissionServiceMock.syncLegacyRoleAssignments).not.toHaveBeenCalled();
+  });
+
+  it('preserves backstop evidence by rejecting physical deletion after any backstop use', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    (engineService as any).hasBackstopHistory.mockResolvedValue(true);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const engineDelete = vi.fn();
+    const engineRepository = {
+      findOne: vi.fn().mockResolvedValue({
+        id: 'e1', registrationSource: 'user', lifecycleStatus: 'active', tenantId: 'tenant-default', tenancyMode: 'dedicated',
+      }),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      delete: engineDelete,
+    };
+    const getRepository = (entity: any) => entity?.name === 'Engine'
+      ? engineRepository
+      : { findOne: vi.fn().mockResolvedValue(null), delete: vi.fn() };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: async (callback: any) => callback({ getRepository }),
+    });
+
+    const response = await request(app).delete('/engines-api/engines/e1');
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain('cannot be physically deleted');
+    expect(engineDelete).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the complete manual-delete graph when a dependency deletion fails', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const initial = new Set(['engine', 'project-target', 'runtime-resource', 'runtime-set', 'materialization', 'assignment']);
+    let committed = new Set(initial);
+    const repositories = (state: Set<string>, injectFailure: boolean) => (entity: any) => {
+      const name = entity?.name;
+      if (name === 'Engine') return {
+        findOne: vi.fn().mockImplementation(async () => state.has('engine') ? {
+          id: 'e1', registrationSource: 'user', lifecycleStatus: 'active', tenantId: 'tenant-default', tenancyMode: 'dedicated',
+        } : null),
+        update: vi.fn().mockResolvedValue({ affected: state.has('engine') ? 1 : 0 }),
+        delete: vi.fn().mockImplementation(async () => { state.delete('engine'); return { affected: 1 }; }),
+      };
+      if (name === 'RuntimeResource') return {
+        find: vi.fn().mockResolvedValue([{ id: 'resource-1' }]),
+        delete: vi.fn().mockImplementation(async () => { state.delete('runtime-resource'); }),
+      };
+      if (name === 'RuntimeResourceSet') return {
+        find: vi.fn().mockResolvedValue([{ id: 'set-1' }]),
+        delete: vi.fn().mockImplementation(async () => { state.delete('runtime-set'); }),
+      };
+      if (name === 'RuntimeResourceSetMaterialization') return {
+        delete: vi.fn().mockImplementation(async () => { state.delete('materialization'); }),
+      };
+      if (name === 'RbacRoleAssignment') return {
+        delete: vi.fn().mockImplementation(async () => { state.delete('assignment'); }),
+      };
+      if (name === 'ProjectEngineTarget') return {
+        delete: vi.fn().mockImplementation(async () => { state.delete('project-target'); }),
+      };
+      if (name === 'EngineTenantMapping' && injectFailure) return {
+        delete: vi.fn().mockRejectedValue(new Error('injected dependency failure')),
+      };
+      return { findOne: vi.fn().mockResolvedValue(null), delete: vi.fn().mockResolvedValue(undefined) };
+    };
+    const dataSource = {
+      getRepository: repositories(committed, false),
+      transaction: async (callback: any) => {
+        const working = new Set(committed);
+        const result = await callback({ getRepository: repositories(working, true) });
+        committed = working;
+        return result;
+      },
+    };
+    (getDataSource as any).mockResolvedValue(dataSource);
+
+    const response = await request(app).delete('/engines-api/engines/e1');
+
+    expect(response.status).toBe(500);
+    expect(committed).toEqual(initial);
+  });
+
+  it('rejects manual deletion of externally registered engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const engineDelete = vi.fn().mockResolvedValue({});
+    const registrationDelete = vi.fn().mockResolvedValue({});
+    const materializationDelete = vi.fn().mockResolvedValue({});
+    const engineFindOne = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'External Engine',
+      registrationSource: 'external_api',
+      lifecycleStatus: 'active',
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const getRepository = (entity: any) => {
+        if (entity?.name === 'Engine') return { findOne: engineFindOne, update: vi.fn().mockResolvedValue({ affected: 1 }), delete: engineDelete };
+        if (entity?.name === 'ExternalEngineRegistration') return { delete: registrationDelete };
+        if (entity?.name === 'EngineSetMaterialization') return { delete: materializationDelete };
+        return {
+          findOne,
+          delete: engineDelete,
+        };
+      };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: async (callback: any) => callback({ getRepository }),
+    });
+
+    const response = await request(app).delete('/engines-api/engines/e1');
+
+    expect(response.status).toBe(409);
+    expect(String(response.body.error || '')).toContain('Externally registered engines cannot be deleted');
+    expect(engineDelete).not.toHaveBeenCalled();
+    expect(registrationDelete).not.toHaveBeenCalled();
+    expect(materializationDelete).not.toHaveBeenCalled();
+  });
+
+  it('rejects manual deletion of decommissioned engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:delete');
+    const engineDelete = vi.fn().mockResolvedValue({});
+    const engineFindOne = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Decommissioned Engine',
+      registrationSource: 'user',
+      lifecycleStatus: 'decommissioned',
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+    });
+    const getRepository = (entity: any) => entity?.name === 'Engine'
+      ? { findOne: engineFindOne, update: vi.fn().mockResolvedValue({ affected: 1 }), delete: engineDelete }
+      : { findOne: vi.fn().mockResolvedValue(null), delete: vi.fn() };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: async (callback: any) => callback({ getRepository }),
+    });
+
+    const response = await request(app).delete('/engines-api/engines/e1');
+
+    expect(response.status).toBe(409);
+    expect(String(response.body.error || '')).toContain('Decommissioned engines cannot be deleted');
+    expect(engineDelete).not.toHaveBeenCalled();
+  });
+
+  it('rejects connection tests for decommissioned engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Decommissioned Engine',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      lifecycleStatus: 'decommissioned',
+      tenantId: null,
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        return { findOne, findOneBy };
+      },
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/test');
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('Cannot test a decommissioned engine');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(healthInsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects connection tests for disabled engines', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Disabled Engine',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      lifecycleStatus: 'disabled',
+      tenantId: null,
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        return { findOne, findOneBy };
+      },
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/test');
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('Cannot test a disabled engine');
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(healthInsert).not.toHaveBeenCalled();
+  });
+
+  it('runs credentialless customer-sidecar health checks through the shared connection resolver', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const engineUpdate = vi.fn().mockResolvedValue({});
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Customer sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+      username: null,
+      passwordEnc: null,
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      lifecycleStatus: 'active',
+      tenantId: null,
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        return { findOne, findOneBy, update: engineUpdate };
+      },
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: vi.fn().mockResolvedValue({ version: '8.7.0' }),
+    });
+
+    const response = await request(app).post('/engines-api/engines/e1/test');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      status: 'connected',
+      version: '8.7.0',
+      transport: {
+        connectionMode: 'customer_sidecar',
+        upstreamHop: 'enterpriseglue_to_sidecar',
+        endpointAuthentication: 'none',
+        downstreamAuthentication: 'customer_managed',
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith('https://sidecar.example.com/engine-rest/version', expect.objectContaining({
+      method: 'GET',
+      headers: expect.not.objectContaining({ Authorization: expect.anything() }),
+    }));
+  });
+
+  it('reports a failed connection test as the EnterpriseGlue-to-sidecar hop without disclosing downstream credentials', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Customer sidecar',
+      baseUrl: 'https://sidecar.example.com/engine-rest',
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+      username: null,
+      passwordEnc: 'downstream-secret-must-not-leak',
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      lifecycleStatus: 'active',
+      tenantId: null,
+    });
+    const findOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        return { findOne, findOneBy };
+      },
+    });
+    fetchMock.mockRejectedValueOnce(new Error('TLS handshake failed: downstream-secret-must-not-leak'));
+
+    const response = await request(app).post('/engines-api/engines/e1/test');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      status: 'disconnected',
+      message: 'Failed to connect to EnterpriseGlue -> customer sidecar endpoint',
+      transport: {
+        connectionMode: 'customer_sidecar',
+        upstreamHop: 'enterpriseglue_to_sidecar',
+        downstreamAuthentication: 'customer_managed',
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('downstream-secret-must-not-leak');
+    expect(healthInsert).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Failed to connect to EnterpriseGlue -> customer sidecar endpoint',
+    }));
+  });
+
+  it('requires platform settings read access for the configured environment health probe', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockResolvedValue(false);
+
+    const response = await request(app).get('/engines-api/engines/__env__/health');
+
+    expect(response.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('runs the configured environment health probe through bounded transport and redacts failures', async () => {
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'platform:settings:manage');
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ find: vi.fn().mockResolvedValue([]) }) });
+    process.env.CAMUNDA_BASE_URL = 'http://localhost:8080/engine-rest';
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ version: '7.23.0' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const success = await request(app).get('/engines-api/engines/__env__/health');
+
+    expect(success.status).toBe(200);
+    expect(success.body).toMatchObject({ status: 'connected', version: '7.23.0' });
+    expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:8080/engine-rest/version', expect.objectContaining({
+      method: 'GET',
+      redirect: 'error',
+      signal: expect.any(AbortSignal),
+    }));
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ version: `private-${'x'.repeat(256)}` }), { status: 200 }));
+    const invalidVersion = await request(app).get('/engines-api/engines/__env__/health');
+    expect(invalidVersion.body).toMatchObject({ status: 'connected', version: null });
+    expect(JSON.stringify(invalidVersion.body)).not.toContain('private-');
+
+    fetchMock.mockResolvedValueOnce(new Response('private upstream detail', { status: 502, statusText: 'secret endpoint failure' }));
+    const rejected = await request(app).get('/engines-api/engines/__env__/health');
+    expect(rejected.body).toMatchObject({ status: 'disconnected', message: 'Engine endpoint returned HTTP 502' });
+    expect(JSON.stringify(rejected.body)).not.toMatch(/secret|private upstream/i);
+
+    fetchMock.mockResolvedValueOnce(new Response('', {
+      status: 200,
+      headers: { 'content-length': String(5 * 1024 * 1024 + 1) },
+    }));
+    const oversized = await request(app).get('/engines-api/engines/__env__/health');
+    expect(oversized.body).toMatchObject({ status: 'disconnected', message: 'Engine health check failed' });
+
+    fetchMock.mockRejectedValueOnce(new Error('Bearer secret at https://private-engine.example/internal'));
+    const failed = await request(app).get('/engines-api/engines/__env__/health');
+    expect(failed.body).toMatchObject({ status: 'disconnected', message: 'Engine health check failed' });
+    expect(JSON.stringify(failed.body)).not.toMatch(/Bearer|private-engine|secret/i);
+    delete process.env.CAMUNDA_BASE_URL;
+  });
+
+  it('lists saved filters only for engines authorized by the action resolver', async () => {
+    const engineFind = vi.fn().mockResolvedValue([
+      { id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' },
+      { id: 'e2', tenantId: 'tenant-default', tenancyMode: 'dedicated' },
+    ]);
+    const filterFind = vi.fn().mockResolvedValue([
+      {
+        id: 'filter-1',
+        engineId: 'e1',
+        name: 'Open incidents',
+        defKeys: '["payment-process"]',
+        active: true,
+        incidents: true,
+        completed: false,
+        canceled: false,
+        version: null,
+        createdAt: 1,
+      },
+    ]);
+    permissionServiceMock.getKnownEngineIdsForUser.mockResolvedValue(['e1', 'e2']);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string, context: { resourceId?: string }) =>
+      permission === 'engine:instance:view' && context.resourceId === 'e1'
+    );
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'SavedFilter'
+        ? { find: filterFind }
+        : { find: engineFind },
+    });
+
+    const response = await request(app).get('/engines-api/saved-filters');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      expect.objectContaining({
+        id: 'filter-1',
+        engineId: 'e1',
+        defKeys: ['payment-process'],
+        version: null,
+      }),
+    ]);
+    expect(filterFind).toHaveBeenCalledWith({
+      where: { engineId: expect.anything() },
+    });
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('engine:instance:view', expect.objectContaining({
+      userId: 'user-1',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+  });
+
+  it('creates saved filters only after resolving the target engine action', async () => {
+    const engineFindOne = vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' });
+    const filterInsert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'SavedFilter'
+        ? { insert: filterInsert }
+        : { findOne: engineFindOne },
+    });
+
+    const response = await request(app)
+      .post('/engines-api/saved-filters')
+      .send({
+        name: 'Open incidents',
+        engineId: 'e1',
+        defKeys: ['payment-process'],
+        active: true,
+        incidents: true,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      name: 'Open incidents',
+      engineId: 'e1',
+      defKeys: ['payment-process'],
+      active: true,
+      incidents: true,
+    });
+    expect(engineFindOne).toHaveBeenCalledWith({
+      where: { id: 'e1' },
+      select: ['id', 'tenantId', 'tenancyMode', 'tenantResolutionStatus'],
+    });
+    expect(filterInsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1',
+      defKeys: '["payment-process"]',
+    }));
   });
 
   it('rejects localhost engine URLs when running in Docker', async () => {
@@ -134,9 +2077,183 @@ describe('mission-control engines routes', () => {
     }
 
     expect(insert).toHaveBeenCalledTimes(3);
+    expect((engineService as any).createEngineWithGovernanceAssignments).toHaveBeenCalledTimes(3);
+    expect((engineService as any).createEngineWithGovernanceAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'user-1', delegateId: null }),
+      expect.any(Object),
+    );
+    expect(permissionServiceMock.syncLegacyRoleAssignments).not.toHaveBeenCalled();
   });
 
-  it('defaults newly registered engines to ION when type is omitted', async () => {
+  it('defaults distributed engines to engine-wide access without runtime inventory reconciliation', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({ name: 'Distributed engine', baseUrl: 'https://distributed.example.com/engine-rest' });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      runtimeAccessScope: 'engine_wide',
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'ready',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeAccessScope: 'engine_wide',
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-default',
+      tenantResolutionStatus: 'ready',
+    }));
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(expect.any(String), 'tenant-default', {
+      runtimeMetadataDiscoveryEnabled: false,
+      deploymentDiscoveryEnabled: true,
+    });
+  });
+
+  it('creates explicit shared engines only with resource-aware access and fail-closed mapping state', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
+
+    const rejected = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Unsafe shared engine',
+        baseUrl: 'https://central.example.com/engine-rest',
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+      });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body).toMatchObject({
+      code: 'ENGINE_SHARED_REQUIRES_RESOURCE_AWARE',
+      field: 'tenancy',
+    });
+    expect(insert).not.toHaveBeenCalled();
+
+    const created = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Central shared engine',
+        baseUrl: 'https://central.example.com/engine-rest',
+        runtimeAccessScope: 'resource_aware',
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+      });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'incomplete',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'engine_tenant_id',
+      tenantResolutionStatus: 'incomplete',
+    }));
+  });
+
+  it('requires authorized resolution for explicit tenant references', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({ getRepository: () => ({ insert }) });
+
+    const forbidden = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Cross-tenant engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'id', id: 'tenant-other' } },
+      });
+    expect(forbidden.status).toBe(403);
+    expect(forbidden.body).toMatchObject({
+      code: 'ENGINE_TENANT_REFERENCE_FORBIDDEN',
+      field: 'tenancy',
+    });
+
+    app.locals.engineTenantReferenceResolver = {
+      resolve: vi.fn().mockResolvedValue({
+        tenantId: 'tenant-enterprise',
+        tenantKey: 'team-a',
+        authorized: true,
+      }),
+    };
+    const created = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Resolved engine',
+        baseUrl: 'https://resolved.example.com/engine-rest',
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'key', key: 'team-a' } },
+      });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-enterprise',
+      tenantResolutionStatus: 'ready',
+    });
+  });
+
+  it('rejects credentialless authentication for a direct engine endpoint', async () => {
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Direct credentialless engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        connectionMode: 'direct',
+        authType: 'none',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Credentialless endpoint authentication is allowed only for customer-sidecar engines',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('rejects a credentialless customer sidecar when platform policy is disabled', async () => {
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Credentialless sidecar',
+        baseUrl: 'https://sidecar.example.com/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'none',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      error: 'Credentialless customer-sidecar endpoints are disabled by platform policy',
+      code: 'VALIDATION_ERROR',
+    });
+  });
+
+  it('persists a credentialless customer sidecar when platform policy permits it', async () => {
+    platformSettingsServiceMock.get.mockResolvedValue({
+      engineOnboardingMode: 'manual_allowed',
+      credentiallessCustomerSidecarsEnabled: true,
+    });
+    const insert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ insert }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Credentialless sidecar',
+        baseUrl: 'https://sidecar.example.com/engine-rest',
+        connectionMode: 'customer_sidecar',
+        authType: 'none',
+      });
+
+    expect(response.status).toBe(201);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      connectionMode: 'customer_sidecar',
+      authType: 'none',
+    }));
+  });
+
+  it('defaults newly registered engines to ION and persists the requested runtime access scope', async () => {
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
@@ -146,14 +2263,57 @@ describe('mission-control engines routes', () => {
 
     const response = await request(app)
       .post('/engines-api/engines')
-      .send({ name: 'Default engine', baseUrl: 'https://ion.example.com/engine-rest' });
+      .send({
+        name: 'Default engine',
+        baseUrl: 'https://ion.example.com/engine-rest',
+        runtimeAccessScope: 'resource_aware',
+        deploymentIntegration: 'direct_engine',
+        deploymentDiscoveryEnabled: false,
+        reconciliationIntervalSeconds: 900,
+      });
 
     expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({ type: 'ion' });
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion' }));
+    expect(response.body).toMatchObject({ type: 'ion', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine', deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900 });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ type: 'ion', runtimeAccessScope: 'resource_aware', deploymentIntegration: 'direct_engine', deploymentDiscoveryEnabled: false, reconciliationIntervalSeconds: 900 }));
+  });
+
+  it('rejects changing a resource-aware engine to engine-wide while runtime assignments exist', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) => permission === 'engine:edit');
+    const getCount = vi.fn().mockResolvedValue(1);
+    const queryBuilder = {
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      andWhere: vi.fn().mockReturnThis(),
+      getCount,
+    };
+    const update = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({ id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated' }),
+        findOneBy: vi.fn().mockResolvedValue({
+          id: 'e1',
+          name: 'Central Engine',
+          registrationSource: 'user',
+          runtimeAccessScope: 'resource_aware',
+          tenantId: null,
+        }),
+        createQueryBuilder: vi.fn(() => queryBuilder),
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({ runtimeAccessScope: 'engine_wide' });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('Remove or move runtime-resource role assignments');
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('accepts OAuth2 client credentials engine auth metadata', async () => {
+    const clientSecret = 'engine-oauth-secret-sentinel';
     const insert = vi.fn().mockResolvedValue({});
     (getDataSource as any).mockResolvedValue({
       getRepository: () => ({
@@ -169,7 +2329,7 @@ describe('mission-control engines routes', () => {
         type: 'ion',
         authType: 'oauth2-client-credentials',
         username: 'enterpriseglue',
-        passwordEnc: 'client-secret',
+        passwordEnc: clientSecret,
         oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
         oauthScopes: 'engine-rest',
         oauthAudience: 'ion-engine',
@@ -178,10 +2338,1701 @@ describe('mission-control engines routes', () => {
     expect(response.status).toBe(201);
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       authType: 'oauth2-client-credentials',
+      passwordEnc: `v2:test:${Buffer.from(clientSecret).toString('base64')}`,
       oauthTokenUrl: 'https://keycloak.example.com/realms/acme/protocol/openid-connect/token',
       oauthScopes: 'engine-rest',
       oauthAudience: 'ion-engine',
     }));
+    expect(response.body).toMatchObject({ passwordEnc: null, hasCredential: true });
+    expect(JSON.stringify(response.body)).not.toContain(clientSecret);
+    expect(JSON.stringify(insert.mock.calls)).not.toContain(clientSecret);
+  });
+
+  it('stores external engine metadata on normal registration', async () => {
+    const insert = vi.fn().mockResolvedValue({});
+    const registrationInsert = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue(null);
+    const registrationFindOne = vi.fn().mockResolvedValue(null);
+    const getRepository = (entity: any) => entity?.name === 'ExternalEngineRegistration' ? ({
+      findOne: registrationFindOne,
+      insert: registrationInsert,
+    }) : ({
+      findOne,
+      insert,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: async (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'External-tagged engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+        labels: { environment: 'prod', region: 'eu' },
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      externalId: 'cluster-a/prod',
+      labels: { environment: 'prod', region: 'eu' },
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      externalId: 'cluster-a/prod',
+      labelsJson: JSON.stringify({ environment: 'prod', region: 'eu' }),
+      registrationSource: 'user',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: null,
+    }));
+    expect(registrationInsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: expect.any(String),
+      externalId: 'cluster-a/prod',
+      labelsJson: JSON.stringify({ environment: 'prod', region: 'eu' }),
+      registrationSource: 'user',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: null,
+    }));
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenCalledWith(expect.any(String), 'tenant-default');
+  });
+
+  it('rolls back manual engine governance when external identity registration fails', async () => {
+    const committedEngines: unknown[] = [];
+    const transaction = vi.fn(async (callback: (manager: { getRepository: (entity: any) => any }) => unknown) => {
+      const pendingEngines: unknown[] = [];
+      const manager = {
+        getRepository: (entity: any) => entity?.name === 'ExternalEngineRegistration'
+          ? {
+            findOne: vi.fn().mockResolvedValue(null),
+            insert: vi.fn().mockRejectedValue(new Error('unique external registration identity conflict')),
+          }
+          : {
+            insert: vi.fn(async (row: unknown) => { pendingEngines.push(row); }),
+          },
+      };
+      const result = await callback(manager);
+      committedEngines.push(...pendingEngines);
+      return result;
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({ findOne: vi.fn().mockResolvedValue(null) }),
+      transaction,
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines')
+      .send({
+        name: 'Conflicting manual engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+      });
+
+    expect(response.status).toBe(500);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(committedEngines).toEqual([]);
+    expect(runtimeResourceInventoryService.materializeForEngine).not.toHaveBeenCalled();
+  });
+
+  it('upserts engines through the external registration API', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    const insert = vi.fn().mockResolvedValue({});
+    const update = vi.fn().mockResolvedValue({});
+    let registrationExists = false;
+    let registrationRecord: Record<string, unknown> = {};
+    const registrationInsert = vi.fn().mockImplementation(async (payload: Record<string, unknown>) => {
+      registrationRecord = { ...payload, id: 'registration-1', engineId: 'e1' };
+      registrationExists = true;
+    });
+    const registrationUpdate = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'e1', externalId: 'cluster-a/prod' });
+    const registrationFindOne = vi.fn().mockImplementation(async () => registrationExists ? registrationRecord : null);
+    const findOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      name: 'Updated external engine',
+      baseUrl: 'https://engine.example.com/engine-rest',
+      type: 'ion',
+      authType: 'none',
+      username: null,
+      passwordEnc: null,
+      version: null,
+      externalId: 'cluster-a/prod',
+      labelsJson: JSON.stringify({ environment: 'prod' }),
+      registrationSource: 'external_api',
+      externalUpdatedAt: 123,
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+      runtimeAccessScope: 'engine_wide',
+      active: false,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    (getDataSource as any).mockResolvedValue(transactionalDataSource(
+      (entity: any) => entity?.name === 'ExternalEngineRegistration' ? ({
+        findOne: registrationFindOne,
+        insert: registrationInsert,
+        update: registrationUpdate,
+      }) : ({
+        findOne,
+        findOneBy,
+        insert,
+        update,
+      }),
+    ));
+
+    const createResponse = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'External engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+        labels: { environment: 'prod' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.created).toBe(true);
+    expect(createResponse.body.diagnostics).toBeUndefined();
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('platform:engine-registration:manage', expect.objectContaining({
+      principalType: 'api_client',
+      principalId: 'client-1',
+      resourceType: 'platform',
+    }));
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      externalId: 'cluster-a/prod',
+      registrationSource: 'external_api',
+      managementMode: 'external_managed',
+      fieldOwnershipJson: expect.stringContaining('connection'),
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: expect.any(Number),
+      ownerId: 'user-1',
+    }));
+    expect((engineService as any).createEngineWithGovernanceAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: 'user-1', delegateId: null, registrationSource: 'external_api' }),
+      expect.any(Object),
+      true,
+    );
+    expect(registrationInsert).toHaveBeenCalledWith(expect.objectContaining({
+      externalId: 'cluster-a/prod',
+      registrationSource: 'external_api',
+      apiClientId: 'client-1',
+      managementMode: 'external_managed',
+      fieldOwnershipJson: expect.stringContaining('connection'),
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: expect.any(Number),
+    }));
+
+    const updateResponse = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Updated external engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+        labels: { environment: 'prod' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+      });
+
+    expect(updateResponse.status).toBe(200);
+    expect(updateResponse.body.created).toBe(false);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      externalId: 'cluster-a/prod',
+      registrationSource: 'external_api',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: expect.any(Number),
+    }));
+    expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
+      engineId: 'e1',
+      externalId: 'cluster-a/prod',
+      registrationSource: 'external_api',
+      apiClientId: 'client-1',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: expect.any(Number),
+    }));
+    expect(runtimeResourceInventoryService.materializeForEngine).toHaveBeenLastCalledWith('e1', 'tenant-default');
+  });
+
+  it('rejects cross-system and manual externalId takeovers before engine mutation', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    const engineUpdate = vi.fn();
+    const externalSystem = { id: 'system-b', tenantId: null, isActive: true, defaultManagementMode: 'external_managed', defaultFieldOwnershipJson: null };
+    const systemARegistration = {
+      id: 'registration-a', engineId: 'engine-a', externalId: 'shared-id', registrationSource: 'external_api',
+      externalSystemId: 'system-a', apiClientId: 'client-a', lifecycleStatus: 'active',
+    };
+    const systemAEngine = {
+      id: 'engine-a', externalId: 'shared-id', registrationSource: 'external_api', externalSystemId: 'system-a',
+      lifecycleStatus: 'active', tenancyMode: 'shared', tenantId: null, runtimeAccessScope: 'resource_aware',
+    };
+    (getDataSource as any).mockResolvedValue(transactionalDataSource((entity: any) => {
+      if (entity?.name === 'ExternalEngineSystem') return { findOne: vi.fn().mockResolvedValue(externalSystem) };
+      if (entity?.name === 'ExternalEngineRegistration') return { findOne: vi.fn().mockResolvedValue(systemARegistration) };
+      return { findOne: vi.fn().mockResolvedValue(systemAEngine), findOneBy: vi.fn().mockResolvedValue(systemAEngine), update: engineUpdate };
+    }));
+
+    const crossSystem = await request(app).post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Takeover', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'shared-id',
+        externalSystemId: 'system-b', runtimeAccessScope: 'resource_aware',
+        tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+      });
+    expect(crossSystem.status).toBe(409);
+    expect(engineUpdate).not.toHaveBeenCalled();
+
+    const manualEngine = { ...systemAEngine, registrationSource: 'user', externalSystemId: null };
+    const manualRegistration = { ...systemARegistration, registrationSource: 'user', externalSystemId: null, apiClientId: null };
+    (getDataSource as any).mockResolvedValue(transactionalDataSource((entity: any) => {
+      if (entity?.name === 'ExternalEngineRegistration') return { findOne: vi.fn().mockResolvedValue(manualRegistration) };
+      return { findOne: vi.fn().mockResolvedValue(manualEngine), findOneBy: vi.fn().mockResolvedValue(manualEngine), update: engineUpdate };
+    }));
+    const manualTakeover = await request(app).post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Takeover', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'shared-id',
+        runtimeAccessScope: 'resource_aware', tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+      });
+    expect(manualTakeover.status).toBe(409);
+    expect(engineUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects external upsert of an existing sibling tenant dedicated engine before tenancy resolution or mutation', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    const engineUpdate = vi.fn();
+    const registration = {
+      id: 'registration-sibling', engineId: 'engine-sibling', externalId: 'sibling-prod', registrationSource: 'external_api',
+      externalSystemId: 'system-1', apiClientId: 'client-1', lifecycleStatus: 'active',
+    };
+    const siblingEngine = {
+      id: 'engine-sibling', externalId: 'sibling-prod', registrationSource: 'external_api', externalSystemId: 'system-1',
+      lifecycleStatus: 'active', tenancyMode: 'dedicated', tenantId: 'tenant-b', runtimeAccessScope: 'engine_wide',
+    };
+    (getDataSource as any).mockResolvedValue(transactionalDataSource((entity: any) => {
+      if (entity?.name === 'ExternalEngineSystem') return { findOne: vi.fn().mockResolvedValue({ id: 'system-1', tenantId: null, isActive: true }) };
+      if (entity?.name === 'ExternalEngineRegistration') return { findOne: vi.fn().mockResolvedValue(registration) };
+      return { findOne: vi.fn().mockResolvedValue(siblingEngine), findOneBy: vi.fn().mockResolvedValue(siblingEngine), update: engineUpdate };
+    }));
+
+    const response = await request(app).post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Sibling engine', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'sibling-prod',
+        externalSystemId: 'system-1', tenancy: { mode: 'dedicated', tenantRef: { type: 'id', id: 'tenant-b' } },
+      });
+
+    expect(response.status).toBe(404);
+    expect(engineUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the engine create when durable registration persistence fails', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    const engineRows: any[] = [];
+    const engineRepository = {
+      findOne: vi.fn().mockResolvedValue(null), findOneBy: vi.fn().mockResolvedValue(null),
+      insert: vi.fn(async (row: any) => { engineRows.push(row); }), update: vi.fn(),
+    };
+    const registrationRepository = {
+      findOne: vi.fn().mockResolvedValue(null),
+      insert: vi.fn(async () => { throw new Error('registration persistence failed'); }),
+    };
+    const getRepository = (entity: any) => {
+      if (entity?.name === 'ExternalEngineRegistration') return registrationRepository;
+      if (entity?.name === 'AuditLog') return { insert: vi.fn().mockResolvedValue({}) };
+      return engineRepository;
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: async (callback: (manager: { getRepository: typeof getRepository }) => unknown) => {
+        const before = [...engineRows];
+        try { return await callback({ getRepository }); } catch (error) {
+          engineRows.splice(0, engineRows.length, ...before);
+          throw error;
+        }
+      },
+    });
+
+    const response = await request(app).post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Atomic engine', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'atomic-id',
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+      });
+    expect(response.status).toBe(500);
+    expect(registrationRepository.insert).toHaveBeenCalled();
+    expect(engineRows).toEqual([]);
+  });
+
+  it('converges concurrent same-source registration onto one engine identity', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    let engineRow: any = null;
+    let registrationRow: any = null;
+    const engineRepository = {
+      findOne: vi.fn(async () => engineRow), findOneBy: vi.fn(async () => engineRow),
+      insert: vi.fn(async (row: any) => { engineRow = row; }),
+      update: vi.fn(async (_criteria: any, values: any) => { engineRow = { ...engineRow, ...values }; }),
+    };
+    const registrationRepository = {
+      findOne: vi.fn(async () => registrationRow),
+      insert: vi.fn(async (row: any) => { registrationRow = row; }),
+      update: vi.fn(async (_criteria: any, values: any) => { registrationRow = { ...registrationRow, ...values }; }),
+    };
+    const getRepository = (entity: any) => {
+      if (entity?.name === 'ExternalEngineRegistration') return registrationRepository;
+      if (entity?.name === 'AuditLog') return { insert: vi.fn().mockResolvedValue({}) };
+      return engineRepository;
+    };
+    let transactionTail: Promise<unknown> = Promise.resolve();
+    const dataSource = {
+      getRepository,
+      transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => {
+        const run = transactionTail.then(() => callback({ getRepository }));
+        transactionTail = run.catch(() => undefined);
+        return run;
+      },
+    };
+    (getDataSource as any).mockResolvedValue(dataSource);
+    const payload = {
+      name: 'Concurrent engine', baseUrl: 'https://engine.example.com/engine-rest', externalId: 'concurrent-id',
+      tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+    };
+    const [first, second] = await Promise.all([
+      request(app).post('/engines-api/external/engines').set('Authorization', 'Bearer egac_client-1_secret').send(payload),
+      request(app).post('/engines-api/external/engines').set('Authorization', 'Bearer egac_client-1_secret').send(payload),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 201]);
+    expect(engineRepository.insert).toHaveBeenCalledTimes(1);
+    expect(registrationRepository.insert).toHaveBeenCalledTimes(1);
+    expect(registrationRow.engineId).toBe(engineRow.id);
+  });
+
+  it('rejects an external registration that omits tenancy before it reads or writes engine state', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Missing tenancy',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/missing-tenancy',
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('Validation failed');
+    expect(getDataSource).not.toHaveBeenCalled();
+  });
+
+  it('rejects silent topology changes during normal engine updates', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const update = vi.fn().mockResolvedValue({});
+    const existing = {
+      id: 'e1',
+      name: 'Dedicated engine',
+      registrationSource: 'user',
+      runtimeAccessScope: 'resource_aware',
+      tenancyMode: 'dedicated',
+      tenantId: 'tenant-default',
+      tenantMappingStrategy: null,
+      tenantMappingVersion: 0,
+      tenantResolutionStatus: 'ready',
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue(existing),
+        findOneBy: vi.fn().mockResolvedValue(existing),
+        update,
+      }),
+    });
+
+    const response = await request(app)
+      .put('/engines-api/engines/e1')
+      .send({
+        tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+        runtimeAccessScope: 'resource_aware',
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      code: 'ENGINE_TENANCY_TRANSITION_REQUIRED',
+      field: 'tenancy',
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('lists, previews, applies, and diagnoses shared tenant mappings through guarded engine routes', async () => {
+    (engineService as any).hasEngineAccess.mockResolvedValue(false);
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engine = { id: 'e1', tenancyMode: 'shared', tenantId: null };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue(engine),
+        insert: vi.fn().mockResolvedValue({}),
+      }),
+    });
+    engineTenantMappingServiceMock.list.mockResolvedValue([{
+      id: 'mapping-1',
+      engineId: 'e1',
+      externalTenantId: 'runtime-a',
+      enterpriseTenantId: 'tenant-default',
+      strategy: 'engine_tenant_id',
+      source: 'manual',
+      sourceRef: 'manual:runtime-a',
+      ownershipMode: 'manual',
+      sourceHash: null,
+      lastAppliedAt: null,
+      isActive: true,
+      createdAt: '10',
+      updatedAt: '11',
+    }]);
+    const mappingResult = {
+      engineId: 'e1',
+      externalId: 'central-1',
+      dryRun: true,
+      mappingVersion: 1,
+      created: 1,
+      updated: 0,
+      deactivated: 0,
+      unchanged: 0,
+      results: [{ index: 0, status: 'created', mappingId: 'mapping-1', code: null }],
+      diagnostics: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'engine_tenant_id',
+        mappingVersion: 1,
+        resolutionStatus: 'ready',
+        lastReconciledAt: 10,
+        mappedResourceCount: 1,
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      },
+    };
+    engineTenantMappingServiceMock.upsert.mockResolvedValue(mappingResult);
+
+    const listed = await request(app).get('/engines-api/engines/e1/tenant-mappings');
+    expect(listed.status).toBe(200);
+    expect(listed.body[0]).toMatchObject({ id: 'mapping-1', createdAt: 10, updatedAt: 11 });
+
+    const diagnostics = await request(app).get('/engines-api/engines/e1/tenancy/diagnostics');
+    expect(diagnostics.status).toBe(200);
+    expect(diagnostics.body).toMatchObject({ mode: 'shared', resolutionStatus: 'incomplete' });
+
+    const applied = await request(app)
+      .put('/engines-api/engines/e1/tenant-mappings')
+      .send({
+        expectedMappingVersion: 0,
+        dryRun: true,
+        mappings: [{
+          externalTenantId: 'runtime-a',
+          tenantRef: { type: 'default' },
+          strategy: 'engine_tenant_id',
+          sourceRef: 'manual:runtime-a',
+        }],
+      });
+    expect(applied.status).toBe(200);
+    expect(applied.body).toMatchObject({ dryRun: true, mappingVersion: 1 });
+    expect(engineTenantMappingServiceMock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1',
+      principalType: 'user',
+      principalId: 'user-1',
+      source: 'manual',
+      ownershipMode: 'manual',
+      request: expect.objectContaining({ dryRun: true }),
+    }));
+  });
+
+  it('publishes the operator tenancy classification report through platform authorization', async () => {
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'platform:engine:create'
+    );
+
+    const response = await request(app)
+      .get('/engines-api/engines/tenancy/classification-report');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      defaultTenantId: 'tenant-default',
+      totals: { engines: 1, classified: 1 },
+      rows: [{ engineId: 'e1', status: 'classified' }],
+    });
+    expect(engineTenancyTransitionServiceMock.classificationReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('previews and atomically applies an acknowledged topology transition', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const auditInsert = vi.fn().mockResolvedValue({});
+    const transition = {
+      engineId: 'e1',
+      kind: 'dedicated_to_shared',
+      current: {
+        mode: 'dedicated',
+        tenantId: 'tenant-default',
+        mappingStrategy: null,
+        mappingVersion: 0,
+        resolutionStatus: 'ready',
+        runtimeAccessScope: 'engine_wide',
+      },
+      proposed: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'engine_tenant_id',
+        mappingVersion: 1,
+        resolutionStatus: 'incomplete',
+        runtimeAccessScope: 'resource_aware',
+      },
+      effects: {
+        roleAssignments: 1,
+        tenantMappings: 0,
+        runtimeResources: 1,
+        engineSetMemberships: 1,
+        deploymentTargets: 1,
+        deploymentReceipts: 1,
+        visibility: {
+          becomeVisible: 0,
+          becomeHidden: 1,
+          becomeUnmapped: 1,
+          becomeConflicting: 0,
+        },
+      },
+      requiredAcknowledgements: [
+        'acknowledge_topology_change',
+        'acknowledge_resource_quarantine',
+        'acknowledge_access_change',
+      ],
+      previewHash: 'a'.repeat(64),
+      previewExpiresAt: 300_000,
+    };
+    engineTenancyTransitionServiceMock.preview.mockResolvedValue(transition);
+    engineTenancyTransitionServiceMock.apply.mockResolvedValue({
+      applied: true,
+      appliedAt: 2_000,
+      previewHash: transition.previewHash,
+      transition,
+    });
+    const engineFindOne = vi.fn().mockResolvedValue({
+      id: 'e1',
+      registrationSource: 'user',
+      ownershipMode: 'manual',
+      managementMode: 'manual',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      tenantId: 'tenant-default',
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'AuditLog'
+        ? { insert: auditInsert }
+        : {
+            findOne: engineFindOne,
+          },
+    });
+
+    const preview = await request(app)
+      .post('/engines-api/engines/e1/tenancy/preview')
+      .send({ tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' } });
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({
+      kind: 'dedicated_to_shared',
+      previewHash: transition.previewHash,
+    });
+    expect(engineTenancyTransitionServiceMock.preview).toHaveBeenCalledWith(
+      'e1',
+      { tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id', unmappedPolicy: 'deny' } },
+      expect.objectContaining({
+        requestTenantId: 'tenant-default',
+        principalType: 'user',
+        principalId: 'user-1',
+      }),
+    );
+
+    const applied = await request(app)
+      .post('/engines-api/engines/e1/tenancy/apply')
+      .send({
+        tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' },
+        previewHash: transition.previewHash,
+        previewExpiresAt: transition.previewExpiresAt,
+        acknowledgements: transition.requiredAcknowledgements,
+      });
+    expect(applied.status).toBe(200);
+    expect(applied.body).toMatchObject({ applied: true, previewHash: transition.previewHash });
+    expect(engineTenancyTransitionServiceMock.apply).toHaveBeenCalledWith(
+      'e1',
+      expect.objectContaining({
+        previewHash: transition.previewHash,
+        acknowledgements: transition.requiredAcknowledgements,
+      }),
+      expect.objectContaining({ principalType: 'user', principalId: 'user-1' }),
+    );
+    expect(engineSetService.materializeEngineSetsForEngine).toHaveBeenCalledWith('e1', null);
+    expect(engineMetadataReconciliationService.reconcileEngine).toHaveBeenCalledWith(
+      'e1',
+      null,
+      {
+        runtimeMetadataDiscoveryEnabled: true,
+        deploymentDiscoveryEnabled: true,
+      },
+    );
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'engine.tenancy.transition.preview',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'engine.tenancy.transition.apply',
+      resourceType: 'engine',
+      resourceId: 'e1',
+    }));
+
+    engineFindOne.mockResolvedValueOnce({
+      id: 'e1',
+      registrationSource: 'config',
+      ownershipMode: 'config_warn',
+      managementMode: 'config_managed',
+      metadataDiscoveryEnabled: true,
+      deploymentDiscoveryEnabled: true,
+      tenantId: 'tenant-default',
+    });
+    const configWarnPreview = await request(app)
+      .post('/engines-api/engines/e1/tenancy/preview')
+      .send({ tenancy: { mode: 'shared', mappingStrategy: 'engine_tenant_id' } });
+    expect(configWarnPreview.status).toBe(200);
+  });
+
+  it('keeps source-owned topology out of the manual transition workflow', async () => {
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    (getDataSource as any).mockResolvedValue({
+      getRepository: () => ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'e1',
+          registrationSource: 'external_api',
+          managementMode: 'external_managed',
+          fieldOwnershipJson: '{}',
+          tenantId: 'tenant-default',
+          tenancyMode: 'dedicated',
+        }),
+      }),
+    });
+
+    const response = await request(app)
+      .post('/engines-api/engines/e1/tenancy/preview')
+      .send({ tenancy: { mode: 'shared', mappingStrategy: 'explicit' } });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error || '')).toContain('owning source');
+    expect(engineTenancyTransitionServiceMock.preview).not.toHaveBeenCalled();
+  });
+
+  it('atomically provisions tenant mappings through the external engine identity', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'ExternalEngineRegistration' ? ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'registration-1', engineId: 'e1', externalId: 'central-1', externalSystemId: 'system-1',
+          registrationSource: 'external_api', apiClientId: 'client-1', lifecycleStatus: 'active',
+        }),
+      }) : ({
+        findOne: vi.fn().mockResolvedValue({
+          id: 'e1',
+          externalId: 'central-1',
+          externalSystemId: 'system-1',
+          registrationSource: 'external_api',
+          tenancyMode: 'shared',
+        }),
+        insert: vi.fn().mockResolvedValue({}),
+      }),
+    });
+    engineTenantMappingServiceMock.upsert.mockResolvedValue({
+      engineId: 'e1',
+      externalId: 'central-1',
+      dryRun: false,
+      mappingVersion: 2,
+      created: 1,
+      updated: 0,
+      deactivated: 0,
+      unchanged: 0,
+      results: [{ index: 0, status: 'created', mappingId: 'mapping-1', code: null }],
+      diagnostics: {
+        mode: 'shared',
+        tenantId: null,
+        mappingStrategy: 'explicit',
+        mappingVersion: 2,
+        resolutionStatus: 'ready',
+        lastReconciledAt: 10,
+        mappedResourceCount: 1,
+        unmappedResourceCount: 0,
+        conflictingResourceCount: 0,
+      },
+    });
+
+    const response = await request(app)
+      .put('/engines-api/external/engines/central-1/tenant-mappings')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalSystemId: 'system-1',
+        expectedMappingVersion: 1,
+        mappings: [{
+          externalTenantId: 'runtime-a',
+          tenantRef: { type: 'default' },
+          strategy: 'explicit',
+          sourceRef: 'cmdb:central-1:runtime-a',
+        }],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ mappingVersion: 2, created: 1 });
+    expect(engineTenantMappingServiceMock.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: 'e1',
+      principalType: 'api_client',
+      principalId: 'client-1',
+      source: 'external',
+      ownershipMode: 'external_managed',
+      request: expect.not.objectContaining({ externalSystemId: expect.anything() }),
+    }));
+  });
+
+  it('rejects external tenant-mapping writes to a sibling tenant dedicated engine', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    const registration = {
+      id: 'registration-1', engineId: 'e-sibling', externalId: 'sibling/prod', externalSystemId: 'system-1',
+      registrationSource: 'external_api', apiClientId: 'client-1', lifecycleStatus: 'active',
+    };
+    const engine = {
+      id: 'e-sibling', externalId: 'sibling/prod', externalSystemId: 'system-1', registrationSource: 'external_api',
+      lifecycleStatus: 'active', tenantId: 'tenant-b', tenancyMode: 'dedicated',
+    };
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => entity?.name === 'ExternalEngineRegistration'
+        ? { findOne: vi.fn().mockResolvedValue(registration) }
+        : { findOne: vi.fn().mockResolvedValue(engine) },
+    });
+
+    const response = await request(app)
+      .put('/engines-api/external/engines/sibling%2Fprod/tenant-mappings')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalSystemId: 'system-1',
+        expectedMappingVersion: 1,
+        mappings: [{
+          externalTenantId: 'runtime-a', tenantRef: { type: 'default' },
+          strategy: 'explicit', sourceRef: 'cmdb:sibling:runtime-a',
+        }],
+      });
+
+    expect(response.status).toBe(404);
+    expect(engineTenantMappingServiceMock.upsert).not.toHaveBeenCalled();
+  });
+
+  it('stores external system and hybrid field ownership during external registration', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    const insert = vi.fn().mockResolvedValue({});
+    const registrationInsert = vi.fn().mockResolvedValue({});
+    const registrationFindOne = vi.fn().mockResolvedValue(null);
+    const engineFindOne = vi.fn().mockResolvedValue(null);
+    const systemFindOne = vi.fn().mockResolvedValue({
+      id: 'system-1',
+      tenantId: null,
+      key: 'cmdb',
+      name: 'CMDB',
+      defaultManagementMode: 'hybrid',
+      defaultFieldOwnershipJson: JSON.stringify({ connection: 'manual', auth: 'external', labels: 'external' }),
+      isActive: true,
+    });
+    (getDataSource as any).mockResolvedValue(transactionalDataSource(
+      (entity: any) => {
+        if (entity?.name === 'ExternalEngineRegistration') {
+          return {
+            findOne: registrationFindOne,
+            insert: registrationInsert,
+          };
+        }
+        if (entity?.name === 'ExternalEngineSystem') {
+          return {
+            findOne: systemFindOne,
+          };
+        }
+        return {
+          findOne: engineFindOne,
+          insert,
+        };
+      },
+    ));
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'External engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+        externalSystemId: 'system-1',
+        labels: { environment: 'prod' },
+        capabilities: { operations: ['engine.read'], supportLevel: 'compatible' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+      });
+
+    expect(response.status).toBe(201);
+    expect(systemFindOne).toHaveBeenCalled();
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      externalSystemId: 'system-1',
+      managementMode: 'hybrid',
+      fieldOwnershipJson: expect.stringContaining('"connection":"manual"'),
+      driftStatus: 'in_sync',
+      lifecycleStatus: 'active',
+      capabilitiesJson: expect.stringContaining('engine.read'),
+      capabilityStatus: 'mismatch',
+    }));
+    expect(registrationInsert).toHaveBeenCalledWith(expect.objectContaining({
+      externalSystemId: 'system-1',
+      managementMode: 'hybrid',
+      fieldOwnershipJson: expect.stringContaining('"connection":"manual"'),
+      driftStatus: 'in_sync',
+      lifecycleStatus: 'active',
+      capabilitiesJson: expect.stringContaining('engine.read'),
+      capabilityStatus: 'mismatch',
+    }));
+  });
+
+  it('externally provisions explicit shared engines without the compatibility warning', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    const insert = vi.fn().mockResolvedValue({});
+    const registrationInsert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue(transactionalDataSource(
+      (entity: any) => entity?.name === 'ExternalEngineRegistration'
+        ? { findOne: vi.fn().mockResolvedValue(null), insert: registrationInsert }
+        : { findOne: vi.fn().mockResolvedValue(null), insert },
+    ));
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Central external engine',
+        baseUrl: 'https://central.example.com/engine-rest',
+        externalId: 'cluster/central',
+        runtimeAccessScope: 'resource_aware',
+        tenancy: { mode: 'shared', mappingStrategy: 'explicit' },
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.diagnostics).toBeUndefined();
+    expect(response.body.engine).toMatchObject({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'explicit',
+      tenantResolutionStatus: 'incomplete',
+    });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      tenancyMode: 'shared',
+      tenantId: null,
+      tenantMappingStrategy: 'explicit',
+      tenantResolutionStatus: 'incomplete',
+    }));
+  });
+
+  it('preserves manual-owned fields and marks drift during hybrid external upsert', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    const update = vi.fn().mockResolvedValue({});
+    const registrationUpdate = vi.fn().mockResolvedValue({});
+    const existingEngine = {
+      id: 'e1',
+      name: 'Manual display name',
+      baseUrl: 'https://manual.example.com/engine-rest',
+      type: 'ion',
+      authType: 'none',
+      username: null,
+      passwordEnc: null,
+      oauthTokenUrl: null,
+      oauthScopes: null,
+      oauthAudience: null,
+      version: null,
+      externalId: 'cluster-a/prod',
+      labelsJson: JSON.stringify({ environment: 'prod' }),
+      registrationSource: 'external_api',
+      externalSystemId: 'system-1',
+      managementMode: 'hybrid',
+      fieldOwnershipJson: JSON.stringify({ connection: 'manual', display: 'manual', auth: 'external', labels: 'external' }),
+      driftStatus: 'in_sync',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: 1000,
+      externalUpdatedAt: 1000,
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+      runtimeAccessScope: 'engine_wide',
+      active: true,
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const engineFindOne = vi.fn().mockResolvedValue(existingEngine);
+    const engineFindOneBy = vi.fn().mockResolvedValue({
+      ...existingEngine,
+      driftStatus: 'manual_override',
+      lastExternalSyncAt: 2000,
+      externalUpdatedAt: 2000,
+      updatedAt: 2000,
+    });
+    const registrationFindOne = vi.fn().mockResolvedValue({
+      id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', externalSystemId: 'system-1',
+      registrationSource: 'external_api', apiClientId: 'client-1', lifecycleStatus: 'active',
+    });
+
+    (getDataSource as any).mockResolvedValue(transactionalDataSource(
+      (entity: any) => {
+        if (entity?.name === 'ExternalEngineRegistration') {
+          return {
+            findOne: registrationFindOne,
+            update: registrationUpdate,
+          };
+        }
+        if (entity?.name === 'ExternalEngineSystem') {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              id: 'system-1', tenantId: null, isActive: true,
+              defaultManagementMode: 'hybrid', defaultFieldOwnershipJson: null,
+            }),
+          };
+        }
+        if (entity?.name === 'AuditLog') return { insert: vi.fn().mockResolvedValue({}) };
+        return {
+          findOne: engineFindOne,
+          findOneBy: engineFindOneBy,
+          update,
+        };
+      },
+    ));
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'External display name',
+        baseUrl: 'https://external.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+        externalSystemId: 'system-1',
+        fieldOwnership: { connection: 'manual', display: 'manual', auth: 'external', labels: 'external' },
+        labels: { environment: 'prod', region: 'eu' },
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+      });
+
+    expect(response.status).toBe(200);
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.not.objectContaining({
+      name: 'External display name',
+      baseUrl: 'https://external.example.com/engine-rest',
+    }));
+    expect(update).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      driftStatus: 'manual_override',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: expect.any(Number),
+      labelsJson: JSON.stringify({ environment: 'prod', region: 'eu' }),
+    }));
+    expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
+      driftStatus: 'manual_override',
+      lifecycleStatus: 'active',
+      lastExternalSyncAt: expect.any(Number),
+    }));
+  });
+
+  it('decommissions external engines without deleting inventory', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    const engineUpdate = vi.fn().mockResolvedValue({});
+    const registrationUpdate = vi.fn().mockResolvedValue({});
+    const auditInsert = vi.fn().mockResolvedValue({});
+    const decommissionEngine = vi.spyOn(engineService, 'decommissionEngine')
+      .mockResolvedValue(undefined);
+    const registrationFindOne = vi.fn().mockResolvedValue({
+      id: 'registration-1',
+      engineId: 'e1',
+      externalId: 'cluster-a/prod',
+      apiClientId: 'client-old',
+    });
+    const engineFindOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      externalId: 'cluster-a/prod',
+      externalSystemId: 'system-1',
+      registrationSource: 'external_api',
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+    });
+
+    const getRepository = (entity: any) => {
+      if (entity?.name === 'ExternalEngineRegistration') {
+        return {
+          findOne: registrationFindOne,
+          update: registrationUpdate,
+        };
+      }
+      if (entity?.name === 'AuditLog') {
+        return { insert: auditInsert };
+      }
+      return {
+        findOne: engineFindOneBy,
+        findOneBy: engineFindOneBy,
+        update: engineUpdate,
+      };
+    };
+    const dataSource = {
+      getRepository,
+      transaction: (callback: (manager: unknown) => unknown) => callback({ getRepository }),
+    };
+    (getDataSource as any).mockResolvedValue(dataSource);
+
+    const response = await request(app)
+      .post('/engines-api/external/engines/decommission')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalId: 'cluster-a/prod',
+        externalSystemId: 'system-1',
+        reason: 'Removed from external inventory',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      decommissioned: true,
+      engineId: 'e1',
+      externalId: 'cluster-a/prod',
+      lifecycleStatus: 'decommissioned',
+    });
+    expect(engineUpdate).toHaveBeenCalledWith({ id: 'e1' }, expect.objectContaining({
+      lifecycleStatus: 'decommissioned',
+      driftStatus: 'decommissioned',
+      lastExternalSyncAt: expect.any(Number),
+    }));
+    expect(registrationUpdate).toHaveBeenCalledWith({ id: 'registration-1' }, expect.objectContaining({
+      apiClientId: 'client-1',
+      lifecycleStatus: 'decommissioned',
+      driftStatus: 'decommissioned',
+      lastExternalSyncAt: expect.any(Number),
+    }));
+    expect(decommissionEngine).toHaveBeenCalledWith(
+      'e1',
+      {},
+      expect.objectContaining({ getRepository }),
+    );
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'engine.external_registration.decommission',
+      resourceId: 'e1',
+      details: expect.stringContaining('Removed from external inventory'),
+    }));
+  });
+
+  it('rejects decommission by a different API-client registration source', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    const decommissionEngine = vi.spyOn(engineService, 'decommissionEngine').mockResolvedValue(undefined);
+    const registration = {
+      id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', registrationSource: 'external_api',
+      externalSystemId: null, apiClientId: 'client-other', lifecycleStatus: 'active',
+    };
+    const engine = {
+      id: 'e1', externalId: 'cluster-a/prod', registrationSource: 'external_api', externalSystemId: null,
+      lifecycleStatus: 'active', tenantId: 'tenant-default', tenancyMode: 'dedicated',
+    };
+    const getRepository = (entity: any) => entity?.name === 'ExternalEngineRegistration'
+      ? { findOne: vi.fn().mockResolvedValue(registration), update: vi.fn() }
+      : { findOne: vi.fn().mockResolvedValue(engine), findOneBy: vi.fn().mockResolvedValue(engine), update: vi.fn() };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
+    });
+
+    const response = await request(app).post('/engines-api/external/engines/decommission')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({ externalId: 'cluster-a/prod' });
+    expect(response.status).toBe(409);
+    expect(decommissionEngine).not.toHaveBeenCalled();
+  });
+
+  it('rejects external decommission of a sibling tenant dedicated engine', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    const decommissionEngine = vi.spyOn(engineService, 'decommissionEngine').mockResolvedValue(undefined);
+    const registrationUpdate = vi.fn();
+    const engineUpdate = vi.fn();
+    const registration = {
+      id: 'registration-1', engineId: 'e-sibling', externalId: 'sibling/prod', registrationSource: 'external_api',
+      externalSystemId: 'system-1', apiClientId: 'client-1', lifecycleStatus: 'active',
+    };
+    const engine = {
+      id: 'e-sibling', externalId: 'sibling/prod', registrationSource: 'external_api', externalSystemId: 'system-1',
+      lifecycleStatus: 'active', tenantId: 'tenant-b', tenancyMode: 'dedicated',
+    };
+    const getRepository = (entity: any) => entity?.name === 'ExternalEngineRegistration'
+      ? { findOne: vi.fn().mockResolvedValue(registration), update: registrationUpdate }
+      : { findOne: vi.fn().mockResolvedValue(engine), findOneBy: vi.fn().mockResolvedValue(engine), update: engineUpdate };
+    (getDataSource as any).mockResolvedValue({
+      getRepository,
+      transaction: (callback: (manager: { getRepository: typeof getRepository }) => unknown) => callback({ getRepository }),
+    });
+
+    const response = await request(app).post('/engines-api/external/engines/decommission')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({ externalId: 'sibling/prod', externalSystemId: 'system-1' });
+
+    expect(response.status).toBe(404);
+    expect(decommissionEngine).not.toHaveBeenCalled();
+    expect(registrationUpdate).not.toHaveBeenCalled();
+    expect(engineUpdate).not.toHaveBeenCalled();
+  });
+
+  it('optionally tests connection during external engine registration', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ version: '8.7.0' }),
+    });
+    const engineInsert = vi.fn().mockResolvedValue({});
+    const engineUpdate = vi.fn().mockResolvedValue({});
+    const healthInsert = vi.fn().mockResolvedValue({});
+    const auditInsert = vi.fn().mockResolvedValue({});
+    const findOne = vi.fn().mockResolvedValue(null);
+    const registrationInsert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue(transactionalDataSource(
+      (entity: any) => {
+        if (entity?.name === 'EngineHealth') return { insert: healthInsert };
+        if (entity?.name === 'AuditLog') return { insert: auditInsert };
+        if (entity?.name === 'ExternalEngineRegistration') return {
+          findOne: vi.fn().mockResolvedValue(null),
+          insert: registrationInsert,
+        };
+        return {
+          findOne,
+          insert: engineInsert,
+          update: engineUpdate,
+        };
+      },
+    ));
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'External engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+        testConnection: true,
+        tenancy: { mode: 'dedicated', tenantRef: { type: 'default' } },
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.health).toMatchObject({ status: 'connected', version: '8.7.0' });
+    expect(response.body.engine.version).toBe('8.7.0');
+    expect(fetchMock).toHaveBeenCalledWith('https://engine.example.com/engine-rest/version', expect.objectContaining({ method: 'GET' }));
+    expect(healthInsert).toHaveBeenCalledWith(expect.objectContaining({
+      engineId: expect.any(String),
+      status: 'connected',
+    }));
+    expect(engineUpdate).toHaveBeenCalledWith({ id: expect.any(String) }, expect.objectContaining({ version: '8.7.0' }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'engine.external_registration.create',
+      details: expect.stringContaining('connectionTest'),
+    }));
+  });
+
+  it('requires an API client bearer token for external engine registration', async () => {
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .send({
+        name: 'External engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+      });
+
+    expect({ status: response.status, body: response.body }).toEqual({
+      status: 401,
+      body: { error: 'API client bearer token required', code: 'UNAUTHORIZED' },
+    });
+    expect(apiClientAuthMock.authenticateToken).not.toHaveBeenCalled();
+  });
+
+  it('denies external engine registration when the API client lacks the action permission', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    permissionServiceMock.hasPermission.mockResolvedValue(false);
+
+    const response = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'External engine',
+        baseUrl: 'https://engine.example.com/engine-rest',
+        externalId: 'cluster-a/prod',
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      error: 'API client is not authorized for action: engine.external-registration.upsert',
+    });
+  });
+
+  it('registers project-engine targets through the external registration API', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'external-engine-system:project-targets:manage'
+    );
+    const registrationFindOne = vi.fn().mockResolvedValue({
+      id: 'registration-1',
+      engineId: 'e1',
+      externalId: 'cluster-a/prod',
+      externalSystemId: 'system-1',
+      registrationSource: 'external_api',
+      lifecycleStatus: 'active',
+    });
+    const systemFindOne = vi.fn().mockResolvedValue({
+      id: 'system-1',
+      tenantId: null,
+      isActive: true,
+    });
+    const engineFindOneBy = vi.fn().mockResolvedValue({
+      id: 'e1',
+      tenantId: 'tenant-default',
+      tenancyMode: 'dedicated',
+      externalId: 'cluster-a/prod',
+      registrationSource: 'external_api',
+      externalSystemId: 'system-1',
+      lifecycleStatus: 'active',
+    });
+    const auditInsert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'ExternalEngineRegistration') return { findOne: registrationFindOne };
+        if (entity?.name === 'ExternalEngineSystem') return { findOne: systemFindOne };
+        if (entity?.name === 'AuditLog') return { insert: auditInsert };
+        return {
+          findOneBy: engineFindOneBy,
+          findOne: vi.fn().mockResolvedValue(null),
+        };
+      },
+    });
+    (projectEngineTargetService as any).listTargets.mockResolvedValue([]);
+    (projectEngineTargetService as any).createTarget.mockResolvedValue({ id: 'target-1' });
+    (projectEngineTargetService as any).getTarget.mockResolvedValue({
+      id: 'target-1',
+      projectId: 'project-1',
+      engineId: 'e1',
+      status: 'active',
+      source: 'external',
+      sourceRef: 'external_engine_system:system-1:project_engine_target:target-ext-1',
+      externalSystemId: 'system-1',
+      externalProjectId: 'cmdb-project-1',
+      externalEngineId: 'cluster-a/prod',
+      externalTargetId: 'target-ext-1',
+      allowManualDeploy: true,
+      allowCiDeploy: true,
+      allowApiDeploy: true,
+      allowImport: false,
+      approvalStatus: 'approved',
+      policyTags: ['prod', 'regulated'],
+      diagnostics: { owner: 'cmdb', confidence: 'high' },
+    });
+
+    const response = await request(app)
+      .post('/engines-api/external/project-engine-targets')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalSystemId: 'system-1',
+        projectId: 'project-1',
+        externalProjectId: 'cmdb-project-1',
+        externalEngineId: 'cluster-a/prod',
+        externalTargetId: 'target-ext-1',
+        approvalStatus: 'approved',
+        policyTags: ['regulated', 'prod'],
+        diagnostics: { owner: 'cmdb', confidence: 'high' },
+        allowCiDeploy: true,
+        allowApiDeploy: true,
+        allowImport: false,
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({ created: true, target: { id: 'target-1', source: 'external' } });
+    expect(permissionServiceMock.hasPermission).toHaveBeenCalledWith('external-engine-system:project-targets:manage', expect.objectContaining({
+      principalType: 'api_client',
+      principalId: 'client-1',
+      resourceType: 'external_engine_system',
+      resourceId: 'system-1',
+    }));
+    expect(projectEngineTargetService.createTarget).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: 'project-1',
+      engineId: 'e1',
+      source: 'external',
+      sourceRef: 'external_engine_system:system-1:project_engine_target:target-ext-1',
+      externalSystemId: 'system-1',
+      externalProjectId: 'cmdb-project-1',
+      externalEngineId: 'cluster-a/prod',
+      externalTargetId: 'target-ext-1',
+      allowManualDeploy: true,
+      allowCiDeploy: true,
+      allowApiDeploy: true,
+      allowImport: false,
+      approvalStatus: 'approved',
+      policyTags: ['regulated', 'prod'],
+      diagnostics: { owner: 'cmdb', confidence: 'high' },
+      createdById: 'user-1',
+      approvedById: 'user-1',
+      allowSourceOwnedMutation: true,
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'project_engine_target.external_registration.create',
+      resourceId: 'target-1',
+      details: expect.stringContaining('target-ext-1'),
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.stringContaining('cmdb-project-1'),
+    }));
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      details: expect.stringContaining('regulated'),
+    }));
+  });
+
+  it.each([
+    ['missing', null],
+    ['manual-source', { id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', externalSystemId: 'system-1', registrationSource: 'user', lifecycleStatus: 'active' }],
+    ['disabled', { id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', externalSystemId: 'system-1', registrationSource: 'external_api', lifecycleStatus: 'disabled' }],
+    ['sibling-system', { id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', externalSystemId: 'system-2', registrationSource: 'external_api', lifecycleStatus: 'active' }],
+  ])('rejects direct engineId target selection with a %s external registration', async (_case, registration) => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1', name: 'Registration client', tokenPrefix: 'egac_client', scopes: ['engine:register'],
+      isActive: true, createdById: 'user-1', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1, authenticatedAt: 2,
+    });
+    permissionServiceMock.hasPermission.mockResolvedValue(true);
+    const engineFindOneBy = vi.fn().mockResolvedValue({
+      id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', externalId: 'cluster-a/prod',
+      registrationSource: 'external_api', externalSystemId: 'system-1', lifecycleStatus: 'active',
+    });
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'ExternalEngineSystem') {
+          return { findOne: vi.fn().mockResolvedValue({ id: 'system-1', tenantId: null, isActive: true }) };
+        }
+        if (entity?.name === 'ExternalEngineRegistration') {
+          return { findOne: vi.fn().mockResolvedValue(registration) };
+        }
+        return { findOneBy: engineFindOneBy, findOne: vi.fn().mockResolvedValue(null) };
+      },
+    });
+
+    const response = await request(app)
+      .post('/engines-api/external/project-engine-targets')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({ externalSystemId: 'system-1', projectId: 'project-1', engineId: 'e1' });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toMatchObject({ error: expect.stringContaining('Engine') });
+    expect(projectEngineTargetService.createTarget).not.toHaveBeenCalled();
+    expect(engineFindOneBy).not.toHaveBeenCalled();
+  });
+
+  it('rejects external target registration when a manual target already owns the project-engine pair', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'external-engine-system:project-targets:manage'
+    );
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'ExternalEngineSystem') return { findOne: vi.fn().mockResolvedValue({ id: 'system-1', tenantId: null, isActive: true }) };
+        if (entity?.name === 'ExternalEngineRegistration') return {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', externalSystemId: 'system-1',
+            registrationSource: 'external_api', lifecycleStatus: 'active',
+          }),
+        };
+        return {
+          findOneBy: vi.fn().mockResolvedValue({
+            id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', externalId: 'cluster-a/prod',
+            registrationSource: 'external_api', externalSystemId: 'system-1', lifecycleStatus: 'active',
+          }),
+          findOne: vi.fn().mockResolvedValue(null),
+        };
+      },
+    });
+    (projectEngineTargetService as any).listTargets.mockResolvedValue([
+      {
+        id: 'target-manual',
+        projectId: 'project-1',
+        engineId: 'e1',
+        source: 'manual',
+        sourceRef: null,
+      },
+    ]);
+
+    const response = await request(app)
+      .post('/engines-api/external/project-engine-targets')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalSystemId: 'system-1',
+        projectId: 'project-1',
+        externalEngineId: 'cluster-a/prod',
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toMatchObject({
+      error: 'Project-engine target is already managed by another source',
+    });
+    expect(projectEngineTargetService.createTarget).not.toHaveBeenCalled();
+  });
+
+  it('decommissions project-engine targets through the owning external system', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+    permissionServiceMock.hasPermission.mockImplementation(async (permission: string) =>
+      permission === 'external-engine-system:project-targets:manage'
+    );
+    const auditInsert = vi.fn().mockResolvedValue({});
+    (getDataSource as any).mockResolvedValue({
+      getRepository: (entity: any) => {
+        if (entity?.name === 'ExternalEngineSystem') return { findOne: vi.fn().mockResolvedValue({ id: 'system-1', tenantId: null, isActive: true }) };
+        if (entity?.name === 'ExternalEngineRegistration') return {
+          findOne: vi.fn().mockResolvedValue({
+            id: 'registration-1', engineId: 'e1', externalId: 'cluster-a/prod', externalSystemId: 'system-1',
+            registrationSource: 'external_api', lifecycleStatus: 'active',
+          }),
+        };
+        if (entity?.name === 'AuditLog') return { insert: auditInsert };
+        return {
+          findOneBy: vi.fn().mockResolvedValue({
+            id: 'e1', tenantId: 'tenant-default', tenancyMode: 'dedicated', externalId: 'cluster-a/prod',
+            registrationSource: 'external_api', externalSystemId: 'system-1', lifecycleStatus: 'active',
+          }),
+          findOne: vi.fn().mockResolvedValue(null),
+        };
+      },
+    });
+    (projectEngineTargetService as any).listTargets.mockResolvedValue([
+      {
+        id: 'target-1',
+        projectId: 'project-1',
+        engineId: 'e1',
+        source: 'external',
+        sourceRef: 'external_engine_system:system-1:project_engine_target:project-1:e1',
+      },
+    ]);
+
+    const response = await request(app)
+      .post('/engines-api/external/project-engine-targets/decommission')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        externalSystemId: 'system-1',
+        projectId: 'project-1',
+        externalEngineId: 'cluster-a/prod',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ archived: true, targetId: 'target-1' });
+    expect(projectEngineTargetService.archiveTarget).toHaveBeenCalledWith(
+      'target-1',
+      'tenant-default',
+      true,
+    );
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'project_engine_target.external_registration.decommission',
+      resourceId: 'target-1',
+    }));
+  });
+
+  it('rejects SSRF-risk external registration URLs', async () => {
+    apiClientAuthMock.authenticateToken.mockResolvedValue({
+      id: 'client-1',
+      name: 'Registration client',
+      tokenPrefix: 'egac_client',
+      scopes: ['engine:register'],
+      isActive: true,
+      createdById: 'user-1',
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: 1,
+      updatedAt: 1,
+      authenticatedAt: 2,
+    });
+
+    const metadataResponse = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Metadata engine',
+        baseUrl: 'http://169.254.169.254/latest/meta-data',
+        externalId: 'metadata-target',
+      });
+
+    expect(metadataResponse.status).toBe(400);
+    expect(metadataResponse.body).toMatchObject({ error: 'Validation failed' });
+    expect(metadataResponse.body.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'baseUrl' }),
+    ]));
+
+    const credentialsResponse = await request(app)
+      .post('/engines-api/external/engines')
+      .set('Authorization', 'Bearer egac_client-1_secret')
+      .send({
+        name: 'Credential URL engine',
+        baseUrl: 'https://user:pass@engine.example.com/engine-rest',
+        externalId: 'credential-target',
+      });
+
+    expect(credentialsResponse.status).toBe(400);
+    expect(credentialsResponse.body.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: 'baseUrl' }),
+    ]));
   });
 
   it('rejects unsupported engine type values', async () => {

@@ -1,14 +1,15 @@
 import { useState, useCallback } from 'react'
-import { apiClient } from '../../../../../shared/api/client'
 import { getUiErrorMessage } from '../../../../../shared/api/apiErrorUtils'
+import { modifyProcessInstanceVariables } from '../../api/processInstances'
 
 interface UseVariableEditorProps {
   instanceId: string
   varsQ: any
   engineId?: string
+  onVariableSaved?: (name: string, variable: { value: any; type: string }) => void
 }
 
-export function useVariableEditor({ instanceId, varsQ, engineId }: UseVariableEditorProps) {
+export function useVariableEditor({ instanceId, varsQ, engineId, onVariableSaved }: UseVariableEditorProps) {
   const [editingVarKey, setEditingVarKey] = useState<string | null>(null)
   const [editingVarType, setEditingVarType] = useState<string>('String')
   const [editingVarValue, setEditingVarValue] = useState<string>('')
@@ -63,16 +64,19 @@ export function useVariableEditor({ instanceId, varsQ, engineId }: UseVariableEd
           parsed = JSON.parse(editingVarValue || '{}')
         }
       }
-      const body = { modifications: { [editingVarKey]: { value: parsed, type: editingVarType } }, engineId }
-      await apiClient.post(`/mission-control-api/process-instances/${instanceId}/variables`, body, { credentials: 'include' })
+      await modifyProcessInstanceVariables(instanceId, {
+        modifications: { [editingVarKey]: { value: parsed, type: editingVarType } },
+        engineId,
+      })
       await varsQ.refetch()
+      onVariableSaved?.(editingVarKey, { value: parsed, type: editingVarType })
       closeVariableEditor()
     } catch (e: any) {
       setEditVarError(getUiErrorMessage(e, 'Failed to update variable'))
     } finally {
       setEditVarBusy(false)
     }
-  }, [instanceId, editingVarKey, editingVarValue, editingVarType, varsQ, closeVariableEditor])
+  }, [instanceId, editingVarKey, editingVarValue, editingVarType, varsQ, onVariableSaved, closeVariableEditor])
 
   return {
     // State

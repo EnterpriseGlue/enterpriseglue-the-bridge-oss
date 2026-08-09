@@ -8,6 +8,7 @@ import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { addCaseInsensitiveEquals, caseInsensitiveColumn } from '@enterpriseglue/shared/db/adapters/QueryHelpers.js';
 import { z } from 'zod';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { validateBody, validateParams, validateQuery } from '@enterpriseglue/shared/middleware/validate.js';
 import { asyncHandler, AppError, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -22,10 +23,10 @@ import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entit
 import { Invitation } from '@enterpriseglue/shared/infrastructure/persistence/entities/Invitation.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { In, IsNull, Not, Raw } from 'typeorm';
-import { MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
-import { requireProjectRole, requireProjectAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { getEmailConfigForTenant } from '@enterpriseglue/shared/services/email/index.js';
+import { permissionService, ProjectPermissions, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
+import { getAccessAuthorityDecision } from '@enterpriseglue/shared/services/platform-admin/AccessAuthorityService.js';
 
 type ProjectRole = 'owner' | 'delegate' | 'developer' | 'editor' | 'viewer';
 
@@ -170,6 +171,34 @@ async function listPendingProjectInvites(projectId: string): Promise<PendingProj
 
 const router = Router();
 
+function projectPermissionContext(req: any, projectId: string) {
+  return {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    resourceType: 'project' as const,
+    resourceId: projectId,
+  };
+}
+
+async function hasProjectPermission(req: any, projectId: string, permission: Permission): Promise<boolean> {
+  return permissionService.hasPermission(permission, projectPermissionContext(req, projectId));
+}
+
+async function canPerformProjectMemberAction(req: any, projectId: string, permission: Permission): Promise<boolean> {
+  return hasProjectPermission(req, projectId, permission);
+}
+
+async function canManageProjectDelegates(req: any, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.DELEGATE_MANAGE);
+}
+
+async function assertManualProjectAccessAllowed(): Promise<void> {
+  const decision = await getAccessAuthorityDecision('project');
+  if (decision && !decision.manualMutationsAllowed) {
+    throw Errors.forbidden(decision.reason || 'Manual project access changes are disabled');
+  }
+}
+
 const uuidLikeSchema = z.string().regex(
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
   'Invalid UUID format'
@@ -220,7 +249,7 @@ router.get(
   requireAuth,
   validateParams(projectIdSchema),
   validateQuery(userSearchSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can search users' }),
+  requireAction('project.members.search', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const projectId = String(req.params.projectId);
@@ -269,7 +298,7 @@ router.get(
   requireAuth,
   validateParams(projectIdSchema),
   validateQuery(memberLookupSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can look up users' }),
+  requireAction('project.members.search', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const projectId = String(req.params.projectId);
@@ -324,7 +353,7 @@ router.get(
   apiLimiter,
   requireAuth,
   validateParams(projectIdSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can inspect invite capabilities' }),
+  requireAction('project.members.invite', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
@@ -347,9 +376,10 @@ router.put(
   requireAuth,
   validateParams(memberIdSchema),
   validateBody(updateDeployGrantSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can manage deploy permissions' }),
+  requireAction('project.members.deploy-grant.manage', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
@@ -360,8 +390,14 @@ router.put(
         throw Errors.projectNotFound();
       }
 
-      if (targetMembership.role !== 'editor') {
-        throw Errors.validation('Deploy permission can only be granted to Editors');
+      const targetCanEditProjectFiles = await permissionService.hasPermission(ProjectPermissions.FILES_EDIT, {
+        userId: targetUserId,
+        tenantId: req.tenant?.tenantId || null,
+        resourceType: 'project',
+        resourceId: projectId,
+      });
+      if (!targetCanEditProjectFiles) {
+        throw Errors.validation('Deploy permission can only be granted to project file editors');
       }
 
       const dataSource = await getDataSource();
@@ -395,6 +431,9 @@ router.put(
       res.json({ allowed });
     } catch (error) {
       logger.error('Update deploy permission error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to update deploy permission');
     }
   })
@@ -409,31 +448,37 @@ router.get(
   apiLimiter,
   requireAuth,
   validateParams(projectIdSchema),
+  requireAction('project.members.read', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
       const projectId = String(req.params.projectId);
-      const userId = req.user!.userId;
-
-      // Check if user has access to project
-      const hasAccess = await projectMemberService.hasAccess(projectId, userId);
-      if (!hasAccess) {
-        throw Errors.forbidden();
-      }
 
       const members = await projectMemberService.getMembers(projectId);
       const pendingInvites = await listPendingProjectInvites(projectId);
 
-      const editorIds = members
-        .filter((m: any) => String(m.role) === 'editor')
-        .map((m: any) => String(m.userId));
+      // The deploy-grant mutation validates the target through the canonical
+      // project file-edit permission. Keep the list contract on that same
+      // decision so the UI does not reintroduce a legacy ProjectMember.role
+      // allowlist (and custom/canonical editors remain manageable).
+      const deployEligibleUserIds = (await Promise.all(members.map(async (member: any) => {
+        const userId = String(member.userId || '');
+        if (!userId) return null;
+        const canEditProjectFiles = await permissionService.hasPermission(ProjectPermissions.FILES_EDIT, {
+          userId,
+          tenantId: req.tenant?.tenantId || null,
+          resourceType: 'project',
+          resourceId: projectId,
+        });
+        return canEditProjectFiles ? userId : null;
+      }))).filter((userId): userId is string => Boolean(userId));
 
       let deployGrantSet = new Set<string>();
-      if (editorIds.length > 0) {
+      if (deployEligibleUserIds.length > 0) {
         const dataSource = await getDataSource();
         const grantRepo = dataSource.getRepository(PermissionGrant);
         const deployGrantRows = await grantRepo.createQueryBuilder('pg')
           .select(['pg.userId'])
-          .where('pg.userId IN (:...editorIds)', { editorIds })
+          .where('pg.userId IN (:...deployEligibleUserIds)', { deployEligibleUserIds })
           .andWhere('pg.permission IN (:...perms)', { perms: ['project:deploy', 'project.deploy'] })
           .andWhere('pg.resourceType = :resourceType', { resourceType: 'project' })
           .andWhere('pg.resourceId = :resourceId', { resourceId: projectId })
@@ -444,7 +489,7 @@ router.get(
       res.json({
         members: members.map((m: any) => ({
           ...m,
-          deployAllowed: String(m.role) === 'editor' ? deployGrantSet.has(String(m.userId)) : null,
+          deployAllowed: deployEligibleUserIds.includes(String(m.userId)) ? deployGrantSet.has(String(m.userId)) : null,
         })),
         pendingInvites,
       });
@@ -460,9 +505,10 @@ router.post(
   apiLimiter,
   requireAuth,
   validateParams(pendingInviteIdSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can manage invitations' }),
+  requireAction('project.members.invite', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const invitationId = String(req.params.invitationId);
       const requesterId = req.user!.userId;
@@ -547,9 +593,9 @@ router.post(
   requireAuth,
   validateParams(projectIdSchema),
   validateBody(addMemberSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can add members' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const { email, role, roles, deliveryMethod } = req.body as { email: string; role?: ProjectRole; roles?: ProjectRole[]; deliveryMethod?: 'email' | 'manual' };
       const inviterId = req.user!.userId;
@@ -558,17 +604,23 @@ router.post(
         throw Errors.validation('Invalid email address');
       }
       const emailLower = email.toLowerCase();
+      const canAddMembers = await canPerformProjectMemberAction(req, projectId, ProjectPermissions.MEMBERS_ADD);
+      const canInviteMembers = await canPerformProjectMemberAction(req, projectId, ProjectPermissions.MEMBERS_INVITE);
 
       const requestedRoles: ProjectRole[] = Array.isArray(roles) && roles.length > 0
         ? roles
         : (role ? [role] : (['viewer'] as ProjectRole[]));
 
-      const inviterMembership = await projectMemberService.getMembership(projectId, inviterId) as MembershipWithRoles | null;
-      const inviterRoles = getRolesFromMembership(inviterMembership);
-      const inviterIsOwner = inviterRoles.includes('owner');
+      // Governance membership rows describe the project roster. They must not
+      // bypass the canonical evaluator when assigning another delegate.
+      const inviterCanManageDelegates = await canManageProjectDelegates(req, projectId);
 
-      if (!inviterIsOwner && (requestedRoles.includes('owner') || requestedRoles.includes('delegate'))) {
-        throw Errors.forbidden('Delegates cannot assign owner or delegate role to new members');
+      if (requestedRoles.includes('owner')) {
+        throw Errors.forbidden('Use transfer ownership to assign project owner role');
+      }
+
+      if (!inviterCanManageDelegates && requestedRoles.includes('delegate')) {
+        throw Errors.forbidden('Delegate assignment requires project delegate-management permission');
       }
 
       // Find user by email
@@ -581,6 +633,10 @@ router.post(
       const targetUser = await targetQb.getOne();
 
       if (targetUser && targetUser.passwordHash) {
+        if (!canAddMembers) {
+          throw Errors.forbidden('Only owners, delegates, or users with project member-add permission can add existing users');
+        }
+
         // Check if user is already a member
         const existingMembership = await projectMemberService.getMembership(projectId, targetUser.id);
         if (existingMembership) {
@@ -610,9 +666,12 @@ router.post(
         });
       }
 
+      if (!canInviteMembers) {
+        throw Errors.forbidden('Only owners, delegates, or users with project member-invite permission can invite users');
+      }
+
       const pendingUser = targetUser || await userService.createPendingUser({
         email: emailLower,
-        platformRole: 'user',
         createdByUserId: inviterId,
       }).then((user) => ({ id: user.id, email: user.email } as Pick<User, 'id' | 'email'>));
 
@@ -678,25 +737,25 @@ router.patch(
   requireAuth,
   validateParams(memberIdSchema),
   validateBody(updateRoleSchema),
-  requireProjectRole(MANAGE_ROLES, { errorStatus: 403, errorMessage: 'Only owners and delegates can update roles' }),
+  requireAction('project.members.update-role', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const targetUserId = String(req.params.userId);
       const { role, roles } = req.body as { role?: ProjectRole; roles?: ProjectRole[] };
       const requesterId = req.user!.userId;
 
-      // Can't change owner role through this endpoint unless requester is owner
+      // Owner transitions are governance operations and only use the dedicated
+      // ownership-transfer endpoint.
       const targetMembership = await projectMemberService.getMembership(projectId, targetUserId);
       if (!targetMembership) {
         throw Errors.projectNotFound();
       }
       const targetRoles = getRolesFromMembership(targetMembership as MembershipWithRoles);
-      const requesterMembership = await projectMemberService.getMembership(projectId, requesterId) as MembershipWithRoles | null;
-      const requesterRoles = getRolesFromMembership(requesterMembership);
-      const requesterIsOwner = requesterRoles.includes('owner');
+      const requesterCanManageDelegates = await canManageProjectDelegates(req, projectId);
 
-      if (targetRoles.includes('owner') && !requesterIsOwner) {
+      if (targetRoles.includes('owner')) {
         throw Errors.validation('Cannot change owner role. Use transfer ownership instead.');
       }
 
@@ -707,9 +766,13 @@ router.patch(
         throw Errors.validation('No roles provided');
       }
 
-      // Delegates can't promote to delegate or owner
-      if (requesterRoles.includes('delegate') && (requestedRoles.includes('delegate') || requestedRoles.includes('owner'))) {
-        throw Errors.forbidden('Delegates cannot assign owner or delegate role');
+      // Only owners can promote to delegate or owner.
+      if (requestedRoles.includes('owner')) {
+        throw Errors.forbidden('Use transfer ownership to assign project owner role');
+      }
+
+      if (!requesterCanManageDelegates && requestedRoles.includes('delegate')) {
+        throw Errors.forbidden('Delegate assignment requires project delegate-management permission');
       }
 
       await projectMemberService.updateRoles(projectId, targetUserId, requestedRoles);
@@ -717,6 +780,9 @@ router.patch(
       res.json({ message: 'Role updated successfully' });
     } catch (error) {
       logger.error('Update member role error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to update member role');
     }
   })
@@ -733,15 +799,18 @@ router.delete(
   validateParams(memberIdSchema),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const targetUserId = String(req.params.userId);
       const requesterId = req.user!.userId;
 
       // Check if requester has permission (owner or delegate, or removing self)
       const isSelf = requesterId === targetUserId;
-      const canManage = await projectMemberService.hasRole(projectId, requesterId, MANAGE_ROLES);
+      const canRemoveMembers = isSelf
+        ? true
+        : await canPerformProjectMemberAction(req, projectId, ProjectPermissions.MEMBERS_REMOVE);
       
-      if (!isSelf && !canManage) {
+      if (!isSelf && !canRemoveMembers) {
         throw Errors.forbidden();
       }
 
@@ -768,6 +837,9 @@ router.delete(
       res.status(204).send();
     } catch (error) {
       logger.error('Remove member error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to remove member');
     }
   })
@@ -783,21 +855,22 @@ router.post(
   requireAuth,
   validateParams(projectIdSchema),
   validateBody(z.object({ newOwnerId: z.string().uuid() })),
+  requireAction('project.ownership.transfer', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
+      await assertManualProjectAccessAllowed();
       const projectId = String(req.params.projectId);
       const { newOwnerId } = req.body;
-      const currentOwnerId = req.user!.userId;
-
-      // Only owner can transfer ownership
-      const isOwner = await projectMemberService.hasRole(projectId, currentOwnerId, ['owner']);
-      if (!isOwner) {
-        throw Errors.userNotFound();
-      }
 
       // New owner must already be a member
       const newOwnerMembership = await projectMemberService.getMembership(projectId, newOwnerId);
       if (!newOwnerMembership) {
+        throw Errors.userNotFound();
+      }
+
+      const ownerIds = await projectMemberService.getProjectOwners(projectId);
+      const currentOwnerId = ownerIds[0];
+      if (!currentOwnerId) {
         throw Errors.userNotFound();
       }
 
@@ -806,6 +879,9 @@ router.post(
       res.json({ message: 'Ownership transferred successfully' });
     } catch (error) {
       logger.error('Transfer ownership error:', error);
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw Errors.internal('Failed to transfer ownership');
     }
   })

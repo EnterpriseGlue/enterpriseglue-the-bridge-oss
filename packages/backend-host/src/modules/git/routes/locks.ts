@@ -4,22 +4,45 @@ import { LockManager } from '@enterpriseglue/shared/services/git/LockManager.js'
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
-import { requireFileEditAccess } from '@enterpriseglue/shared/middleware/projectAuth.js';
-import { AcquireLockRequestSchema, LockHeartbeatRequestSchema, ReleaseLockRequestSchema } from '@enterpriseglue/shared/schemas/git/index.js';
+import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
+import { AcquireLockRequestSchema, LockHeartbeatRequestSchema, LockHeartbeatResponseSchema, LockListResponseSchema, LockResponseSchema } from '@enterpriseglue/shared/schemas/git/index.js';
 import { subscribeLockEvents, emitLockEvent } from '../lockEvents.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
-import { projectMemberService } from '@enterpriseglue/shared/services/platform-admin/ProjectMemberService.js';
-import { EDIT_ROLES, MANAGE_ROLES } from '@enterpriseglue/shared/constants/roles.js';
+import { ProjectPermissions, permissionService, type Permission } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
 const router = Router();
 const lockManager = new LockManager();
+
+async function hasProjectPermission(req: Request, projectId: string, permission: Permission): Promise<boolean> {
+  return permissionService.hasPermission(permission, {
+    userId: req.user!.userId,
+    tenantId: req.tenant?.tenantId || null,
+    resourceType: 'project',
+    resourceId: projectId,
+  });
+}
+
+async function canViewProjectFiles(req: Request, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_VIEW);
+}
+
+async function canEditProjectFiles(req: Request, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.FILES_EDIT);
+}
+
+async function canManageProjectLocks(req: Request, projectId: string): Promise<boolean> {
+  return hasProjectPermission(req, projectId, ProjectPermissions.PROJECT_SETTINGS);
+}
 
 /**
  * POST /git-api/locks
  * Acquire a lock on a file
  */
-router.post('/git-api/locks', apiLimiter, requireAuth, validateBody(AcquireLockRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/git-api/locks', apiLimiter, requireAuth, validateBody(AcquireLockRequestSchema), requireAction('project.git.locks.acquire', {
+  resourceResolver: 'project.byFileId',
+  resourceIdFrom: 'body',
+}), asyncHandler(async (req: Request, res: Response) => {
   const validated = req.body;
   const userId = req.user!.userId;
 
@@ -33,12 +56,7 @@ router.post('/git-api/locks', apiLimiter, requireAuth, validateBody(AcquireLockR
     throw Errors.fileNotFound();
   }
   const projectId = String(file.projectId);
-  const canEditProject = await projectMemberService.hasRole(
-    projectId,
-    userId,
-    EDIT_ROLES
-  );
-  if (!canEditProject) {
+  if (!(await canEditProjectFiles(req, projectId))) {
     throw Errors.fileNotFound();
   }
 
@@ -75,14 +93,18 @@ router.post('/git-api/locks', apiLimiter, requireAuth, validateBody(AcquireLockR
     });
   }
 
-  res.status(201).json(lock);
+  res.status(201).json(LockResponseSchema.parse(lock));
 }));
 
 /**
  * DELETE /git-api/locks/:lockId
  * Release a lock
  */
-router.delete('/git-api/locks/:lockId', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/git-api/locks/:lockId', apiLimiter, requireAuth, requireAction('project.git.locks.release', {
+  resourceResolver: 'project.byGitLockId',
+  resourceIdFrom: 'params',
+  acceptedPermissions: [ProjectPermissions.FILES_EDIT, ProjectPermissions.PROJECT_SETTINGS],
+}), asyncHandler(async (req: Request, res: Response) => {
   const lockId = String(req.params.lockId);
   const userId = req.user!.userId;
 
@@ -102,11 +124,7 @@ router.delete('/git-api/locks/:lockId', apiLimiter, requireAuth, asyncHandler(as
   }
   const projectId = String(file.projectId);
 
-  const canManageLocks = await projectMemberService.hasRole(
-    projectId,
-    userId,
-    MANAGE_ROLES
-  );
+  const canManageLocks = await canManageProjectLocks(req, projectId);
   const isHolder = String(lock.userId) === String(userId);
   if (!isHolder && !canManageLocks) {
     throw Errors.validation('Lock not found');
@@ -121,29 +139,30 @@ router.delete('/git-api/locks/:lockId', apiLimiter, requireAuth, asyncHandler(as
  * GET /git-api/locks
  * List active locks for a project
  */
-router.get('/git-api/locks', apiLimiter, requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/locks', apiLimiter, requireAuth, requireAction('project.git.locks.read', { resourceIdFrom: 'query' }), asyncHandler(async (req: Request, res: Response) => {
   const projectId = req.query.projectId as string;
-  const userId = req.user!.userId;
 
   if (!projectId) {
     throw Errors.validation('projectId is required');
   }
 
-  const canRead = await projectMemberService.hasAccess(String(projectId), userId);
-  if (!canRead) {
+  if (!(await canViewProjectFiles(req, String(projectId)))) {
     throw Errors.projectNotFound();
   }
 
   const locks = await lockManager.getProjectLocks(projectId);
 
-  res.json({ locks });
+  res.json(LockListResponseSchema.parse({ locks }));
 }));
 
 /**
  * PUT /git-api/locks/:lockId/heartbeat
  * Send heartbeat to extend lock
  */
-router.put('/git-api/locks/:lockId/heartbeat', apiLimiter, requireAuth, validateBody(LockHeartbeatRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+router.put('/git-api/locks/:lockId/heartbeat', apiLimiter, requireAuth, validateBody(LockHeartbeatRequestSchema), requireAction('project.git.locks.heartbeat', {
+  resourceResolver: 'project.byGitLockId',
+  resourceIdFrom: 'params',
+}), asyncHandler(async (req: Request, res: Response) => {
   const lockId = String(req.params.lockId);
   const validated = req.body;
 
@@ -162,16 +181,18 @@ router.put('/git-api/locks/:lockId/heartbeat', apiLimiter, requireAuth, validate
     hasInteraction: validated.hasInteraction,
   });
 
-  res.json({ success: true, lock: updated ?? undefined });
+  res.json(LockHeartbeatResponseSchema.parse({ success: true, lock: updated ?? undefined }));
 }));
 
 /**
  * GET /git-api/locks/:fileId/events
  * SSE stream for lock events on a file
  */
-router.get('/git-api/locks/:fileId/events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/git-api/locks/:fileId/events', requireAuth, requireAction('project.git.locks.read', {
+  resourceResolver: 'project.byFileId',
+  resourceIdFrom: 'params',
+}), asyncHandler(async (req: Request, res: Response) => {
   const fileId = String(req.params.fileId);
-  const userId = req.user!.userId;
 
   // Verify user has access to this file's project
   const dataSource = await getDataSource();
@@ -183,8 +204,7 @@ router.get('/git-api/locks/:fileId/events', requireAuth, asyncHandler(async (req
   if (!file) {
     throw Errors.fileNotFound();
   }
-  const canRead = await projectMemberService.hasAccess(String(file.projectId), userId);
-  if (!canRead) {
+  if (!(await canViewProjectFiles(req, String(file.projectId)))) {
     throw Errors.fileNotFound();
   }
 

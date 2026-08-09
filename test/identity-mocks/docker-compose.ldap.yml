@@ -1,0 +1,33 @@
+# Opt-in only: invoked by scripts/run-ldap-protocol-mock.sh. It intentionally
+# has no fixed host port, credential, volume, or project name.
+services:
+  openldap:
+    image: osixia/openldap:1.5.0
+    hostname: ldap.identity-mock.test
+    environment:
+      LDAP_ORGANISATION: EnterpriseGlue protocol test
+      LDAP_DOMAIN: ${EG_LDAP_TEST_DOMAIN:?set by the harness}
+      LDAP_ADMIN_PASSWORD: ${EG_LDAP_TEST_ADMIN_PASSWORD:?set by the harness}
+      LDAP_CONFIG_PASSWORD: ${EG_LDAP_TEST_CONFIG_PASSWORD:?set by the harness}
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: ldap.crt
+      LDAP_TLS_KEY_FILENAME: ldap.key
+      LDAP_TLS_CA_CRT_FILENAME: ldap.crt
+      # Exercise normal server-authenticated LDAPS. Production clients validate
+      # the generated CA but are not issued a client certificate by this fixture.
+      LDAP_TLS_VERIFY_CLIENT: never
+    ports:
+      # Local runs remain loopback-only. The disposable CI rehearsal can opt
+      # into a Docker-network attachment instead of routing LDAPS through the
+      # runner host.
+      - "${EG_LDAP_TEST_PUBLISH_HOST:-127.0.0.1}::636"
+    volumes:
+      # The image adjusts certificate ownership during startup. This is a
+      # generated temporary directory, removed by the harness on exit.
+      - ${EG_LDAP_TEST_CERT_DIR:?set by the harness}:/container/service/slapd/assets/certs
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://localhost -b \"$${LDAP_BASE_DN}\" -s base >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s

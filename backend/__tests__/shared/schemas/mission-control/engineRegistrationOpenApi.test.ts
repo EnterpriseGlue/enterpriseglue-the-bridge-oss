@@ -1,0 +1,241 @@
+import { describe, expect, it } from 'vitest';
+import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
+import { ExternalEngineDecommissionRequestSchema } from '@enterpriseglue/shared/schemas/mission-control/engine.js';
+
+describe('engine registration OpenAPI contracts', () => {
+  it('publishes one connection-mode enum across manual, external, and config registration', () => {
+    const document = generateOpenApi();
+    const schemas = document.components?.schemas;
+
+    expect(schemas?.EngineConnectionMode).toEqual({
+      type: 'string',
+      enum: ['direct', 'customer_sidecar'],
+    });
+    for (const schemaName of [
+      'CreateEngineRequest',
+      'ExternalEngineRegistrationRequest',
+      'ConfigEngineRegistration',
+    ]) {
+      expect(schemas?.[schemaName]?.properties?.connectionMode).toMatchObject({
+        type: 'string',
+        enum: ['direct', 'customer_sidecar'],
+      });
+    }
+    expect(schemas?.UpdateEngineRequest?.required).toBeUndefined();
+
+    expect(document.paths?.['/engines-api/engines']?.post?.description)
+      .toContain('does not grant engine membership');
+    expect(document.paths?.['/engines-api/external/engines']?.post?.description)
+      .toContain('does not grant any user or group engine access');
+  });
+
+  it('documents sanitized transport diagnostics and endpoint-policy errors on every registration path', () => {
+    const document = generateOpenApi();
+    const schemas = document.components?.schemas;
+    const paths = document.paths;
+
+    expect(schemas?.EngineTransportDiagnostics?.properties).toMatchObject({
+      connectionMode: { type: 'string', enum: ['direct', 'customer_sidecar'] },
+      endpointAuthentication: { type: 'string' },
+      downstreamAuthentication: { type: 'string' },
+    });
+    expect(schemas?.EngineTransportDiagnostics?.properties).not.toHaveProperty('baseUrl');
+    expect(schemas?.EngineTransportDiagnostics?.properties).not.toHaveProperty('credentials');
+    expect(schemas?.EndpointAuthenticationPolicyError?.properties).toMatchObject({
+      error: {
+        type: 'string',
+        enum: [
+          'Credentialless endpoint authentication is allowed only for customer-sidecar engines',
+          'Credentialless customer-sidecar endpoints are disabled by platform policy',
+        ],
+      },
+      code: { type: 'string', enum: ['VALIDATION_ERROR'] },
+    });
+
+    for (const [path, method] of [
+      ['/engines-api/engines', 'post'],
+      ['/engines-api/engines/{id}', 'put'],
+      ['/engines-api/external/engines', 'post'],
+    ] as const) {
+      expect(paths?.[path]?.[method]?.responses?.['400']?.content?.['application/json']?.schema?.anyOf)
+        .toEqual(expect.arrayContaining([
+          schemas?.EndpointAuthenticationPolicyError,
+          schemas?.EngineTenancyErrorResponse,
+        ]));
+    }
+  });
+
+  it('publishes canonical engine tenancy, mapping, diagnostics, and batch contracts', () => {
+    const document = generateOpenApi();
+    const schemas = document.components?.schemas;
+
+    expect(schemas?.EngineTenancyMode).toEqual({
+      type: 'string',
+      enum: ['dedicated', 'shared'],
+    });
+    expect(schemas?.EngineTenantMappingStrategy).toEqual({
+      type: 'string',
+      enum: ['engine_tenant_id', 'deployment_target', 'explicit'],
+    });
+    expect(schemas?.EngineTenancyConfiguration?.oneOf).toHaveLength(2);
+    expect(schemas?.EngineTenancyConfiguration?.oneOf).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        properties: expect.objectContaining({ mode: { type: 'string', enum: ['dedicated'] } }),
+      }),
+      expect.objectContaining({
+        properties: expect.objectContaining({ mode: { type: 'string', enum: ['shared'] } }),
+      }),
+    ]));
+    expect(schemas?.EngineTenancyDiagnostics?.properties).toHaveProperty('resolutionStatus');
+    expect(schemas?.EngineTenancyErrorCode?.enum).toContain('ENGINE_TENANCY_TRANSITION_REQUIRED');
+    expect(schemas?.EngineTenancyErrorCode?.enum).toEqual(expect.arrayContaining([
+      'ENGINE_TENANCY_PREVIEW_STALE',
+      'ENGINE_TENANCY_PREVIEW_EXPIRED',
+      'ENGINE_TENANCY_ACKNOWLEDGEMENT_REQUIRED',
+    ]));
+    expect(schemas?.EngineTenancyErrorResponse?.properties).not.toHaveProperty('details');
+    expect(schemas?.EngineTenantMapping?.properties).not.toHaveProperty('credentials');
+    expect(schemas?.EngineTenancyTransitionPreviewResponse?.properties).toMatchObject({
+      effects: expect.any(Object),
+      requiredAcknowledgements: expect.any(Object),
+      previewHash: expect.any(Object),
+      previewExpiresAt: expect.any(Object),
+    });
+    expect(schemas?.EngineTenancyTransitionApplyRequest?.required).toEqual(expect.arrayContaining([
+      'tenancy',
+      'previewHash',
+      'previewExpiresAt',
+      'acknowledgements',
+    ]));
+    expect(schemas?.EngineTenancyClassificationReport?.properties).toHaveProperty('rows');
+    for (const schemaName of [
+      'CreateEngineRequest',
+      'UpdateEngineRequest',
+      'ExternalEngineRegistrationRequest',
+    ]) {
+      expect(schemas?.[schemaName]?.properties).toHaveProperty('tenancy');
+    }
+    expect(schemas?.ExternalEngineTenantMappingsUpsertRequest?.properties).toMatchObject({
+      expectedMappingVersion: { type: 'integer', minimum: 0 },
+      atomic: { type: 'boolean', default: true, enum: [true] },
+    });
+    expect(schemas?.ExternalEngineTenantMappingsUpsertResponse?.properties).toHaveProperty('diagnostics');
+
+    const paths = generateOpenApi().paths;
+    for (const [path, method] of [
+      ['/engines-api/engines', 'post'],
+      ['/engines-api/engines/{id}', 'put'],
+      ['/engines-api/external/engines', 'post'],
+    ] as const) {
+      expect(paths?.[path]?.[method]?.responses?.['403']).toBeDefined();
+    }
+    expect(paths?.['/engines-api/engines/{id}']?.put?.responses?.['409']).toBeDefined();
+    expect(paths?.['/engines-api/external/engines']?.post?.responses?.['409']).toBeDefined();
+
+    expect(document.paths?.['/engines-api/engines/{id}/tenancy/diagnostics']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/tenancy/classification-report']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenancy/preview']?.post?.requestBody)
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenancy/apply']?.post?.responses?.['409'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenant-mappings']?.get?.responses?.['200'])
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/engines/{id}/tenant-mappings']?.put?.requestBody)
+      .toBeDefined();
+    expect(document.paths?.['/engines-api/external/engines/{externalId}/tenant-mappings']?.put?.responses?.['409'])
+      .toBeDefined();
+  });
+
+  it('documents the sanitized aggregate engine-tenancy metrics contract', () => {
+    const metrics = generateOpenApi().paths?.['/metrics']?.get;
+
+    expect(metrics?.responses?.['200']).toMatchObject({
+      description: 'Sanitized Prometheus configuration-bootstrap, aggregate engine-tenancy, and bounded login-experience metrics',
+      content: {
+        'text/plain': {
+          schema: { type: 'string' },
+        },
+      },
+    });
+  });
+
+  it('publishes one strict external decommission contract across runtime and OpenAPI', () => {
+    expect(ExternalEngineDecommissionRequestSchema.parse({
+      externalId: 'cmdb/payments-prod',
+      externalSystemId: 'cmdb',
+      reason: 'Retired by source',
+    })).toEqual({
+      externalId: 'cmdb/payments-prod',
+      externalSystemId: 'cmdb',
+      reason: 'Retired by source',
+    });
+    expect(ExternalEngineDecommissionRequestSchema.safeParse({
+      externalId: 'cmdb/payments-prod',
+      unexpected: true,
+    }).success).toBe(false);
+
+    const requestSchema = generateOpenApi()
+      .paths?.['/engines-api/external/engines/decommission']
+      ?.post?.requestBody?.content?.['application/json']?.schema;
+    expect(requestSchema).toMatchObject({
+      type: 'object',
+      required: ['externalId'],
+      additionalProperties: false,
+      properties: {
+        externalId: { type: 'string', minLength: 1, maxLength: 255 },
+        externalSystemId: { nullable: true },
+        reason: { nullable: true, maxLength: 2000 },
+      },
+    });
+  });
+
+  it('publishes the complete external project-engine target in create and update responses', () => {
+    const operation = generateOpenApi()
+      .paths?.['/engines-api/external/project-engine-targets']
+      ?.post;
+
+    for (const [status, created] of [['201', true], ['200', false]] as const) {
+      const responseSchema = operation?.responses?.[status]?.content?.['application/json']?.schema;
+      expect(responseSchema).toMatchObject({
+        type: 'object',
+        required: ['created', 'target'],
+        additionalProperties: false,
+        properties: {
+          created: { type: 'boolean', enum: [created] },
+          target: {
+            type: 'object',
+            required: expect.arrayContaining([
+              'id',
+              'projectId',
+              'engineId',
+              'status',
+              'source',
+              'ownershipMode',
+              'allowManualDeploy',
+              'allowCiDeploy',
+              'allowApiDeploy',
+              'allowImport',
+              'approvalStatus',
+              'policyTags',
+              'createdAt',
+              'updatedAt',
+            ]),
+            properties: expect.objectContaining({
+              id: { type: 'string' },
+              projectId: { type: 'string' },
+              engineId: { type: 'string' },
+              status: { type: 'string', enum: ['active', 'disabled', 'archived'] },
+              source: {
+                type: 'string',
+                enum: ['manual', 'legacy', 'ci', 'api', 'import', 'deployment_history', 'external', 'system', 'automation', 'config'],
+              },
+              ownershipMode: { type: 'string', enum: ['manual', 'config_locked', 'config_warn'] },
+            }),
+          },
+        },
+      });
+    }
+  });
+});

@@ -4,6 +4,9 @@
   "type": "module",
   "version": "0.1.0",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "dotenv run node dist/backend/src/server.js",
@@ -13,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "guard:no-raw-sql": "tsx scripts/check-no-raw-sql.ts",
     "test:unit": "npm run guard:no-raw-sql && vitest --run --dir __tests__ --config vitest.config.ts",
-    "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.config.ts --fileParallelism=false",
+    "test:integration": "npm run guard:no-raw-sql && vitest --run --dir test/integration --config vitest.integration.config.ts --fileParallelism=false",
     "verify": "npm run typecheck && npm run build:skip-generate && npm run test:unit",
     "db:migration:generate": "npx typeorm migration:generate -d dist/packages/shared/src/db/data-source.js",
     "db:migration:run": "npx typeorm migration:run -d dist/packages/shared/src/db/data-source.js",
@@ -42,6 +45,7 @@
     "google-auth-library": "^10.6.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "ldapts": "^9.0.0",
     "morgan": "^1.11.0",
     "mssql": "^12.7.0",
     "mysql2": "^3.23.2",
@@ -54,7 +58,7 @@
     "simple-git": "^3.32.3",
     "sql.js": "^1.13.0",
     "swagger-ui-express": "^5.0.0",
-    "typeorm": "^0.3.29",
+    "typeorm": "^0.3.31",
     "undici": "^7.29.0",
     "zod": "^4.3.6"
   },
@@ -88,7 +92,7 @@
     "minimatch": "^10.2.4",
     "cross-spawn": "^7.0.6",
     "tar": "^7.5.8",
-    "brace-expansion": "^2.0.3",
+    "brace-expansion": "^2.1.3",
     "diff": "^5.2.2",
     "fast-xml-parser": "^5.3.6",
     "qs": "^6.15.2",

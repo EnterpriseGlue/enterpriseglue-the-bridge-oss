@@ -2,9 +2,9 @@ import React from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { sanitizePathParam } from '../../../shared/utils/sanitize'
-import { Pause, Play, TrashCan, Renew, Migrate, Close, Launch } from '@carbon/icons-react'
-import { BreadcrumbItem, Button } from '@carbon/react'
-import { useQuery } from '@tanstack/react-query'
+import { Pause, Play, TrashCan, Renew, Migrate, Launch, Save } from '@carbon/icons-react'
+import { BreadcrumbItem, Button, Dropdown, InlineNotification, Modal, TextArea, TextInput } from '@carbon/react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BreadcrumbBar } from '../../shared/components/BreadcrumbBar'
 import { TableSearchBar } from '../../../shared/components/ui/TableSearchBar'
 import { SplitPane, Pane } from 'react-split-pane'
@@ -24,38 +24,226 @@ import {
   useRetryModal,
   useSplitPaneState,
 } from './hooks'
+import { createSavedProcessFilter, deleteSavedProcessFilter, listSavedProcessFilters } from './api/processDefinitions'
 import { EngineAccessError, isEngineAccessError } from '../shared/components/EngineAccessError'
+import { RuntimeCollectionEmptyState } from '../shared/components/RuntimeCollectionEmptyState'
 import { apiClient } from '../../../shared/api/client'
+import { evaluateMissionControlStarbaseBridge, type BridgeDecisionResponse } from '../../../shared/api/bridgeAuthz'
+import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { useSelectedEngine } from '../../../components/EngineSelector'
 import { useEngineSelectorStore } from '../../../stores/engineSelectorStore'
 import { LoadingState } from '../../shared/components/LoadingState'
+import { evaluateActionSnapshot, summarizeBulkActionUnavailableReasons, WhyUnavailableLink } from '../../../shared/auth/guards'
+import type { UiAuthzDecision } from '@enterpriseglue/shared/authz/permission-actions.js'
+import { AuthContext } from '../../../contexts/AuthContext'
+import { getUiErrorMessage } from '../../../shared/api/apiErrorUtils'
+import type { ProcessInstanceIncident, ProcessInstanceStartResponse } from '@enterpriseglue/shared/schemas/mission-control/process.js'
+import type { ProcessEditTarget } from '@enterpriseglue/shared/schemas/mission-control/edit-target.js'
 
 const SPLIT_PANE_STORAGE_KEY = 'processes-split-pane-size-v2'
 const DEFAULT_SPLIT_SIZE = '75%'
 const Viewer = React.lazy(() => import('../../shared/components/Viewer'))
 
-type ProcessEditTarget = {
-  canShowEditButton: boolean
-  canEdit: boolean
-  engineId: string
-  processKey: string
-  processVersion: number
-  projectId: string
-  fileId: string
-  engineDeploymentId?: string
-  commitId?: string | null
-  fileVersionNumber?: number | null
-  mappingSource?: string
+function deniedReason(decision: UiAuthzDecision): string | null {
+  if (decision.allowed) return null
+  return decision.reason || 'Action unavailable'
+}
+
+type BulkProcessAction = 'retry' | 'activate' | 'suspend' | 'delete' | 'migrate'
+
+type BulkProcessInstance = {
+  id?: string
+  state?: string | null
+  hasIncident?: boolean
+  processDefinitionKey?: string | null
+  version?: number | string | null
+  runtimeActionDecisions?: {
+    suspension?: { allowed: boolean; reason?: string }
+    retry?: { allowed: boolean; reason?: string }
+    terminate?: { allowed: boolean; reason?: string }
+    migration?: { allowed: boolean; reason?: string }
+  }
+}
+
+type BulkProcessEligibility = {
+  allowed: boolean
+  deniedCount: number
+  firstDeniedDecision: UiAuthzDecision | null
+  firstDeniedReason: string | null
+  summary: string | null
+}
+
+type SavedProcessFilter = Awaited<ReturnType<typeof listSavedProcessFilters>>[number]
+
+const SAVED_FILTER_STATE_LABELS: Record<string, string> = {
+  active: 'Active',
+  incidents: 'Incidents',
+  completed: 'Completed',
+  canceled: 'Canceled',
+}
+
+function normalizedInstanceState(instance: BulkProcessInstance): string {
+  return String(instance?.state || '').toUpperCase()
+}
+
+function isRunningInstance(instance: BulkProcessInstance): boolean {
+  const state = normalizedInstanceState(instance)
+  return state === 'ACTIVE' || state === 'SUSPENDED'
+}
+
+function stateReason(instance: BulkProcessInstance): string {
+  const state = normalizedInstanceState(instance)
+  if (state === 'ACTIVE') return 'instance is already active'
+  if (state === 'SUSPENDED') return 'instance is already suspended'
+  if (state === 'COMPLETED') return 'instance is completed'
+  if (state === 'CANCELED' || state === 'CANCELLED') return 'instance is canceled'
+  return state ? `instance state is ${state.toLowerCase()}` : 'instance state is unknown'
+}
+
+function actionPastTense(action: BulkProcessAction): string {
+  if (action === 'retry') return 'retried'
+  if (action === 'activate') return 'activated'
+  if (action === 'suspend') return 'suspended'
+  if (action === 'delete') return 'canceled'
+  return 'migrated'
+}
+
+function runtimeDecisionFor(
+  instance: BulkProcessInstance,
+  runtimeAction: 'suspension' | 'retry' | 'terminate' | 'migration',
+  fallback: UiAuthzDecision,
+): UiAuthzDecision {
+  const runtimeDecision = instance.runtimeActionDecisions?.[runtimeAction]
+  if (!runtimeDecision) {
+    return {
+      ...fallback,
+      allowed: false,
+      state: 'disabled',
+      reason: 'Action decision unavailable for this runtime resource',
+    }
+  }
+  return {
+    ...fallback,
+    allowed: runtimeDecision.allowed,
+    state: runtimeDecision.allowed ? 'allowed' : 'disabled',
+    reason: runtimeDecision.allowed
+      ? 'Allowed for this runtime resource'
+      : runtimeDecision.reason || 'Action unavailable for this runtime resource',
+  }
+}
+
+export function getBulkProcessActionEligibility(
+  action: BulkProcessAction,
+  selectedInstances: BulkProcessInstance[],
+  options: {
+    currentKey?: string | null
+    diagnosticDecision?: UiAuthzDecision | null
+    getActionDecision?: (instance: BulkProcessInstance) => UiAuthzDecision | null
+  } = {}
+): BulkProcessEligibility {
+  if (selectedInstances.length === 0) {
+    return { allowed: false, deniedCount: 0, firstDeniedDecision: null, firstDeniedReason: null, summary: null }
+  }
+
+  const baselineProcessKey = selectedInstances
+    .map((instance) => instance.processDefinitionKey || options.currentKey || null)
+    .find(Boolean) || null
+  const baselineVersion = selectedInstances
+    .map((instance) => instance.version)
+    .find((version) => version !== undefined && version !== null)
+
+  const summary = summarizeBulkActionUnavailableReasons(
+    selectedInstances,
+    (instance) => {
+      const actionDecision = options.getActionDecision?.(instance)
+      if (actionDecision && !actionDecision.allowed) return actionDecision.reason || 'Action unavailable'
+      if ((action === 'delete' || action === 'migrate' || action === 'retry') && !isRunningInstance(instance)) {
+        return stateReason(instance)
+      }
+      if (action === 'activate' && normalizedInstanceState(instance) !== 'SUSPENDED') {
+        return stateReason(instance)
+      }
+      if (action === 'suspend' && normalizedInstanceState(instance) !== 'ACTIVE') {
+        return stateReason(instance)
+      }
+      if (action === 'retry' && !instance.hasIncident) {
+        return 'instance has no incident'
+      }
+      if (action === 'migrate') {
+        const processKey = instance.processDefinitionKey || options.currentKey || null
+        if (baselineProcessKey && processKey && processKey !== baselineProcessKey) {
+          return 'instance belongs to a different process definition'
+        }
+        if (
+          baselineVersion !== undefined &&
+          baselineVersion !== null &&
+          instance.version !== undefined &&
+          instance.version !== null &&
+          instance.version !== baselineVersion
+        ) {
+          return 'instance has a different source version'
+        }
+      }
+      return null
+    },
+    {
+      actionPastTense: actionPastTense(action),
+      getDiagnosticDecision: (instance, reason) => (options.getActionDecision?.(instance) || options.diagnosticDecision)
+        ? {
+            ...(options.getActionDecision?.(instance) || options.diagnosticDecision)!,
+            allowed: false,
+            diagnostics: (options.getActionDecision?.(instance) || options.diagnosticDecision)?.diagnostics ?? {
+              explainUrl: '/admin/access-control?tab=effective-access',
+              remediation: ['Ask a platform administrator to review effective access.'],
+            },
+            reason,
+            state: 'disabled',
+          }
+        : null,
+      itemLabelSingular: 'instance',
+      itemLabelPlural: 'instances',
+    }
+  )
+
+  return {
+    allowed: summary.allowed,
+    deniedCount: summary.deniedCount,
+    firstDeniedDecision: summary.firstDeniedDecision,
+    firstDeniedReason: summary.firstDeniedReason,
+    summary: summary.reason,
+  }
 }
 
 export default function ProcessesOverviewPage() {
   const { tenantNavigate, toTenantPath } = useTenantNavigate()
   const location = useLocation() as any
   const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
   const { alertState, showAlert, closeAlert } = useAlert()
+  const [bridgeError, setBridgeError] = React.useState<string | null>(null)
+  const [bridgeDecision, setBridgeDecision] = React.useState<BridgeDecisionResponse | null>(null)
   const selectedEngineId = useSelectedEngine()
   const setSelectedEngineId = useEngineSelectorStore((s) => s.setSelectedEngineId)
   const { clearViewports } = useDiagramViewStore()
+  const authContext = React.useContext(AuthContext)
+  const selectedEngineResource = React.useMemo(
+    () => ({ type: 'engine' as const, id: selectedEngineId ?? null }),
+    [selectedEngineId]
+  )
+  const permissionSnapshot = authContext?.permissions ?? null
+  const instanceRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-instances.retry', selectedEngineResource)
+  const startProcessDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.process-definitions.start', selectedEngineResource)
+  const bulkRetryDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.jobs.retry', selectedEngineResource)
+  const bulkDeleteDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.delete', selectedEngineResource)
+  const bulkSuspendDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.suspend', selectedEngineResource)
+  const bulkActivateDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.runtime.batches.process-instances.activate', selectedEngineResource)
+  const savedFiltersReadDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.read', selectedEngineResource)
+  const savedFiltersManageDecision = evaluateActionSnapshot(permissionSnapshot, 'engine.saved-filters.manage', selectedEngineResource)
+  const notifyDeniedAction = React.useCallback((decision: UiAuthzDecision) => {
+    if (decision.allowed) return false
+    showAlert(decision.reason || 'Action unavailable', 'warning')
+    return true
+  }, [showAlert])
 
   // Split pane state with localStorage persistence
   const { size: splitSize, handleChange: handleSplitChange } = useSplitPaneState({
@@ -63,7 +251,7 @@ export default function ProcessesOverviewPage() {
     defaultSize: DEFAULT_SPLIT_SIZE,
   })
 
-  
+
   // Filter store
   const {
     selectedProcess, setSelectedProcess,
@@ -107,6 +295,15 @@ export default function ProcessesOverviewPage() {
   const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
   const [retryingMap, setRetryingMap] = React.useState<Record<string, boolean>>({})
   const [retryModalInstanceId, setRetryModalInstanceId] = React.useState<string | null>(null)
+  const [startProcessOpen, setStartProcessOpen] = React.useState(false)
+  const [startBusinessKey, setStartBusinessKey] = React.useState('')
+  const [startVariablesJson, setStartVariablesJson] = React.useState('')
+  const [startBusy, setStartBusy] = React.useState(false)
+  const [startError, setStartError] = React.useState<string | null>(null)
+  const [saveFilterOpen, setSaveFilterOpen] = React.useState(false)
+  const [saveFilterName, setSaveFilterName] = React.useState('')
+  const [saveFilterError, setSaveFilterError] = React.useState<string | null>(null)
+  const [selectedSavedFilterId, setSelectedSavedFilterId] = React.useState<string | null>(null)
   // tableSearchValue now comes from the store as searchValue
 
   // Modal hooks
@@ -137,6 +334,10 @@ export default function ProcessesOverviewPage() {
     varOp,
     varValue,
     advancedOpen,
+    // Both collection routes filter against live runtime-resource lineage.
+    // Navigation snapshots intentionally omit that lineage.
+    processDefinitionsEnabled: true,
+    processInstancesEnabled: true,
   })
 
   const modalData = useProcessesModalData({
@@ -144,6 +345,10 @@ export default function ProcessesOverviewPage() {
     detailsModalOpen: detailsModal.isOpen,
     retryModalInstanceId,
     engineId: selectedEngineId,
+    variablesEnabled: true,
+    activityHistoryEnabled: true,
+    jobsEnabled: true,
+    externalTasksEnabled: true,
   })
 
   const bulkOps = useBulkOperations({
@@ -162,6 +367,138 @@ export default function ProcessesOverviewPage() {
 
   // Destructure data from hooks
   const { defItems, versions, currentKey, defIdForVersion, xmlQ, countsQ, countsByStateQ, previewCountQ, instQ, defsQ, defIdQ } = processesData
+
+  const savedFiltersQ = useQuery({
+    queryKey: ['mission-control', 'saved-filters', selectedEngineId],
+    queryFn: listSavedProcessFilters,
+    enabled: savedFiltersReadDecision.allowed && !!selectedEngineId,
+    select: (filters) => filters
+      .filter((filter) => filter.engineId === selectedEngineId)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    retry: false,
+    staleTime: 15_000,
+  })
+
+  const savedFilters = savedFiltersQ.data || []
+  const selectedSavedFilter = React.useMemo(
+    () => savedFilters.find((filter) => filter.id === selectedSavedFilterId) || null,
+    [savedFilters, selectedSavedFilterId]
+  )
+
+  const defaultSavedFilterName = React.useMemo(() => {
+    const processLabel = selectedProcess?.label || selectedProcess?.key || 'All processes'
+    const versionLabel = selectedVersion !== null ? ` v${selectedVersion}` : ''
+    return `${processLabel}${versionLabel}`
+  }, [selectedProcess?.key, selectedProcess?.label, selectedVersion])
+
+  const saveFilterMutation = useMutation({
+    mutationFn: createSavedProcessFilter,
+    onSuccess: async (filter) => {
+      setSelectedSavedFilterId(filter.id)
+      setSaveFilterOpen(false)
+      setSaveFilterName('')
+      setSaveFilterError(null)
+      await queryClient.invalidateQueries({ queryKey: ['mission-control', 'saved-filters', selectedEngineId] })
+      showAlert('Saved filter created', 'info')
+    },
+    onError: (error) => {
+      setSaveFilterError(getUiErrorMessage(error, 'Failed to save filter'))
+    },
+  })
+
+  const deleteFilterMutation = useMutation({
+    mutationFn: deleteSavedProcessFilter,
+    onSuccess: async (_data, filterId) => {
+      if (selectedSavedFilterId === filterId) {
+        setSelectedSavedFilterId(null)
+      }
+      await queryClient.invalidateQueries({ queryKey: ['mission-control', 'saved-filters', selectedEngineId] })
+      showAlert('Saved filter deleted', 'info')
+    },
+    onError: (error) => {
+      showAlert(getUiErrorMessage(error, 'Failed to delete saved filter'), 'error')
+    },
+  })
+
+  const handleApplySavedFilter = React.useCallback((filter: SavedProcessFilter | null) => {
+    if (!filter) {
+      setSelectedSavedFilterId(null)
+      return
+    }
+
+    setSelectedSavedFilterId(filter.id)
+    const processKey = filter.defKeys[0] || ''
+    const matchingProcess = processKey
+      ? defItems.find((item) => item.key === processKey)
+      : null
+    setSelectedProcess(matchingProcess || (processKey ? { id: processKey, key: processKey, label: processKey, version: 0 } as any : null))
+
+    const parsedVersion = filter.version === null || filter.version === undefined || filter.version === ''
+      ? null
+      : Number(filter.version)
+    setSelectedVersion(typeof parsedVersion === 'number' && Number.isFinite(parsedVersion) ? parsedVersion : null)
+    setFlowNode('')
+    clearViewports()
+    setSelectedStates(
+      Object.entries(SAVED_FILTER_STATE_LABELS)
+        .filter(([state]) => Boolean((filter as any)[state]))
+        .map(([id, label]) => ({ id, label }))
+    )
+  }, [clearViewports, defItems, setFlowNode, setSelectedProcess, setSelectedStates, setSelectedVersion])
+
+  const openSaveFilterModal = React.useCallback(() => {
+    if (notifyDeniedAction(savedFiltersManageDecision)) return
+    if (!selectedEngineId) {
+      showAlert('Select an engine before saving a filter', 'warning')
+      return
+    }
+    setSaveFilterName(defaultSavedFilterName)
+    setSaveFilterError(null)
+    setSaveFilterOpen(true)
+  }, [defaultSavedFilterName, notifyDeniedAction, savedFiltersManageDecision, selectedEngineId, showAlert])
+
+  const handleSaveFilter = React.useCallback(async () => {
+    if (notifyDeniedAction(savedFiltersManageDecision)) return
+    const name = saveFilterName.trim()
+    if (!name) {
+      setSaveFilterError('Filter name is required')
+      return
+    }
+    if (!selectedEngineId) {
+      setSaveFilterError('Select an engine before saving a filter')
+      return
+    }
+
+    setSaveFilterError(null)
+    await saveFilterMutation.mutateAsync({
+      name,
+      engineId: selectedEngineId,
+      defKeys: selectedProcess?.key ? [selectedProcess.key] : [],
+      version: selectedVersion !== null ? String(selectedVersion) : null,
+      active,
+      incidents,
+      completed,
+      canceled,
+    })
+  }, [
+    active,
+    canceled,
+    completed,
+    incidents,
+    notifyDeniedAction,
+    saveFilterMutation,
+    saveFilterName,
+    savedFiltersManageDecision,
+    selectedEngineId,
+    selectedProcess?.key,
+    selectedVersion,
+  ])
+
+  const handleDeleteSavedFilter = React.useCallback(() => {
+    if (notifyDeniedAction(savedFiltersManageDecision)) return
+    if (!selectedSavedFilter) return
+    deleteFilterMutation.mutate(selectedSavedFilter.id)
+  }, [deleteFilterMutation, notifyDeniedAction, savedFiltersManageDecision, selectedSavedFilter])
 
   React.useEffect(() => {
     const engineIdParam = String(searchParams.get('engineId') || '')
@@ -231,6 +568,8 @@ export default function ProcessesOverviewPage() {
       version: selectedVersion,
       processDefinitionId: defIdForVersion,
     }),
+    // The endpoint resolves the selected process definition before checking
+    // access. Do not gate it with the runtime-resource-free UI snapshot.
     enabled: !!selectedEngineId && !!selectedProcess?.key && selectedVersion !== null,
     retry: false,
     staleTime: 15_000,
@@ -244,8 +583,26 @@ export default function ProcessesOverviewPage() {
     processEditTarget?.fileId
   )
 
-  const handleEditInStarbase = React.useCallback(() => {
+  const handleEditInStarbase = React.useCallback(async () => {
     if (!processEditTarget?.fileId || selectedVersion === null || !selectedProcess?.key) return
+    setBridgeError(null)
+    setBridgeDecision(null)
+    try {
+      const bridgeDecision = await evaluateMissionControlStarbaseBridge({
+        engineId: String(selectedEngineId || processEditTarget.engineId || ''),
+        projectId: processEditTarget.projectId,
+        fileId: processEditTarget.fileId,
+        definitionKey: selectedProcess.key,
+        kind: 'process',
+      })
+      if (!bridgeDecision.allowed) {
+        setBridgeDecision(bridgeDecision)
+        return
+      }
+    } catch (error) {
+      setBridgeError(getUiErrorMessage(error, 'Unable to evaluate Starbase edit access'))
+      return
+    }
 
     const params = new URLSearchParams({
       source: 'mission-control',
@@ -268,10 +625,10 @@ export default function ProcessesOverviewPage() {
 
   // Viewer API for managing BPMN diagram
   const [viewerApi, setViewerApi] = React.useState<any>(null)
-  
+
   // Flow nodes extracted from the diagram for the filter dropdown
   const [diagramFlowNodes, setDiagramFlowNodes] = React.useState<Array<{ id: string; name: string; type: string; x: number }>>([])
-  
+
   // Extract flow nodes - called after diagram is ready (via onDiagramReset)
   const extractFlowNodes = React.useCallback(() => {
     if (viewerApi) {
@@ -291,7 +648,7 @@ export default function ProcessesOverviewPage() {
       viewerApi.selectElement(flowNode)
     } catch {}
   }, [viewerApi, flowNode])
-  
+
   // Extract flow nodes when viewerApi becomes available or changes
   // This ensures nodes are listed even when navigating back to the page
   React.useEffect(() => {
@@ -308,7 +665,7 @@ export default function ProcessesOverviewPage() {
       setFlowNodes([])
     }
   }, [viewerApi, setFlowNodes])
-  
+
   // Handle element click on diagram - toggle selection
   const handleElementClick = React.useCallback((elementId: string, elementName: string, elementType: string) => {
     // If clicking the same element, deselect it
@@ -329,15 +686,15 @@ export default function ProcessesOverviewPage() {
   // Function to apply activity count badges for selected states only
   const applyBadges = React.useCallback(() => {
     if (!viewerApi || !countsByStateQ.data || countsByStateQ.isLoading) return
-    
+
     // Clear existing badges
     viewerApi.clearBadges()
-    
+
     // Get element registry to access shape dimensions
     const elementRegistry = viewerApi.getInternals().elementRegistry
-    
+
     const { active: activeCounts, incidents: incidentCounts, suspended: suspendedCounts, canceled: canceledCounts, completed: completedCounts } = countsByStateQ.data
-    
+
     // Add badges only for selected states
     // Active -> Bottom Left (green)
     if (active) {
@@ -349,7 +706,7 @@ export default function ProcessesOverviewPage() {
         viewerApi.addBadge(actId, badge, position)
       }
     }
-    
+
     // Incidents -> Bottom Right (red)
     if (incidents) {
       for (const [actId, count] of Object.entries(incidentCounts || {})) {
@@ -360,7 +717,7 @@ export default function ProcessesOverviewPage() {
         viewerApi.addBadge(actId, badge, position)
       }
     }
-    
+
     // Suspended -> Top Right (yellow)
     if (suspendedFlag) {
       for (const [actId, count] of Object.entries(suspendedCounts || {})) {
@@ -371,7 +728,7 @@ export default function ProcessesOverviewPage() {
         viewerApi.addBadge(actId, badge, position)
       }
     }
-    
+
     // Canceled -> Top Left (brown)
     if (canceled) {
       for (const [actId, count] of Object.entries(canceledCounts || {})) {
@@ -382,7 +739,7 @@ export default function ProcessesOverviewPage() {
         viewerApi.addBadge(actId, badge, position)
       }
     }
-    
+
     // Completed -> Top Right (gray) - for end events
     if (completed) {
       for (const [actId, count] of Object.entries(completedCounts || {})) {
@@ -494,15 +851,10 @@ export default function ProcessesOverviewPage() {
 
   const selectedCount = selectedInstances.length
   const hasSelection = selectedCount > 0
-
-  const allRunningSelected = hasSelection
-    ? selectedInstances.every((i: any) => i?.state === 'ACTIVE' || i?.state === 'SUSPENDED')
-    : false
-  const anyActiveSelected = hasSelection ? selectedInstances.some((i: any) => i?.state === 'ACTIVE') : false
-  const anySuspendedSelected = hasSelection ? selectedInstances.some((i: any) => i?.state === 'SUSPENDED') : false
-  const allActiveSelected = hasSelection ? selectedInstances.every((i: any) => i?.state === 'ACTIVE') : false
-  const allSuspendedSelected = hasSelection ? selectedInstances.every((i: any) => i?.state === 'SUSPENDED') : false
-  const anyIncidentSelected = hasSelection ? selectedInstances.some((i: any) => !!i?.hasIncident) : false
+  const retryModalDecision = React.useMemo(() => {
+    const instance = (instQ.data || []).find((candidate) => candidate.id === retryModalInstanceId)
+    return instance ? runtimeDecisionFor(instance, 'retry', instanceRetryDecision) : instanceRetryDecision
+  }, [instQ.data, instanceRetryDecision, retryModalInstanceId])
 
   const migrateSameProcess = React.useMemo(() => {
     if (!hasSelection) return false
@@ -518,11 +870,71 @@ export default function ProcessesOverviewPage() {
     return new Set(vers).size <= 1
   }, [hasSelection, selectedInstances])
 
-  const canRetry = hasSelection && allRunningSelected && anyIncidentSelected && !bulkOps.bulkRetryBusy
-  const canActivate = hasSelection && allRunningSelected && anySuspendedSelected && !bulkOps.bulkActivateBusy
-  const canSuspend = hasSelection && allRunningSelected && anyActiveSelected && !bulkOps.bulkSuspendBusy
-  const canDelete = hasSelection && allRunningSelected && !bulkOps.bulkDeleteBusy
-  const canMigrate = hasSelection && allRunningSelected && migrateSameProcess && migrateSameVersion
+  const retryEligibility = React.useMemo(
+    () => getBulkProcessActionEligibility('retry', selectedInstances, {
+      diagnosticDecision: bulkRetryDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'retry', bulkRetryDecision),
+    }),
+    [bulkRetryDecision, selectedInstances]
+  )
+  const activateEligibility = React.useMemo(
+    () => getBulkProcessActionEligibility('activate', selectedInstances, {
+      diagnosticDecision: bulkActivateDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'suspension', bulkActivateDecision),
+    }),
+    [bulkActivateDecision, selectedInstances]
+  )
+  const suspendEligibility = React.useMemo(
+    () => getBulkProcessActionEligibility('suspend', selectedInstances, {
+      diagnosticDecision: bulkSuspendDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'suspension', bulkSuspendDecision),
+    }),
+    [bulkSuspendDecision, selectedInstances]
+  )
+  const deleteEligibility = React.useMemo(
+    () => getBulkProcessActionEligibility('delete', selectedInstances, {
+      diagnosticDecision: bulkDeleteDecision,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'terminate', bulkDeleteDecision),
+    }),
+    [bulkDeleteDecision, selectedInstances]
+  )
+  const migrateEligibility = React.useMemo(
+    () => getBulkProcessActionEligibility('migrate', selectedInstances, {
+      currentKey,
+      getActionDecision: (instance) => runtimeDecisionFor(instance, 'migration', {
+        actionId: 'engine.runtime.migrations.execute-direct',
+        resourceType: 'engine_runtime_resource',
+        allowed: false,
+        state: 'disabled',
+        reason: 'Action decision unavailable for this runtime resource',
+      }),
+    }),
+    [currentKey, selectedInstances]
+  )
+
+  const canRetry = hasSelection && retryEligibility.allowed && !bulkOps.bulkRetryBusy
+  const canActivate = hasSelection && activateEligibility.allowed && !bulkOps.bulkActivateBusy
+  const canSuspend = hasSelection && suspendEligibility.allowed && !bulkOps.bulkSuspendBusy
+  const canDelete = hasSelection && deleteEligibility.allowed && !bulkOps.bulkDeleteBusy
+  const canMigrate = hasSelection && migrateEligibility.allowed && migrateSameProcess && migrateSameVersion
+  const retryTitle = retryEligibility.summary || 'Retry failed jobs (Batch)'
+  const activateTitle = activateEligibility.summary || 'Activate (Batch)'
+  const suspendTitle = suspendEligibility.summary || 'Suspend (Batch)'
+  const deleteTitle = deleteEligibility.summary || 'Cancel (Batch)'
+  const migrateTitle = migrateEligibility.summary || 'Migrate'
+  const startTitle = startProcessDecision.allowed
+    ? 'Start process instance'
+    : startProcessDecision.reason || 'Action unavailable'
+  const bulkDeleteDiagnosticDecision = deleteEligibility.firstDeniedDecision
+  const bulkSuspendDiagnosticDecision = suspendEligibility.firstDeniedDecision
+  const bulkMigrateDiagnosticDecision = migrateEligibility.firstDeniedDecision
+  const bulkActivateDiagnosticDecision = activateEligibility.firstDeniedDecision
+  const bulkRetryDiagnosticDecision = retryEligibility.firstDeniedDecision
+  const firstBulkDiagnosticDecision = bulkDeleteDiagnosticDecision ||
+    bulkSuspendDiagnosticDecision ||
+    bulkMigrateDiagnosticDecision ||
+    bulkActivateDiagnosticDecision ||
+    bulkRetryDiagnosticDecision
 
   const actionBtnStyle: React.CSSProperties = {
     background: 'transparent',
@@ -557,7 +969,7 @@ export default function ProcessesOverviewPage() {
       for (let attempt = 0; attempt < 5; attempt++) {
         await sleep(1000)
         try {
-          const incidents = await apiClient.get<any[]>(`/mission-control-api/process-instances/${id}/incidents${engineQs}`, undefined, { credentials: 'include' })
+          const incidents = await apiClient.get<ProcessInstanceIncident[]>(`/mission-control-api/process-instances/${id}/incidents${engineQs}`, undefined, { credentials: 'include' })
           const stillHas = Array.isArray(incidents) && incidents.length > 0
           if (!stillHas) {
             await instQ.refetch()
@@ -576,6 +988,55 @@ export default function ProcessesOverviewPage() {
       })
     }
   }
+
+  const closeStartProcessModal = React.useCallback(() => {
+    if (startBusy) return
+    setStartProcessOpen(false)
+    setStartError(null)
+  }, [startBusy])
+
+  const handleStartProcess = React.useCallback(async () => {
+    if (!selectedProcess?.key) return
+    if (!selectedEngineId) {
+      setStartError('Select an engine')
+      return
+    }
+
+    let variables: unknown
+    const trimmedVariables = startVariablesJson.trim()
+    if (trimmedVariables) {
+      try {
+        variables = JSON.parse(trimmedVariables)
+      } catch {
+        setStartError('Variables must be valid JSON')
+        return
+      }
+    }
+
+    setStartBusy(true)
+    setStartError(null)
+    try {
+      const payload: Record<string, unknown> = { engineId: selectedEngineId }
+      const businessKey = startBusinessKey.trim()
+      if (businessKey) payload.businessKey = businessKey
+      if (variables !== undefined) payload.variables = variables
+      const started = await apiClient.post<ProcessInstanceStartResponse>(
+        `/mission-control-api/process-definitions/key/${encodeURIComponent(selectedProcess.key)}/start`,
+        payload,
+        { credentials: 'include' }
+      )
+      setStartProcessOpen(false)
+      setStartBusinessKey('')
+      setStartVariablesJson('')
+      await instQ.refetch()
+      const startedId = started?.id ? ` ${started.id}` : ''
+      showAlert(`Process instance started${startedId}`, 'info')
+    } catch (error) {
+      setStartError(getUiErrorMessage(error, 'Failed to start process instance'))
+    } finally {
+      setStartBusy(false)
+    }
+  }, [instQ, selectedEngineId, selectedProcess?.key, showAlert, startBusinessKey, startVariablesJson])
 
   const onRowClick = (rowId: string) => {
     detailsModal.openModal(rowId)
@@ -613,17 +1074,73 @@ export default function ProcessesOverviewPage() {
     }}>
       {/* Breadcrumb Bar - shared component */}
       <BreadcrumbBar
-        rightActions={showEditButton ? (
-          <Button
-            kind="ghost"
-            size="sm"
-            renderIcon={Launch}
-            onClick={handleEditInStarbase}
-            disabled={!processEditTarget?.canEdit || processEditTargetQ.isFetching}
-            title={processEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
-          >
-            Edit
-          </Button>
+        rightActions={(selectedProcess || showEditButton || savedFiltersReadDecision.allowed) ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+            {savedFiltersReadDecision.allowed ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)', minWidth: 0 }}>
+                <div style={{ width: 180 }}>
+                  <Dropdown
+                    id="process-saved-filter"
+                    titleText=""
+                    label={savedFiltersQ.isLoading ? 'Loading filters' : savedFilters.length > 0 ? 'Saved filters' : 'No saved filters'}
+                    items={savedFilters}
+                    selectedItem={selectedSavedFilter}
+                    itemToString={(item: SavedProcessFilter | null) => item?.name || ''}
+                    onChange={({ selectedItem }: { selectedItem?: SavedProcessFilter | null }) => handleApplySavedFilter(selectedItem || null)}
+                    disabled={savedFiltersQ.isLoading || savedFilters.length === 0}
+                    size="sm"
+                  />
+                </div>
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  renderIcon={Save}
+                  hasIconOnly
+                  iconDescription="Save current filter"
+                  disabled={!savedFiltersManageDecision.allowed || !selectedEngineId || saveFilterMutation.isPending}
+                  title={savedFiltersManageDecision.allowed ? (selectedEngineId ? 'Save current filter' : 'Select an engine') : savedFiltersManageDecision.reason}
+                  onClick={openSaveFilterModal}
+                />
+                <Button
+                  kind="ghost"
+                  size="sm"
+                  renderIcon={TrashCan}
+                  hasIconOnly
+                  iconDescription="Delete saved filter"
+                  disabled={!savedFiltersManageDecision.allowed || !selectedSavedFilter || deleteFilterMutation.isPending}
+                  title={savedFiltersManageDecision.allowed ? (selectedSavedFilter ? 'Delete saved filter' : 'Select a saved filter') : savedFiltersManageDecision.reason}
+                  onClick={handleDeleteSavedFilter}
+                />
+              </div>
+            ) : null}
+            {selectedProcess && (
+              <Button
+                kind="primary"
+                size="sm"
+                renderIcon={Play}
+                onClick={() => {
+                  setStartError(null)
+                  setStartProcessOpen(true)
+                }}
+                disabled={!selectedProcess?.key || !startProcessDecision.allowed}
+                title={startTitle}
+              >
+                Start
+              </Button>
+            )}
+            {showEditButton ? (
+              <Button
+                kind="ghost"
+                size="sm"
+                renderIcon={Launch}
+                onClick={handleEditInStarbase}
+                disabled={!processEditTarget?.canEdit || processEditTargetQ.isFetching}
+                title={processEditTarget?.canEdit ? 'Edit deployed version in Starbase' : 'You do not have edit access for this project'}
+              >
+                Edit
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       >
         <BreadcrumbItem>
@@ -659,6 +1176,10 @@ export default function ProcessesOverviewPage() {
           </BreadcrumbItem>
         )}
       </BreadcrumbBar>
+      <BridgeAccessNotice title="Starbase edit unavailable" decision={bridgeDecision} error={bridgeError} />
+      {defsQ.isSuccess && selectedEngineId && defItems.length === 0 && (
+        <RuntimeCollectionEmptyState kind="process_definitions" style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }} />
+      )}
 
       {/* SplitPane wrapper - needed because react-split-pane uses absolute positioning */}
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
@@ -667,7 +1188,7 @@ export default function ProcessesOverviewPage() {
           dividerClassName="eg-split-divider"
           dividerSize={5}
           onResize={(sizes) => handleSplitChange(sizes[0])}
-          style={{ 
+          style={{
             position: 'absolute',
             top: 0,
             left: 0,
@@ -678,16 +1199,16 @@ export default function ProcessesOverviewPage() {
         <Pane size={splitSize} minSize={200} style={{ overflow: 'hidden' }}>
         <div style={{ background: 'var(--color-bg-primary)', border: '1px solid var(--color-border-primary)', position: 'relative', overflow: 'hidden', height: '100%', width: '100%' }}>
           {!currentKey && (
-            <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To view a Diagram, select a Process in the Filters panel</div>
+            <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To view a diagram, select a process in the Filters panel.</div>
           )}
           {currentKey && selectedVersion === null && (
             <div style={{ color: 'var(--color-text-tertiary)', position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 'var(--z-base)' }}>To see a Diagram, select a single Version</div>
           )}
           {currentKey && selectedVersion !== null && xmlQ.data && (
             <React.Suspense fallback={<LoadingState message="Loading diagram..." />}>
-              <Viewer 
+              <Viewer
                 key={`${defIdForVersion || currentKey}-${selectedVersion || 'all'}`}
-                xml={xmlQ.data as string} 
+                xml={xmlQ.data as string}
                 onReady={setViewerApi}
                 onDiagramReset={handleDiagramReset}
                 onElementClick={handleElementClick}
@@ -734,12 +1255,12 @@ export default function ProcessesOverviewPage() {
         <Pane minSize={200} style={{ overflow: 'auto' }}>
         <div style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--cds-layer-01)' }}>
           {/* Action bar - Carbon DataTable toolbar style */}
-          <div style={{ 
-            background: hasSelection ? 'var(--cds-background-brand)' : 'var(--cds-layer-01)', 
-            color: hasSelection ? 'var(--cds-text-on-color)' : 'var(--cds-text-primary)', 
-            padding: '0 16px', 
-            display: 'flex', 
-            alignItems: 'center', 
+          <div style={{
+            background: hasSelection ? 'var(--cds-background-brand)' : 'var(--cds-layer-01)',
+            color: hasSelection ? 'var(--cds-text-on-color)' : 'var(--cds-text-primary)',
+            padding: '0 16px',
+            display: 'flex',
+            alignItems: 'center',
             gap: '16px',
             height: '2rem',
             minHeight: '2rem',
@@ -749,20 +1270,26 @@ export default function ProcessesOverviewPage() {
             transition: 'background-color 110ms, color 110ms',
           }}>
             <div style={{ fontSize: 'var(--cds-body-compact-01-font-size, 0.875rem)', fontWeight: 400, whiteSpace: 'nowrap' }}>
-              {hasSelection 
+              {hasSelection
                 ? `${selectedCount} of ${instQ.data?.length || 0} Process Instances selected`
                 : `${instQ.data?.length || 0} Process Instances`
               }
             </div>
-            
+            {firstBulkDiagnosticDecision ? (
+              <WhyUnavailableLink
+                decision={firstBulkDiagnosticDecision}
+                style={{ color: 'var(--cds-text-on-color)', fontSize: 'var(--cds-label-01-font-size, 0.75rem)' }}
+              />
+            ) : null}
+
             {/* Spacer to push search and actions to the right */}
             <div style={{ flex: 1 }} />
-            
+
             {/* Action buttons - slide out from search bar's left */}
-            <div style={{ 
-              display: 'flex', 
+            <div style={{
+              display: 'flex',
               flexDirection: 'row-reverse',
-              gap: 0, 
+              gap: 0,
               alignItems: 'center',
               overflow: 'hidden',
               maxWidth: hasSelection ? '600px' : '0px',
@@ -772,10 +1299,10 @@ export default function ProcessesOverviewPage() {
               <button
                 style={getActionBtnStyle(canDelete)}
                 disabled={!canDelete}
-                onMouseEnter={(e) => { 
+                onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'var(--cds-button-primary-hover)'
                 }}
-                onMouseLeave={(e) => { 
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
@@ -784,7 +1311,7 @@ export default function ProcessesOverviewPage() {
                   bulkDeleteModal.openModal()
                 }}
                 aria-label="Cancel (Batch)"
-                title="Cancel (Batch)"
+                title={deleteTitle}
               >
                 <TrashCan size={16} />
                 Cancel
@@ -792,10 +1319,10 @@ export default function ProcessesOverviewPage() {
               <button
                 style={getActionBtnStyle(canSuspend)}
                 disabled={!canSuspend}
-                onMouseEnter={(e) => { 
+                onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'var(--cds-button-primary-hover)'
                 }}
-                onMouseLeave={(e) => { 
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
@@ -804,7 +1331,7 @@ export default function ProcessesOverviewPage() {
                   bulkSuspendModal.openModal()
                 }}
                 aria-label="Suspend (Batch)"
-                title="Suspend (Batch)"
+                title={suspendTitle}
               >
                 <Pause size={16} />
                 Suspend
@@ -812,10 +1339,10 @@ export default function ProcessesOverviewPage() {
               <button
                 style={getActionBtnStyle(canMigrate)}
                 disabled={!canMigrate}
-                onMouseEnter={(e) => { 
+                onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'var(--cds-button-primary-hover)'
                 }}
-                onMouseLeave={(e) => { 
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
@@ -836,7 +1363,7 @@ export default function ProcessesOverviewPage() {
                   tenantNavigate('/mission-control/migration/new', { state: { instanceIds: ids, selectedKey: unique[0] || currentKey, selectedVersion } })
                 }}
                 aria-label="Migrate"
-                title="Migrate"
+                title={migrateTitle}
               >
                 <Migrate size={16} />
                 Migrate
@@ -844,10 +1371,10 @@ export default function ProcessesOverviewPage() {
               <button
                 style={getActionBtnStyle(canActivate)}
                 disabled={!canActivate}
-                onMouseEnter={(e) => { 
+                onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'var(--cds-button-primary-hover)'
                 }}
-                onMouseLeave={(e) => { 
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
@@ -856,7 +1383,7 @@ export default function ProcessesOverviewPage() {
                   bulkActivateModal.openModal()
                 }}
                 aria-label="Activate (Batch)"
-                title="Activate (Batch)"
+                title={activateTitle}
               >
                 <Play size={16} />
                 Activate
@@ -864,10 +1391,10 @@ export default function ProcessesOverviewPage() {
               <button
                 style={getActionBtnStyle(canRetry)}
                 disabled={!canRetry}
-                onMouseEnter={(e) => { 
+                onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'var(--cds-button-primary-hover)'
                 }}
-                onMouseLeave={(e) => { 
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => {
@@ -876,17 +1403,17 @@ export default function ProcessesOverviewPage() {
                   bulkRetryModal.openModal()
                 }}
                 aria-label="Retry failed jobs (Batch)"
-                title="Retry failed jobs (Batch)"
+                title={retryTitle}
               >
                 <Renew size={16} />
                 Retry
               </button>
               <button
                 style={getActionBtnStyle(hasSelection)}
-                onMouseEnter={(e) => { 
+                onMouseEnter={(e) => {
                   e.currentTarget.style.background = 'var(--cds-button-primary-hover)'
                 }}
-                onMouseLeave={(e) => { 
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = 'transparent'
                 }}
                 onClick={() => setSelectedMap({})}
@@ -896,19 +1423,30 @@ export default function ProcessesOverviewPage() {
                 Discard
               </button>
             </div>
-            
+
             {/* Search input */}
             {/* Search moved to sidebar */}
           </div>
 
           {/* Data Table (scrollable) */}
           <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            {instQ.isSuccess && selectedEngineId && defItems.length > 0 && (instQ.data || []).length === 0 && (
+              <RuntimeCollectionEmptyState kind="process_instances" />
+            )}
             <ProcessesDataTable
               data={instQ.data || []}
-              onTerminate={(id) => terminateModal.openModal(id)}
-              onRetry={(id) => setRetryModalInstanceId(id)}
-              onActivate={(id) => callAction('PUT', `/mission-control-api/process-instances/${id}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())}
-              onSuspend={(id) => callAction('PUT', `/mission-control-api/process-instances/${id}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())}
+              onTerminate={(id) => {
+                terminateModal.openModal(id)
+              }}
+              onRetry={(id) => {
+                setRetryModalInstanceId(id)
+              }}
+              onActivate={(id) => {
+                return callAction('PUT', `/mission-control-api/process-instances/${id}/activate${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
+              }}
+              onSuspend={(id) => {
+                return callAction('PUT', `/mission-control-api/process-instances/${id}/suspend${selectedEngineId ? `?engineId=${encodeURIComponent(selectedEngineId)}` : ''}`).then(() => instQ.refetch())
+              }}
               selectedMap={selectedMap}
               setSelectedMap={setSelectedMap}
               retryingMap={retryingMap}
@@ -959,34 +1497,43 @@ export default function ProcessesOverviewPage() {
         retryExtTasksQRefetch={() => retryExtTasksQ.refetch()}
         instQRefetch={() => instQ.refetch()}
         engineId={selectedEngineId}
+        retryDecision={retryModalDecision}
       />
 
       <BulkOperationModals
         bulkRetryOpen={bulkRetryModal.isOpen}
         bulkRetryBusy={bulkOps.bulkRetryBusy}
         onBulkRetryClose={bulkRetryModal.closeModal}
-        onBulkRetryConfirm={bulkOps.bulkRetry}
+        onBulkRetryConfirm={async (reason) => {
+          await bulkOps.bulkRetry(reason)
+        }}
         selectedCount={selectedCount}
         bulkDeleteOpen={bulkDeleteModal.isOpen}
         bulkDeleteBusy={bulkOps.bulkDeleteBusy}
         onBulkDeleteClose={bulkDeleteModal.closeModal}
-        onBulkDeleteConfirm={bulkOps.bulkDelete}
+        onBulkDeleteConfirm={async (reason) => {
+          await bulkOps.bulkDelete(reason)
+        }}
         bulkSuspendOpen={bulkSuspendModal.isOpen}
         bulkSuspendBusy={bulkOps.bulkSuspendBusy}
         onBulkSuspendClose={bulkSuspendModal.closeModal}
-        onBulkSuspendConfirm={bulkOps.bulkSuspend}
+        onBulkSuspendConfirm={async (reason) => {
+          await bulkOps.bulkSuspend(reason)
+        }}
         bulkActivateOpen={bulkActivateModal.isOpen}
         bulkActivateBusy={bulkOps.bulkActivateBusy}
         onBulkActivateClose={bulkActivateModal.closeModal}
-        onBulkActivateConfirm={bulkOps.bulkActivate}
+        onBulkActivateConfirm={async (reason) => {
+          await bulkOps.bulkActivate(reason)
+        }}
         terminateOpen={terminateModal.isOpen}
         onTerminateClose={terminateModal.closeModal}
-        onTerminateConfirm={async () => {
+        onTerminateConfirm={async (reason) => {
           if (!terminateModal.data) return
           try {
             await bulkOps.callAction(
               'DELETE',
-              `/mission-control-api/process-instances/${terminateModal.data}?deleteReason=${encodeURIComponent('Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true${selectedEngineId ? `&engineId=${encodeURIComponent(selectedEngineId)}` : ''}`
+              `/mission-control-api/process-instances/${terminateModal.data}?deleteReason=${encodeURIComponent(reason || 'Canceled via Mission Control')}&skipCustomListeners=true&skipIoMappings=true${selectedEngineId ? `&engineId=${encodeURIComponent(selectedEngineId)}` : ''}`
             )
             await instQ.refetch()
             terminateModal.closeModal()
@@ -996,6 +1543,87 @@ export default function ProcessesOverviewPage() {
           }
         }}
       />
+
+      <Modal
+        open={saveFilterOpen}
+        modalHeading="Save filter"
+        primaryButtonText={saveFilterMutation.isPending ? 'Saving...' : 'Save'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={saveFilterMutation.isPending || !saveFilterName.trim() || !savedFiltersManageDecision.allowed}
+        onRequestClose={() => {
+          if (saveFilterMutation.isPending) return
+          setSaveFilterOpen(false)
+          setSaveFilterError(null)
+        }}
+        onRequestSubmit={handleSaveFilter}
+        size="sm"
+      >
+        <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+          {!savedFiltersManageDecision.allowed ? (
+            <InlineNotification
+              lowContrast
+              kind="warning"
+              title="Save unavailable"
+              subtitle={savedFiltersManageDecision.reason || 'Action unavailable'}
+            />
+          ) : null}
+          {saveFilterError ? (
+            <InlineNotification
+              lowContrast
+              kind="error"
+              title="Failed to save filter"
+              subtitle={saveFilterError}
+            />
+          ) : null}
+          <TextInput
+            id="save-process-filter-name"
+            labelText="Name"
+            value={saveFilterName}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setSaveFilterName(event.target.value)}
+            disabled={saveFilterMutation.isPending}
+            placeholder="Filter name"
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        open={startProcessOpen}
+        modalHeading={`Start ${selectedProcess?.label || selectedProcess?.key || 'process'}`}
+        primaryButtonText={startBusy ? 'Starting...' : 'Start process'}
+        secondaryButtonText="Cancel"
+        primaryButtonDisabled={startBusy || !selectedProcess?.key}
+        onRequestClose={closeStartProcessModal}
+        onRequestSubmit={handleStartProcess}
+        size="sm"
+      >
+        <div style={{ display: 'grid', gap: 'var(--spacing-4)' }}>
+          {startError ? (
+            <InlineNotification
+              lowContrast
+              kind="error"
+              title="Failed to start process"
+              subtitle={startError}
+            />
+          ) : null}
+          <TextInput
+            id="start-process-business-key"
+            labelText="Business key"
+            value={startBusinessKey}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) => setStartBusinessKey(event.target.value)}
+            disabled={startBusy}
+            placeholder="Optional business key"
+          />
+          <TextArea
+            id="start-process-variables"
+            labelText="Variables JSON"
+            value={startVariablesJson}
+            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setStartVariablesJson(event.target.value)}
+            disabled={startBusy}
+            placeholder={'{\n  "customerId": { "value": "C-100", "type": "String" }\n}'}
+            rows={6}
+          />
+        </div>
+      </Modal>
 
       <AlertModal
         open={alertState.open}

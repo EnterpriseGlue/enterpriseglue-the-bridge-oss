@@ -18,8 +18,6 @@ import {
   TableToolbar,
   TableToolbarContent,
   Tag,
-  OverflowMenu,
-  OverflowMenuItem,
   InlineNotification,
   TextInput,
   TextArea,
@@ -29,9 +27,11 @@ import {
   Modal,
   Accordion,
   AccordionItem,
+  Checkbox,
 } from '@carbon/react';
 import { Add, Policy } from '@carbon/icons-react';
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout';
+import { GuardedOverflowMenu, GuardedOverflowMenuItem } from '../../../shared/auth/guards';
 import { parseApiError } from '../../../shared/api/apiErrorUtils';
 import {
   useAuthzPolicies,
@@ -47,8 +47,10 @@ const EFFECTS = [
   { id: 'deny', label: 'Deny' },
 ];
 
+const ALL_RESOURCES = '__all__';
+
 const RESOURCE_TYPES = [
-  { id: '', label: 'All Resources' },
+  { id: ALL_RESOURCES, label: 'All resources (advanced)' },
   { id: 'project', label: 'Project' },
   { id: 'engine', label: 'Engine' },
   { id: 'platform', label: 'Platform' },
@@ -79,7 +81,7 @@ export default function AuthzPolicies() {
   const [form, setForm] = React.useState({
     name: '',
     description: '',
-    effect: 'deny' as 'allow' | 'deny',
+    effect: '' as '' | 'allow' | 'deny',
     priority: 100,
     resourceType: '',
     action: '',
@@ -87,19 +89,23 @@ export default function AuthzPolicies() {
   });
 
   const [conditionsJson, setConditionsJson] = React.useState('{}');
+  const [matchAllActions, setMatchAllActions] = React.useState(false);
+  const [riskAcknowledged, setRiskAcknowledged] = React.useState(false);
 
   const openCreate = () => {
     setEditing(null);
     setForm({
       name: '',
       description: '',
-      effect: 'deny',
+      effect: '',
       priority: 100,
       resourceType: '',
       action: '',
       conditions: DEFAULT_CONDITIONS,
     });
     setConditionsJson('{}');
+    setMatchAllActions(false);
+    setRiskAcknowledged(false);
     setModalOpen(true);
   };
 
@@ -110,11 +116,13 @@ export default function AuthzPolicies() {
       description: policy.description || '',
       effect: policy.effect,
       priority: policy.priority,
-      resourceType: policy.resourceType || '',
+      resourceType: policy.resourceType || ALL_RESOURCES,
       action: policy.action || '',
       conditions: policy.conditions || DEFAULT_CONDITIONS,
     });
     setConditionsJson(JSON.stringify(policy.conditions || {}, null, 2));
+    setMatchAllActions(!policy.action);
+    setRiskAcknowledged(false);
     setModalOpen(true);
   };
 
@@ -130,8 +138,9 @@ export default function AuthzPolicies() {
 
       const payload = {
         ...form,
-        resourceType: form.resourceType || undefined,
-        action: form.action || undefined,
+        effect: form.effect as 'allow' | 'deny',
+        resourceType: form.resourceType === ALL_RESOURCES ? undefined : form.resourceType,
+        action: matchAllActions ? undefined : form.action.trim(),
         conditions,
       };
 
@@ -159,9 +168,17 @@ export default function AuthzPolicies() {
   };
 
   const policies = policiesQ.data || [];
+  const broadPolicy = form.resourceType === ALL_RESOURCES || matchAllActions;
+  const formValid = Boolean(
+    form.name.trim() &&
+    form.effect &&
+    form.resourceType &&
+    (matchAllActions || form.action.trim()) &&
+    (!broadPolicy || riskAcknowledged)
+  );
 
   const getEffectTag = (effect: string) => {
-    return effect === 'deny' 
+    return effect === 'deny'
       ? <Tag type="red">Deny</Tag>
       : <Tag type="green">Allow</Tag>;
   };
@@ -222,7 +239,7 @@ export default function AuthzPolicies() {
                       renderIcon={Add}
                       onClick={openCreate}
                     >
-                      Add Policy
+                      Add policy
                     </Button>
                   </TableToolbarContent>
                 </TableToolbar>
@@ -268,9 +285,9 @@ export default function AuthzPolicies() {
                             if (cell.info.header === 'action') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <code style={{ 
-                                    background: 'var(--cds-layer-02)', 
-                                    padding: '2px 6px', 
+                                  <code style={{
+                                    background: 'var(--cds-layer-02)',
+                                    padding: '2px 6px',
                                     borderRadius: '4px',
                                     fontSize: '12px',
                                   }}>
@@ -282,25 +299,25 @@ export default function AuthzPolicies() {
                             if (cell.info.header === 'actions') {
                               return (
                                 <TableCell key={cell.id}>
-                                  <OverflowMenu size="sm" flipped>
-                                    <OverflowMenuItem
+                                  <GuardedOverflowMenu size="sm" flipped>
+                                    <GuardedOverflowMenuItem
                                       itemText="Edit"
                                       onClick={() => policy && openEdit(policy)}
                                     />
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText={policy?.isActive ? 'Disable' : 'Enable'}
-                                      onClick={() => policy && updateM.mutate({ 
-                                        id: policy.id, 
-                                        isActive: !policy.isActive 
+                                      onClick={() => policy && updateM.mutate({
+                                        id: policy.id,
+                                        isActive: !policy.isActive
                                       })}
                                     />
-                                    <OverflowMenuItem
+                                    <GuardedOverflowMenuItem
                                       itemText="Delete"
                                       isDelete
                                       hasDivider
                                       onClick={() => handleDelete(row.id)}
                                     />
-                                  </OverflowMenu>
+                                  </GuardedOverflowMenu>
                                 </TableCell>
                               );
                             }
@@ -322,10 +339,10 @@ export default function AuthzPolicies() {
         open={modalOpen}
         onRequestClose={() => setModalOpen(false)}
         onRequestSubmit={handleSubmit}
-        modalHeading={editing ? 'Edit Policy' : 'Add Policy'}
+        modalHeading={editing ? 'Edit policy' : 'Add policy'}
         primaryButtonText={editing ? 'Save' : 'Create'}
         secondaryButtonText="Cancel"
-        primaryButtonDisabled={!form.name || createM.isPending || updateM.isPending}
+        primaryButtonDisabled={!formValid || createM.isPending || updateM.isPending}
         size="lg"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
@@ -354,7 +371,10 @@ export default function AuthzPolicies() {
               items={EFFECTS}
               itemToString={(item: any) => item?.label || ''}
               selectedItem={EFFECTS.find(e => e.id === form.effect)}
-              onChange={({ selectedItem }: any) => setForm(f => ({ ...f, effect: selectedItem?.id || 'deny' }))}
+              onChange={({ selectedItem }: any) => {
+                setRiskAcknowledged(false);
+                setForm(f => ({ ...f, effect: selectedItem?.id || '' }));
+              }}
             />
 
             <NumberInput
@@ -371,34 +391,66 @@ export default function AuthzPolicies() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--spacing-4)' }}>
             <Dropdown
               id="policy-resource-type"
-              titleText="Resource Type"
-              label="Select type"
+              titleText="Resource type"
+              label="Select resource type"
               items={RESOURCE_TYPES}
               itemToString={(item: any) => item?.label || ''}
               selectedItem={RESOURCE_TYPES.find(r => r.id === form.resourceType)}
-              onChange={({ selectedItem }: any) => setForm(f => ({ ...f, resourceType: selectedItem?.id || '' }))}
+              onChange={({ selectedItem }: any) => {
+                setRiskAcknowledged(false);
+                setForm(f => ({ ...f, resourceType: selectedItem?.id || '' }));
+              }}
             />
 
             <TextInput
               id="policy-action"
-              labelText="Action (Permission)"
-              placeholder="e.g., engine:deploy or leave empty for all"
-              helperText="The permission string to match"
+              labelText="Permission"
+              placeholder="e.g., engine:deploy"
+              helperText={matchAllActions ? 'All actions are explicitly selected.' : 'Enter one exact permission action.'}
               value={form.action}
+              disabled={matchAllActions}
               onChange={(e) => setForm(f => ({ ...f, action: e.target.value }))}
             />
           </div>
 
+          <Checkbox
+            id="policy-all-actions"
+            labelText="Apply to every permission for this resource type"
+            checked={matchAllActions}
+            onChange={(_event, { checked }) => {
+              setMatchAllActions(Boolean(checked));
+              setRiskAcknowledged(false);
+            }}
+          />
+
+          {broadPolicy && (
+            <div style={{ display: 'grid', gap: 'var(--spacing-3)' }}>
+              <InlineNotification
+                kind="warning"
+                lowContrast
+                hideCloseButton
+                title="Broad policy impact"
+                subtitle={`${form.effect === 'deny' ? 'This policy can deny' : 'This policy can allow'} ${matchAllActions ? 'all actions' : form.action || 'the selected action'} on ${form.resourceType === ALL_RESOURCES ? 'all resources' : 'the selected resource type'}.`}
+              />
+              <Checkbox
+                id="policy-risk-acknowledged"
+                labelText="I understand the scope of this broad policy."
+                checked={riskAcknowledged}
+                onChange={(_event, { checked }) => setRiskAcknowledged(Boolean(checked))}
+              />
+            </div>
+          )}
+
           <Accordion>
-            <AccordionItem title="Conditions (Advanced)">
+            <AccordionItem title="Advanced conditions (JSON)">
               <p style={{ fontSize: '13px', color: 'var(--cds-text-secondary)', marginBottom: 'var(--spacing-3)' }}>
-                Define JSON conditions for when this policy applies. Leave empty for always-active policies.
+                Optional. Add valid JSON only when this policy must apply under specific conditions.
               </p>
               <div style={{ fontSize: '12px', color: 'var(--cds-text-helper)', marginBottom: 'var(--spacing-3)' }}>
                 <strong>Example conditions:</strong>
-                <pre style={{ 
-                  background: 'var(--cds-layer-02)', 
-                  padding: 'var(--spacing-3)', 
+                <pre style={{
+                  background: 'var(--cds-layer-02)',
+                  padding: 'var(--spacing-3)',
                   borderRadius: '4px',
                   overflow: 'auto',
                   fontSize: '11px',
@@ -420,7 +472,7 @@ export default function AuthzPolicies() {
               </div>
               <TextArea
                 id="policy-conditions"
-                labelText="Conditions JSON"
+                labelText="Conditions"
                 value={conditionsJson}
                 onChange={(e) => setConditionsJson(e.target.value)}
                 rows={8}
