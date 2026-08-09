@@ -252,6 +252,60 @@ describe('projectEngineTargetService', () => {
     }));
   });
 
+  it('lists only legacy project-engine access that remains visible in the project tenant', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Project) return {
+          findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }),
+        };
+        if (entity === EngineProjectAccess) return {
+          find: vi.fn().mockResolvedValue([
+            { engineId: 'engine-a' },
+            { engineId: 'engine-b' },
+          ]),
+        };
+        if (entity === ProjectEngineTarget) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Engine) return {
+          find: vi.fn().mockResolvedValue([
+            { id: 'engine-a', tenantId: 'tenant-a', tenancyMode: 'dedicated' },
+            { id: 'engine-b', tenantId: 'tenant-b', tenancyMode: 'dedicated' },
+          ]),
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(projectEngineTargetService.getProjectEngineIds('project-1', 'tenant-a'))
+      .resolves.toEqual(['engine-a']);
+  });
+
+  it('lists only legacy engine-project access whose project remains in the request tenant', async () => {
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return {
+          findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: null, tenancyMode: 'shared' }),
+        };
+        if (entity === EngineProjectAccess) return {
+          find: vi.fn().mockResolvedValue([
+            { projectId: 'project-a' },
+            { projectId: 'project-b' },
+          ]),
+        };
+        if (entity === ProjectEngineTarget) return { find: vi.fn().mockResolvedValue([]) };
+        if (entity === Project) return {
+          find: vi.fn().mockResolvedValue([
+            { id: 'project-a', tenantId: 'tenant-a' },
+            { id: 'project-b', tenantId: 'tenant-b' },
+          ]),
+        };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    await expect(projectEngineTargetService.getEngineProjectIds('engine-1', 'tenant-a'))
+      .resolves.toEqual(['project-a']);
+  });
+
   it('skips legacy mirroring when the pair is already source-owned', async () => {
     const insert = vi.fn().mockResolvedValue(undefined);
 

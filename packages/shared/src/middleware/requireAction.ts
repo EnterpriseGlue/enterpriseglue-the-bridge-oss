@@ -792,7 +792,7 @@ async function evaluateDeploymentComposite(
   if (failedChecks.length === 1 && failedChecks[0] === 'project_engine_target.active') {
     const canAutoGrant = await canAutoGrantProjectAccess(userId, engineId, tenantId);
     if (canAutoGrant) {
-      await engineAccessService.grantAccess(projectId, engineId, userId, true);
+      await engineAccessService.grantAccess(projectId, engineId, userId, true, tenantId);
       result = await deploymentEligibilityService.evaluate({
         userId,
         tenantId,

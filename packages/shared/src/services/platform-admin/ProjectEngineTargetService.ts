@@ -424,11 +424,12 @@ export class ProjectEngineTargetService {
     engineId: string,
     grantedById?: string | null,
     autoApproved = false,
-    tenantId?: string | null
+    tenantId?: string | null,
+    store?: DataSource | EntityManager,
   ): Promise<{ id: string } | null> {
     if (!engineId || engineId === '__env__') return null;
     if ((await this.getProjectEngineTargetPolicyMode()) === 'external_only') return null;
-    const existing = await this.findTargetForPair(projectId, engineId, tenantId);
+    const existing = await this.findTargetForPair(projectId, engineId, tenantId, store);
     if (existing && isSourceOwnedProjectEngineTarget(existing.source)) return null;
     return this.createTarget({
       tenantId,
@@ -442,7 +443,7 @@ export class ProjectEngineTargetService {
       allowImport: true,
       createdById: grantedById || null,
       approvedById: autoApproved ? grantedById || null : null,
-    });
+    }, store);
   }
 
   async archiveLegacyTarget(projectId: string, engineId: string, tenantId?: string | null): Promise<void> {
@@ -482,6 +483,12 @@ export class ProjectEngineTargetService {
 
   async getProjectEngineIds(projectId: string, tenantId?: string | null): Promise<string[]> {
     const dataSource = await getDataSource();
+    const requestTenantId = effectiveTenantId(tenantId);
+    const project = await dataSource.getRepository(Project).findOne({
+      where: { id: projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project || project.tenantId !== requestTenantId) return [];
     const legacyRows = await dataSource.getRepository(EngineProjectAccess).find({
       where: { projectId },
       select: ['engineId'],
@@ -490,16 +497,33 @@ export class ProjectEngineTargetService {
       where: { projectId, status: 'active' },
       select: ['engineId', 'tenantId'],
     }))
-      .filter((target) => isTenantVisible(target.tenantId, tenantId));
+      .filter((target) => isTenantVisible(target.tenantId, requestTenantId));
 
-    return Array.from(new Set([
+    const candidateEngineIds = Array.from(new Set([
       ...legacyRows.map((row) => row.engineId),
       ...targetRows.map((row) => row.engineId),
-    ]));
+    ])).filter((id) => id && id !== '__env__');
+    if (candidateEngineIds.length === 0) return [];
+    const engines = await dataSource.getRepository(Engine).find({
+      where: { id: In(candidateEngineIds), lifecycleStatus: 'active' },
+      select: ['id', 'tenantId', 'tenancyMode', 'lifecycleStatus'],
+    });
+    return engines
+      .filter((engine) => isEngineVisibleInTenancyContext(engine, requestTenantId))
+      .filter((engine) => engine.tenancyMode === 'shared'
+        ? !engine.tenantId
+        : engine.tenantId === project.tenantId)
+      .map((engine) => engine.id);
   }
 
   async getEngineProjectIds(engineId: string, tenantId?: string | null): Promise<string[]> {
     const dataSource = await getDataSource();
+    const requestTenantId = effectiveTenantId(tenantId);
+    const engine = await dataSource.getRepository(Engine).findOne({
+      where: { id: engineId, lifecycleStatus: 'active' },
+      select: ['id', 'tenantId', 'tenancyMode', 'lifecycleStatus'],
+    });
+    if (!engine || !isEngineVisibleInTenancyContext(engine, requestTenantId)) return [];
     const legacyRows = await dataSource.getRepository(EngineProjectAccess).find({
       where: { engineId },
       select: ['projectId'],
@@ -508,12 +532,23 @@ export class ProjectEngineTargetService {
       where: { engineId, status: 'active' },
       select: ['projectId', 'tenantId'],
     }))
-      .filter((target) => isTenantVisible(target.tenantId, tenantId));
+      .filter((target) => isTenantVisible(target.tenantId, requestTenantId));
 
-    return Array.from(new Set([
+    const candidateProjectIds = Array.from(new Set([
       ...legacyRows.map((row) => row.projectId),
       ...targetRows.map((row) => row.projectId),
     ]));
+    if (candidateProjectIds.length === 0) return [];
+    const projects = await dataSource.getRepository(Project).find({
+      where: { id: In(candidateProjectIds) },
+      select: ['id', 'tenantId'],
+    });
+    return projects
+      .filter((project) => project.tenantId === requestTenantId)
+      .filter((project) => engine.tenancyMode === 'shared'
+        ? !engine.tenantId
+        : engine.tenantId === project.tenantId)
+      .map((project) => project.id);
   }
 
   async syncLegacyAccessForProject(projectId: string, tenantId?: string | null): Promise<{ createdOrUpdated: number }> {
@@ -530,8 +565,13 @@ export class ProjectEngineTargetService {
     return { createdOrUpdated };
   }
 
-  private async findTargetForPair(projectId: string, engineId: string, tenantId?: string | null): Promise<ProjectEngineTarget | null> {
-    const dataSource = await getDataSource();
+  private async findTargetForPair(
+    projectId: string,
+    engineId: string,
+    tenantId?: string | null,
+    store?: DataSource | EntityManager,
+  ): Promise<ProjectEngineTarget | null> {
+    const dataSource = store || await getDataSource();
     const target = await dataSource.getRepository(ProjectEngineTarget).findOne({ where: { projectId, engineId } });
     if (!target || !isTenantVisible(target.tenantId, tenantId)) return null;
     return target;
@@ -574,8 +614,8 @@ export class ProjectEngineTargetService {
       throw Errors.notFound('Project', projectId);
     }
     const engine = await dataSource.getRepository(Engine).findOne({
-      where: { id: engineId },
-      select: ['id', 'tenantId', 'tenancyMode'],
+      where: { id: engineId, lifecycleStatus: 'active' },
+      select: ['id', 'tenantId', 'tenancyMode', 'lifecycleStatus'],
     });
     const topologyMatchesProject = engine?.tenancyMode === 'shared'
       ? !engine.tenantId

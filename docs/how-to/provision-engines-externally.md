@@ -31,8 +31,12 @@ export ENTERPRISEGLUE_URL="https://enterpriseglue.example.com"
 export ENTERPRISEGLUE_TOKEN="<api-client-token>"
 ```
 
-External engine URLs must use HTTP or HTTPS and cannot target localhost,
-private, link-local, reserved, metadata, or Docker-internal hosts.
+By default, external engine URLs must use HTTPS and cannot target localhost,
+private, link-local, reserved, metadata, or Docker-internal hosts. A reviewed
+private engine or customer sidecar can be enabled only with
+`EG_ENGINE_ALLOW_PRIVATE_HOSTS=true` and an exact `EG_ENGINE_ALLOWED_HOSTS`
+entry; see [Configuration reference](../reference/configuration.md#engine-endpoint-policy).
+Temporary private HTTP additionally requires the explicit insecure-HTTP opt-in.
 
 ## Register a Dedicated Engine
 

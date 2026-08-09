@@ -8,8 +8,14 @@ import { Engine } from '@enterpriseglue/shared/infrastructure/persistence/entiti
 import { EngineProjectAccess } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineProjectAccess.js';
 import { EngineAccessRequest } from '@enterpriseglue/shared/infrastructure/persistence/entities/EngineAccessRequest.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
+import { ProjectEngineTarget } from '@enterpriseglue/shared/infrastructure/persistence/entities/ProjectEngineTarget.js';
+import {
+  OSS_DEFAULT_TENANT_ID,
+  normalizeTenantIdForPersistence,
+} from '@enterpriseglue/shared/authz/tenant-scope.js';
 import { isEngineVisibleInTenancyContext } from '@enterpriseglue/shared/engine-tenancy/visibility.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import type { DataSource, EntityManager } from 'typeorm';
 import { projectEngineTargetService } from './ProjectEngineTargetService.js';
 import { EnginePermissions, permissionService, ProjectPermissions } from './permissions.js';
 
@@ -23,33 +29,67 @@ export interface AccessRequest {
 }
 
 export class EngineAccessService {
+  private effectiveTenantId(tenantId?: string | null): string {
+    return normalizeTenantIdForPersistence(tenantId) || OSS_DEFAULT_TENANT_ID;
+  }
+
+  private async assertVisibleTopology(
+    store: DataSource | EntityManager,
+    projectId: string,
+    engineId: string,
+    tenantId?: string | null,
+  ): Promise<{ project: Project; engine: Engine; tenantId: string }> {
+    const effectiveTenantId = this.effectiveTenantId(tenantId);
+    const project = await store.getRepository(Project).findOne({
+      where: { id: projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project || project.tenantId !== effectiveTenantId) {
+      throw new Error('Project and engine must belong to the same tenant');
+    }
+    const engine = await store.getRepository(Engine).findOne({
+      where: { id: engineId, lifecycleStatus: 'active' },
+      select: ['id', 'tenantId', 'tenancyMode', 'lifecycleStatus'],
+    });
+    const topologyMatchesProject = engine?.tenancyMode === 'shared'
+      ? !engine.tenantId
+      : Boolean(engine?.tenantId && engine.tenantId === project.tenantId);
+    if (!engine || !isEngineVisibleInTenancyContext(engine, effectiveTenantId) || !topologyMatchesProject) {
+      throw new Error('Project and engine must belong to the same tenant');
+    }
+    return { project, engine, tenantId: effectiveTenantId };
+  }
+
   /**
    * Check if a project has access to an engine
    */
-  async hasProjectAccess(projectId: string, engineId: string): Promise<boolean> {
+  async hasProjectAccess(projectId: string, engineId: string, tenantId?: string | null): Promise<boolean> {
     const dataSource = await getDataSource();
-    const accessRepo = dataSource.getRepository(EngineProjectAccess);
-    const access = await accessRepo.findOne({ where: { projectId, engineId } });
-    if (access !== null) {
-      await projectEngineTargetService.ensureTargetFromLegacyAccess(projectId, engineId, access.grantedById, access.autoApproved)
-        .catch(() => undefined);
-      return true;
+    try {
+      const topology = await this.assertVisibleTopology(dataSource, projectId, engineId, tenantId);
+      return await projectEngineTargetService.hasActiveTarget(
+        projectId,
+        engineId,
+        'manual',
+        topology.tenantId,
+      );
+    } catch {
+      return false;
     }
-    return projectEngineTargetService.hasActiveTarget(projectId, engineId, 'manual');
   }
 
   /**
    * Get all engines a project has access to
    */
-  async getProjectEngines(projectId: string): Promise<string[]> {
-    return projectEngineTargetService.getProjectEngineIds(projectId);
+  async getProjectEngines(projectId: string, tenantId?: string | null): Promise<string[]> {
+    return projectEngineTargetService.getProjectEngineIds(projectId, this.effectiveTenantId(tenantId));
   }
 
   /**
    * Get all projects that have access to an engine
    */
-  async getEngineProjects(engineId: string): Promise<string[]> {
-    return projectEngineTargetService.getEngineProjectIds(engineId);
+  async getEngineProjects(engineId: string, tenantId?: string | null): Promise<string[]> {
+    return projectEngineTargetService.getEngineProjectIds(engineId, this.effectiveTenantId(tenantId));
   }
 
   /**
@@ -81,7 +121,7 @@ export class EngineAccessService {
       where: { id: projectId },
       select: ['id', 'tenantId'],
     });
-    if (!project) {
+    if (!project?.tenantId) {
       throw new Error('Project not found');
     }
     if (
@@ -92,7 +132,7 @@ export class EngineAccessService {
     }
 
     // Check if access already exists
-    const existingAccess = await this.hasProjectAccess(projectId, engineId);
+    const existingAccess = await this.hasProjectAccess(projectId, engineId, project.tenantId);
     if (existingAccess) {
       return { status: 'approved', autoApproved: false };
     }
@@ -127,7 +167,7 @@ export class EngineAccessService {
 
     if (shouldAutoApprove) {
       // Auto-approve: directly grant access
-      await this.grantAccess(projectId, engineId, requestedById, true);
+      await this.grantAccess(projectId, engineId, requestedById, true, project.tenantId);
       return { status: 'approved', autoApproved: true };
     }
 
@@ -152,37 +192,56 @@ export class EngineAccessService {
     projectId: string,
     engineId: string,
     grantedById: string,
-    autoApproved: boolean = false
+    autoApproved: boolean,
+    tenantId: string | null,
   ): Promise<{ id: string }> {
     const dataSource = await getDataSource();
-    const accessRepo = dataSource.getRepository(EngineProjectAccess);
-    const project = await dataSource.getRepository(Project).findOne({
-      where: { id: projectId },
-      select: ['id', 'tenantId'],
+    const effectiveTenantId = this.effectiveTenantId(tenantId);
+    return dataSource.transaction(async (manager) => {
+      const projectClaim = await manager.getRepository(Project).update(
+        { id: projectId, tenantId: effectiveTenantId },
+        { id: projectId },
+      );
+      if (projectClaim.affected !== 1) {
+        throw new Error('Project and engine must belong to the same tenant');
+      }
+      const engineClaim = await manager.getRepository(Engine).update(
+        { id: engineId, lifecycleStatus: 'active' },
+        { id: engineId },
+      );
+      if (engineClaim.affected !== 1) {
+        throw new Error('Project and engine must belong to the same tenant');
+      }
+      await this.assertVisibleTopology(manager, projectId, engineId, effectiveTenantId);
+
+      const id = generateId();
+      await manager.getRepository(EngineProjectAccess).insert({
+        id,
+        engineId,
+        projectId,
+        grantedById,
+        autoApproved,
+        createdAt: Date.now(),
+      });
+      const materialized = await projectEngineTargetService.ensureTargetFromLegacyAccess(
+        projectId,
+        engineId,
+        grantedById,
+        autoApproved,
+        effectiveTenantId,
+        manager,
+      );
+      if (!materialized) {
+        const existingTarget = await manager.getRepository(ProjectEngineTarget).findOne({
+          where: { projectId, engineId, tenantId: effectiveTenantId, status: 'active' },
+          select: ['id', 'allowManualDeploy'],
+        });
+        if (!existingTarget?.allowManualDeploy) {
+          throw new Error('Engine access requires an active project-engine target in the same tenant');
+        }
+      }
+      return { id };
     });
-    if (!project?.tenantId) {
-      throw new Error('Project must have a tenant before engine access can be granted');
-    }
-    const id = generateId();
-
-    await accessRepo.insert({
-      id,
-      engineId,
-      projectId,
-      grantedById,
-      autoApproved,
-      createdAt: Date.now(),
-    });
-
-    await projectEngineTargetService.ensureTargetFromLegacyAccess(
-      projectId,
-      engineId,
-      grantedById,
-      autoApproved,
-      project.tenantId,
-    );
-
-    return { id };
   }
 
   /**
@@ -220,7 +279,12 @@ export class EngineAccessService {
     }
 
     // Grant access
-    await this.grantAccess(request.projectId, request.engineId, reviewedById, false);
+    const project = await dataSource.getRepository(Project).findOne({
+      where: { id: request.projectId },
+      select: ['id', 'tenantId'],
+    });
+    if (!project?.tenantId) throw new Error('Project not found');
+    await this.grantAccess(request.projectId, request.engineId, reviewedById, false, project.tenantId);
 
     // Update request status
     await requestRepo.update({ id: requestId }, {

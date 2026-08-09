@@ -26,10 +26,11 @@ describe('EngineAccessService', () => {
   });
 
   it('returns approved when access already exists', async () => {
-    const accessRepo = { findOne: vi.fn().mockResolvedValue({ id: 'access-1' }) };
+    const accessRepo = { findOne: vi.fn().mockResolvedValue({ id: 'access-1', grantedById: 'user-1', autoApproved: true }) };
     const requestRepo = { findOne: vi.fn() };
     const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated' }) };
     const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
+    const targetRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
 
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
@@ -37,6 +38,7 @@ describe('EngineAccessService', () => {
         if (entity === EngineAccessRequest) return requestRepo;
         if (entity === Engine) return engineRepo;
         if (entity === Project) return projectRepo;
+        if (entity === ProjectEngineTarget) return targetRepo;
         throw new Error('Unexpected repository');
       },
     });
@@ -71,19 +73,27 @@ describe('EngineAccessService', () => {
   it('auto-approves when the requester has canonical management permissions for both resources', async () => {
     const accessRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
     const requestRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
-    const engineRepo = { findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated' }) };
-    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
+    const engineRepo = {
+      findOne: vi.fn().mockResolvedValue({ id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated', lifecycleStatus: 'active' }),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const projectRepo = {
+      findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
     const targetRepo = { findOne: vi.fn().mockResolvedValue(null), insert: vi.fn() };
 
-    (getDataSource as unknown as Mock).mockResolvedValue({
-      getRepository: (entity: unknown) => {
+    const getRepository = (entity: unknown) => {
         if (entity === EngineProjectAccess) return accessRepo;
         if (entity === EngineAccessRequest) return requestRepo;
         if (entity === Engine) return engineRepo;
         if (entity === Project) return projectRepo;
         if (entity === ProjectEngineTarget) return targetRepo;
         throw new Error('Unexpected repository');
-      },
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository,
+      transaction: vi.fn(async (callback) => callback({ getRepository })),
     });
     (permissionService.hasPermission as Mock)
       .mockResolvedValueOnce(true)
@@ -134,19 +144,116 @@ describe('EngineAccessService', () => {
 
   it('does not persist legacy engine access for a project without tenant ownership', async () => {
     const accessRepo = { insert: vi.fn() };
-    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }) };
+    const projectRepo = {
+      update: vi.fn().mockResolvedValue({ affected: 0 }),
+      findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: null }),
+    };
+    const getRepository = (entity: unknown) => {
+      if (entity === EngineProjectAccess) return accessRepo;
+      if (entity === Project) return projectRepo;
+      throw new Error('Unexpected repository');
+    };
 
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository,
+      transaction: vi.fn(async (callback) => callback({ getRepository })),
+    });
+
+    await expect(service.grantAccess('project-1', 'engine-1', 'user-1', true, 'tenant-default'))
+      .rejects.toThrow('same tenant');
+    expect(accessRepo.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a direct cross-tenant grant before persisting access or a target', async () => {
+    const accessRepo = { insert: vi.fn() };
+    const targetRepo = { findOne: vi.fn(), insert: vi.fn() };
+    const projectRepo = {
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }),
+    };
+    const engineRepo = {
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'engine-1', tenantId: 'tenant-b', tenancyMode: 'dedicated', lifecycleStatus: 'active',
+      }),
+    };
+    const getRepository = (entity: unknown) => {
+      if (entity === EngineProjectAccess) return accessRepo;
+      if (entity === ProjectEngineTarget) return targetRepo;
+      if (entity === Project) return projectRepo;
+      if (entity === Engine) return engineRepo;
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository,
+      transaction: vi.fn(async (callback) => callback({ getRepository })),
+    });
+
+    await expect(service.grantAccess('project-1', 'engine-1', 'user-1', true, 'tenant-a'))
+      .rejects.toThrow('same tenant');
+    expect(accessRepo.insert).not.toHaveBeenCalled();
+    expect(targetRepo.insert).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the legacy access row when target materialization fails', async () => {
+    const committedAccess: Array<Record<string, unknown>> = [];
+    const pendingAccess: Array<Record<string, unknown>> = [];
+    const accessRepo = { insert: vi.fn(async (row) => { pendingAccess.push(row); }) };
+    const targetRepo = {
+      findOne: vi.fn().mockResolvedValue(null),
+      insert: vi.fn().mockRejectedValue(new Error('injected target persistence failure')),
+    };
+    const projectRepo = {
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }),
+    };
+    const engineRepo = {
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+      findOne: vi.fn().mockResolvedValue({
+        id: 'engine-1', tenantId: 'tenant-a', tenancyMode: 'dedicated', lifecycleStatus: 'active',
+      }),
+    };
+    const getRepository = (entity: unknown) => {
+      if (entity === EngineProjectAccess) return accessRepo;
+      if (entity === ProjectEngineTarget) return targetRepo;
+      if (entity === Project) return projectRepo;
+      if (entity === Engine) return engineRepo;
+      throw new Error('Unexpected repository');
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository,
+      transaction: vi.fn(async (callback) => {
+        try {
+          const result = await callback({ getRepository });
+          committedAccess.push(...pendingAccess);
+          return result;
+        } finally {
+          pendingAccess.length = 0;
+        }
+      }),
+    });
+
+    await expect(service.grantAccess('project-1', 'engine-1', 'user-1', true, 'tenant-a'))
+      .rejects.toThrow('injected target persistence failure');
+    expect(committedAccess).toEqual([]);
+  });
+
+  it('does not honor a stale cross-tenant legacy row', async () => {
+    const accessRepo = { findOne: vi.fn().mockResolvedValue({ id: 'access-1' }) };
+    const projectRepo = { findOne: vi.fn().mockResolvedValue({ id: 'project-1', tenantId: 'tenant-a' }) };
+    const engineRepo = { findOne: vi.fn().mockResolvedValue({
+      id: 'engine-1', tenantId: 'tenant-b', tenancyMode: 'dedicated', lifecycleStatus: 'active',
+    }) };
     (getDataSource as unknown as Mock).mockResolvedValue({
       getRepository: (entity: unknown) => {
         if (entity === EngineProjectAccess) return accessRepo;
         if (entity === Project) return projectRepo;
+        if (entity === Engine) return engineRepo;
         throw new Error('Unexpected repository');
       },
     });
 
-    await expect(service.grantAccess('project-1', 'engine-1', 'user-1', true))
-      .rejects.toThrow('Project must have a tenant');
-    expect(accessRepo.insert).not.toHaveBeenCalled();
+    await expect(service.hasProjectAccess('project-1', 'engine-1', 'tenant-a')).resolves.toBe(false);
   });
 
   it('rejects a cross-tenant project and engine before evaluating auto-approval', async () => {

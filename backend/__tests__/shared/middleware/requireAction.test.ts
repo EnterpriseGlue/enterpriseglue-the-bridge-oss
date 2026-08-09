@@ -2343,7 +2343,7 @@ describe('requireAction project resource resolvers', () => {
       resourceType: 'engine',
       resourceId: engineId,
     }));
-    expect(engineAccessService.grantAccess).toHaveBeenCalledWith(projectId, engineId, 'user-1', true);
+    expect(engineAccessService.grantAccess).toHaveBeenCalledWith(projectId, engineId, 'user-1', true, 'tenant-default');
     expect(deploymentEligibilityService.evaluate).toHaveBeenCalledTimes(2);
   });
 

@@ -214,7 +214,7 @@ describe('deployAuth middleware', () => {
       resourceType: 'engine',
       resourceId: 'engine-1',
     }));
-    expect(mocks.grantAccess).toHaveBeenCalledWith('project-1', 'engine-1', 'user-1', true);
+    expect(mocks.grantAccess).toHaveBeenCalledWith('project-1', 'engine-1', 'user-1', true, null);
     expect(next).toHaveBeenCalledOnce();
     expect(req.deployContext).toMatchObject({
       projectId: 'project-1',
