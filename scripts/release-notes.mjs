@@ -252,13 +252,16 @@ export function validatePathCoverage(changedFiles, fragments, { exempt = false, 
   return { relevant, highRisk, requirements: [...new Set(requirements)] }
 }
 
-export function validatePrClassification(fragments, { title = '', labels = [] } = {}) {
+export function validatePrClassification(fragments, { title = '', labels = [], isReleasePlease = false } = {}) {
   if (!title || fragments.length === 0) return
   const breaking = fragments.some((fragment) => fragment.breaking || fragment.type === 'breaking')
   const titleBreaking = /^[a-z]+(?:\([a-z0-9._/-]+\))?!:/i.test(title.trim())
+  const canonicalReleasePleaseTitle = isReleasePlease && /^chore\(main\): release \d+\.\d+\.\d+$/i.test(title.trim())
   const releaseLabels = labels.filter((label) => label.startsWith('release:'))
   if (breaking) {
-    if (!titleBreaking) fail('Breaking release-note fragments require a conventional PR title with ! before the colon.')
+    if (!titleBreaking && !canonicalReleasePleaseTitle) {
+      fail('Breaking release-note fragments require a conventional PR title with ! before the colon.')
+    }
     if (!releaseLabels.includes('release:breaking')) fail('Breaking release-note fragments require the release:breaking label.')
     return
   }
@@ -495,6 +498,7 @@ function runValidate(root, options) {
   validatePrClassification(fragments, {
     title: process.env.RELEASE_PR_TITLE || '',
     labels,
+    isReleasePlease: String(process.env.RELEASE_PR_HEAD_REF || '').startsWith('release-please--branches--'),
   })
   console.log(`[release-notes] validated ${selection.all.length} stored fragment(s).`)
   console.log(`[release-notes] ${fragments.length} fragment(s) cover ${coverage.relevant.length} release-impacting file(s) since ${baseRef}.`)
