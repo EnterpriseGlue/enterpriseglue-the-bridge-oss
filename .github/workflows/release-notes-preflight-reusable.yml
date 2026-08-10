@@ -39,13 +39,18 @@ jobs:
 
       - name: Fetch current pull-request metadata
         id: pull_request
-        if: inputs.pull_number > 0
+        if: inputs.pull_number > 0 || github.event_name == 'merge_group'
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           PULL_NUMBER: ${{ inputs.pull_number }}
         with:
           script: |
-            const pullNumber = Number(process.env.PULL_NUMBER);
+            let pullNumber = Number(process.env.PULL_NUMBER);
+            if ((!Number.isInteger(pullNumber) || pullNumber < 1) && context.eventName === 'merge_group') {
+              const headRef = context.payload.merge_group?.head_ref || '';
+              const match = headRef.match(/(?:^|\/)pr-(\d+)-/);
+              pullNumber = match ? Number(match[1]) : 0;
+            }
             if (!Number.isInteger(pullNumber) || pullNumber < 1) {
               core.setFailed(`Invalid pull request number: ${process.env.PULL_NUMBER}`);
               return;
@@ -74,19 +79,24 @@ jobs:
             core.setOutput('body', pullRequest.body || '');
             core.setOutput('labels', labels.join(','));
             core.setOutput('exempt', String(labels.includes('release-note:none')));
+            core.setOutput('number', String(pullNumber));
+            core.setOutput('head_ref', pullRequest.head?.ref || '');
 
       - name: Resolve release-note comparison base
         id: release_base
         shell: bash
         env:
           BASE_REF: ${{ inputs.base_ref }}
+          PULL_HEAD_REF: ${{ steps.pull_request.outputs.head_ref || '' }}
         run: |
           set -euo pipefail
-          if [[ "${GITHUB_HEAD_REF:-}" == release-please--branches--* ]]; then
+          if [[ "$PULL_HEAD_REF" == release-please--branches--* || "${GITHUB_HEAD_REF:-}" == release-please--branches--* ]]; then
             base_ref="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+            echo "allow_pending=true" >> "$GITHUB_OUTPUT"
           else
             test -n "$BASE_REF"
             base_ref="origin/$BASE_REF"
+            echo "allow_pending=false" >> "$GITHUB_OUTPUT"
           fi
           git rev-parse --verify "$base_ref^{commit}" >/dev/null
           echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
@@ -105,7 +115,10 @@ jobs:
             --release-base "$base_tag"
             --output .artifacts/release-notes-preview.md
           )
-          if [[ "${{ inputs.pull_number }}" == "0" ]]; then
+          if [[ "${{ steps.release_base.outputs.allow_pending }}" == "true" ]]; then
+            preflight_args+=(--allow-pending)
+          fi
+          if [[ "${{ steps.pull_request.outputs.number || inputs.pull_number }}" == "0" ]]; then
             preflight_args+=(--skip-recommend)
           fi
           node scripts/run-release-notes-preflight.mjs "${preflight_args[@]}"

@@ -26,6 +26,10 @@ export function parsePreflightArgs(argv) {
       options.skipRecommend = true
       continue
     }
+    if (key === 'allow-pending') {
+      options.allowPending = true
+      continue
+    }
     if (!['base-ref', 'release-base', 'output'].includes(key)) fail(`Unknown option: --${key}`)
     const next = argv[index + 1]
     if (!next || next.startsWith('--')) fail(`Missing value for --${key}`)
@@ -58,6 +62,7 @@ export function runPreflight({
   releaseBase,
   output = '.artifacts/release-notes-preview.md',
   skipRecommend = false,
+  allowPending = false,
   runToolTests = defaultToolTests,
   runCommand = (args) => runReleaseNotesCommand(args, root),
 } = {}) {
@@ -67,7 +72,7 @@ export function runPreflight({
 
   try {
     runToolTests(root)
-    runCommand(['baseline'])
+    runCommand(['baseline', ...(allowPending ? ['--allow-pending'] : [])])
     runCommand(['validate', '--base-ref', comparisonBase])
     if (!skipRecommend) runCommand(['recommend', '--base-ref', stableTag])
   } catch (error) {
