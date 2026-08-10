@@ -51,6 +51,7 @@
     "Run the frontend authorization helper regression covering a runtime-enforced action omitted from action availability.",
     "Run the Docker security workflow contract tests and build the shared test dependencies before the published-image smoke.",
     "Run the release-note contracts and verify preparation force-refreshes only the validated Release Please branch ref.",
+    "Restore an unpublished manifest/changelog pair to the latest real tag before regenerating an interrupted release candidate.",
     "Run the Mission Control Postgres image smoke against the exact candidate images and require every browser journey to pass.",
     "Verify GitHub reports no open generic secret-scanning alerts for the repository."
   ],

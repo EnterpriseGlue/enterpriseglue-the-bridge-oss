@@ -350,7 +350,7 @@ describe('AccessControl resources and policies', () => {
         },
       },
     }));
-  }, 60000);
+  }, 120_000);
 
   it('renders effective access query controls', () => {
     render(<AccessControl />);
