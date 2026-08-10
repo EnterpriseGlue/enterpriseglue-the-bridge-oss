@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.11.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.7...v0.11.0) (2026-08-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **main:** release 0.11.0 ([#351](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/351))
+* **authz:** add SSO engine assignments and fine-grained authorization ([#345](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/345))
+
+### Features
+
+* **authz:** add SSO engine assignments and fine-grained authorization ([#345](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/345)) ([1caccf5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1caccf578c0ddcf07d28a4589943e55fce28af7f))
+
+
+### Bug Fixes
+
+* **ci:** allow pending release publication baseline ([#352](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/352)) ([4aff276](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4aff276389750b855e629545c61dbb89fea6c6bc))
+* **ci:** restore release-please baseline after partial publish ([#354](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/354)) ([62af2df](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/62af2df4e8aede757eb5c10ef284b1a29d2a811e))
+
+
+### Miscellaneous Chores
+
+* **main:** release 0.11.0 ([#351](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/351)) ([cc7d177](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cc7d177f24f15d9b9ba0647aea61b88c5afaa7a3))
+
 ## [0.10.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.6...v0.10.7) (2026-08-04)
 
 
