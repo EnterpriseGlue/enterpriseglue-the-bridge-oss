@@ -146,6 +146,7 @@ run_playwright_smoke() {
       -e E2E_ADMIN_EMAIL \
       -e E2E_ADMIN_PASSWORD \
       -e E2E_REQUIRE_MISSION_CONTROL_MOCK \
+      -e ENCRYPTION_KEY \
       -v "$ROOT_DIR:/work" \
       -w /work \
       "$PLAYWRIGHT_RUNNER_IMAGE" \
@@ -195,7 +196,7 @@ main() {
   FRONTEND_PORT="$(choose_port 8080 18080 28080)"
   POSTGRES_HOST_PORT="$(choose_port 55432 65432 75432)"
 
-  local postgres_user postgres_password postgres_database postgres_schema postgres_ssl admin_email admin_password
+  local postgres_user postgres_password postgres_database postgres_schema postgres_ssl admin_email admin_password encryption_key
   postgres_user="$(env_first POSTGRES_USER)"
   postgres_password="$(env_first POSTGRES_PASSWORD)"
   postgres_database="$(env_first POSTGRES_DATABASE POSTGRES_DB)"
@@ -203,6 +204,7 @@ main() {
   postgres_ssl="$(env_first POSTGRES_SSL)"
   admin_email="$(env_first ADMIN_EMAIL)"
   admin_password="$(env_first ADMIN_PASSWORD)"
+  encryption_key="$(env_first ENCRYPTION_KEY)"
 
   [[ -n "$postgres_user" ]] || error "POSTGRES_USER missing in $ENV_FILE"
   [[ -n "$postgres_password" ]] || error "POSTGRES_PASSWORD missing in $ENV_FILE"
@@ -210,6 +212,7 @@ main() {
   [[ -n "$postgres_schema" ]] || error "POSTGRES_SCHEMA missing in $ENV_FILE"
   [[ -n "$admin_email" ]] || error "ADMIN_EMAIL missing in $ENV_FILE"
   [[ -n "$admin_password" ]] || error "ADMIN_PASSWORD missing in $ENV_FILE"
+  [[ -n "$encryption_key" ]] || error "ENCRYPTION_KEY missing in $ENV_FILE"
 
   log "Starting Postgres db/backend services with Mission Control mock"
   FRONTEND_HOST_PORT="$FRONTEND_PORT" \
@@ -246,6 +249,7 @@ main() {
   E2E_ADMIN_EMAIL="$admin_email" \
   E2E_ADMIN_PASSWORD="$admin_password" \
   E2E_REQUIRE_MISSION_CONTROL_MOCK=true \
+  ENCRYPTION_KEY="$encryption_key" \
   run_playwright_smoke
 
   log "Mission Control image smoke tests passed"

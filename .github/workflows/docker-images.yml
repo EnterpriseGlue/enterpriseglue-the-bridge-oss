@@ -123,6 +123,10 @@ jobs:
             echo "ADMIN_EMAIL=admin@enterpriseglue.ai"
             echo "ADMIN_PASSWORD=change_me_change_me"
             echo "ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            echo "EG_ENGINE_ALLOWED_HOSTS=camunda-mock"
+            echo "EG_ENGINE_ALLOW_PRIVATE_HOSTS=true"
+            echo "EG_ALLOW_INSECURE_ENGINE_HTTP=true"
+            echo "EG_ENFORCE_ENGINE_ENDPOINT_POLICY=true"
             echo "GIT_REPOS_PATH=./data/repos"
             echo "GIT_DEFAULT_BRANCH=main"
             echo "API_BASE_URL="
@@ -157,6 +161,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
         run: pnpm install --frozen-lockfile
+
+      - name: Build shared test dependencies
+        run: pnpm run build:shared
 
       - name: Resolve Playwright runner image
         id: playwright-runner
