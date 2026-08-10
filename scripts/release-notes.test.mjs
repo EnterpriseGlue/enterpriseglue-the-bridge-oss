@@ -249,10 +249,16 @@ test('expensive pull-request workflows cannot start before release-note prefligh
 test('normal and hotfix release workflows generate detailed notes through the same script', () => {
   const release = readFileSync(new URL('../.github/workflows/release-please.yml', import.meta.url), 'utf8')
   const hotfix = readFileSync(new URL('../.github/workflows/release-hotfix.yml', import.meta.url), 'utf8')
+  const prepare = readFileSync(new URL('./prepare-release-notes-pr.sh', import.meta.url), 'utf8')
   for (const workflow of [release, hotfix]) {
     assert.match(workflow, /node scripts\/release-notes\.mjs baseline/)
     assert.match(workflow, /bash scripts\/prepare-release-notes-pr\.sh/)
   }
+  assert.match(
+    prepare,
+    /"\+refs\/heads\/\$\{RELEASE_PR_HEAD_REF\}:refs\/remotes\/origin\/\$\{RELEASE_PR_HEAD_REF\}"/,
+    'release-note preparation must refresh the validated moving Release Please ref',
+  )
   assert.match(release, /gh release edit "v\$\{RELEASE_VERSION\}" --notes-file/)
   assert.match(release, /baseline --allow-pending/)
   assert.equal((release.match(/\^chore\\\(main\\\)!\?: release/g) || []).length, 2)

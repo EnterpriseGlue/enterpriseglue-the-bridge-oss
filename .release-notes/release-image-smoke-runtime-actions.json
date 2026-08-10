@@ -11,10 +11,11 @@
     "developers",
     "security"
   ],
-  "summary": "Restores Mission Control decision access for authorized users and makes the published-image Postgres smoke lane self-contained and reproducible.",
+  "summary": "Restores Mission Control decision access for authorized users and makes published-image and hotfix-release qualification self-contained and reproducible.",
   "userImpact": [
     "Users with engine instance-view permission can open Mission Control Decisions when the runtime action is intentionally omitted from the coarse frontend availability snapshot.",
-    "Release operators receive a complete Postgres image-smoke result instead of a missing shared-build artifact failure."
+    "Release operators receive a complete Postgres image-smoke result instead of a missing shared-build artifact failure.",
+    "Hotfix release-note preparation safely refreshes a Release Please branch that advanced after workflow checkout."
   ],
   "upgrade": {
     "required": false,
@@ -49,6 +50,7 @@
   "validation": [
     "Run the frontend authorization helper regression covering a runtime-enforced action omitted from action availability.",
     "Run the Docker security workflow contract tests and build the shared test dependencies before the published-image smoke.",
+    "Run the release-note contracts and verify preparation force-refreshes only the validated Release Please branch ref.",
     "Run the Mission Control Postgres image smoke against the exact candidate images and require every browser journey to pass.",
     "Verify GitHub reports no open generic secret-scanning alerts for the repository."
   ],

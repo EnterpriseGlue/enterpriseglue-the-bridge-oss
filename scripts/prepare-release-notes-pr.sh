@@ -22,7 +22,7 @@ if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 fi
 
 git fetch --no-tags origin \
-  "refs/heads/${RELEASE_PR_HEAD_REF}:refs/remotes/origin/${RELEASE_PR_HEAD_REF}"
+  "+refs/heads/${RELEASE_PR_HEAD_REF}:refs/remotes/origin/${RELEASE_PR_HEAD_REF}"
 git checkout -B "$RELEASE_PR_HEAD_REF" "origin/$RELEASE_PR_HEAD_REF"
 
 base_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
