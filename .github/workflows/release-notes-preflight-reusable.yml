@@ -90,15 +90,21 @@ jobs:
           PULL_HEAD_REF: ${{ steps.pull_request.outputs.head_ref || '' }}
         run: |
           set -euo pipefail
+          latest_tag="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+          allow_pending=false
           if [[ "$PULL_HEAD_REF" == release-please--branches--* || "${GITHUB_HEAD_REF:-}" == release-please--branches--* ]]; then
-            base_ref="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
-            echo "allow_pending=true" >> "$GITHUB_OUTPUT"
+            base_ref="$latest_tag"
+            allow_pending=true
           else
             test -n "$BASE_REF"
             base_ref="origin/$BASE_REF"
-            echo "allow_pending=false" >> "$GITHUB_OUTPUT"
+            base_manifest_version="$(git show "$base_ref:.github/.release-please-manifest.json" | node -e 'let input=""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => process.stdout.write(JSON.parse(input)["."]));')"
+            if [[ "$base_manifest_version" != "${latest_tag#v}" ]]; then
+              allow_pending=true
+            fi
           fi
           git rev-parse --verify "$base_ref^{commit}" >/dev/null
+          echo "allow_pending=$allow_pending" >> "$GITHUB_OUTPUT"
           echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
 
       - name: Run release-note preflight
