@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.11.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.11.0...v0.11.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **release:** qualify 0.11.1 image smoke ([#357](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/357)) ([35d36fd](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/35d36fd424d1c54cf1b5f8bb219df6f958ebd0ca))
+* **release:** refresh moving release notes ref ([#359](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/359)) ([f5c732f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f5c732ff8912553d276bf510b1082d368fcbe766))
+* **release:** restore 0.11.1 publication baseline ([#361](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/361)) ([abf3e1d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/abf3e1d7c40ceb580ce9f80e39fac151fc4cc110))
+
 ## [0.11.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.10.7...v0.11.0) (2026-08-10)
 
 
