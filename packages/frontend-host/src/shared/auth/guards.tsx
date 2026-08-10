@@ -123,8 +123,16 @@ export function evaluateActionSnapshot(
         ? snapshot?.engines.find((item) => item.resourceId === resourceId)?.actionAvailability
         : undefined;
 
-  if (availability) {
-    const restriction = availability.restrictions[actionId];
+  const restriction = availability?.restrictions[actionId];
+  const hasExplicitAvailabilityDecision = Boolean(
+    availability && (availability.allowedActions.includes(actionId) || restriction),
+  );
+  // Runtime-enforced actions are deliberately omitted from the coarse
+  // frontend availability snapshot. Only treat availability as authoritative
+  // when the server explicitly allowed or restricted this action; otherwise
+  // fall through to the permission snapshot and let the guarded backend route
+  // enforce any runtime-resource boundary.
+  if (availability && hasExplicitAvailabilityDecision) {
     allowed = availability.allowedActions.includes(actionId);
     return {
       actionId,

@@ -14,6 +14,14 @@ const imagePublish = readFileSync(
   new URL('../.github/workflows/docker-images-reusable.yml', import.meta.url),
   'utf8',
 );
+const dockerImages = readFileSync(
+  new URL('../.github/workflows/docker-images.yml', import.meta.url),
+  'utf8',
+);
+const postgresImageSmoke = readFileSync(
+  new URL('./e2e-smoke-postgres-images.sh', import.meta.url),
+  'utf8',
+);
 
 test('nightly preserves evidence before enforcing the high and critical gate', () => {
   assert.match(nightly, /echo "critical=\$\{critical_total\}"/);
@@ -55,4 +63,24 @@ test('image publishing labels and verifies source, revision, and version', () =>
   assert.match(imagePublish, /EXPECTED_REVISION: \$\{\{ github\.sha \}\}/);
   assert.match(imagePublish, /EXPECTED_VERSION: \$\{\{ steps\.meta\.outputs\.image_tag \}\}/);
   assert.match(imagePublish, /verify-oci-image-metadata\.mjs "\$prefix"/);
+});
+
+test('published Postgres image smoke compiles test dependencies and preserves fail-closed engine policy', () => {
+  const install = dockerImages.indexOf('- name: Install dependencies');
+  const buildShared = dockerImages.indexOf('- name: Build shared test dependencies');
+  const smoke = dockerImages.indexOf('- name: Run Mission Control Playwright smoke on Postgres images');
+  assert.ok(install >= 0 && install < buildShared, 'shared test dependencies must build after install');
+  assert.ok(buildShared < smoke, 'shared test dependencies must build before Playwright starts');
+  assert.match(dockerImages, /run: pnpm run build:shared/);
+  assert.match(dockerImages, /echo "EG_ENGINE_ALLOWED_HOSTS=camunda-mock"/);
+  assert.match(dockerImages, /echo "EG_ENGINE_ALLOW_PRIVATE_HOSTS=true"/);
+  assert.match(dockerImages, /echo "EG_ALLOW_INSECURE_ENGINE_HTTP=true"/);
+  assert.match(dockerImages, /echo "EG_ENFORCE_ENGINE_ENDPOINT_POLICY=true"/);
+});
+
+test('published Postgres image smoke passes the configured encryption boundary into Playwright', () => {
+  assert.match(postgresImageSmoke, /encryption_key="\$\(env_first ENCRYPTION_KEY\)"/);
+  assert.match(postgresImageSmoke, /\[\[ -n "\$encryption_key" \]\] \|\| error "ENCRYPTION_KEY missing in \$ENV_FILE"/);
+  assert.match(postgresImageSmoke, /-e ENCRYPTION_KEY \\/);
+  assert.match(postgresImageSmoke, /ENCRYPTION_KEY="\$encryption_key" \\/);
 });

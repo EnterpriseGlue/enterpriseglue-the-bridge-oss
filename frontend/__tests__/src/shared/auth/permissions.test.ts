@@ -206,4 +206,30 @@ describe('frontend permission helpers', () => {
       { type: 'engine', id: 'engine-1' },
     ).allowed).toBe(true);
   });
+
+  it('falls back to engine permissions for runtime-enforced actions omitted from availability', () => {
+    const decision = evaluateActionSnapshot(
+      {
+        ...baseSnapshot,
+        engines: [{
+          resourceId: 'engine-1',
+          permissions: [EnginePermission.INSTANCE_VIEW],
+          runtimePermissions: [],
+          actionAvailability: {
+            allowedActions: [],
+            restrictions: {},
+          },
+        }],
+      },
+      'engine.runtime.decisions.read',
+      { type: 'engine', id: 'engine-1' },
+    );
+
+    expect(decision).toMatchObject({
+      allowed: true,
+      permissionId: EnginePermission.INSTANCE_VIEW,
+      reason: 'Allowed by current permission snapshot',
+      resourceId: 'engine-1',
+    });
+  });
 });
