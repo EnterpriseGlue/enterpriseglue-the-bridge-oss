@@ -32,13 +32,7 @@ jobs:
           node-version: 24
 
       - name: Validate release baseline
-        run: |
-          set -euo pipefail
-          if git log -1 --format=%s | grep -Eq '^chore\(main\): release [0-9]+\.[0-9]+\.[0-9]+'; then
-            node scripts/release-notes.mjs baseline --allow-pending
-          else
-            node scripts/release-notes.mjs baseline
-          fi
+        run: node scripts/release-notes.mjs baseline --allow-pending
 
       - name: Run Release Please
         id: release
@@ -100,7 +94,7 @@ jobs:
             }
 
             const releasedVersion = String(process.env.HEAD_COMMIT_MESSAGE || '')
-              .match(/^chore\(main\): release (\d+\.\d+\.\d+)\b/)?.[1] || '';
+              .match(/^chore\(main\)!?: release (\d+\.\d+\.\d+)\b/)?.[1] || '';
             core.setOutput('released_version', releasedVersion);
 
       - name: Prepare detailed release PR notes
@@ -126,7 +120,7 @@ jobs:
           github-token: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
           script: |
             const headCommitMessage = String(context.payload.head_commit?.message || '').trim();
-            const match = headCommitMessage.match(/^chore\(main\): release (\d+\.\d+\.\d+)\b/);
+            const match = headCommitMessage.match(/^chore\(main\)!?: release (\d+\.\d+\.\d+)\b/);
             if (!match) {
               core.notice('Head commit is not a merged release commit. Skipping release existence verification.');
               return;

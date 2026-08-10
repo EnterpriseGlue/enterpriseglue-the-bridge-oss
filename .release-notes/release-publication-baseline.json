@@ -1,0 +1,44 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "release-publication-baseline",
+  "type": "fix",
+  "scope": "release-automation",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Allows a prepared breaking Release Please candidate to pass merge-queue and publication baseline checks until its version tag is created.",
+  "userImpact": [
+    "EnterpriseGlue 0.11.0 can publish normally after its breaking Release Please pull request passes the protected merge queue."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "This release-automation correction does not change the database schema or migration sequence."
+    ]
+  },
+  "security": [],
+  "documentation": [
+    "The release-note preflight contract now covers Release Please candidates in GitHub merge groups and the manifest-ahead publication window."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the release-automation correction if the protected merge-queue metadata contract changes."
+  ],
+  "validation": [
+    "Run the release-note contract suite, simulate the prepared 0.11.0 merge-group preflight, and verify the Release Please publication workflow creates the expected tag and release."
+  ],
+  "packages": []
+}

@@ -192,6 +192,7 @@ test('the reusable preflight fetches fresh PR metadata and validates release not
   assert.match(workflow, /node scripts\/run-release-notes-preflight\.mjs/)
   assert.match(workflow, /--base-ref "\$\{\{ steps\.release_base\.outputs\.base_ref \}\}"/)
   assert.match(workflow, /preflight_args\+\=\(--allow-pending\)/)
+  assert.match(workflow, /base_manifest_version=/)
   assert.match(workflow, /- name: Upload release-note preview\n        if: always\(\)/)
   assert.match(workflow, /release-notes-preview-\$\{\{ github\.run_id \}\}/)
 })
@@ -240,6 +241,8 @@ test('normal and hotfix release workflows generate detailed notes through the sa
     assert.match(workflow, /bash scripts\/prepare-release-notes-pr\.sh/)
   }
   assert.match(release, /gh release edit "v\$\{RELEASE_VERSION\}" --notes-file/)
+  assert.match(release, /baseline --allow-pending/)
+  assert.equal((release.match(/\^chore\\\(main\\\)!\?: release/g) || []).length, 2)
   assert.match(hotfix, /merge-method: merge/)
 })
 
