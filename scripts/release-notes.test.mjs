@@ -86,6 +86,18 @@ test('breaking fragments require matching title and release label', () => {
     title: 'feat(authz)!: add authorization',
     labels: ['release:breaking'],
   }))
+  assert.throws(
+    () => validatePrClassification([fragment], {
+      title: 'chore(main): release 0.11.0',
+      labels: ['release:breaking'],
+    }),
+    /title with !/,
+  )
+  assert.doesNotThrow(() => validatePrClassification([fragment], {
+    title: 'chore(main): release 0.11.0',
+    labels: ['release:breaking'],
+    isReleasePlease: true,
+  }))
 })
 
 test('low-risk internal changes can be exempted only with a reason', () => {
@@ -188,6 +200,7 @@ test('the reusable preflight fetches fresh PR metadata and validates release not
   assert.match(workflow, /RELEASE_NOTE_EXEMPT: \$\{\{ steps\.pull_request\.outputs\.exempt/)
   assert.match(workflow, /RELEASE_PR_LABELS: \$\{\{ steps\.pull_request\.outputs\.labels/)
   assert.match(workflow, /RELEASE_PR_TITLE: \$\{\{ steps\.pull_request\.outputs\.title/)
+  assert.match(workflow, /RELEASE_PR_HEAD_REF: \$\{\{ steps\.pull_request\.outputs\.head_ref/)
   assert.match(workflow, /- name: Run release-note preflight/)
   assert.match(workflow, /node scripts\/run-release-notes-preflight\.mjs/)
   assert.match(workflow, /--base-ref "\$\{\{ steps\.release_base\.outputs\.base_ref \}\}"/)

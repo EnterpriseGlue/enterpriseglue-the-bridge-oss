@@ -38,7 +38,8 @@
     "Revert the release-automation correction if the protected merge-queue metadata contract changes."
   ],
   "validation": [
-    "Run the release-note contract suite, simulate the prepared 0.11.0 merge-group preflight, and verify the Release Please publication workflow creates the expected tag and release."
+    "Run the release-note contract suite, simulate the prepared 0.11.0 merge-group preflight, and verify the Release Please publication workflow creates the expected tag and release.",
+    "Restore an unpublished manifest/changelog pair to the latest real tag before asking Release Please to regenerate the interrupted release candidate."
   ],
   "packages": []
 }
