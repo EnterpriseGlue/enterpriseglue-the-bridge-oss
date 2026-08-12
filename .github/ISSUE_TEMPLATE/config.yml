@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Questions & discussions
-    url: https://github.com/haryselman/enterpriseglue/discussions
+    url: https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/discussions
     about: Please use GitHub Discussions for questions, troubleshooting, and design discussion.
-  - name: Security vulnerability report
-    url: https://github.com/haryselman/enterpriseglue/security/advisories/new
-    about: Please report security vulnerabilities via GitHub Security Advisories (preferred).

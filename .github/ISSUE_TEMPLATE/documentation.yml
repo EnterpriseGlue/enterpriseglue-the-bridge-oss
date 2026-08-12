@@ -1,0 +1,49 @@
+name: Documentation improvement
+description: Report missing, unclear, or incorrect documentation
+title: "[Docs]: "
+labels:
+  - documentation
+type: Task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping us improve the EnterpriseGlue documentation.
+
+        For questions and troubleshooting, please use GitHub Discussions.
+
+  - type: input
+    id: location
+    attributes:
+      label: Documentation location
+      description: Link to the affected page or provide the relevant file path.
+      placeholder: "https://... or docs/path/to/file.md"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What needs improvement?
+      description: Describe what is missing, unclear, outdated, or incorrect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Describe the change you would like to see.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: willingness
+    attributes:
+      label: Are you willing to contribute a PR?
+      options:
+        - "Yes"
+        - Maybe
+        - "No"
+    validations:
+      required: false

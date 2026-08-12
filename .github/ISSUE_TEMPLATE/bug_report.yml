@@ -3,6 +3,7 @@ description: Report a reproducible problem
 title: "[Bug]: "
 labels:
   - bug
+type: Bug
 body:
   - type: markdown
     attributes:
@@ -59,7 +60,7 @@ body:
     attributes:
       label: Version
       description: Release tag/commit SHA, or "main".
-      placeholder: "v0.1.0" or "main" or commit SHA
+      placeholder: "v0.1.0, main, or commit SHA"
     validations:
       required: false
 
