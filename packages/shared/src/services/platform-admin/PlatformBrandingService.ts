@@ -79,10 +79,24 @@ export class PlatformBrandingService {
     if (!await repo.findOneBy({ id: 'default' })) {
       await platformSettingsService.update({}, updatedById, { store, bypassOwnership: true });
     }
-    const update: Record<string, unknown> = { updatedAt: Date.now(), updatedById };
-    for (const [key, value] of Object.entries(data)) {
-      if (value !== undefined) update[key] = value;
-    }
+    const update = {
+      updatedAt: Date.now(),
+      updatedById,
+      ...(data.logoUrl !== undefined ? { logoUrl: data.logoUrl } : {}),
+      ...(data.loginLogoUrl !== undefined ? { loginLogoUrl: data.loginLogoUrl } : {}),
+      ...(data.loginTitleVerticalOffset !== undefined
+        ? { loginTitleVerticalOffset: data.loginTitleVerticalOffset }
+        : {}),
+      ...(data.loginTitleColor !== undefined ? { loginTitleColor: data.loginTitleColor } : {}),
+      ...(data.logoTitle !== undefined ? { logoTitle: data.logoTitle } : {}),
+      ...(data.logoScale !== undefined ? { logoScale: data.logoScale } : {}),
+      ...(data.titleFontUrl !== undefined ? { titleFontUrl: data.titleFontUrl } : {}),
+      ...(data.titleFontWeight !== undefined ? { titleFontWeight: data.titleFontWeight } : {}),
+      ...(data.titleFontSize !== undefined ? { titleFontSize: data.titleFontSize } : {}),
+      ...(data.titleVerticalOffset !== undefined ? { titleVerticalOffset: data.titleVerticalOffset } : {}),
+      ...(data.menuAccentColor !== undefined ? { menuAccentColor: data.menuAccentColor } : {}),
+      ...(data.faviconUrl !== undefined ? { faviconUrl: data.faviconUrl } : {}),
+    };
     await repo.update({ id: 'default' }, update);
   }
 

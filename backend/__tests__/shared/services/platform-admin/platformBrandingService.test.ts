@@ -70,7 +70,11 @@ describe('PlatformBrandingService', () => {
     const manualClaim = vi.spyOn(platformSettingsSectionOwnershipService, 'claimManualMutation').mockResolvedValue();
     const seed = vi.spyOn(platformSettingsService, 'update').mockResolvedValue({} as any);
 
-    await service.update({ logoTitle: 'Portal title', logoUrl: undefined }, 'user-1');
+    await service.update({
+      logoTitle: 'Portal title',
+      logoUrl: undefined,
+      attackerControlledProperty: 'must-not-persist',
+    } as any, 'user-1');
 
     expect(root.transaction).toHaveBeenCalledOnce();
     expect(manualClaim).toHaveBeenCalledWith(manager, ['branding']);
@@ -80,6 +84,7 @@ describe('PlatformBrandingService', () => {
       expect.objectContaining({ logoTitle: 'Portal title', updatedById: 'user-1' }),
     );
     expect(repo.update.mock.calls[0]![1]).not.toHaveProperty('logoUrl');
+    expect(repo.update.mock.calls[0]![1]).not.toHaveProperty('attackerControlledProperty');
   });
 
   it('claims exact configuration provenance and bypasses a manual claim', async () => {
