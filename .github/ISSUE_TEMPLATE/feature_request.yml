@@ -3,6 +3,7 @@ description: Suggest an idea or enhancement
 title: "[Feature]: "
 labels:
   - enhancement
+type: Feature
 body:
   - type: markdown
     attributes:
@@ -53,8 +54,8 @@ body:
     attributes:
       label: Are you willing to contribute a PR?
       options:
-        - Yes
+        - "Yes"
         - Maybe
-        - No
+        - "No"
     validations:
       required: false
