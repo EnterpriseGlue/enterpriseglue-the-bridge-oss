@@ -27,6 +27,12 @@ describe('AdminIntegrationEndpointPolicy', () => {
       .toThrow('not permitted');
     expect(isAllowedAdminIntegrationHost('tenant.login.example.com', ['*.login.example.com'])).toBe(true);
     expect(isAllowedAdminIntegrationHost('attacker.com', ['*.com'])).toBe(false);
+    expect(() => validateAdminIntegrationEndpointUrl('https://api.sendgrid.com/v3/mail/send', 'SendGrid email provider'))
+      .not.toThrow();
+    expect(() => validateAdminIntegrationEndpointUrl('https://api.mailgun.net/v3/example/messages', 'Mailgun email provider'))
+      .not.toThrow();
+    expect(() => validateAdminIntegrationEndpointUrl('https://api.mailjet.com/v3.1/send', 'Mailjet email provider'))
+      .not.toThrow();
   });
 
   it('requires both private-host opt-in and an exact reviewed entry', () => {

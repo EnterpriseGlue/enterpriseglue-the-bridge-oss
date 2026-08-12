@@ -8,6 +8,9 @@ export const MAX_ADMIN_INTEGRATION_RESPONSE_BYTES = 1024 * 1024;
 export const DEFAULT_ADMIN_INTEGRATION_TIMEOUT_MS = 10_000;
 
 const BUILTIN_ADMIN_INTEGRATION_HOSTS = [
+  'api.mailgun.net',
+  'api.mailjet.com',
+  'api.sendgrid.com',
   'api.bitbucket.org',
   'api.github.com',
   'app.vssps.visualstudio.com',

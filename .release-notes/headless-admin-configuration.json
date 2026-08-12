@@ -46,7 +46,8 @@
   },
   "security": [
     "Headless bootstrap is fail closed, validates exact bundle content and ownership, and never accepts literal credentials in configuration.",
-    "Administrative changes retain audit, idempotency, tenant, authorization, endpoint-policy, and secret-resolution boundaries equivalent to the interactive APIs."
+    "Administrative changes retain audit, idempotency, tenant, authorization, endpoint-policy, and secret-resolution boundaries equivalent to the interactive APIs.",
+    "SendGrid, Mailgun, and Mailjet credential delivery is restricted to exact built-in HTTPS provider hosts with production DNS pinning, redirect rejection, request timeouts, bounded responses, and sanitized public failures."
   ],
   "documentation": [
     "Architecture and parity plan: `docs/architecture/17-headless-platform-administration-plan.md`",
