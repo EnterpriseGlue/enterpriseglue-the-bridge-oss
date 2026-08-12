@@ -94,7 +94,8 @@ release pull request. The workflow then:
 1. validates that the manifest, latest stable tag, and changelog agree;
 2. finds all fragments changed since the latest stable tag;
 3. generates `docs/releases/vX.Y.Z.md` on the Release Please branch;
-4. copies that document into the release pull-request body; and
+4. synchronizes that document to a managed release pull-request comment while
+   preserving Release Please's machine-readable pull-request body; and
 5. publishes the same document as the GitHub release body after the release
    pull request is merged.
 

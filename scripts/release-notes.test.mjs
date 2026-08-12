@@ -253,11 +253,23 @@ test('normal and hotfix release workflows generate detailed notes through the sa
   for (const workflow of [release, hotfix]) {
     assert.match(workflow, /node scripts\/release-notes\.mjs baseline/)
     assert.match(workflow, /bash scripts\/prepare-release-notes-pr\.sh/)
+    assert.match(
+      workflow,
+      /uses: actions\/checkout@[^\n]+\n\s+with:\n\s+fetch-depth: 0\n\s+token: \$\{\{ secrets\.RELEASE_PLEASE_TOKEN != '' && secrets\.RELEASE_PLEASE_TOKEN \|\| github\.token \}\}/,
+      'release workflows must persist the trusted release token for release-note branch pushes',
+    )
   }
   assert.match(
     prepare,
     /"\+refs\/heads\/\$\{RELEASE_PR_HEAD_REF\}:refs\/remotes\/origin\/\$\{RELEASE_PR_HEAD_REF\}"/,
     'release-note preparation must refresh the validated moving Release Please ref',
+  )
+  assert.match(prepare, /enterpriseglue-detailed-release-notes/)
+  assert.match(prepare, /issues\/\$\{RELEASE_PR_NUMBER\}\/comments/)
+  assert.doesNotMatch(
+    prepare,
+    /repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{RELEASE_PR_NUMBER\}/,
+    'detailed notes must not replace Release Please machine-readable PR metadata',
   )
   assert.match(release, /gh release edit "v\$\{RELEASE_VERSION\}" --notes-file/)
   assert.match(release, /baseline --allow-pending/)
