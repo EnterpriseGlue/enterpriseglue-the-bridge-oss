@@ -264,6 +264,13 @@ test('normal and hotfix release workflows generate detailed notes through the sa
     /"\+refs\/heads\/\$\{RELEASE_PR_HEAD_REF\}:refs\/remotes\/origin\/\$\{RELEASE_PR_HEAD_REF\}"/,
     'release-note preparation must refresh the validated moving Release Please ref',
   )
+  assert.match(prepare, /enterpriseglue-detailed-release-notes/)
+  assert.match(prepare, /issues\/\$\{RELEASE_PR_NUMBER\}\/comments/)
+  assert.doesNotMatch(
+    prepare,
+    /repos\/\$\{GITHUB_REPOSITORY\}\/pulls\/\$\{RELEASE_PR_NUMBER\}/,
+    'detailed notes must not replace Release Please machine-readable PR metadata',
+  )
   assert.match(release, /gh release edit "v\$\{RELEASE_VERSION\}" --notes-file/)
   assert.match(release, /baseline --allow-pending/)
   assert.equal((release.match(/\^chore\\\(main\\\)!\?: release/g) || []).length, 2)

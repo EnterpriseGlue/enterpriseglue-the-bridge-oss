@@ -48,9 +48,26 @@ if ! git diff --cached --quiet; then
   git push origin "HEAD:refs/heads/${RELEASE_PR_HEAD_REF}"
 fi
 
-gh api \
-  --method PATCH \
-  "repos/${GITHUB_REPOSITORY}/pulls/${RELEASE_PR_NUMBER}" \
-  -f "body=$(<"$release_file")" >/dev/null
+comment_marker='<!-- enterpriseglue-detailed-release-notes -->'
+comment_body="${comment_marker}
 
-echo "Detailed release notes prepared in ${release_file} and copied to PR #${RELEASE_PR_NUMBER}."
+$(<"$release_file")"
+comment_id="$(gh api \
+  --paginate \
+  "repos/${GITHUB_REPOSITORY}/issues/${RELEASE_PR_NUMBER}/comments" \
+  --jq ".[] | select(.body | startswith(\"${comment_marker}\")) | .id" \
+  | head -n 1)"
+
+if [[ -n "$comment_id" ]]; then
+  gh api \
+    --method PATCH \
+    "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+    -f "body=${comment_body}" >/dev/null
+else
+  gh api \
+    --method POST \
+    "repos/${GITHUB_REPOSITORY}/issues/${RELEASE_PR_NUMBER}/comments" \
+    -f "body=${comment_body}" >/dev/null
+fi
+
+echo "Detailed release notes prepared in ${release_file} and synchronized to the managed PR comment for #${RELEASE_PR_NUMBER}."
