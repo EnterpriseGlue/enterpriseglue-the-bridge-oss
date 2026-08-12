@@ -4,6 +4,7 @@ import { GitProvider } from '@enterpriseglue/shared/db/entities/GitProvider.js';
 import { GitRepository } from '@enterpriseglue/shared/db/entities/GitRepository.js';
 import { GitCredential } from '@enterpriseglue/shared/db/entities/GitCredential.js';
 import { gitProviderService } from '@enterpriseglue/shared/services/git/GitProviderService.js';
+import { adminConfigObjectOwnershipService } from '@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn(),
@@ -12,6 +13,10 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/services/encryption.js', () => ({
   encrypt: vi.fn((v: string) => `enc:${v}`),
   isEncrypted: vi.fn(() => false),
+}));
+
+vi.mock('@enterpriseglue/shared/services/platform-admin/AdminConfigObjectOwnershipService.js', () => ({
+  adminConfigObjectOwnershipService: { claimManualMutation: vi.fn() },
 }));
 
 describe('GitProviderService', () => {
@@ -33,7 +38,7 @@ describe('GitProviderService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    const dataSource = {
       getRepository: (entity: unknown) => {
         if (entity === GitProvider) return {
           find: mockProviderFind,
@@ -48,7 +53,12 @@ describe('GitProviderService', () => {
         };
         throw new Error(`Unexpected entity: ${entity}`);
       },
+    };
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      ...dataSource,
+      transaction: (work: (manager: typeof dataSource) => unknown) => work(dataSource),
     });
+    (adminConfigObjectOwnershipService.claimManualMutation as unknown as Mock).mockResolvedValue(undefined);
   });
 
   describe('listActive', () => {
@@ -181,14 +191,14 @@ describe('GitProviderService', () => {
       mockProviderFindOneBy.mockResolvedValue({ id: 'p1' });
 
       await expect(gitProviderService.update('p1', { customBaseUrl: 'not-a-url' }))
-        .rejects.toThrow('Custom base URL must start with http');
+        .rejects.toThrow('Custom Git base URL must be a valid URL');
     });
 
     it('rejects invalid custom API URL', async () => {
       mockProviderFindOneBy.mockResolvedValue({ id: 'p1' });
 
       await expect(gitProviderService.update('p1', { customApiUrl: 'ftp://bad' }))
-        .rejects.toThrow('Custom API URL must start with http');
+        .rejects.toThrow('Custom Git API URL must use HTTPS');
     });
   });
 });

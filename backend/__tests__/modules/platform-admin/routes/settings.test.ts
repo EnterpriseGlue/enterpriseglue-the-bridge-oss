@@ -4,6 +4,7 @@ import express from 'express';
 import settingsRouter from '../../../../../packages/backend-host/src/modules/platform-admin/routes/settings.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { PlatformSettings } from '@enterpriseglue/shared/db/entities/PlatformSettings.js';
+import { PlatformSettingsSectionOwnership } from '@enterpriseglue/shared/infrastructure/persistence/entities/PlatformSettingsSectionOwnership.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
@@ -30,6 +31,7 @@ describe('platform-admin settings routes', () => {
     insert: Mock;
     update: Mock;
   };
+  let settingsOwnershipRepo: { find: Mock; update: Mock };
 
   beforeEach(() => {
     app = express();
@@ -51,11 +53,22 @@ describe('platform-admin settings routes', () => {
       update: vi.fn().mockResolvedValue(undefined),
     };
 
-    (getDataSource as unknown as Mock).mockResolvedValue({
+    settingsOwnershipRepo = {
+      find: vi.fn().mockResolvedValue([]),
+      update: vi.fn().mockResolvedValue({ affected: 1 }),
+    };
+
+    const manager = {
       getRepository: (entity: unknown) => {
         if (entity === PlatformSettings) return platformSettingsRepo;
+        if (entity === PlatformSettingsSectionOwnership) return settingsOwnershipRepo;
         throw new Error('Unexpected repository');
       },
+    };
+
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      ...manager,
+      transaction: (work: (store: typeof manager) => unknown) => work(manager),
     });
   });
 
@@ -93,6 +106,11 @@ describe('platform-admin settings routes', () => {
       accessGovernanceSourceRef: 'config_bundle:acme.authz',
       accessGovernanceOwnershipMode: 'config_locked',
     });
+    settingsOwnershipRepo.find.mockResolvedValue([{
+      id: 'default:governance', settingsId: 'default', section: 'governance',
+      scopeKey: 'platform', sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_locked', generation: 1,
+    }]);
 
     const response = await request(app).put('/').send({
       engineAccessAuthority: 'sso_managed',
@@ -109,6 +127,11 @@ describe('platform-admin settings routes', () => {
       accessGovernanceSourceRef: 'config_bundle:acme.authz',
       accessGovernanceOwnershipMode: 'config_warn',
     });
+    settingsOwnershipRepo.find.mockResolvedValue([{
+      id: 'default:governance', settingsId: 'default', section: 'governance',
+      scopeKey: 'platform', sourceRef: 'config_bundle:acme.authz',
+      ownershipMode: 'config_warn', driftStatus: 'in_sync', generation: 1,
+    }]);
 
     const response = await request(app).put('/').send({
       engineAccessAuthority: 'transition_to_sso',
@@ -121,6 +144,10 @@ describe('platform-admin settings routes', () => {
         engineAccessAuthority: 'transition_to_sso',
         accessGovernanceDriftStatus: 'drifted',
       }),
+    );
+    expect(settingsOwnershipRepo.update).toHaveBeenCalledWith(
+      { id: 'default:governance', generation: 1 },
+      expect.objectContaining({ generation: 2, driftStatus: 'drifted' }),
     );
   });
 });

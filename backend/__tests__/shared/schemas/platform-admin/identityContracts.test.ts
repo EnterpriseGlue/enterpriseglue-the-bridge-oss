@@ -205,6 +205,7 @@ describe('provider-neutral identity shared contracts', () => {
     expect(AuthzPolicyResponseSchema.parse({
       id: 'policy-1', tenantId: null, name: 'Deny risky production action', effect: 'deny', priority: 10,
       conditions: { environment: 'production' }, isActive: true,
+      configKey: null, sourceRef: null, ownershipMode: 'manual', driftStatus: null,
     }).conditions).toEqual({ environment: 'production' });
     expect(() => AuthzPolicyResponseSchema.parse({
       id: 'policy-1', tenantId: null, name: 'Deny', effect: 'deny', priority: 10, conditions: {}, isActive: true, createdAt: 1,

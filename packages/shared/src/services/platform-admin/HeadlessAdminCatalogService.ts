@@ -12,13 +12,26 @@ import type { AdminConfigObjectType } from '@enterpriseglue/shared/infrastructur
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 import { hashPassword } from '@enterpriseglue/shared/utils/password.js';
-import type { ConfigBundleDiffChange } from './ConfigBundleDiffService.js';
 import { adminConfigObjectOwnershipService } from './AdminConfigObjectOwnershipService.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
 import { secretResolver } from './SecretResolver.js';
 import { validateAdminIntegrationEndpointUrl } from './AdminIntegrationEndpointPolicy.js';
 
 type OwnershipMode = 'manual' | 'config_locked' | 'config_warn';
+
+/**
+ * Narrow handoff contract from the bundle compiler into the catalog writer.
+ * Keeping this structural type here prevents a runtime administration service
+ * from importing the compiler boundary just to name its output.
+ */
+interface HeadlessAdminConfigChange {
+  objectType: string;
+  key: string;
+  operation: 'create' | 'update' | 'noop' | 'archive' | 'conflict';
+  currentId?: string;
+  expectedUpdatedAt?: number;
+  expectedOwnershipGeneration?: number;
+}
 
 function values(files: Record<string, unknown>, path: string, property: string): any[] {
   const file = files[path] as Record<string, unknown> | undefined;
@@ -29,7 +42,7 @@ function objectFingerprint(objectType: AdminConfigObjectType, desired: any): str
   return hashCanonicalConfig({ kind: objectType, key: desired.key, value: desired });
 }
 
-function configuredObjectType(change: ConfigBundleDiffChange): change is ConfigBundleDiffChange & { objectType: AdminConfigObjectType } {
+function configuredObjectType(change: HeadlessAdminConfigChange): change is HeadlessAdminConfigChange & { objectType: AdminConfigObjectType } {
   return [
     'git_provider', 'email_configuration', 'email_template', 'permission',
     'authorization_policy', 'api_client', 'service_account', 'external_engine_system',
@@ -64,7 +77,7 @@ export class HeadlessAdminCatalogService {
     manager: EntityManager,
     input: {
       files: Record<string, unknown>;
-      changes: ConfigBundleDiffChange[];
+      changes: HeadlessAdminConfigChange[];
       sourceRef: string;
       tenantId?: string | null;
       actorId: string;
@@ -99,7 +112,7 @@ export class HeadlessAdminCatalogService {
       principalType?: string;
       principalId?: string | null;
     },
-    change: ConfigBundleDiffChange,
+    change: HeadlessAdminConfigChange,
   ): Promise<void> {
     let objectId = currentId || generateId();
     const ownershipMode = desired.ownershipMode as OwnershipMode;
@@ -296,7 +309,7 @@ export class HeadlessAdminCatalogService {
     objectType: AdminConfigObjectType,
     objectId: string,
     appliedAt: number,
-    change: ConfigBundleDiffChange,
+    change: HeadlessAdminConfigChange,
   ): Promise<void> {
     await this.claimCurrentObject(manager, objectType, objectId, change.expectedUpdatedAt);
     const ownership = await adminConfigObjectOwnershipService.findForObject(manager, objectType, objectId);

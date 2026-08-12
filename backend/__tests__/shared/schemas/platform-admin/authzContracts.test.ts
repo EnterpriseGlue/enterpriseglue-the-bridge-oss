@@ -120,6 +120,7 @@ describe('authorization response contracts', () => {
       client: {
         id: 'client-a', name: 'CI deployer', tokenPrefix: 'eg_client_', scopes: ['deployment:execute'],
         isActive: true, createdById: 'user-a', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1,
+        configKey: null, sourceRef: null, ownershipMode: 'manual', driftStatus: null,
       },
       token: 'reveal-once-client-token',
     }).client.tokenPrefix).toBe('eg_client_');
@@ -128,6 +129,7 @@ describe('authorization response contracts', () => {
       account: {
         id: 'service-account-a', name: 'Release service account', tokenPrefix: null, scopes: ['deployment:execute'],
         description: null, isActive: true, createdById: 'user-a', lastUsedAt: null, revokedAt: null, createdAt: 1, updatedAt: 1,
+        configKey: null, sourceRef: null, ownershipMode: 'manual', driftStatus: null,
       },
       token: 'reveal-once-service-token',
     }).account.id).toBe('service-account-a');
