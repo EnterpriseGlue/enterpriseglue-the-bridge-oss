@@ -165,7 +165,9 @@ jobs:
 
             const titleIndicatesBreaking = /!\s*:/.test(title) || /\)!:/.test(title);
             const labelIndicatesBreaking = labels.includes('release:breaking');
-            const bodyIndicatesBreaking = /breaking\s+change/i.test(body);
+            const bodyIndicatesBreaking =
+              /(?:^|\n)\s*[-*]\s*\[[xX]\]\s*breaking change\b/i.test(body) ||
+              /(?:^|\n)\s*BREAKING[ -]CHANGE\s*:/i.test(body);
             const isBreaking = titleIndicatesBreaking || labelIndicatesBreaking || bodyIndicatesBreaking;
 
             if (!isBreaking) {

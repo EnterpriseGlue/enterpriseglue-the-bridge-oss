@@ -137,7 +137,10 @@ jobs:
               const lowerBody = String(body || '').toLowerCase();
               const docsOnly = paths.length > 0 && paths.every((p) => p.startsWith('docs/') || p.endsWith('.md'));
               const automationOnly = isInternalAutomationOnly(paths);
-              const breaking = /breaking|!:/i.test(title || '') || /breaking\s+change/i.test(body || '');
+              const bodyDeclaresBreaking =
+                /(?:^|\n)\s*[-*]\s*\[[xX]\]\s*breaking change\b/i.test(body || '') ||
+                /(?:^|\n)\s*BREAKING[ -]CHANGE\s*:/i.test(body || '');
+              const breaking = /breaking|!:/i.test(title || '') || bodyDeclaresBreaking;
               const security = /security|vuln|cve/i.test(lowerTitle) || /security|vuln|cve/i.test(lowerBody);
               const feature = /feat|feature|add|introduce|implement/i.test(lowerTitle);
               const fix = /fix|bug|regress|hotfix/i.test(lowerTitle);
@@ -567,7 +570,10 @@ jobs:
 
             const titleMatch = String(freshPR.title || '').match(/^([a-z]+)(\([a-z0-9._/-]+\))?(!)?:\s.+$/i);
             const titleType = titleMatch ? titleMatch[1].toLowerCase() : '';
-            const titleIsBreaking = Boolean(titleMatch && titleMatch[3]) || /breaking\s+change/i.test(String(freshPR.body || ''));
+            const bodyDeclaresBreaking =
+              /(?:^|\n)\s*[-*]\s*\[[xX]\]\s*breaking change\b/i.test(String(freshPR.body || '')) ||
+              /(?:^|\n)\s*BREAKING[ -]CHANGE\s*:/i.test(String(freshPR.body || ''));
+            const titleIsBreaking = Boolean(titleMatch && titleMatch[3]) || bodyDeclaresBreaking;
             const internalOnlyTypes = new Set(['ci', 'chore', 'build', 'test']);
 
             let targetReleaseLabel = releaseLabel && allowedReleaseLabels.has(releaseLabel)
