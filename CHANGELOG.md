@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.12.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.11.1...v0.12.0) (2026-08-12)
+
+
+### Features
+
+* **platform-admin:** support complete headless configuration ([#364](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/issues/364)) ([c190036](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c190036bbf17b473bf66714703660a26b88aa5f8))
+
 ## [0.11.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.11.0...v0.11.1) (2026-08-10)
 
 
